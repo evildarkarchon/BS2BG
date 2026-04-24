@@ -23,6 +23,7 @@ public sealed class MorphsViewModel : ReactiveObject
     private readonly INpcImageLookupService imageLookupService;
     private readonly IImageViewService imageViewService;
     private readonly INoPresetNotificationService noPresetNotificationService;
+    private readonly Dictionary<Npc, int> npcPropertySubscriptions = new();
     private CustomMorphTarget? selectedCustomTarget;
     private Npc? selectedNpc;
     private Npc? selectedImportedNpc;
@@ -78,6 +79,7 @@ public sealed class MorphsViewModel : ReactiveObject
         project.CustomMorphTargets.CollectionChanged += OnCustomTargetsChanged;
         project.SliderPresets.CollectionChanged += OnPresetsChanged;
         NpcDatabase.CollectionChanged += OnNpcDatabaseChanged;
+        RefreshNpcSubscriptions();
         RefreshVisibleNpcs();
         RefreshVisibleNpcDatabase();
 
@@ -720,11 +722,17 @@ public sealed class MorphsViewModel : ReactiveObject
 
     private void UpdateNpcSubscriptions(NotifyCollectionChangedEventArgs args)
     {
+        if (args.Action == NotifyCollectionChangedAction.Reset)
+        {
+            RefreshNpcSubscriptions();
+            return;
+        }
+
         if (args.OldItems is not null)
         {
             foreach (Npc npc in args.OldItems)
             {
-                npc.PropertyChanged -= OnNpcPropertyChanged;
+                DetachNpcPropertyChanged(npc);
             }
         }
 
@@ -732,9 +740,57 @@ public sealed class MorphsViewModel : ReactiveObject
         {
             foreach (Npc npc in args.NewItems)
             {
-                npc.PropertyChanged += OnNpcPropertyChanged;
+                AttachNpcPropertyChanged(npc);
             }
         }
+    }
+
+    private void RefreshNpcSubscriptions()
+    {
+        DetachAllNpcPropertyChanged();
+
+        foreach (var npc in Npcs)
+        {
+            AttachNpcPropertyChanged(npc);
+        }
+    }
+
+    private void AttachNpcPropertyChanged(Npc npc)
+    {
+        npc.PropertyChanged += OnNpcPropertyChanged;
+        npcPropertySubscriptions.TryGetValue(npc, out var count);
+        npcPropertySubscriptions[npc] = count + 1;
+    }
+
+    private void DetachNpcPropertyChanged(Npc npc)
+    {
+        npc.PropertyChanged -= OnNpcPropertyChanged;
+
+        if (!npcPropertySubscriptions.TryGetValue(npc, out var count))
+        {
+            return;
+        }
+
+        if (count == 1)
+        {
+            npcPropertySubscriptions.Remove(npc);
+            return;
+        }
+
+        npcPropertySubscriptions[npc] = count - 1;
+    }
+
+    private void DetachAllNpcPropertyChanged()
+    {
+        foreach (var subscription in npcPropertySubscriptions)
+        {
+            for (var index = 0; index < subscription.Value; index++)
+            {
+                subscription.Key.PropertyChanged -= OnNpcPropertyChanged;
+            }
+        }
+
+        npcPropertySubscriptions.Clear();
     }
 
     private void OnNpcPropertyChanged(object? sender, PropertyChangedEventArgs args)

@@ -82,6 +82,32 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void ClearedNpcsDoNotRefreshViewModelWhenRemovedNpcChanges()
+    {
+        var project = CreateProjectWithPresets();
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider());
+        var npc = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var npcBadgeNotifications = 0;
+
+        project.MorphedNpcs.Add(npc);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(MorphsViewModel.NpcCountBadgeText))
+            {
+                npcBadgeNotifications++;
+            }
+        };
+
+        project.MorphedNpcs.Clear();
+        npcBadgeNotifications = 0;
+
+        npc.Name = "Detached Lydia";
+
+        Assert.Equal(0, npcBadgeNotifications);
+        Assert.Empty(viewModel.VisibleNpcs);
+    }
+
+    [Fact]
     public void GenerateMorphsReportsAndNotifiesTargetsWithoutPresets()
     {
         var project = CreateProjectWithPresets();
