@@ -4,6 +4,7 @@
                      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                      xmlns:rxui="using:ReactiveUI.Avalonia"
                      xmlns:vm="using:BS2BG.App.ViewModels"
+                     xmlns:models="using:BS2BG.Core.Models"
                      x:Class="BS2BG.App.Views.MainWindow"
                      x:DataType="vm:MainWindowViewModel"
                      mc:Ignorable="d">
@@ -11,5 +12,131 @@
     <vm:MainWindowViewModel />
   </Design.DataContext>
 
-  <Grid Background="{DynamicResource BS2BGWindowBackgroundBrush}" />
+  <Grid Background="{DynamicResource BS2BGWindowBackgroundBrush}"
+        RowDefinitions="Auto,*"
+        ColumnDefinitions="280,4,*">
+    <Border Grid.Row="0"
+            Grid.ColumnSpan="3"
+            Padding="16,12"
+            Background="{DynamicResource BS2BGWindowBackgroundBrush}">
+      <DockPanel LastChildFill="False">
+        <TextBlock DockPanel.Dock="Left"
+                   Text="{Binding Title}"
+                   FontSize="18"
+                   FontWeight="SemiBold"
+                   VerticalAlignment="Center" />
+        <ProgressBar DockPanel.Dock="Right"
+                     Width="160"
+                     Height="4"
+                     IsIndeterminate="True"
+                     IsVisible="{Binding Templates.IsBusy}" />
+      </DockPanel>
+    </Border>
+
+    <Border Grid.Row="1"
+            Grid.Column="0"
+            Padding="16,8,12,16">
+      <Grid RowDefinitions="Auto,Auto,*">
+        <StackPanel Grid.Row="0" Spacing="8">
+          <Button Content="Add BodySlide XML Presets"
+                  Command="{Binding Templates.ImportPresetsCommand}" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0"
+                     Text="{Binding Templates.PresetNameInput}"
+                     PlaceholderText="Preset name" />
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="6"
+                        Margin="8,0,0,0">
+              <Button Content="Rename"
+                      Command="{Binding Templates.RenameSelectedPresetCommand}" />
+              <Button Content="Duplicate"
+                      Command="{Binding Templates.DuplicateSelectedPresetCommand}" />
+            </StackPanel>
+          </Grid>
+          <Grid ColumnDefinitions="*,*">
+            <Button Grid.Column="0"
+                    Content="Remove"
+                    Command="{Binding Templates.RemoveSelectedPresetCommand}" />
+            <Button Grid.Column="1"
+                    Margin="8,0,0,0"
+                    Content="Clear"
+                    Command="{Binding Templates.ClearPresetsCommand}" />
+          </Grid>
+          <TextBlock Text="{Binding Templates.ValidationMessage}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}" />
+        </StackPanel>
+
+        <Separator Grid.Row="1" Margin="0,12" />
+
+        <ListBox Grid.Row="2"
+                 ItemsSource="{Binding Templates.Presets}"
+                 SelectedItem="{Binding Templates.SelectedPreset}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="models:SliderPreset">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+    </Border>
+
+    <GridSplitter Grid.Row="1"
+                  Grid.Column="1"
+                  ResizeDirection="Columns" />
+
+    <Border Grid.Row="1"
+            Grid.Column="2"
+            Padding="12,8,16,16">
+      <Grid RowDefinitions="Auto,*,Auto,*">
+        <Grid Grid.Row="0"
+              ColumnDefinitions="Auto,220,Auto,Auto,*"
+              RowDefinitions="Auto"
+              Margin="0,0,0,8">
+          <TextBlock Grid.Column="0"
+                     Text="Profile"
+                     VerticalAlignment="Center"
+                     Margin="0,0,8,0" />
+          <ComboBox Grid.Column="1"
+                    ItemsSource="{Binding Templates.ProfileNames}"
+                    SelectedItem="{Binding Templates.SelectedProfileName}" />
+          <CheckBox Grid.Column="2"
+                    Margin="16,0,0,0"
+                    Content="Omit Redundant Sliders"
+                    IsChecked="{Binding Templates.OmitRedundantSliders}" />
+          <Button Grid.Column="3"
+                  Margin="16,0,0,0"
+                  Content="Generate Templates"
+                  Command="{Binding Templates.GenerateTemplatesCommand}" />
+          <Button Grid.Column="4"
+                  Margin="8,0,0,0"
+                  HorizontalAlignment="Left"
+                  Content="Copy"
+                  Command="{Binding Templates.CopyGeneratedTemplatesCommand}" />
+        </Grid>
+
+        <TextBox Grid.Row="1"
+                 Text="{Binding Templates.PreviewTemplateText}"
+                 AcceptsReturn="True"
+                 IsReadOnly="True"
+                 TextWrapping="Wrap"
+                 FontFamily="Consolas"
+                 FontSize="13" />
+
+        <TextBlock Grid.Row="2"
+                   Margin="0,10,0,8"
+                   Text="{Binding Templates.StatusMessage}"
+                   TextWrapping="Wrap" />
+
+        <TextBox Grid.Row="3"
+                 Text="{Binding Templates.GeneratedTemplateText}"
+                 AcceptsReturn="True"
+                 IsReadOnly="True"
+                 TextWrapping="NoWrap"
+                 FontFamily="Consolas"
+                 FontSize="13" />
+      </Grid>
+    </Border>
+  </Grid>
 </rxui:ReactiveWindow>

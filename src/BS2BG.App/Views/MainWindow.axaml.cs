@@ -1,3 +1,4 @@
+using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using ReactiveUI.Avalonia;
 
@@ -11,6 +12,14 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
     }
 
     public MainWindow(MainWindowViewModel viewModel)
+        : this(viewModel, null, null)
+    {
+    }
+
+    public MainWindow(
+        MainWindowViewModel viewModel,
+        WindowBodySlideXmlFilePicker? filePicker,
+        WindowClipboardService? clipboardService)
     {
         InitializeComponent();
 
@@ -21,5 +30,7 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
         Height = AppShell.StartupHeight;
         MinWidth = AppShell.MinWidth;
         MinHeight = AppShell.MinHeight;
+        filePicker?.Attach(this);
+        clipboardService?.Attach(this);
     }
 }
