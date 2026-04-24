@@ -113,30 +113,82 @@ public sealed class ProjectModel : ProjectModelNode
     private void AttachCollection<T>(ObservableCollection<T> collection)
         where T : ProjectModelNode
     {
+        var childSubscriptions = new Dictionary<T, int>();
+
         collection.CollectionChanged += (_, args) =>
         {
-            UpdateChildSubscriptions(args);
+            UpdateChildSubscriptions(args, childSubscriptions);
             MarkDirty();
         };
     }
 
-    private void UpdateChildSubscriptions(NotifyCollectionChangedEventArgs args)
+    private void UpdateChildSubscriptions<T>(
+        NotifyCollectionChangedEventArgs args,
+        Dictionary<T, int> childSubscriptions)
+        where T : ProjectModelNode
     {
+        if (args.Action == NotifyCollectionChangedAction.Reset)
+        {
+            DetachAllChildren(childSubscriptions);
+            return;
+        }
+
         if (args.OldItems is not null)
         {
-            foreach (ProjectModelNode item in args.OldItems)
+            foreach (T item in args.OldItems)
             {
-                item.Changed -= OnChildChanged;
+                DetachChild(item, childSubscriptions);
             }
         }
 
         if (args.NewItems is not null)
         {
-            foreach (ProjectModelNode item in args.NewItems)
+            foreach (T item in args.NewItems)
             {
-                item.Changed += OnChildChanged;
+                AttachChild(item, childSubscriptions);
             }
         }
+    }
+
+    private void AttachChild<T>(T item, Dictionary<T, int> childSubscriptions)
+        where T : ProjectModelNode
+    {
+        item.Changed += OnChildChanged;
+        childSubscriptions.TryGetValue(item, out var count);
+        childSubscriptions[item] = count + 1;
+    }
+
+    private void DetachChild<T>(T item, Dictionary<T, int> childSubscriptions)
+        where T : ProjectModelNode
+    {
+        item.Changed -= OnChildChanged;
+
+        if (!childSubscriptions.TryGetValue(item, out var count))
+        {
+            return;
+        }
+
+        if (count == 1)
+        {
+            childSubscriptions.Remove(item);
+            return;
+        }
+
+        childSubscriptions[item] = count - 1;
+    }
+
+    private void DetachAllChildren<T>(Dictionary<T, int> childSubscriptions)
+        where T : ProjectModelNode
+    {
+        foreach (var subscription in childSubscriptions)
+        {
+            for (var index = 0; index < subscription.Value; index++)
+            {
+                subscription.Key.Changed -= OnChildChanged;
+            }
+        }
+
+        childSubscriptions.Clear();
     }
 
     private void OnChildChanged(object? sender, EventArgs args)

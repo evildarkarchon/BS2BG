@@ -9,6 +9,8 @@ public sealed class SliderPreset : ProjectModelNode
     private string profileName;
     private bool sortingSetSliders;
     private bool sortingMissingDefaults;
+    private readonly Dictionary<SetSlider, int> setSliderSubscriptions = new();
+    private readonly Dictionary<SetSlider, int> missingDefaultSetSliderSubscriptions = new();
 
     public SliderPreset(string name, string? profileName = null)
     {
@@ -94,7 +96,7 @@ public sealed class SliderPreset : ProjectModelNode
 
     private void OnSetSlidersChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        UpdateChildSubscriptions(args);
+        UpdateChildSubscriptions(args, setSliderSubscriptions);
 
         if (!sortingSetSliders)
         {
@@ -106,7 +108,7 @@ public sealed class SliderPreset : ProjectModelNode
 
     private void OnMissingDefaultSetSlidersChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        UpdateChildSubscriptions(args);
+        UpdateChildSubscriptions(args, missingDefaultSetSliderSubscriptions);
 
         if (!sortingMissingDefaults)
         {
@@ -116,13 +118,21 @@ public sealed class SliderPreset : ProjectModelNode
         NotifyChanged(nameof(MissingDefaultSetSliders));
     }
 
-    private void UpdateChildSubscriptions(NotifyCollectionChangedEventArgs args)
+    private void UpdateChildSubscriptions(
+        NotifyCollectionChangedEventArgs args,
+        Dictionary<SetSlider, int> childSubscriptions)
     {
+        if (args.Action == NotifyCollectionChangedAction.Reset)
+        {
+            DetachAllChildren(childSubscriptions);
+            return;
+        }
+
         if (args.OldItems is not null)
         {
             foreach (SetSlider slider in args.OldItems)
             {
-                slider.Changed -= OnChildChanged;
+                DetachChild(slider, childSubscriptions);
             }
         }
 
@@ -130,9 +140,47 @@ public sealed class SliderPreset : ProjectModelNode
         {
             foreach (SetSlider slider in args.NewItems)
             {
-                slider.Changed += OnChildChanged;
+                AttachChild(slider, childSubscriptions);
             }
         }
+    }
+
+    private void AttachChild(SetSlider slider, Dictionary<SetSlider, int> childSubscriptions)
+    {
+        slider.Changed += OnChildChanged;
+        childSubscriptions.TryGetValue(slider, out var count);
+        childSubscriptions[slider] = count + 1;
+    }
+
+    private void DetachChild(SetSlider slider, Dictionary<SetSlider, int> childSubscriptions)
+    {
+        slider.Changed -= OnChildChanged;
+
+        if (!childSubscriptions.TryGetValue(slider, out var count))
+        {
+            return;
+        }
+
+        if (count == 1)
+        {
+            childSubscriptions.Remove(slider);
+            return;
+        }
+
+        childSubscriptions[slider] = count - 1;
+    }
+
+    private void DetachAllChildren(Dictionary<SetSlider, int> childSubscriptions)
+    {
+        foreach (var subscription in childSubscriptions)
+        {
+            for (var index = 0; index < subscription.Value; index++)
+            {
+                subscription.Key.Changed -= OnChildChanged;
+            }
+        }
+
+        childSubscriptions.Clear();
     }
 
     private void OnChildChanged(object? sender, EventArgs args)
