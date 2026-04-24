@@ -122,6 +122,43 @@ public sealed class SliderMathFormatterTests
         }
     }
 
+    [Fact]
+    public void BosJsonUsesLfOnlyLineEndings()
+    {
+        var profile = new SliderProfile(
+            defaults: Array.Empty<SliderDefault>(),
+            multipliers: Array.Empty<SliderMultiplier>(),
+            invertedNames: Array.Empty<string>());
+        var preset = new SliderPreset(
+            "Body",
+            new[]
+            {
+                new SetSlider("Scale")
+                {
+                    ValueSmall = 0,
+                    ValueBig = 50,
+                },
+            });
+
+        var actual = SliderMathFormatter.FormatBosJson(preset, profile);
+
+        Assert.Equal(
+            "{\n" +
+            "  \"string\": {\n" +
+            "    \"bodyname\": \"Body\",\n" +
+            "    \"slidername1\": \"Scale\"\n" +
+            "  },\n" +
+            "  \"int\": {\n" +
+            "    \"slidersnumber\": 1\n" +
+            "  },\n" +
+            "  \"float\": {\n" +
+            "    \"highvalue1\": 0.5,\n" +
+            "    \"lowvalue1\": 0\n" +
+            "  }\n" +
+            "}",
+            actual);
+    }
+
     private static string FormatTemplates(IEnumerable<SliderPreset> presets, SliderProfile profile, bool omitRedundant)
     {
         var lines = presets

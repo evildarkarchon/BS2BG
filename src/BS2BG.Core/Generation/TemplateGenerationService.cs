@@ -50,7 +50,7 @@ public sealed class TemplateGenerationService
                 profileCatalog.GetProfile(preset.ProfileName),
                 omitRedundantSliders));
 
-        return string.Join("\n", lines);
+        return string.Join("\r\n", lines);
     }
 
     private static FormatPreset ToFormattingPreset(ModelPreset preset)

@@ -8,6 +8,30 @@ namespace BS2BG.Tests;
 
 public sealed class TemplateGenerationServiceTests
 {
+    [Fact]
+    public void GenerateTemplatesUsesCrLfLineEndings()
+    {
+        var service = new TemplateGenerationService();
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile(
+                ProjectProfileMapping.SkyrimCbbe,
+                new BS2BG.Core.Formatting.SliderProfile(
+                    defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
+                    multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
+                    invertedNames: Array.Empty<string>())),
+        });
+        var beta = CreatePreset("Beta", 50);
+        var alpha = CreatePreset("Alpha", 25);
+
+        var actual = service.GenerateTemplates(
+            new[] { beta, alpha },
+            catalog,
+            omitRedundantSliders: false);
+
+        Assert.Equal("Alpha=Scale@0.25\r\nBeta=Scale@0.5", actual);
+    }
+
     [Theory]
     [InlineData("minimal", "minimal.xml", "settings.json")]
     [InlineData("skyrim-cbbe", "CBBE.xml", "settings.json")]
@@ -68,6 +92,17 @@ public sealed class TemplateGenerationServiceTests
     private static string InputPath(string scenario, string fileName)
     {
         return Path.Combine(RepositoryRoot, "tests", "fixtures", "inputs", scenario, fileName);
+    }
+
+    private static SliderPreset CreatePreset(string name, int bigValue)
+    {
+        var preset = new SliderPreset(name);
+        preset.AddSetSlider(new SetSlider("Scale")
+        {
+            ValueSmall = 0,
+            ValueBig = bigValue,
+        });
+        return preset;
     }
 
     private static void AssertFixtureText(string scenario, string fileName, string actual)

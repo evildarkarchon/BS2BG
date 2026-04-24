@@ -130,8 +130,8 @@ public static class SliderMathFormatter
     private static string WriteBosJson(string bodyName, IReadOnlyList<BosSlider> sliders)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("{");
-        builder.AppendLine("  \"string\": {");
+        AppendLine(builder, "{");
+        AppendLine(builder, "  \"string\": {");
         AppendStringProperty(builder, "bodyname", bodyName, trailingComma: sliders.Count > 0, indent: 4);
 
         for (var index = 0; index < sliders.Count; index++)
@@ -144,16 +144,16 @@ public static class SliderMathFormatter
                 indent: 4);
         }
 
-        builder.AppendLine("  },");
-        builder.AppendLine("  \"int\": {");
+        AppendLine(builder, "  },");
+        AppendLine(builder, "  \"int\": {");
         AppendNumberProperty(
             builder,
             "slidersnumber",
             sliders.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
             trailingComma: false,
             indent: 4);
-        builder.AppendLine("  },");
-        builder.AppendLine("  \"float\": {");
+        AppendLine(builder, "  },");
+        AppendLine(builder, "  \"float\": {");
 
         for (var index = 0; index < sliders.Count; index++)
         {
@@ -175,10 +175,16 @@ public static class SliderMathFormatter
                 indent: 4);
         }
 
-        builder.AppendLine("  }");
+        AppendLine(builder, "  }");
         builder.Append('}');
 
         return builder.ToString();
+    }
+
+    private static void AppendLine(StringBuilder builder, string value)
+    {
+        builder.Append(value);
+        builder.Append('\n');
     }
 
     private static void AppendStringProperty(
@@ -224,7 +230,7 @@ public static class SliderMathFormatter
             builder.Append(',');
         }
 
-        builder.AppendLine();
+        builder.Append('\n');
     }
 
     private static string EscapeJsonString(string value)
