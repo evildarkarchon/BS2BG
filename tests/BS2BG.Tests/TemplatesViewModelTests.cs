@@ -139,6 +139,31 @@ public sealed class TemplatesViewModelTests
         Assert.Equal("Generated templates copied.", viewModel.StatusMessage);
     }
 
+    [Fact]
+    public void CopyGeneratedTemplatesCommandReportsClipboardFailure()
+    {
+        var clipboard = new ThrowingClipboardService(new InvalidOperationException("Clipboard is unavailable."));
+        var viewModel = CreateViewModel(clipboard: clipboard);
+        AddPreset(viewModel, "Alpha", 50);
+        viewModel.GenerateTemplates();
+        var synchronizationContext = new RecordingSynchronizationContext();
+        var previousContext = SynchronizationContext.Current;
+
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(synchronizationContext);
+
+            viewModel.CopyGeneratedTemplatesCommand.Execute(null);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+
+        Assert.Empty(synchronizationContext.Exceptions);
+        Assert.Equal("Copy generated templates failed: Clipboard is unavailable.", viewModel.StatusMessage);
+    }
+
     private static ModelSliderPreset AddPreset(TemplatesViewModel viewModel, string name, int bigValue)
     {
         var preset = new ModelSliderPreset(name);
@@ -216,6 +241,38 @@ public sealed class TemplatesViewModelTests
         {
             Text = text;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingClipboardService : IClipboardService
+    {
+        private readonly Exception exception;
+
+        public ThrowingClipboardService(Exception exception)
+        {
+            this.exception = exception;
+        }
+
+        public Task SetTextAsync(string text, CancellationToken cancellationToken)
+        {
+            return Task.FromException(exception);
+        }
+    }
+
+    private sealed class RecordingSynchronizationContext : SynchronizationContext
+    {
+        public List<Exception> Exceptions { get; } = new List<Exception>();
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            try
+            {
+                d(state);
+            }
+            catch (Exception ex)
+            {
+                Exceptions.Add(ex);
+            }
         }
     }
 

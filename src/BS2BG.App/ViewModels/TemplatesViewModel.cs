@@ -64,7 +64,10 @@ public sealed class TemplatesViewModel : ReactiveObject
         this.clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
         selectedProfileName = profileCatalog.DefaultProfile.Name;
 
-        ImportPresetsCommand = new AsyncRelayCommand(ImportPresetsAsync, () => !IsBusy);
+        ImportPresetsCommand = new AsyncRelayCommand(
+            ImportPresetsAsync,
+            () => !IsBusy,
+            exception => ReportCommandFailure("Import presets", exception));
         RenameSelectedPresetCommand = new RelayCommand(
             () => TryRenameSelectedPreset(PresetNameInput),
             () => SelectedPreset is not null);
@@ -76,7 +79,9 @@ public sealed class TemplatesViewModel : ReactiveObject
             () => SelectedPreset is not null);
         ClearPresetsCommand = new RelayCommand(ClearPresets, () => Presets.Count > 0);
         GenerateTemplatesCommand = new RelayCommand(GenerateTemplates, () => Presets.Count > 0);
-        CopyGeneratedTemplatesCommand = new AsyncRelayCommand(CopyGeneratedTemplatesAsync);
+        CopyGeneratedTemplatesCommand = new AsyncRelayCommand(
+            CopyGeneratedTemplatesAsync,
+            reportException: exception => ReportCommandFailure("Copy generated templates", exception));
     }
 
     public ObservableCollection<SliderPreset> Presets => project.SliderPresets;
@@ -361,6 +366,11 @@ public sealed class TemplatesViewModel : ReactiveObject
         StatusMessage = "Generated templates copied.";
     }
 
+    private void ReportCommandFailure(string action, Exception exception)
+    {
+        StatusMessage = action + " failed: " + FormatExceptionMessage(exception);
+    }
+
     private void AddOrUpdatePreset(SliderPreset importedPreset)
     {
         var existingPreset = project.FindSliderPreset(importedPreset.Name);
@@ -495,6 +505,13 @@ public sealed class TemplatesViewModel : ReactiveObject
     private static string NormalizePresetName(string value)
     {
         return (value ?? string.Empty).Trim().Replace('.', ' ');
+    }
+
+    private static string FormatExceptionMessage(Exception exception)
+    {
+        return string.IsNullOrWhiteSpace(exception.Message)
+            ? exception.GetType().Name
+            : exception.Message;
     }
 
     private static string FormatImportStatus(BodySlideXmlImportResult import)

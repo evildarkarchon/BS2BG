@@ -8,31 +8,43 @@ public static class TemplateProfileCatalogFactory
 {
     public static TemplateProfileCatalog CreateDefault()
     {
+        return CreateDefault(CandidateDirectories());
+    }
+
+    public static TemplateProfileCatalog CreateDefault(IEnumerable<string> searchDirectories)
+    {
+        ArgumentNullException.ThrowIfNull(searchDirectories);
+
+        return CreateDefault(searchDirectories.Select(directory => new DirectoryInfo(directory)));
+    }
+
+    private static TemplateProfileCatalog CreateDefault(IEnumerable<DirectoryInfo> searchDirectories)
+    {
+        var directories = searchDirectories.ToArray();
+
         return new TemplateProfileCatalog(new[]
         {
-            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, LoadOrCreateEmpty("settings.json")),
-            new TemplateProfile(ProjectProfileMapping.SkyrimUunp, LoadOrCreateEmpty("settings_UUNP.json")),
-            new TemplateProfile(ProjectProfileMapping.Fallout4Cbbe, LoadOrCreateEmpty("settings.json")),
+            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, LoadRequiredProfile("settings.json", directories)),
+            new TemplateProfile(ProjectProfileMapping.SkyrimUunp, LoadRequiredProfile("settings_UUNP.json", directories)),
+            new TemplateProfile(ProjectProfileMapping.Fallout4Cbbe, LoadRequiredProfile("settings.json", directories)),
         });
     }
 
-    private static SliderProfile LoadOrCreateEmpty(string fileName)
+    private static SliderProfile LoadRequiredProfile(string fileName, IEnumerable<DirectoryInfo> searchDirectories)
     {
-        var path = FindProfilePath(fileName);
-        return path is null ? CreateEmptyProfile() : SliderProfileJsonService.Load(path);
+        var directories = searchDirectories.ToArray();
+        var path = FindProfilePath(fileName, directories);
+        if (path is null)
+        {
+            throw new FileNotFoundException(CreateMissingProfileMessage(fileName, directories), fileName);
+        }
+
+        return SliderProfileJsonService.Load(path);
     }
 
-    private static SliderProfile CreateEmptyProfile()
+    private static string? FindProfilePath(string fileName, IEnumerable<DirectoryInfo> searchDirectories)
     {
-        return new SliderProfile(
-            Array.Empty<SliderDefault>(),
-            Array.Empty<SliderMultiplier>(),
-            Array.Empty<string>());
-    }
-
-    private static string? FindProfilePath(string fileName)
-    {
-        foreach (var directory in CandidateDirectories())
+        foreach (var directory in searchDirectories)
         {
             var path = Path.Combine(directory.FullName, fileName);
             if (File.Exists(path))
@@ -42,6 +54,21 @@ public static class TemplateProfileCatalogFactory
         }
 
         return null;
+    }
+
+    private static string CreateMissingProfileMessage(string fileName, IEnumerable<DirectoryInfo> searchDirectories)
+    {
+        var searchedDirectories = string.Join(
+            Environment.NewLine,
+            searchDirectories
+                .Select(directory => directory.FullName)
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        return "Required slider profile '" + fileName + "' was not found."
+            + Environment.NewLine
+            + "Searched directories:"
+            + Environment.NewLine
+            + searchedDirectories;
     }
 
     private static IEnumerable<DirectoryInfo> CandidateDirectories()

@@ -1,0 +1,48 @@
+using BS2BG.App.Services;
+using Xunit;
+
+namespace BS2BG.Tests;
+
+public sealed class TemplateProfileCatalogFactoryTests
+{
+    [Fact]
+    public void CreateDefaultThrowsWhenRequiredProfileFileIsMissing()
+    {
+        using var directory = new TemporaryDirectory();
+        directory.WriteFile(
+            "settings.json",
+            """
+            {
+              "Defaults": {},
+              "Multipliers": {},
+              "Inverted": []
+            }
+            """);
+
+        var exception = Assert.Throws<FileNotFoundException>(
+            () => TemplateProfileCatalogFactory.CreateDefault(new[] { directory.Path }));
+
+        Assert.Contains("settings_UUNP.json", exception.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void WriteFile(string fileName, string contents)
+        {
+            File.WriteAllText(System.IO.Path.Combine(Path, fileName), contents);
+        }
+
+        public void Dispose()
+        {
+            Directory.Delete(Path, recursive: true);
+        }
+    }
+}
