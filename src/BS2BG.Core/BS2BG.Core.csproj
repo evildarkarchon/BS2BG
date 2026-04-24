@@ -4,4 +4,8 @@
     <RootNamespace>BS2BG.Core</RootNamespace>
     <LangVersion>13</LangVersion>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
 </Project>
