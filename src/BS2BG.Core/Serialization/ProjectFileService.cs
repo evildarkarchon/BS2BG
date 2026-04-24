@@ -99,7 +99,7 @@ public sealed class ProjectFileService
                 Enabled = sliderDto.Enabled ?? true,
                 ValueSmall = sliderDto.ValueSmall,
                 ValueBig = sliderDto.ValueBig,
-                PercentMin = sliderDto.PercentMin ?? 0,
+                PercentMin = sliderDto.PercentMin ?? 100,
                 PercentMax = sliderDto.PercentMax ?? 100
             });
         }

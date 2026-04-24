@@ -1,5 +1,7 @@
 using System.Reflection;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using BS2BG.Core.Models;
 using BS2BG.App.Services;
 using Xunit;
 
@@ -34,6 +36,36 @@ public sealed class WindowImageViewServiceTests
         (bitmap as IDisposable)?.Dispose();
     }
 
+    [AvaloniaFact]
+    public void ShowImageRecreatesWindowAfterClose()
+    {
+        using var directory = new TemporaryDirectory();
+        var imagePath = directory.WriteBytes(
+            "pixel.png",
+            Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="));
+        var service = new WindowImageViewService();
+
+        service.ShowImage(new Npc("Lydia"), imagePath);
+
+        var firstWindow = GetWindow(service);
+        firstWindow.Should().NotBeNull();
+        firstWindow!.Title.Should().Be("Lydia");
+        firstWindow.IsVisible.Should().BeTrue();
+
+        firstWindow.Close();
+        GetWindow(service).Should().BeNull();
+
+        service.ShowImage(new Npc("Serana"), imagePath);
+
+        var secondWindow = GetWindow(service);
+        secondWindow.Should().NotBeNull();
+        secondWindow.Should().NotBeSameAs(firstWindow);
+        secondWindow!.Title.Should().Be("Serana");
+        secondWindow.IsVisible.Should().BeTrue();
+        secondWindow.Close();
+    }
+
     private static object? InvokeCreateBitmap(string imagePath)
     {
         var createBitmap = typeof(WindowImageViewService).GetMethod(
@@ -41,6 +73,15 @@ public sealed class WindowImageViewServiceTests
                                BindingFlags.NonPublic | BindingFlags.Static)
                            ?? throw new InvalidOperationException("CreateBitmap was not found.");
         return createBitmap.Invoke(null, new object?[] { imagePath });
+    }
+
+    private static Window? GetWindow(WindowImageViewService service)
+    {
+        var field = typeof(WindowImageViewService).GetField(
+                        "window",
+                        BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new InvalidOperationException("window field was not found.");
+        return field.GetValue(service) as Window;
     }
 
     private sealed class TemporaryDirectory : IDisposable

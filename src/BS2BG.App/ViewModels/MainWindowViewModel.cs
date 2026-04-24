@@ -383,39 +383,46 @@ public sealed class MainWindowViewModel : ReactiveObject
         IReadOnlyList<string> paths,
         CancellationToken cancellationToken = default)
     {
-        var files = paths?.Where(path => !string.IsNullOrWhiteSpace(path)).ToArray()
-                    ?? Array.Empty<string>();
-        if (files.Length == 0)
+        try
         {
-            StatusMessage = "No files dropped.";
-            return;
+            var files = paths?.Where(path => !string.IsNullOrWhiteSpace(path)).ToArray()
+                        ?? Array.Empty<string>();
+            if (files.Length == 0)
+            {
+                StatusMessage = "No files dropped.";
+                return;
+            }
+
+            var projectFiles = files
+                .Where(path => string.Equals(Path.GetExtension(path), ".jbs2bg", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var xmlFiles = files
+                .Where(path => string.Equals(Path.GetExtension(path), ".xml", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var npcFiles = files
+                .Where(path => string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var skipped = files.Length - projectFiles.Length - xmlFiles.Length - npcFiles.Length;
+
+            if (projectFiles.Length > 0
+                && !await TryOpenProjectPathAsync(projectFiles[0], true, cancellationToken))
+                return;
+
+            if (xmlFiles.Length > 0) await Templates.ImportPresetFilesAsync(xmlFiles, cancellationToken);
+
+            if (npcFiles.Length > 0) await Morphs.ImportNpcFilesAsync(npcFiles, cancellationToken);
+
+            StatusMessage = "Processed " + (files.Length - skipped).ToString(CultureInfo.InvariantCulture)
+                                         + " dropped file" + (files.Length - skipped == 1 ? "." : "s.")
+                                         + (skipped > 0
+                                             ? " Skipped " + skipped.ToString(CultureInfo.InvariantCulture)
+                                                           + " unsupported file" + (skipped == 1 ? "." : "s.")
+                                             : string.Empty);
         }
-
-        var projectFiles = files
-            .Where(path => string.Equals(Path.GetExtension(path), ".jbs2bg", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        var xmlFiles = files
-            .Where(path => string.Equals(Path.GetExtension(path), ".xml", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        var npcFiles = files
-            .Where(path => string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        var skipped = files.Length - projectFiles.Length - xmlFiles.Length - npcFiles.Length;
-
-        if (projectFiles.Length > 0
-            && !await TryOpenProjectPathAsync(projectFiles[0], true, cancellationToken))
-            return;
-
-        if (xmlFiles.Length > 0) await Templates.ImportPresetFilesAsync(xmlFiles, cancellationToken);
-
-        if (npcFiles.Length > 0) await Morphs.ImportNpcFilesAsync(npcFiles, cancellationToken);
-
-        StatusMessage = "Processed " + (files.Length - skipped).ToString(CultureInfo.InvariantCulture)
-                                     + " dropped file" + (files.Length - skipped == 1 ? "." : "s.")
-                                     + (skipped > 0
-                                         ? " Skipped " + skipped.ToString(CultureInfo.InvariantCulture)
-                                                       + " unsupported file" + (skipped == 1 ? "." : "s.")
-                                         : string.Empty);
+        catch (Exception exception)
+        {
+            StatusMessage = "Dropped file processing failed: " + FormatExceptionMessage(exception);
+        }
     }
 
     public async Task SaveProjectAsync(CancellationToken cancellationToken = default) =>

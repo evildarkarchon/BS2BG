@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
@@ -129,6 +130,16 @@ public sealed class MainWindowViewModelTests
         viewModel.CurrentProjectPath.Should().BeNull();
         viewModel.StatusMessage.Should().Be("Open cancelled.");
         confirmations.ConfirmDiscardCallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DroppedFileProcessingReportsUnexpectedFailures()
+    {
+        var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService());
+
+        await viewModel.HandleDroppedFilesAsync(new ThrowingReadOnlyList("boom"), TestContext.Current.CancellationToken);
+
+        viewModel.StatusMessage.Should().Be("Dropped file processing failed: boom");
     }
 
     [Fact]
@@ -312,6 +323,17 @@ public sealed class MainWindowViewModelTests
     private sealed class EmptyClipboardService : IClipboardService
     {
         public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class ThrowingReadOnlyList(string message) : IReadOnlyList<string>
+    {
+        public int Count => 1;
+
+        public string this[int index] => throw new InvalidOperationException(message);
+
+        public IEnumerator<string> GetEnumerator() => throw new InvalidOperationException(message);
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private sealed class TemporaryDirectory : IDisposable

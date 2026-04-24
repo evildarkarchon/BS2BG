@@ -21,6 +21,32 @@ public sealed class NpcImageLookupServiceTests
     }
 
     [Fact]
+    public void ReturnsNullForDirectoryTraversalNpcName()
+    {
+        using var directory = new TemporaryDirectory();
+        directory.WriteImage(string.Empty, "outside.png");
+        var service = new NpcImageLookupService(directory.Path);
+
+        var actual = service.FindImagePath(new Npc("..\\outside"));
+
+        actual.Should().BeNull();
+    }
+
+    [Fact]
+    public void ReturnsNullForRootedNpcName()
+    {
+        using var directory = new TemporaryDirectory();
+        var rootedBasePath = System.IO.Path.Combine(directory.Path, "Elsewhere", "Serana");
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(rootedBasePath)!);
+        File.WriteAllBytes(rootedBasePath + ".png", new byte[] { 0x42 });
+        var service = new NpcImageLookupService(directory.Path);
+
+        var actual = service.FindImagePath(new Npc(rootedBasePath));
+
+        actual.Should().BeNull();
+    }
+
+    [Fact]
     public void FallsBackToNameOnlyImageAndSupportsDocumentedExtensionOrder()
     {
         using var directory = new TemporaryDirectory();

@@ -85,6 +85,40 @@ public sealed class ProjectFileServiceTests
     }
 
     [Fact]
+    public void LoadMissingDefaultSliderWithOmittedPctMinDefaultsToHundredAndSavesWithOmissionSemantics()
+    {
+        var service = new ProjectFileService();
+
+        var project = service.LoadFromString(
+            """
+            {
+              "SliderPresets": {
+                "Alpha": {
+                  "SetSliders": [
+                    {
+                      "name": "Waist"
+                    }
+                  ]
+                }
+              },
+              "CustomMorphTargets": {},
+              "MorphedNPCs": {}
+            }
+            """);
+
+        var preset = project.FindSliderPreset("Alpha");
+        preset.Should().NotBeNull();
+        var slider = preset!.MissingDefaultSetSliders.Should().ContainSingle().Which;
+        slider.PercentMin.Should().Be(100);
+        slider.PercentMax.Should().Be(100);
+
+        var saved = service.SaveToString(project);
+
+        saved.Should().Contain("\"SetSliders\": []");
+        saved.Should().NotContain("Waist");
+    }
+
+    [Fact]
     public void SavePreservesNpcsWithDuplicateDisplayNames()
     {
         var service = new ProjectFileService();

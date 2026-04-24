@@ -58,6 +58,15 @@ public sealed class WindowImageViewService : IImageViewService
                 Content = imageControl
             }
         };
+
+        var createdWindow = window;
+        createdWindow.Closed += (_, _) =>
+        {
+            if (!ReferenceEquals(window, createdWindow)) return;
+
+            imageControl = null;
+            window = null;
+        };
     }
 
     private static Bitmap? CreateBitmap(string? imagePath)
