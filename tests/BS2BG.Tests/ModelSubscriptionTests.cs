@@ -46,6 +46,22 @@ public sealed class ModelSubscriptionTests
     }
 
     [Fact]
+    public void AddSetSliderKeepsSortedOrderWhenCollectionHasExternalSubscribers()
+    {
+        var preset = new SliderPreset("Alpha");
+        var collectionNotifications = 0;
+        preset.SetSliders.CollectionChanged += (_, _) => collectionNotifications++;
+
+        preset.AddSetSlider(new SetSlider("P2") { ValueBig = 2 });
+        FluentActions.Invoking(() => preset.AddSetSlider(new SetSlider("P10") { ValueBig = 10 }))
+            .Should()
+            .NotThrow();
+
+        collectionNotifications.Should().BeGreaterThan(0);
+        preset.SetSliders.Select(slider => slider.Name).Should().Equal(new List<string> { "P10", "P2" });
+    }
+
+    [Fact]
     public void SliderPresetDoesNotTrackSetSliderAfterMissingDefaultCollectionIsCleared()
     {
         var preset = new SliderPreset("Alpha");

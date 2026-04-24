@@ -81,6 +81,29 @@ public sealed class SetSliderInspectorViewModelTests
     }
 
     [Fact]
+    public void DirectInspectorEditsCanUndoAndRedo()
+    {
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(undoRedo: undoRedo);
+        var preset = AddPreset(viewModel);
+        viewModel.SelectedPreset = preset;
+        var row = viewModel.SetSliderRows.Should().ContainSingle().Which;
+
+        row.Enabled = false;
+
+        row.Enabled.Should().BeFalse();
+        preset.SetSliders.Single().Enabled.Should().BeFalse();
+
+        undoRedo.Undo().Should().BeTrue();
+        row.Enabled.Should().BeTrue();
+        preset.SetSliders.Single().Enabled.Should().BeTrue();
+
+        undoRedo.Redo().Should().BeTrue();
+        row.Enabled.Should().BeFalse();
+        preset.SetSliders.Single().Enabled.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task SelectedPresetBosJsonUsesCoreOutputAndCopiesToClipboard()
     {
         var clipboard = new CapturingClipboardService();
@@ -107,7 +130,8 @@ public sealed class SetSliderInspectorViewModelTests
 
     private static TemplatesViewModel CreateViewModel(
         TemplateProfileCatalog? profileCatalog = null,
-        IClipboardService? clipboard = null)
+        IClipboardService? clipboard = null,
+        UndoRedoService? undoRedo = null)
     {
         return new TemplatesViewModel(
             new ProjectModel(),
@@ -115,7 +139,8 @@ public sealed class SetSliderInspectorViewModelTests
             new TemplateGenerationService(),
             profileCatalog ?? CreateCatalog(),
             new EmptyBodySlideXmlFilePicker(),
-            clipboard ?? new CapturingClipboardService());
+            clipboard ?? new CapturingClipboardService(),
+            undoRedo);
     }
 
     private static TemplateProfileCatalog CreateCatalog()

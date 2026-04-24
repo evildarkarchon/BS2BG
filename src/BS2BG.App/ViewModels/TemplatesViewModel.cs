@@ -481,7 +481,7 @@ public sealed class TemplatesViewModel : ReactiveObject
     private void SetAllSliderPercents(int value)
     {
         var before = CaptureSelectedSetSliders();
-        foreach (var row in SetSliderRows) row.SetBothPercents(value);
+        foreach (var row in SetSliderRows) row.SetBothPercents(value, false);
 
         RefreshAfterSetSliderEdit();
         RecordSelectedSetSliderChange("Set slider percents", before);
@@ -490,7 +490,7 @@ public sealed class TemplatesViewModel : ReactiveObject
     private void SetAllMinPercents(int value)
     {
         var before = CaptureSelectedSetSliders();
-        foreach (var row in SetSliderRows) row.SetMinPercent(value);
+        foreach (var row in SetSliderRows) row.SetMinPercent(value, false);
 
         RefreshAfterSetSliderEdit();
         RecordSelectedSetSliderChange("Set min percents", before);
@@ -499,7 +499,7 @@ public sealed class TemplatesViewModel : ReactiveObject
     private void SetAllMaxPercents(int value)
     {
         var before = CaptureSelectedSetSliders();
-        foreach (var row in SetSliderRows) row.SetMaxPercent(value);
+        foreach (var row in SetSliderRows) row.SetMaxPercent(value, false);
 
         RefreshAfterSetSliderEdit();
         RecordSelectedSetSliderChange("Set max percents", before);
@@ -713,7 +713,8 @@ public sealed class TemplatesViewModel : ReactiveObject
                 slider,
                 templateGenerationService,
                 () => profileCatalog.GetProfile(SelectedProfileName),
-                RefreshAfterSetSliderEdit));
+                RefreshAfterSetSliderEdit,
+                undoRedo));
 
         RaiseCommandStatesChanged();
     }

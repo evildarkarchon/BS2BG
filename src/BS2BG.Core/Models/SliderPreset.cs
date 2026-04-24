@@ -103,18 +103,12 @@ public sealed class SliderPreset : ProjectModelNode
     private void OnSetSlidersChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
         UpdateChildSubscriptions(args, setSliderSubscriptions);
-
-        if (!sortingSetSliders) SortSetSliders();
-
         NotifyChanged(nameof(SetSliders));
     }
 
     private void OnMissingDefaultSetSlidersChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
         UpdateChildSubscriptions(args, missingDefaultSetSliderSubscriptions);
-
-        if (!sortingMissingDefaults) SortMissingDefaultSetSliders();
-
         NotifyChanged(nameof(MissingDefaultSetSliders));
     }
 

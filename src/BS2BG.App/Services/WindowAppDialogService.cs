@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 
 namespace BS2BG.App.Services;
 
@@ -19,7 +20,8 @@ public sealed class WindowAppDialogService : IAppDialogService
         if (owner is null) return true;
 
         var window = CreateDiscardWindow(action);
-        using var registration = cancellationToken.Register(() => window.Close(false));
+        using var registration = cancellationToken.Register(
+            () => Dispatcher.UIThread.Post(() => window.Close(false)));
         return await window.ShowDialog<bool>(owner);
     }
 

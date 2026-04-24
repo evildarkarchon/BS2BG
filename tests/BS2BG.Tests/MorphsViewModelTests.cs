@@ -181,6 +181,33 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void AddAllVisibleImportedNpcsCanUndoAndRedoWithRandomAssignments()
+    {
+        var project = CreateProjectWithPresets();
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(0, 1), undoRedo: undoRedo);
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        viewModel.NpcDatabase.Add(lydia);
+        viewModel.NpcDatabase.Add(valerica);
+        viewModel.AssignRandomOnAdd = true;
+
+        viewModel.AddAllVisibleImportedNpcs().Should().Be(2);
+
+        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Valerica" });
+        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
+
+        undoRedo.Undo().Should().BeTrue();
+        project.MorphedNpcs.Should().BeEmpty();
+
+        undoRedo.Redo().Should().BeTrue();
+        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Valerica" });
+        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
+    }
+
+    [Fact]
     public void ClearedNpcsDoNotRefreshViewModelWhenRemovedNpcChanges()
     {
         var project = CreateProjectWithPresets();

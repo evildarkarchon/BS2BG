@@ -652,11 +652,29 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public int AddAllVisibleImportedNpcs()
     {
+        var before = Npcs.ToArray();
+        var selectedNpc = SelectedNpc;
         var added = assignmentService.AddNpcsToMorphs(project, VisibleNpcDatabase.ToArray(), AssignRandomOnAdd);
+        var addedSnapshots = Npcs
+            .Except(before)
+            .Select(npc => new NpcRemovalSnapshot(npc, Npcs.IndexOf(npc), CaptureAssignments(npc)))
+            .ToArray();
         StatusMessage = "Added " + added.ToString(CultureInfo.InvariantCulture)
                                  + " NPC" + (added == 1 ? "." : "s.");
         RefreshVisibleNpcs();
         RaiseCommandStatesChanged();
+        if (addedSnapshots.Length > 0)
+            undoRedo.Record(
+                "Add visible NPCs",
+                () =>
+                {
+                    ApplyRemoveNpcs(addedSnapshots);
+                    SelectedNpc = selectedNpc is not null && Npcs.Contains(selectedNpc)
+                        ? selectedNpc
+                        : VisibleNpcs.FirstOrDefault();
+                },
+                () => RestoreRemovedNpcs(addedSnapshots, selectedNpc));
+
         return added;
     }
 
