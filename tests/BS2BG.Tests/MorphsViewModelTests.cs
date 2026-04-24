@@ -81,11 +81,58 @@ public sealed class MorphsViewModelTests
         Assert.Equal(new[] { "Lydia", "Serana" }, viewModel.VisibleNpcs.Select(npc => npc.Name));
     }
 
+    [Fact]
+    public void GenerateMorphsReportsAndNotifiesTargetsWithoutPresets()
+    {
+        var project = CreateProjectWithPresets();
+        var emptyTarget = new CustomMorphTarget("All|Female");
+        var emptyNpc = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        project.CustomMorphTargets.Add(emptyTarget);
+        project.MorphedNpcs.Add(emptyNpc);
+        var notifier = new CapturingNoPresetNotificationService();
+        var viewModel = CreateViewModel(
+            project,
+            new QueueRandomAssignmentProvider(),
+            noPresetNotificationService: notifier);
+
+        viewModel.GenerateMorphs();
+
+        Assert.Equal(new MorphTargetBase[] { emptyTarget, emptyNpc }, viewModel.NoPresetTargets);
+        Assert.Equal(viewModel.NoPresetTargets, notifier.Targets);
+        Assert.Equal("Generated morphs. 2 targets have no presets.", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public void ViewSelectedNpcImageUsesLookupAndImageWindowService()
+    {
+        var project = CreateProjectWithPresets();
+        var npc = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        project.MorphedNpcs.Add(npc);
+        var imageLookup = new StubNpcImageLookupService("images/Lydia (HousecarlWhiterun).png");
+        var imageView = new CapturingImageViewService();
+        var viewModel = CreateViewModel(
+            project,
+            new QueueRandomAssignmentProvider(),
+            imageLookupService: imageLookup,
+            imageViewService: imageView);
+
+        viewModel.SelectedNpc = npc;
+        viewModel.ViewSelectedNpcImageCommand.Execute(null);
+
+        Assert.Equal(npc, imageLookup.Npc);
+        Assert.Equal(npc, imageView.Npc);
+        Assert.Equal("images/Lydia (HousecarlWhiterun).png", imageView.ImagePath);
+        Assert.Equal("Opened image for Lydia.", viewModel.StatusMessage);
+    }
+
     private static MorphsViewModel CreateViewModel(
         ProjectModel project,
         IRandomAssignmentProvider randomProvider,
         INpcTextFilePicker? filePicker = null,
-        IClipboardService? clipboard = null)
+        IClipboardService? clipboard = null,
+        INpcImageLookupService? imageLookupService = null,
+        IImageViewService? imageViewService = null,
+        INoPresetNotificationService? noPresetNotificationService = null)
     {
         return new MorphsViewModel(
             project,
@@ -93,7 +140,10 @@ public sealed class MorphsViewModelTests
             new MorphAssignmentService(randomProvider),
             new MorphGenerationService(),
             filePicker ?? new StaticNpcTextFilePicker(Array.Empty<string>()),
-            clipboard ?? new CapturingClipboardService());
+            clipboard ?? new CapturingClipboardService(),
+            imageLookupService ?? new StubNpcImageLookupService(null),
+            imageViewService ?? new CapturingImageViewService(),
+            noPresetNotificationService ?? new CapturingNoPresetNotificationService());
     }
 
     private static ProjectModel CreateProjectWithPresets()
@@ -158,6 +208,47 @@ public sealed class MorphsViewModelTests
         {
             Text = text;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubNpcImageLookupService : INpcImageLookupService
+    {
+        private readonly string? imagePath;
+
+        public StubNpcImageLookupService(string? imagePath)
+        {
+            this.imagePath = imagePath;
+        }
+
+        public Npc? Npc { get; private set; }
+
+        public string? FindImagePath(Npc npc)
+        {
+            Npc = npc;
+            return imagePath;
+        }
+    }
+
+    private sealed class CapturingImageViewService : IImageViewService
+    {
+        public Npc? Npc { get; private set; }
+
+        public string? ImagePath { get; private set; }
+
+        public void ShowImage(Npc npc, string? imagePath)
+        {
+            Npc = npc;
+            ImagePath = imagePath;
+        }
+    }
+
+    private sealed class CapturingNoPresetNotificationService : INoPresetNotificationService
+    {
+        public IReadOnlyList<MorphTargetBase> Targets { get; private set; } = Array.Empty<MorphTargetBase>();
+
+        public void ShowTargetsWithoutPresets(IReadOnlyList<MorphTargetBase> targets)
+        {
+            Targets = targets.ToArray();
         }
     }
 

@@ -41,6 +41,13 @@ public static class AppBootstrapper
         services.AddSingleton<WindowClipboardService>();
         services.AddSingleton<IClipboardService>(provider =>
             provider.GetRequiredService<WindowClipboardService>());
+        services.AddSingleton<INpcImageLookupService, NpcImageLookupService>();
+        services.AddSingleton<WindowImageViewService>();
+        services.AddSingleton<IImageViewService>(provider =>
+            provider.GetRequiredService<WindowImageViewService>());
+        services.AddSingleton<WindowNoPresetNotificationService>();
+        services.AddSingleton<INoPresetNotificationService>(provider =>
+            provider.GetRequiredService<WindowNoPresetNotificationService>());
         services.AddSingleton<TemplatesViewModel>();
         services.AddSingleton<MorphsViewModel>();
         services.AddSingleton<MainWindowViewModel>();

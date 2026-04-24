@@ -43,6 +43,21 @@ public static class SliderMathFormatter
         return WriteBosJson(preset.Name, sliders);
     }
 
+    public static string FormatSetSliderValue(SetSlider slider, SliderProfile profile)
+    {
+        if (slider is null)
+        {
+            throw new ArgumentNullException(nameof(slider));
+        }
+
+        if (profile is null)
+        {
+            throw new ArgumentNullException(nameof(profile));
+        }
+
+        return FormatTemplateValue(slider, profile);
+    }
+
     private static string FormatTemplateValue(SetSlider slider, SliderProfile profile)
     {
         var small = ResolveSmall(slider, profile) * 0.01f;

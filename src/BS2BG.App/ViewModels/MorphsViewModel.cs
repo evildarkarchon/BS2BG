@@ -20,6 +20,9 @@ public sealed class MorphsViewModel : ReactiveObject
     private readonly MorphGenerationService morphGenerationService;
     private readonly INpcTextFilePicker npcTextFilePicker;
     private readonly IClipboardService clipboardService;
+    private readonly INpcImageLookupService imageLookupService;
+    private readonly IImageViewService imageViewService;
+    private readonly INoPresetNotificationService noPresetNotificationService;
     private CustomMorphTarget? selectedCustomTarget;
     private Npc? selectedNpc;
     private Npc? selectedImportedNpc;
@@ -42,7 +45,10 @@ public sealed class MorphsViewModel : ReactiveObject
             new MorphAssignmentService(new RandomAssignmentProvider()),
             new MorphGenerationService(),
             new EmptyNpcTextFilePicker(),
-            new EmptyClipboardService())
+            new EmptyClipboardService(),
+            new NpcImageLookupService(),
+            new NullImageViewService(),
+            new NullNoPresetNotificationService())
     {
     }
 
@@ -52,7 +58,10 @@ public sealed class MorphsViewModel : ReactiveObject
         MorphAssignmentService assignmentService,
         MorphGenerationService morphGenerationService,
         INpcTextFilePicker npcTextFilePicker,
-        IClipboardService clipboardService)
+        IClipboardService clipboardService,
+        INpcImageLookupService? imageLookupService = null,
+        IImageViewService? imageViewService = null,
+        INoPresetNotificationService? noPresetNotificationService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.npcTextParser = npcTextParser ?? throw new ArgumentNullException(nameof(npcTextParser));
@@ -61,6 +70,9 @@ public sealed class MorphsViewModel : ReactiveObject
             ?? throw new ArgumentNullException(nameof(morphGenerationService));
         this.npcTextFilePicker = npcTextFilePicker ?? throw new ArgumentNullException(nameof(npcTextFilePicker));
         this.clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
+        this.imageLookupService = imageLookupService ?? new NpcImageLookupService();
+        this.imageViewService = imageViewService ?? new NullImageViewService();
+        this.noPresetNotificationService = noPresetNotificationService ?? new NullNoPresetNotificationService();
 
         project.MorphedNpcs.CollectionChanged += OnNpcsChanged;
         project.CustomMorphTargets.CollectionChanged += OnCustomTargetsChanged;
@@ -116,6 +128,9 @@ public sealed class MorphsViewModel : ReactiveObject
         CopyGeneratedMorphsCommand = new AsyncRelayCommand(
             CopyGeneratedMorphsAsync,
             reportException: exception => ReportCommandFailure("Copy generated morphs", exception));
+        ViewSelectedNpcImageCommand = new RelayCommand(
+            ViewSelectedNpcImage,
+            () => SelectedImageNpc is not null);
     }
 
     public ObservableCollection<SliderPreset> Presets => project.SliderPresets;
@@ -129,6 +144,8 @@ public sealed class MorphsViewModel : ReactiveObject
     public ObservableCollection<Npc> VisibleNpcs { get; } = new();
 
     public ObservableCollection<Npc> VisibleNpcDatabase { get; } = new();
+
+    public ObservableCollection<MorphTargetBase> NoPresetTargets { get; } = new();
 
     public ICommand ImportNpcsCommand { get; }
 
@@ -161,6 +178,8 @@ public sealed class MorphsViewModel : ReactiveObject
     public ICommand GenerateMorphsCommand { get; }
 
     public ICommand CopyGeneratedMorphsCommand { get; }
+
+    public ICommand ViewSelectedNpcImageCommand { get; }
 
     public CustomMorphTarget? SelectedCustomTarget
     {
@@ -200,6 +219,7 @@ public sealed class MorphsViewModel : ReactiveObject
             }
 
             RefreshSelectedTargetSubscription();
+            RaiseCommandStatesChanged();
         }
     }
 
@@ -234,6 +254,8 @@ public sealed class MorphsViewModel : ReactiveObject
     }
 
     public MorphTargetBase? SelectedTarget => (MorphTargetBase?)SelectedCustomTarget ?? SelectedNpc;
+
+    private Npc? SelectedImageNpc => SelectedNpc ?? SelectedImportedNpc;
 
     public IEnumerable<SliderPreset> SelectedTargetPresets => SelectedTarget?.SliderPresets
         ?? Enumerable.Empty<SliderPreset>();
@@ -553,11 +575,38 @@ public sealed class MorphsViewModel : ReactiveObject
 
         var result = morphGenerationService.GenerateMorphs(project);
         GeneratedMorphsText = result.Text;
+        NoPresetTargets.Clear();
+        foreach (var target in result.TargetsWithoutPresets)
+        {
+            NoPresetTargets.Add(target);
+        }
+
         StatusMessage = result.TargetsWithoutPresets.Count == 0
             ? "Generated morphs."
             : "Generated morphs. " + result.TargetsWithoutPresets.Count.ToString(CultureInfo.InvariantCulture)
                 + " target" + (result.TargetsWithoutPresets.Count == 1 ? " has" : "s have")
                 + " no presets.";
+
+        if (NoPresetTargets.Count > 0)
+        {
+            noPresetNotificationService.ShowTargetsWithoutPresets(NoPresetTargets.ToArray());
+        }
+    }
+
+    public void ViewSelectedNpcImage()
+    {
+        var npc = SelectedImageNpc;
+        if (npc is null)
+        {
+            StatusMessage = "Select an NPC before viewing an image.";
+            return;
+        }
+
+        var imagePath = imageLookupService.FindImagePath(npc);
+        imageViewService.ShowImage(npc, imagePath);
+        StatusMessage = imagePath is null
+            ? "No image found for " + npc.Name + "."
+            : "Opened image for " + npc.Name + ".";
     }
 
     public async Task CopyGeneratedMorphsAsync(CancellationToken cancellationToken = default)
@@ -756,6 +805,7 @@ public sealed class MorphsViewModel : ReactiveObject
         RaiseCanExecuteChanged(FillEmptyNpcsCommand);
         RaiseCanExecuteChanged(ClearAssignmentsCommand);
         RaiseCanExecuteChanged(GenerateMorphsCommand);
+        RaiseCanExecuteChanged(ViewSelectedNpcImageCommand);
     }
 
     private static void RaiseCanExecuteChanged(ICommand? command)
@@ -821,6 +871,20 @@ public sealed class MorphsViewModel : ReactiveObject
         public Task SetTextAsync(string text, CancellationToken cancellationToken)
         {
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NullImageViewService : IImageViewService
+    {
+        public void ShowImage(Npc npc, string? imagePath)
+        {
+        }
+    }
+
+    private sealed class NullNoPresetNotificationService : INoPresetNotificationService
+    {
+        public void ShowTargetsWithoutPresets(IReadOnlyList<MorphTargetBase> targets)
+        {
         }
     }
 }

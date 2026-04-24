@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows.Input;
 using BS2BG.App.Services;
@@ -22,6 +23,7 @@ public sealed class TemplatesViewModel : ReactiveObject
     private string presetNameInput = string.Empty;
     private string previewTemplateText = string.Empty;
     private string generatedTemplateText = string.Empty;
+    private string selectedBosJsonText = string.Empty;
     private string validationMessage = string.Empty;
     private string statusMessage = string.Empty;
     private bool omitRedundantSliders;
@@ -82,9 +84,24 @@ public sealed class TemplatesViewModel : ReactiveObject
         CopyGeneratedTemplatesCommand = new AsyncRelayCommand(
             CopyGeneratedTemplatesAsync,
             reportException: exception => ReportCommandFailure("Copy generated templates", exception));
+        CopySelectedBosJsonCommand = new AsyncRelayCommand(
+            CopySelectedBosJsonAsync,
+            () => !string.IsNullOrWhiteSpace(SelectedBosJsonText),
+            exception => ReportCommandFailure("Copy BoS JSON", exception));
+        SetAllSliderPercentsTo0Command = new RelayCommand(() => SetAllSliderPercents(0), CanEditSetSliders);
+        SetAllSliderPercentsTo50Command = new RelayCommand(() => SetAllSliderPercents(50), CanEditSetSliders);
+        SetAllSliderPercentsTo100Command = new RelayCommand(() => SetAllSliderPercents(100), CanEditSetSliders);
+        SetAllMinPercentsTo0Command = new RelayCommand(() => SetAllMinPercents(0), CanEditSetSliders);
+        SetAllMinPercentsTo50Command = new RelayCommand(() => SetAllMinPercents(50), CanEditSetSliders);
+        SetAllMinPercentsTo100Command = new RelayCommand(() => SetAllMinPercents(100), CanEditSetSliders);
+        SetAllMaxPercentsTo0Command = new RelayCommand(() => SetAllMaxPercents(0), CanEditSetSliders);
+        SetAllMaxPercentsTo50Command = new RelayCommand(() => SetAllMaxPercents(50), CanEditSetSliders);
+        SetAllMaxPercentsTo100Command = new RelayCommand(() => SetAllMaxPercents(100), CanEditSetSliders);
     }
 
     public ObservableCollection<SliderPreset> Presets => project.SliderPresets;
+
+    public ObservableCollection<SetSliderInspectorRowViewModel> SetSliderRows { get; } = new();
 
     public IReadOnlyList<string> ProfileNames => profileCatalog.ProfileNames;
 
@@ -102,6 +119,26 @@ public sealed class TemplatesViewModel : ReactiveObject
 
     public ICommand CopyGeneratedTemplatesCommand { get; }
 
+    public ICommand CopySelectedBosJsonCommand { get; }
+
+    public ICommand SetAllSliderPercentsTo0Command { get; }
+
+    public ICommand SetAllSliderPercentsTo50Command { get; }
+
+    public ICommand SetAllSliderPercentsTo100Command { get; }
+
+    public ICommand SetAllMinPercentsTo0Command { get; }
+
+    public ICommand SetAllMinPercentsTo50Command { get; }
+
+    public ICommand SetAllMinPercentsTo100Command { get; }
+
+    public ICommand SetAllMaxPercentsTo0Command { get; }
+
+    public ICommand SetAllMaxPercentsTo50Command { get; }
+
+    public ICommand SetAllMaxPercentsTo100Command { get; }
+
     public SliderPreset? SelectedPreset
     {
         get => selectedPreset;
@@ -115,6 +152,8 @@ public sealed class TemplatesViewModel : ReactiveObject
             if (selectedPreset is not null)
             {
                 selectedPreset.PropertyChanged -= OnSelectedPresetChanged;
+                selectedPreset.SetSliders.CollectionChanged -= OnSelectedPresetSlidersCollectionChanged;
+                selectedPreset.MissingDefaultSetSliders.CollectionChanged -= OnSelectedPresetSlidersCollectionChanged;
             }
 
             this.RaiseAndSetIfChanged(ref selectedPreset, value);
@@ -122,15 +161,20 @@ public sealed class TemplatesViewModel : ReactiveObject
             if (selectedPreset is not null)
             {
                 selectedPreset.PropertyChanged += OnSelectedPresetChanged;
+                selectedPreset.SetSliders.CollectionChanged += OnSelectedPresetSlidersCollectionChanged;
+                selectedPreset.MissingDefaultSetSliders.CollectionChanged += OnSelectedPresetSlidersCollectionChanged;
                 PresetNameInput = selectedPreset.Name;
                 SetSelectedProfileNameFromPreset(selectedPreset.ProfileName);
+                RefreshSelectedPresetMissingDefaults(SelectedProfileName);
             }
             else
             {
                 PresetNameInput = string.Empty;
             }
 
+            RebuildSetSliderRows();
             RefreshPreview();
+            RefreshSelectedBosJson();
             RaiseCommandStatesChanged();
         }
     }
@@ -154,7 +198,10 @@ public sealed class TemplatesViewModel : ReactiveObject
             }
 
             RefreshSelectedPresetMissingDefaults(resolvedName);
+            RebuildSetSliderRows();
+            RefreshSetSliderRowPreviews();
             RefreshPreview();
+            RefreshSelectedBosJson();
         }
     }
 
@@ -174,6 +221,12 @@ public sealed class TemplatesViewModel : ReactiveObject
     {
         get => generatedTemplateText;
         private set => this.RaiseAndSetIfChanged(ref generatedTemplateText, value);
+    }
+
+    public string SelectedBosJsonText
+    {
+        get => selectedBosJsonText;
+        private set => this.RaiseAndSetIfChanged(ref selectedBosJsonText, value);
     }
 
     public string ValidationMessage
@@ -367,6 +420,48 @@ public sealed class TemplatesViewModel : ReactiveObject
         StatusMessage = "Generated templates copied.";
     }
 
+    public async Task CopySelectedBosJsonAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(SelectedBosJsonText))
+        {
+            StatusMessage = "Select a preset before copying BoS JSON.";
+            return;
+        }
+
+        await clipboardService.SetTextAsync(SelectedBosJsonText, cancellationToken);
+        StatusMessage = "BoS JSON copied.";
+    }
+
+    private void SetAllSliderPercents(int value)
+    {
+        foreach (var row in SetSliderRows)
+        {
+            row.SetBothPercents(value);
+        }
+
+        RefreshAfterSetSliderEdit();
+    }
+
+    private void SetAllMinPercents(int value)
+    {
+        foreach (var row in SetSliderRows)
+        {
+            row.SetMinPercent(value);
+        }
+
+        RefreshAfterSetSliderEdit();
+    }
+
+    private void SetAllMaxPercents(int value)
+    {
+        foreach (var row in SetSliderRows)
+        {
+            row.SetMaxPercent(value);
+        }
+
+        RefreshAfterSetSliderEdit();
+    }
+
     private void ReportCommandFailure(string action, Exception exception)
     {
         StatusMessage = action + " failed: " + FormatExceptionMessage(exception);
@@ -405,6 +500,22 @@ public sealed class TemplatesViewModel : ReactiveObject
             OmitRedundantSliders);
     }
 
+    private void RefreshSelectedBosJson()
+    {
+        if (SelectedPreset is null)
+        {
+            SelectedBosJsonText = string.Empty;
+        }
+        else
+        {
+            SelectedBosJsonText = templateGenerationService.PreviewBosJson(
+                SelectedPreset,
+                profileCatalog.GetProfile(SelectedProfileName));
+        }
+
+        RaiseCanExecuteChanged(CopySelectedBosJsonCommand);
+    }
+
     private void OnSelectedPresetChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName == nameof(SliderPreset.ProfileName))
@@ -413,6 +524,14 @@ public sealed class TemplatesViewModel : ReactiveObject
         }
 
         RefreshPreview();
+        RefreshSelectedBosJson();
+        RefreshSetSliderRowPreviews();
+    }
+
+    private void OnSelectedPresetSlidersCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        RebuildSetSliderRows();
+        RefreshAfterSetSliderEdit();
     }
 
     private void RefreshSelectedPresetMissingDefaults(string profileName)
@@ -470,6 +589,66 @@ public sealed class TemplatesViewModel : ReactiveObject
         RaiseCanExecuteChanged(RemoveSelectedPresetCommand);
         RaiseCanExecuteChanged(ClearPresetsCommand);
         RaiseCanExecuteChanged(GenerateTemplatesCommand);
+        RaiseCanExecuteChanged(CopySelectedBosJsonCommand);
+        RaiseCanExecuteChanged(SetAllSliderPercentsTo0Command);
+        RaiseCanExecuteChanged(SetAllSliderPercentsTo50Command);
+        RaiseCanExecuteChanged(SetAllSliderPercentsTo100Command);
+        RaiseCanExecuteChanged(SetAllMinPercentsTo0Command);
+        RaiseCanExecuteChanged(SetAllMinPercentsTo50Command);
+        RaiseCanExecuteChanged(SetAllMinPercentsTo100Command);
+        RaiseCanExecuteChanged(SetAllMaxPercentsTo0Command);
+        RaiseCanExecuteChanged(SetAllMaxPercentsTo50Command);
+        RaiseCanExecuteChanged(SetAllMaxPercentsTo100Command);
+    }
+
+    private void RebuildSetSliderRows()
+    {
+        foreach (var row in SetSliderRows)
+        {
+            row.Dispose();
+        }
+
+        SetSliderRows.Clear();
+        if (SelectedPreset is null)
+        {
+            RaiseCommandStatesChanged();
+            return;
+        }
+
+        var sliders = SelectedPreset.SetSliders
+            .Concat(SelectedPreset.MissingDefaultSetSliders)
+            .OrderBy(slider => slider.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (var slider in sliders)
+        {
+            SetSliderRows.Add(new SetSliderInspectorRowViewModel(
+                slider,
+                templateGenerationService,
+                () => profileCatalog.GetProfile(SelectedProfileName),
+                RefreshAfterSetSliderEdit));
+        }
+
+        RaiseCommandStatesChanged();
+    }
+
+    private void RefreshAfterSetSliderEdit()
+    {
+        RefreshPreview();
+        RefreshSelectedBosJson();
+        RefreshSetSliderRowPreviews();
+    }
+
+    private void RefreshSetSliderRowPreviews()
+    {
+        foreach (var row in SetSliderRows)
+        {
+            row.RefreshPreview();
+        }
+    }
+
+    private bool CanEditSetSliders()
+    {
+        return SetSliderRows.Count > 0;
     }
 
     private static void RaiseCanExecuteChanged(ICommand command)

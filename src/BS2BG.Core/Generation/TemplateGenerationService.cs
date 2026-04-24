@@ -53,6 +53,40 @@ public sealed class TemplateGenerationService
         return string.Join("\r\n", lines);
     }
 
+    public string PreviewBosJson(ModelPreset preset, TemplateProfile profile)
+    {
+        if (preset is null)
+        {
+            throw new ArgumentNullException(nameof(preset));
+        }
+
+        if (profile is null)
+        {
+            throw new ArgumentNullException(nameof(profile));
+        }
+
+        return SliderMathFormatter.FormatBosJson(
+            ToFormattingPreset(preset),
+            profile.SliderProfile);
+    }
+
+    public string PreviewSetSlider(ModelSetSlider slider, TemplateProfile profile)
+    {
+        if (slider is null)
+        {
+            throw new ArgumentNullException(nameof(slider));
+        }
+
+        if (profile is null)
+        {
+            throw new ArgumentNullException(nameof(profile));
+        }
+
+        return SliderMathFormatter.FormatSetSliderValue(
+            ToFormattingSetSlider(slider),
+            profile.SliderProfile);
+    }
+
     private static FormatPreset ToFormattingPreset(ModelPreset preset)
     {
         return new FormatPreset(

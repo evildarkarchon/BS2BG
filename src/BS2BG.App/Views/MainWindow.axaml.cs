@@ -20,7 +20,9 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
         MainWindowViewModel viewModel,
         WindowBodySlideXmlFilePicker? filePicker,
         WindowNpcTextFilePicker? npcTextFilePicker,
-        WindowClipboardService? clipboardService)
+        WindowClipboardService? clipboardService,
+        WindowImageViewService? imageViewService = null,
+        WindowNoPresetNotificationService? noPresetNotificationService = null)
     {
         InitializeComponent();
 
@@ -34,5 +36,7 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
         filePicker?.Attach(this);
         npcTextFilePicker?.Attach(this);
         clipboardService?.Attach(this);
+        imageViewService?.Attach(this);
+        noPresetNotificationService?.Attach(this);
     }
 }
