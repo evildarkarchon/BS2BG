@@ -139,6 +139,39 @@ public sealed class M6UxViewModelTests
     }
 
     [Fact]
+    public void UndoRedoRestoresClearPresetsAndAssignments()
+    {
+        var project = CreateProjectWithPresets("Alpha", "Beta");
+        var alpha = project.SliderPresets[0];
+        var beta = project.SliderPresets[1];
+        var target = new CustomMorphTarget("All|Female");
+        var npc = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        target.AddSliderPreset(alpha);
+        npc.AddSliderPreset(beta);
+        project.CustomMorphTargets.Add(target);
+        project.MorphedNpcs.Add(npc);
+        var harness = CreateHarness(project);
+
+        harness.Templates.ClearPresets();
+
+        Assert.Empty(project.SliderPresets);
+        Assert.Empty(target.SliderPresets);
+        Assert.Empty(npc.SliderPresets);
+
+        harness.Main.UndoCommand.Execute(null);
+
+        Assert.Equal(new[] { "Alpha", "Beta" }, project.SliderPresets.Select(preset => preset.Name));
+        Assert.Equal(new[] { "Alpha" }, target.SliderPresets.Select(preset => preset.Name));
+        Assert.Equal(new[] { "Beta" }, npc.SliderPresets.Select(preset => preset.Name));
+
+        harness.Main.RedoCommand.Execute(null);
+
+        Assert.Empty(project.SliderPresets);
+        Assert.Empty(target.SliderPresets);
+        Assert.Empty(npc.SliderPresets);
+    }
+
+    [Fact]
     public void InlineTargetValidationThemePreferenceAndPresetWarningAreActionable()
     {
         var project = CreateProjectWithPresets(Enumerable.Range(0, 80).Select(index => "P" + index).ToArray());

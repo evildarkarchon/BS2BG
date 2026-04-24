@@ -8,6 +8,31 @@ public sealed class BosJsonExportWriter
 {
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     private static readonly HashSet<char> WindowsReservedFileNameCharacters = new("<>:\"/\\|?*");
+    private static readonly HashSet<string> WindowsReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        "COM1",
+        "COM2",
+        "COM3",
+        "COM4",
+        "COM5",
+        "COM6",
+        "COM7",
+        "COM8",
+        "COM9",
+        "LPT1",
+        "LPT2",
+        "LPT3",
+        "LPT4",
+        "LPT5",
+        "LPT6",
+        "LPT7",
+        "LPT8",
+        "LPT9",
+    };
     private readonly TemplateGenerationService templateGenerationService;
 
     public BosJsonExportWriter(TemplateGenerationService templateGenerationService)
@@ -63,7 +88,7 @@ public sealed class BosJsonExportWriter
         }
 
         var sanitized = builder.ToString().Trim().TrimEnd('.', ' ');
-        return sanitized.Length == 0 ? "preset" : sanitized;
+        return sanitized.Length == 0 ? "preset" : SanitizeWindowsDeviceName(sanitized);
     }
 
     private static bool IsReservedFileNameCharacter(char character)
@@ -71,6 +96,21 @@ public sealed class BosJsonExportWriter
         return character < ' '
             || WindowsReservedFileNameCharacters.Contains(character)
             || Path.GetInvalidFileNameChars().Contains(character);
+    }
+
+    private static string SanitizeWindowsDeviceName(string fileStem)
+    {
+        var extensionSeparator = fileStem.IndexOf('.');
+        var deviceNameLength = extensionSeparator < 0 ? fileStem.Length : extensionSeparator;
+        if (deviceNameLength == 0)
+        {
+            return fileStem;
+        }
+
+        var deviceName = fileStem.Substring(0, deviceNameLength);
+        return WindowsReservedDeviceNames.Contains(deviceName)
+            ? fileStem.Insert(deviceNameLength, "_")
+            : fileStem;
     }
 
     private static string GetUniqueFileName(string fileStem, HashSet<string> usedFileNames)

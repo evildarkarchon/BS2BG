@@ -57,6 +57,36 @@ public sealed class ExportWriterTests
         Assert.Contains("\"bodyname\": \"Preset?One\"", File.ReadAllText(result.FilePaths[1]));
     }
 
+    [Fact]
+    public void BosJsonExportWriterSanitizesWindowsDeviceNames()
+    {
+        using var directory = new TemporaryDirectory();
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile(
+                ProjectProfileMapping.SkyrimCbbe,
+                new BS2BG.Core.Formatting.SliderProfile(
+                    defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
+                    multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
+                    invertedNames: Array.Empty<string>())),
+        });
+        var writer = new BosJsonExportWriter(new TemplateGenerationService());
+        var first = new SliderPreset("CON");
+        var second = new SliderPreset("COM1");
+
+        var result = writer.Write(directory.Path, new[] { first, second }, catalog);
+
+        Assert.Equal(
+            new[]
+            {
+                Path.Combine(directory.Path, "COM1_.json"),
+                Path.Combine(directory.Path, "CON_.json"),
+            },
+            result.FilePaths);
+        Assert.Contains("\"bodyname\": \"COM1\"", File.ReadAllText(result.FilePaths[0]));
+        Assert.Contains("\"bodyname\": \"CON\"", File.ReadAllText(result.FilePaths[1]));
+    }
+
     private static bool HasUtf8Bom(byte[] bytes)
     {
         return bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;

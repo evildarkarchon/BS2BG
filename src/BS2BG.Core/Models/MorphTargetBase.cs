@@ -6,7 +6,6 @@ namespace BS2BG.Core.Models;
 public abstract class MorphTargetBase : ProjectModelNode
 {
     private string name;
-    private bool sortingPresets;
 
     protected MorphTargetBase(string name)
     {
@@ -87,11 +86,6 @@ public abstract class MorphTargetBase : ProjectModelNode
 
     private void OnSliderPresetsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (!sortingPresets)
-        {
-            SortSliderPresets();
-        }
-
         NotifyChanged(nameof(SliderPresets));
         NotifyChanged(nameof(HasPresets));
         OnSliderPresetAssignmentsChanged();
@@ -103,25 +97,17 @@ public abstract class MorphTargetBase : ProjectModelNode
 
     private void SortSliderPresets()
     {
-        sortingPresets = true;
-        try
+        for (var sortedIndex = 0; sortedIndex < SliderPresets.Count; sortedIndex++)
         {
-            for (var sortedIndex = 0; sortedIndex < SliderPresets.Count; sortedIndex++)
+            var item = SliderPresets
+                .Skip(sortedIndex)
+                .OrderBy(sliderPreset => sliderPreset.Name, StringComparer.OrdinalIgnoreCase)
+                .First();
+            var currentIndex = SliderPresets.IndexOf(item);
+            if (currentIndex != sortedIndex)
             {
-                var item = SliderPresets
-                    .Skip(sortedIndex)
-                    .OrderBy(sliderPreset => sliderPreset.Name, StringComparer.OrdinalIgnoreCase)
-                    .First();
-                var currentIndex = SliderPresets.IndexOf(item);
-                if (currentIndex != sortedIndex)
-                {
-                    SliderPresets.Move(currentIndex, sortedIndex);
-                }
+                SliderPresets.Move(currentIndex, sortedIndex);
             }
-        }
-        finally
-        {
-            sortingPresets = false;
         }
     }
 }

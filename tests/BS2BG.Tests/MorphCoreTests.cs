@@ -120,6 +120,21 @@ public sealed class MorphCoreTests
         Assert.Equal(new[] { "Empty|Female" }, result.TargetsWithoutPresets.Select(target => target.Name));
     }
 
+    [Fact]
+    public void AddingSliderPresetKeepsSortedOrderWhenCollectionHasExternalSubscribers()
+    {
+        var target = new CustomMorphTarget("All|Female");
+        var collectionNotifications = 0;
+        target.SliderPresets.CollectionChanged += (_, _) => collectionNotifications++;
+
+        target.AddSliderPreset(new SliderPreset("P2"));
+        var exception = Record.Exception(() => target.AddSliderPreset(new SliderPreset("P10")));
+
+        Assert.Null(exception);
+        Assert.True(collectionNotifications > 0);
+        Assert.Equal(new[] { "P10", "P2" }, target.SliderPresets.Select(preset => preset.Name));
+    }
+
     private sealed class FixedRandomAssignmentProvider : IRandomAssignmentProvider
     {
         private readonly int value;

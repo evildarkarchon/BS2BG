@@ -41,6 +41,13 @@ public sealed class AppShellTests
         Assert.Equal(AppShell.MinHeight, window.MinHeight);
     }
 
+    [Fact]
+    public void StartupSizeMatchesPreferredDefaultWindowCapture()
+    {
+        Assert.Equal(1422, AppShell.StartupWidth);
+        Assert.Equal(817, AppShell.StartupHeight);
+    }
+
     [AvaloniaFact]
     public void MainWindowTitleTracksRootViewModelTitle()
     {

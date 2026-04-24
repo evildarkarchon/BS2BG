@@ -87,6 +87,23 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
         }
     }
 
+    private void OnNpcRaceFilterSelectionChanged(object? sender, SelectionChangedEventArgs args)
+    {
+        if (ViewModel is null || sender is not ListBox listBox)
+        {
+            return;
+        }
+
+        var selectedRaces = listBox.SelectedItems?.OfType<string>().ToArray() ?? Array.Empty<string>();
+        ViewModel.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, selectedRaces);
+    }
+
+    private void OnNpcRaceFilterClearClick(object? sender, Avalonia.Interactivity.RoutedEventArgs args)
+    {
+        this.FindControl<ListBox>("NpcRaceFilterValuesListBox")?.SelectedItems?.Clear();
+        ViewModel?.Morphs.ClearNpcRaceFilter();
+    }
+
     private void OnCommandPaletteSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
         if (ViewModel is null || sender is not ListBox listBox)

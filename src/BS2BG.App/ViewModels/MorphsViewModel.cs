@@ -59,6 +59,7 @@ public sealed class MorphsViewModel : ReactiveObject
     private string validationMessage = string.Empty;
     private bool assignRandomOnAdd;
     private bool isBusy;
+    private bool isNpcRaceFilterOpen;
 
     public MorphsViewModel()
         : this(
@@ -157,6 +158,8 @@ public sealed class MorphsViewModel : ReactiveObject
         TrimSelectedTargetTo76Command = new RelayCommand(
             () => TrimSelectedTargetTo76(),
             () => SelectedTarget?.SliderPresets.Count >= 77);
+        ToggleNpcRaceFilterCommand = new RelayCommand(() => IsNpcRaceFilterOpen = !IsNpcRaceFilterOpen);
+        ClearNpcRaceFilterCommand = new RelayCommand(ClearNpcRaceFilter);
         GenerateMorphsCommand = new RelayCommand(
             GenerateMorphs,
             () => CustomTargets.Count > 0 || Npcs.Count > 0);
@@ -217,6 +220,10 @@ public sealed class MorphsViewModel : ReactiveObject
     public ICommand ClearSelectedNpcAssignmentsCommand { get; }
 
     public ICommand TrimSelectedTargetTo76Command { get; }
+
+    public ICommand ToggleNpcRaceFilterCommand { get; }
+
+    public ICommand ClearNpcRaceFilterCommand { get; }
 
     public ICommand GenerateMorphsCommand { get; }
 
@@ -321,6 +328,14 @@ public sealed class MorphsViewModel : ReactiveObject
         }
     }
 
+    public bool IsTargetPresetWarningVisible => TargetPresetWarningState != PresetCountWarningState.Neutral;
+
+    public bool IsTargetPresetTrimVisible => TargetPresetWarningState == PresetCountWarningState.Error;
+
+    public string TargetPresetWarningText => TargetPresetWarningState == PresetCountWarningState.Error
+        ? "Preset count is over the safe limit."
+        : "Preset count is approaching the safe limit.";
+
     public string NpcCountBadgeText => "(" + Npcs.Count.ToString(CultureInfo.InvariantCulture) + ")";
 
     public string NpcDatabaseCountBadgeText => "(" + NpcDatabase.Count.ToString(CultureInfo.InvariantCulture) + ")";
@@ -371,6 +386,20 @@ public sealed class MorphsViewModel : ReactiveObject
             RefreshVisibleNpcDatabase();
         }
     }
+
+    public bool IsNpcRaceFilterOpen
+    {
+        get => isNpcRaceFilterOpen;
+        set => this.RaiseAndSetIfChanged(ref isNpcRaceFilterOpen, value);
+    }
+
+    public string NpcRaceColumnSearchText
+    {
+        get => GetNpcColumnSearchText(NpcFilterColumn.Race);
+        set => SetNpcColumnSearchText(NpcFilterColumn.Race, value);
+    }
+
+    public IReadOnlyList<string> NpcRaceColumnValues => GetNpcColumnValues(NpcFilterColumn.Race);
 
     public string GeneratedMorphsText
     {
@@ -851,8 +880,18 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public void SetNpcColumnSearchText(NpcFilterColumn column, string value)
     {
-        npcColumnSearchText[column] = value ?? string.Empty;
-        this.RaisePropertyChanged(nameof(VisibleNpcs));
+        var normalized = value ?? string.Empty;
+        if (string.Equals(GetNpcColumnSearchText(column), normalized, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        npcColumnSearchText[column] = normalized;
+        if (column == NpcFilterColumn.Race)
+        {
+            this.RaisePropertyChanged(nameof(NpcRaceColumnSearchText));
+            this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
+        }
     }
 
     public IReadOnlyList<string> GetNpcColumnValues(NpcFilterColumn column)
@@ -866,6 +905,12 @@ public sealed class MorphsViewModel : ReactiveObject
                 || value.Contains(filter, StringComparison.OrdinalIgnoreCase))
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    public void ClearNpcRaceFilter()
+    {
+        SetNpcColumnAllowedValues(NpcFilterColumn.Race, Array.Empty<string>());
+        NpcRaceColumnSearchText = string.Empty;
     }
 
     public void GenerateMorphs()
@@ -982,6 +1027,7 @@ public sealed class MorphsViewModel : ReactiveObject
     {
         RefreshFilteredCollection(Npcs, VisibleNpcs, SearchText);
         this.RaisePropertyChanged(nameof(NpcCountBadgeText));
+        this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
         RaiseCommandStatesChanged();
     }
 
@@ -1204,6 +1250,9 @@ public sealed class MorphsViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(SelectedTargetPresets));
         this.RaisePropertyChanged(nameof(TargetPresetCountText));
         this.RaisePropertyChanged(nameof(TargetPresetWarningState));
+        this.RaisePropertyChanged(nameof(IsTargetPresetWarningVisible));
+        this.RaisePropertyChanged(nameof(IsTargetPresetTrimVisible));
+        this.RaisePropertyChanged(nameof(TargetPresetWarningText));
         RaiseCommandStatesChanged();
     }
 
@@ -1226,8 +1275,17 @@ public sealed class MorphsViewModel : ReactiveObject
         RaiseCanExecuteChanged(AssignSelectedNpcsCommand);
         RaiseCanExecuteChanged(ClearSelectedNpcAssignmentsCommand);
         RaiseCanExecuteChanged(TrimSelectedTargetTo76Command);
+        RaiseCanExecuteChanged(ToggleNpcRaceFilterCommand);
+        RaiseCanExecuteChanged(ClearNpcRaceFilterCommand);
         RaiseCanExecuteChanged(GenerateMorphsCommand);
         RaiseCanExecuteChanged(ViewSelectedNpcImageCommand);
+    }
+
+    private string GetNpcColumnSearchText(NpcFilterColumn column)
+    {
+        return npcColumnSearchText.TryGetValue(column, out var value)
+            ? value
+            : string.Empty;
     }
 
     private IEnumerable<Npc> GetSelectedNpcsForCommand()
