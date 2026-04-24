@@ -2,39 +2,171 @@
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
                      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                     xmlns:input="using:Avalonia.Input"
                      xmlns:rxui="using:ReactiveUI.Avalonia"
+                     xmlns:services="using:BS2BG.App.Services"
                      xmlns:vm="using:BS2BG.App.ViewModels"
                      xmlns:models="using:BS2BG.Core.Models"
                      x:Class="BS2BG.App.Views.MainWindow"
                      x:DataType="vm:MainWindowViewModel"
                      mc:Ignorable="d">
+  <rxui:ReactiveWindow.KeyBindings>
+    <input:KeyBinding Gesture="Ctrl+N"
+                      Command="{Binding NewProjectCommand}" />
+    <input:KeyBinding Gesture="Ctrl+O"
+                      Command="{Binding OpenProjectCommand}" />
+    <input:KeyBinding Gesture="Ctrl+S"
+                      Command="{Binding SaveProjectCommand}" />
+    <input:KeyBinding Gesture="Ctrl+Alt+S"
+                      Command="{Binding SaveProjectAsCommand}" />
+    <input:KeyBinding Gesture="Ctrl+B"
+                      Command="{Binding ExportBosJsonCommand}" />
+    <input:KeyBinding Gesture="Ctrl+X"
+                      Command="{Binding ExportBodyGenInisCommand}" />
+    <input:KeyBinding Gesture="Ctrl+Z"
+                      Command="{Binding UndoCommand}" />
+    <input:KeyBinding Gesture="Ctrl+Y"
+                      Command="{Binding RedoCommand}" />
+    <input:KeyBinding Gesture="Ctrl+F"
+                      Command="{Binding FocusGlobalSearchCommand}" />
+    <input:KeyBinding Gesture="Ctrl+Shift+P"
+                      Command="{Binding OpenCommandPaletteCommand}" />
+  </rxui:ReactiveWindow.KeyBindings>
+
   <Design.DataContext>
     <vm:MainWindowViewModel />
   </Design.DataContext>
 
   <Grid Background="{DynamicResource BS2BGWindowBackgroundBrush}"
-        RowDefinitions="Auto,*">
-    <Border Grid.Row="0"
+        RowDefinitions="Auto,Auto,*">
+    <Menu x:Name="MainMenuBar"
+          Grid.Row="0">
+      <MenuItem Header="File">
+        <MenuItem x:Name="NewProjectMenuItem"
+                  Header="New"
+                  Command="{Binding NewProjectCommand}" />
+        <MenuItem x:Name="OpenProjectMenuItem"
+                  Header="Open..."
+                  Command="{Binding OpenProjectCommand}" />
+        <Separator />
+        <MenuItem x:Name="SaveProjectMenuItem"
+                  Header="Save"
+                  Command="{Binding SaveProjectCommand}" />
+        <MenuItem x:Name="SaveProjectAsMenuItem"
+                  Header="Save As..."
+                  Command="{Binding SaveProjectAsCommand}" />
+        <Separator />
+        <MenuItem x:Name="ExportBosJsonMenuItem"
+                  Header="Export Templates as BoS JSON"
+                  Command="{Binding ExportBosJsonCommand}" />
+        <MenuItem x:Name="ExportBodyGenInisMenuItem"
+                  Header="Export BodyGen INIs"
+                  Command="{Binding ExportBodyGenInisCommand}" />
+      </MenuItem>
+      <MenuItem Header="Edit">
+        <MenuItem x:Name="UndoMenuItem"
+                  Header="Undo"
+                  Command="{Binding UndoCommand}" />
+        <MenuItem x:Name="RedoMenuItem"
+                  Header="Redo"
+                  Command="{Binding RedoCommand}" />
+        <Separator />
+        <MenuItem Header="Command Palette..."
+                  Command="{Binding OpenCommandPaletteCommand}" />
+      </MenuItem>
+      <MenuItem Header="Help">
+        <MenuItem x:Name="AboutMenuItem"
+                  Header="About Bodyslide to Bodygen"
+                  Command="{Binding ShowAboutCommand}" />
+      </MenuItem>
+    </Menu>
+
+    <Border Grid.Row="1"
             Padding="16,12"
             Background="{DynamicResource BS2BGWindowBackgroundBrush}">
-      <DockPanel LastChildFill="False">
+      <Grid ColumnDefinitions="Auto,260,Auto,Auto,*">
         <TextBlock DockPanel.Dock="Left"
+                   Grid.Column="0"
                    Text="{Binding Title}"
                    FontSize="18"
                    FontWeight="SemiBold"
+                   Margin="0,0,16,0"
                    VerticalAlignment="Center" />
+        <TextBox x:Name="GlobalSearchBox"
+                 Grid.Column="1"
+                 Text="{Binding GlobalSearchText}"
+                 PlaceholderText="Search active view" />
+        <ComboBox x:Name="ThemePreferenceComboBox"
+                  Grid.Column="2"
+                  Width="108"
+                  Margin="8,0,0,0"
+                  ItemsSource="{Binding ThemePreferences}"
+                  SelectedItem="{Binding SelectedThemePreference}" />
+        <Button Grid.Column="3"
+                Margin="8,0,0,0"
+                Content="Commands"
+                Command="{Binding OpenCommandPaletteCommand}" />
         <ProgressBar DockPanel.Dock="Right"
+                     Grid.Column="4"
                      Width="160"
                      Height="4"
+                     HorizontalAlignment="Right"
                      IsIndeterminate="True"
                      IsVisible="{Binding Templates.IsBusy}" />
-      </DockPanel>
+        <TextBlock x:Name="ShellStatusText"
+                   Grid.Column="4"
+                   Text="{Binding StatusMessage}"
+                   Margin="16,0,176,0"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" />
+      </Grid>
     </Border>
 
-    <TabControl Grid.Row="1"
-                Margin="12,0,12,12">
+    <Popup x:Name="CommandPalettePopup"
+           Grid.Row="1"
+           PlacementTarget="{Binding #GlobalSearchBox}"
+           Placement="Bottom"
+           IsOpen="{Binding IsCommandPaletteOpen}">
+      <Border Padding="8"
+              Width="420"
+              MaxHeight="360"
+              Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+              BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+              BorderThickness="1">
+        <Grid RowDefinitions="Auto,*">
+          <TextBox Grid.Row="0"
+                   Text="{Binding CommandPaletteSearchText}"
+                   PlaceholderText="Run command" />
+          <ListBox Grid.Row="1"
+                   Margin="0,8,0,0"
+                   ItemsSource="{Binding VisibleCommandPaletteItems}"
+                   SelectionChanged="OnCommandPaletteSelectionChanged">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="services:CommandDescriptor">
+                <Grid ColumnDefinitions="*,Auto"
+                      Margin="4">
+                  <TextBlock Grid.Column="0" Text="{Binding Title}" />
+                  <TextBlock Grid.Column="1"
+                             Text="{Binding GestureText}"
+                             Opacity="0.72" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+    </Popup>
+
+    <TabControl x:Name="WorkspaceTabs"
+                Grid.Row="2"
+                Margin="12,0,12,12"
+                SelectionChanged="OnWorkspaceSelectionChanged">
       <TabItem Header="Templates">
-        <Grid ColumnDefinitions="280,4,*">
+        <Grid x:Name="TemplatesDropZone"
+              DragDrop.AllowDrop="True"
+              DragDrop.DragOver="OnDragOver"
+              DragDrop.Drop="OnDrop"
+              ColumnDefinitions="280,4,*">
           <Border Grid.Column="0"
                   Padding="4,8,12,4">
             <Grid RowDefinitions="Auto,Auto,*">
@@ -72,7 +204,7 @@
               <Separator Grid.Row="1" Margin="0,12" />
 
               <ListBox Grid.Row="2"
-                       ItemsSource="{Binding Templates.Presets}"
+                       ItemsSource="{Binding Templates.VisiblePresets}"
                        SelectedItem="{Binding Templates.SelectedPreset}">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="models:SliderPreset">
@@ -298,7 +430,11 @@
       </TabItem>
 
       <TabItem Header="Morphs">
-        <Grid ColumnDefinitions="280,4,*,4,300"
+        <Grid x:Name="NpcDropZone"
+              DragDrop.AllowDrop="True"
+              DragDrop.DragOver="OnDragOver"
+              DragDrop.Drop="OnDrop"
+              ColumnDefinitions="280,4,*,4,300"
               RowDefinitions="*,Auto,170">
           <Border Grid.Column="0"
                   Grid.RowSpan="3"
@@ -341,7 +477,7 @@
               </Grid>
 
               <TextBlock Grid.Row="4"
-                         Text="{Binding Morphs.ValidationMessage}"
+                         Text="{Binding Morphs.TargetNameValidationMessage}"
                          TextWrapping="Wrap"
                          Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}" />
 
@@ -414,7 +550,7 @@
                   Padding="12,8,12,4">
             <Grid RowDefinitions="Auto,Auto,*">
               <Grid Grid.Row="0"
-                    ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto"
+                    ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto"
                     Margin="0,0,0,8">
                 <TextBlock Grid.Column="0"
                            Text="Individual NPCs"
@@ -443,6 +579,16 @@
                         Margin="8,0,0,0"
                         Content="Clear"
                         Command="{Binding Morphs.ClearVisibleNpcsCommand}" />
+                <Button x:Name="SelectedNpcAssignButton"
+                        Grid.Column="7"
+                        Margin="8,0,0,0"
+                        Content="Assign Selected"
+                        Command="{Binding Morphs.AssignSelectedNpcsCommand}" />
+                <Button x:Name="SelectedNpcClearAssignmentsButton"
+                        Grid.Column="8"
+                        Margin="8,0,0,0"
+                        Content="Clear Selected"
+                        Command="{Binding Morphs.ClearSelectedNpcAssignmentsCommand}" />
               </Grid>
 
               <Grid Grid.Row="1"
@@ -450,13 +596,20 @@
                     Margin="8,0,8,4">
                 <TextBlock Grid.Column="0" Text="Name" FontWeight="SemiBold" />
                 <TextBlock Grid.Column="1" Text="Master" FontWeight="SemiBold" />
-                <TextBlock Grid.Column="2" Text="Race" FontWeight="SemiBold" />
+                <Button x:Name="NpcFilterRaceButton"
+                        Grid.Column="2"
+                        Padding="0"
+                        HorizontalAlignment="Left"
+                        Content="Race" />
                 <TextBlock Grid.Column="3" Text="EditorID" FontWeight="SemiBold" />
                 <TextBlock Grid.Column="4" Text="FormID" FontWeight="SemiBold" />
                 <TextBlock Grid.Column="5" Text="Slider Presets" FontWeight="SemiBold" />
               </Grid>
 
               <ListBox Grid.Row="2"
+                       x:Name="NpcListBox"
+                       SelectionMode="Multiple"
+                       SelectionChanged="OnNpcSelectionChanged"
                        ItemsSource="{Binding Morphs.VisibleNpcs}"
                        SelectedItem="{Binding Morphs.SelectedNpc}">
                 <ListBox.ItemTemplate>
@@ -498,6 +651,17 @@
                         Margin="8,0,0,0"
                         Command="{Binding Morphs.ViewSelectedNpcImageCommand}" />
               </Grid>
+
+              <Border Grid.Row="0"
+                      Margin="0,28,0,8"
+                      Padding="8"
+                      Background="{DynamicResource SystemControlBackgroundAccentBrush}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="Preset count is over the safe limit." />
+                  <Button Content="Trim to 76"
+                          Command="{Binding Morphs.TrimSelectedTargetTo76Command}" />
+                </StackPanel>
+              </Border>
 
               <Grid Grid.Row="1"
                     RowDefinitions="Auto,*">

@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.LogicalTree;
 using Avalonia;
 using BS2BG.App;
@@ -11,6 +13,7 @@ using Xunit;
 
 namespace BS2BG.Tests;
 
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected arrays keep shell assertions readable.")]
 public sealed class AppShellTests
 {
     [Fact]
@@ -39,6 +42,19 @@ public sealed class AppShellTests
     }
 
     [AvaloniaFact]
+    public void MainWindowTitleTracksRootViewModelTitle()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var window = provider.GetRequiredService<MainWindow>();
+        var project = provider.GetRequiredService<BS2BG.Core.Models.ProjectModel>();
+
+        project.SliderPresets.Add(new BS2BG.Core.Models.SliderPreset("Alpha"));
+
+        Assert.Equal(AppShell.Title + " *", window.Title);
+    }
+
+    [AvaloniaFact]
     public void MainWindowExposesTemplatesAndMorphsWorkspaces()
     {
         using var provider = AppBootstrapper.CreateServiceProvider();
@@ -51,6 +67,72 @@ public sealed class AppShellTests
             .ToArray();
         Assert.Contains("Templates", tabHeaders);
         Assert.Contains("Morphs", tabHeaders);
+    }
+
+    [AvaloniaFact]
+    public void MainWindowExposesM5FileAndHelpMenus()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var window = provider.GetRequiredService<MainWindow>();
+
+        Assert.Equal(
+            new[]
+            {
+                "New",
+                "Open...",
+                "Save",
+                "Save As...",
+                "Export Templates as BoS JSON",
+                "Export BodyGen INIs",
+                "About Bodyslide to Bodygen",
+            },
+            window.GetLogicalDescendants()
+                .OfType<MenuItem>()
+                .Where(item => item.Name is
+                    "NewProjectMenuItem"
+                    or "OpenProjectMenuItem"
+                    or "SaveProjectMenuItem"
+                    or "SaveProjectAsMenuItem"
+                    or "ExportBosJsonMenuItem"
+                    or "ExportBodyGenInisMenuItem"
+                    or "AboutMenuItem")
+                .Select(item => item.Header?.ToString())
+                .ToArray());
+    }
+
+    [AvaloniaFact]
+    public void MainWindowRoutesM5CommandsThroughMenuItemsAndKeyBindings()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var window = provider.GetRequiredService<MainWindow>();
+        var viewModel = Assert.IsType<MainWindowViewModel>(window.ViewModel);
+        window.ApplyTemplate();
+
+        Assert.Same(
+            viewModel.NewProjectCommand,
+            window.FindControl<MenuItem>("NewProjectMenuItem")?.Command);
+        Assert.Same(
+            viewModel.SaveProjectAsCommand,
+            window.FindControl<MenuItem>("SaveProjectAsMenuItem")?.Command);
+        Assert.Same(
+            viewModel.ExportBodyGenInisCommand,
+            window.FindControl<MenuItem>("ExportBodyGenInisMenuItem")?.Command);
+        Assert.NotNull(window.FindControl<TextBlock>("ShellStatusText"));
+
+        Assert.Contains(window.KeyBindings, binding =>
+            ReferenceEquals(binding.Command, viewModel.SaveProjectAsCommand)
+            && binding.Gesture?.Key == Key.S
+            && binding.Gesture.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Alt));
+        Assert.Contains(window.KeyBindings, binding =>
+            ReferenceEquals(binding.Command, viewModel.ExportBosJsonCommand)
+            && binding.Gesture?.Key == Key.B
+            && binding.Gesture.KeyModifiers == KeyModifiers.Control);
+        Assert.Contains(window.KeyBindings, binding =>
+            ReferenceEquals(binding.Command, viewModel.ExportBodyGenInisCommand)
+            && binding.Gesture?.Key == Key.X
+            && binding.Gesture.KeyModifiers == KeyModifiers.Control);
     }
 
     [AvaloniaFact]
@@ -79,5 +161,27 @@ public sealed class AppShellTests
         Assert.IsType<WindowImageViewService>(provider.GetRequiredService<IImageViewService>());
         Assert.IsType<WindowNoPresetNotificationService>(
             provider.GetRequiredService<INoPresetNotificationService>());
+    }
+
+    [AvaloniaFact]
+    public void AboutDialogUsesRequiredCreditsAndSizing()
+    {
+        var service = new WindowAppDialogService();
+
+        var window = service.CreateAboutWindow();
+
+        Assert.Equal(AppShell.Title, window.Title);
+        Assert.Equal(400, window.Width);
+        Assert.Equal(200, window.Height);
+        Assert.False(window.CanResize);
+
+        var text = string.Join(
+            "\n",
+            window.GetLogicalDescendants()
+                .OfType<TextBlock>()
+                .Select(block => block.Text));
+        Assert.Contains("Bodyslide to Bodygen", text, StringComparison.Ordinal);
+        Assert.Contains("Totiman / asdasfa", text, StringComparison.Ordinal);
+        Assert.Contains("evildarkarchon", text, StringComparison.Ordinal);
     }
 }

@@ -82,6 +82,27 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void ClearVisibleNpcsClearsSelectedNpcWhenSelectionIsRemoved()
+    {
+        var project = CreateProjectWithPresets();
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(valerica);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider());
+
+        viewModel.SelectedNpc = lydia;
+        viewModel.SearchText = "Skyrim";
+        var removed = viewModel.ClearVisibleNpcs();
+
+        Assert.Equal(1, removed);
+        Assert.DoesNotContain(lydia, project.MorphedNpcs);
+        Assert.Contains(valerica, project.MorphedNpcs);
+        Assert.Null(viewModel.SelectedNpc);
+        Assert.Null(viewModel.SelectedTarget);
+    }
+
+    [Fact]
     public void ClearedNpcsDoNotRefreshViewModelWhenRemovedNpcChanges()
     {
         var project = CreateProjectWithPresets();

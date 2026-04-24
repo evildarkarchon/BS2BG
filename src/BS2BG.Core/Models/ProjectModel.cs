@@ -42,6 +42,48 @@ public sealed class ProjectModel : ProjectModelNode
         SortCollection(CustomMorphTargets);
     }
 
+    public void ReplaceWith(ProjectModel source)
+    {
+        if (source is null)
+        {
+            throw new ArgumentNullException(nameof(source));
+        }
+
+        SliderPresets.Clear();
+        CustomMorphTargets.Clear();
+        MorphedNpcs.Clear();
+
+        var presetMap = new Dictionary<string, SliderPreset>(StringComparer.OrdinalIgnoreCase);
+        foreach (var preset in source.SliderPresets)
+        {
+            var clone = ClonePreset(preset);
+            SliderPresets.Add(clone);
+            presetMap[clone.Name] = clone;
+        }
+
+        foreach (var target in source.CustomMorphTargets)
+        {
+            var clone = new CustomMorphTarget(target.Name);
+            CopyPresetAssignments(target, clone, presetMap);
+            CustomMorphTargets.Add(clone);
+        }
+
+        foreach (var npc in source.MorphedNpcs)
+        {
+            var clone = new Npc(npc.Name)
+            {
+                Mod = npc.Mod,
+                EditorId = npc.EditorId,
+                Race = npc.Race,
+                FormId = npc.FormId,
+            };
+            CopyPresetAssignments(npc, clone, presetMap);
+            MorphedNpcs.Add(clone);
+        }
+
+        MarkClean();
+    }
+
     public int RemoveStalePresetReferences()
     {
         var removed = 0;
@@ -221,5 +263,37 @@ public sealed class ProjectModel : ProjectModelNode
             MorphTargetBase target => target.Name,
             _ => string.Empty,
         };
+    }
+
+    private static SliderPreset ClonePreset(SliderPreset source)
+    {
+        var clone = new SliderPreset(source.Name, source.ProfileName);
+        foreach (var slider in source.SetSliders.Concat(source.MissingDefaultSetSliders))
+        {
+            clone.AddSetSlider(new SetSlider(slider.Name)
+            {
+                Enabled = slider.Enabled,
+                ValueSmall = slider.ValueSmall,
+                ValueBig = slider.ValueBig,
+                PercentMin = slider.PercentMin,
+                PercentMax = slider.PercentMax,
+            });
+        }
+
+        return clone;
+    }
+
+    private static void CopyPresetAssignments(
+        MorphTargetBase source,
+        MorphTargetBase target,
+        Dictionary<string, SliderPreset> presetMap)
+    {
+        foreach (var preset in source.SliderPresets)
+        {
+            if (presetMap.TryGetValue(preset.Name, out var resolvedPreset))
+            {
+                target.AddSliderPreset(resolvedPreset);
+            }
+        }
     }
 }

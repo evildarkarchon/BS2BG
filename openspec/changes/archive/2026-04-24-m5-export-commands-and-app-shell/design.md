@@ -33,4 +33,4 @@ No schema migration. Projects saved in earlier milestones continue to load; expo
 
 ## Open Questions
 
-- Confirm final Save As shortcut, since the PRD table mentions `Ctrl+Alt+S` while the note says keep Shift from Java behavior.
+- Resolved: Save As uses `Ctrl+Alt+S`, matching the PRD table and the original Java `ALT_DOWN` binding.

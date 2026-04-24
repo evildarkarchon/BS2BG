@@ -1,10 +1,12 @@
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
+using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
+using BS2BG.Core.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BS2BG.App;
@@ -27,8 +29,13 @@ public static class AppBootstrapper
         services.AddSingleton<ProjectModel>();
         services.AddSingleton<BodySlideXmlParser>();
         services.AddSingleton<NpcTextParser>();
+        services.AddSingleton<ProjectFileService>();
         services.AddSingleton<TemplateGenerationService>();
         services.AddSingleton<MorphGenerationService>();
+        services.AddSingleton<BodyGenIniExportWriter>();
+        services.AddSingleton<BosJsonExportWriter>();
+        services.AddSingleton<UndoRedoService>();
+        services.AddSingleton<IUserPreferencesService, UserPreferencesService>();
         services.AddSingleton<IRandomAssignmentProvider, RandomAssignmentProvider>();
         services.AddSingleton<MorphAssignmentService>();
         services.AddSingleton(_ => TemplateProfileCatalogFactory.CreateDefault());
@@ -48,6 +55,12 @@ public static class AppBootstrapper
         services.AddSingleton<WindowNoPresetNotificationService>();
         services.AddSingleton<INoPresetNotificationService>(provider =>
             provider.GetRequiredService<WindowNoPresetNotificationService>());
+        services.AddSingleton<WindowFileDialogService>();
+        services.AddSingleton<IFileDialogService>(provider =>
+            provider.GetRequiredService<WindowFileDialogService>());
+        services.AddSingleton<WindowAppDialogService>();
+        services.AddSingleton<IAppDialogService>(provider =>
+            provider.GetRequiredService<WindowAppDialogService>());
         services.AddSingleton<TemplatesViewModel>();
         services.AddSingleton<MorphsViewModel>();
         services.AddSingleton<MainWindowViewModel>();

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Windows.Input;
 using BS2BG.App.Services;
@@ -11,6 +12,23 @@ using BS2BG.Core.Morphs;
 using ReactiveUI;
 
 namespace BS2BG.App.ViewModels;
+
+public enum NpcFilterColumn
+{
+    Name,
+    Mod,
+    Race,
+    EditorId,
+    FormId,
+    Presets,
+}
+
+public enum PresetCountWarningState
+{
+    Neutral,
+    Warn,
+    Error,
+}
 
 public sealed class MorphsViewModel : ReactiveObject
 {
@@ -23,7 +41,10 @@ public sealed class MorphsViewModel : ReactiveObject
     private readonly INpcImageLookupService imageLookupService;
     private readonly IImageViewService imageViewService;
     private readonly INoPresetNotificationService noPresetNotificationService;
+    private readonly UndoRedoService undoRedo;
     private readonly Dictionary<Npc, int> npcPropertySubscriptions = new();
+    private readonly Dictionary<NpcFilterColumn, string> npcColumnSearchText = new();
+    private readonly Dictionary<NpcFilterColumn, HashSet<string>> npcColumnAllowedValues = new();
     private CustomMorphTarget? selectedCustomTarget;
     private Npc? selectedNpc;
     private Npc? selectedImportedNpc;
@@ -62,7 +83,8 @@ public sealed class MorphsViewModel : ReactiveObject
         IClipboardService clipboardService,
         INpcImageLookupService? imageLookupService = null,
         IImageViewService? imageViewService = null,
-        INoPresetNotificationService? noPresetNotificationService = null)
+        INoPresetNotificationService? noPresetNotificationService = null,
+        UndoRedoService? undoRedo = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.npcTextParser = npcTextParser ?? throw new ArgumentNullException(nameof(npcTextParser));
@@ -74,11 +96,13 @@ public sealed class MorphsViewModel : ReactiveObject
         this.imageLookupService = imageLookupService ?? new NpcImageLookupService();
         this.imageViewService = imageViewService ?? new NullImageViewService();
         this.noPresetNotificationService = noPresetNotificationService ?? new NullNoPresetNotificationService();
+        this.undoRedo = undoRedo ?? new UndoRedoService();
 
         project.MorphedNpcs.CollectionChanged += OnNpcsChanged;
         project.CustomMorphTargets.CollectionChanged += OnCustomTargetsChanged;
         project.SliderPresets.CollectionChanged += OnPresetsChanged;
         NpcDatabase.CollectionChanged += OnNpcDatabaseChanged;
+        SelectedNpcs.CollectionChanged += (_, _) => RaiseCommandStatesChanged();
         RefreshNpcSubscriptions();
         RefreshVisibleNpcs();
         RefreshVisibleNpcDatabase();
@@ -124,6 +148,15 @@ public sealed class MorphsViewModel : ReactiveObject
         ClearAssignmentsCommand = new RelayCommand(
             () => ClearVisibleNpcAssignments(),
             () => VisibleNpcs.Any(npc => npc.SliderPresets.Count > 0));
+        AssignSelectedNpcsCommand = new RelayCommand(
+            () => AssignSelectedNpcs(),
+            () => GetSelectedNpcsForCommand().Any() && SelectedAvailablePreset is not null);
+        ClearSelectedNpcAssignmentsCommand = new RelayCommand(
+            () => ClearSelectedNpcAssignments(),
+            () => GetSelectedNpcsForCommand().Any(npc => npc.SliderPresets.Count > 0));
+        TrimSelectedTargetTo76Command = new RelayCommand(
+            () => TrimSelectedTargetTo76(),
+            () => SelectedTarget?.SliderPresets.Count >= 77);
         GenerateMorphsCommand = new RelayCommand(
             GenerateMorphs,
             () => CustomTargets.Count > 0 || Npcs.Count > 0);
@@ -148,6 +181,8 @@ public sealed class MorphsViewModel : ReactiveObject
     public ObservableCollection<Npc> VisibleNpcDatabase { get; } = new();
 
     public ObservableCollection<MorphTargetBase> NoPresetTargets { get; } = new();
+
+    public ObservableCollection<Npc> SelectedNpcs { get; } = new();
 
     public ICommand ImportNpcsCommand { get; }
 
@@ -176,6 +211,12 @@ public sealed class MorphsViewModel : ReactiveObject
     public ICommand FillEmptyNpcsCommand { get; }
 
     public ICommand ClearAssignmentsCommand { get; }
+
+    public ICommand AssignSelectedNpcsCommand { get; }
+
+    public ICommand ClearSelectedNpcAssignmentsCommand { get; }
+
+    public ICommand TrimSelectedTargetTo76Command { get; }
 
     public ICommand GenerateMorphsCommand { get; }
 
@@ -267,6 +308,19 @@ public sealed class MorphsViewModel : ReactiveObject
     public string TargetPresetCountText => (SelectedTarget?.SliderPresets.Count ?? 0)
         .ToString(CultureInfo.InvariantCulture);
 
+    public PresetCountWarningState TargetPresetWarningState
+    {
+        get
+        {
+            var count = SelectedTarget?.SliderPresets.Count ?? 0;
+            return count >= 77
+                ? PresetCountWarningState.Error
+                : count >= 31
+                    ? PresetCountWarningState.Warn
+                    : PresetCountWarningState.Neutral;
+        }
+    }
+
     public string NpcCountBadgeText => "(" + Npcs.Count.ToString(CultureInfo.InvariantCulture) + ")";
 
     public string NpcDatabaseCountBadgeText => "(" + NpcDatabase.Count.ToString(CultureInfo.InvariantCulture) + ")";
@@ -274,8 +328,17 @@ public sealed class MorphsViewModel : ReactiveObject
     public string TargetNameInput
     {
         get => targetNameInput;
-        set => this.RaiseAndSetIfChanged(ref targetNameInput, value ?? string.Empty);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref targetNameInput, value ?? string.Empty);
+            RefreshTargetNameValidation();
+        }
     }
+
+    public string TargetNameValidationMessage => ValidateCustomTargetName(TargetNameInput);
+
+    [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Binding-friendly instance property.")]
+    public string CustomTargetExamples => "Examples: All|Female, All|Male, Skyrim.esm|Female|NordRace";
 
     public string SearchText
     {
@@ -361,28 +424,33 @@ public sealed class MorphsViewModel : ReactiveObject
 
         try
         {
-            var files = await npcTextFilePicker.PickNpcTextFilesAsync(cancellationToken);
-            if (files.Count == 0)
-            {
-                StatusMessage = "No NPC files selected.";
-                return;
-            }
+            await ImportNpcFilesCoreAsync(
+                await npcTextFilePicker.PickNpcTextFilesAsync(cancellationToken),
+                "No NPC files selected.",
+                cancellationToken);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
-            var importedCount = 0;
-            var diagnosticCount = 0;
-            var fallbackCount = 0;
-            foreach (var file in files)
-            {
-                var result = await Task.Run(() => npcTextParser.ParseFile(file), cancellationToken);
-                importedCount += AddNpcsToDatabase(result.Npcs);
-                diagnosticCount += result.Diagnostics.Count;
-                if (result.UsedFallbackEncoding)
-                {
-                    fallbackCount++;
-                }
-            }
+    public async Task ImportNpcFilesAsync(
+        IReadOnlyList<string> files,
+        CancellationToken cancellationToken = default)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
 
-            StatusMessage = FormatImportStatus(importedCount, diagnosticCount, fallbackCount);
+        IsBusy = true;
+        ValidationMessage = string.Empty;
+        StatusMessage = string.Empty;
+
+        try
+        {
+            await ImportNpcFilesCoreAsync(files, "No NPC files dropped.", cancellationToken);
         }
         finally
         {
@@ -408,12 +476,33 @@ public sealed class MorphsViewModel : ReactiveObject
         ValidationMessage = string.Empty;
         StatusMessage = "Added custom target.";
         RaiseCommandStatesChanged();
+        undoRedo.Record(
+            "Add custom target",
+            () =>
+            {
+                target.ClearSliderPresets();
+                project.CustomMorphTargets.Remove(target);
+                SelectedCustomTarget = CustomTargets.FirstOrDefault();
+            },
+            () =>
+            {
+                project.CustomMorphTargets.Add(target);
+                project.SortCustomMorphTargets();
+                SelectedCustomTarget = target;
+            });
         return true;
     }
 
     public bool RemoveSelectedCustomTarget()
     {
         var current = SelectedCustomTarget;
+        if (current is null)
+        {
+            return false;
+        }
+
+        var index = CustomTargets.IndexOf(current);
+        var assignments = current.SliderPresets.ToArray();
         if (!assignmentService.RemoveCustomTarget(project, current))
         {
             return false;
@@ -422,6 +511,25 @@ public sealed class MorphsViewModel : ReactiveObject
         SelectedCustomTarget = CustomTargets.FirstOrDefault();
         StatusMessage = "Removed custom target.";
         RaiseCommandStatesChanged();
+        undoRedo.Record(
+            "Remove custom target",
+            () =>
+            {
+                foreach (var preset in assignments)
+                {
+                    current.AddSliderPreset(preset);
+                }
+
+                CustomTargets.Insert(Math.Min(index, CustomTargets.Count), current);
+                project.SortCustomMorphTargets();
+                SelectedCustomTarget = current;
+            },
+            () =>
+            {
+                current.ClearSliderPresets();
+                CustomTargets.Remove(current);
+                SelectedCustomTarget = CustomTargets.FirstOrDefault();
+            });
         return true;
     }
 
@@ -440,11 +548,14 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public bool AddSelectedPresetToTarget()
     {
-        var added = assignmentService.AddPresetToTarget(SelectedTarget, SelectedAvailablePreset);
+        var target = SelectedTarget;
+        var before = CaptureAssignments(target);
+        var added = assignmentService.AddPresetToTarget(target, SelectedAvailablePreset);
         if (added)
         {
             StatusMessage = "Added preset to target.";
             RaiseSelectedTargetChanged();
+            RecordAssignmentChange("Add preset to target", target, before);
         }
 
         return added;
@@ -452,11 +563,14 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public int AddAllPresetsToTarget()
     {
-        var added = assignmentService.AddAllPresetsToTarget(SelectedTarget, Presets);
+        var target = SelectedTarget;
+        var before = CaptureAssignments(target);
+        var added = assignmentService.AddAllPresetsToTarget(target, Presets);
         if (added > 0)
         {
             StatusMessage = "Added all presets to target.";
             RaiseSelectedTargetChanged();
+            RecordAssignmentChange("Add all presets to target", target, before);
         }
 
         return added;
@@ -464,12 +578,15 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public bool RemoveSelectedPresetFromTarget()
     {
-        var removed = assignmentService.RemovePresetFromTarget(SelectedTarget, SelectedAssignedPreset);
+        var target = SelectedTarget;
+        var before = CaptureAssignments(target);
+        var removed = assignmentService.RemovePresetFromTarget(target, SelectedAssignedPreset);
         if (removed)
         {
             SelectedAssignedPreset = null;
             StatusMessage = "Removed preset from target.";
             RaiseSelectedTargetChanged();
+            RecordAssignmentChange("Remove preset from target", target, before);
         }
 
         return removed;
@@ -477,12 +594,15 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public int ClearTargetPresets()
     {
-        var cleared = assignmentService.ClearTargetPresets(SelectedTarget);
+        var target = SelectedTarget;
+        var before = CaptureAssignments(target);
+        var cleared = assignmentService.ClearTargetPresets(target);
         if (cleared > 0)
         {
             SelectedAssignedPreset = null;
             StatusMessage = "Cleared target presets.";
             RaiseSelectedTargetChanged();
+            RecordAssignmentChange("Clear target presets", target, before);
         }
 
         return cleared;
@@ -490,12 +610,30 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public bool AddSelectedNpc()
     {
+        var npc = SelectedImportedNpc;
+        if (npc is null)
+        {
+            return false;
+        }
+
         var added = assignmentService.AddNpcToMorphs(project, SelectedImportedNpc, AssignRandomOnAdd);
         if (added)
         {
             SelectedNpc = SelectedImportedNpc;
             StatusMessage = "Added NPC.";
             RefreshVisibleNpcs();
+            undoRedo.Record(
+                "Add NPC",
+                () =>
+                {
+                    project.MorphedNpcs.Remove(npc);
+                    SelectedNpc = Npcs.FirstOrDefault();
+                },
+                () =>
+                {
+                    project.MorphedNpcs.Add(npc);
+                    SelectedNpc = npc;
+                });
         }
         else if (SelectedImportedNpc is not null)
         {
@@ -518,12 +656,35 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public bool RemoveSelectedNpc()
     {
-        var removed = assignmentService.RemoveNpc(project, SelectedNpc);
+        var npc = SelectedNpc;
+        if (npc is null)
+        {
+            return false;
+        }
+
+        var removedNpc = npc;
+        var index = Npcs.IndexOf(removedNpc);
+        var assignments = CaptureAssignments(removedNpc);
+        var removed = assignmentService.RemoveNpc(project, removedNpc);
         if (removed)
         {
             SelectedNpc = Npcs.FirstOrDefault();
             StatusMessage = "Removed NPC.";
             RefreshVisibleNpcs();
+            undoRedo.Record(
+                "Remove NPC",
+                () =>
+                {
+                    RestoreAssignments(removedNpc, assignments);
+                    Npcs.Insert(Math.Min(index, Npcs.Count), removedNpc);
+                    SelectedNpc = removedNpc;
+                },
+                () =>
+                {
+                    removedNpc.ClearSliderPresets();
+                    Npcs.Remove(removedNpc);
+                    SelectedNpc = Npcs.FirstOrDefault();
+                });
         }
 
         RaiseCommandStatesChanged();
@@ -533,12 +694,18 @@ public sealed class MorphsViewModel : ReactiveObject
     public int ClearVisibleNpcs()
     {
         var visible = VisibleNpcs.ToArray();
+        var resetSelectedNpc = SelectedNpc is not null && visible.Contains(SelectedNpc);
         foreach (var npc in visible)
         {
             assignmentService.RemoveNpc(project, npc);
         }
 
         RefreshVisibleNpcs();
+        if (resetSelectedNpc)
+        {
+            SelectedNpc = VisibleNpcs.FirstOrDefault();
+        }
+
         StatusMessage = "Removed " + visible.Length.ToString(CultureInfo.InvariantCulture)
             + " visible NPC" + (visible.Length == 1 ? "." : "s.");
         RaiseCommandStatesChanged();
@@ -548,22 +715,157 @@ public sealed class MorphsViewModel : ReactiveObject
     public int FillEmptyVisibleNpcs(IEnumerable<SliderPreset> presets)
     {
         var candidates = presets?.ToArray() ?? Array.Empty<SliderPreset>();
+        var targets = VisibleNpcs.ToArray();
+        var before = CaptureAssignments(targets);
         var filled = assignmentService.FillEmptyNpcs(VisibleNpcs.ToArray(), candidates);
         StatusMessage = "Filled " + filled.ToString(CultureInfo.InvariantCulture)
             + " empty NPC" + (filled == 1 ? "." : "s.");
         RaiseCommandStatesChanged();
         RaiseSelectedTargetChanged();
+        if (filled > 0)
+        {
+            RecordAssignmentChange("Fill empty NPCs", before);
+        }
+
         return filled;
     }
 
     public int ClearVisibleNpcAssignments()
     {
-        var cleared = assignmentService.ClearAssignments(VisibleNpcs.ToArray());
+        var targets = VisibleNpcs.ToArray();
+        var before = CaptureAssignments(targets);
+        var cleared = assignmentService.ClearAssignments(targets);
         StatusMessage = "Cleared assignments from " + cleared.ToString(CultureInfo.InvariantCulture)
             + " NPC" + (cleared == 1 ? "." : "s.");
         RaiseCommandStatesChanged();
         RaiseSelectedTargetChanged();
+        if (cleared > 0)
+        {
+            RecordAssignmentChange("Clear visible NPC assignments", before);
+        }
+
         return cleared;
+    }
+
+    public int AssignSelectedNpcs()
+    {
+        var preset = SelectedAvailablePreset;
+        if (preset is null)
+        {
+            return 0;
+        }
+
+        var targets = GetSelectedNpcsForCommand().ToArray();
+        var before = CaptureAssignments(targets);
+        var added = 0;
+        foreach (var npc in targets)
+        {
+            if (assignmentService.AddPresetToTarget(npc, preset))
+            {
+                added++;
+            }
+        }
+
+        StatusMessage = "Assigned preset to " + added.ToString(CultureInfo.InvariantCulture)
+            + " NPC" + (added == 1 ? "." : "s.");
+        RaiseCommandStatesChanged();
+        RaiseSelectedTargetChanged();
+        if (added > 0)
+        {
+            RecordAssignmentChange("Assign selected NPCs", before);
+        }
+
+        return added;
+    }
+
+    public int ClearSelectedNpcAssignments()
+    {
+        var targets = GetSelectedNpcsForCommand().ToArray();
+        var before = CaptureAssignments(targets);
+        var cleared = assignmentService.ClearAssignments(targets);
+        StatusMessage = "Cleared assignments from " + cleared.ToString(CultureInfo.InvariantCulture)
+            + " selected NPC" + (cleared == 1 ? "." : "s.");
+        RaiseCommandStatesChanged();
+        RaiseSelectedTargetChanged();
+        if (cleared > 0)
+        {
+            RecordAssignmentChange("Clear selected NPC assignments", before);
+        }
+
+        return cleared;
+    }
+
+    public int TrimSelectedTargetTo76()
+    {
+        var target = SelectedTarget;
+        if (target is null || target.SliderPresets.Count <= 76)
+        {
+            return 0;
+        }
+
+        var before = CaptureAssignments(target);
+        var usage = project.CustomMorphTargets
+            .Cast<MorphTargetBase>()
+            .Concat(project.MorphedNpcs)
+            .SelectMany(item => item.SliderPresets)
+            .GroupBy(preset => preset.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+        var rankedNames = target.SliderPresets
+            .Select((preset, index) => new { preset, index })
+            .OrderByDescending(item => usage.TryGetValue(item.preset.Name, out var count) ? count : 0)
+            .ThenBy(item => item.index)
+            .Take(76)
+            .Select(item => item.preset.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var kept = target.SliderPresets
+            .Where(preset => rankedNames.Contains(preset.Name))
+            .ToArray();
+
+        target.ClearSliderPresets();
+        foreach (var preset in kept)
+        {
+            target.AddSliderPreset(preset);
+        }
+
+        RaiseSelectedTargetChanged();
+        StatusMessage = "Trimmed selected target to 76 presets.";
+        RecordAssignmentChange("Trim target presets", target, before);
+        return kept.Length;
+    }
+
+    public void SetNpcColumnAllowedValues(NpcFilterColumn column, IEnumerable<string> values)
+    {
+        var selected = values?.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()
+            ?? Array.Empty<string>();
+        if (selected.Length == 0)
+        {
+            npcColumnAllowedValues.Remove(column);
+        }
+        else
+        {
+            npcColumnAllowedValues[column] = new HashSet<string>(selected, StringComparer.OrdinalIgnoreCase);
+        }
+
+        RefreshVisibleNpcs();
+    }
+
+    public void SetNpcColumnSearchText(NpcFilterColumn column, string value)
+    {
+        npcColumnSearchText[column] = value ?? string.Empty;
+        this.RaisePropertyChanged(nameof(VisibleNpcs));
+    }
+
+    public IReadOnlyList<string> GetNpcColumnValues(NpcFilterColumn column)
+    {
+        npcColumnSearchText.TryGetValue(column, out var filter);
+        return Npcs
+            .Select(npc => GetNpcColumnValue(npc, column))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(value => string.IsNullOrWhiteSpace(filter)
+                || value.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     public void GenerateMorphs()
@@ -640,6 +942,34 @@ public sealed class MorphsViewModel : ReactiveObject
         return added;
     }
 
+    private async Task ImportNpcFilesCoreAsync(
+        IReadOnlyList<string> files,
+        string emptyStatus,
+        CancellationToken cancellationToken)
+    {
+        if (files.Count == 0)
+        {
+            StatusMessage = emptyStatus;
+            return;
+        }
+
+        var importedCount = 0;
+        var diagnosticCount = 0;
+        var fallbackCount = 0;
+        foreach (var file in files)
+        {
+            var result = await Task.Run(() => npcTextParser.ParseFile(file), cancellationToken);
+            importedCount += AddNpcsToDatabase(result.Npcs);
+            diagnosticCount += result.Diagnostics.Count;
+            if (result.UsedFallbackEncoding)
+            {
+                fallbackCount++;
+            }
+        }
+
+        StatusMessage = FormatImportStatus(importedCount, diagnosticCount, fallbackCount);
+    }
+
     private int FillEmptyFromSelectedPreset()
     {
         var candidates = SelectedAvailablePreset is null
@@ -662,7 +992,7 @@ public sealed class MorphsViewModel : ReactiveObject
         RaiseCommandStatesChanged();
     }
 
-    private static void RefreshFilteredCollection(
+    private void RefreshFilteredCollection(
         IEnumerable<Npc> source,
         ObservableCollection<Npc> target,
         string filterText)
@@ -674,8 +1004,13 @@ public sealed class MorphsViewModel : ReactiveObject
         }
     }
 
-    private static bool MatchesFilter(Npc npc, string filterText)
+    private bool MatchesFilter(Npc npc, string filterText)
     {
+        if (!MatchesColumnFilters(npc))
+        {
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(filterText))
         {
             return true;
@@ -687,6 +1022,33 @@ public sealed class MorphsViewModel : ReactiveObject
             || Contains(npc.EditorId, filterText)
             || Contains(npc.FormId, filterText)
             || Contains(npc.SliderPresetsText, filterText);
+    }
+
+    private bool MatchesColumnFilters(Npc npc)
+    {
+        foreach (var filter in npcColumnAllowedValues)
+        {
+            if (!filter.Value.Contains(GetNpcColumnValue(npc, filter.Key)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string GetNpcColumnValue(Npc npc, NpcFilterColumn column)
+    {
+        return column switch
+        {
+            NpcFilterColumn.Name => npc.Name,
+            NpcFilterColumn.Mod => npc.Mod,
+            NpcFilterColumn.Race => npc.Race,
+            NpcFilterColumn.EditorId => npc.EditorId,
+            NpcFilterColumn.FormId => npc.FormId,
+            NpcFilterColumn.Presets => npc.SliderPresetsText,
+            _ => string.Empty,
+        };
     }
 
     private static bool Contains(string value, string filterText)
@@ -841,6 +1203,7 @@ public sealed class MorphsViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(SelectedTargetName));
         this.RaisePropertyChanged(nameof(SelectedTargetPresets));
         this.RaisePropertyChanged(nameof(TargetPresetCountText));
+        this.RaisePropertyChanged(nameof(TargetPresetWarningState));
         RaiseCommandStatesChanged();
     }
 
@@ -860,8 +1223,112 @@ public sealed class MorphsViewModel : ReactiveObject
         RaiseCanExecuteChanged(ClearVisibleNpcsCommand);
         RaiseCanExecuteChanged(FillEmptyNpcsCommand);
         RaiseCanExecuteChanged(ClearAssignmentsCommand);
+        RaiseCanExecuteChanged(AssignSelectedNpcsCommand);
+        RaiseCanExecuteChanged(ClearSelectedNpcAssignmentsCommand);
+        RaiseCanExecuteChanged(TrimSelectedTargetTo76Command);
         RaiseCanExecuteChanged(GenerateMorphsCommand);
         RaiseCanExecuteChanged(ViewSelectedNpcImageCommand);
+    }
+
+    private IEnumerable<Npc> GetSelectedNpcsForCommand()
+    {
+        return SelectedNpcs.Count > 0
+            ? SelectedNpcs
+            : SelectedNpc is null
+                ? Enumerable.Empty<Npc>()
+                : new[] { SelectedNpc };
+    }
+
+    private void RefreshTargetNameValidation()
+    {
+        this.RaisePropertyChanged(nameof(TargetNameValidationMessage));
+    }
+
+    private string ValidateCustomTargetName(string value)
+    {
+        var normalizedName = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            return string.Empty;
+        }
+
+        var parts = normalizedName.Split('|');
+        if ((parts.Length != 2 && parts.Length != 3) || parts.Any(part => string.IsNullOrWhiteSpace(part)))
+        {
+            return "Custom target must use Context|Gender or Context|Gender|Race[Variant].";
+        }
+
+        return CustomTargets.Any(existing => string.Equals(
+            existing.Name,
+            normalizedName,
+            StringComparison.OrdinalIgnoreCase))
+            ? "A custom target named '" + normalizedName + "' already exists."
+            : string.Empty;
+    }
+
+    [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Kept as instance helper alongside assignment record helpers.")]
+    private SliderPreset[] CaptureAssignments(MorphTargetBase? target)
+    {
+        return target?.SliderPresets.ToArray() ?? Array.Empty<SliderPreset>();
+    }
+
+    [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Kept as instance helper alongside assignment record helpers.")]
+    private Dictionary<MorphTargetBase, SliderPreset[]> CaptureAssignments(IEnumerable<MorphTargetBase> targets)
+    {
+        return targets.ToDictionary(target => target, target => target.SliderPresets.ToArray());
+    }
+
+    private void RecordAssignmentChange(
+        string name,
+        MorphTargetBase? target,
+        SliderPreset[] before)
+    {
+        if (target is null)
+        {
+            return;
+        }
+
+        var after = CaptureAssignments(target);
+        undoRedo.Record(
+            name,
+            () => RestoreAssignments(target, before),
+            () => RestoreAssignments(target, after));
+    }
+
+    private void RecordAssignmentChange(
+        string name,
+        Dictionary<MorphTargetBase, SliderPreset[]> before)
+    {
+        var after = CaptureAssignments(before.Keys);
+        undoRedo.Record(
+            name,
+            () => RestoreAssignments(before),
+            () => RestoreAssignments(after));
+    }
+
+    private void RestoreAssignments(Dictionary<MorphTargetBase, SliderPreset[]> snapshot)
+    {
+        foreach (var item in snapshot)
+        {
+            RestoreAssignments(item.Key, item.Value);
+        }
+    }
+
+    private void RestoreAssignments(MorphTargetBase? target, IEnumerable<SliderPreset> presets)
+    {
+        if (target is null)
+        {
+            return;
+        }
+
+        target.ClearSliderPresets();
+        foreach (var preset in presets)
+        {
+            target.AddSliderPreset(preset);
+        }
+
+        RaiseSelectedTargetChanged();
+        RefreshVisibleNpcs();
     }
 
     private static void RaiseCanExecuteChanged(ICommand? command)

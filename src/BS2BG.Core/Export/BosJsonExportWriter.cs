@@ -1,0 +1,98 @@
+using System.Text;
+using BS2BG.Core.Generation;
+using BS2BG.Core.Models;
+
+namespace BS2BG.Core.Export;
+
+public sealed class BosJsonExportWriter
+{
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly HashSet<char> WindowsReservedFileNameCharacters = new("<>:\"/\\|?*");
+    private readonly TemplateGenerationService templateGenerationService;
+
+    public BosJsonExportWriter(TemplateGenerationService templateGenerationService)
+    {
+        this.templateGenerationService = templateGenerationService
+            ?? throw new ArgumentNullException(nameof(templateGenerationService));
+    }
+
+    public BosJsonExportResult Write(
+        string directoryPath,
+        IEnumerable<SliderPreset> presets,
+        TemplateProfileCatalog profileCatalog)
+    {
+        if (directoryPath is null)
+        {
+            throw new ArgumentNullException(nameof(directoryPath));
+        }
+
+        if (presets is null)
+        {
+            throw new ArgumentNullException(nameof(presets));
+        }
+
+        if (profileCatalog is null)
+        {
+            throw new ArgumentNullException(nameof(profileCatalog));
+        }
+
+        Directory.CreateDirectory(directoryPath);
+
+        var usedFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var filePaths = new List<string>();
+        foreach (var preset in presets.OrderBy(preset => preset.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var fileName = GetUniqueFileName(SanitizeFileStem(preset.Name), usedFileNames);
+            var filePath = Path.Combine(directoryPath, fileName);
+            var json = templateGenerationService.PreviewBosJson(
+                preset,
+                profileCatalog.GetProfile(preset.ProfileName));
+            File.WriteAllText(filePath, json, Utf8NoBom);
+            filePaths.Add(filePath);
+        }
+
+        return new BosJsonExportResult(filePaths);
+    }
+
+    private static string SanitizeFileStem(string name)
+    {
+        var builder = new StringBuilder((name ?? string.Empty).Length);
+        foreach (var character in name ?? string.Empty)
+        {
+            builder.Append(IsReservedFileNameCharacter(character) ? '_' : character);
+        }
+
+        var sanitized = builder.ToString().Trim().TrimEnd('.', ' ');
+        return sanitized.Length == 0 ? "preset" : sanitized;
+    }
+
+    private static bool IsReservedFileNameCharacter(char character)
+    {
+        return character < ' '
+            || WindowsReservedFileNameCharacters.Contains(character)
+            || Path.GetInvalidFileNameChars().Contains(character);
+    }
+
+    private static string GetUniqueFileName(string fileStem, HashSet<string> usedFileNames)
+    {
+        var candidate = fileStem + ".json";
+        var suffix = 2;
+        while (!usedFileNames.Add(candidate))
+        {
+            candidate = fileStem + " (" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture) + ").json";
+            suffix++;
+        }
+
+        return candidate;
+    }
+}
+
+public sealed class BosJsonExportResult
+{
+    public BosJsonExportResult(IEnumerable<string> filePaths)
+    {
+        FilePaths = (filePaths ?? throw new ArgumentNullException(nameof(filePaths))).ToArray();
+    }
+
+    public IReadOnlyList<string> FilePaths { get; }
+}

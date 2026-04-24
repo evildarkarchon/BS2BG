@@ -18,9 +18,11 @@ public sealed class TemplatesViewModel : ReactiveObject
     private readonly TemplateProfileCatalog profileCatalog;
     private readonly IBodySlideXmlFilePicker filePicker;
     private readonly IClipboardService clipboardService;
+    private readonly UndoRedoService undoRedo;
     private SliderPreset? selectedPreset;
     private string selectedProfileName;
     private string presetNameInput = string.Empty;
+    private string searchText = string.Empty;
     private string previewTemplateText = string.Empty;
     private string generatedTemplateText = string.Empty;
     private string selectedBosJsonText = string.Empty;
@@ -55,7 +57,8 @@ public sealed class TemplatesViewModel : ReactiveObject
         TemplateGenerationService templateGenerationService,
         TemplateProfileCatalog profileCatalog,
         IBodySlideXmlFilePicker filePicker,
-        IClipboardService clipboardService)
+        IClipboardService clipboardService,
+        UndoRedoService? undoRedo = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.parser = parser ?? throw new ArgumentNullException(nameof(parser));
@@ -64,7 +67,9 @@ public sealed class TemplatesViewModel : ReactiveObject
         this.profileCatalog = profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog));
         this.filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
         this.clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
+        this.undoRedo = undoRedo ?? new UndoRedoService();
         selectedProfileName = profileCatalog.DefaultProfile.Name;
+        project.SliderPresets.CollectionChanged += (_, _) => RefreshVisiblePresets();
 
         ImportPresetsCommand = new AsyncRelayCommand(
             ImportPresetsAsync,
@@ -97,9 +102,12 @@ public sealed class TemplatesViewModel : ReactiveObject
         SetAllMaxPercentsTo0Command = new RelayCommand(() => SetAllMaxPercents(0), CanEditSetSliders);
         SetAllMaxPercentsTo50Command = new RelayCommand(() => SetAllMaxPercents(50), CanEditSetSliders);
         SetAllMaxPercentsTo100Command = new RelayCommand(() => SetAllMaxPercents(100), CanEditSetSliders);
+        RefreshVisiblePresets();
     }
 
     public ObservableCollection<SliderPreset> Presets => project.SliderPresets;
+
+    public ObservableCollection<SliderPreset> VisiblePresets { get; } = new();
 
     public ObservableCollection<SetSliderInspectorRowViewModel> SetSliderRows { get; } = new();
 
@@ -211,6 +219,22 @@ public sealed class TemplatesViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref presetNameInput, value ?? string.Empty);
     }
 
+    public string SearchText
+    {
+        get => searchText;
+        set
+        {
+            var newValue = value ?? string.Empty;
+            if (string.Equals(searchText, newValue, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            this.RaiseAndSetIfChanged(ref searchText, newValue);
+            RefreshVisiblePresets();
+        }
+    }
+
     public string PreviewTemplateText
     {
         get => previewTemplateText;
@@ -285,27 +309,33 @@ public sealed class TemplatesViewModel : ReactiveObject
 
         try
         {
-            var files = await filePicker.PickXmlPresetFilesAsync(cancellationToken);
-            if (files.Count == 0)
-            {
-                StatusMessage = "No preset files selected.";
-                return;
-            }
+            await ImportPresetFilesCoreAsync(
+                await filePicker.PickXmlPresetFilesAsync(cancellationToken),
+                "No preset files selected.",
+                cancellationToken);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
-            var import = await Task.Run(() => parser.ParseFiles(files), cancellationToken);
-            foreach (var preset in import.Presets)
-            {
-                preset.ProfileName = SelectedProfileName;
-                AddOrUpdatePreset(preset);
-            }
+    public async Task ImportPresetFilesAsync(
+        IReadOnlyList<string> files,
+        CancellationToken cancellationToken = default)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
 
-            SortPresets();
-            if (import.Presets.Count > 0)
-            {
-                SelectedPreset = Presets.FirstOrDefault();
-            }
+        IsBusy = true;
+        ValidationMessage = string.Empty;
+        StatusMessage = string.Empty;
 
-            StatusMessage = FormatImportStatus(import);
+        try
+        {
+            await ImportPresetFilesCoreAsync(files, "No preset files dropped.", cancellationToken);
         }
         finally
         {
@@ -325,11 +355,13 @@ public sealed class TemplatesViewModel : ReactiveObject
             return false;
         }
 
-        SelectedPreset.Name = normalizedName;
-        PresetNameInput = normalizedName;
-        SortPresets();
-        ValidationMessage = string.Empty;
-        RefreshPreview();
+        var preset = SelectedPreset;
+        var previousName = preset.Name;
+        ApplyPresetRename(preset, normalizedName);
+        undoRedo.Record(
+            "Rename preset",
+            () => ApplyPresetRename(preset, previousName),
+            () => ApplyPresetRename(preset, normalizedName));
         return true;
     }
 
@@ -350,6 +382,19 @@ public sealed class TemplatesViewModel : ReactiveObject
         SortPresets();
         SelectedPreset = duplicate;
         ValidationMessage = string.Empty;
+        undoRedo.Record(
+            "Duplicate preset",
+            () =>
+            {
+                Presets.Remove(duplicate);
+                SelectedPreset = Presets.FirstOrDefault();
+            },
+            () =>
+            {
+                Presets.Add(duplicate);
+                SortPresets();
+                SelectedPreset = duplicate;
+            });
         return true;
     }
 
@@ -360,8 +405,14 @@ public sealed class TemplatesViewModel : ReactiveObject
             return false;
         }
 
-        var currentIndex = Presets.IndexOf(SelectedPreset);
-        var removed = project.RemoveSliderPreset(SelectedPreset.Name);
+        var preset = SelectedPreset;
+        var currentIndex = Presets.IndexOf(preset);
+        var assignedTargets = project.CustomMorphTargets
+            .Cast<MorphTargetBase>()
+            .Concat(project.MorphedNpcs)
+            .Where(target => target.SliderPresets.Contains(preset))
+            .ToArray();
+        var removed = project.RemoveSliderPreset(preset.Name);
         if (!removed)
         {
             return false;
@@ -372,6 +423,26 @@ public sealed class TemplatesViewModel : ReactiveObject
             : Presets[Math.Min(currentIndex, Presets.Count - 1)];
         GeneratedTemplateText = string.Empty;
         RaiseCommandStatesChanged();
+        undoRedo.Record(
+            "Remove preset",
+            () =>
+            {
+                Presets.Add(preset);
+                SortPresets();
+                foreach (var target in assignedTargets)
+                {
+                    target.AddSliderPreset(preset);
+                }
+
+                SelectedPreset = preset;
+                GeneratedTemplateText = string.Empty;
+            },
+            () =>
+            {
+                project.RemoveSliderPreset(preset.Name);
+                SelectedPreset = Presets.FirstOrDefault();
+                GeneratedTemplateText = string.Empty;
+            });
         return true;
     }
 
@@ -398,6 +469,7 @@ public sealed class TemplatesViewModel : ReactiveObject
     public void SortPresets()
     {
         project.SortPresets();
+        RefreshVisiblePresets();
         RaiseCommandStatesChanged();
     }
 
@@ -444,32 +516,81 @@ public sealed class TemplatesViewModel : ReactiveObject
 
     private void SetAllSliderPercents(int value)
     {
+        var before = CaptureSelectedSetSliders();
         foreach (var row in SetSliderRows)
         {
             row.SetBothPercents(value);
         }
 
         RefreshAfterSetSliderEdit();
+        RecordSelectedSetSliderChange("Set slider percents", before);
     }
 
     private void SetAllMinPercents(int value)
     {
+        var before = CaptureSelectedSetSliders();
         foreach (var row in SetSliderRows)
         {
             row.SetMinPercent(value);
         }
 
         RefreshAfterSetSliderEdit();
+        RecordSelectedSetSliderChange("Set min percents", before);
     }
 
     private void SetAllMaxPercents(int value)
     {
+        var before = CaptureSelectedSetSliders();
         foreach (var row in SetSliderRows)
         {
             row.SetMaxPercent(value);
         }
 
         RefreshAfterSetSliderEdit();
+        RecordSelectedSetSliderChange("Set max percents", before);
+    }
+
+    private async Task ImportPresetFilesCoreAsync(
+        IReadOnlyList<string> files,
+        string emptyStatus,
+        CancellationToken cancellationToken)
+    {
+        if (files.Count == 0)
+        {
+            StatusMessage = emptyStatus;
+            return;
+        }
+
+        var before = SnapshotPresets();
+        var import = await Task.Run(() => parser.ParseFiles(files), cancellationToken);
+        foreach (var preset in import.Presets)
+        {
+            preset.ProfileName = SelectedProfileName;
+            AddOrUpdatePreset(preset);
+        }
+
+        SortPresets();
+        if (import.Presets.Count > 0)
+        {
+            SelectedPreset = Presets.FirstOrDefault();
+        }
+
+        StatusMessage = FormatImportStatus(import);
+        var after = SnapshotPresets();
+        undoRedo.Record(
+            "Import presets",
+            () => RestorePresetSnapshot(before),
+            () => RestorePresetSnapshot(after));
+    }
+
+    private void ApplyPresetRename(SliderPreset preset, string name)
+    {
+        preset.Name = name;
+        PresetNameInput = name;
+        SortPresets();
+        SelectedPreset = preset;
+        ValidationMessage = string.Empty;
+        RefreshPreview();
     }
 
     private void ReportCommandFailure(string action, Exception exception)
@@ -508,6 +629,39 @@ public sealed class TemplatesViewModel : ReactiveObject
             SelectedPreset,
             profileCatalog.GetProfile(SelectedProfileName),
             OmitRedundantSliders);
+    }
+
+    private void RefreshVisiblePresets()
+    {
+        var selected = SelectedPreset;
+        VisiblePresets.Clear();
+        foreach (var preset in Presets.Where(MatchesSearch))
+        {
+            VisiblePresets.Add(preset);
+        }
+
+        if (selected is not null && !VisiblePresets.Contains(selected) && ReferenceEquals(SelectedPreset, selected))
+        {
+            SelectedPreset = VisiblePresets.FirstOrDefault();
+        }
+    }
+
+    private bool MatchesSearch(SliderPreset preset)
+    {
+        if (string.IsNullOrWhiteSpace(SearchText))
+        {
+            return true;
+        }
+
+        return Contains(preset.Name, SearchText)
+            || Contains(preset.ProfileName, SearchText)
+            || preset.SetSliders.Concat(preset.MissingDefaultSetSliders)
+                .Any(slider => Contains(slider.Name, SearchText));
+    }
+
+    private static bool Contains(string value, string searchText)
+    {
+        return value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
     }
 
     private void RefreshSelectedBosJson()
@@ -648,6 +802,65 @@ public sealed class TemplatesViewModel : ReactiveObject
         RefreshSetSliderRowPreviews();
     }
 
+    private SliderPreset[] SnapshotPresets()
+    {
+        return Presets.Select(preset => ClonePreset(preset, preset.Name)).ToArray();
+    }
+
+    private void RestorePresetSnapshot(IReadOnlyList<SliderPreset> snapshot)
+    {
+        Presets.Clear();
+        foreach (var preset in snapshot.Select(preset => ClonePreset(preset, preset.Name)))
+        {
+            Presets.Add(preset);
+        }
+
+        SortPresets();
+        SelectedPreset = Presets.FirstOrDefault();
+        GeneratedTemplateText = string.Empty;
+    }
+
+    private SetSliderSnapshot[] CaptureSelectedSetSliders()
+    {
+        return SelectedPreset?.SetSliders
+            .Concat(SelectedPreset.MissingDefaultSetSliders)
+            .Select(SetSliderSnapshot.Create)
+            .ToArray() ?? Array.Empty<SetSliderSnapshot>();
+    }
+
+    private void RecordSelectedSetSliderChange(string name, SetSliderSnapshot[] before)
+    {
+        var preset = SelectedPreset;
+        if (preset is null || before.Length == 0)
+        {
+            return;
+        }
+
+        var after = CaptureSelectedSetSliders();
+        undoRedo.Record(
+            name,
+            () => RestoreSetSliders(preset, before),
+            () => RestoreSetSliders(preset, after));
+    }
+
+    private void RestoreSetSliders(SliderPreset preset, IEnumerable<SetSliderSnapshot> snapshot)
+    {
+        foreach (var item in snapshot)
+        {
+            var slider = preset.SetSliders
+                .Concat(preset.MissingDefaultSetSliders)
+                .FirstOrDefault(candidate => string.Equals(candidate.Name, item.Name, StringComparison.OrdinalIgnoreCase));
+            if (slider is null)
+            {
+                continue;
+            }
+
+            item.Apply(slider);
+        }
+
+        RefreshAfterSetSliderEdit();
+    }
+
     private void RefreshSetSliderRowPreviews()
     {
         foreach (var row in SetSliderRows)
@@ -725,6 +938,57 @@ public sealed class TemplatesViewModel : ReactiveObject
         }
 
         return status;
+    }
+
+    private sealed class SetSliderSnapshot
+    {
+        private SetSliderSnapshot(
+            string name,
+            bool enabled,
+            int? valueSmall,
+            int? valueBig,
+            int percentMin,
+            int percentMax)
+        {
+            Name = name;
+            Enabled = enabled;
+            ValueSmall = valueSmall;
+            ValueBig = valueBig;
+            PercentMin = percentMin;
+            PercentMax = percentMax;
+        }
+
+        public string Name { get; }
+
+        public bool Enabled { get; }
+
+        public int? ValueSmall { get; }
+
+        public int? ValueBig { get; }
+
+        public int PercentMin { get; }
+
+        public int PercentMax { get; }
+
+        public static SetSliderSnapshot Create(SetSlider slider)
+        {
+            return new SetSliderSnapshot(
+                slider.Name,
+                slider.Enabled,
+                slider.ValueSmall,
+                slider.ValueBig,
+                slider.PercentMin,
+                slider.PercentMax);
+        }
+
+        public void Apply(SetSlider slider)
+        {
+            slider.Enabled = Enabled;
+            slider.ValueSmall = ValueSmall;
+            slider.ValueBig = ValueBig;
+            slider.PercentMin = PercentMin;
+            slider.PercentMax = PercentMax;
+        }
     }
 
     private sealed class EmptyBodySlideXmlFilePicker : IBodySlideXmlFilePicker
