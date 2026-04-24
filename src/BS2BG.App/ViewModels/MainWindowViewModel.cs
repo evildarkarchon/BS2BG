@@ -328,13 +328,13 @@ public sealed class MainWindowViewModel : ReactiveObject
             return;
         }
 
-        await OpenProjectPathAsync(path, false, cancellationToken);
+        await TryOpenProjectPathAsync(path, false, cancellationToken);
     }
 
-    public Task OpenProjectPathAsync(string path, CancellationToken cancellationToken = default) =>
-        OpenProjectPathAsync(path, true, cancellationToken);
+    public async Task OpenProjectPathAsync(string path, CancellationToken cancellationToken = default) =>
+        await TryOpenProjectPathAsync(path, true, cancellationToken);
 
-    private async Task OpenProjectPathAsync(
+    private async Task<bool> TryOpenProjectPathAsync(
         string path,
         bool confirmDiscard,
         CancellationToken cancellationToken)
@@ -342,14 +342,14 @@ public sealed class MainWindowViewModel : ReactiveObject
         if (string.IsNullOrWhiteSpace(path))
         {
             StatusMessage = "Open cancelled.";
-            return;
+            return false;
         }
 
         if (confirmDiscard
             && !await ConfirmDiscardChangesIfNeededAsync(DiscardChangesAction.OpenProject, cancellationToken))
         {
             StatusMessage = "Open cancelled.";
-            return;
+            return false;
         }
 
         IsBusy = true;
@@ -363,10 +363,12 @@ public sealed class MainWindowViewModel : ReactiveObject
             Morphs.SelectedNpc = project.MorphedNpcs.FirstOrDefault();
             undoRedo.Clear();
             StatusMessage = "Opened " + Path.GetFileName(path) + ".";
+            return true;
         }
         catch (Exception exception)
         {
             StatusMessage = "Opening jBS2BG file failed: " + FormatExceptionMessage(exception);
+            return false;
         }
         finally
         {
@@ -398,7 +400,9 @@ public sealed class MainWindowViewModel : ReactiveObject
             .ToArray();
         var skipped = files.Length - projectFiles.Length - xmlFiles.Length - npcFiles.Length;
 
-        if (projectFiles.Length > 0) await OpenProjectPathAsync(projectFiles[0], cancellationToken);
+        if (projectFiles.Length > 0
+            && !await TryOpenProjectPathAsync(projectFiles[0], true, cancellationToken))
+            return;
 
         if (xmlFiles.Length > 0) await Templates.ImportPresetFilesAsync(xmlFiles, cancellationToken);
 

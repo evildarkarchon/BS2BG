@@ -90,7 +90,7 @@ Copy-RequiredFile -Source (Join-Path $repoRoot 'settings_UUNP.json') -Destinatio
 Copy-RequiredFile -Source (Join-Path $repoRoot 'assets\res\icon.png') -Destination (Join-Path $packageDir 'assets\res\icon.png')
 Copy-RequiredFile -Source (Join-Path $repoRoot 'docs\release\README.md') -Destination (Join-Path $packageDir 'README.md')
 Copy-RequiredFile -Source (Join-Path $repoRoot 'docs\release\CREDITS.md') -Destination (Join-Path $packageDir 'CREDITS.md')
-Copy-RequiredFile -Source (Join-Path $repoRoot 'docs\release\RELEASE-NOTES-v1.0.0.md') -Destination (Join-Path $packageDir 'RELEASE-NOTES.md')
+Copy-RequiredFile -Source (Join-Path $repoRoot "docs\release\RELEASE-NOTES-v$Version.md") -Destination (Join-Path $packageDir 'RELEASE-NOTES.md')
 Copy-RequiredFile -Source (Join-Path $repoRoot 'docs\release\UNSIGNED-BUILD.md') -Destination (Join-Path $packageDir 'UNSIGNED-BUILD.md')
 Copy-RequiredFile -Source (Join-Path $repoRoot 'docs\release\QA-CHECKLIST.md') -Destination (Join-Path $packageDir 'QA-CHECKLIST.md')
 

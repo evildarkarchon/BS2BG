@@ -75,6 +75,40 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task DroppedProjectStopsPresetAndNpcImportsWhenDiscardIsCancelled()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var droppedProject = new ProjectModel();
+        droppedProject.SliderPresets.Add(new SliderPreset("Loaded"));
+        var droppedProjectPath = Path.Combine(directory.Path, "loaded.jbs2bg");
+        new ProjectFileService().Save(droppedProject, droppedProjectPath);
+        var xmlPath = directory.WriteText(
+            "drop.xml",
+            """
+            <SliderPresets>
+              <Preset name="DropAlpha"><SetSlider name="Scale" size="big" value="50"/></Preset>
+            </SliderPresets>
+            """);
+        var npcPath = directory.WriteText(
+            "npcs.txt",
+            "Skyrim.esm|Lydia|HousecarlWhiterun|NordRace|000A2C94");
+        var confirmations = new FakeAppDialogService { ConfirmDiscardResult = false };
+        var viewModel = CreateViewModel(project, new FakeFileDialogService(), confirmations);
+
+        await viewModel.HandleDroppedFilesAsync(
+            new[] { droppedProjectPath, xmlPath, npcPath },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(new[] { "Alpha" }, project.SliderPresets.Select(preset => preset.Name));
+        Assert.DoesNotContain(project.SliderPresets, preset => preset.Name == "DropAlpha");
+        Assert.Empty(viewModel.Morphs.NpcDatabase);
+        Assert.Null(viewModel.CurrentProjectPath);
+        Assert.Equal("Open cancelled.", viewModel.StatusMessage);
+        Assert.Equal(1, confirmations.ConfirmDiscardCallCount);
+    }
+
+    [Fact]
     public async Task ExportBodyGenInisRegeneratesAndWritesCurrentOutput()
     {
         using var directory = new TemporaryDirectory();
@@ -262,5 +296,12 @@ public sealed class MainWindowViewModelTests
         public string Path { get; }
 
         public void Dispose() => Directory.Delete(Path, true);
+
+        public string WriteText(string fileName, string text)
+        {
+            var filePath = System.IO.Path.Combine(Path, fileName);
+            File.WriteAllText(filePath, text);
+            return filePath;
+        }
     }
 }
