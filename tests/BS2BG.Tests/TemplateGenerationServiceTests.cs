@@ -1,6 +1,7 @@
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
+using BS2BG.App.Services;
 using Xunit;
 
 namespace BS2BG.Tests;
@@ -32,6 +33,29 @@ public sealed class TemplateGenerationServiceTests
             service.GenerateTemplates(import.Presets, catalog, omitRedundantSliders: false));
         AssertFixtureText(
             scenario,
+            "templates-omit.ini",
+            service.GenerateTemplates(import.Presets, catalog, omitRedundantSliders: true));
+    }
+
+    [Fact]
+    public void GenerateTemplatesUsesDefaultFallout4ProfileSettings()
+    {
+        var parser = new BodySlideXmlParser();
+        var service = new TemplateGenerationService();
+        var import = parser.ParseFile(InputPath("fallout4-cbbe", "CBBE.xml"));
+        var catalog = TemplateProfileCatalogFactory.CreateDefault();
+
+        foreach (var preset in import.Presets)
+        {
+            preset.ProfileName = ProjectProfileMapping.Fallout4Cbbe;
+        }
+
+        AssertFixtureText(
+            "fallout4-cbbe",
+            "templates.ini",
+            service.GenerateTemplates(import.Presets, catalog, omitRedundantSliders: false));
+        AssertFixtureText(
+            "fallout4-cbbe",
             "templates-omit.ini",
             service.GenerateTemplates(import.Presets, catalog, omitRedundantSliders: true));
     }

@@ -12,7 +12,7 @@ public static class TemplateProfileCatalogFactory
         {
             new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, LoadOrCreateEmpty("settings.json")),
             new TemplateProfile(ProjectProfileMapping.SkyrimUunp, LoadOrCreateEmpty("settings_UUNP.json")),
-            new TemplateProfile(ProjectProfileMapping.Fallout4Cbbe, CreateEmptyProfile()),
+            new TemplateProfile(ProjectProfileMapping.Fallout4Cbbe, LoadOrCreateEmpty("settings.json")),
         });
     }
 
