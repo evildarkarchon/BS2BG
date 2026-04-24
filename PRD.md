@@ -5,7 +5,7 @@
 **Author (this port):** evildarkarchon
 **Original author (Java jBS2BG, credited):** Totiman / asdasfa
 **Source of truth for parity:** Java/JavaFX 8 implementation `jBS2BG` v1.1.2 in `src/com/asdasfa/jbs2bg`.
-**Target stack:** .NET 9, C# 13, Avalonia 11 (MVVM via CommunityToolkit.Mvvm), Fluent theme + custom skin.
+**Target stack:** .NET 10, C# 14, Avalonia 12 (MVVM via ReactiveUI / `Avalonia.ReactiveUI`), Fluent theme + custom skin.
 **Primary host OS:** Windows 10/11 (app is Skyrim/Fallout 4 modder tooling). Linux/macOS builds are free by virtue of Avalonia; ship Windows binaries first.
 
 ---
@@ -264,7 +264,7 @@ Rationale:
 - **Command palette.** `Ctrl+Shift+P` opens a palette listing every command in §4.1 and the context actions (`Rename`, `Duplicate`, etc.). Low cost with Avalonia; high payoff for modders with mouse-fatigue.
 - **Inline validation.** The custom-target textbox currently only validates on Add. Port a live indicator (green check / red X) that parses `All|Female|NordRace` against a simple grammar as the user types, and replays the tooltip examples as inline placeholder text.
 - **Multiselect in NPC table.** Java uses `SelectionMode.SINGLE`. Allow multi-select + "Assign preset(s) to selected" from the inspector. Also enables right-click → "Clear assignments on selected".
-- **Undo/redo.** Implement a simple `ICommand`-based undo stack at the ViewModel level covering: add/remove/rename preset, add/remove custom target, NPC preset assignment changes. Bind to `Ctrl+Z` / `Ctrl+Y`. This is cheap if we commit to using `CommunityToolkit.Mvvm` relay commands from day 1.
+- **Undo/redo.** Implement a simple `ICommand`-based undo stack at the ViewModel level covering: add/remove/rename preset, add/remove custom target, NPC preset assignment changes. Bind to `Ctrl+Z` / `Ctrl+Y`. This is cheap if we commit to using ReactiveUI `ReactiveCommand`s from day 1 — each user-initiated mutation pushes an inverse delegate onto an undo stack, and `Undo` / `Redo` are themselves `ReactiveCommand`s with `canExecute` gated by stack depth.
 - **Preset count warning becomes actionable.** v1 colors the count red at 77+. v2 shows a warning banner with a "Why?" tooltip linking to the BodyGen limit note, and offers a "Trim to 76" command that keeps the N most-used presets.
 - **Dark/Light/System themes.** Avalonia's `FluentTheme` variants + a custom `SolidColorBrush` palette matching the original dark scheme. Pick up OS setting by default.
 - **High-DPI.** Avalonia handles this natively; audit any hardcoded pixel offsets from the Java window-centering logic when porting.
@@ -298,12 +298,12 @@ Rationale:
       Services/           ISettingsService, IPreferencesService, IProjectFileService,
                           IBodySlideXmlParser, IBodyGenIniWriter, IBosJsonWriter
       Formatting/         SliderMathFormatter (the %/invert/multiplier/round code)
-    BS2BG.App/            net9.0           # Avalonia, MVVM
+    BS2BG.App/            net10.0          # Avalonia, MVVM
       Views/              *.axaml
       ViewModels/         MainWindowViewModel, PresetListViewModel, ...
       Controls/           FilterableDataGrid (custom), PercentSlider, ...
       Resources/          themes, icons, fonts
-    BS2BG.Tests/          net9.0           # xUnit + snapshot
+    BS2BG.Tests/          net10.0          # xUnit v3 + snapshot
       FormattingTests     # golden files from Java output for same XML inputs
       ProjectRoundTripTests
 ```
@@ -312,18 +312,22 @@ Rationale:
 
 ### 6.2 MVVM conventions
 
-- `CommunityToolkit.Mvvm` `[ObservableProperty]` + `[RelayCommand]` source generators.
-- `IMessenger` for cross-ViewModel notifications (e.g., "preset removed → NPC ViewModels drop it").
-- All file I/O goes through services injected via `Microsoft.Extensions.DependencyInjection`.
-- No `Dispatcher.UIThread.InvokeAsync` sprinkled in ViewModels: services return `Task<T>`, the command awaits, binding updates on the UI thread via the `SynchronizationContext` set by Avalonia.
+- ViewModels derive from `ReactiveObject`. Properties use `this.RaiseAndSetIfChanged(ref _field, value)`; adopt `ReactiveUI.Fody`'s `[Reactive]` attribute (or the `[ObservableAsProperty]` pattern for derived state) to keep the boilerplate manageable.
+- Commands are `ReactiveCommand<TParam, TResult>`, with `canExecute` built from `this.WhenAnyValue(...)` observables so command availability is declaratively tied to VM state.
+- Derived properties (e.g., preset count warning color, "has empty targets" flag) are expressed as `WhenAnyValue(...).ToProperty(this, x => x.Foo, out _foo)` so the reactive graph is the source of truth rather than imperative setters.
+- Cross-ViewModel notifications use `MessageBus.Current` (or a typed wrapper injected as `IMessageBus`) for fire-and-forget events like "preset removed → NPC ViewModels drop it".
+- DI: `Microsoft.Extensions.DependencyInjection` is the container, bridged to ReactiveUI's `Locator` via `Splat.Microsoft.Extensions.DependencyInjection` so `ViewLocator` and `IScreen`/`IRoutableViewModel` navigation resolve from the same graph.
+- View ↔ VM wiring: `Avalonia.ReactiveUI`'s `ReactiveUserControl<TViewModel>` / `ReactiveWindow<TViewModel>` bases, with `this.WhenActivated(d => { ... })` for subscription lifetimes so observables tied to a view clean up when it unloads.
+- Compiled bindings are enabled by default in Avalonia 12 — every AXAML file must declare `x:DataType` (or use `{CompiledBinding}` explicitly) so the type-checked binding pipeline catches renames at build time. Treat reflection-binding opt-outs (`{ReflectionBinding ...}`) as a code-review red flag.
+- No `Dispatcher.UIThread.InvokeAsync` sprinkled in ViewModels: services return `Task<T>` or `IObservable<T>`, commands marshal results to the UI via `RxApp.MainThreadScheduler`, and background work runs on `RxApp.TaskpoolScheduler`.
 
 ### 6.3 Threading
 
 Java uses `javafx.concurrent.Task` + a `mainPane.setDisable(true)` pattern for XML parsing, generate, save, export. Port as:
 
-- `IAsyncRelayCommand` with `CanExecute = !IsBusy`.
-- Root ViewModel exposes `IsBusy` + `BusyMessage` bound to a glass overlay.
-- Progress for multi-file operations via `IProgress<T>` + determinate progress bar.
+- `ReactiveCommand.CreateFromTask(...)` for each long-running action, with `canExecute` composed from `this.WhenAnyValue(x => x.IsBusy, busy => !busy)` (and additional gates where needed).
+- `IsBusy` is driven by the union of every long-running command's `IsExecuting` observable — e.g., `Observable.CombineLatest(cmdA.IsExecuting, cmdB.IsExecuting, ...).ToProperty(this, x => x.IsBusy)`. The root ViewModel also exposes `BusyMessage`, bound to a glass overlay.
+- Progress for multi-file operations via `IProgress<T>` + determinate progress bar (or an `IObservable<Progress>` pushed onto `RxApp.MainThreadScheduler`).
 
 ### 6.4 Data model mapping
 
@@ -376,6 +380,14 @@ Java uses `javafx.concurrent.Task` + a `mainPane.setDisable(true)` pattern for X
 6. **Image file discovery.** v1 looks in `./images/` relative to CWD. Confirm modders actually use that convention — they do. Keep the same convention; don't migrate to AppData.
 7. **Fallout 4 slider namespace seed.** Seed `fallout4-cbbe.json` with the slider names observed in `Fallout 4/Data/Tools/BodySlide/SliderPresets/CBBE.xml` that the Java app would have treated as "missing defaults." Concrete seeding plan: enumerate the union of slider names across every `<Preset>` in FO4 CBBE.xml (including `Ankles`, `AppleCheeks`, `Arms`, `BackArch`, `Belly`, `BreastCenter`, `BreastCenterBig`, `BreastGravity`, `BreastGravity2`, `BreastHeight`, `BreastTopSlope`, `Breasts`, `BreastsTogether`, `Butt`, `ButtNew`, `CalfSize`, `ChubbyWaist`, `CrotchBack`, `HipBack`, `LegShape`, `NippleDown`, `NipplePerkiness`, `ShoulderTweak`, `ShoulderWidth`, `Thighs`, `Waist`, `WaistHeight`, `BreastsCleavage`, `NipBGone`, `PushUp`, `BreastFlatness2`, ...). Default `valueSmall`/`valueBig` to `1.0`, multipliers to `1.0`, inverted list empty. Authoring the "correct" FO4 inverted/multiplier sets is out of v2.0 scope — ship the file empty and let users tune it. Document that the FO4 profile is "best effort."
 8. **Negative slider values.** Real CBBE presets contain negative input values (`BreastHeight@-25`, `BreastWidth@-50`, `AreolaSize@-30`, `Belly@-25`). The Java math pipeline divides by 100, optionally inverts (`1 - x`), optionally multiplies, and rounds with `ROUND_HALF_UP`. Negative values flow through unchanged. Add explicit negative-value cases to the golden-file corpus (`CBBE Fetish`, `CBBE Chubby`, `CBBE Curvy (Outfit)` from the real CBBE.xml are good candidates).
+9. **Avalonia 12 API touchpoints.** Several older Avalonia APIs that tutorials and Stack Overflow answers still reference are gone or renamed in v12. Implementer should not rely on muscle memory from v11 for:
+   - **File pickers** — `OpenFileDialog` / `SaveFileDialog` / `OpenFolderDialog` are removed. Use `TopLevel.GetTopLevel(this).StorageProvider` with `OpenFilePickerAsync` / `SaveFilePickerAsync` / `OpenFolderPickerAsync`. Affects every "Add XMLs", "Export INIs", "Export BoS JSON", "Save / Save As" path in §4.1–§4.3.
+   - **Clipboard** — the old `IDataObject` / `DataObject` and `IClipboard.GetTextAsync` / `SetTextAsync` surface is removed. Use `DataTransfer` + `DataTransferItem` and the `ClipboardExtensions.TryGetTextAsync` / `SetTextAsync` helpers. Affects the Templates/Morphs "Copy" buttons and the BoS JSON viewer copy button.
+   - **`TopLevel` is not always root.** Cast via `TopLevel.GetTopLevel(Visual)` only — do not assume the visual tree's root is a `TopLevel` / `Window`. Relevant for the always-on-top image viewer and the "No Preset" notifier.
+   - **Dev tools** — `Avalonia.Diagnostics` is gone; the replacement `AvaloniaUI.DiagnosticsSupport` ships under Avalonia Plus (commercial). Decision deferred: either pay for Plus, gate dev-tools behind a DEBUG-only conditional reference, or ship without an in-app inspector. Open question for the maintainer.
+   - **Testing** — `Avalonia.Headless.XUnit` for v12 requires xUnit v3 (up from v2). The testing strategy in §8 must use xUnit v3 from the start, so `[Fact]` / `[Theory]` references and fixture attributes follow the v3 conventions (`IAsyncLifetime` → `ValueTask InitializeAsync`, class fixtures unchanged, per-test output via `ITestOutputHelper` unchanged).
+   - **Compiled bindings default on** — adding `x:DataType` to every `Window` / `UserControl` is now mandatory for bindings to resolve without warnings.
+   - **`BS2BG.Core` stays on `netstandard2.1`.** Avalonia 12 dropped .NET Framework / .NET Standard support, but Core has no Avalonia dependency, so netstandard2.1 remains valid and keeps the headless-CLI path (§10) portable. `BS2BG.App` and `BS2BG.Tests` target `net10.0`. Core compiles under `LangVersion=13` (netstandard2.1 can't use all C# 14 features without runtime polyfills); App and Tests get C# 14.
 
 ## 8. Testing strategy
 

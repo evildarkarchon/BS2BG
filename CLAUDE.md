@@ -16,10 +16,10 @@ Current status: **planning only, no C# code yet**. Java reference and test fixtu
 
 ## Target stack
 
-- .NET 9, C# 13
-- Avalonia 11 with `CommunityToolkit.Mvvm` (ObservableProperty / RelayCommand source generators)
+- .NET 10, C# 14 (Core project stays on netstandard2.1 / C# 13 for headless-CLI portability; App and Tests target net10.0)
+- Avalonia 12 with `ReactiveUI` / `Avalonia.ReactiveUI` (`ReactiveObject`, `ReactiveCommand`, `WhenAnyValue`; optionally `ReactiveUI.Fody` `[Reactive]` for property boilerplate). Compiled bindings are on by default in v12 — add `x:DataType` to every AXAML file.
 - `System.Text.Json` for JSON, `XDocument` for BodySlide XML
-- xUnit for tests
+- xUnit **v3** for tests (required by `Avalonia.Headless.XUnit` 12)
 - Planned solution: `BS2BG.sln` with `src/BS2BG.Core` (netstandard2.1, pure domain + I/O), `src/BS2BG.App` (Avalonia UI), `src/BS2BG.Tests` (xUnit + golden-file snapshots)
 
 ## Sacred files — do not edit without asking
