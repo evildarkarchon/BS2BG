@@ -4,7 +4,8 @@ using Xunit;
 
 namespace BS2BG.Tests;
 
-[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected sequences keep parser assertions readable.")]
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected sequences keep parser assertions readable.")]
 public sealed class BodySlideXmlParserTests
 {
     [Theory]
@@ -13,15 +14,15 @@ public sealed class BodySlideXmlParserTests
     public void ParseStringReadsPresetsWithOrWithoutXmlDeclaration(string declaration)
     {
         var xml = declaration + """
-            <SliderPresets>
-              <Preset name="CBBE Curvy (Outfit)" set="Ignored">
-                <Group name="Ignored"/>
-                <SetSlider name="Breasts" size="big" value="75" ignored="true"/>
-                <SetSlider name="Arms" size="small" value="-25"/>
-                <Unsupported name="Ignored"/>
-              </Preset>
-            </SliderPresets>
-            """;
+                                <SliderPresets>
+                                  <Preset name="CBBE Curvy (Outfit)" set="Ignored">
+                                    <Group name="Ignored"/>
+                                    <SetSlider name="Breasts" size="big" value="75" ignored="true"/>
+                                    <SetSlider name="Arms" size="small" value="-25"/>
+                                    <Unsupported name="Ignored"/>
+                                  </Preset>
+                                </SliderPresets>
+                                """;
         var parser = new BodySlideXmlParser();
 
         var result = parser.ParseString(xml, "sample.xml");
@@ -43,17 +44,17 @@ public sealed class BodySlideXmlParserTests
     [Fact]
     public void ParseStringMergesSparseSliderHalvesByName()
     {
-        const string Xml = """
-            <SliderPresets>
-              <Preset name="- Zeroed Sliders -">
-                <SetSlider name="Waist" size="small" value="10"/>
-                <SetSlider name="waist" size="big" value="40"/>
-              </Preset>
-            </SliderPresets>
-            """;
+        const string xml = """
+                           <SliderPresets>
+                             <Preset name="- Zeroed Sliders -">
+                               <SetSlider name="Waist" size="small" value="10"/>
+                               <SetSlider name="waist" size="big" value="40"/>
+                             </Preset>
+                           </SliderPresets>
+                           """;
         var parser = new BodySlideXmlParser();
 
-        var result = parser.ParseString(Xml, "sample.xml");
+        var result = parser.ParseString(xml, "sample.xml");
 
         var preset = Assert.Single(result.Presets);
         var slider = Assert.Single(preset.SetSliders);

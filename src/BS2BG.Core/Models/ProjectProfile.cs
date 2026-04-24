@@ -1,17 +1,10 @@
 namespace BS2BG.Core.Models;
 
-public sealed class ProjectProfile
+public sealed class ProjectProfile(string name, IEnumerable<string> defaultSliderNames)
 {
-    private readonly IReadOnlyList<string> defaultSliderNames;
+    public string Name { get; } = ProjectProfileMapping.Resolve(name, false);
 
-    public ProjectProfile(string name, IEnumerable<string> defaultSliderNames)
-    {
-        Name = ProjectProfileMapping.Resolve(name, isUunp: false);
-        this.defaultSliderNames = defaultSliderNames?.ToArray()
-            ?? throw new ArgumentNullException(nameof(defaultSliderNames));
-    }
-
-    public string Name { get; }
-
-    public IReadOnlyList<string> DefaultSliderNames => defaultSliderNames;
+    public IReadOnlyList<string> DefaultSliderNames { get; } = defaultSliderNames?.ToArray()
+                                                               ?? throw new ArgumentNullException(
+                                                                   nameof(defaultSliderNames));
 }

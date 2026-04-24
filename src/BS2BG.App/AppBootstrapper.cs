@@ -13,15 +13,15 @@ namespace BS2BG.App;
 
 public static class AppBootstrapper
 {
-    private static IServiceProvider? serviceProvider;
+    private static IServiceProvider? _serviceProvider;
 
-    public static IServiceProvider Services => serviceProvider ??= CreateServiceProvider();
+    public static IServiceProvider Services => _serviceProvider ??= CreateServiceProvider();
 
     public static ServiceProvider CreateServiceProvider()
     {
         var services = new ServiceCollection();
         ConfigureServices(services);
-        return services.BuildServiceProvider(validateScopes: true);
+        return services.BuildServiceProvider(true);
     }
 
     public static void ConfigureServices(IServiceCollection services)
@@ -67,8 +67,6 @@ public static class AppBootstrapper
         services.AddTransient<MainWindow>();
     }
 
-    public static void SetServiceProvider(IServiceProvider? provider)
-    {
-        serviceProvider = provider ?? throw new ArgumentNullException(nameof(provider));
-    }
+    public static void SetServiceProvider(IServiceProvider? provider) =>
+        _serviceProvider = provider ?? throw new ArgumentNullException(nameof(provider));
 }

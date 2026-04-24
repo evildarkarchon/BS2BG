@@ -1,16 +1,11 @@
 namespace BS2BG.Core.Models;
 
-public sealed class Npc : MorphTargetBase
+public sealed class Npc(string name) : MorphTargetBase(name)
 {
-    private string mod = "Skyrim.esm";
     private string editorId = string.Empty;
-    private string race = string.Empty;
     private string formId = string.Empty;
-
-    public Npc(string name)
-        : base(name)
-    {
-    }
+    private string mod = "Skyrim.esm";
+    private string race = string.Empty;
 
     public string Mod
     {
@@ -38,24 +33,16 @@ public sealed class Npc : MorphTargetBase
 
     public string SliderPresetsText => string.Join("|", SliderPresets.Select(sliderPreset => sliderPreset.Name));
 
-    public override string ToMorphLine()
-    {
-        return Mod + "|" + FormId + "=" + string.Join("|", SliderPresets.Select(sliderPreset => sliderPreset.Name));
-    }
+    public override string ToMorphLine() => Mod + "|" + FormId + "=" +
+                                            string.Join("|", SliderPresets.Select(sliderPreset => sliderPreset.Name));
 
-    protected override void OnSliderPresetAssignmentsChanged()
-    {
-        NotifyChanged(nameof(SliderPresetsText));
-    }
+    protected override void OnSliderPresetAssignmentsChanged() => NotifyChanged(nameof(SliderPresetsText));
 
     private static string NormalizeFormId(string? value)
     {
         var normalized = (value ?? string.Empty).Trim();
 
-        if (normalized.Length > 6)
-        {
-            normalized = normalized.Substring(normalized.Length - 6);
-        }
+        if (normalized.Length > 6) normalized = normalized.Substring(normalized.Length - 6);
 
         normalized = normalized.TrimStart('0');
         return normalized.Length == 0 ? "0" : normalized;

@@ -9,7 +9,8 @@ using Xunit;
 
 namespace BS2BG.Tests;
 
-[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected sequences keep ViewModel assertions readable.")]
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected sequences keep ViewModel assertions readable.")]
 public sealed class MorphsViewModelTests
 {
     [Fact]
@@ -43,7 +44,8 @@ public sealed class MorphsViewModelTests
         await viewModel.CopyGeneratedMorphsAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { "Lydia", "Valerica" }, viewModel.NpcDatabase.Select(npc => npc.Name));
-        Assert.Equal(new[] { "Alpha", "Beta" }, project.CustomMorphTargets.Single().SliderPresets.Select(preset => preset.Name));
+        Assert.Equal(new[] { "Alpha", "Beta" },
+            project.CustomMorphTargets.Single().SliderPresets.Select(preset => preset.Name));
         Assert.Equal("Lydia", viewModel.SelectedTargetName);
         Assert.Equal("1", viewModel.TargetPresetCountText);
         Assert.Equal("(1)", viewModel.NpcCountBadgeText);
@@ -51,6 +53,28 @@ public sealed class MorphsViewModelTests
             "All|Female=Alpha|Beta\r\nSkyrim.esm|A2C94=Alpha",
             viewModel.GeneratedMorphsText);
         Assert.Equal(viewModel.GeneratedMorphsText, clipboard.Text);
+    }
+
+    [Fact]
+    public async Task ImportNpcFilesSkipsUnreadableFilesAndContinuesImporting()
+    {
+        using var directory = new TemporaryDirectory();
+        var missingFile = Path.Combine(
+            Path.GetTempPath(),
+            Guid.NewGuid().ToString("N"),
+            "missing-npcs.txt");
+        var validFile = directory.WriteText(
+            "npcs.txt",
+            "Skyrim.esm|Lydia|HousecarlWhiterun|NordRace|000A2C94");
+        var viewModel = CreateViewModel(CreateProjectWithPresets(), new QueueRandomAssignmentProvider());
+
+        await viewModel.ImportNpcFilesAsync(
+            new[] { missingFile, validFile },
+            TestContext.Current.CancellationToken);
+
+        var npc = Assert.Single(viewModel.NpcDatabase);
+        Assert.Equal("Lydia", npc.Name);
+        Assert.Equal("Imported 1 NPC. 1 issue was skipped.", viewModel.StatusMessage);
     }
 
     [Fact]
@@ -113,10 +137,7 @@ public sealed class MorphsViewModelTests
         project.MorphedNpcs.Add(npc);
         viewModel.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(MorphsViewModel.NpcCountBadgeText))
-            {
-                npcBadgeNotifications++;
-            }
+            if (args.PropertyName == nameof(MorphsViewModel.NpcCountBadgeText)) npcBadgeNotifications++;
         };
 
         project.MorphedNpcs.Clear();
@@ -201,50 +222,27 @@ public sealed class MorphsViewModelTests
         return project;
     }
 
-    private static Npc CreateNpc(string mod, string name, string editorId, string race, string formId)
-    {
-        return new Npc(name)
-        {
-            Mod = mod,
-            EditorId = editorId,
-            Race = race,
-            FormId = formId,
-        };
-    }
+    private static Npc CreateNpc(string mod, string name, string editorId, string race, string formId) =>
+        new(name) { Mod = mod, EditorId = editorId, Race = race, FormId = formId };
 
-    private sealed class QueueRandomAssignmentProvider : IRandomAssignmentProvider
+    private sealed class QueueRandomAssignmentProvider(params int[] values) : IRandomAssignmentProvider
     {
-        private readonly Queue<int> values;
-
-        public QueueRandomAssignmentProvider(params int[] values)
-        {
-            this.values = new Queue<int>(values);
-        }
+        private readonly Queue<int> values = new(values);
 
         public int NextIndex(int exclusiveMax)
         {
-            if (values.Count == 0)
-            {
-                return 0;
-            }
+            if (values.Count == 0) return 0;
 
             return values.Dequeue();
         }
     }
 
-    private sealed class StaticNpcTextFilePicker : INpcTextFilePicker
+    private sealed class StaticNpcTextFilePicker(IReadOnlyList<string> files) : INpcTextFilePicker
     {
-        private readonly IReadOnlyList<string> files;
+        private readonly IReadOnlyList<string> files = files;
 
-        public StaticNpcTextFilePicker(IReadOnlyList<string> files)
-        {
-            this.files = files;
-        }
-
-        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult(files);
-        }
+        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(files);
     }
 
     private sealed class CapturingClipboardService : IClipboardService
@@ -258,14 +256,9 @@ public sealed class MorphsViewModelTests
         }
     }
 
-    private sealed class StubNpcImageLookupService : INpcImageLookupService
+    private sealed class StubNpcImageLookupService(string? imagePath) : INpcImageLookupService
     {
-        private readonly string? imagePath;
-
-        public StubNpcImageLookupService(string? imagePath)
-        {
-            this.imagePath = imagePath;
-        }
+        private readonly string? imagePath = imagePath;
 
         public Npc? Npc { get; private set; }
 
@@ -293,31 +286,22 @@ public sealed class MorphsViewModelTests
     {
         public IReadOnlyList<MorphTargetBase> Targets { get; private set; } = Array.Empty<MorphTargetBase>();
 
-        public void ShowTargetsWithoutPresets(IReadOnlyList<MorphTargetBase> targets)
-        {
-            Targets = targets.ToArray();
-        }
+        public void ShowTargetsWithoutPresets(IReadOnlyList<MorphTargetBase> targets) => Targets = targets.ToArray();
     }
 
     private sealed class TemporaryDirectory : IDisposable
     {
         private readonly string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
 
-        public TemporaryDirectory()
-        {
-            Directory.CreateDirectory(path);
-        }
+        public TemporaryDirectory() => Directory.CreateDirectory(path);
+
+        public void Dispose() => Directory.Delete(path, true);
 
         public string WriteText(string fileName, string text)
         {
             var filePath = Path.Combine(path, fileName);
             File.WriteAllText(filePath, text);
             return filePath;
-        }
-
-        public void Dispose()
-        {
-            Directory.Delete(path, recursive: true);
         }
     }
 }

@@ -15,10 +15,7 @@ public static class JavaFloatFormatting
 
     public static string FormatForText(float value)
     {
-        if (value == 0f)
-        {
-            return "0.0";
-        }
+        if (value == 0f) return "0.0";
 
         var text = value.ToString("0.##", CultureInfo.InvariantCulture);
         return text.Contains('.') ? text : text + ".0";
@@ -26,10 +23,7 @@ public static class JavaFloatFormatting
 
     public static string FormatForMinimalJsonNumber(float value)
     {
-        if (value == 0f)
-        {
-            return "0";
-        }
+        if (value == 0f) return "0";
 
         return value.ToString("0.##", CultureInfo.InvariantCulture);
     }

@@ -4,13 +4,7 @@ namespace BS2BG.App.Services;
 
 public sealed class NpcImageLookupService : INpcImageLookupService
 {
-    private static readonly string[] SupportedExtensions =
-    {
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".bmp",
-    };
+    private static readonly string[] SupportedExtensions = { ".jpg", ".jpeg", ".png", ".bmp" };
 
     private readonly string workingDirectory;
 
@@ -34,19 +28,13 @@ public sealed class NpcImageLookupService : INpcImageLookupService
         foreach (var extension in SupportedExtensions)
         {
             var candidate = Path.Combine(imagesDirectory, npc.Name + " (" + npc.EditorId + ")" + extension);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
+            if (File.Exists(candidate)) return candidate;
         }
 
         foreach (var extension in SupportedExtensions)
         {
             var candidate = Path.Combine(imagesDirectory, npc.Name + extension);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
+            if (File.Exists(candidate)) return candidate;
         }
 
         return null;

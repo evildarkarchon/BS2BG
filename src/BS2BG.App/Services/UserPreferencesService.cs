@@ -9,7 +9,7 @@ public enum ThemePreference
 {
     System,
     Light,
-    Dark,
+    Dark
 }
 
 public sealed class UserPreferences
@@ -24,14 +24,12 @@ public interface IUserPreferencesService
     void Save(UserPreferences preferences);
 }
 
-public sealed class UserPreferencesService : IUserPreferencesService
+public sealed class UserPreferencesService(string preferencesPath) : IUserPreferencesService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-    };
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    private readonly string preferencesPath;
+    private readonly string preferencesPath =
+        preferencesPath ?? throw new ArgumentNullException(nameof(preferencesPath));
 
     public UserPreferencesService()
         : this(Path.Combine(
@@ -41,24 +39,16 @@ public sealed class UserPreferencesService : IUserPreferencesService
     {
     }
 
-    public UserPreferencesService(string preferencesPath)
-    {
-        this.preferencesPath = preferencesPath ?? throw new ArgumentNullException(nameof(preferencesPath));
-    }
-
     public UserPreferences Load()
     {
-        if (!File.Exists(preferencesPath))
-        {
-            return new UserPreferences();
-        }
+        if (!File.Exists(preferencesPath)) return new UserPreferences();
 
         try
         {
             return JsonSerializer.Deserialize<UserPreferences>(
-                    File.ReadAllText(preferencesPath),
-                    JsonOptions)
-                ?? new UserPreferences();
+                       File.ReadAllText(preferencesPath),
+                       JsonOptions)
+                   ?? new UserPreferences();
         }
         catch (JsonException)
         {
@@ -75,10 +65,7 @@ public sealed class UserPreferencesService : IUserPreferencesService
         ArgumentNullException.ThrowIfNull(preferences);
 
         var directory = Path.GetDirectoryName(preferencesPath);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
         File.WriteAllText(preferencesPath, JsonSerializer.Serialize(preferences, JsonOptions));
     }
@@ -92,7 +79,7 @@ public static class ThemePreferenceApplier
         {
             ThemePreference.Light => ThemeVariant.Light,
             ThemePreference.Dark => ThemeVariant.Dark,
-            _ => ThemeVariant.Default,
+            _ => ThemeVariant.Default
         };
     }
 
@@ -102,13 +89,9 @@ public static class ThemePreferenceApplier
         {
             var themeVariant = ToThemeVariant(preference);
             if (Dispatcher.UIThread.CheckAccess())
-            {
                 application.RequestedThemeVariant = themeVariant;
-            }
             else
-            {
                 Dispatcher.UIThread.Post(() => application.RequestedThemeVariant = themeVariant);
-            }
         }
     }
 }

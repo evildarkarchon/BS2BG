@@ -8,21 +8,13 @@ public static class ProjectProfileMapping
 
     public static string Resolve(string? profileName, bool isUunp)
     {
-        if (!string.IsNullOrWhiteSpace(profileName))
-        {
-            return profileName.Trim();
-        }
+        if (!string.IsNullOrWhiteSpace(profileName)) return profileName.Trim();
 
         return isUunp ? SkyrimUunp : SkyrimCbbe;
     }
 
-    public static string FromLegacyIsUunp(bool isUunp)
-    {
-        return isUunp ? SkyrimUunp : SkyrimCbbe;
-    }
+    public static string FromLegacyIsUunp(bool isUunp) => isUunp ? SkyrimUunp : SkyrimCbbe;
 
-    public static bool ToLegacyIsUunp(string? profileName)
-    {
-        return string.Equals(profileName, SkyrimUunp, StringComparison.OrdinalIgnoreCase);
-    }
+    public static bool ToLegacyIsUunp(string? profileName) =>
+        string.Equals(profileName, SkyrimUunp, StringComparison.OrdinalIgnoreCase);
 }

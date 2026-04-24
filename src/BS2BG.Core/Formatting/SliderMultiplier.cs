@@ -1,14 +1,8 @@
 namespace BS2BG.Core.Formatting;
 
-public sealed class SliderMultiplier
+public sealed class SliderMultiplier(string name, float value)
 {
-    public SliderMultiplier(string name, float value)
-    {
-        Name = name ?? throw new ArgumentNullException(nameof(name));
-        Value = value;
-    }
+    public string Name { get; } = name ?? throw new ArgumentNullException(nameof(name));
 
-    public string Name { get; }
-
-    public float Value { get; }
+    public float Value { get; } = value;
 }

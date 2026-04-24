@@ -2,7 +2,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
-using Avalonia.LogicalTree;
 using BS2BG.App;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
@@ -52,10 +51,7 @@ public sealed class M6UxAppShellTests
         Assert.True(banner.IsVisible);
         Assert.False(trimButton.IsVisible);
 
-        for (var index = 31; index < 77; index++)
-        {
-            warningTarget.AddSliderPreset(new SliderPreset("P" + index));
-        }
+        for (var index = 31; index < 77; index++) warningTarget.AddSliderPreset(new SliderPreset("P" + index));
 
         Assert.True(banner.IsVisible);
         Assert.True(trimButton.IsVisible);
@@ -112,24 +108,15 @@ public sealed class M6UxAppShellTests
             viewModel.CommandPaletteItems.Select(item => item.Title));
     }
 
-    private static Npc CreateNpc(string name, string race)
+    private static Npc CreateNpc(string name, string race) => new(name)
     {
-        return new Npc(name)
-        {
-            Mod = "Skyrim.esm",
-            EditorId = name + "Editor",
-            Race = race,
-            FormId = "00000001",
-        };
-    }
+        Mod = "Skyrim.esm", EditorId = name + "Editor", Race = race, FormId = "00000001"
+    };
 
     private static CustomMorphTarget CreateTargetWithPresetCount(string name, int presetCount)
     {
         var target = new CustomMorphTarget(name);
-        for (var index = 0; index < presetCount; index++)
-        {
-            target.AddSliderPreset(new SliderPreset("P" + index));
-        }
+        for (var index = 0; index < presetCount; index++) target.AddSliderPreset(new SliderPreset("P" + index));
 
         return target;
     }

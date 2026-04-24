@@ -1,18 +1,13 @@
 namespace BS2BG.Core.Models;
 
-public sealed class SetSlider : ProjectModelNode
+public sealed class SetSlider(string name) : ProjectModelNode
 {
-    private string name;
     private bool enabled = true;
-    private int? valueSmall;
-    private int? valueBig;
-    private int percentMin = 100;
+    private string name = name ?? throw new ArgumentNullException(nameof(name));
     private int percentMax = 100;
-
-    public SetSlider(string name)
-    {
-        this.name = name ?? throw new ArgumentNullException(nameof(name));
-    }
+    private int percentMin = 100;
+    private int? valueBig;
+    private int? valueSmall;
 
     public string Name
     {

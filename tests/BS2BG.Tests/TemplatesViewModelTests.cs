@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
+using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
@@ -10,7 +11,8 @@ using ModelSliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
-[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected sequences keep ViewModel assertions readable.")]
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected sequences keep ViewModel assertions readable.")]
 public sealed class TemplatesViewModelTests
 {
     [Fact]
@@ -99,11 +101,7 @@ public sealed class TemplatesViewModelTests
         var project = new ProjectModel();
         var preset = new ModelSliderPreset("Alpha");
         var target = new CustomMorphTarget("All|Female");
-        var npc = new Npc("Lydia")
-        {
-            Mod = "Skyrim.esm",
-            EditorId = "HousecarlWhiterun",
-        };
+        var npc = new Npc("Lydia") { Mod = "Skyrim.esm", EditorId = "HousecarlWhiterun" };
         project.SliderPresets.Add(preset);
         project.CustomMorphTargets.Add(target);
         project.MorphedNpcs.Add(npc);
@@ -116,6 +114,44 @@ public sealed class TemplatesViewModelTests
         Assert.Empty(project.SliderPresets);
         Assert.Empty(target.SliderPresets);
         Assert.Empty(npc.SliderPresets);
+    }
+
+    [Fact]
+    public async Task UndoImportRemapsTargetAndNpcAssignmentsToRestoredPresetInstances()
+    {
+        using var directory = new TemporaryDirectory();
+        var importFile = directory.WriteXml(
+            "alpha.xml",
+            """
+            <SliderPresets>
+              <Preset name="Alpha"><SetSlider name="Scale" size="big" value="75"/></Preset>
+            </SliderPresets>
+            """);
+        var undoRedo = new UndoRedoService();
+        var project = new ProjectModel();
+        var preset = new ModelSliderPreset("Alpha");
+        preset.AddSetSlider(new ModelSetSlider("Scale") { ValueBig = 25 });
+        var target = new CustomMorphTarget("All|Female");
+        var npc = new Npc("Lydia") { Mod = "Skyrim.esm", FormId = "000A2C94" };
+        project.SliderPresets.Add(preset);
+        project.CustomMorphTargets.Add(target);
+        project.MorphedNpcs.Add(npc);
+        target.AddSliderPreset(preset);
+        npc.AddSliderPreset(preset);
+        var viewModel = CreateViewModel(project: project, undoRedo: undoRedo);
+
+        await viewModel.ImportPresetFilesAsync(new[] { importFile }, TestContext.Current.CancellationToken);
+        Assert.True(undoRedo.Undo());
+
+        var restoredPreset = Assert.Single(project.SliderPresets);
+        Assert.Same(restoredPreset, Assert.Single(target.SliderPresets));
+        Assert.Same(restoredPreset, Assert.Single(npc.SliderPresets));
+
+        viewModel.SelectedPreset = restoredPreset;
+        Assert.True(viewModel.TryRenameSelectedPreset("Restored"));
+
+        Assert.Equal("All|Female=Restored", target.ToMorphLine());
+        Assert.Equal("Skyrim.esm|A2C94=Restored", npc.ToMorphLine());
     }
 
     [Fact]
@@ -212,11 +248,7 @@ public sealed class TemplatesViewModelTests
     private static ModelSliderPreset AddPreset(TemplatesViewModel viewModel, string name, int bigValue)
     {
         var preset = new ModelSliderPreset(name);
-        preset.AddSetSlider(new ModelSetSlider("Scale")
-        {
-            ValueSmall = 0,
-            ValueBig = bigValue,
-        });
+        preset.AddSetSlider(new ModelSetSlider("Scale") { ValueSmall = 0, ValueBig = bigValue });
         viewModel.Presets.Add(preset);
         viewModel.SortPresets();
         return preset;
@@ -226,7 +258,8 @@ public sealed class TemplatesViewModelTests
         IBodySlideXmlFilePicker? picker = null,
         IClipboardService? clipboard = null,
         TemplateProfileCatalog? profileCatalog = null,
-        ProjectModel? project = null)
+        ProjectModel? project = null,
+        UndoRedoService? undoRedo = null)
     {
         return new TemplatesViewModel(
             project ?? new ProjectModel(),
@@ -234,55 +267,49 @@ public sealed class TemplatesViewModelTests
             new TemplateGenerationService(),
             profileCatalog ?? CreateCatalog(),
             picker ?? new BlockingFilePicker(Array.Empty<string>()),
-            clipboard ?? new CapturingClipboardService());
+            clipboard ?? new CapturingClipboardService(),
+            undoRedo);
     }
 
     private static TemplateProfileCatalog CreateCatalog()
     {
-        var regular = new BS2BG.Core.Formatting.SliderProfile(
-            defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
-            multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-            invertedNames: Array.Empty<string>());
-        var doubled = new BS2BG.Core.Formatting.SliderProfile(
-            defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
-            multipliers: new[] { new BS2BG.Core.Formatting.SliderMultiplier("Scale", 2f) },
-            invertedNames: Array.Empty<string>());
+        var regular = new SliderProfile(
+            Array.Empty<SliderDefault>(),
+            Array.Empty<SliderMultiplier>(),
+            Array.Empty<string>());
+        var doubled = new SliderProfile(
+            Array.Empty<SliderDefault>(),
+            new[] { new SliderMultiplier("Scale", 2f) },
+            Array.Empty<string>());
 
         return new TemplateProfileCatalog(new[]
         {
-            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, regular),
-            new TemplateProfile("Double", doubled),
+            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, regular), new TemplateProfile("Double", doubled)
         });
     }
 
     private static TemplateProfileCatalog CreateCatalogWithProfileDefaults()
     {
-        var regular = new BS2BG.Core.Formatting.SliderProfile(
-            defaults: new[] { new BS2BG.Core.Formatting.SliderDefault("RegularOnly", 0f, 1f) },
-            multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-            invertedNames: Array.Empty<string>());
-        var doubled = new BS2BG.Core.Formatting.SliderProfile(
-            defaults: new[] { new BS2BG.Core.Formatting.SliderDefault("DoubleOnly", 0f, 1f) },
-            multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-            invertedNames: Array.Empty<string>());
+        var regular = new SliderProfile(
+            new[] { new SliderDefault("RegularOnly", 0f, 1f) },
+            Array.Empty<SliderMultiplier>(),
+            Array.Empty<string>());
+        var doubled = new SliderProfile(
+            new[] { new SliderDefault("DoubleOnly", 0f, 1f) },
+            Array.Empty<SliderMultiplier>(),
+            Array.Empty<string>());
 
         return new TemplateProfileCatalog(new[]
         {
-            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, regular),
-            new TemplateProfile("Double", doubled),
+            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, regular), new TemplateProfile("Double", doubled)
         });
     }
 
-    private sealed class BlockingFilePicker : IBodySlideXmlFilePicker
+    private sealed class BlockingFilePicker(IReadOnlyList<string> nextFiles) : IBodySlideXmlFilePicker
     {
         private TaskCompletionSource<IReadOnlyList<string>>? completion;
 
-        public BlockingFilePicker(IReadOnlyList<string> nextFiles)
-        {
-            NextFiles = nextFiles;
-        }
-
-        public IReadOnlyList<string> NextFiles { get; set; }
+        public IReadOnlyList<string> NextFiles { get; set; } = nextFiles;
 
         public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken)
         {
@@ -292,10 +319,7 @@ public sealed class TemplatesViewModelTests
             return completion.Task;
         }
 
-        public void Release()
-        {
-            completion?.TrySetResult(NextFiles);
-        }
+        public void Release() => completion?.TrySetResult(NextFiles);
     }
 
     private sealed class CapturingClipboardService : IClipboardService
@@ -309,24 +333,16 @@ public sealed class TemplatesViewModelTests
         }
     }
 
-    private sealed class ThrowingClipboardService : IClipboardService
+    private sealed class ThrowingClipboardService(Exception exception) : IClipboardService
     {
-        private readonly Exception exception;
+        private readonly Exception exception = exception;
 
-        public ThrowingClipboardService(Exception exception)
-        {
-            this.exception = exception;
-        }
-
-        public Task SetTextAsync(string text, CancellationToken cancellationToken)
-        {
-            return Task.FromException(exception);
-        }
+        public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.FromException(exception);
     }
 
     private sealed class RecordingSynchronizationContext : SynchronizationContext
     {
-        public List<Exception> Exceptions { get; } = new List<Exception>();
+        public List<Exception> Exceptions { get; } = new();
 
         public override void Post(SendOrPostCallback d, object? state)
         {
@@ -345,21 +361,15 @@ public sealed class TemplatesViewModelTests
     {
         private readonly string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
 
-        public TemporaryDirectory()
-        {
-            Directory.CreateDirectory(path);
-        }
+        public TemporaryDirectory() => Directory.CreateDirectory(path);
+
+        public void Dispose() => Directory.Delete(path, true);
 
         public string WriteXml(string fileName, string xml)
         {
             var filePath = Path.Combine(path, fileName);
             File.WriteAllText(filePath, xml);
             return filePath;
-        }
-
-        public void Dispose()
-        {
-            Directory.Delete(path, recursive: true);
         }
     }
 }

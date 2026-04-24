@@ -9,6 +9,7 @@
                      xmlns:vm="using:BS2BG.App.ViewModels"
                      xmlns:models="using:BS2BG.Core.Models"
                      x:Class="BS2BG.App.Views.MainWindow"
+                     x:TypeArguments="vm:MainWindowViewModel"
                      x:DataType="vm:MainWindowViewModel"
                      mc:Ignorable="d">
   <rxui:ReactiveWindow.KeyBindings>

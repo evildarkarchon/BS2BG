@@ -1,30 +1,22 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 using BS2BG.Core.Models;
 
 namespace BS2BG.App.Services;
 
 public sealed class WindowNoPresetNotificationService : INoPresetNotificationService
 {
-    private Window? owner;
-    private Window? window;
     private ListBox? customTargetsList;
     private ListBox? npcsList;
-
-    public void Attach(Window owner)
-    {
-        ArgumentNullException.ThrowIfNull(owner);
-
-        this.owner = owner;
-    }
+    private Window? owner;
+    private Window? window;
 
     public void ShowTargetsWithoutPresets(IReadOnlyList<MorphTargetBase> targets)
     {
         ArgumentNullException.ThrowIfNull(targets);
 
-        if (targets.Count == 0)
-        {
-            return;
-        }
+        if (targets.Count == 0) return;
 
         EnsureWindow();
         customTargetsList!.ItemsSource = targets
@@ -39,24 +31,24 @@ public sealed class WindowNoPresetNotificationService : INoPresetNotificationSer
         if (!window!.IsVisible)
         {
             if (owner is null)
-            {
                 window.Show();
-            }
             else
-            {
                 window.Show(owner);
-            }
         }
 
         window.Activate();
     }
 
+    public void Attach(Window owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+
+        this.owner = owner;
+    }
+
     private void EnsureWindow()
     {
-        if (window is not null)
-        {
-            return;
-        }
+        if (window is not null) return;
 
         customTargetsList = new ListBox();
         npcsList = new ListBox();
@@ -72,19 +64,19 @@ public sealed class WindowNoPresetNotificationService : INoPresetNotificationSer
             Content = new Grid
             {
                 RowDefinitions = new RowDefinitions("Auto,*,*"),
-                Margin = new Avalonia.Thickness(12),
+                Margin = new Thickness(12),
                 Children =
                 {
                     new TextBlock
                     {
                         Text = "The following targets don't have assigned presets.",
-                        TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-                        Margin = new Avalonia.Thickness(0, 0, 0, 8),
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 0, 0, 8)
                     },
                     customTargetsList,
-                    npcsList,
-                },
-            },
+                    npcsList
+                }
+            }
         };
 
         Grid.SetRow(customTargetsList, 1);

@@ -1,14 +1,18 @@
 using System.Diagnostics.CodeAnalysis;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
+using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using Xunit;
+using SetSlider = BS2BG.Core.Models.SetSlider;
+using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
-[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected sequences keep ViewModel assertions readable.")]
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected sequences keep ViewModel assertions readable.")]
 public sealed class SetSliderInspectorViewModelTests
 {
     [Fact]
@@ -16,11 +20,7 @@ public sealed class SetSliderInspectorViewModelTests
     {
         var viewModel = CreateViewModel(CreateCatalogWithDefault());
         var preset = new SliderPreset("Alpha");
-        preset.AddSetSlider(new SetSlider("Scale")
-        {
-            ValueSmall = 0,
-            ValueBig = 100,
-        });
+        preset.AddSetSlider(new SetSlider("Scale") { ValueSmall = 0, ValueBig = 100 });
         viewModel.Presets.Add(preset);
 
         viewModel.SelectedPreset = preset;
@@ -57,13 +57,8 @@ public sealed class SetSliderInspectorViewModelTests
     {
         var viewModel = CreateViewModel();
         var preset = AddPreset(viewModel);
-        preset.AddSetSlider(new SetSlider("Height")
-        {
-            ValueSmall = 0,
-            ValueBig = 100,
-            PercentMin = 25,
-            PercentMax = 75,
-        });
+        preset.AddSetSlider(
+            new SetSlider("Height") { ValueSmall = 0, ValueBig = 100, PercentMin = 25, PercentMax = 75 });
         viewModel.SelectedPreset = preset;
 
         viewModel.SetAllSliderPercentsTo50Command.Execute(null);
@@ -107,11 +102,7 @@ public sealed class SetSliderInspectorViewModelTests
     private static SliderPreset AddPreset(TemplatesViewModel viewModel)
     {
         var preset = new SliderPreset("Alpha");
-        preset.AddSetSlider(new SetSlider("Scale")
-        {
-            ValueSmall = 0,
-            ValueBig = 100,
-        });
+        preset.AddSetSlider(new SetSlider("Scale") { ValueSmall = 0, ValueBig = 100 });
         viewModel.Presets.Add(preset);
         return preset;
     }
@@ -135,10 +126,10 @@ public sealed class SetSliderInspectorViewModelTests
         {
             new TemplateProfile(
                 ProjectProfileMapping.SkyrimCbbe,
-                new BS2BG.Core.Formatting.SliderProfile(
-                    Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
-                    Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-                    Array.Empty<string>())),
+                new SliderProfile(
+                    Array.Empty<SliderDefault>(),
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
         });
     }
 
@@ -148,19 +139,17 @@ public sealed class SetSliderInspectorViewModelTests
         {
             new TemplateProfile(
                 ProjectProfileMapping.SkyrimCbbe,
-                new BS2BG.Core.Formatting.SliderProfile(
-                    new[] { new BS2BG.Core.Formatting.SliderDefault("DefaultOnly", 0f, 1f) },
-                    Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-                    Array.Empty<string>())),
+                new SliderProfile(
+                    new[] { new SliderDefault("DefaultOnly", 0f, 1f) },
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
         });
     }
 
     private sealed class EmptyBodySlideXmlFilePicker : IBodySlideXmlFilePicker
     {
-        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        }
+        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
     }
 
     private sealed class CapturingClipboardService : IClipboardService

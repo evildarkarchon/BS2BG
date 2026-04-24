@@ -13,10 +13,7 @@ public sealed class NpcImageLookupServiceTests
         directory.WriteImage("images", "Lydia.png");
         var specific = directory.WriteImage("images", "Lydia (HousecarlWhiterun).png");
         var service = new NpcImageLookupService(directory.Path);
-        var npc = new Npc("Lydia")
-        {
-            EditorId = "HousecarlWhiterun",
-        };
+        var npc = new Npc("Lydia") { EditorId = "HousecarlWhiterun" };
 
         var actual = service.FindImagePath(npc);
 
@@ -55,6 +52,8 @@ public sealed class NpcImageLookupServiceTests
 
         public string Path { get; }
 
+        public void Dispose() => Directory.Delete(Path, true);
+
         public string WriteImage(string relativeDirectory, string fileName)
         {
             var directory = System.IO.Path.Combine(Path, relativeDirectory);
@@ -62,11 +61,6 @@ public sealed class NpcImageLookupServiceTests
             var filePath = System.IO.Path.Combine(directory, fileName);
             File.WriteAllBytes(filePath, new byte[] { 0x42 });
             return filePath;
-        }
-
-        public void Dispose()
-        {
-            Directory.Delete(Path, recursive: true);
         }
     }
 }

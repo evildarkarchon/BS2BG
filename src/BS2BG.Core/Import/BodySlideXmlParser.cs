@@ -1,25 +1,24 @@
-using System.Globalization;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Xml;
 using System.Xml.Linq;
 using BS2BG.Core.Models;
 
 namespace BS2BG.Core.Import;
 
-[SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Parser is exposed as an injectable service surface.")]
+[SuppressMessage("Performance", "CA1822:Mark members as static",
+    Justification = "Parser is exposed as an injectable service surface.")]
 public sealed class BodySlideXmlParser
 {
     public BodySlideXmlImportResult ParseFile(string path)
     {
-        if (path is null)
-        {
-            throw new ArgumentNullException(nameof(path));
-        }
+        if (path is null) throw new ArgumentNullException(nameof(path));
 
         try
         {
             return ParseDocument(XDocument.Load(path), path);
         }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Xml.XmlException)
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is XmlException)
         {
             return new BodySlideXmlImportResult(
                 Array.Empty<SliderPreset>(),
@@ -29,10 +28,7 @@ public sealed class BodySlideXmlParser
 
     public BodySlideXmlImportResult ParseFiles(IEnumerable<string> paths)
     {
-        if (paths is null)
-        {
-            throw new ArgumentNullException(nameof(paths));
-        }
+        if (paths is null) throw new ArgumentNullException(nameof(paths));
 
         var presets = new List<SliderPreset>();
         var diagnostics = new List<BodySlideXmlImportDiagnostic>();
@@ -49,16 +45,13 @@ public sealed class BodySlideXmlParser
 
     public BodySlideXmlImportResult ParseString(string xml, string source)
     {
-        if (xml is null)
-        {
-            throw new ArgumentNullException(nameof(xml));
-        }
+        if (xml is null) throw new ArgumentNullException(nameof(xml));
 
         try
         {
             return ParseDocument(XDocument.Parse(xml), source ?? string.Empty);
         }
-        catch (System.Xml.XmlException ex)
+        catch (XmlException ex)
         {
             return new BodySlideXmlImportResult(
                 Array.Empty<SliderPreset>(),
@@ -70,11 +63,9 @@ public sealed class BodySlideXmlParser
     {
         var root = document.Root;
         if (root is null || !NameEquals(root, "SliderPresets"))
-        {
             return new BodySlideXmlImportResult(
                 Array.Empty<SliderPreset>(),
                 new[] { new BodySlideXmlImportDiagnostic(source, "Root element is not SliderPresets.") });
-        }
 
         var presets = new List<SliderPreset>();
         var diagnostics = new List<BodySlideXmlImportDiagnostic>();
@@ -92,14 +83,9 @@ public sealed class BodySlideXmlParser
             var sliders = new List<SetSlider>();
 
             foreach (var sliderElement in presetElement.Elements().Where(element => NameEquals(element, "SetSlider")))
-            {
                 AddSetSlider(sliders, sliderElement, source, diagnostics);
-            }
 
-            foreach (var slider in sliders)
-            {
-                preset.AddSetSlider(slider);
-            }
+            foreach (var slider in sliders) preset.AddSetSlider(slider);
 
             presets.Add(preset);
         }
@@ -141,17 +127,11 @@ public sealed class BodySlideXmlParser
 
         var size = sliderElement.Attribute("size")?.Value;
         if (string.Equals(size, "small", StringComparison.OrdinalIgnoreCase))
-        {
             slider.ValueSmall = value;
-        }
         else
-        {
             slider.ValueBig = value;
-        }
     }
 
-    private static bool NameEquals(XElement element, string name)
-    {
-        return string.Equals(element.Name.LocalName, name, StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool NameEquals(XElement element, string name) =>
+        string.Equals(element.Name.LocalName, name, StringComparison.OrdinalIgnoreCase);
 }

@@ -1,14 +1,8 @@
 namespace BS2BG.Core.Import;
 
-public sealed class BodySlideXmlImportDiagnostic
+public sealed class BodySlideXmlImportDiagnostic(string source, string message)
 {
-    public BodySlideXmlImportDiagnostic(string source, string message)
-    {
-        Source = source ?? string.Empty;
-        Message = message ?? throw new ArgumentNullException(nameof(message));
-    }
+    public string Source { get; } = source ?? string.Empty;
 
-    public string Source { get; }
-
-    public string Message { get; }
+    public string Message { get; } = message ?? throw new ArgumentNullException(nameof(message));
 }

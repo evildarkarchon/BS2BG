@@ -2,16 +2,19 @@ using System.Diagnostics.CodeAnalysis;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Export;
+using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 using BS2BG.Core.Serialization;
 using Xunit;
+using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
-[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected arrays keep test intent readable.")]
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected arrays keep test intent readable.")]
 public sealed class MainWindowViewModelTests
 {
     [Fact]
@@ -19,10 +22,7 @@ public sealed class MainWindowViewModelTests
     {
         using var directory = new TemporaryDirectory();
         var project = CreateProjectWithPreset("Alpha");
-        var dialogs = new FakeFileDialogService
-        {
-            SaveProjectPath = Path.Combine(directory.Path, "saved-project"),
-        };
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
         var viewModel = CreateViewModel(project, dialogs);
 
         await viewModel.SaveProjectAsync(TestContext.Current.CancellationToken);
@@ -38,10 +38,7 @@ public sealed class MainWindowViewModelTests
     {
         using var directory = new TemporaryDirectory();
         var project = CreateProjectWithPreset("Alpha");
-        var dialogs = new FakeFileDialogService
-        {
-            SaveProjectPath = Path.Combine(directory.Path, "explicit-name"),
-        };
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "explicit-name") };
         var viewModel = CreateViewModel(project, dialogs);
 
         await viewModel.SaveProjectAsAsync(TestContext.Current.CancellationToken);
@@ -54,10 +51,7 @@ public sealed class MainWindowViewModelTests
     {
         var project = CreateProjectWithPreset("Alpha");
         var dialogs = new FakeFileDialogService();
-        var confirmations = new FakeAppDialogService
-        {
-            ConfirmDiscardResult = false,
-        };
+        var confirmations = new FakeAppDialogService { ConfirmDiscardResult = false };
         var viewModel = CreateViewModel(project, dialogs, confirmations);
 
         await viewModel.OpenProjectAsync(TestContext.Current.CancellationToken);
@@ -71,10 +65,7 @@ public sealed class MainWindowViewModelTests
     public async Task NewProjectKeepsDirtyProjectWhenDiscardIsCancelled()
     {
         var project = CreateProjectWithPreset("Alpha");
-        var confirmations = new FakeAppDialogService
-        {
-            ConfirmDiscardResult = false,
-        };
+        var confirmations = new FakeAppDialogService { ConfirmDiscardResult = false };
         var viewModel = CreateViewModel(project, new FakeFileDialogService(), confirmations);
 
         await viewModel.NewProjectAsync(TestContext.Current.CancellationToken);
@@ -91,10 +82,7 @@ public sealed class MainWindowViewModelTests
         var target = new CustomMorphTarget("All|Female");
         target.AddSliderPreset(project.SliderPresets[0]);
         project.CustomMorphTargets.Add(target);
-        var dialogs = new FakeFileDialogService
-        {
-            BodyGenExportFolder = directory.Path,
-        };
+        var dialogs = new FakeFileDialogService { BodyGenExportFolder = directory.Path };
         var viewModel = CreateViewModel(project, dialogs);
 
         await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
@@ -108,10 +96,8 @@ public sealed class MainWindowViewModelTests
     public async Task ExportBodyGenInisReportsEmptyOutputWithoutWritingFiles()
     {
         using var directory = new TemporaryDirectory();
-        var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService
-        {
-            BodyGenExportFolder = directory.Path,
-        });
+        var viewModel = CreateViewModel(new ProjectModel(),
+            new FakeFileDialogService { BodyGenExportFolder = directory.Path });
 
         await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
 
@@ -127,10 +113,7 @@ public sealed class MainWindowViewModelTests
         var blockingFile = Path.Combine(directory.Path, "not-a-folder");
         File.WriteAllText(blockingFile, string.Empty);
         var project = CreateProjectWithPreset("Alpha");
-        var dialogs = new FakeFileDialogService
-        {
-            BodyGenExportFolder = blockingFile,
-        };
+        var dialogs = new FakeFileDialogService { BodyGenExportFolder = blockingFile };
         var viewModel = CreateViewModel(project, dialogs);
 
         await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
@@ -143,10 +126,7 @@ public sealed class MainWindowViewModelTests
     {
         using var directory = new TemporaryDirectory();
         var project = CreateProjectWithPreset("Preset:One");
-        var dialogs = new FakeFileDialogService
-        {
-            BosJsonExportFolder = directory.Path,
-        };
+        var dialogs = new FakeFileDialogService { BosJsonExportFolder = directory.Path };
         var viewModel = CreateViewModel(project, dialogs);
 
         await viewModel.ExportBosJsonAsync(TestContext.Current.CancellationToken);
@@ -167,10 +147,10 @@ public sealed class MainWindowViewModelTests
         {
             new TemplateProfile(
                 ProjectProfileMapping.SkyrimCbbe,
-                new BS2BG.Core.Formatting.SliderProfile(
-                    defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
-                    multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-                    invertedNames: Array.Empty<string>())),
+                new SliderProfile(
+                    Array.Empty<SliderDefault>(),
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
         });
         var templates = new TemplatesViewModel(
             project,
@@ -227,20 +207,14 @@ public sealed class MainWindowViewModelTests
             return Task.FromResult(OpenProjectPath);
         }
 
-        public Task<string?> PickSaveProjectFileAsync(string? currentPath, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(SaveProjectPath);
-        }
+        public Task<string?> PickSaveProjectFileAsync(string? currentPath, CancellationToken cancellationToken) =>
+            Task.FromResult(SaveProjectPath);
 
-        public Task<string?> PickBodyGenExportFolderAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult(BodyGenExportFolder);
-        }
+        public Task<string?> PickBodyGenExportFolderAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(BodyGenExportFolder);
 
-        public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult(BosJsonExportFolder);
-        }
+        public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(BosJsonExportFolder);
     }
 
     private sealed class FakeAppDialogService : IAppDialogService
@@ -257,34 +231,24 @@ public sealed class MainWindowViewModelTests
             return Task.FromResult(ConfirmDiscardResult);
         }
 
-        public void ShowAbout()
-        {
-            AboutCallCount++;
-        }
+        public void ShowAbout() => AboutCallCount++;
     }
 
     private sealed class EmptyBodySlideXmlFilePicker : IBodySlideXmlFilePicker
     {
-        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        }
+        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
     }
 
     private sealed class EmptyNpcTextFilePicker : INpcTextFilePicker
     {
-        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        }
+        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
     }
 
     private sealed class EmptyClipboardService : IClipboardService
     {
-        public Task SetTextAsync(string text, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class TemporaryDirectory : IDisposable
@@ -297,9 +261,6 @@ public sealed class MainWindowViewModelTests
 
         public string Path { get; }
 
-        public void Dispose()
-        {
-            Directory.Delete(Path, recursive: true);
-        }
+        public void Dispose() => Directory.Delete(Path, true);
     }
 }

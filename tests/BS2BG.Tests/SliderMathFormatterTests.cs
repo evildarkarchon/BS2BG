@@ -8,6 +8,19 @@ namespace BS2BG.Tests;
 
 public sealed class SliderMathFormatterTests
 {
+    private static string RepositoryRoot
+    {
+        get
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PRD.md")))
+                directory = directory.Parent;
+
+            return directory?.FullName
+                   ?? throw new InvalidOperationException("Could not locate repository root.");
+        }
+    }
+
     [Theory]
     [InlineData(0f, "0.0", "0")]
     [InlineData(1f, "1.0", "1")]
@@ -38,11 +51,14 @@ public sealed class SliderMathFormatterTests
     }
 
     [Theory]
-    [InlineData("AllCases", false, "AllCases=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@1.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@0.6")]
+    [InlineData("AllCases", false,
+        "AllCases=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@1.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@0.6")]
     [InlineData("AllCases", true, "AllCases=Arms@0.0, Butt@1.0, Legs@0.0, Waist@0.6")]
-    [InlineData("Negatives", false, "Negatives=Ankles@0.0, Arms@0.0, Breasts@1.25, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.2, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0")]
+    [InlineData("Negatives", false,
+        "Negatives=Ankles@0.0, Arms@0.0, Breasts@1.25, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.2, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0")]
     [InlineData("Negatives", true, "Negatives=Arms@0.0, Breasts@1.25, Butt@0.0, Legs@0.2, Waist@1.0")]
-    [InlineData("MissingDef", false, "MissingDef=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NipBGone@1.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0")]
+    [InlineData("MissingDef", false,
+        "MissingDef=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NipBGone@1.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0")]
     [InlineData("MissingDef", true, "MissingDef=Arms@0.0, Breasts@0.0, Butt@0.0, Legs@0.0, NipBGone@1.0, Waist@1.0")]
     public void MinimalFixtureTemplateLinesMatchJavaWalkthrough(string presetName, bool omitRedundant, string expected)
     {
@@ -59,23 +75,14 @@ public sealed class SliderMathFormatterTests
     public void TemplateLineAppliesPercentInterpolationBeforeMultiplier()
     {
         var profile = new SliderProfile(
-            defaults: Array.Empty<SliderDefault>(),
-            multipliers: new[] { new SliderMultiplier("Scale", 2f) },
-            invertedNames: Array.Empty<string>());
+            Array.Empty<SliderDefault>(),
+            new[] { new SliderMultiplier("Scale", 2f) },
+            Array.Empty<string>());
         var preset = new SliderPreset(
             "Scaled",
-            new[]
-            {
-                new SetSlider("Scale")
-                {
-                    ValueSmall = 0,
-                    ValueBig = 100,
-                    PercentMin = 25,
-                    PercentMax = 75,
-                },
-            });
+            new[] { new SetSlider("Scale") { ValueSmall = 0, ValueBig = 100, PercentMin = 25, PercentMax = 75 } });
 
-        var actual = SliderMathFormatter.FormatTemplateLine(preset, profile, omitRedundantSliders: false);
+        var actual = SliderMathFormatter.FormatTemplateLine(preset, profile, false);
 
         Assert.Equal("Scaled=Scale@0.5:1.5", actual);
     }
@@ -93,11 +100,11 @@ public sealed class SliderMathFormatterTests
         AssertFixtureText(
             scenario,
             "templates.ini",
-            FormatTemplates(presets, profile, omitRedundant: false));
+            FormatTemplates(presets, profile, false));
         AssertFixtureText(
             scenario,
             "templates-omit.ini",
-            FormatTemplates(presets, profile, omitRedundant: true));
+            FormatTemplates(presets, profile, true));
     }
 
     [Theory]
@@ -126,19 +133,12 @@ public sealed class SliderMathFormatterTests
     public void BosJsonUsesLfOnlyLineEndings()
     {
         var profile = new SliderProfile(
-            defaults: Array.Empty<SliderDefault>(),
-            multipliers: Array.Empty<SliderMultiplier>(),
-            invertedNames: Array.Empty<string>());
+            Array.Empty<SliderDefault>(),
+            Array.Empty<SliderMultiplier>(),
+            Array.Empty<string>());
         var preset = new SliderPreset(
             "Body",
-            new[]
-            {
-                new SetSlider("Scale")
-                {
-                    ValueSmall = 0,
-                    ValueBig = 50,
-                },
-            });
+            new[] { new SetSlider("Scale") { ValueSmall = 0, ValueBig = 50 } });
 
         var actual = SliderMathFormatter.FormatBosJson(preset, profile);
 
@@ -189,7 +189,8 @@ public sealed class SliderMathFormatterTests
             foreach (var sliderElement in presetElement.Elements("SetSlider"))
             {
                 var name = RequiredAttribute(sliderElement, "name");
-                var slider = sliders.FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
+                var slider = sliders.FirstOrDefault(item =>
+                    string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
 
                 if (slider is null)
                 {
@@ -198,14 +199,11 @@ public sealed class SliderMathFormatterTests
                 }
 
                 var value = int.Parse(RequiredAttribute(sliderElement, "value"), CultureInfo.InvariantCulture);
-                if (string.Equals(RequiredAttribute(sliderElement, "size"), "small", StringComparison.OrdinalIgnoreCase))
-                {
+                if (string.Equals(RequiredAttribute(sliderElement, "size"), "small",
+                        StringComparison.OrdinalIgnoreCase))
                     slider.ValueSmall = value;
-                }
                 else
-                {
                     slider.ValueBig = value;
-                }
             }
 
             presets.Add(new SliderPreset(RequiredAttribute(presetElement, "name"), sliders));
@@ -232,9 +230,7 @@ public sealed class SliderMathFormatterTests
 
         var multipliers = new List<SliderMultiplier>();
         foreach (var property in root.GetProperty("Multipliers").EnumerateObject())
-        {
             multipliers.Add(new SliderMultiplier(property.Name, property.Value.GetSingle()));
-        }
 
         var inverted = root.GetProperty("Inverted")
             .EnumerateArray()
@@ -247,27 +243,12 @@ public sealed class SliderMathFormatterTests
     private static string RequiredAttribute(XElement element, string name)
     {
         return element.Attribute(name)?.Value
-            ?? throw new InvalidOperationException($"Missing '{name}' attribute on '{element.Name}'.");
+               ?? throw new InvalidOperationException($"Missing '{name}' attribute on '{element.Name}'.");
     }
 
     private static string NormalizeNewlines(string value)
     {
         return value.Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace("\r", "\n", StringComparison.Ordinal);
-    }
-
-    private static string RepositoryRoot
-    {
-        get
-        {
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PRD.md")))
-            {
-                directory = directory.Parent;
-            }
-
-            return directory?.FullName
-                ?? throw new InvalidOperationException("Could not locate repository root.");
-        }
     }
 }

@@ -1,17 +1,10 @@
 namespace BS2BG.Core.Formatting;
 
-public sealed class SliderDefault
+public sealed class SliderDefault(string name, float valueSmall, float valueBig)
 {
-    public SliderDefault(string name, float valueSmall, float valueBig)
-    {
-        Name = name ?? throw new ArgumentNullException(nameof(name));
-        ValueSmall = valueSmall;
-        ValueBig = valueBig;
-    }
+    public string Name { get; } = name ?? throw new ArgumentNullException(nameof(name));
 
-    public string Name { get; }
+    public float ValueSmall { get; } = valueSmall;
 
-    public float ValueSmall { get; }
-
-    public float ValueBig { get; }
+    public float ValueBig { get; } = valueBig;
 }

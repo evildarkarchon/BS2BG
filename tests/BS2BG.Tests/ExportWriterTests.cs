@@ -1,8 +1,9 @@
-using System.Text;
 using BS2BG.Core.Export;
+using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using Xunit;
+using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
@@ -14,7 +15,8 @@ public sealed class ExportWriterTests
         using var directory = new TemporaryDirectory();
         var writer = new BodyGenIniExportWriter();
 
-        var result = writer.Write(directory.Path, "Alpha=Scale@1.0\nBeta=Scale@0.5", "All|Female=Alpha\rSkyrim.esm|A2C94=Beta");
+        var result = writer.Write(directory.Path, "Alpha=Scale@1.0\nBeta=Scale@0.5",
+            "All|Female=Alpha\rSkyrim.esm|A2C94=Beta");
 
         Assert.Equal(Path.Combine(directory.Path, "templates.ini"), result.TemplatesPath);
         Assert.Equal(Path.Combine(directory.Path, "morphs.ini"), result.MorphsPath);
@@ -35,10 +37,10 @@ public sealed class ExportWriterTests
         {
             new TemplateProfile(
                 ProjectProfileMapping.SkyrimCbbe,
-                new BS2BG.Core.Formatting.SliderProfile(
-                    defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
-                    multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-                    invertedNames: Array.Empty<string>())),
+                new SliderProfile(
+                    Array.Empty<SliderDefault>(),
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
         });
         var writer = new BosJsonExportWriter(new TemplateGenerationService());
         var first = new SliderPreset("Preset:One");
@@ -49,8 +51,7 @@ public sealed class ExportWriterTests
         Assert.Equal(
             new[]
             {
-                Path.Combine(directory.Path, "Preset_One.json"),
-                Path.Combine(directory.Path, "Preset_One (2).json"),
+                Path.Combine(directory.Path, "Preset_One.json"), Path.Combine(directory.Path, "Preset_One (2).json")
             },
             result.FilePaths);
         Assert.Contains("\"bodyname\": \"Preset:One\"", File.ReadAllText(result.FilePaths[0]));
@@ -65,10 +66,10 @@ public sealed class ExportWriterTests
         {
             new TemplateProfile(
                 ProjectProfileMapping.SkyrimCbbe,
-                new BS2BG.Core.Formatting.SliderProfile(
-                    defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
-                    multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-                    invertedNames: Array.Empty<string>())),
+                new SliderProfile(
+                    Array.Empty<SliderDefault>(),
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
         });
         var writer = new BosJsonExportWriter(new TemplateGenerationService());
         var first = new SliderPreset("CON");
@@ -77,20 +78,14 @@ public sealed class ExportWriterTests
         var result = writer.Write(directory.Path, new[] { first, second }, catalog);
 
         Assert.Equal(
-            new[]
-            {
-                Path.Combine(directory.Path, "COM1_.json"),
-                Path.Combine(directory.Path, "CON_.json"),
-            },
+            new[] { Path.Combine(directory.Path, "COM1_.json"), Path.Combine(directory.Path, "CON_.json") },
             result.FilePaths);
         Assert.Contains("\"bodyname\": \"COM1\"", File.ReadAllText(result.FilePaths[0]));
         Assert.Contains("\"bodyname\": \"CON\"", File.ReadAllText(result.FilePaths[1]));
     }
 
-    private static bool HasUtf8Bom(byte[] bytes)
-    {
-        return bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
-    }
+    private static bool HasUtf8Bom(byte[] bytes) =>
+        bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
 
     private sealed class TemporaryDirectory : IDisposable
     {
@@ -102,9 +97,6 @@ public sealed class ExportWriterTests
 
         public string Path { get; }
 
-        public void Dispose()
-        {
-            Directory.Delete(Path, recursive: true);
-        }
+        public void Dispose() => Directory.Delete(Path, true);
     }
 }

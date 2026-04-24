@@ -5,55 +5,55 @@ using BS2BG.Core.Models;
 
 namespace BS2BG.Core.Import;
 
-[SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "NPC import is exposed as an injectable service surface.")]
+[SuppressMessage("Performance", "CA1822:Mark members as static",
+    Justification = "NPC import is exposed as an injectable service surface.")]
 public sealed class NpcTextParser
 {
     private static readonly Encoding StrictUtf8 = new UTF8Encoding(
-        encoderShouldEmitUTF8Identifier: false,
-        throwOnInvalidBytes: true);
+        false,
+        true);
 
-    static NpcTextParser()
-    {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-    }
+    static NpcTextParser() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
     public NpcImportResult ParseFile(string path)
     {
-        if (path is null)
-        {
-            throw new ArgumentNullException(nameof(path));
-        }
+        if (path is null) throw new ArgumentNullException(nameof(path));
 
-        return ParseBytes(File.ReadAllBytes(path));
+        try
+        {
+            return ParseBytes(File.ReadAllBytes(path));
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+        {
+            return new NpcImportResult(
+                Array.Empty<Npc>(),
+                new[] { new NpcImportDiagnostic(0, "Could not read NPC file '" + path + "': " + ex.Message) },
+                false,
+                string.Empty);
+        }
     }
 
     public NpcImportResult ParseText(string text)
     {
-        if (text is null)
-        {
-            throw new ArgumentNullException(nameof(text));
-        }
+        if (text is null) throw new ArgumentNullException(nameof(text));
 
-        return ParseDecodedText(text, usedFallbackEncoding: false, encodingName: "UTF-16");
+        return ParseDecodedText(text, false, "UTF-16");
     }
 
     private static NpcImportResult ParseBytes(byte[] bytes)
     {
-        if (TryDecodeBom(bytes, out var text, out var encodingName))
-        {
-            return ParseDecodedText(text, usedFallbackEncoding: false, encodingName);
-        }
+        if (TryDecodeBom(bytes, out var text, out var encodingName)) return ParseDecodedText(text, false, encodingName);
 
         try
         {
             text = StrictUtf8.GetString(bytes);
-            return ParseDecodedText(text, usedFallbackEncoding: false, StrictUtf8.WebName);
+            return ParseDecodedText(text, false, StrictUtf8.WebName);
         }
         catch (DecoderFallbackException)
         {
             var fallbackEncoding = GetFallbackEncoding();
             text = fallbackEncoding.GetString(bytes);
-            return ParseDecodedText(text, usedFallbackEncoding: true, fallbackEncoding.WebName);
+            return ParseDecodedText(text, true, fallbackEncoding.WebName);
         }
     }
 
@@ -73,10 +73,7 @@ public sealed class NpcTextParser
         {
             var lineNumber = index + 1;
             var line = lines[index].Trim();
-            if (line.Length == 0)
-            {
-                continue;
-            }
+            if (line.Length == 0) continue;
 
             var parts = line.Split('|');
             if (parts.Length < 5)
@@ -92,24 +89,12 @@ public sealed class NpcTextParser
             var editorId = parts[2].Trim();
             var race = TrimRace(parts[3]);
             var formId = parts[4].Trim();
-            if (name.Length == 0)
-            {
-                name = "Unnamed (" + editorId + ")";
-            }
+            if (name.Length == 0) name = "Unnamed (" + editorId + ")";
 
             var key = new NpcKey(mod, editorId);
-            if (!seen.Add(key))
-            {
-                continue;
-            }
+            if (!seen.Add(key)) continue;
 
-            npcs.Add(new Npc(name)
-            {
-                Mod = mod,
-                EditorId = editorId,
-                Race = race,
-                FormId = formId,
-            });
+            npcs.Add(new Npc(name) { Mod = mod, EditorId = editorId, Race = race, FormId = formId });
         }
 
         return new NpcImportResult(npcs, diagnostics, usedFallbackEncoding, encodingName);
@@ -119,10 +104,7 @@ public sealed class NpcTextParser
     {
         foreach (var candidate in BomEncoding.Candidates)
         {
-            if (!StartsWith(bytes, candidate.Preamble))
-            {
-                continue;
-            }
+            if (!StartsWith(bytes, candidate.Preamble)) continue;
 
             text = candidate.Encoding.GetString(
                 bytes,
@@ -139,18 +121,11 @@ public sealed class NpcTextParser
 
     private static bool StartsWith(byte[] bytes, byte[] prefix)
     {
-        if (bytes.Length < prefix.Length)
-        {
-            return false;
-        }
+        if (bytes.Length < prefix.Length) return false;
 
         for (var index = 0; index < prefix.Length; index++)
-        {
             if (bytes[index] != prefix[index])
-            {
                 return false;
-            }
-        }
 
         return true;
     }
@@ -172,35 +147,23 @@ public sealed class NpcTextParser
     {
         var race = value.Trim();
         var quoteIndex = race.IndexOf('"', StringComparison.Ordinal);
-        if (quoteIndex >= 0)
-        {
-            race = race.Substring(0, quoteIndex).Trim();
-        }
+        if (quoteIndex >= 0) race = race.Substring(0, quoteIndex).Trim();
 
         return race;
     }
 
-    private readonly struct NpcKey : IEquatable<NpcKey>
+    private readonly struct NpcKey(string mod, string editorId) : IEquatable<NpcKey>
     {
-        private readonly string mod;
-        private readonly string editorId;
-
-        public NpcKey(string mod, string editorId)
-        {
-            this.mod = mod;
-            this.editorId = editorId;
-        }
+        private readonly string mod = mod;
+        private readonly string editorId = editorId;
 
         public bool Equals(NpcKey other)
         {
             return string.Equals(mod, other.mod, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(editorId, other.editorId, StringComparison.OrdinalIgnoreCase);
+                   && string.Equals(editorId, other.editorId, StringComparison.OrdinalIgnoreCase);
         }
 
-        public override bool Equals(object? obj)
-        {
-            return obj is NpcKey other && Equals(other);
-        }
+        public override bool Equals(object? obj) => obj is NpcKey other && Equals(other);
 
         public override int GetHashCode()
         {
@@ -213,13 +176,13 @@ public sealed class NpcTextParser
     private sealed class BomEncoding
     {
         public static readonly BomEncoding[] Candidates =
-        {
+        [
             new(new byte[] { 0xEF, 0xBB, 0xBF }, StrictUtf8),
-            new(new byte[] { 0xFF, 0xFE, 0x00, 0x00 }, new UTF32Encoding(bigEndian: false, byteOrderMark: true, throwOnInvalidCharacters: true)),
-            new(new byte[] { 0x00, 0x00, 0xFE, 0xFF }, new UTF32Encoding(bigEndian: true, byteOrderMark: true, throwOnInvalidCharacters: true)),
+            new(new byte[] { 0xFF, 0xFE, 0x00, 0x00 }, new UTF32Encoding(false, true, true)),
+            new(new byte[] { 0x00, 0x00, 0xFE, 0xFF }, new UTF32Encoding(true, true, true)),
             new(new byte[] { 0xFF, 0xFE }, Encoding.Unicode),
-            new(new byte[] { 0xFE, 0xFF }, Encoding.BigEndianUnicode),
-        };
+            new(new byte[] { 0xFE, 0xFF }, Encoding.BigEndianUnicode)
+        ];
 
         private BomEncoding(byte[] preamble, Encoding encoding)
         {

@@ -2,18 +2,17 @@ namespace BS2BG.Core.Formatting;
 
 public sealed class SliderProfile
 {
-    private readonly IReadOnlyList<SliderDefault> defaults;
     private readonly Dictionary<string, SliderDefault> defaultsByName;
-    private readonly Dictionary<string, float> multipliersByName;
     private readonly HashSet<string> invertedNames;
+    private readonly Dictionary<string, float> multipliersByName;
 
     public SliderProfile(
         IEnumerable<SliderDefault> defaults,
         IEnumerable<SliderMultiplier> multipliers,
         IEnumerable<string> invertedNames)
     {
-        this.defaults = defaults?.ToArray() ?? throw new ArgumentNullException(nameof(defaults));
-        defaultsByName = this.defaults.ToDictionary(
+        Defaults = defaults?.ToArray() ?? throw new ArgumentNullException(nameof(defaults));
+        defaultsByName = Defaults.ToDictionary(
             value => value.Name,
             StringComparer.OrdinalIgnoreCase);
         multipliersByName = (multipliers ?? throw new ArgumentNullException(nameof(multipliers)))
@@ -23,7 +22,7 @@ public sealed class SliderProfile
             StringComparer.OrdinalIgnoreCase);
     }
 
-    public IReadOnlyList<SliderDefault> Defaults => defaults;
+    public IReadOnlyList<SliderDefault> Defaults { get; }
 
     public int GetDefaultSmall(string sliderName)
     {
@@ -39,13 +38,8 @@ public sealed class SliderProfile
             : 0;
     }
 
-    public float GetMultiplier(string sliderName)
-    {
-        return multipliersByName.TryGetValue(sliderName, out var value) ? value : 1f;
-    }
+    public float GetMultiplier(string sliderName) =>
+        multipliersByName.TryGetValue(sliderName, out var value) ? value : 1f;
 
-    public bool IsInverted(string sliderName)
-    {
-        return invertedNames.Contains(sliderName);
-    }
+    public bool IsInverted(string sliderName) => invertedNames.Contains(sliderName);
 }

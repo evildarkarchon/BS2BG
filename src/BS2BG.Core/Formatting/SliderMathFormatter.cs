@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace BS2BG.Core.Formatting;
@@ -6,15 +7,9 @@ public static class SliderMathFormatter
 {
     public static string FormatTemplateLine(SliderPreset preset, SliderProfile profile, bool omitRedundantSliders)
     {
-        if (preset is null)
-        {
-            throw new ArgumentNullException(nameof(preset));
-        }
+        if (preset is null) throw new ArgumentNullException(nameof(preset));
 
-        if (profile is null)
-        {
-            throw new ArgumentNullException(nameof(profile));
-        }
+        if (profile is null) throw new ArgumentNullException(nameof(profile));
 
         var values = GetEnabledAndDefaultSliders(preset, profile)
             .Where(slider => !omitRedundantSliders || !IsRedundant(slider, profile))
@@ -25,15 +20,9 @@ public static class SliderMathFormatter
 
     public static string FormatBosJson(SliderPreset preset, SliderProfile profile)
     {
-        if (preset is null)
-        {
-            throw new ArgumentNullException(nameof(preset));
-        }
+        if (preset is null) throw new ArgumentNullException(nameof(preset));
 
-        if (profile is null)
-        {
-            throw new ArgumentNullException(nameof(profile));
-        }
+        if (profile is null) throw new ArgumentNullException(nameof(profile));
 
         var sliders = GetEnabledAndDefaultSliders(preset, profile)
             .Where(slider => !IsRedundant(slider, profile))
@@ -45,15 +34,9 @@ public static class SliderMathFormatter
 
     public static string FormatSetSliderValue(SetSlider slider, SliderProfile profile)
     {
-        if (slider is null)
-        {
-            throw new ArgumentNullException(nameof(slider));
-        }
+        if (slider is null) throw new ArgumentNullException(nameof(slider));
 
-        if (profile is null)
-        {
-            throw new ArgumentNullException(nameof(profile));
-        }
+        if (profile is null) throw new ArgumentNullException(nameof(profile));
 
         return FormatTemplateValue(slider, profile);
     }
@@ -70,8 +53,8 @@ public static class SliderMathFormatter
         }
 
         var diff = big - small;
-        var min = small + (diff * (slider.PercentMin * 0.01f));
-        var max = small + (diff * (slider.PercentMax * 0.01f));
+        var min = small + diff * (slider.PercentMin * 0.01f);
+        var max = small + diff * (slider.PercentMax * 0.01f);
         var multiplier = profile.GetMultiplier(slider.Name);
 
         min = JavaFloatFormatting.RoundHalfUpToTwoDecimals(min * multiplier);
@@ -120,75 +103,61 @@ public static class SliderMathFormatter
         sliders.AddRange(preset.Sliders.Where(slider => slider.Enabled));
 
         foreach (var defaultValue in profile.Defaults)
-        {
             if (!userSliderNames.Contains(defaultValue.Name))
-            {
                 sliders.Add(new SetSlider(defaultValue.Name));
-            }
-        }
 
         return sliders
             .OrderBy(slider => slider.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
-    private static int ResolveSmall(SetSlider slider, SliderProfile profile)
-    {
-        return slider.ValueSmall ?? profile.GetDefaultSmall(slider.Name);
-    }
+    private static int ResolveSmall(SetSlider slider, SliderProfile profile) =>
+        slider.ValueSmall ?? profile.GetDefaultSmall(slider.Name);
 
-    private static int ResolveBig(SetSlider slider, SliderProfile profile)
-    {
-        return slider.ValueBig ?? profile.GetDefaultBig(slider.Name);
-    }
+    private static int ResolveBig(SetSlider slider, SliderProfile profile) =>
+        slider.ValueBig ?? profile.GetDefaultBig(slider.Name);
 
     private static string WriteBosJson(string bodyName, IReadOnlyList<BosSlider> sliders)
     {
         var builder = new StringBuilder();
         AppendLine(builder, "{");
         AppendLine(builder, "  \"string\": {");
-        AppendStringProperty(builder, "bodyname", bodyName, trailingComma: sliders.Count > 0, indent: 4);
+        AppendStringProperty(builder, "bodyname", bodyName, sliders.Count > 0, 4);
 
         for (var index = 0; index < sliders.Count; index++)
-        {
             AppendStringProperty(
                 builder,
-                "slidername" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "slidername" + (index + 1).ToString(CultureInfo.InvariantCulture),
                 sliders[index].Name,
-                trailingComma: index < sliders.Count - 1,
-                indent: 4);
-        }
+                index < sliders.Count - 1,
+                4);
 
         AppendLine(builder, "  },");
         AppendLine(builder, "  \"int\": {");
         AppendNumberProperty(
             builder,
             "slidersnumber",
-            sliders.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            trailingComma: false,
-            indent: 4);
+            sliders.Count.ToString(CultureInfo.InvariantCulture),
+            false,
+            4);
         AppendLine(builder, "  },");
         AppendLine(builder, "  \"float\": {");
 
         for (var index = 0; index < sliders.Count; index++)
-        {
             AppendNumberProperty(
                 builder,
-                "highvalue" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "highvalue" + (index + 1).ToString(CultureInfo.InvariantCulture),
                 JavaFloatFormatting.FormatForMinimalJsonNumber(sliders[index].High),
-                trailingComma: true,
-                indent: 4);
-        }
+                true,
+                4);
 
         for (var index = 0; index < sliders.Count; index++)
-        {
             AppendNumberProperty(
                 builder,
-                "lowvalue" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "lowvalue" + (index + 1).ToString(CultureInfo.InvariantCulture),
                 JavaFloatFormatting.FormatForMinimalJsonNumber(sliders[index].Low),
-                trailingComma: index < sliders.Count - 1,
-                indent: 4);
-        }
+                index < sliders.Count - 1,
+                4);
 
         AppendLine(builder, "  }");
         builder.Append('}');
@@ -233,17 +202,11 @@ public static class SliderMathFormatter
         AppendCommaAndLine(builder, trailingComma);
     }
 
-    private static void AppendIndent(StringBuilder builder, int indent)
-    {
-        builder.Append(' ', indent);
-    }
+    private static void AppendIndent(StringBuilder builder, int indent) => builder.Append(' ', indent);
 
     private static void AppendCommaAndLine(StringBuilder builder, bool trailingComma)
     {
-        if (trailingComma)
-        {
-            builder.Append(',');
-        }
+        if (trailingComma) builder.Append(',');
 
         builder.Append('\n');
     }
@@ -253,7 +216,6 @@ public static class SliderMathFormatter
         var builder = new StringBuilder(value.Length);
 
         foreach (var character in value)
-        {
             switch (character)
             {
                 case '"':
@@ -281,7 +243,7 @@ public static class SliderMathFormatter
                     if (character < ' ')
                     {
                         builder.Append("\\u");
-                        builder.Append(((int)character).ToString("x4", System.Globalization.CultureInfo.InvariantCulture));
+                        builder.Append(((int)character).ToString("x4", CultureInfo.InvariantCulture));
                     }
                     else
                     {
@@ -290,24 +252,16 @@ public static class SliderMathFormatter
 
                     break;
             }
-        }
 
         return builder.ToString();
     }
 
-    private sealed class BosSlider
+    private sealed class BosSlider(string name, float high, float low)
     {
-        public BosSlider(string name, float high, float low)
-        {
-            Name = name;
-            High = high;
-            Low = low;
-        }
+        public string Name { get; } = name;
 
-        public string Name { get; }
+        public float High { get; } = high;
 
-        public float High { get; }
-
-        public float Low { get; }
+        public float Low { get; } = low;
     }
 }

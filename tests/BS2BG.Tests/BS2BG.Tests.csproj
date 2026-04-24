@@ -8,18 +8,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.Headless.XUnit" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
-    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Avalonia.Headless.XUnit"/>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all"/>
+    <PackageReference Include="xunit.v3"/>
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\BS2BG.App\BS2BG.App.csproj" />
-    <ProjectReference Include="..\..\src\BS2BG.Core\BS2BG.Core.csproj" />
+    <ProjectReference Include="..\..\src\BS2BG.App\BS2BG.App.csproj"/>
+    <ProjectReference Include="..\..\src\BS2BG.Core\BS2BG.Core.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\fixtures\expected\**\*.*" LinkBase="fixtures\expected" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\fixtures\expected\**\*.*" LinkBase="fixtures\expected" CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>
 </Project>

@@ -1,14 +1,8 @@
 namespace BS2BG.Core.Import;
 
-public sealed class NpcImportDiagnostic
+public sealed class NpcImportDiagnostic(int lineNumber, string message)
 {
-    public NpcImportDiagnostic(int lineNumber, string message)
-    {
-        LineNumber = lineNumber;
-        Message = message ?? throw new ArgumentNullException(nameof(message));
-    }
+    public int LineNumber { get; } = lineNumber;
 
-    public int LineNumber { get; }
-
-    public string Message { get; }
+    public string Message { get; } = message ?? throw new ArgumentNullException(nameof(message));
 }

@@ -1,9 +1,5 @@
 namespace BS2BG.Core.Models;
 
-public sealed class CustomMorphTarget : MorphTargetBase
+public sealed class CustomMorphTarget(string name) : MorphTargetBase(name)
 {
-    public CustomMorphTarget(string name)
-        : base(name)
-    {
-    }
 }

@@ -1,8 +1,10 @@
-using System.Collections.Specialized;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.Globalization;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.Core.Export;
+using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
@@ -15,34 +17,32 @@ namespace BS2BG.App.ViewModels;
 public enum AppWorkspace
 {
     Templates,
-    Morphs,
+    Morphs
 }
 
 public sealed class MainWindowViewModel : ReactiveObject
 {
+    private readonly BodyGenIniExportWriter bodyGenIniExportWriter;
+    private readonly BosJsonExportWriter bosJsonExportWriter;
+    private readonly IAppDialogService dialogService;
+    private readonly IFileDialogService fileDialogService;
+    private readonly MorphGenerationService morphGenerationService;
+    private readonly IUserPreferencesService preferencesService;
+    private readonly TemplateProfileCatalog profileCatalog;
     private readonly ProjectModel project;
     private readonly ProjectFileService projectFileService;
     private readonly TemplateGenerationService templateGenerationService;
-    private readonly MorphGenerationService morphGenerationService;
-    private readonly TemplateProfileCatalog profileCatalog;
-    private readonly BodyGenIniExportWriter bodyGenIniExportWriter;
-    private readonly BosJsonExportWriter bosJsonExportWriter;
-    private readonly IFileDialogService fileDialogService;
-    private readonly IAppDialogService dialogService;
     private readonly UndoRedoService undoRedo;
-    private readonly IUserPreferencesService preferencesService;
-    private readonly ObservableCollection<CommandDescriptor> commandPaletteItems = new();
-    private readonly ObservableCollection<CommandDescriptor> visibleCommandPaletteItems = new();
-    private string title = AppShell.Title;
-    private string? currentProjectPath;
-    private string statusMessage = string.Empty;
-    private string globalSearchText = string.Empty;
-    private string commandPaletteSearchText = string.Empty;
     private AppWorkspace activeWorkspace;
-    private ThemePreference selectedThemePreference = ThemePreference.System;
+    private string commandPaletteSearchText = string.Empty;
+    private string? currentProjectPath;
+    private string globalSearchText = string.Empty;
     private bool isBusy;
     private bool isCommandPaletteOpen;
+    private ThemePreference selectedThemePreference = ThemePreference.System;
     private bool shouldFocusGlobalSearch;
+    private string statusMessage = string.Empty;
+    private string title = AppShell.Title;
 
     public MainWindowViewModel()
         : this(CreateDesignTimeProject())
@@ -83,14 +83,14 @@ public sealed class MainWindowViewModel : ReactiveObject
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
         this.templateGenerationService = templateGenerationService
-            ?? throw new ArgumentNullException(nameof(templateGenerationService));
+                                         ?? throw new ArgumentNullException(nameof(templateGenerationService));
         this.morphGenerationService = morphGenerationService
-            ?? throw new ArgumentNullException(nameof(morphGenerationService));
+                                      ?? throw new ArgumentNullException(nameof(morphGenerationService));
         this.profileCatalog = profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog));
         this.bodyGenIniExportWriter = bodyGenIniExportWriter
-            ?? throw new ArgumentNullException(nameof(bodyGenIniExportWriter));
+                                      ?? throw new ArgumentNullException(nameof(bodyGenIniExportWriter));
         this.bosJsonExportWriter = bosJsonExportWriter
-            ?? throw new ArgumentNullException(nameof(bosJsonExportWriter));
+                                   ?? throw new ArgumentNullException(nameof(bosJsonExportWriter));
         this.fileDialogService = fileDialogService ?? throw new ArgumentNullException(nameof(fileDialogService));
         this.dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
         this.undoRedo = undoRedo ?? new UndoRedoService();
@@ -171,10 +171,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         get => currentProjectPath;
         private set
         {
-            if (string.Equals(currentProjectPath, value, StringComparison.Ordinal))
-            {
-                return;
-            }
+            if (string.Equals(currentProjectPath, value, StringComparison.Ordinal)) return;
 
             this.RaiseAndSetIfChanged(ref currentProjectPath, value);
             RefreshProjectState();
@@ -192,10 +189,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         get => isBusy;
         private set
         {
-            if (isBusy == value)
-            {
-                return;
-            }
+            if (isBusy == value) return;
 
             this.RaiseAndSetIfChanged(ref isBusy, value);
             RaiseCommandStatesChanged();
@@ -206,9 +200,9 @@ public sealed class MainWindowViewModel : ReactiveObject
 
     public MorphsViewModel Morphs { get; }
 
-    public ObservableCollection<CommandDescriptor> CommandPaletteItems => commandPaletteItems;
+    public ObservableCollection<CommandDescriptor> CommandPaletteItems { get; } = new();
 
-    public ObservableCollection<CommandDescriptor> VisibleCommandPaletteItems => visibleCommandPaletteItems;
+    public ObservableCollection<CommandDescriptor> VisibleCommandPaletteItems { get; } = new();
 
     public IReadOnlyList<ThemePreference> ThemePreferences { get; } = Enum.GetValues<ThemePreference>();
 
@@ -244,10 +238,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         set
         {
             var newValue = value ?? string.Empty;
-            if (string.Equals(globalSearchText, newValue, StringComparison.Ordinal))
-            {
-                return;
-            }
+            if (string.Equals(globalSearchText, newValue, StringComparison.Ordinal)) return;
 
             this.RaiseAndSetIfChanged(ref globalSearchText, newValue);
             ApplyGlobalSearchText();
@@ -259,10 +250,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         get => activeWorkspace;
         set
         {
-            if (activeWorkspace == value)
-            {
-                return;
-            }
+            if (activeWorkspace == value) return;
 
             this.RaiseAndSetIfChanged(ref activeWorkspace, value);
             ApplyGlobalSearchText();
@@ -281,10 +269,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         set
         {
             var newValue = value ?? string.Empty;
-            if (string.Equals(commandPaletteSearchText, newValue, StringComparison.Ordinal))
-            {
-                return;
-            }
+            if (string.Equals(commandPaletteSearchText, newValue, StringComparison.Ordinal)) return;
 
             this.RaiseAndSetIfChanged(ref commandPaletteSearchText, newValue);
             RefreshVisibleCommandPaletteItems();
@@ -302,10 +287,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         get => selectedThemePreference;
         set
         {
-            if (selectedThemePreference == value)
-            {
-                return;
-            }
+            if (selectedThemePreference == value) return;
 
             this.RaiseAndSetIfChanged(ref selectedThemePreference, value);
             ThemePreferenceApplier.Apply(value);
@@ -346,13 +328,11 @@ public sealed class MainWindowViewModel : ReactiveObject
             return;
         }
 
-        await OpenProjectPathAsync(path, confirmDiscard: false, cancellationToken);
+        await OpenProjectPathAsync(path, false, cancellationToken);
     }
 
-    public Task OpenProjectPathAsync(string path, CancellationToken cancellationToken = default)
-    {
-        return OpenProjectPathAsync(path, confirmDiscard: true, cancellationToken);
-    }
+    public Task OpenProjectPathAsync(string path, CancellationToken cancellationToken = default) =>
+        OpenProjectPathAsync(path, true, cancellationToken);
 
     private async Task OpenProjectPathAsync(
         string path,
@@ -400,7 +380,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         CancellationToken cancellationToken = default)
     {
         var files = paths?.Where(path => !string.IsNullOrWhiteSpace(path)).ToArray()
-            ?? Array.Empty<string>();
+                    ?? Array.Empty<string>();
         if (files.Length == 0)
         {
             StatusMessage = "No files dropped.";
@@ -418,38 +398,25 @@ public sealed class MainWindowViewModel : ReactiveObject
             .ToArray();
         var skipped = files.Length - projectFiles.Length - xmlFiles.Length - npcFiles.Length;
 
-        if (projectFiles.Length > 0)
-        {
-            await OpenProjectPathAsync(projectFiles[0], cancellationToken);
-        }
+        if (projectFiles.Length > 0) await OpenProjectPathAsync(projectFiles[0], cancellationToken);
 
-        if (xmlFiles.Length > 0)
-        {
-            await Templates.ImportPresetFilesAsync(xmlFiles, cancellationToken);
-        }
+        if (xmlFiles.Length > 0) await Templates.ImportPresetFilesAsync(xmlFiles, cancellationToken);
 
-        if (npcFiles.Length > 0)
-        {
-            await Morphs.ImportNpcFilesAsync(npcFiles, cancellationToken);
-        }
+        if (npcFiles.Length > 0) await Morphs.ImportNpcFilesAsync(npcFiles, cancellationToken);
 
-        StatusMessage = "Processed " + (files.Length - skipped).ToString(System.Globalization.CultureInfo.InvariantCulture)
-            + " dropped file" + (files.Length - skipped == 1 ? "." : "s.")
-            + (skipped > 0
-                ? " Skipped " + skipped.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                    + " unsupported file" + (skipped == 1 ? "." : "s.")
-                : string.Empty);
+        StatusMessage = "Processed " + (files.Length - skipped).ToString(CultureInfo.InvariantCulture)
+                                     + " dropped file" + (files.Length - skipped == 1 ? "." : "s.")
+                                     + (skipped > 0
+                                         ? " Skipped " + skipped.ToString(CultureInfo.InvariantCulture)
+                                                       + " unsupported file" + (skipped == 1 ? "." : "s.")
+                                         : string.Empty);
     }
 
-    public async Task SaveProjectAsync(CancellationToken cancellationToken = default)
-    {
-        await SaveProjectInternalAsync(CurrentProjectPath, promptForPath: CurrentProjectPath is null, cancellationToken);
-    }
+    public async Task SaveProjectAsync(CancellationToken cancellationToken = default) =>
+        await SaveProjectInternalAsync(CurrentProjectPath, CurrentProjectPath is null, cancellationToken);
 
-    public async Task SaveProjectAsAsync(CancellationToken cancellationToken = default)
-    {
-        await SaveProjectInternalAsync(CurrentProjectPath, promptForPath: true, cancellationToken);
-    }
+    public async Task SaveProjectAsAsync(CancellationToken cancellationToken = default) =>
+        await SaveProjectInternalAsync(CurrentProjectPath, true, cancellationToken);
 
     public async Task ExportBodyGenInisAsync(CancellationToken cancellationToken = default)
     {
@@ -526,10 +493,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         StatusMessage = "Opened About dialog.";
     }
 
-    public void AcknowledgeGlobalSearchFocus()
-    {
-        ShouldFocusGlobalSearch = false;
-    }
+    public void AcknowledgeGlobalSearchFocus() => ShouldFocusGlobalSearch = false;
 
     private async Task SaveProjectInternalAsync(
         string? targetPath,
@@ -537,10 +501,7 @@ public sealed class MainWindowViewModel : ReactiveObject
         CancellationToken cancellationToken)
     {
         var path = targetPath;
-        if (promptForPath)
-        {
-            path = await fileDialogService.PickSaveProjectFileAsync(targetPath, cancellationToken);
-        }
+        if (promptForPath) path = await fileDialogService.PickSaveProjectFileAsync(targetPath, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -572,13 +533,11 @@ public sealed class MainWindowViewModel : ReactiveObject
         CancellationToken cancellationToken)
     {
         return !project.IsDirty
-            || await dialogService.ConfirmDiscardChangesAsync(action, cancellationToken);
+               || await dialogService.ConfirmDiscardChangesAsync(action, cancellationToken);
     }
 
-    private void OnProjectOutputStateChanged(object? sender, NotifyCollectionChangedEventArgs args)
-    {
+    private void OnProjectOutputStateChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
         RefreshProjectState();
-    }
 
     private void RefreshProjectState()
     {
@@ -597,27 +556,18 @@ public sealed class MainWindowViewModel : ReactiveObject
         return project.IsDirty ? AppShell.Title + " *" : AppShell.Title;
     }
 
-    private bool CanRunShellCommand()
-    {
-        return !IsBusy;
-    }
+    private bool CanRunShellCommand() => !IsBusy;
 
-    private bool CanSaveProject()
-    {
-        return !IsBusy && (project.IsDirty || CurrentProjectPath is null);
-    }
+    private bool CanSaveProject() => !IsBusy && (project.IsDirty || CurrentProjectPath is null);
 
-    private bool CanExportBosJson()
-    {
-        return !IsBusy && project.SliderPresets.Count > 0;
-    }
+    private bool CanExportBosJson() => !IsBusy && project.SliderPresets.Count > 0;
 
     private bool CanExportBodyGenInis()
     {
         return !IsBusy
-            && (project.SliderPresets.Count > 0
-                || project.CustomMorphTargets.Count > 0
-                || project.MorphedNpcs.Count > 0);
+               && (project.SliderPresets.Count > 0
+                   || project.CustomMorphTargets.Count > 0
+                   || project.MorphedNpcs.Count > 0);
     }
 
     private void RaiseCommandStatesChanged()
@@ -662,15 +612,12 @@ public sealed class MainWindowViewModel : ReactiveObject
 
     private void RunCommandPaletteItem(CommandDescriptor? descriptor)
     {
-        if (descriptor?.Command.CanExecute(null) == true)
-        {
-            descriptor.Command.Execute(null);
-        }
+        if (descriptor?.Command.CanExecute(null) == true) descriptor.Command.Execute(null);
     }
 
     private void RegisterCommandPaletteItems()
     {
-        commandPaletteItems.Clear();
+        CommandPaletteItems.Clear();
         AddCommand("New Project", "File", "Ctrl+N", NewProjectCommand);
         AddCommand("Open Project", "File", "Ctrl+O", OpenProjectCommand);
         AddCommand("Save Project", "File", "Ctrl+S", SaveProjectCommand);
@@ -689,24 +636,18 @@ public sealed class MainWindowViewModel : ReactiveObject
         AddCommand("About", "Help", string.Empty, ShowAboutCommand);
     }
 
-    private void AddCommand(string title, string group, string gestureText, ICommand command)
-    {
-        commandPaletteItems.Add(new CommandDescriptor(title, group, gestureText, command));
-    }
+    private void AddCommand(string title, string group, string gestureText, ICommand command) =>
+        CommandPaletteItems.Add(new CommandDescriptor(title, group, gestureText, command));
 
     private void RefreshVisibleCommandPaletteItems()
     {
-        visibleCommandPaletteItems.Clear();
+        VisibleCommandPaletteItems.Clear();
         foreach (var descriptor in CommandPaletteItems.Where(item => item.Matches(CommandPaletteSearchText)))
-        {
-            visibleCommandPaletteItems.Add(descriptor);
-        }
+            VisibleCommandPaletteItems.Add(descriptor);
     }
 
-    private void ReportCommandFailure(string action, Exception exception)
-    {
+    private void ReportCommandFailure(string action, Exception exception) =>
         StatusMessage = action + " failed: " + FormatExceptionMessage(exception);
-    }
 
     private static string EnsureProjectExtension(string path)
     {
@@ -738,10 +679,7 @@ public sealed class MainWindowViewModel : ReactiveObject
             : exception.Message;
     }
 
-    private static ProjectModel CreateDesignTimeProject()
-    {
-        return new ProjectModel();
-    }
+    private static ProjectModel CreateDesignTimeProject() => new();
 
     private static TemplateProfileCatalog CreateDesignTimeProfileCatalog()
     {
@@ -749,10 +687,10 @@ public sealed class MainWindowViewModel : ReactiveObject
         {
             new TemplateProfile(
                 ProjectProfileMapping.SkyrimCbbe,
-                new BS2BG.Core.Formatting.SliderProfile(
-                    Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
-                    Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-                    Array.Empty<string>())),
+                new SliderProfile(
+                    Array.Empty<SliderDefault>(),
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
         });
     }
 
@@ -781,35 +719,25 @@ public sealed class MainWindowViewModel : ReactiveObject
 
     private sealed class EmptyFileDialogService : IFileDialogService
     {
-        public Task<string?> PickOpenProjectFileAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<string?>(null);
-        }
+        public Task<string?> PickOpenProjectFileAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
 
-        public Task<string?> PickSaveProjectFileAsync(string? currentPath, CancellationToken cancellationToken)
-        {
-            return Task.FromResult<string?>(null);
-        }
+        public Task<string?> PickSaveProjectFileAsync(string? currentPath, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
 
-        public Task<string?> PickBodyGenExportFolderAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<string?>(null);
-        }
+        public Task<string?> PickBodyGenExportFolderAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
 
-        public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<string?>(null);
-        }
+        public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
     }
 
     private sealed class NullAppDialogService : IAppDialogService
     {
         public Task<bool> ConfirmDiscardChangesAsync(
             DiscardChangesAction action,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(true);
-        }
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
 
         public void ShowAbout()
         {
@@ -818,25 +746,18 @@ public sealed class MainWindowViewModel : ReactiveObject
 
     private sealed class EmptyBodySlideXmlFilePicker : IBodySlideXmlFilePicker
     {
-        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        }
+        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
     }
 
     private sealed class EmptyNpcTextFilePicker : INpcTextFilePicker
     {
-        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        }
+        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
     }
 
     private sealed class EmptyClipboardService : IClipboardService
     {
-        public Task SetTextAsync(string text, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

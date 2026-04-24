@@ -5,8 +5,6 @@ namespace BS2BG.Core.Models;
 
 public sealed class ProjectModel : ProjectModelNode
 {
-    private bool isDirty;
-
     public ProjectModel()
     {
         AttachCollection(SliderPresets);
@@ -14,15 +12,15 @@ public sealed class ProjectModel : ProjectModelNode
         AttachCollection(MorphedNpcs);
     }
 
-    public event EventHandler? DirtyStateChanged;
-
     public ObservableCollection<SliderPreset> SliderPresets { get; } = new();
 
     public ObservableCollection<CustomMorphTarget> CustomMorphTargets { get; } = new();
 
     public ObservableCollection<Npc> MorphedNpcs { get; } = new();
 
-    public bool IsDirty => isDirty;
+    public bool IsDirty { get; private set; }
+
+    public event EventHandler? DirtyStateChanged;
 
     public SliderPreset? FindSliderPreset(string name)
     {
@@ -32,22 +30,13 @@ public sealed class ProjectModel : ProjectModelNode
             StringComparison.OrdinalIgnoreCase));
     }
 
-    public void SortPresets()
-    {
-        SortCollection(SliderPresets);
-    }
+    public void SortPresets() => SortCollection(SliderPresets);
 
-    public void SortCustomMorphTargets()
-    {
-        SortCollection(CustomMorphTargets);
-    }
+    public void SortCustomMorphTargets() => SortCollection(CustomMorphTargets);
 
     public void ReplaceWith(ProjectModel source)
     {
-        if (source is null)
-        {
-            throw new ArgumentNullException(nameof(source));
-        }
+        if (source is null) throw new ArgumentNullException(nameof(source));
 
         SliderPresets.Clear();
         CustomMorphTargets.Clear();
@@ -72,10 +61,7 @@ public sealed class ProjectModel : ProjectModelNode
         {
             var clone = new Npc(npc.Name)
             {
-                Mod = npc.Mod,
-                EditorId = npc.EditorId,
-                Race = npc.Race,
-                FormId = npc.FormId,
+                Mod = npc.Mod, EditorId = npc.EditorId, Race = npc.Race, FormId = npc.FormId
             };
             CopyPresetAssignments(npc, clone, presetMap);
             MorphedNpcs.Add(clone);
@@ -88,15 +74,9 @@ public sealed class ProjectModel : ProjectModelNode
     {
         var removed = 0;
 
-        foreach (var target in CustomMorphTargets)
-        {
-            removed += target.RemoveMissingPresetReferences(SliderPresets);
-        }
+        foreach (var target in CustomMorphTargets) removed += target.RemoveMissingPresetReferences(SliderPresets);
 
-        foreach (var npc in MorphedNpcs)
-        {
-            removed += npc.RemoveMissingPresetReferences(SliderPresets);
-        }
+        foreach (var npc in MorphedNpcs) removed += npc.RemoveMissingPresetReferences(SliderPresets);
 
         return removed;
     }
@@ -104,50 +84,32 @@ public sealed class ProjectModel : ProjectModelNode
     public bool RemoveSliderPreset(string name)
     {
         var preset = FindSliderPreset(name);
-        if (preset is null)
-        {
-            return false;
-        }
+        if (preset is null) return false;
 
         var removed = SliderPresets.Remove(preset);
-        if (!removed)
-        {
-            return false;
-        }
+        if (!removed) return false;
 
-        foreach (var target in CustomMorphTargets)
-        {
-            target.RemoveSliderPreset(preset.Name);
-        }
+        foreach (var target in CustomMorphTargets) target.RemoveSliderPreset(preset.Name);
 
-        foreach (var npc in MorphedNpcs)
-        {
-            npc.RemoveSliderPreset(preset.Name);
-        }
+        foreach (var npc in MorphedNpcs) npc.RemoveSliderPreset(preset.Name);
 
         return true;
     }
 
     public void MarkDirty()
     {
-        if (isDirty)
-        {
-            return;
-        }
+        if (IsDirty) return;
 
-        isDirty = true;
+        IsDirty = true;
         NotifyChanged(nameof(IsDirty));
         DirtyStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void MarkClean()
     {
-        if (!isDirty)
-        {
-            return;
-        }
+        if (!IsDirty) return;
 
-        isDirty = false;
+        IsDirty = false;
         NotifyChanged(nameof(IsDirty));
         DirtyStateChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -176,20 +138,12 @@ public sealed class ProjectModel : ProjectModelNode
         }
 
         if (args.OldItems is not null)
-        {
             foreach (T item in args.OldItems)
-            {
                 DetachChild(item, childSubscriptions);
-            }
-        }
 
         if (args.NewItems is not null)
-        {
             foreach (T item in args.NewItems)
-            {
                 AttachChild(item, childSubscriptions);
-            }
-        }
     }
 
     private void AttachChild<T>(T item, Dictionary<T, int> childSubscriptions)
@@ -205,10 +159,7 @@ public sealed class ProjectModel : ProjectModelNode
     {
         item.Changed -= OnChildChanged;
 
-        if (!childSubscriptions.TryGetValue(item, out var count))
-        {
-            return;
-        }
+        if (!childSubscriptions.TryGetValue(item, out var count)) return;
 
         if (count == 1)
         {
@@ -223,20 +174,13 @@ public sealed class ProjectModel : ProjectModelNode
         where T : ProjectModelNode
     {
         foreach (var subscription in childSubscriptions)
-        {
             for (var index = 0; index < subscription.Value; index++)
-            {
                 subscription.Key.Changed -= OnChildChanged;
-            }
-        }
 
         childSubscriptions.Clear();
     }
 
-    private void OnChildChanged(object? sender, EventArgs args)
-    {
-        MarkDirty();
-    }
+    private void OnChildChanged(object? sender, EventArgs args) => MarkDirty();
 
     private static void SortCollection<T>(ObservableCollection<T> collection)
         where T : ProjectModelNode
@@ -248,10 +192,7 @@ public sealed class ProjectModel : ProjectModelNode
                 .OrderBy(value => GetName(value), StringComparer.OrdinalIgnoreCase)
                 .First();
             var currentIndex = collection.IndexOf(item);
-            if (currentIndex != sortedIndex)
-            {
-                collection.Move(currentIndex, sortedIndex);
-            }
+            if (currentIndex != sortedIndex) collection.Move(currentIndex, sortedIndex);
         }
     }
 
@@ -261,7 +202,7 @@ public sealed class ProjectModel : ProjectModelNode
         {
             SliderPreset preset => preset.Name,
             MorphTargetBase target => target.Name,
-            _ => string.Empty,
+            _ => string.Empty
         };
     }
 
@@ -269,16 +210,14 @@ public sealed class ProjectModel : ProjectModelNode
     {
         var clone = new SliderPreset(source.Name, source.ProfileName);
         foreach (var slider in source.SetSliders.Concat(source.MissingDefaultSetSliders))
-        {
             clone.AddSetSlider(new SetSlider(slider.Name)
             {
                 Enabled = slider.Enabled,
                 ValueSmall = slider.ValueSmall,
                 ValueBig = slider.ValueBig,
                 PercentMin = slider.PercentMin,
-                PercentMax = slider.PercentMax,
+                PercentMax = slider.PercentMax
             });
-        }
 
         return clone;
     }
@@ -289,11 +228,7 @@ public sealed class ProjectModel : ProjectModelNode
         Dictionary<string, SliderPreset> presetMap)
     {
         foreach (var preset in source.SliderPresets)
-        {
             if (presetMap.TryGetValue(preset.Name, out var resolvedPreset))
-            {
                 target.AddSliderPreset(resolvedPreset);
-            }
-        }
     }
 }

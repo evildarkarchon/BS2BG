@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Export;
+using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
@@ -13,7 +14,8 @@ using ModelSliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
-[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected sequences keep M6 workflow assertions readable.")]
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected sequences keep M6 workflow assertions readable.")]
 public sealed class M6UxViewModelTests
 {
     [Fact]
@@ -177,15 +179,9 @@ public sealed class M6UxViewModelTests
         var project = CreateProjectWithPresets(Enumerable.Range(0, 80).Select(index => "P" + index).ToArray());
         var target = new CustomMorphTarget("All|Female");
         var support = new CustomMorphTarget("All|Male");
-        foreach (var preset in project.SliderPresets)
-        {
-            target.AddSliderPreset(preset);
-        }
+        foreach (var preset in project.SliderPresets) target.AddSliderPreset(preset);
 
-        foreach (var preset in project.SliderPresets.Skip(76))
-        {
-            support.AddSliderPreset(preset);
-        }
+        foreach (var preset in project.SliderPresets.Skip(76)) support.AddSliderPreset(preset);
 
         project.CustomMorphTargets.Add(target);
         project.CustomMorphTargets.Add(support);
@@ -203,7 +199,8 @@ public sealed class M6UxViewModelTests
         harness.Morphs.TrimSelectedTargetTo76Command.Execute(null);
 
         Assert.Equal(76, target.SliderPresets.Count);
-        Assert.Equal(new[] { "P76", "P77", "P78", "P79" }, target.SliderPresets.TakeLast(4).Select(preset => preset.Name));
+        Assert.Equal(new[] { "P76", "P77", "P78", "P79" },
+            target.SliderPresets.TakeLast(4).Select(preset => preset.Name));
 
         harness.Main.SelectedThemePreference = ThemePreference.Dark;
 
@@ -256,37 +253,23 @@ public sealed class M6UxViewModelTests
         foreach (var presetName in presetNames)
         {
             var preset = new ModelSliderPreset(presetName);
-            preset.AddSetSlider(new ModelSetSlider("Scale")
-            {
-                ValueBig = 50,
-            });
+            preset.AddSetSlider(new ModelSetSlider("Scale") { ValueBig = 50 });
             project.SliderPresets.Add(preset);
         }
 
         return project;
     }
 
-    private static Npc CreateNpc(string mod, string name, string editorId, string race, string formId)
-    {
-        return new Npc(name)
-        {
-            Mod = mod,
-            EditorId = editorId,
-            Race = race,
-            FormId = formId,
-        };
-    }
+    private static Npc CreateNpc(string mod, string name, string editorId, string race, string formId) =>
+        new(name) { Mod = mod, EditorId = editorId, Race = race, FormId = formId };
 
     private static TemplateProfileCatalog CreateCatalog()
     {
-        var regular = new BS2BG.Core.Formatting.SliderProfile(
-            defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
-            multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-            invertedNames: Array.Empty<string>());
-        return new TemplateProfileCatalog(new[]
-        {
-            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, regular),
-        });
+        var regular = new SliderProfile(
+            Array.Empty<SliderDefault>(),
+            Array.Empty<SliderMultiplier>(),
+            Array.Empty<string>());
+        return new TemplateProfileCatalog(new[] { new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, regular) });
     }
 
     private sealed record TestHarness(
@@ -297,41 +280,29 @@ public sealed class M6UxViewModelTests
 
     private sealed class QueueRandomAssignmentProvider : IRandomAssignmentProvider
     {
-        public int NextIndex(int exclusiveMax)
-        {
-            return 0;
-        }
+        public int NextIndex(int exclusiveMax) => 0;
     }
 
     private sealed class EmptyFileDialogService : IFileDialogService
     {
-        public Task<string?> PickOpenProjectFileAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<string?>(null);
-        }
+        public Task<string?> PickOpenProjectFileAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
 
-        public Task<string?> PickSaveProjectFileAsync(string? currentPath, CancellationToken cancellationToken)
-        {
-            return Task.FromResult<string?>(null);
-        }
+        public Task<string?> PickSaveProjectFileAsync(string? currentPath, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
 
-        public Task<string?> PickBodyGenExportFolderAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<string?>(null);
-        }
+        public Task<string?> PickBodyGenExportFolderAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
 
-        public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<string?>(null);
-        }
+        public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
     }
 
     private sealed class ConfirmingAppDialogService : IAppDialogService
     {
-        public Task<bool> ConfirmDiscardChangesAsync(DiscardChangesAction action, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(true);
-        }
+        public Task<bool>
+            ConfirmDiscardChangesAsync(DiscardChangesAction action, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
 
         public void ShowAbout()
         {
@@ -340,41 +311,28 @@ public sealed class M6UxViewModelTests
 
     private sealed class EmptyBodySlideXmlFilePicker : IBodySlideXmlFilePicker
     {
-        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        }
+        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
     }
 
     private sealed class EmptyNpcTextFilePicker : INpcTextFilePicker
     {
-        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        }
+        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
     }
 
     private sealed class EmptyClipboardService : IClipboardService
     {
-        public Task SetTextAsync(string text, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class CapturingUserPreferencesService : IUserPreferencesService
     {
-        public UserPreferences Saved { get; private set; } = new UserPreferences();
+        public UserPreferences Saved { get; private set; } = new();
 
-        public UserPreferences Load()
-        {
-            return Saved;
-        }
+        public UserPreferences Load() => Saved;
 
-        public void Save(UserPreferences preferences)
-        {
-            Saved = preferences;
-        }
+        public void Save(UserPreferences preferences) => Saved = preferences;
     }
 
     private sealed class TemporaryDirectory : IDisposable
@@ -387,16 +345,13 @@ public sealed class M6UxViewModelTests
 
         public string Path { get; }
 
+        public void Dispose() => Directory.Delete(Path, true);
+
         public string WriteText(string fileName, string text)
         {
             var filePath = System.IO.Path.Combine(Path, fileName);
             File.WriteAllText(filePath, text);
             return filePath;
-        }
-
-        public void Dispose()
-        {
-            Directory.Delete(Path, recursive: true);
         }
     }
 }

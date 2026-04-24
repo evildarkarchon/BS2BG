@@ -1,13 +1,29 @@
+using BS2BG.App.Services;
+using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
-using BS2BG.App.Services;
 using Xunit;
+using SetSlider = BS2BG.Core.Models.SetSlider;
+using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
 public sealed class TemplateGenerationServiceTests
 {
+    private static string RepositoryRoot
+    {
+        get
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PRD.md")))
+                directory = directory.Parent;
+
+            return directory?.FullName
+                   ?? throw new InvalidOperationException("Could not locate repository root.");
+        }
+    }
+
     [Fact]
     public void GenerateTemplatesUsesCrLfLineEndings()
     {
@@ -16,10 +32,10 @@ public sealed class TemplateGenerationServiceTests
         {
             new TemplateProfile(
                 ProjectProfileMapping.SkyrimCbbe,
-                new BS2BG.Core.Formatting.SliderProfile(
-                    defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
-                    multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
-                    invertedNames: Array.Empty<string>())),
+                new SliderProfile(
+                    Array.Empty<SliderDefault>(),
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
         });
         var beta = CreatePreset("Beta", 50);
         var alpha = CreatePreset("Alpha", 25);
@@ -27,7 +43,7 @@ public sealed class TemplateGenerationServiceTests
         var actual = service.GenerateTemplates(
             new[] { beta, alpha },
             catalog,
-            omitRedundantSliders: false);
+            false);
 
         Assert.Equal("Alpha=Scale@0.25\r\nBeta=Scale@0.5", actual);
     }
@@ -46,7 +62,7 @@ public sealed class TemplateGenerationServiceTests
         var profile = SliderProfileJsonService.Load(ProfilePath(profileFileName));
         var catalog = new TemplateProfileCatalog(new[]
         {
-            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, profile),
+            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, profile)
         });
         var service = new TemplateGenerationService();
         var import = parser.ParseFile(InputPath(scenario, xmlFileName));
@@ -54,11 +70,11 @@ public sealed class TemplateGenerationServiceTests
         AssertFixtureText(
             scenario,
             "templates.ini",
-            service.GenerateTemplates(import.Presets, catalog, omitRedundantSliders: false));
+            service.GenerateTemplates(import.Presets, catalog, false));
         AssertFixtureText(
             scenario,
             "templates-omit.ini",
-            service.GenerateTemplates(import.Presets, catalog, omitRedundantSliders: true));
+            service.GenerateTemplates(import.Presets, catalog, true));
     }
 
     [Fact]
@@ -69,39 +85,28 @@ public sealed class TemplateGenerationServiceTests
         var import = parser.ParseFile(InputPath("fallout4-cbbe", "CBBE.xml"));
         var catalog = TemplateProfileCatalogFactory.CreateDefault();
 
-        foreach (var preset in import.Presets)
-        {
-            preset.ProfileName = ProjectProfileMapping.Fallout4Cbbe;
-        }
+        foreach (var preset in import.Presets) preset.ProfileName = ProjectProfileMapping.Fallout4Cbbe;
 
         AssertFixtureText(
             "fallout4-cbbe",
             "templates.ini",
-            service.GenerateTemplates(import.Presets, catalog, omitRedundantSliders: false));
+            service.GenerateTemplates(import.Presets, catalog, false));
         AssertFixtureText(
             "fallout4-cbbe",
             "templates-omit.ini",
-            service.GenerateTemplates(import.Presets, catalog, omitRedundantSliders: true));
+            service.GenerateTemplates(import.Presets, catalog, true));
     }
 
-    private static string ProfilePath(string fileName)
-    {
-        return Path.Combine(RepositoryRoot, "tests", "fixtures", "inputs", "profiles", fileName);
-    }
+    private static string ProfilePath(string fileName) =>
+        Path.Combine(RepositoryRoot, "tests", "fixtures", "inputs", "profiles", fileName);
 
-    private static string InputPath(string scenario, string fileName)
-    {
-        return Path.Combine(RepositoryRoot, "tests", "fixtures", "inputs", scenario, fileName);
-    }
+    private static string InputPath(string scenario, string fileName) =>
+        Path.Combine(RepositoryRoot, "tests", "fixtures", "inputs", scenario, fileName);
 
     private static SliderPreset CreatePreset(string name, int bigValue)
     {
         var preset = new SliderPreset(name);
-        preset.AddSetSlider(new SetSlider("Scale")
-        {
-            ValueSmall = 0,
-            ValueBig = bigValue,
-        });
+        preset.AddSetSlider(new SetSlider("Scale") { ValueSmall = 0, ValueBig = bigValue });
         return preset;
     }
 
@@ -117,20 +122,5 @@ public sealed class TemplateGenerationServiceTests
     {
         return value.Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace("\r", "\n", StringComparison.Ordinal);
-    }
-
-    private static string RepositoryRoot
-    {
-        get
-        {
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PRD.md")))
-            {
-                directory = directory.Parent;
-            }
-
-            return directory?.FullName
-                ?? throw new InvalidOperationException("Could not locate repository root.");
-        }
     }
 }

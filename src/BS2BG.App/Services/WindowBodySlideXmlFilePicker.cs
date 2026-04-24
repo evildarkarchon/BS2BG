@@ -9,17 +9,9 @@ public sealed class WindowBodySlideXmlFilePicker : IBodySlideXmlFilePicker
     private static readonly string[] XmlMimeTypes = { "application/xml", "text/xml" };
     private TopLevel? owner;
 
-    public void Attach(TopLevel topLevel)
-    {
-        owner = topLevel ?? throw new ArgumentNullException(nameof(topLevel));
-    }
-
     public async Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken)
     {
-        if (owner?.StorageProvider.CanOpen != true)
-        {
-            return Array.Empty<string>();
-        }
+        if (owner?.StorageProvider.CanOpen != true) return Array.Empty<string>();
 
         var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
@@ -27,12 +19,8 @@ public sealed class WindowBodySlideXmlFilePicker : IBodySlideXmlFilePicker
             AllowMultiple = true,
             FileTypeFilter = new[]
             {
-                new FilePickerFileType("BodySlide XML")
-                {
-                    Patterns = XmlPatterns,
-                    MimeTypes = XmlMimeTypes,
-                },
-            },
+                new FilePickerFileType("BodySlide XML") { Patterns = XmlPatterns, MimeTypes = XmlMimeTypes }
+            }
         });
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -42,4 +30,6 @@ public sealed class WindowBodySlideXmlFilePicker : IBodySlideXmlFilePicker
             .Select(file => file.Path.LocalPath)
             .ToArray();
     }
+
+    public void Attach(TopLevel topLevel) => owner = topLevel ?? throw new ArgumentNullException(nameof(topLevel));
 }

@@ -1,8 +1,9 @@
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Models;
-using Avalonia.Controls;
-using Avalonia.Input;
 using ReactiveUI.Avalonia;
 
 namespace BS2BG.App.Views;
@@ -14,16 +15,11 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
     {
     }
 
-    public MainWindow(MainWindowViewModel viewModel)
-        : this(viewModel, null, null, null)
-    {
-    }
-
     public MainWindow(
         MainWindowViewModel viewModel,
-        WindowBodySlideXmlFilePicker? filePicker,
-        WindowNpcTextFilePicker? npcTextFilePicker,
-        WindowClipboardService? clipboardService,
+        WindowBodySlideXmlFilePicker? filePicker = null,
+        WindowNpcTextFilePicker? npcTextFilePicker = null,
+        WindowClipboardService? clipboardService = null,
         WindowImageViewService? imageViewService = null,
         WindowNoPresetNotificationService? noPresetNotificationService = null,
         WindowFileDialogService? fileDialogService = null,
@@ -41,7 +37,7 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
                 Title = viewModel.Title;
             }
             else if (args.PropertyName == nameof(MainWindowViewModel.ShouldFocusGlobalSearch)
-                && viewModel.ShouldFocusGlobalSearch)
+                     && viewModel.ShouldFocusGlobalSearch)
             {
                 this.FindControl<TextBox>("GlobalSearchBox")?.Focus();
                 viewModel.AcknowledgeGlobalSearchFocus();
@@ -63,10 +59,7 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
 
     private void OnWorkspaceSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (ViewModel is null || sender is not TabControl tabControl)
-        {
-            return;
-        }
+        if (ViewModel is null || sender is not TabControl tabControl) return;
 
         ViewModel.ActiveWorkspace = tabControl.SelectedIndex == 0
             ? AppWorkspace.Templates
@@ -75,30 +68,22 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
 
     private void OnNpcSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (ViewModel is null || sender is not ListBox listBox)
-        {
-            return;
-        }
+        if (ViewModel is null || sender is not ListBox listBox) return;
 
         ViewModel.Morphs.SelectedNpcs.Clear();
         foreach (var item in listBox.SelectedItems?.OfType<Npc>() ?? Enumerable.Empty<Npc>())
-        {
             ViewModel.Morphs.SelectedNpcs.Add(item);
-        }
     }
 
     private void OnNpcRaceFilterSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (ViewModel is null || sender is not ListBox listBox)
-        {
-            return;
-        }
+        if (ViewModel is null || sender is not ListBox listBox) return;
 
         var selectedRaces = listBox.SelectedItems?.OfType<string>().ToArray() ?? Array.Empty<string>();
         ViewModel.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, selectedRaces);
     }
 
-    private void OnNpcRaceFilterClearClick(object? sender, Avalonia.Interactivity.RoutedEventArgs args)
+    private void OnNpcRaceFilterClearClick(object? sender, RoutedEventArgs args)
     {
         this.FindControl<ListBox>("NpcRaceFilterValuesListBox")?.SelectedItems?.Clear();
         ViewModel?.Morphs.ClearNpcRaceFilter();
@@ -106,10 +91,7 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
 
     private void OnCommandPaletteSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (ViewModel is null || sender is not ListBox listBox)
-        {
-            return;
-        }
+        if (ViewModel is null || sender is not ListBox listBox) return;
 
         if (listBox.SelectedItem is CommandDescriptor descriptor)
         {
@@ -128,10 +110,7 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
 
     private async void OnDrop(object? sender, DragEventArgs args)
     {
-        if (ViewModel is null)
-        {
-            return;
-        }
+        if (ViewModel is null) return;
 
         var paths = args.DataTransfer.TryGetFiles()?
             .Where(file => file.Path.IsFile)

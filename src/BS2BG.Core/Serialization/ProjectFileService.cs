@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
@@ -6,7 +7,8 @@ using BS2BG.Core.Models;
 
 namespace BS2BG.Core.Serialization;
 
-[SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Project file I/O is exposed as an injectable service surface.")]
+[SuppressMessage("Performance", "CA1822:Mark members as static",
+    Justification = "Project file I/O is exposed as an injectable service surface.")]
 public sealed class ProjectFileService
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
@@ -15,9 +17,7 @@ public sealed class ProjectFileService
     {
         var options = new JsonSerializerOptions
         {
-            AllowTrailingCommas = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            WriteIndented = true,
+            AllowTrailingCommas = true, ReadCommentHandling = JsonCommentHandling.Skip, WriteIndented = true
         };
         options.Converters.Add(new NamedNpcObjectListJsonConverter());
         return options;
@@ -25,43 +25,31 @@ public sealed class ProjectFileService
 
     public ProjectModel Load(string path)
     {
-        if (path is null)
-        {
-            throw new ArgumentNullException(nameof(path));
-        }
+        if (path is null) throw new ArgumentNullException(nameof(path));
 
         return LoadFromString(File.ReadAllText(path, Encoding.UTF8));
     }
 
     public ProjectModel LoadFromString(string json)
     {
-        if (json is null)
-        {
-            throw new ArgumentNullException(nameof(json));
-        }
+        if (json is null) throw new ArgumentNullException(nameof(json));
 
         var dto = JsonSerializer.Deserialize<ProjectFileDto>(json, JsonOptions)
-            ?? new ProjectFileDto();
+                  ?? new ProjectFileDto();
         var project = new ProjectModel();
 
         foreach (var (presetName, presetDto) in Enumerate(dto.SliderPresets))
-        {
             project.SliderPresets.Add(ToModel(presetName, presetDto));
-        }
 
         project.SortPresets();
 
         foreach (var (targetName, targetDto) in Enumerate(dto.CustomMorphTargets))
-        {
             project.CustomMorphTargets.Add(ToModel(targetName, targetDto, project));
-        }
 
         project.SortCustomMorphTargets();
 
-        foreach (var (npcName, npcDto) in Enumerate(dto.MorphedNPCs))
-        {
+        foreach (var (npcName, npcDto) in Enumerate(dto.MorphedNpCs))
             project.MorphedNpcs.Add(ToModel(npcName, npcDto, project));
-        }
 
         project.MarkClean();
         return project;
@@ -69,26 +57,17 @@ public sealed class ProjectFileService
 
     public void Save(ProjectModel project, string path)
     {
-        if (project is null)
-        {
-            throw new ArgumentNullException(nameof(project));
-        }
+        if (project is null) throw new ArgumentNullException(nameof(project));
 
-        if (path is null)
-        {
-            throw new ArgumentNullException(nameof(path));
-        }
+        if (path is null) throw new ArgumentNullException(nameof(path));
 
-        File.WriteAllText(path, SaveToString(project), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        File.WriteAllText(path, SaveToString(project), new UTF8Encoding(false));
         project.MarkClean();
     }
 
     public string SaveToString(ProjectModel project)
     {
-        if (project is null)
-        {
-            throw new ArgumentNullException(nameof(project));
-        }
+        if (project is null) throw new ArgumentNullException(nameof(project));
 
         return JsonSerializer.Serialize(ToDto(project), JsonOptions);
     }
@@ -100,10 +79,7 @@ public sealed class ProjectFileService
 
         foreach (var sliderDto in dto?.SetSliders ?? Enumerable.Empty<SetSliderDto?>())
         {
-            if (sliderDto is null)
-            {
-                continue;
-            }
+            if (sliderDto is null) continue;
 
             preset.AddSetSlider(new SetSlider(sliderDto.Name ?? string.Empty)
             {
@@ -111,7 +87,7 @@ public sealed class ProjectFileService
                 ValueSmall = sliderDto.ValueSmall,
                 ValueBig = sliderDto.ValueBig,
                 PercentMin = sliderDto.PercentMin ?? 0,
-                PercentMax = sliderDto.PercentMax ?? 100,
+                PercentMax = sliderDto.PercentMax ?? 100
             });
         }
 
@@ -132,7 +108,7 @@ public sealed class ProjectFileService
             Mod = dto?.Mod ?? string.Empty,
             EditorId = dto?.EditorId ?? string.Empty,
             Race = dto?.Race ?? string.Empty,
-            FormId = dto?.FormId ?? string.Empty,
+            FormId = dto?.FormId ?? string.Empty
         };
         AddResolvedPresetReferences(npc, dto?.SliderPresets, project);
         return npc;
@@ -146,10 +122,7 @@ public sealed class ProjectFileService
         foreach (var presetName in presetNames ?? Enumerable.Empty<string>())
         {
             var preset = project.FindSliderPreset(presetName);
-            if (preset is not null)
-            {
-                target.AddSliderPreset(preset);
-            }
+            if (preset is not null) target.AddSliderPreset(preset);
         }
     }
 
@@ -163,8 +136,8 @@ public sealed class ProjectFileService
             CustomMorphTargets = project.CustomMorphTargets
                 .OrderBy(target => target.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(target => target.Name, ToDto, StringComparer.Ordinal),
-            MorphedNPCs = new NamedNpcObjectList(project.MorphedNpcs
-                .Select(npc => new NamedNpcObject(npc.Name, ToDto(npc)))),
+            MorphedNpCs = new NamedNpcObjectList(project.MorphedNpcs
+                .Select(npc => new NamedNpcObject(npc.Name, ToDto(npc))))
         };
     }
 
@@ -177,7 +150,7 @@ public sealed class ProjectFileService
             SetSliders = preset.GetAllSetSlidersForSave()
                 .Where(slider => !ShouldOmitMissingDefault(slider))
                 .Select(ToDto)
-                .ToList(),
+                .ToList()
         };
     }
 
@@ -190,7 +163,7 @@ public sealed class ProjectFileService
             ValueSmall = slider.ValueSmall,
             ValueBig = slider.ValueBig,
             PercentMin = slider.PercentMin,
-            PercentMax = slider.PercentMax,
+            PercentMax = slider.PercentMax
         };
     }
 
@@ -200,7 +173,7 @@ public sealed class ProjectFileService
         {
             SliderPresets = target.SliderPresets
                 .Select(preset => preset.Name)
-                .ToList(),
+                .ToList()
         };
     }
 
@@ -214,22 +187,27 @@ public sealed class ProjectFileService
             FormId = npc.FormId,
             SliderPresets = npc.SliderPresets
                 .Select(preset => preset.Name)
-                .ToList(),
+                .ToList()
         };
     }
 
     private static bool ShouldOmitMissingDefault(SetSlider slider)
     {
         return slider.IsMissingDefault
-            && slider.Enabled
-            && slider.PercentMin == 100
-            && slider.PercentMax == 100;
+               && slider.Enabled
+               && slider.PercentMin == 100
+               && slider.PercentMax == 100;
     }
 
     private static IEnumerable<KeyValuePair<string, TValue>> Enumerate<TValue>(
-        Dictionary<string, TValue>? values)
+        Dictionary<string, TValue>? values) =>
+        values ?? Enumerable.Empty<KeyValuePair<string, TValue>>();
+
+    private static IEnumerable<KeyValuePair<string, NpcDto?>> Enumerate(NamedNpcObjectList? values)
     {
-        return values ?? Enumerable.Empty<KeyValuePair<string, TValue>>();
+        if (values is null) yield break;
+
+        foreach (var entry in values) yield return new KeyValuePair<string, NpcDto?>(entry.Name, entry.Value);
     }
 
     private sealed class ProjectFileDto
@@ -244,7 +222,7 @@ public sealed class ProjectFileService
 
         [JsonPropertyName("MorphedNPCs")]
         [JsonPropertyOrder(2)]
-        public NamedNpcObjectList? MorphedNPCs { get; set; }
+        public NamedNpcObjectList? MorphedNpCs { get; set; }
     }
 
     private sealed class SliderPresetDto
@@ -319,41 +297,25 @@ public sealed class ProjectFileService
         public List<string>? SliderPresets { get; set; }
     }
 
-    private readonly struct NamedNpcObject
+    private readonly struct NamedNpcObject(string name, NpcDto? value)
     {
-        public NamedNpcObject(string name, NpcDto? value)
-        {
-            Name = name;
-            Value = value;
-        }
+        public string Name { get; } = name;
 
-        public string Name { get; }
-
-        public NpcDto? Value { get; }
+        public NpcDto? Value { get; } = value;
     }
 
-    private sealed class NamedNpcObjectList : IReadOnlyList<NamedNpcObject>
+    private sealed class NamedNpcObjectList(IEnumerable<NamedNpcObject> entries) : IReadOnlyList<NamedNpcObject>
     {
-        private readonly NamedNpcObject[] entries;
-
-        public NamedNpcObjectList(IEnumerable<NamedNpcObject> entries)
-        {
-            this.entries = (entries ?? throw new ArgumentNullException(nameof(entries))).ToArray();
-        }
+        private readonly NamedNpcObject[] entries =
+            (entries ?? throw new ArgumentNullException(nameof(entries))).ToArray();
 
         public int Count => entries.Length;
 
         public NamedNpcObject this[int index] => entries[index];
 
-        public IEnumerator<NamedNpcObject> GetEnumerator()
-        {
-            return ((IEnumerable<NamedNpcObject>)entries).GetEnumerator();
-        }
+        public IEnumerator<NamedNpcObject> GetEnumerator() => ((IEnumerable<NamedNpcObject>)entries).GetEnumerator();
 
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private sealed class NamedNpcObjectListJsonConverter : JsonConverter<NamedNpcObjectList>
@@ -363,34 +325,21 @@ public sealed class ProjectFileService
             Type typeToConvert,
             JsonSerializerOptions options)
         {
-            if (reader.TokenType == JsonTokenType.Null)
-            {
-                return new NamedNpcObjectList(Array.Empty<NamedNpcObject>());
-            }
+            if (reader.TokenType == JsonTokenType.Null) return new NamedNpcObjectList(Array.Empty<NamedNpcObject>());
 
             if (reader.TokenType != JsonTokenType.StartObject)
-            {
                 throw new JsonException("Expected MorphedNPCs to be a JSON object.");
-            }
 
             var entries = new List<NamedNpcObject>();
             while (reader.Read())
             {
-                if (reader.TokenType == JsonTokenType.EndObject)
-                {
-                    return new NamedNpcObjectList(entries);
-                }
+                if (reader.TokenType == JsonTokenType.EndObject) return new NamedNpcObjectList(entries);
 
                 if (reader.TokenType != JsonTokenType.PropertyName)
-                {
                     throw new JsonException("Expected NPC name property.");
-                }
 
                 var name = reader.GetString() ?? string.Empty;
-                if (!reader.Read())
-                {
-                    throw new JsonException("Expected NPC object.");
-                }
+                if (!reader.Read()) throw new JsonException("Expected NPC object.");
 
                 var value = JsonSerializer.Deserialize<NpcDto>(ref reader, options);
                 entries.Add(new NamedNpcObject(name, value));
@@ -413,19 +362,6 @@ public sealed class ProjectFileService
             }
 
             writer.WriteEndObject();
-        }
-    }
-
-    private static IEnumerable<KeyValuePair<string, NpcDto?>> Enumerate(NamedNpcObjectList? values)
-    {
-        if (values is null)
-        {
-            yield break;
-        }
-
-        foreach (var entry in values)
-        {
-            yield return new KeyValuePair<string, NpcDto?>(entry.Name, entry.Value);
         }
     }
 }

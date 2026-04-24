@@ -2,38 +2,25 @@ using System.Windows.Input;
 
 namespace BS2BG.App.Services;
 
-public sealed class CommandDescriptor
+public sealed class CommandDescriptor(string title, string group, string gestureText, ICommand command)
 {
-    public CommandDescriptor(string title, string group, string gestureText, ICommand command)
-    {
-        Title = title ?? throw new ArgumentNullException(nameof(title));
-        Group = group ?? throw new ArgumentNullException(nameof(group));
-        GestureText = gestureText ?? string.Empty;
-        Command = command ?? throw new ArgumentNullException(nameof(command));
-    }
+    public string Title { get; } = title ?? throw new ArgumentNullException(nameof(title));
 
-    public string Title { get; }
+    public string Group { get; } = group ?? throw new ArgumentNullException(nameof(group));
 
-    public string Group { get; }
+    public string GestureText { get; } = gestureText ?? string.Empty;
 
-    public string GestureText { get; }
-
-    public ICommand Command { get; }
+    public ICommand Command { get; } = command ?? throw new ArgumentNullException(nameof(command));
 
     public bool Matches(string searchText)
     {
-        if (string.IsNullOrWhiteSpace(searchText))
-        {
-            return true;
-        }
+        if (string.IsNullOrWhiteSpace(searchText)) return true;
 
         return Contains(Title, searchText)
-            || Contains(Group, searchText)
-            || Contains(GestureText, searchText);
+               || Contains(Group, searchText)
+               || Contains(GestureText, searchText);
     }
 
-    private static bool Contains(string value, string searchText)
-    {
-        return value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool Contains(string value, string searchText) =>
+        value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
 }

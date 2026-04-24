@@ -5,17 +5,17 @@ namespace BS2BG.Core.Models;
 
 public sealed class SliderPreset : ProjectModelNode
 {
+    private readonly Dictionary<SetSlider, int> missingDefaultSetSliderSubscriptions = new();
+    private readonly Dictionary<SetSlider, int> setSliderSubscriptions = new();
     private string name;
     private string profileName;
-    private bool sortingSetSliders;
     private bool sortingMissingDefaults;
-    private readonly Dictionary<SetSlider, int> setSliderSubscriptions = new();
-    private readonly Dictionary<SetSlider, int> missingDefaultSetSliderSubscriptions = new();
+    private bool sortingSetSliders;
 
     public SliderPreset(string name, string? profileName = null)
     {
         this.name = NormalizePresetName(name);
-        this.profileName = ProjectProfileMapping.Resolve(profileName, isUunp: false);
+        this.profileName = ProjectProfileMapping.Resolve(profileName, false);
 
         SetSliders.CollectionChanged += OnSetSlidersChanged;
         MissingDefaultSetSliders.CollectionChanged += OnMissingDefaultSetSlidersChanged;
@@ -30,7 +30,7 @@ public sealed class SliderPreset : ProjectModelNode
     public string ProfileName
     {
         get => profileName;
-        set => SetProperty(ref profileName, ProjectProfileMapping.Resolve(value, isUunp: false));
+        set => SetProperty(ref profileName, ProjectProfileMapping.Resolve(value, false));
     }
 
     public bool IsUunp
@@ -45,10 +45,7 @@ public sealed class SliderPreset : ProjectModelNode
 
     public void AddSetSlider(SetSlider slider)
     {
-        if (slider is null)
-        {
-            throw new ArgumentNullException(nameof(slider));
-        }
+        if (slider is null) throw new ArgumentNullException(nameof(slider));
 
         if (slider.IsMissingDefault)
         {
@@ -71,10 +68,7 @@ public sealed class SliderPreset : ProjectModelNode
 
     public void RefreshMissingDefaultSetSliders(IEnumerable<string> defaultSliderNames)
     {
-        if (defaultSliderNames is null)
-        {
-            throw new ArgumentNullException(nameof(defaultSliderNames));
-        }
+        if (defaultSliderNames is null) throw new ArgumentNullException(nameof(defaultSliderNames));
 
         var defaultNames = defaultSliderNames.ToArray();
         var activeDefaultNames = new HashSet<string>(
@@ -88,9 +82,7 @@ public sealed class SliderPreset : ProjectModelNode
         {
             var slider = MissingDefaultSetSliders[index];
             if (!activeDefaultNames.Contains(slider.Name) || setSliderNames.Contains(slider.Name))
-            {
                 MissingDefaultSetSliders.RemoveAt(index);
-            }
         }
 
         var existingNames = new HashSet<string>(
@@ -100,10 +92,7 @@ public sealed class SliderPreset : ProjectModelNode
 
         foreach (var sliderName in defaultNames)
         {
-            if (!existingNames.Add(sliderName))
-            {
-                continue;
-            }
+            if (!existingNames.Add(sliderName)) continue;
 
             MissingDefaultSetSliders.Add(new SetSlider(sliderName));
         }
@@ -115,10 +104,7 @@ public sealed class SliderPreset : ProjectModelNode
     {
         UpdateChildSubscriptions(args, setSliderSubscriptions);
 
-        if (!sortingSetSliders)
-        {
-            SortSetSliders();
-        }
+        if (!sortingSetSliders) SortSetSliders();
 
         NotifyChanged(nameof(SetSliders));
     }
@@ -127,10 +113,7 @@ public sealed class SliderPreset : ProjectModelNode
     {
         UpdateChildSubscriptions(args, missingDefaultSetSliderSubscriptions);
 
-        if (!sortingMissingDefaults)
-        {
-            SortMissingDefaultSetSliders();
-        }
+        if (!sortingMissingDefaults) SortMissingDefaultSetSliders();
 
         NotifyChanged(nameof(MissingDefaultSetSliders));
     }
@@ -146,20 +129,12 @@ public sealed class SliderPreset : ProjectModelNode
         }
 
         if (args.OldItems is not null)
-        {
             foreach (SetSlider slider in args.OldItems)
-            {
                 DetachChild(slider, childSubscriptions);
-            }
-        }
 
         if (args.NewItems is not null)
-        {
             foreach (SetSlider slider in args.NewItems)
-            {
                 AttachChild(slider, childSubscriptions);
-            }
-        }
     }
 
     private void AttachChild(SetSlider slider, Dictionary<SetSlider, int> childSubscriptions)
@@ -173,10 +148,7 @@ public sealed class SliderPreset : ProjectModelNode
     {
         slider.Changed -= OnChildChanged;
 
-        if (!childSubscriptions.TryGetValue(slider, out var count))
-        {
-            return;
-        }
+        if (!childSubscriptions.TryGetValue(slider, out var count)) return;
 
         if (count == 1)
         {
@@ -190,30 +162,17 @@ public sealed class SliderPreset : ProjectModelNode
     private void DetachAllChildren(Dictionary<SetSlider, int> childSubscriptions)
     {
         foreach (var subscription in childSubscriptions)
-        {
             for (var index = 0; index < subscription.Value; index++)
-            {
                 subscription.Key.Changed -= OnChildChanged;
-            }
-        }
 
         childSubscriptions.Clear();
     }
 
-    private void OnChildChanged(object? sender, EventArgs args)
-    {
-        NotifyChanged(nameof(SetSliders));
-    }
+    private void OnChildChanged(object? sender, EventArgs args) => NotifyChanged(nameof(SetSliders));
 
-    private void SortSetSliders()
-    {
-        SortCollection(SetSliders, ref sortingSetSliders);
-    }
+    private void SortSetSliders() => SortCollection(SetSliders, ref sortingSetSliders);
 
-    private void SortMissingDefaultSetSliders()
-    {
-        SortCollection(MissingDefaultSetSliders, ref sortingMissingDefaults);
-    }
+    private void SortMissingDefaultSetSliders() => SortCollection(MissingDefaultSetSliders, ref sortingMissingDefaults);
 
     private static void SortCollection(ObservableCollection<SetSlider> collection, ref bool sorting)
     {
@@ -227,10 +186,7 @@ public sealed class SliderPreset : ProjectModelNode
                     .OrderBy(slider => slider.Name, StringComparer.OrdinalIgnoreCase)
                     .First();
                 var currentIndex = collection.IndexOf(item);
-                if (currentIndex != sortedIndex)
-                {
-                    collection.Move(currentIndex, sortedIndex);
-                }
+                if (currentIndex != sortedIndex) collection.Move(currentIndex, sortedIndex);
             }
         }
         finally

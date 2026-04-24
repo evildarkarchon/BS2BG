@@ -1,26 +1,21 @@
+using System.Diagnostics.CodeAnalysis;
+using BS2BG.Core.Formatting;
 using ModelPreset = BS2BG.Core.Models.SliderPreset;
 using ModelSetSlider = BS2BG.Core.Models.SetSlider;
 using FormatPreset = BS2BG.Core.Formatting.SliderPreset;
 using FormatSetSlider = BS2BG.Core.Formatting.SetSlider;
-using System.Diagnostics.CodeAnalysis;
-using BS2BG.Core.Formatting;
 
 namespace BS2BG.Core.Generation;
 
-[SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Template generation is exposed as an injectable service surface.")]
+[SuppressMessage("Performance", "CA1822:Mark members as static",
+    Justification = "Template generation is exposed as an injectable service surface.")]
 public sealed class TemplateGenerationService
 {
     public string PreviewTemplate(ModelPreset preset, TemplateProfile profile, bool omitRedundantSliders)
     {
-        if (preset is null)
-        {
-            throw new ArgumentNullException(nameof(preset));
-        }
+        if (preset is null) throw new ArgumentNullException(nameof(preset));
 
-        if (profile is null)
-        {
-            throw new ArgumentNullException(nameof(profile));
-        }
+        if (profile is null) throw new ArgumentNullException(nameof(profile));
 
         return SliderMathFormatter.FormatTemplateLine(
             ToFormattingPreset(preset),
@@ -33,15 +28,9 @@ public sealed class TemplateGenerationService
         TemplateProfileCatalog profileCatalog,
         bool omitRedundantSliders)
     {
-        if (presets is null)
-        {
-            throw new ArgumentNullException(nameof(presets));
-        }
+        if (presets is null) throw new ArgumentNullException(nameof(presets));
 
-        if (profileCatalog is null)
-        {
-            throw new ArgumentNullException(nameof(profileCatalog));
-        }
+        if (profileCatalog is null) throw new ArgumentNullException(nameof(profileCatalog));
 
         var lines = presets
             .OrderBy(preset => preset.Name, StringComparer.OrdinalIgnoreCase)
@@ -55,15 +44,9 @@ public sealed class TemplateGenerationService
 
     public string PreviewBosJson(ModelPreset preset, TemplateProfile profile)
     {
-        if (preset is null)
-        {
-            throw new ArgumentNullException(nameof(preset));
-        }
+        if (preset is null) throw new ArgumentNullException(nameof(preset));
 
-        if (profile is null)
-        {
-            throw new ArgumentNullException(nameof(profile));
-        }
+        if (profile is null) throw new ArgumentNullException(nameof(profile));
 
         return SliderMathFormatter.FormatBosJson(
             ToFormattingPreset(preset),
@@ -72,15 +55,9 @@ public sealed class TemplateGenerationService
 
     public string PreviewSetSlider(ModelSetSlider slider, TemplateProfile profile)
     {
-        if (slider is null)
-        {
-            throw new ArgumentNullException(nameof(slider));
-        }
+        if (slider is null) throw new ArgumentNullException(nameof(slider));
 
-        if (profile is null)
-        {
-            throw new ArgumentNullException(nameof(profile));
-        }
+        if (profile is null) throw new ArgumentNullException(nameof(profile));
 
         return SliderMathFormatter.FormatSetSliderValue(
             ToFormattingSetSlider(slider),
@@ -104,7 +81,7 @@ public sealed class TemplateGenerationService
             ValueSmall = slider.ValueSmall,
             ValueBig = slider.ValueBig,
             PercentMin = slider.PercentMin,
-            PercentMax = slider.PercentMax,
+            PercentMax = slider.PercentMax
         };
     }
 }

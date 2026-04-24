@@ -8,9 +8,7 @@ public sealed class TemplateProfileCatalog
     {
         this.profiles = (profiles ?? throw new ArgumentNullException(nameof(profiles))).ToArray();
         if (this.profiles.Length == 0)
-        {
             throw new ArgumentException("At least one template profile is required.", nameof(profiles));
-        }
     }
 
     public IReadOnlyList<TemplateProfile> Profiles => profiles;
@@ -27,10 +25,7 @@ public sealed class TemplateProfileCatalog
                 profile.Name,
                 name,
                 StringComparison.OrdinalIgnoreCase));
-            if (match is not null)
-            {
-                return match;
-            }
+            if (match is not null) return match;
         }
 
         return DefaultProfile;

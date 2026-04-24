@@ -1,10 +1,10 @@
 using Avalonia;
 using Avalonia.Headless;
-using Avalonia.Headless.XUnit;
+using BS2BG.Tests;
 using ReactiveUI.Avalonia;
 using AvaloniaApp = BS2BG.App.App;
 
-[assembly: AvaloniaTestApplication(typeof(BS2BG.Tests.AvaloniaTestApp))]
+[assembly: AvaloniaTestApplication(typeof(AvaloniaTestApp))]
 [assembly: AvaloniaTestIsolation(AvaloniaTestIsolationLevel.PerAssembly)]
 
 namespace BS2BG.Tests;

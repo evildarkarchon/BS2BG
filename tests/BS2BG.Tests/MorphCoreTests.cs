@@ -8,7 +8,8 @@ using Xunit;
 
 namespace BS2BG.Tests;
 
-[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected sequences keep morph assertions readable.")]
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected sequences keep morph assertions readable.")]
 public sealed class MorphCoreTests
 {
     [Fact]
@@ -42,7 +43,7 @@ public sealed class MorphCoreTests
         using var directory = new TemporaryDirectory();
         var bomPath = directory.WriteBytes(
             "bom-npcs.txt",
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(
+            new UTF8Encoding(true).GetBytes(
                 """
                 Skyrim.esm|Lydia|HousecarlWhiterun|NordRace "Nord"|000A2C94
                 skyrim.ESM|Duplicate Lydia|housecarlwhiterun|NordRace|000A2C94
@@ -51,12 +52,9 @@ public sealed class MorphCoreTests
             "fallback-npcs.txt",
             new byte[]
             {
-                0x44, 0x61, 0x77, 0x6E, 0x67, 0x75, 0x61, 0x72,
-                0x64, 0x2E, 0x65, 0x73, 0x6D, 0x7C, 0x5A, 0x6F,
-                0xEB, 0x7C, 0x44, 0x4C, 0x43, 0x31, 0x5A, 0x6F,
-                0x65, 0x7C, 0x4E, 0x6F, 0x72, 0x64, 0x52, 0x61,
-                0x63, 0x65, 0x7C, 0x30, 0x32, 0x30, 0x30, 0x32,
-                0x42, 0x36, 0x43,
+                0x44, 0x61, 0x77, 0x6E, 0x67, 0x75, 0x61, 0x72, 0x64, 0x2E, 0x65, 0x73, 0x6D, 0x7C, 0x5A, 0x6F,
+                0xEB, 0x7C, 0x44, 0x4C, 0x43, 0x31, 0x5A, 0x6F, 0x65, 0x7C, 0x4E, 0x6F, 0x72, 0x64, 0x52, 0x61,
+                0x63, 0x65, 0x7C, 0x30, 0x32, 0x30, 0x30, 0x32, 0x42, 0x36, 0x43
             });
         var parser = new NpcTextParser();
 
@@ -77,6 +75,26 @@ public sealed class MorphCoreTests
     }
 
     [Fact]
+    public void NpcTextParserReportsFileReadFailureAsDiagnostic()
+    {
+        var missingPath = Path.Combine(
+            Path.GetTempPath(),
+            Guid.NewGuid().ToString("N"),
+            "missing-npcs.txt");
+        var parser = new NpcTextParser();
+
+        var result = parser.ParseFile(missingPath);
+
+        Assert.Empty(result.Npcs);
+        Assert.False(result.UsedFallbackEncoding);
+        Assert.Equal(string.Empty, result.EncodingName);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(0, diagnostic.LineNumber);
+        Assert.Contains("Could not read NPC file", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains(missingPath, diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MorphGenerationWritesCustomTargetsThenNpcsSortedByMod()
     {
         var alpha = new SliderPreset("Alpha");
@@ -91,18 +109,12 @@ public sealed class MorphCoreTests
         project.CustomMorphTargets.Add(new CustomMorphTarget("Empty|Female"));
         var skyrimNpc = new Npc("Lydia")
         {
-            Mod = "Skyrim.esm",
-            EditorId = "HousecarlWhiterun",
-            Race = "NordRace",
-            FormId = "000A2C94",
+            Mod = "Skyrim.esm", EditorId = "HousecarlWhiterun", Race = "NordRace", FormId = "000A2C94"
         };
         skyrimNpc.AddSliderPreset(beta);
         var dawnguardNpc = new Npc("Valerica")
         {
-            Mod = "Dawnguard.esm",
-            EditorId = "DLC1Valerica",
-            Race = "NordRaceVampire",
-            FormId = "02002B6C",
+            Mod = "Dawnguard.esm", EditorId = "DLC1Valerica", Race = "NordRaceVampire", FormId = "02002B6C"
         };
         dawnguardNpc.AddSliderPreset(alpha);
         project.MorphedNpcs.Add(skyrimNpc);
@@ -135,40 +147,26 @@ public sealed class MorphCoreTests
         Assert.Equal(new[] { "P10", "P2" }, target.SliderPresets.Select(preset => preset.Name));
     }
 
-    private sealed class FixedRandomAssignmentProvider : IRandomAssignmentProvider
+    private sealed class FixedRandomAssignmentProvider(int value) : IRandomAssignmentProvider
     {
-        private readonly int value;
+        private readonly int value = value;
 
-        public FixedRandomAssignmentProvider(int value)
-        {
-            this.value = value;
-        }
-
-        public int NextIndex(int exclusiveMax)
-        {
-            return value;
-        }
+        public int NextIndex(int exclusiveMax) => value;
     }
 
     private sealed class TemporaryDirectory : IDisposable
     {
         private readonly string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
 
-        public TemporaryDirectory()
-        {
-            Directory.CreateDirectory(path);
-        }
+        public TemporaryDirectory() => Directory.CreateDirectory(path);
+
+        public void Dispose() => Directory.Delete(path, true);
 
         public string WriteBytes(string fileName, byte[] bytes)
         {
             var filePath = Path.Combine(path, fileName);
             File.WriteAllBytes(filePath, bytes);
             return filePath;
-        }
-
-        public void Dispose()
-        {
-            Directory.Delete(path, recursive: true);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using ReactiveUI;
@@ -7,9 +8,9 @@ namespace BS2BG.App.ViewModels;
 
 public sealed class SetSliderInspectorRowViewModel : ReactiveObject, IDisposable
 {
+    private readonly Func<TemplateProfile> getProfile;
     private readonly SetSlider slider;
     private readonly TemplateGenerationService templateGenerationService;
-    private readonly Func<TemplateProfile> getProfile;
     private readonly Action valueChanged;
 
     public SetSliderInspectorRowViewModel(
@@ -20,7 +21,7 @@ public sealed class SetSliderInspectorRowViewModel : ReactiveObject, IDisposable
     {
         this.slider = slider ?? throw new ArgumentNullException(nameof(slider));
         this.templateGenerationService = templateGenerationService
-            ?? throw new ArgumentNullException(nameof(templateGenerationService));
+                                         ?? throw new ArgumentNullException(nameof(templateGenerationService));
         this.getProfile = getProfile ?? throw new ArgumentNullException(nameof(getProfile));
         this.valueChanged = valueChanged ?? throw new ArgumentNullException(nameof(valueChanged));
 
@@ -34,10 +35,7 @@ public sealed class SetSliderInspectorRowViewModel : ReactiveObject, IDisposable
         get => slider.Enabled;
         set
         {
-            if (slider.Enabled == value)
-            {
-                return;
-            }
+            if (slider.Enabled == value) return;
 
             slider.Enabled = value;
             RaiseAllChanged();
@@ -57,19 +55,18 @@ public sealed class SetSliderInspectorRowViewModel : ReactiveObject, IDisposable
         set => SetPercentMax(value);
     }
 
-    public string PercentMinText => slider.PercentMin.ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+    public string PercentMinText => slider.PercentMin.ToString(CultureInfo.InvariantCulture) + "%";
 
-    public string PercentMaxText => slider.PercentMax.ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+    public string PercentMaxText => slider.PercentMax.ToString(CultureInfo.InvariantCulture) + "%";
 
     public string PreviewText => templateGenerationService.PreviewSetSlider(slider, getProfile());
+
+    public void Dispose() => slider.PropertyChanged -= OnSliderPropertyChanged;
 
     public void SetBothPercents(int value)
     {
         var clamped = ClampPercent(value);
-        if (slider.PercentMin == clamped && slider.PercentMax == clamped)
-        {
-            return;
-        }
+        if (slider.PercentMin == clamped && slider.PercentMax == clamped) return;
 
         slider.PercentMin = clamped;
         slider.PercentMax = clamped;
@@ -77,33 +74,16 @@ public sealed class SetSliderInspectorRowViewModel : ReactiveObject, IDisposable
         valueChanged();
     }
 
-    public void SetMinPercent(int value)
-    {
-        SetPercentMin(value);
-    }
+    public void SetMinPercent(int value) => SetPercentMin(value);
 
-    public void SetMaxPercent(int value)
-    {
-        SetPercentMax(value);
-    }
+    public void SetMaxPercent(int value) => SetPercentMax(value);
 
-    public void RefreshPreview()
-    {
-        this.RaisePropertyChanged(nameof(PreviewText));
-    }
-
-    public void Dispose()
-    {
-        slider.PropertyChanged -= OnSliderPropertyChanged;
-    }
+    public void RefreshPreview() => this.RaisePropertyChanged(nameof(PreviewText));
 
     private void SetPercentMin(double value)
     {
         var clamped = Math.Min(ClampPercent(value), slider.PercentMax);
-        if (slider.PercentMin == clamped)
-        {
-            return;
-        }
+        if (slider.PercentMin == clamped) return;
 
         slider.PercentMin = clamped;
         RaiseAllChanged();
@@ -113,20 +93,14 @@ public sealed class SetSliderInspectorRowViewModel : ReactiveObject, IDisposable
     private void SetPercentMax(double value)
     {
         var clamped = Math.Max(ClampPercent(value), slider.PercentMin);
-        if (slider.PercentMax == clamped)
-        {
-            return;
-        }
+        if (slider.PercentMax == clamped) return;
 
         slider.PercentMax = clamped;
         RaiseAllChanged();
         valueChanged();
     }
 
-    private void OnSliderPropertyChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        RaiseAllChanged();
-    }
+    private void OnSliderPropertyChanged(object? sender, PropertyChangedEventArgs args) => RaiseAllChanged();
 
     private void RaiseAllChanged()
     {
@@ -141,10 +115,7 @@ public sealed class SetSliderInspectorRowViewModel : ReactiveObject, IDisposable
 
     private static int ClampPercent(double value)
     {
-        if (double.IsNaN(value))
-        {
-            return 0;
-        }
+        if (double.IsNaN(value)) return 0;
 
         return Math.Clamp((int)Math.Round(value, MidpointRounding.AwayFromZero), 0, 100);
     }

@@ -3,7 +3,7 @@ namespace BS2BG.App.Services;
 public enum DiscardChangesAction
 {
     NewProject,
-    OpenProject,
+    OpenProject
 }
 
 public interface IAppDialogService

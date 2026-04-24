@@ -1,19 +1,21 @@
 using System.Diagnostics.CodeAnalysis;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.LogicalTree;
-using Avalonia;
 using BS2BG.App;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
+using BS2BG.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace BS2BG.Tests;
 
-[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected arrays keep shell assertions readable.")]
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected arrays keep shell assertions readable.")]
 public sealed class AppShellTests
 {
     [Fact]
@@ -54,9 +56,9 @@ public sealed class AppShellTests
         using var provider = AppBootstrapper.CreateServiceProvider();
 
         var window = provider.GetRequiredService<MainWindow>();
-        var project = provider.GetRequiredService<BS2BG.Core.Models.ProjectModel>();
+        var project = provider.GetRequiredService<ProjectModel>();
 
-        project.SliderPresets.Add(new BS2BG.Core.Models.SliderPreset("Alpha"));
+        project.SliderPresets.Add(new SliderPreset("Alpha"));
 
         Assert.Equal(AppShell.Title + " *", window.Title);
     }
@@ -86,13 +88,8 @@ public sealed class AppShellTests
         Assert.Equal(
             new[]
             {
-                "New",
-                "Open...",
-                "Save",
-                "Save As...",
-                "Export Templates as BoS JSON",
-                "Export BodyGen INIs",
-                "About Bodyslide to Bodygen",
+                "New", "Open...", "Save", "Save As...", "Export Templates as BoS JSON", "Export BodyGen INIs",
+                "About Bodyslide to Bodygen"
             },
             window.GetLogicalDescendants()
                 .OfType<MenuItem>()

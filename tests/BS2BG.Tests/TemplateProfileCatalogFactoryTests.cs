@@ -38,8 +38,8 @@ public sealed class TemplateProfileCatalogFactoryTests
             }
             """);
 
-        var exception = Assert.Throws<FileNotFoundException>(
-            () => TemplateProfileCatalogFactory.CreateDefault(new[] { directory.Path }));
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            TemplateProfileCatalogFactory.CreateDefault(new[] { directory.Path }));
 
         Assert.Contains("settings_UUNP.json", exception.Message, StringComparison.Ordinal);
     }
@@ -54,14 +54,9 @@ public sealed class TemplateProfileCatalogFactoryTests
 
         public string Path { get; }
 
-        public void WriteFile(string fileName, string contents)
-        {
-            File.WriteAllText(System.IO.Path.Combine(Path, fileName), contents);
-        }
+        public void Dispose() => Directory.Delete(Path, true);
 
-        public void Dispose()
-        {
-            Directory.Delete(Path, recursive: true);
-        }
+        public void WriteFile(string fileName, string contents) =>
+            File.WriteAllText(System.IO.Path.Combine(Path, fileName), contents);
     }
 }

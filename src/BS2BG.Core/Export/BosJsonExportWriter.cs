@@ -1,13 +1,15 @@
+using System.Globalization;
 using System.Text;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 
 namespace BS2BG.Core.Export;
 
-public sealed class BosJsonExportWriter
+public sealed class BosJsonExportWriter(TemplateGenerationService templateGenerationService)
 {
-    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
     private static readonly HashSet<char> WindowsReservedFileNameCharacters = new("<>:\"/\\|?*");
+
     private static readonly HashSet<string> WindowsReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON",
@@ -31,35 +33,23 @@ public sealed class BosJsonExportWriter
         "LPT6",
         "LPT7",
         "LPT8",
-        "LPT9",
+        "LPT9"
     };
-    private readonly TemplateGenerationService templateGenerationService;
 
-    public BosJsonExportWriter(TemplateGenerationService templateGenerationService)
-    {
-        this.templateGenerationService = templateGenerationService
-            ?? throw new ArgumentNullException(nameof(templateGenerationService));
-    }
+    private readonly TemplateGenerationService templateGenerationService = templateGenerationService
+                                                                           ?? throw new ArgumentNullException(
+                                                                               nameof(templateGenerationService));
 
     public BosJsonExportResult Write(
         string directoryPath,
         IEnumerable<SliderPreset> presets,
         TemplateProfileCatalog profileCatalog)
     {
-        if (directoryPath is null)
-        {
-            throw new ArgumentNullException(nameof(directoryPath));
-        }
+        if (directoryPath is null) throw new ArgumentNullException(nameof(directoryPath));
 
-        if (presets is null)
-        {
-            throw new ArgumentNullException(nameof(presets));
-        }
+        if (presets is null) throw new ArgumentNullException(nameof(presets));
 
-        if (profileCatalog is null)
-        {
-            throw new ArgumentNullException(nameof(profileCatalog));
-        }
+        if (profileCatalog is null) throw new ArgumentNullException(nameof(profileCatalog));
 
         Directory.CreateDirectory(directoryPath);
 
@@ -83,9 +73,7 @@ public sealed class BosJsonExportWriter
     {
         var builder = new StringBuilder((name ?? string.Empty).Length);
         foreach (var character in name ?? string.Empty)
-        {
             builder.Append(IsReservedFileNameCharacter(character) ? '_' : character);
-        }
 
         var sanitized = builder.ToString().Trim().TrimEnd('.', ' ');
         return sanitized.Length == 0 ? "preset" : SanitizeWindowsDeviceName(sanitized);
@@ -94,18 +82,15 @@ public sealed class BosJsonExportWriter
     private static bool IsReservedFileNameCharacter(char character)
     {
         return character < ' '
-            || WindowsReservedFileNameCharacters.Contains(character)
-            || Path.GetInvalidFileNameChars().Contains(character);
+               || WindowsReservedFileNameCharacters.Contains(character)
+               || Path.GetInvalidFileNameChars().Contains(character);
     }
 
     private static string SanitizeWindowsDeviceName(string fileStem)
     {
         var extensionSeparator = fileStem.IndexOf('.');
         var deviceNameLength = extensionSeparator < 0 ? fileStem.Length : extensionSeparator;
-        if (deviceNameLength == 0)
-        {
-            return fileStem;
-        }
+        if (deviceNameLength == 0) return fileStem;
 
         var deviceName = fileStem.Substring(0, deviceNameLength);
         return WindowsReservedDeviceNames.Contains(deviceName)
@@ -119,7 +104,7 @@ public sealed class BosJsonExportWriter
         var suffix = 2;
         while (!usedFileNames.Add(candidate))
         {
-            candidate = fileStem + " (" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture) + ").json";
+            candidate = fileStem + " (" + suffix.ToString(CultureInfo.InvariantCulture) + ").json";
             suffix++;
         }
 
@@ -127,12 +112,8 @@ public sealed class BosJsonExportWriter
     }
 }
 
-public sealed class BosJsonExportResult
+public sealed class BosJsonExportResult(IEnumerable<string> filePaths)
 {
-    public BosJsonExportResult(IEnumerable<string> filePaths)
-    {
-        FilePaths = (filePaths ?? throw new ArgumentNullException(nameof(filePaths))).ToArray();
-    }
-
-    public IReadOnlyList<string> FilePaths { get; }
+    public IReadOnlyList<string> FilePaths { get; } =
+        (filePaths ?? throw new ArgumentNullException(nameof(filePaths))).ToArray();
 }

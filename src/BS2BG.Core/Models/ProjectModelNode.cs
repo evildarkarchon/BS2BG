@@ -5,16 +5,12 @@ namespace BS2BG.Core.Models;
 
 public abstract class ProjectModelNode : INotifyPropertyChanged
 {
-    internal event EventHandler? Changed;
-
     public event PropertyChangedEventHandler? PropertyChanged;
+    internal event EventHandler? Changed;
 
     protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = "")
     {
-        if (EqualityComparer<T>.Default.Equals(field, value))
-        {
-            return false;
-        }
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
 
         field = value;
         NotifyChanged(propertyName);

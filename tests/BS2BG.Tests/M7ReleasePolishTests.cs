@@ -32,27 +32,20 @@ public sealed class M7ReleasePolishTests
         Assert.Equal("Ctrl+N", Accelerator<MenuItem>(window, "NewProjectMenuItem"));
 
         foreach (var (name, expected) in new[]
-        {
-            ("ImportPresetsButton", "Add BodySlide XML presets"),
-            ("PresetNameInputBox", "Preset name"),
-            ("TemplateProfileComboBox", "Template profile"),
-            ("GenerateTemplatesButton", "Generate templates"),
-            ("GeneratedTemplatesTextBox", "Generated templates"),
-            ("CustomTargetNameInputBox", "Custom target name"),
-            ("ImportNpcsButton", "Import NPCs"),
-            ("ImportedNpcSearchBox", "Search imported NPCs"),
-            ("NpcSearchBox", "Search NPCs"),
-            ("FillEmptyNpcsButton", "Fill empty NPC assignments"),
-            ("NpcListBox", "Individual NPCs"),
-            ("SelectedNpcAssignButton", "Assign preset to selected NPCs"),
-            ("ViewImageButton", "View selected NPC image"),
-            ("AvailablePresetsListBox", "Available presets"),
-            ("AssignedPresetsListBox", "Assigned presets"),
-            ("GeneratedMorphsTextBox", "Generated morphs"),
-        })
-        {
+                 {
+                     ("ImportPresetsButton", "Add BodySlide XML presets"), ("PresetNameInputBox", "Preset name"),
+                     ("TemplateProfileComboBox", "Template profile"),
+                     ("GenerateTemplatesButton", "Generate templates"),
+                     ("GeneratedTemplatesTextBox", "Generated templates"),
+                     ("CustomTargetNameInputBox", "Custom target name"), ("ImportNpcsButton", "Import NPCs"),
+                     ("ImportedNpcSearchBox", "Search imported NPCs"), ("NpcSearchBox", "Search NPCs"),
+                     ("FillEmptyNpcsButton", "Fill empty NPC assignments"), ("NpcListBox", "Individual NPCs"),
+                     ("SelectedNpcAssignButton", "Assign preset to selected NPCs"),
+                     ("ViewImageButton", "View selected NPC image"),
+                     ("AvailablePresetsListBox", "Available presets"),
+                     ("AssignedPresetsListBox", "Assigned presets"), ("GeneratedMorphsTextBox", "Generated morphs")
+                 })
             Assert.Equal(expected, AccessibleName<Control>(window, name));
-        }
     }
 
     [AvaloniaFact]
@@ -71,11 +64,14 @@ public sealed class M7ReleasePolishTests
         Assert.True(window.FindControl<TextBox>("NpcSearchBox")?.Focusable);
         Assert.True(window.FindControl<ListBox>("NpcListBox")?.Focusable);
 
-        Assert.Same(viewModel.Templates.ImportPresetsCommand, window.FindControl<Button>("ImportPresetsButton")?.Command);
-        Assert.Same(viewModel.Templates.GenerateTemplatesCommand, window.FindControl<Button>("GenerateTemplatesButton")?.Command);
+        Assert.Same(viewModel.Templates.ImportPresetsCommand,
+            window.FindControl<Button>("ImportPresetsButton")?.Command);
+        Assert.Same(viewModel.Templates.GenerateTemplatesCommand,
+            window.FindControl<Button>("GenerateTemplatesButton")?.Command);
         Assert.Same(viewModel.Morphs.ImportNpcsCommand, window.FindControl<Button>("ImportNpcsButton")?.Command);
         Assert.Same(viewModel.Morphs.FillEmptyNpcsCommand, window.FindControl<Button>("FillEmptyNpcsButton")?.Command);
-        Assert.Same(viewModel.Morphs.GenerateMorphsCommand, window.FindControl<Button>("GenerateMorphsButton")?.Command);
+        Assert.Same(viewModel.Morphs.GenerateMorphsCommand,
+            window.FindControl<Button>("GenerateMorphsButton")?.Command);
 
         Assert.Contains(window.KeyBindings, binding =>
             ReferenceEquals(binding.Command, viewModel.FocusGlobalSearchCommand)
@@ -90,10 +86,12 @@ public sealed class M7ReleasePolishTests
     [AvaloniaFact]
     public void M7ThemeResourcesKeepWarningAndFocusContrastAboveAccessibilityThresholds()
     {
-        var application = Assert.IsType<BS2BG.App.App>(Application.Current);
+        var application = Assert.IsType<App.App>(Application.Current);
 
-        AssertContrast(application, ThemeVariant.Light, "BS2BGWarningForegroundBrush", "BS2BGWarningBackgroundBrush", 4.5);
-        AssertContrast(application, ThemeVariant.Dark, "BS2BGWarningForegroundBrush", "BS2BGWarningBackgroundBrush", 4.5);
+        AssertContrast(application, ThemeVariant.Light, "BS2BGWarningForegroundBrush", "BS2BGWarningBackgroundBrush",
+            4.5);
+        AssertContrast(application, ThemeVariant.Dark, "BS2BGWarningForegroundBrush", "BS2BGWarningBackgroundBrush",
+            4.5);
         AssertContrast(application, ThemeVariant.Light, "BS2BGFocusBrush", "BS2BGWindowBackgroundBrush", 3.0);
         AssertContrast(application, ThemeVariant.Dark, "BS2BGFocusBrush", "BS2BGWindowBackgroundBrush", 3.0);
     }
@@ -144,8 +142,8 @@ public sealed class M7ReleasePolishTests
     private static double RelativeLuminance(Color color)
     {
         return 0.2126 * Linearize(color.R)
-            + 0.7152 * Linearize(color.G)
-            + 0.0722 * Linearize(color.B);
+               + 0.7152 * Linearize(color.G)
+               + 0.0722 * Linearize(color.B);
     }
 
     private static double Linearize(byte channel)

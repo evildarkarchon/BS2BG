@@ -1,13 +1,8 @@
 namespace BS2BG.Core.Formatting;
 
-public sealed class SetSlider
+public sealed class SetSlider(string name)
 {
-    public SetSlider(string name)
-    {
-        Name = name ?? throw new ArgumentNullException(nameof(name));
-    }
-
-    public string Name { get; }
+    public string Name { get; } = name ?? throw new ArgumentNullException(nameof(name));
 
     public bool Enabled { get; set; } = true;
 

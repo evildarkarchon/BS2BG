@@ -3,17 +3,15 @@ using System.Text;
 
 namespace BS2BG.Core.Export;
 
-[SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Export writers are registered as injectable services.")]
+[SuppressMessage("Performance", "CA1822:Mark members as static",
+    Justification = "Export writers are registered as injectable services.")]
 public sealed class BodyGenIniExportWriter
 {
-    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
     public BodyGenIniExportResult Write(string directoryPath, string templatesText, string morphsText)
     {
-        if (directoryPath is null)
-        {
-            throw new ArgumentNullException(nameof(directoryPath));
-        }
+        if (directoryPath is null) throw new ArgumentNullException(nameof(directoryPath));
 
         Directory.CreateDirectory(directoryPath);
 
@@ -34,15 +32,9 @@ public sealed class BodyGenIniExportWriter
     }
 }
 
-public sealed class BodyGenIniExportResult
+public sealed class BodyGenIniExportResult(string templatesPath, string morphsPath)
 {
-    public BodyGenIniExportResult(string templatesPath, string morphsPath)
-    {
-        TemplatesPath = templatesPath ?? throw new ArgumentNullException(nameof(templatesPath));
-        MorphsPath = morphsPath ?? throw new ArgumentNullException(nameof(morphsPath));
-    }
+    public string TemplatesPath { get; } = templatesPath ?? throw new ArgumentNullException(nameof(templatesPath));
 
-    public string TemplatesPath { get; }
-
-    public string MorphsPath { get; }
+    public string MorphsPath { get; } = morphsPath ?? throw new ArgumentNullException(nameof(morphsPath));
 }

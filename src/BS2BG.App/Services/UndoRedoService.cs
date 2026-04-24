@@ -2,24 +2,20 @@ namespace BS2BG.App.Services;
 
 public sealed class UndoRedoService
 {
-    private readonly Stack<UndoRedoOperation> undoStack = new();
     private readonly Stack<UndoRedoOperation> redoStack = new();
-    private bool isReplaying;
+    private readonly Stack<UndoRedoOperation> undoStack = new();
 
-    public event EventHandler? StateChanged;
-
-    public bool IsReplaying => isReplaying;
+    public bool IsReplaying { get; private set; }
 
     public bool CanUndo => undoStack.Count > 0;
 
     public bool CanRedo => redoStack.Count > 0;
 
+    public event EventHandler? StateChanged;
+
     public void Record(string name, Action undo, Action redo)
     {
-        if (isReplaying)
-        {
-            return;
-        }
+        if (IsReplaying) return;
 
         undoStack.Push(new UndoRedoOperation(name, undo, redo));
         redoStack.Clear();
@@ -28,10 +24,7 @@ public sealed class UndoRedoService
 
     public bool Undo()
     {
-        if (undoStack.Count == 0)
-        {
-            return false;
-        }
+        if (undoStack.Count == 0) return false;
 
         var operation = undoStack.Pop();
         Replay(operation.Undo);
@@ -42,10 +35,7 @@ public sealed class UndoRedoService
 
     public bool Redo()
     {
-        if (redoStack.Count == 0)
-        {
-            return false;
-        }
+        if (redoStack.Count == 0) return false;
 
         var operation = redoStack.Pop();
         Replay(operation.Redo);
@@ -56,10 +46,7 @@ public sealed class UndoRedoService
 
     public void Clear()
     {
-        if (undoStack.Count == 0 && redoStack.Count == 0)
-        {
-            return;
-        }
+        if (undoStack.Count == 0 && redoStack.Count == 0) return;
 
         undoStack.Clear();
         redoStack.Clear();
@@ -68,30 +55,23 @@ public sealed class UndoRedoService
 
     private void Replay(Action action)
     {
-        isReplaying = true;
+        IsReplaying = true;
         try
         {
             action();
         }
         finally
         {
-            isReplaying = false;
+            IsReplaying = false;
         }
     }
 
-    private sealed class UndoRedoOperation
+    private sealed class UndoRedoOperation(string name, Action undo, Action redo)
     {
-        public UndoRedoOperation(string name, Action undo, Action redo)
-        {
-            Name = name ?? string.Empty;
-            Undo = undo ?? throw new ArgumentNullException(nameof(undo));
-            Redo = redo ?? throw new ArgumentNullException(nameof(redo));
-        }
+        public string Name { get; } = name ?? string.Empty;
 
-        public string Name { get; }
+        public Action Undo { get; } = undo ?? throw new ArgumentNullException(nameof(undo));
 
-        public Action Undo { get; }
-
-        public Action Redo { get; }
+        public Action Redo { get; } = redo ?? throw new ArgumentNullException(nameof(redo));
     }
 }

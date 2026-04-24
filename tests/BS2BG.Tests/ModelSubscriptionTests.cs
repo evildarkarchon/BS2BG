@@ -27,10 +27,7 @@ public sealed class ModelSubscriptionTests
     public void SliderPresetDoesNotTrackSetSliderAfterSetSlidersCollectionIsCleared()
     {
         var preset = new SliderPreset("Alpha");
-        var slider = new SetSlider("Scale")
-        {
-            ValueBig = 50,
-        };
+        var slider = new SetSlider("Scale") { ValueBig = 50 };
         var changeCount = 0;
         preset.PropertyChanged += CountPresetChanges;
 

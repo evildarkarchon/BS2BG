@@ -25,18 +25,13 @@ public abstract class MorphTargetBase : ProjectModelNode
 
     public void AddSliderPreset(SliderPreset sliderPreset)
     {
-        if (sliderPreset is null)
-        {
-            throw new ArgumentNullException(nameof(sliderPreset));
-        }
+        if (sliderPreset is null) throw new ArgumentNullException(nameof(sliderPreset));
 
         if (SliderPresets.Any(existing => string.Equals(
                 existing.Name,
                 sliderPreset.Name,
                 StringComparison.OrdinalIgnoreCase)))
-        {
             return;
-        }
 
         SliderPresets.Add(sliderPreset);
         SortSliderPresets();
@@ -52,37 +47,27 @@ public abstract class MorphTargetBase : ProjectModelNode
         return match is not null && SliderPresets.Remove(match);
     }
 
-    public void ClearSliderPresets()
-    {
-        SliderPresets.Clear();
-    }
+    public void ClearSliderPresets() => SliderPresets.Clear();
 
     public int RemoveMissingPresetReferences(IEnumerable<SliderPreset> availablePresets)
     {
-        if (availablePresets is null)
-        {
-            throw new ArgumentNullException(nameof(availablePresets));
-        }
+        if (availablePresets is null) throw new ArgumentNullException(nameof(availablePresets));
 
         var available = new HashSet<SliderPreset>(availablePresets);
         var removed = 0;
 
         for (var index = SliderPresets.Count - 1; index >= 0; index--)
-        {
             if (!available.Contains(SliderPresets[index]))
             {
                 SliderPresets.RemoveAt(index);
                 removed++;
             }
-        }
 
         return removed;
     }
 
-    public virtual string ToMorphLine()
-    {
-        return Name + "=" + string.Join("|", SliderPresets.Select(sliderPreset => sliderPreset.Name));
-    }
+    public virtual string ToMorphLine() =>
+        Name + "=" + string.Join("|", SliderPresets.Select(sliderPreset => sliderPreset.Name));
 
     private void OnSliderPresetsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
@@ -104,10 +89,7 @@ public abstract class MorphTargetBase : ProjectModelNode
                 .OrderBy(sliderPreset => sliderPreset.Name, StringComparer.OrdinalIgnoreCase)
                 .First();
             var currentIndex = SliderPresets.IndexOf(item);
-            if (currentIndex != sortedIndex)
-            {
-                SliderPresets.Move(currentIndex, sortedIndex);
-            }
+            if (currentIndex != sortedIndex) SliderPresets.Move(currentIndex, sortedIndex);
         }
     }
 }

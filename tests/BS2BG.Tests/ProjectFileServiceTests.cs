@@ -5,9 +5,23 @@ using Xunit;
 
 namespace BS2BG.Tests;
 
-[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments", Justification = "Small expected sequences keep project fixture assertions readable.")]
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected sequences keep project fixture assertions readable.")]
 public sealed class ProjectFileServiceTests
 {
+    private static string RepositoryRoot
+    {
+        get
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PRD.md")))
+                directory = directory.Parent;
+
+            return directory?.FullName
+                   ?? throw new InvalidOperationException("Could not locate repository root.");
+        }
+    }
+
     [Fact]
     public void LoadV1ProjectDataIntoCorePreservesSupportedFieldsAndDropsStaleReferences()
     {
@@ -79,17 +93,11 @@ public sealed class ProjectFileServiceTests
     {
         var service = new ProjectFileService();
         var project = new ProjectModel();
+        project.MorphedNpcs.Add(
+            new Npc("Guard") { Mod = "Skyrim.esm", EditorId = "WhiterunGuard", FormId = "00012345" });
         project.MorphedNpcs.Add(new Npc("Guard")
         {
-            Mod = "Skyrim.esm",
-            EditorId = "WhiterunGuard",
-            FormId = "00012345",
-        });
-        project.MorphedNpcs.Add(new Npc("Guard")
-        {
-            Mod = "Dawnguard.esm",
-            EditorId = "DawnguardGuard",
-            FormId = "02012345",
+            Mod = "Dawnguard.esm", EditorId = "DawnguardGuard", FormId = "02012345"
         });
 
         var saved = service.SaveToString(project);
@@ -158,10 +166,8 @@ public sealed class ProjectFileServiceTests
         Assert.True(project.IsDirty);
     }
 
-    private static string ProjectFixturePath(string fileName)
-    {
-        return Path.Combine(RepositoryRoot, "tests", "fixtures", "project-roundtrip", fileName);
-    }
+    private static string ProjectFixturePath(string fileName) =>
+        Path.Combine(RepositoryRoot, "tests", "fixtures", "project-roundtrip", fileName);
 
     private static string NormalizeNewlines(string value)
     {
@@ -169,23 +175,5 @@ public sealed class ProjectFileServiceTests
             .Replace("\r", "\n", StringComparison.Ordinal);
     }
 
-    private static string NormalizeJson(string value)
-    {
-        return NormalizeNewlines(value).TrimEnd('\n');
-    }
-
-    private static string RepositoryRoot
-    {
-        get
-        {
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PRD.md")))
-            {
-                directory = directory.Parent;
-            }
-
-            return directory?.FullName
-                ?? throw new InvalidOperationException("Could not locate repository root.");
-        }
-    }
+    private static string NormalizeJson(string value) => NormalizeNewlines(value).TrimEnd('\n');
 }
