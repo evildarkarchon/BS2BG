@@ -28,9 +28,9 @@ public sealed class MainWindowViewModelTests
         await viewModel.SaveProjectAsync(TestContext.Current.CancellationToken);
 
         var expectedPath = Path.Combine(directory.Path, "saved-project.jbs2bg");
-        Assert.True(File.Exists(expectedPath));
-        Assert.Equal(expectedPath, viewModel.CurrentProjectPath);
-        Assert.False(project.IsDirty);
+        File.Exists(expectedPath).Should().BeTrue();
+        viewModel.CurrentProjectPath.Should().Be(expectedPath);
+        project.IsDirty.Should().BeFalse();
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.SaveProjectAsAsync(TestContext.Current.CancellationToken);
 
-        Assert.True(File.Exists(Path.Combine(directory.Path, "explicit-name.jbs2bg")));
+        File.Exists(Path.Combine(directory.Path, "explicit-name.jbs2bg")).Should().BeTrue();
     }
 
     [Fact]
@@ -56,9 +56,9 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.OpenProjectAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(new[] { "Alpha" }, project.SliderPresets.Select(preset => preset.Name));
-        Assert.Equal(1, confirmations.ConfirmDiscardCallCount);
-        Assert.Equal(0, dialogs.OpenProjectCallCount);
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        confirmations.ConfirmDiscardCallCount.Should().Be(1);
+        dialogs.OpenProjectCallCount.Should().Be(0);
     }
 
     [Fact]
@@ -70,8 +70,8 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.NewProjectAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(new[] { "Alpha" }, project.SliderPresets.Select(preset => preset.Name));
-        Assert.Equal(1, confirmations.ConfirmDiscardCallCount);
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        confirmations.ConfirmDiscardCallCount.Should().Be(1);
     }
 
     [Fact]
@@ -100,12 +100,12 @@ public sealed class MainWindowViewModelTests
             new[] { droppedProjectPath, xmlPath, npcPath },
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(new[] { "Alpha" }, project.SliderPresets.Select(preset => preset.Name));
-        Assert.DoesNotContain(project.SliderPresets, preset => preset.Name == "DropAlpha");
-        Assert.Empty(viewModel.Morphs.NpcDatabase);
-        Assert.Null(viewModel.CurrentProjectPath);
-        Assert.Equal("Open cancelled.", viewModel.StatusMessage);
-        Assert.Equal(1, confirmations.ConfirmDiscardCallCount);
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        project.SliderPresets.Should().NotContain(preset => preset.Name == "DropAlpha");
+        viewModel.Morphs.NpcDatabase.Should().BeEmpty();
+        viewModel.CurrentProjectPath.Should().BeNull();
+        viewModel.StatusMessage.Should().Be("Open cancelled.");
+        confirmations.ConfirmDiscardCallCount.Should().Be(1);
     }
 
     [Fact]
@@ -121,9 +121,9 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
 
-        Assert.True(File.Exists(Path.Combine(directory.Path, "templates.ini")));
-        Assert.Equal("All|Female=Alpha", File.ReadAllText(Path.Combine(directory.Path, "morphs.ini")));
-        Assert.Contains("exported", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        File.Exists(Path.Combine(directory.Path, "templates.ini")).Should().BeTrue();
+        File.ReadAllText(Path.Combine(directory.Path, "morphs.ini")).Should().Be("All|Female=Alpha");
+        viewModel.StatusMessage.Should().ContainEquivalentOf("exported");
     }
 
     [Fact]
@@ -135,9 +135,9 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
 
-        Assert.False(File.Exists(Path.Combine(directory.Path, "templates.ini")));
-        Assert.False(File.Exists(Path.Combine(directory.Path, "morphs.ini")));
-        Assert.Contains("No generated BodyGen output", viewModel.StatusMessage, StringComparison.Ordinal);
+        File.Exists(Path.Combine(directory.Path, "templates.ini")).Should().BeFalse();
+        File.Exists(Path.Combine(directory.Path, "morphs.ini")).Should().BeFalse();
+        viewModel.StatusMessage.Should().Contain("No generated BodyGen output");
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
 
-        Assert.Contains("failed", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        viewModel.StatusMessage.Should().ContainEquivalentOf("failed");
     }
 
     [Fact]
@@ -166,8 +166,8 @@ public sealed class MainWindowViewModelTests
         await viewModel.ExportBosJsonAsync(TestContext.Current.CancellationToken);
 
         var file = Path.Combine(directory.Path, "Preset_One.json");
-        Assert.True(File.Exists(file));
-        Assert.Contains("\"bodyname\": \"Preset:One\"", File.ReadAllText(file));
+        File.Exists(file).Should().BeTrue();
+        File.ReadAllText(file).Should().Contain("\"bodyname\": \"Preset:One\"");
     }
 
     private static MainWindowViewModel CreateViewModel(

@@ -33,26 +33,23 @@ public sealed class MorphsViewModelTests
 
         await viewModel.ImportNpcsAsync(TestContext.Current.CancellationToken);
         viewModel.TargetNameInput = "All|Female";
-        Assert.True(viewModel.AddCustomTarget());
+        viewModel.AddCustomTarget().Should().BeTrue();
         viewModel.SelectedAvailablePreset = project.SliderPresets.Single(preset => preset.Name == "Alpha");
-        Assert.True(viewModel.AddSelectedPresetToTarget());
+        viewModel.AddSelectedPresetToTarget().Should().BeTrue();
         viewModel.AssignRandomOnAdd = true;
         viewModel.SelectedImportedNpc = viewModel.NpcDatabase.Single(npc => npc.Name == "Lydia");
-        Assert.True(viewModel.AddSelectedNpc());
+        viewModel.AddSelectedNpc().Should().BeTrue();
 
         viewModel.GenerateMorphs();
         await viewModel.CopyGeneratedMorphsAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(new[] { "Lydia", "Valerica" }, viewModel.NpcDatabase.Select(npc => npc.Name));
-        Assert.Equal(new[] { "Alpha", "Beta" },
-            project.CustomMorphTargets.Single().SliderPresets.Select(preset => preset.Name));
-        Assert.Equal("Lydia", viewModel.SelectedTargetName);
-        Assert.Equal("1", viewModel.TargetPresetCountText);
-        Assert.Equal("(1)", viewModel.NpcCountBadgeText);
-        Assert.Equal(
-            "All|Female=Alpha|Beta\r\nSkyrim.esm|A2C94=Alpha",
-            viewModel.GeneratedMorphsText);
-        Assert.Equal(viewModel.GeneratedMorphsText, clipboard.Text);
+        viewModel.NpcDatabase.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Valerica" });
+        project.CustomMorphTargets.Single().SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta" });
+        viewModel.SelectedTargetName.Should().Be("Lydia");
+        viewModel.TargetPresetCountText.Should().Be("1");
+        viewModel.NpcCountBadgeText.Should().Be("(1)");
+        viewModel.GeneratedMorphsText.Should().Be("All|Female=Alpha|Beta\r\nSkyrim.esm|A2C94=Alpha");
+        clipboard.Text.Should().Be(viewModel.GeneratedMorphsText);
     }
 
     [Fact]
@@ -72,9 +69,9 @@ public sealed class MorphsViewModelTests
             new[] { missingFile, validFile },
             TestContext.Current.CancellationToken);
 
-        var npc = Assert.Single(viewModel.NpcDatabase);
-        Assert.Equal("Lydia", npc.Name);
-        Assert.Equal("Imported 1 NPC. 1 issue was skipped.", viewModel.StatusMessage);
+        var npc = viewModel.NpcDatabase.Should().ContainSingle().Which;
+        npc.Name.Should().Be("Lydia");
+        viewModel.StatusMessage.Should().Be("Imported 1 NPC. 1 issue was skipped.");
     }
 
     [Fact]
@@ -97,12 +94,12 @@ public sealed class MorphsViewModelTests
         var filled = viewModel.FillEmptyVisibleNpcs(new[] { alpha });
         var cleared = viewModel.ClearVisibleNpcAssignments();
 
-        Assert.Equal(1, filled);
-        Assert.Equal(2, cleared);
-        Assert.Empty(lydia.SliderPresets);
-        Assert.Empty(serana.SliderPresets);
-        Assert.Equal(new[] { "Beta" }, valerica.SliderPresets.Select(preset => preset.Name));
-        Assert.Equal(new[] { "Lydia", "Serana" }, viewModel.VisibleNpcs.Select(npc => npc.Name));
+        filled.Should().Be(1);
+        cleared.Should().Be(2);
+        lydia.SliderPresets.Should().BeEmpty();
+        serana.SliderPresets.Should().BeEmpty();
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
+        viewModel.VisibleNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Serana" });
     }
 
     [Fact]
@@ -119,11 +116,11 @@ public sealed class MorphsViewModelTests
         viewModel.SearchText = "Skyrim";
         var removed = viewModel.ClearVisibleNpcs();
 
-        Assert.Equal(1, removed);
-        Assert.DoesNotContain(lydia, project.MorphedNpcs);
-        Assert.Contains(valerica, project.MorphedNpcs);
-        Assert.Null(viewModel.SelectedNpc);
-        Assert.Null(viewModel.SelectedTarget);
+        removed.Should().Be(1);
+        project.MorphedNpcs.Should().NotContain(lydia);
+        project.MorphedNpcs.Should().Contain(valerica);
+        viewModel.SelectedNpc.Should().BeNull();
+        viewModel.SelectedTarget.Should().BeNull();
     }
 
     [Fact]
@@ -145,8 +142,8 @@ public sealed class MorphsViewModelTests
 
         npc.Name = "Detached Lydia";
 
-        Assert.Equal(0, npcBadgeNotifications);
-        Assert.Empty(viewModel.VisibleNpcs);
+        npcBadgeNotifications.Should().Be(0);
+        viewModel.VisibleNpcs.Should().BeEmpty();
     }
 
     [Fact]
@@ -165,9 +162,9 @@ public sealed class MorphsViewModelTests
 
         viewModel.GenerateMorphs();
 
-        Assert.Equal(new MorphTargetBase[] { emptyTarget, emptyNpc }, viewModel.NoPresetTargets);
-        Assert.Equal(viewModel.NoPresetTargets, notifier.Targets);
-        Assert.Equal("Generated morphs. 2 targets have no presets.", viewModel.StatusMessage);
+        viewModel.NoPresetTargets.Should().Equal(new MorphTargetBase[] { emptyTarget, emptyNpc });
+        notifier.Targets.Should().Equal(viewModel.NoPresetTargets);
+        viewModel.StatusMessage.Should().Be("Generated morphs. 2 targets have no presets.");
     }
 
     [Fact]
@@ -187,10 +184,10 @@ public sealed class MorphsViewModelTests
         viewModel.SelectedNpc = npc;
         viewModel.ViewSelectedNpcImageCommand.Execute(null);
 
-        Assert.Equal(npc, imageLookup.Npc);
-        Assert.Equal(npc, imageView.Npc);
-        Assert.Equal("images/Lydia (HousecarlWhiterun).png", imageView.ImagePath);
-        Assert.Equal("Opened image for Lydia.", viewModel.StatusMessage);
+        imageLookup.Npc.Should().Be(npc);
+        imageView.Npc.Should().Be(npc);
+        imageView.ImagePath.Should().Be("images/Lydia (HousecarlWhiterun).png");
+        viewModel.StatusMessage.Should().Be("Opened image for Lydia.");
     }
 
     private static MorphsViewModel CreateViewModel(

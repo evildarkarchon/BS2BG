@@ -27,18 +27,18 @@ public sealed class BodySlideXmlParserTests
 
         var result = parser.ParseString(xml, "sample.xml");
 
-        Assert.Empty(result.Diagnostics);
-        var preset = Assert.Single(result.Presets);
-        Assert.Equal("CBBE Curvy (Outfit)", preset.Name);
+        result.Diagnostics.Should().BeEmpty();
+        var preset = result.Presets.Should().ContainSingle().Which;
+        preset.Name.Should().Be("CBBE Curvy (Outfit)");
 
-        Assert.Equal(new[] { "Arms", "Breasts" }, preset.SetSliders.Select(slider => slider.Name));
+        preset.SetSliders.Select(slider => slider.Name).Should().Equal(new[] { "Arms", "Breasts" });
         var arms = preset.SetSliders.Single(slider => slider.Name == "Arms");
-        Assert.Equal(-25, arms.ValueSmall);
-        Assert.Null(arms.ValueBig);
+        arms.ValueSmall.Should().Be(-25);
+        arms.ValueBig.Should().BeNull();
 
         var breasts = preset.SetSliders.Single(slider => slider.Name == "Breasts");
-        Assert.Null(breasts.ValueSmall);
-        Assert.Equal(75, breasts.ValueBig);
+        breasts.ValueSmall.Should().BeNull();
+        breasts.ValueBig.Should().Be(75);
     }
 
     [Fact]
@@ -56,10 +56,10 @@ public sealed class BodySlideXmlParserTests
 
         var result = parser.ParseString(xml, "sample.xml");
 
-        var preset = Assert.Single(result.Presets);
-        var slider = Assert.Single(preset.SetSliders);
-        Assert.Equal("Waist", slider.Name);
-        Assert.Equal(10, slider.ValueSmall);
-        Assert.Equal(40, slider.ValueBig);
+        var preset = result.Presets.Should().ContainSingle().Which;
+        var slider = preset.SetSliders.Should().ContainSingle().Which;
+        slider.Name.Should().Be("Waist");
+        slider.ValueSmall.Should().Be(10);
+        slider.ValueBig.Should().Be(40);
     }
 }

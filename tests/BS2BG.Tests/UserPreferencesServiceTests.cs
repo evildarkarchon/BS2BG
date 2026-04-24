@@ -35,7 +35,7 @@ public sealed class UserPreferencesServiceTests
         {
             var loaded = new UserPreferencesService(preferencesPath).Load();
 
-            Assert.Equal(ThemePreference.System, loaded.Theme);
+            loaded.Theme.Should().Be(ThemePreference.System);
         }
         finally
         {
@@ -55,7 +55,7 @@ public sealed class UserPreferencesServiceTests
         var saved = new UserPreferencesService(preferencesPath)
             .Save(new UserPreferences { Theme = ThemePreference.Dark });
 
-        Assert.False(saved);
+        saved.Should().BeFalse();
     }
 
     private sealed class TemporaryDirectory : IDisposable

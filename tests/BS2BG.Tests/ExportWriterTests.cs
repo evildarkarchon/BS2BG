@@ -18,15 +18,15 @@ public sealed class ExportWriterTests
         var result = writer.Write(directory.Path, "Alpha=Scale@1.0\nBeta=Scale@0.5",
             "All|Female=Alpha\rSkyrim.esm|A2C94=Beta");
 
-        Assert.Equal(Path.Combine(directory.Path, "templates.ini"), result.TemplatesPath);
-        Assert.Equal(Path.Combine(directory.Path, "morphs.ini"), result.MorphsPath);
-        Assert.Equal("Alpha=Scale@1.0\r\nBeta=Scale@0.5", File.ReadAllText(result.TemplatesPath));
-        Assert.Equal("All|Female=Alpha\r\nSkyrim.esm|A2C94=Beta", File.ReadAllText(result.MorphsPath));
+        result.TemplatesPath.Should().Be(Path.Combine(directory.Path, "templates.ini"));
+        result.MorphsPath.Should().Be(Path.Combine(directory.Path, "morphs.ini"));
+        File.ReadAllText(result.TemplatesPath).Should().Be("Alpha=Scale@1.0\r\nBeta=Scale@0.5");
+        File.ReadAllText(result.MorphsPath).Should().Be("All|Female=Alpha\r\nSkyrim.esm|A2C94=Beta");
 
         var templateBytes = File.ReadAllBytes(result.TemplatesPath);
-        Assert.False(HasUtf8Bom(templateBytes));
-        Assert.Contains((byte)'\r', templateBytes);
-        Assert.Contains((byte)'\n', templateBytes);
+        HasUtf8Bom(templateBytes).Should().BeFalse();
+        templateBytes.Should().Contain((byte)'\r');
+        templateBytes.Should().Contain((byte)'\n');
     }
 
     [Fact]
@@ -48,14 +48,12 @@ public sealed class ExportWriterTests
 
         var result = writer.Write(directory.Path, new[] { first, second }, catalog);
 
-        Assert.Equal(
-            new[]
+        result.FilePaths.Should().Equal(new[]
             {
                 Path.Combine(directory.Path, "Preset_One.json"), Path.Combine(directory.Path, "Preset_One (2).json")
-            },
-            result.FilePaths);
-        Assert.Contains("\"bodyname\": \"Preset:One\"", File.ReadAllText(result.FilePaths[0]));
-        Assert.Contains("\"bodyname\": \"Preset?One\"", File.ReadAllText(result.FilePaths[1]));
+            });
+        File.ReadAllText(result.FilePaths[0]).Should().Contain("\"bodyname\": \"Preset:One\"");
+        File.ReadAllText(result.FilePaths[1]).Should().Contain("\"bodyname\": \"Preset?One\"");
     }
 
     [Fact]
@@ -77,11 +75,9 @@ public sealed class ExportWriterTests
 
         var result = writer.Write(directory.Path, new[] { first, second }, catalog);
 
-        Assert.Equal(
-            new[] { Path.Combine(directory.Path, "COM1_.json"), Path.Combine(directory.Path, "CON_.json") },
-            result.FilePaths);
-        Assert.Contains("\"bodyname\": \"COM1\"", File.ReadAllText(result.FilePaths[0]));
-        Assert.Contains("\"bodyname\": \"CON\"", File.ReadAllText(result.FilePaths[1]));
+        result.FilePaths.Should().Equal(new[] { Path.Combine(directory.Path, "COM1_.json"), Path.Combine(directory.Path, "CON_.json") });
+        File.ReadAllText(result.FilePaths[0]).Should().Contain("\"bodyname\": \"COM1\"");
+        File.ReadAllText(result.FilePaths[1]).Should().Contain("\"bodyname\": \"CON\"");
     }
 
     private static bool HasUtf8Bom(byte[] bytes) =>

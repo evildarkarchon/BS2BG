@@ -25,8 +25,8 @@ public sealed class SetSliderInspectorViewModelTests
 
         viewModel.SelectedPreset = preset;
 
-        Assert.Equal(new[] { "DefaultOnly", "Scale" }, viewModel.SetSliderRows.Select(row => row.Name));
-        Assert.Equal("Alpha = DefaultOnly@1.0, Scale@1.0", viewModel.PreviewTemplateText);
+        viewModel.SetSliderRows.Select(row => row.Name).Should().Equal(new[] { "DefaultOnly", "Scale" });
+        viewModel.PreviewTemplateText.Should().Be("Alpha = DefaultOnly@1.0, Scale@1.0");
     }
 
     [Fact]
@@ -35,21 +35,21 @@ public sealed class SetSliderInspectorViewModelTests
         var viewModel = CreateViewModel();
         var preset = AddPreset(viewModel);
         viewModel.SelectedPreset = preset;
-        var row = Assert.Single(viewModel.SetSliderRows);
+        var row = viewModel.SetSliderRows.Should().ContainSingle().Which;
 
         row.PercentMin = 75;
         row.PercentMax = 50;
 
-        Assert.Equal(75, row.PercentMin);
-        Assert.Equal(75, row.PercentMax);
-        Assert.Equal("75%", row.PercentMinText);
-        Assert.Equal("75%", row.PercentMaxText);
-        Assert.Equal("Alpha = Scale@0.75", viewModel.PreviewTemplateText);
+        row.PercentMin.Should().Be(75);
+        row.PercentMax.Should().Be(75);
+        row.PercentMinText.Should().Be("75%");
+        row.PercentMaxText.Should().Be("75%");
+        viewModel.PreviewTemplateText.Should().Be("Alpha = Scale@0.75");
 
         row.Enabled = false;
 
-        Assert.False(preset.SetSliders.Single().Enabled);
-        Assert.Equal("Alpha = ", viewModel.PreviewTemplateText);
+        preset.SetSliders.Single().Enabled.Should().BeFalse();
+        viewModel.PreviewTemplateText.Should().Be("Alpha = ");
     }
 
     [Fact]
@@ -62,22 +62,22 @@ public sealed class SetSliderInspectorViewModelTests
         viewModel.SelectedPreset = preset;
 
         viewModel.SetAllSliderPercentsTo50Command.Execute(null);
-        Assert.All(viewModel.SetSliderRows, row =>
+        viewModel.SetSliderRows.Should().AllSatisfy(row =>
         {
-            Assert.Equal(50, row.PercentMin);
-            Assert.Equal(50, row.PercentMax);
+            row.PercentMin.Should().Be(50);
+            row.PercentMax.Should().Be(50);
         });
-        Assert.Equal("Alpha = Height@0.5, Scale@0.5", viewModel.PreviewTemplateText);
+        viewModel.PreviewTemplateText.Should().Be("Alpha = Height@0.5, Scale@0.5");
 
         viewModel.SetAllMinPercentsTo0Command.Execute(null);
         viewModel.SetAllMaxPercentsTo100Command.Execute(null);
 
-        Assert.All(viewModel.SetSliderRows, row =>
+        viewModel.SetSliderRows.Should().AllSatisfy(row =>
         {
-            Assert.Equal(0, row.PercentMin);
-            Assert.Equal(100, row.PercentMax);
+            row.PercentMin.Should().Be(0);
+            row.PercentMax.Should().Be(100);
         });
-        Assert.Equal("Alpha = Height@0.0:1.0, Scale@0.0:1.0", viewModel.PreviewTemplateText);
+        viewModel.PreviewTemplateText.Should().Be("Alpha = Height@0.0:1.0, Scale@0.0:1.0");
     }
 
     [Fact]
@@ -90,13 +90,11 @@ public sealed class SetSliderInspectorViewModelTests
         viewModel.SelectedPreset = preset;
         await viewModel.CopySelectedBosJsonAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(
-            new TemplateGenerationService().PreviewBosJson(
+        viewModel.SelectedBosJsonText.Should().Be(new TemplateGenerationService().PreviewBosJson(
                 preset,
-                CreateCatalog().GetProfile(ProjectProfileMapping.SkyrimCbbe)),
-            viewModel.SelectedBosJsonText);
-        Assert.Equal(viewModel.SelectedBosJsonText, clipboard.Text);
-        Assert.Equal("BoS JSON copied.", viewModel.StatusMessage);
+                CreateCatalog().GetProfile(ProjectProfileMapping.SkyrimCbbe)));
+        clipboard.Text.Should().Be(viewModel.SelectedBosJsonText);
+        viewModel.StatusMessage.Should().Be("BoS JSON copied.");
     }
 
     private static SliderPreset AddPreset(TemplatesViewModel viewModel)

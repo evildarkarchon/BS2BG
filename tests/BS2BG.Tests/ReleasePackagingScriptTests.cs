@@ -13,11 +13,8 @@ public sealed class ReleasePackagingScriptTests
             "release",
             "package-release.ps1"));
 
-        Assert.Contains("\"docs\\release\\RELEASE-NOTES-v$Version.md\"", script, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "'docs\\release\\RELEASE-NOTES-v1.0.0.md'",
-            script,
-            StringComparison.Ordinal);
+        script.Should().Contain("\"docs\\release\\RELEASE-NOTES-v$Version.md\"");
+        script.Should().NotContain("'docs\\release\\RELEASE-NOTES-v1.0.0.md'");
     }
 
     private static string FindRepoRoot()

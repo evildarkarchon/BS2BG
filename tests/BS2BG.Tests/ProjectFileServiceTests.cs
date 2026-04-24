@@ -29,51 +29,47 @@ public sealed class ProjectFileServiceTests
 
         var project = service.Load(ProjectFixturePath("v1-stale-project.jbs2bg"));
 
-        Assert.False(project.IsDirty);
-        Assert.Equal(new[] { "Alpha", "Beta Preset" }, project.SliderPresets.Select(preset => preset.Name));
+        project.IsDirty.Should().BeFalse();
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta Preset" });
 
         var alpha = project.FindSliderPreset("alpha");
-        Assert.NotNull(alpha);
-        Assert.Equal(ProjectProfileMapping.Fallout4Cbbe, alpha.ProfileName);
-        Assert.False(alpha.IsUunp);
-        Assert.Empty(alpha.SetSliders);
+        alpha.Should().NotBeNull();
+        alpha.ProfileName.Should().Be(ProjectProfileMapping.Fallout4Cbbe);
+        alpha.IsUunp.Should().BeFalse();
+        alpha.SetSliders.Should().BeEmpty();
 
         var beta = project.FindSliderPreset("Beta Preset");
-        Assert.NotNull(beta);
-        Assert.Equal(ProjectProfileMapping.SkyrimUunp, beta.ProfileName);
-        Assert.True(beta.IsUunp);
+        beta.Should().NotBeNull();
+        beta.ProfileName.Should().Be(ProjectProfileMapping.SkyrimUunp);
+        beta.IsUunp.Should().BeTrue();
 
-        var arms = Assert.Single(beta.SetSliders);
-        Assert.Equal("Arms", arms.Name);
-        Assert.True(arms.Enabled);
-        Assert.Null(arms.ValueSmall);
-        Assert.Equal(50, arms.ValueBig);
-        Assert.Equal(25, arms.PercentMin);
-        Assert.Equal(75, arms.PercentMax);
+        var arms = beta.SetSliders.Should().ContainSingle().Which;
+        arms.Name.Should().Be("Arms");
+        arms.Enabled.Should().BeTrue();
+        arms.ValueSmall.Should().BeNull();
+        arms.ValueBig.Should().Be(50);
+        arms.PercentMin.Should().Be(25);
+        arms.PercentMax.Should().Be(75);
 
-        Assert.Equal(
-            new[] { "MissingKept", "ZedMissingOmitted" },
-            beta.MissingDefaultSetSliders.Select(slider => slider.Name));
+        beta.MissingDefaultSetSliders.Select(slider => slider.Name).Should().Equal(new[] { "MissingKept", "ZedMissingOmitted" });
         var keptMissingDefault = beta.MissingDefaultSetSliders.Single(slider => slider.Name == "MissingKept");
-        Assert.False(keptMissingDefault.Enabled);
+        keptMissingDefault.Enabled.Should().BeFalse();
 
-        Assert.Equal(new[] { "TargetA", "TargetZ" }, project.CustomMorphTargets.Select(target => target.Name));
-        Assert.Empty(project.CustomMorphTargets[0].SliderPresets);
-        Assert.Equal(
-            new[] { "Alpha", "Beta Preset" },
-            project.CustomMorphTargets[1].SliderPresets.Select(preset => preset.Name));
+        project.CustomMorphTargets.Select(target => target.Name).Should().Equal(new[] { "TargetA", "TargetZ" });
+        project.CustomMorphTargets[0].SliderPresets.Should().BeEmpty();
+        project.CustomMorphTargets[1].SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta Preset" });
 
-        Assert.Equal(new[] { "Long Form", "No Assignments" }, project.MorphedNpcs.Select(npc => npc.Name));
+        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Long Form", "No Assignments" });
         var npc = project.MorphedNpcs[0];
-        Assert.Equal("Skyrim.esm", npc.Mod);
-        Assert.Equal("HousecarlWhiterun", npc.EditorId);
-        Assert.Equal("NordRace", npc.Race);
-        Assert.Equal("A2C94", npc.FormId);
-        Assert.Equal(new[] { "Beta Preset" }, npc.SliderPresets.Select(preset => preset.Name));
+        npc.Mod.Should().Be("Skyrim.esm");
+        npc.EditorId.Should().Be("HousecarlWhiterun");
+        npc.Race.Should().Be("NordRace");
+        npc.FormId.Should().Be("A2C94");
+        npc.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta Preset" });
 
-        Assert.Equal("Dawnguard.esm", project.MorphedNpcs[1].Mod);
-        Assert.Equal("0", project.MorphedNpcs[1].FormId);
-        Assert.Empty(project.MorphedNpcs[1].SliderPresets);
+        project.MorphedNpcs[1].Mod.Should().Be("Dawnguard.esm");
+        project.MorphedNpcs[1].FormId.Should().Be("0");
+        project.MorphedNpcs[1].SliderPresets.Should().BeEmpty();
     }
 
     [Fact]
@@ -85,7 +81,7 @@ public sealed class ProjectFileServiceTests
         var actual = service.SaveToString(project);
         var expected = File.ReadAllText(ProjectFixturePath("v1-stale-project.expected.jbs2bg"));
 
-        Assert.Equal(NormalizeJson(expected), NormalizeJson(actual));
+        NormalizeJson(actual).Should().Be(NormalizeJson(expected));
     }
 
     [Fact]
@@ -103,8 +99,8 @@ public sealed class ProjectFileServiceTests
         var saved = service.SaveToString(project);
         var reloaded = service.LoadFromString(saved);
 
-        Assert.Equal(2, reloaded.MorphedNpcs.Count);
-        Assert.Equal(new[] { "WhiterunGuard", "DawnguardGuard" }, reloaded.MorphedNpcs.Select(npc => npc.EditorId));
+        reloaded.MorphedNpcs.Count.Should().Be(2);
+        reloaded.MorphedNpcs.Select(npc => npc.EditorId).Should().Equal(new[] { "WhiterunGuard", "DawnguardGuard" });
     }
 
     [Fact]
@@ -136,8 +132,8 @@ public sealed class ProjectFileServiceTests
             }
             """);
 
-        Assert.Equal(2, project.MorphedNpcs.Count);
-        Assert.Equal(new[] { "WhiterunGuard", "DawnguardGuard" }, project.MorphedNpcs.Select(npc => npc.EditorId));
+        project.MorphedNpcs.Count.Should().Be(2);
+        project.MorphedNpcs.Select(npc => npc.EditorId).Should().Equal(new[] { "WhiterunGuard", "DawnguardGuard" });
     }
 
     [Fact]
@@ -152,18 +148,18 @@ public sealed class ProjectFileServiceTests
         target.AddSliderPreset(preset);
         project.MarkClean();
 
-        Assert.False(project.IsDirty);
+        project.IsDirty.Should().BeFalse();
 
         preset.ProfileName = ProjectProfileMapping.SkyrimUunp;
 
-        Assert.True(project.IsDirty);
+        project.IsDirty.Should().BeTrue();
         project.MarkClean();
 
         var removed = project.RemoveSliderPreset("preset one");
 
-        Assert.True(removed);
-        Assert.Empty(target.SliderPresets);
-        Assert.True(project.IsDirty);
+        removed.Should().BeTrue();
+        target.SliderPresets.Should().BeEmpty();
+        project.IsDirty.Should().BeTrue();
     }
 
     private static string ProjectFixturePath(string fileName) =>

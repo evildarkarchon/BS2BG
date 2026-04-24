@@ -12,16 +12,16 @@ public sealed class TemplateProfileCatalogFactoryTests
         var method = typeof(TemplateProfileCatalogFactory).GetMethod(
             "CandidateDirectories",
             BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(method);
+        method.Should().NotBeNull();
 
-        var directories = Assert.IsAssignableFrom<IEnumerable<DirectoryInfo>>(method.Invoke(null, null));
+        var directories = method.Invoke(null, null).Should().BeAssignableTo<IEnumerable<DirectoryInfo>>().Which;
 
         var fullNames = directories
             .Select(directory => directory.FullName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        Assert.Equal(new[] { new DirectoryInfo(AppContext.BaseDirectory).FullName }, fullNames);
+        fullNames.Should().Equal(new[] { new DirectoryInfo(AppContext.BaseDirectory).FullName });
     }
 
     [Fact]
@@ -38,10 +38,13 @@ public sealed class TemplateProfileCatalogFactoryTests
             }
             """);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
-            TemplateProfileCatalogFactory.CreateDefault(new[] { directory.Path }));
+        var exception = FluentActions.Invoking(() =>
+                TemplateProfileCatalogFactory.CreateDefault(new[] { directory.Path }))
+            .Should()
+            .ThrowExactly<FileNotFoundException>()
+            .Which;
 
-        Assert.Contains("settings_UUNP.json", exception.Message, StringComparison.Ordinal);
+        exception.Message.Should().Contain("settings_UUNP.json");
     }
 
     private sealed class TemporaryDirectory : IDisposable

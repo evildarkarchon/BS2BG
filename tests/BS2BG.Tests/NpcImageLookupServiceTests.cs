@@ -17,7 +17,7 @@ public sealed class NpcImageLookupServiceTests
 
         var actual = service.FindImagePath(npc);
 
-        Assert.Equal(specific, actual);
+        actual.Should().Be(specific);
     }
 
     [Fact]
@@ -30,7 +30,7 @@ public sealed class NpcImageLookupServiceTests
 
         var actual = service.FindImagePath(new Npc("Serana") { EditorId = "DLC1Serana" });
 
-        Assert.Equal(jpg, actual);
+        actual.Should().Be(jpg);
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public sealed class NpcImageLookupServiceTests
         using var directory = new TemporaryDirectory();
         var service = new NpcImageLookupService(directory.Path);
 
-        Assert.Null(service.FindImagePath(new Npc("Missing") { EditorId = "Nope" }));
+        service.FindImagePath(new Npc("Missing") { EditorId = "Nope" }).Should().BeNull();
     }
 
     private sealed class TemporaryDirectory : IDisposable

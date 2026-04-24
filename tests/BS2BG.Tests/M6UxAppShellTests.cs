@@ -21,14 +21,14 @@ public sealed class M6UxAppShellTests
         var window = provider.GetRequiredService<MainWindow>();
         window.ApplyTemplate();
 
-        Assert.NotNull(window.FindControl<TextBox>("GlobalSearchBox"));
-        Assert.NotNull(window.FindControl<Popup>("CommandPalettePopup"));
-        Assert.NotNull(window.FindControl<ComboBox>("ThemePreferenceComboBox"));
-        Assert.NotNull(window.FindControl<MenuItem>("UndoMenuItem"));
-        Assert.NotNull(window.FindControl<MenuItem>("RedoMenuItem"));
-        Assert.NotNull(window.FindControl<Button>("NpcFilterRaceButton"));
-        Assert.NotNull(window.FindControl<Button>("SelectedNpcAssignButton"));
-        Assert.NotNull(window.FindControl<Button>("SelectedNpcClearAssignmentsButton"));
+        window.FindControl<TextBox>("GlobalSearchBox").Should().NotBeNull();
+        window.FindControl<Popup>("CommandPalettePopup").Should().NotBeNull();
+        window.FindControl<ComboBox>("ThemePreferenceComboBox").Should().NotBeNull();
+        window.FindControl<MenuItem>("UndoMenuItem").Should().NotBeNull();
+        window.FindControl<MenuItem>("RedoMenuItem").Should().NotBeNull();
+        window.FindControl<Button>("NpcFilterRaceButton").Should().NotBeNull();
+        window.FindControl<Button>("SelectedNpcAssignButton").Should().NotBeNull();
+        window.FindControl<Button>("SelectedNpcClearAssignmentsButton").Should().NotBeNull();
     }
 
     [AvaloniaFact]
@@ -37,24 +37,24 @@ public sealed class M6UxAppShellTests
         var viewModel = new MainWindowViewModel();
         var window = new MainWindow(viewModel);
         window.ApplyTemplate();
-        var banner = Assert.IsAssignableFrom<Border>(window.FindControl<Border>("TargetPresetWarningBanner"));
-        var trimButton = Assert.IsAssignableFrom<Button>(window.FindControl<Button>("TargetPresetWarningTrimButton"));
+        var banner = window.FindControl<Border>("TargetPresetWarningBanner").Should().BeAssignableTo<Border>().Which;
+        var trimButton = window.FindControl<Button>("TargetPresetWarningTrimButton").Should().BeAssignableTo<Button>().Which;
 
-        Assert.False(banner.IsVisible);
-        Assert.False(trimButton.IsVisible);
+        banner.IsVisible.Should().BeFalse();
+        trimButton.IsVisible.Should().BeFalse();
 
         var warningTarget = CreateTargetWithPresetCount("All|Female", 31);
 
         viewModel.Morphs.CustomTargets.Add(warningTarget);
         viewModel.Morphs.SelectedCustomTarget = warningTarget;
 
-        Assert.True(banner.IsVisible);
-        Assert.False(trimButton.IsVisible);
+        banner.IsVisible.Should().BeTrue();
+        trimButton.IsVisible.Should().BeFalse();
 
         for (var index = 31; index < 77; index++) warningTarget.AddSliderPreset(new SliderPreset("P" + index));
 
-        Assert.True(banner.IsVisible);
-        Assert.True(trimButton.IsVisible);
+        banner.IsVisible.Should().BeTrue();
+        trimButton.IsVisible.Should().BeTrue();
     }
 
     [AvaloniaFact]
@@ -65,20 +65,20 @@ public sealed class M6UxAppShellTests
         viewModel.Morphs.Npcs.Add(CreateNpc("Serana", "NordRaceVampire"));
         var window = new MainWindow(viewModel);
         window.ApplyTemplate();
-        var button = Assert.IsAssignableFrom<Button>(window.FindControl<Button>("NpcFilterRaceButton"));
-        var popup = Assert.IsAssignableFrom<Popup>(window.FindControl<Popup>("NpcRaceFilterPopup"));
-        var valuesList = Assert.IsAssignableFrom<ListBox>(window.FindControl<ListBox>("NpcRaceFilterValuesListBox"));
+        var button = window.FindControl<Button>("NpcFilterRaceButton").Should().BeAssignableTo<Button>().Which;
+        var popup = window.FindControl<Popup>("NpcRaceFilterPopup").Should().BeAssignableTo<Popup>().Which;
+        var valuesList = window.FindControl<ListBox>("NpcRaceFilterValuesListBox").Should().BeAssignableTo<ListBox>().Which;
 
-        Assert.Same(viewModel.Morphs.ToggleNpcRaceFilterCommand, button.Command);
+        button.Command.Should().BeSameAs(viewModel.Morphs.ToggleNpcRaceFilterCommand);
 
-        Assert.NotNull(button.Command);
+        button.Command.Should().NotBeNull();
         button.Command.Execute(null);
 
-        Assert.True(popup.IsOpen);
+        popup.IsOpen.Should().BeTrue();
 
         valuesList.SelectedItems!.Add("NordRaceVampire");
 
-        Assert.Equal(["Serana"], viewModel.Morphs.VisibleNpcs.Select(npc => npc.Name));
+        viewModel.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal(["Serana"]);
     }
 
     [AvaloniaFact]
@@ -87,25 +87,21 @@ public sealed class M6UxAppShellTests
         using var provider = AppBootstrapper.CreateServiceProvider();
 
         var window = provider.GetRequiredService<MainWindow>();
-        var viewModel = Assert.IsType<MainWindowViewModel>(window.ViewModel);
+        var viewModel = window.ViewModel.Should().BeOfType<MainWindowViewModel>().Which;
         window.ApplyTemplate();
 
-        Assert.Contains(window.KeyBindings, binding =>
+        window.KeyBindings.Any(binding =>
             ReferenceEquals(binding.Command, viewModel.FocusGlobalSearchCommand)
             && binding.Gesture?.Key == Key.F
-            && binding.Gesture.KeyModifiers == KeyModifiers.Control);
-        Assert.Contains(window.KeyBindings, binding =>
+            && binding.Gesture.KeyModifiers == KeyModifiers.Control).Should().BeTrue();
+        window.KeyBindings.Any(binding =>
             ReferenceEquals(binding.Command, viewModel.OpenCommandPaletteCommand)
             && binding.Gesture?.Key == Key.P
-            && binding.Gesture.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift));
+            && binding.Gesture.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift)).Should().BeTrue();
 
-        Assert.True(DragDrop.GetAllowDrop(Assert.IsAssignableFrom<Control>(
-            window.FindControl<Control>("TemplatesDropZone"))));
-        Assert.True(DragDrop.GetAllowDrop(Assert.IsAssignableFrom<Control>(
-            window.FindControl<Control>("NpcDropZone"))));
-        Assert.Contains(
-            "Generate Templates",
-            viewModel.CommandPaletteItems.Select(item => item.Title));
+        (DragDrop.GetAllowDrop(window.FindControl<Control>("TemplatesDropZone").Should().BeAssignableTo<Control>().Which)).Should().BeTrue();
+        (DragDrop.GetAllowDrop(window.FindControl<Control>("NpcDropZone").Should().BeAssignableTo<Control>().Which)).Should().BeTrue();
+        viewModel.CommandPaletteItems.Select(item => item.Title).Should().Contain("Generate Templates");
     }
 
     private static Npc CreateNpc(string name, string race) => new(name)

@@ -25,7 +25,7 @@ public sealed class AppShellTests
 
         var viewModel = provider.GetRequiredService<MainWindowViewModel>();
 
-        Assert.NotNull(viewModel);
+        viewModel.Should().NotBeNull();
     }
 
     [AvaloniaFact]
@@ -35,19 +35,19 @@ public sealed class AppShellTests
 
         var window = provider.GetRequiredService<MainWindow>();
 
-        Assert.IsType<MainWindowViewModel>(window.ViewModel);
-        Assert.Equal(AppShell.Title, window.Title);
-        Assert.Equal(AppShell.StartupWidth, window.Width);
-        Assert.Equal(AppShell.StartupHeight, window.Height);
-        Assert.Equal(AppShell.MinWidth, window.MinWidth);
-        Assert.Equal(AppShell.MinHeight, window.MinHeight);
+        window.ViewModel.Should().BeOfType<MainWindowViewModel>();
+        window.Title.Should().Be(AppShell.Title);
+        window.Width.Should().Be(AppShell.StartupWidth);
+        window.Height.Should().Be(AppShell.StartupHeight);
+        window.MinWidth.Should().Be(AppShell.MinWidth);
+        window.MinHeight.Should().Be(AppShell.MinHeight);
     }
 
     [Fact]
     public void StartupSizeMatchesPreferredDefaultWindowCapture()
     {
-        Assert.Equal(1422, AppShell.StartupWidth);
-        Assert.Equal(817, AppShell.StartupHeight);
+        AppShell.StartupWidth.Should().Be(1422);
+        AppShell.StartupHeight.Should().Be(817);
     }
 
     [AvaloniaFact]
@@ -60,7 +60,7 @@ public sealed class AppShellTests
 
         project.SliderPresets.Add(new SliderPreset("Alpha"));
 
-        Assert.Equal(AppShell.Title + " *", window.Title);
+        window.Title.Should().Be(AppShell.Title + " *");
     }
 
     [AvaloniaFact]
@@ -74,8 +74,8 @@ public sealed class AppShellTests
             .OfType<TabItem>()
             .Select(tab => tab.Header?.ToString())
             .ToArray();
-        Assert.Contains("Templates", tabHeaders);
-        Assert.Contains("Morphs", tabHeaders);
+        tabHeaders.Should().Contain("Templates");
+        tabHeaders.Should().Contain("Morphs");
     }
 
     [AvaloniaFact]
@@ -85,13 +85,7 @@ public sealed class AppShellTests
 
         var window = provider.GetRequiredService<MainWindow>();
 
-        Assert.Equal(
-            new[]
-            {
-                "New", "Open...", "Save", "Save As...", "Export Templates as BoS JSON", "Export BodyGen INIs",
-                "About Bodyslide to Bodygen"
-            },
-            window.GetLogicalDescendants()
+        (window.GetLogicalDescendants()
                 .OfType<MenuItem>()
                 .Where(item => item.Name is
                     "NewProjectMenuItem"
@@ -102,7 +96,11 @@ public sealed class AppShellTests
                     or "ExportBodyGenInisMenuItem"
                     or "AboutMenuItem")
                 .Select(item => item.Header?.ToString())
-                .ToArray());
+                .ToArray()).Should().Equal(new[]
+            {
+                "New", "Open...", "Save", "Save As...", "Export Templates as BoS JSON", "Export BodyGen INIs",
+                "About Bodyslide to Bodygen"
+            });
     }
 
     [AvaloniaFact]
@@ -111,32 +109,26 @@ public sealed class AppShellTests
         using var provider = AppBootstrapper.CreateServiceProvider();
 
         var window = provider.GetRequiredService<MainWindow>();
-        var viewModel = Assert.IsType<MainWindowViewModel>(window.ViewModel);
+        var viewModel = window.ViewModel.Should().BeOfType<MainWindowViewModel>().Which;
         window.ApplyTemplate();
 
-        Assert.Same(
-            viewModel.NewProjectCommand,
-            window.FindControl<MenuItem>("NewProjectMenuItem")?.Command);
-        Assert.Same(
-            viewModel.SaveProjectAsCommand,
-            window.FindControl<MenuItem>("SaveProjectAsMenuItem")?.Command);
-        Assert.Same(
-            viewModel.ExportBodyGenInisCommand,
-            window.FindControl<MenuItem>("ExportBodyGenInisMenuItem")?.Command);
-        Assert.NotNull(window.FindControl<TextBlock>("ShellStatusText"));
+        window.FindControl<MenuItem>("NewProjectMenuItem")?.Command.Should().BeSameAs(viewModel.NewProjectCommand);
+        window.FindControl<MenuItem>("SaveProjectAsMenuItem")?.Command.Should().BeSameAs(viewModel.SaveProjectAsCommand);
+        window.FindControl<MenuItem>("ExportBodyGenInisMenuItem")?.Command.Should().BeSameAs(viewModel.ExportBodyGenInisCommand);
+        window.FindControl<TextBlock>("ShellStatusText").Should().NotBeNull();
 
-        Assert.Contains(window.KeyBindings, binding =>
+        window.KeyBindings.Any(binding =>
             ReferenceEquals(binding.Command, viewModel.SaveProjectAsCommand)
             && binding.Gesture?.Key == Key.S
-            && binding.Gesture.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Alt));
-        Assert.Contains(window.KeyBindings, binding =>
+            && binding.Gesture.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Alt)).Should().BeTrue();
+        window.KeyBindings.Any(binding =>
             ReferenceEquals(binding.Command, viewModel.ExportBosJsonCommand)
             && binding.Gesture?.Key == Key.B
-            && binding.Gesture.KeyModifiers == KeyModifiers.Control);
-        Assert.Contains(window.KeyBindings, binding =>
+            && binding.Gesture.KeyModifiers == KeyModifiers.Control).Should().BeTrue();
+        window.KeyBindings.Any(binding =>
             ReferenceEquals(binding.Command, viewModel.ExportBodyGenInisCommand)
             && binding.Gesture?.Key == Key.X
-            && binding.Gesture.KeyModifiers == KeyModifiers.Control);
+            && binding.Gesture.KeyModifiers == KeyModifiers.Control).Should().BeTrue();
     }
 
     [AvaloniaFact]
@@ -151,9 +143,9 @@ public sealed class AppShellTests
         window.Measure(new Size(AppShell.MinWidth, AppShell.MinHeight));
         window.Arrange(new Rect(0, 0, AppShell.MinWidth, AppShell.MinHeight));
 
-        Assert.NotNull(window.FindControl<ItemsControl>("SetSliderInspectorRows"));
-        Assert.NotNull(window.FindControl<TextBox>("BosJsonTextBox"));
-        Assert.NotNull(window.FindControl<Button>("ViewImageButton"));
+        window.FindControl<ItemsControl>("SetSliderInspectorRows").Should().NotBeNull();
+        window.FindControl<TextBox>("BosJsonTextBox").Should().NotBeNull();
+        window.FindControl<Button>("ViewImageButton").Should().NotBeNull();
     }
 
     [Fact]
@@ -161,10 +153,9 @@ public sealed class AppShellTests
     {
         using var provider = AppBootstrapper.CreateServiceProvider();
 
-        Assert.IsType<NpcImageLookupService>(provider.GetRequiredService<INpcImageLookupService>());
-        Assert.IsType<WindowImageViewService>(provider.GetRequiredService<IImageViewService>());
-        Assert.IsType<WindowNoPresetNotificationService>(
-            provider.GetRequiredService<INoPresetNotificationService>());
+        provider.GetRequiredService<INpcImageLookupService>().Should().BeOfType<NpcImageLookupService>();
+        provider.GetRequiredService<IImageViewService>().Should().BeOfType<WindowImageViewService>();
+        provider.GetRequiredService<INoPresetNotificationService>().Should().BeOfType<WindowNoPresetNotificationService>();
     }
 
     [AvaloniaFact]
@@ -174,18 +165,18 @@ public sealed class AppShellTests
 
         var window = service.CreateAboutWindow();
 
-        Assert.Equal(AppShell.Title, window.Title);
-        Assert.Equal(400, window.Width);
-        Assert.Equal(200, window.Height);
-        Assert.False(window.CanResize);
+        window.Title.Should().Be(AppShell.Title);
+        window.Width.Should().Be(400);
+        window.Height.Should().Be(200);
+        window.CanResize.Should().BeFalse();
 
         var text = string.Join(
             "\n",
             window.GetLogicalDescendants()
                 .OfType<TextBlock>()
                 .Select(block => block.Text));
-        Assert.Contains("Bodyslide to Bodygen", text, StringComparison.Ordinal);
-        Assert.Contains("Totiman / asdasfa", text, StringComparison.Ordinal);
-        Assert.Contains("evildarkarchon", text, StringComparison.Ordinal);
+        text.Should().Contain("Bodyslide to Bodygen");
+        text.Should().Contain("Totiman / asdasfa");
+        text.Should().Contain("evildarkarchon");
     }
 }

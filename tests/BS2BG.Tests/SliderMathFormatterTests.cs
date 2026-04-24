@@ -34,8 +34,8 @@ public sealed class SliderMathFormatterTests
         string expectedText,
         string expectedJson)
     {
-        Assert.Equal(expectedText, JavaFloatFormatting.FormatForText(value));
-        Assert.Equal(expectedJson, JavaFloatFormatting.FormatForMinimalJsonNumber(value));
+        JavaFloatFormatting.FormatForText(value).Should().Be(expectedText);
+        JavaFloatFormatting.FormatForMinimalJsonNumber(value).Should().Be(expectedJson);
     }
 
     [Theory]
@@ -47,7 +47,7 @@ public sealed class SliderMathFormatterTests
     {
         var rounded = JavaFloatFormatting.RoundHalfUpToTwoDecimals(value);
 
-        Assert.Equal(expected, JavaFloatFormatting.FormatForText(rounded));
+        JavaFloatFormatting.FormatForText(rounded).Should().Be(expected);
     }
 
     [Theory]
@@ -68,7 +68,7 @@ public sealed class SliderMathFormatterTests
 
         var actual = SliderMathFormatter.FormatTemplateLine(preset, profile, omitRedundant);
 
-        Assert.Equal(expected, actual);
+        actual.Should().Be(expected);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class SliderMathFormatterTests
 
         var actual = SliderMathFormatter.FormatTemplateLine(preset, profile, false);
 
-        Assert.Equal("Scaled = Scale@0.5:1.5", actual);
+        actual.Should().Be("Scaled = Scale@0.5:1.5");
     }
 
     [Theory]
@@ -125,7 +125,7 @@ public sealed class SliderMathFormatterTests
             var actual = SliderMathFormatter.FormatBosJson(presets[presetName], profile);
             var expected = File.ReadAllText(expectedFile);
 
-            Assert.Equal(NormalizeNewlines(expected), NormalizeNewlines(actual));
+            NormalizeNewlines(actual).Should().Be(NormalizeNewlines(expected));
         }
     }
 
@@ -142,8 +142,7 @@ public sealed class SliderMathFormatterTests
 
         var actual = SliderMathFormatter.FormatBosJson(preset, profile);
 
-        Assert.Equal(
-            "{\n" +
+        actual.Should().Be("{\n" +
             "  \"string\": {\n" +
             "    \"bodyname\": \"Body\",\n" +
             "    \"slidername1\": \"Scale\"\n" +
@@ -155,8 +154,7 @@ public sealed class SliderMathFormatterTests
             "    \"highvalue1\": 0.5,\n" +
             "    \"lowvalue1\": 0\n" +
             "  }\n" +
-            "}",
-            actual);
+            "}");
     }
 
     private static string FormatTemplates(IEnumerable<SliderPreset> presets, SliderProfile profile, bool omitRedundant)
@@ -173,7 +171,7 @@ public sealed class SliderMathFormatterTests
         var expectedPath = Path.Combine(RepositoryRoot, "tests", "fixtures", "expected", scenario, fileName);
         var expected = File.ReadAllText(expectedPath);
 
-        Assert.Equal(NormalizeNewlines(expected).TrimEnd(), NormalizeNewlines(actual).TrimEnd());
+        NormalizeNewlines(actual).TrimEnd().Should().Be(NormalizeNewlines(expected).TrimEnd());
     }
 
     private static List<SliderPreset> LoadPresets(string scenario, string fileName)

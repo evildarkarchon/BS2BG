@@ -15,7 +15,7 @@ public sealed class WindowImageViewServiceTests
 
         var bitmap = InvokeCreateBitmap(imagePath);
 
-        Assert.Null(bitmap);
+        bitmap.Should().BeNull();
         (bitmap as IDisposable)?.Dispose();
     }
 
@@ -30,7 +30,7 @@ public sealed class WindowImageViewServiceTests
 
         var bitmap = InvokeCreateBitmap(imagePath);
 
-        Assert.NotNull(bitmap);
+        bitmap.Should().NotBeNull();
         (bitmap as IDisposable)?.Dispose();
     }
 

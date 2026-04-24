@@ -23,13 +23,13 @@ public sealed class M7ReleasePolishTests
         var window = provider.GetRequiredService<MainWindow>();
         window.ApplyTemplate();
 
-        Assert.Equal("Search active view", AccessibleName<TextBox>(window, "GlobalSearchBox"));
-        Assert.Equal("Ctrl+F", Accelerator<TextBox>(window, "GlobalSearchBox"));
-        Assert.Equal("Theme preference", AccessibleName<ComboBox>(window, "ThemePreferenceComboBox"));
-        Assert.Equal("Open command palette", AccessibleName<Button>(window, "OpenCommandPaletteButton"));
-        Assert.Equal("Ctrl+Shift+P", Accelerator<Button>(window, "OpenCommandPaletteButton"));
-        Assert.Equal("New project", AccessibleName<MenuItem>(window, "NewProjectMenuItem"));
-        Assert.Equal("Ctrl+N", Accelerator<MenuItem>(window, "NewProjectMenuItem"));
+        AccessibleName<TextBox>(window, "GlobalSearchBox").Should().Be("Search active view");
+        Accelerator<TextBox>(window, "GlobalSearchBox").Should().Be("Ctrl+F");
+        AccessibleName<ComboBox>(window, "ThemePreferenceComboBox").Should().Be("Theme preference");
+        AccessibleName<Button>(window, "OpenCommandPaletteButton").Should().Be("Open command palette");
+        Accelerator<Button>(window, "OpenCommandPaletteButton").Should().Be("Ctrl+Shift+P");
+        AccessibleName<MenuItem>(window, "NewProjectMenuItem").Should().Be("New project");
+        Accelerator<MenuItem>(window, "NewProjectMenuItem").Should().Be("Ctrl+N");
 
         foreach (var (name, expected) in new[]
                  {
@@ -45,7 +45,7 @@ public sealed class M7ReleasePolishTests
                      ("AvailablePresetsListBox", "Available presets"),
                      ("AssignedPresetsListBox", "Assigned presets"), ("GeneratedMorphsTextBox", "Generated morphs")
                  })
-            Assert.Equal(expected, AccessibleName<Control>(window, name));
+            AccessibleName<Control>(window, name).Should().Be(expected);
     }
 
     [AvaloniaFact]
@@ -54,39 +54,36 @@ public sealed class M7ReleasePolishTests
         using var provider = AppBootstrapper.CreateServiceProvider();
 
         var window = provider.GetRequiredService<MainWindow>();
-        var viewModel = Assert.IsType<MainWindowViewModel>(window.ViewModel);
+        var viewModel = window.ViewModel.Should().BeOfType<MainWindowViewModel>().Which;
         window.ApplyTemplate();
 
-        Assert.True(window.FindControl<TextBox>("GlobalSearchBox")?.Focusable);
-        Assert.True(window.FindControl<ComboBox>("ThemePreferenceComboBox")?.Focusable);
-        Assert.True(window.FindControl<Button>("OpenCommandPaletteButton")?.Focusable);
-        Assert.True(window.FindControl<TextBox>("PresetNameInputBox")?.Focusable);
-        Assert.True(window.FindControl<TextBox>("NpcSearchBox")?.Focusable);
-        Assert.True(window.FindControl<ListBox>("NpcListBox")?.Focusable);
+        window.FindControl<TextBox>("GlobalSearchBox")?.Focusable.Should().BeTrue();
+        window.FindControl<ComboBox>("ThemePreferenceComboBox")?.Focusable.Should().BeTrue();
+        window.FindControl<Button>("OpenCommandPaletteButton")?.Focusable.Should().BeTrue();
+        window.FindControl<TextBox>("PresetNameInputBox")?.Focusable.Should().BeTrue();
+        window.FindControl<TextBox>("NpcSearchBox")?.Focusable.Should().BeTrue();
+        window.FindControl<ListBox>("NpcListBox")?.Focusable.Should().BeTrue();
 
-        Assert.Same(viewModel.Templates.ImportPresetsCommand,
-            window.FindControl<Button>("ImportPresetsButton")?.Command);
-        Assert.Same(viewModel.Templates.GenerateTemplatesCommand,
-            window.FindControl<Button>("GenerateTemplatesButton")?.Command);
-        Assert.Same(viewModel.Morphs.ImportNpcsCommand, window.FindControl<Button>("ImportNpcsButton")?.Command);
-        Assert.Same(viewModel.Morphs.FillEmptyNpcsCommand, window.FindControl<Button>("FillEmptyNpcsButton")?.Command);
-        Assert.Same(viewModel.Morphs.GenerateMorphsCommand,
-            window.FindControl<Button>("GenerateMorphsButton")?.Command);
+        window.FindControl<Button>("ImportPresetsButton")?.Command.Should().BeSameAs(viewModel.Templates.ImportPresetsCommand);
+        window.FindControl<Button>("GenerateTemplatesButton")?.Command.Should().BeSameAs(viewModel.Templates.GenerateTemplatesCommand);
+        window.FindControl<Button>("ImportNpcsButton")?.Command.Should().BeSameAs(viewModel.Morphs.ImportNpcsCommand);
+        window.FindControl<Button>("FillEmptyNpcsButton")?.Command.Should().BeSameAs(viewModel.Morphs.FillEmptyNpcsCommand);
+        window.FindControl<Button>("GenerateMorphsButton")?.Command.Should().BeSameAs(viewModel.Morphs.GenerateMorphsCommand);
 
-        Assert.Contains(window.KeyBindings, binding =>
+        window.KeyBindings.Any(binding =>
             ReferenceEquals(binding.Command, viewModel.FocusGlobalSearchCommand)
             && binding.Gesture?.Key == Key.F
-            && binding.Gesture.KeyModifiers == KeyModifiers.Control);
-        Assert.Contains(window.KeyBindings, binding =>
+            && binding.Gesture.KeyModifiers == KeyModifiers.Control).Should().BeTrue();
+        window.KeyBindings.Any(binding =>
             ReferenceEquals(binding.Command, viewModel.OpenCommandPaletteCommand)
             && binding.Gesture?.Key == Key.P
-            && binding.Gesture.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift));
+            && binding.Gesture.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift)).Should().BeTrue();
     }
 
     [AvaloniaFact]
     public void M7ThemeResourcesKeepWarningAndFocusContrastAboveAccessibilityThresholds()
     {
-        var application = Assert.IsType<App.App>(Application.Current);
+        var application = Application.Current.Should().BeOfType<App.App>().Which;
 
         AssertContrast(application, ThemeVariant.Light, "BS2BGWarningForegroundBrush", "BS2BGWarningBackgroundBrush",
             4.5);
@@ -99,14 +96,14 @@ public sealed class M7ReleasePolishTests
     private static string? AccessibleName<TControl>(Control root, string name)
         where TControl : Control
     {
-        var control = Assert.IsAssignableFrom<TControl>(root.FindControl<Control>(name));
+        var control = root.FindControl<Control>(name).Should().BeAssignableTo<TControl>().Which;
         return AutomationProperties.GetName(control);
     }
 
     private static string? Accelerator<TControl>(Control root, string name)
         where TControl : Control
     {
-        var control = Assert.IsAssignableFrom<TControl>(root.FindControl<Control>(name));
+        var control = root.FindControl<Control>(name).Should().BeAssignableTo<TControl>().Which;
         return AutomationProperties.GetAcceleratorKey(control);
     }
 
@@ -119,15 +116,15 @@ public sealed class M7ReleasePolishTests
     {
         var foreground = GetBrush(application, foregroundKey, theme);
         var background = GetBrush(application, backgroundKey, theme);
-        Assert.True(
-            ContrastRatio(foreground.Color, background.Color) >= minimum,
-            $"{foregroundKey} must contrast with {backgroundKey} in {theme}.");
+        ContrastRatio(foreground.Color, background.Color)
+            .Should()
+            .BeGreaterThanOrEqualTo(minimum, $"{foregroundKey} must contrast with {backgroundKey} in {theme}.");
     }
 
     private static SolidColorBrush GetBrush(Application application, string key, ThemeVariant theme)
     {
-        Assert.True(application.TryGetResource(key, theme, out var resource), $"Missing resource {key}.");
-        return Assert.IsType<SolidColorBrush>(resource);
+        application.TryGetResource(key, theme, out var resource).Should().BeTrue($"Missing resource {key}.");
+        return resource.Should().BeOfType<SolidColorBrush>().Which;
     }
 
     private static double ContrastRatio(Color first, Color second)

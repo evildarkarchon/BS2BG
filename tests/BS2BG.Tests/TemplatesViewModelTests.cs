@@ -38,28 +38,27 @@ public sealed class TemplatesViewModelTests
         var viewModel = CreateViewModel(picker);
 
         var importTask = viewModel.ImportPresetsAsync(TestContext.Current.CancellationToken);
-        Assert.True(viewModel.IsBusy);
+        viewModel.IsBusy.Should().BeTrue();
 
         picker.Release();
         await importTask;
 
-        Assert.False(viewModel.IsBusy);
-        Assert.Equal(new[] { "Alpha", "beta" }, viewModel.Presets.Select(preset => preset.Name));
+        viewModel.IsBusy.Should().BeFalse();
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "beta" });
         var alpha = viewModel.Presets.Single(preset => preset.Name == "Alpha");
-        Assert.Same(alpha, viewModel.SelectedPreset);
-        Assert.Equal(50, alpha.SetSliders.Single().ValueBig);
+        viewModel.SelectedPreset.Should().BeSameAs(alpha);
+        alpha.SetSliders.Single().ValueBig.Should().Be(50);
 
         picker.NextFiles = new[] { secondImport };
         var secondImportTask = viewModel.ImportPresetsAsync(TestContext.Current.CancellationToken);
         picker.Release();
         await secondImportTask;
 
-        var updatedAlpha = Assert.Single(
-            viewModel.Presets,
-            preset => string.Equals(preset.Name, "Alpha", StringComparison.OrdinalIgnoreCase));
-        Assert.Same(alpha, updatedAlpha);
-        Assert.Equal(75, updatedAlpha.SetSliders.Single().ValueBig);
-        Assert.Equal(new[] { "Alpha", "beta" }, viewModel.Presets.Select(preset => preset.Name));
+        var updatedAlpha = viewModel.Presets.Should().ContainSingle(preset =>
+            string.Equals(preset.Name, "Alpha", StringComparison.OrdinalIgnoreCase)).Which;
+        updatedAlpha.Should().BeSameAs(alpha);
+        updatedAlpha.SetSliders.Single().ValueBig.Should().Be(75);
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "beta" });
     }
 
     [Fact]
@@ -70,29 +69,29 @@ public sealed class TemplatesViewModelTests
         AddPreset(viewModel, "Beta", 50);
         viewModel.SelectedPreset = alpha;
 
-        Assert.False(viewModel.TryRenameSelectedPreset("Beta"));
-        Assert.Equal("A preset named 'Beta' already exists.", viewModel.ValidationMessage);
-        Assert.Equal(new[] { "Alpha", "Beta" }, viewModel.Presets.Select(preset => preset.Name));
+        viewModel.TryRenameSelectedPreset("Beta").Should().BeFalse();
+        viewModel.ValidationMessage.Should().Be("A preset named 'Beta' already exists.");
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta" });
 
-        Assert.True(viewModel.TryRenameSelectedPreset("Gamma"));
-        Assert.Equal("Gamma", alpha.Name);
+        viewModel.TryRenameSelectedPreset("Gamma").Should().BeTrue();
+        alpha.Name.Should().Be("Gamma");
 
-        Assert.False(viewModel.TryDuplicateSelectedPreset("Beta"));
-        Assert.Equal("A preset named 'Beta' already exists.", viewModel.ValidationMessage);
+        viewModel.TryDuplicateSelectedPreset("Beta").Should().BeFalse();
+        viewModel.ValidationMessage.Should().Be("A preset named 'Beta' already exists.");
 
-        Assert.True(viewModel.TryDuplicateSelectedPreset("Delta"));
-        Assert.Equal(new[] { "Beta", "Delta", "Gamma" }, viewModel.Presets.Select(preset => preset.Name));
-        Assert.Equal("Delta", viewModel.SelectedPreset?.Name);
-        Assert.Equal(25, viewModel.SelectedPreset?.SetSliders.Single().ValueBig);
+        viewModel.TryDuplicateSelectedPreset("Delta").Should().BeTrue();
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Beta", "Delta", "Gamma" });
+        viewModel.SelectedPreset?.Name.Should().Be("Delta");
+        viewModel.SelectedPreset?.SetSliders.Single().ValueBig.Should().Be(25);
 
-        Assert.True(viewModel.RemoveSelectedPreset());
-        Assert.Equal(new[] { "Beta", "Gamma" }, viewModel.Presets.Select(preset => preset.Name));
+        viewModel.RemoveSelectedPreset().Should().BeTrue();
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Beta", "Gamma" });
 
         viewModel.ClearPresets();
 
-        Assert.Empty(viewModel.Presets);
-        Assert.Null(viewModel.SelectedPreset);
-        Assert.Equal(string.Empty, viewModel.PreviewTemplateText);
+        viewModel.Presets.Should().BeEmpty();
+        viewModel.SelectedPreset.Should().BeNull();
+        viewModel.PreviewTemplateText.Should().Be(string.Empty);
     }
 
     [Fact]
@@ -111,9 +110,9 @@ public sealed class TemplatesViewModelTests
 
         viewModel.ClearPresets();
 
-        Assert.Empty(project.SliderPresets);
-        Assert.Empty(target.SliderPresets);
-        Assert.Empty(npc.SliderPresets);
+        project.SliderPresets.Should().BeEmpty();
+        target.SliderPresets.Should().BeEmpty();
+        npc.SliderPresets.Should().BeEmpty();
     }
 
     [Fact]
@@ -141,17 +140,17 @@ public sealed class TemplatesViewModelTests
         var viewModel = CreateViewModel(project: project, undoRedo: undoRedo);
 
         await viewModel.ImportPresetFilesAsync(new[] { importFile }, TestContext.Current.CancellationToken);
-        Assert.True(undoRedo.Undo());
+        undoRedo.Undo().Should().BeTrue();
 
-        var restoredPreset = Assert.Single(project.SliderPresets);
-        Assert.Same(restoredPreset, Assert.Single(target.SliderPresets));
-        Assert.Same(restoredPreset, Assert.Single(npc.SliderPresets));
+        var restoredPreset = project.SliderPresets.Should().ContainSingle().Which;
+        target.SliderPresets.Should().ContainSingle().Which.Should().BeSameAs(restoredPreset);
+        npc.SliderPresets.Should().ContainSingle().Which.Should().BeSameAs(restoredPreset);
 
         viewModel.SelectedPreset = restoredPreset;
-        Assert.True(viewModel.TryRenameSelectedPreset("Restored"));
+        viewModel.TryRenameSelectedPreset("Restored").Should().BeTrue();
 
-        Assert.Equal("All|Female=Restored", target.ToMorphLine());
-        Assert.Equal("Skyrim.esm|A2C94=Restored", npc.ToMorphLine());
+        target.ToMorphLine().Should().Be("All|Female=Restored");
+        npc.ToMorphLine().Should().Be("Skyrim.esm|A2C94=Restored");
     }
 
     [Fact]
@@ -162,23 +161,23 @@ public sealed class TemplatesViewModelTests
         AddPreset(viewModel, "Beta", 25);
 
         viewModel.SelectedPreset = alpha;
-        Assert.Equal("Alpha = Scale@0.5", viewModel.PreviewTemplateText);
+        viewModel.PreviewTemplateText.Should().Be("Alpha = Scale@0.5");
 
         viewModel.SelectedProfileName = "Double";
-        Assert.Equal("Double", alpha.ProfileName);
-        Assert.Equal("Alpha = Scale@1.0", viewModel.PreviewTemplateText);
+        alpha.ProfileName.Should().Be("Double");
+        viewModel.PreviewTemplateText.Should().Be("Alpha = Scale@1.0");
 
         alpha.SetSliders.Single().ValueBig = 75;
-        Assert.Equal("Alpha = Scale@1.5", viewModel.PreviewTemplateText);
+        viewModel.PreviewTemplateText.Should().Be("Alpha = Scale@1.5");
 
         viewModel.GenerateTemplates();
-        Assert.NotEqual(string.Empty, viewModel.GeneratedTemplateText);
+        viewModel.GeneratedTemplateText.Should().NotBe(string.Empty);
 
         alpha.SetSliders.Single().ValueBig = 0;
         viewModel.OmitRedundantSliders = true;
 
-        Assert.Equal(string.Empty, viewModel.GeneratedTemplateText);
-        Assert.Equal("Alpha = ", viewModel.PreviewTemplateText);
+        viewModel.GeneratedTemplateText.Should().Be(string.Empty);
+        viewModel.PreviewTemplateText.Should().Be("Alpha = ");
     }
 
     [Fact]
@@ -192,13 +191,13 @@ public sealed class TemplatesViewModelTests
 
         viewModel.SelectedProfileName = "Double";
 
-        Assert.Equal("Double", preset.ProfileName);
-        Assert.Equal(new[] { "DoubleOnly" }, preset.MissingDefaultSetSliders.Select(slider => slider.Name));
+        preset.ProfileName.Should().Be("Double");
+        preset.MissingDefaultSetSliders.Select(slider => slider.Name).Should().Equal(new[] { "DoubleOnly" });
 
         viewModel.GenerateTemplates();
 
-        Assert.Contains("DoubleOnly@1.0", viewModel.GeneratedTemplateText);
-        Assert.DoesNotContain("RegularOnly@", viewModel.GeneratedTemplateText);
+        viewModel.GeneratedTemplateText.Should().Contain("DoubleOnly@1.0");
+        viewModel.GeneratedTemplateText.Should().NotContain("RegularOnly@");
     }
 
     [Fact]
@@ -209,15 +208,15 @@ public sealed class TemplatesViewModelTests
 
         await viewModel.CopyGeneratedTemplatesAsync(TestContext.Current.CancellationToken);
 
-        Assert.Null(clipboard.Text);
-        Assert.Equal("Generate templates before copying.", viewModel.StatusMessage);
+        clipboard.Text.Should().BeNull();
+        viewModel.StatusMessage.Should().Be("Generate templates before copying.");
 
         AddPreset(viewModel, "Alpha", 50);
         viewModel.GenerateTemplates();
         await viewModel.CopyGeneratedTemplatesAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(viewModel.GeneratedTemplateText, clipboard.Text);
-        Assert.Equal("Generated templates copied.", viewModel.StatusMessage);
+        clipboard.Text.Should().Be(viewModel.GeneratedTemplateText);
+        viewModel.StatusMessage.Should().Be("Generated templates copied.");
     }
 
     [Fact]
@@ -241,8 +240,8 @@ public sealed class TemplatesViewModelTests
             SynchronizationContext.SetSynchronizationContext(previousContext);
         }
 
-        Assert.Empty(synchronizationContext.Exceptions);
-        Assert.Equal("Copy generated templates failed: Clipboard is unavailable.", viewModel.StatusMessage);
+        synchronizationContext.Exceptions.Should().BeEmpty();
+        viewModel.StatusMessage.Should().Be("Copy generated templates failed: Clipboard is unavailable.");
     }
 
     private static ModelSliderPreset AddPreset(TemplatesViewModel viewModel, string name, int bigValue)

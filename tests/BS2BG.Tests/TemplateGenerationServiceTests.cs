@@ -45,7 +45,7 @@ public sealed class TemplateGenerationServiceTests
             catalog,
             false);
 
-        Assert.Equal("Alpha = Scale@0.25\r\nBeta = Scale@0.5", actual);
+        actual.Should().Be("Alpha = Scale@0.25\r\nBeta = Scale@0.5");
     }
 
     [Theory]
@@ -115,7 +115,7 @@ public sealed class TemplateGenerationServiceTests
         var expectedPath = Path.Combine(RepositoryRoot, "tests", "fixtures", "expected", scenario, fileName);
         var expected = File.ReadAllText(expectedPath);
 
-        Assert.Equal(NormalizeNewlines(expected).TrimEnd(), NormalizeNewlines(actual).TrimEnd());
+        NormalizeNewlines(actual).TrimEnd().Should().Be(NormalizeNewlines(expected).TrimEnd());
     }
 
     private static string NormalizeNewlines(string value)

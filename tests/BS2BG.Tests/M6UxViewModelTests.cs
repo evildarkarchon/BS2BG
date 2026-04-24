@@ -30,22 +30,22 @@ public sealed class M6UxViewModelTests
         harness.Main.ActiveWorkspace = AppWorkspace.Templates;
         harness.Main.GlobalSearchText = "wide";
 
-        Assert.Equal(new[] { "Beta" }, harness.Templates.VisiblePresets.Select(preset => preset.Name));
+        harness.Templates.VisiblePresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
 
         harness.Main.ActiveWorkspace = AppWorkspace.Morphs;
         harness.Main.GlobalSearchText = "housecarl";
 
-        Assert.Equal(new[] { "Lydia" }, harness.Morphs.VisibleNpcs.Select(npc => npc.Name));
+        harness.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia" });
 
         harness.Main.OpenCommandPaletteCommand.Execute(null);
         harness.Main.CommandPaletteSearchText = "Generate Templates";
-        var command = Assert.Single(harness.Main.VisibleCommandPaletteItems);
+        var command = harness.Main.VisibleCommandPaletteItems.Should().ContainSingle().Which;
 
         harness.Main.RunCommandPaletteItemCommand.Execute(command);
 
-        Assert.True(harness.Main.IsCommandPaletteOpen);
-        Assert.Equal("Generate Templates", command.Title);
-        Assert.Contains("Alpha", harness.Templates.GeneratedTemplateText, StringComparison.Ordinal);
+        harness.Main.IsCommandPaletteOpen.Should().BeTrue();
+        command.Title.Should().Be("Generate Templates");
+        harness.Templates.GeneratedTemplateText.Should().Contain("Alpha");
     }
 
     [Fact]
@@ -72,11 +72,11 @@ public sealed class M6UxViewModelTests
             new[] { xmlPath, npcPath, Path.Combine(directory.Path, "ignored.md") },
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(projectPath, harness.Main.CurrentProjectPath);
-        Assert.Contains(harness.Project.SliderPresets, preset => preset.Name == "Loaded");
-        Assert.Contains(harness.Project.SliderPresets, preset => preset.Name == "DropAlpha");
-        Assert.Equal(new[] { "Lydia" }, harness.Morphs.NpcDatabase.Select(npc => npc.Name));
-        Assert.Contains("Skipped 1 unsupported file", harness.Main.StatusMessage, StringComparison.Ordinal);
+        harness.Main.CurrentProjectPath.Should().Be(projectPath);
+        harness.Project.SliderPresets.Should().Contain(preset => preset.Name == "Loaded");
+        harness.Project.SliderPresets.Should().Contain(preset => preset.Name == "DropAlpha");
+        harness.Morphs.NpcDatabase.Select(npc => npc.Name).Should().Equal(new[] { "Lydia" });
+        harness.Main.StatusMessage.Should().Contain("Skipped 1 unsupported file");
     }
 
     [Fact]
@@ -100,16 +100,16 @@ public sealed class M6UxViewModelTests
         harness.Morphs.AssignSelectedNpcsCommand.Execute(null);
         harness.Morphs.ClearSelectedNpcAssignmentsCommand.Execute(null);
 
-        Assert.Empty(lydia.SliderPresets);
-        Assert.Empty(serana.SliderPresets);
-        Assert.Equal(new[] { "Beta" }, valerica.SliderPresets.Select(preset => preset.Name));
+        lydia.SliderPresets.Should().BeEmpty();
+        serana.SliderPresets.Should().BeEmpty();
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
 
         harness.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, new[] { "NordRaceVampire" });
         harness.Morphs.SearchText = "Dawnguard";
         harness.Morphs.SetNpcColumnSearchText(NpcFilterColumn.Race, "vamp");
 
-        Assert.Equal(new[] { "Valerica" }, harness.Morphs.VisibleNpcs.Select(npc => npc.Name));
-        Assert.Equal(new[] { "NordRaceVampire" }, harness.Morphs.GetNpcColumnValues(NpcFilterColumn.Race));
+        harness.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Valerica" });
+        harness.Morphs.GetNpcColumnValues(NpcFilterColumn.Race).Should().Equal(new[] { "NordRaceVampire" });
     }
 
     [Fact]
@@ -123,21 +123,21 @@ public sealed class M6UxViewModelTests
         var harness = CreateHarness(project);
 
         harness.Templates.SelectedPreset = alpha;
-        Assert.True(harness.Templates.TryRenameSelectedPreset("Gamma"));
+        harness.Templates.TryRenameSelectedPreset("Gamma").Should().BeTrue();
 
         harness.Main.UndoCommand.Execute(null);
-        Assert.Equal("Alpha", alpha.Name);
+        alpha.Name.Should().Be("Alpha");
 
         harness.Main.RedoCommand.Execute(null);
-        Assert.Equal("Gamma", alpha.Name);
+        alpha.Name.Should().Be("Gamma");
 
-        Assert.True(harness.Templates.RemoveSelectedPreset());
-        Assert.Empty(target.SliderPresets);
+        harness.Templates.RemoveSelectedPreset().Should().BeTrue();
+        target.SliderPresets.Should().BeEmpty();
 
         harness.Main.UndoCommand.Execute(null);
 
-        Assert.Contains(project.SliderPresets, preset => preset.Name == "Gamma");
-        Assert.Equal(new[] { "Gamma" }, target.SliderPresets.Select(preset => preset.Name));
+        project.SliderPresets.Should().Contain(preset => preset.Name == "Gamma");
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Gamma" });
     }
 
     [Fact]
@@ -156,21 +156,21 @@ public sealed class M6UxViewModelTests
 
         harness.Templates.ClearPresets();
 
-        Assert.Empty(project.SliderPresets);
-        Assert.Empty(target.SliderPresets);
-        Assert.Empty(npc.SliderPresets);
+        project.SliderPresets.Should().BeEmpty();
+        target.SliderPresets.Should().BeEmpty();
+        npc.SliderPresets.Should().BeEmpty();
 
         harness.Main.UndoCommand.Execute(null);
 
-        Assert.Equal(new[] { "Alpha", "Beta" }, project.SliderPresets.Select(preset => preset.Name));
-        Assert.Equal(new[] { "Alpha" }, target.SliderPresets.Select(preset => preset.Name));
-        Assert.Equal(new[] { "Beta" }, npc.SliderPresets.Select(preset => preset.Name));
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta" });
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        npc.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
 
         harness.Main.RedoCommand.Execute(null);
 
-        Assert.Empty(project.SliderPresets);
-        Assert.Empty(target.SliderPresets);
-        Assert.Empty(npc.SliderPresets);
+        project.SliderPresets.Should().BeEmpty();
+        target.SliderPresets.Should().BeEmpty();
+        npc.SliderPresets.Should().BeEmpty();
     }
 
     [Fact]
@@ -189,22 +189,21 @@ public sealed class M6UxViewModelTests
         var harness = CreateHarness(project, preferences);
 
         harness.Morphs.TargetNameInput = "bad";
-        Assert.NotEqual(string.Empty, harness.Morphs.TargetNameValidationMessage);
-        Assert.Contains("All|Female", harness.Morphs.CustomTargetExamples);
+        harness.Morphs.TargetNameValidationMessage.Should().NotBe(string.Empty);
+        harness.Morphs.CustomTargetExamples.Should().Contain("All|Female");
 
         harness.Morphs.SelectedCustomTarget = target;
-        Assert.Equal(PresetCountWarningState.Error, harness.Morphs.TargetPresetWarningState);
-        Assert.True(harness.Morphs.TrimSelectedTargetTo76Command.CanExecute(null));
+        harness.Morphs.TargetPresetWarningState.Should().Be(PresetCountWarningState.Error);
+        harness.Morphs.TrimSelectedTargetTo76Command.CanExecute(null).Should().BeTrue();
 
         harness.Morphs.TrimSelectedTargetTo76Command.Execute(null);
 
-        Assert.Equal(76, target.SliderPresets.Count);
-        Assert.Equal(new[] { "P76", "P77", "P78", "P79" },
-            target.SliderPresets.TakeLast(4).Select(preset => preset.Name));
+        target.SliderPresets.Count.Should().Be(76);
+        target.SliderPresets.TakeLast(4).Select(preset => preset.Name).Should().Equal(new[] { "P76", "P77", "P78", "P79" });
 
         harness.Main.SelectedThemePreference = ThemePreference.Dark;
 
-        Assert.Equal(ThemePreference.Dark, preferences.Saved.Theme);
+        preferences.Saved.Theme.Should().Be(ThemePreference.Dark);
     }
 
     [Fact]
@@ -216,8 +215,8 @@ public sealed class M6UxViewModelTests
 
         harness.Main.SelectedThemePreference = ThemePreference.Dark;
 
-        Assert.Equal(ThemePreference.Dark, harness.Main.SelectedThemePreference);
-        Assert.Equal("Saving preferences failed.", harness.Main.StatusMessage);
+        harness.Main.SelectedThemePreference.Should().Be(ThemePreference.Dark);
+        harness.Main.StatusMessage.Should().Be("Saving preferences failed.");
     }
 
     private static TestHarness CreateHarness(

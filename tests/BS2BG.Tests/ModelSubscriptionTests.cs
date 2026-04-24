@@ -20,7 +20,7 @@ public sealed class ModelSubscriptionTests
 
         preset.Name = "Beta";
 
-        Assert.False(project.IsDirty);
+        project.IsDirty.Should().BeFalse();
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public sealed class ModelSubscriptionTests
 
         slider.ValueBig = 75;
 
-        Assert.Equal(0, changeCount);
+        changeCount.Should().Be(0);
 
         void CountPresetChanges(object? sender, PropertyChangedEventArgs args)
         {
@@ -59,7 +59,7 @@ public sealed class ModelSubscriptionTests
 
         slider.ValueBig = 75;
 
-        Assert.Equal(0, changeCount);
+        changeCount.Should().Be(0);
 
         void CountPresetChanges(object? sender, PropertyChangedEventArgs args)
         {

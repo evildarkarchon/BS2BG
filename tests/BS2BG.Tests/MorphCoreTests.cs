@@ -24,17 +24,17 @@ public sealed class MorphCoreTests
 
         var added = service.TryAddCustomTarget(project, " All|Female|NordRace ", out var target, out var error);
 
-        Assert.True(added);
-        Assert.Equal(string.Empty, error);
-        Assert.NotNull(target);
-        Assert.Equal("All|Female|NordRace", target.Name);
-        Assert.Equal(new[] { "Beta" }, target.SliderPresets.Select(preset => preset.Name));
+        added.Should().BeTrue();
+        error.Should().Be(string.Empty);
+        target.Should().NotBeNull();
+        target.Name.Should().Be("All|Female|NordRace");
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
 
-        Assert.False(service.TryAddCustomTarget(project, "all|female|nordrace", out _, out error));
-        Assert.Equal("A custom target named 'all|female|nordrace' already exists.", error);
+        service.TryAddCustomTarget(project, "all|female|nordrace", out _, out error).Should().BeFalse();
+        error.Should().Be("A custom target named 'all|female|nordrace' already exists.");
 
-        Assert.False(service.TryAddCustomTarget(project, "All", out _, out error));
-        Assert.Equal("Custom target must use Context|Gender or Context|Gender|Race[Variant].", error);
+        service.TryAddCustomTarget(project, "All", out _, out error).Should().BeFalse();
+        error.Should().Be("Custom target must use Context|Gender or Context|Gender|Race[Variant].");
     }
 
     [Fact]
@@ -61,17 +61,17 @@ public sealed class MorphCoreTests
         var bomResult = parser.ParseFile(bomPath);
         var fallbackResult = parser.ParseFile(fallbackPath);
 
-        var npc = Assert.Single(bomResult.Npcs);
-        Assert.False(bomResult.UsedFallbackEncoding);
-        Assert.Equal("Lydia", npc.Name);
-        Assert.Equal("HousecarlWhiterun", npc.EditorId);
-        Assert.Equal("NordRace", npc.Race);
-        Assert.Equal("A2C94", npc.FormId);
+        var npc = bomResult.Npcs.Should().ContainSingle().Which;
+        bomResult.UsedFallbackEncoding.Should().BeFalse();
+        npc.Name.Should().Be("Lydia");
+        npc.EditorId.Should().Be("HousecarlWhiterun");
+        npc.Race.Should().Be("NordRace");
+        npc.FormId.Should().Be("A2C94");
 
-        var fallbackNpc = Assert.Single(fallbackResult.Npcs);
-        Assert.True(fallbackResult.UsedFallbackEncoding);
-        Assert.Equal("Zoë", fallbackNpc.Name);
-        Assert.Equal("DLC1Zoe", fallbackNpc.EditorId);
+        var fallbackNpc = fallbackResult.Npcs.Should().ContainSingle().Which;
+        fallbackResult.UsedFallbackEncoding.Should().BeTrue();
+        fallbackNpc.Name.Should().Be("Zoë");
+        fallbackNpc.EditorId.Should().Be("DLC1Zoe");
     }
 
     [Fact]
@@ -85,13 +85,13 @@ public sealed class MorphCoreTests
 
         var result = parser.ParseFile(missingPath);
 
-        Assert.Empty(result.Npcs);
-        Assert.False(result.UsedFallbackEncoding);
-        Assert.Equal(string.Empty, result.EncodingName);
-        var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal(0, diagnostic.LineNumber);
-        Assert.Contains("Could not read NPC file", diagnostic.Message, StringComparison.Ordinal);
-        Assert.Contains(missingPath, diagnostic.Message, StringComparison.Ordinal);
+        result.Npcs.Should().BeEmpty();
+        result.UsedFallbackEncoding.Should().BeFalse();
+        result.EncodingName.Should().Be(string.Empty);
+        var diagnostic = result.Diagnostics.Should().ContainSingle().Which;
+        diagnostic.LineNumber.Should().Be(0);
+        diagnostic.Message.Should().Contain("Could not read NPC file");
+        diagnostic.Message.Should().Contain(missingPath);
     }
 
     [Fact]
@@ -123,13 +123,11 @@ public sealed class MorphCoreTests
 
         var result = generator.GenerateMorphs(project);
 
-        Assert.Equal(
-            "All|Female=Alpha|Beta\r\n"
+        result.Text.Should().Be("All|Female=Alpha|Beta\r\n"
             + "Empty|Female=\r\n"
             + "Dawnguard.esm|2B6C=Alpha\r\n"
-            + "Skyrim.esm|A2C94=Beta",
-            result.Text);
-        Assert.Equal(new[] { "Empty|Female" }, result.TargetsWithoutPresets.Select(target => target.Name));
+            + "Skyrim.esm|A2C94=Beta");
+        result.TargetsWithoutPresets.Select(target => target.Name).Should().Equal(new[] { "Empty|Female" });
     }
 
     [Fact]
@@ -140,11 +138,9 @@ public sealed class MorphCoreTests
         target.SliderPresets.CollectionChanged += (_, _) => collectionNotifications++;
 
         target.AddSliderPreset(new SliderPreset("P2"));
-        var exception = Record.Exception(() => target.AddSliderPreset(new SliderPreset("P10")));
-
-        Assert.Null(exception);
-        Assert.True(collectionNotifications > 0);
-        Assert.Equal(new[] { "P10", "P2" }, target.SliderPresets.Select(preset => preset.Name));
+        FluentActions.Invoking(() => target.AddSliderPreset(new SliderPreset("P10"))).Should().NotThrow();
+        collectionNotifications.Should().BeGreaterThan(0);
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "P10", "P2" });
     }
 
     private sealed class FixedRandomAssignmentProvider(int value) : IRandomAssignmentProvider
