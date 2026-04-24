@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <RootNamespace>BS2BG.Core</RootNamespace>
+    <LangVersion>13</LangVersion>
+  </PropertyGroup>
+</Project>
