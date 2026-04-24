@@ -1,0 +1,31 @@
+{
+  "string": {
+    "bodyname": "SevenBase",
+    "slidername1": "7B Lower",
+    "slidername2": "7B Upper",
+    "slidername3": "Arms",
+    "slidername4": "Breasts",
+    "slidername5": "Butt",
+    "slidername6": "Legs",
+    "slidername7": "Waist"
+  },
+  "int": {
+    "slidersnumber": 7
+  },
+  "float": {
+    "highvalue1": 1,
+    "highvalue2": 1,
+    "highvalue3": 0,
+    "highvalue4": 0,
+    "highvalue5": 0,
+    "highvalue6": 0,
+    "highvalue7": 1,
+    "lowvalue1": 0,
+    "lowvalue2": 0,
+    "lowvalue3": 1,
+    "lowvalue4": 0.8,
+    "lowvalue5": 1,
+    "lowvalue6": 1,
+    "lowvalue7": 0
+  }
+}

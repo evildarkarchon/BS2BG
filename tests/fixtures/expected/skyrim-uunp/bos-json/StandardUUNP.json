@@ -1,0 +1,28 @@
+{
+  "string": {
+    "bodyname": "StandardUUNP",
+    "slidername1": "Arms",
+    "slidername2": "Breasts",
+    "slidername3": "Butt",
+    "slidername4": "Legs",
+    "slidername5": "ShoulderWidth",
+    "slidername6": "Waist"
+  },
+  "int": {
+    "slidersnumber": 6
+  },
+  "float": {
+    "highvalue1": 0,
+    "highvalue2": 0.2,
+    "highvalue3": 0.4,
+    "highvalue4": 0,
+    "highvalue5": 0.5,
+    "highvalue6": 1,
+    "lowvalue1": 1,
+    "lowvalue2": 0.6,
+    "lowvalue3": 0.4,
+    "lowvalue4": 1,
+    "lowvalue5": 0.5,
+    "lowvalue6": 0
+  }
+}

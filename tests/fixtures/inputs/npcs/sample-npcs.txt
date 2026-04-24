@@ -1,0 +1,7 @@
+Skyrim.esm|Lydia|HousecarlWhiterun|NordRace|000A2C94
+Skyrim.esm|Aela the Huntress|CompanionsAela|NordRace|0001A697
+Skyrim.esm|Serana|DLC1Serana|NordRaceVampire|02002B74
+Dawnguard.esm|Valerica|DLC1Valerica|NordRaceVampire|02002B6C
+Skyrim.esm|Mjoll the Lioness|MjollTheLioness|NordRace|0001B07A
+Skyrim.esm|Jenassa|Jenassa|DarkElfRace|0001348E
+Skyrim.esm|Ysolda|Ysolda|NordRace|0001A691

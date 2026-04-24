@@ -1,0 +1,2464 @@
+{
+  "SliderPresets": {
+    "- Zeroed Sliders -": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 0,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Athletic": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "BreastFlatness2",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastGravity2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastHeight",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastPerkiness",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsSmall2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastTopSlope",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtClassic",
+          "enabled": true,
+          "valueSmall": 60,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtSmall",
+          "enabled": true,
+          "valueSmall": 80,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CalfSmooth",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleAbs",
+          "enabled": true,
+          "valueSmall": 70,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleArms",
+          "enabled": true,
+          "valueSmall": 60,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleButt",
+          "enabled": true,
+          "valueSmall": 55,
+          "valueBig": 75,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleLegs",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MusclePecs",
+          "enabled": true,
+          "valueSmall": 45,
+          "valueBig": 55,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleDown",
+          "enabled": true,
+          "valueSmall": 18,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleSize",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleTip",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderSmooth",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SlimThighs",
+          "enabled": true,
+          "valueSmall": 45,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SternumHeight",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "TummyTuck",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Waist",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WaistHeight",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WideWaistLine",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Chubby": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "AppleCheeks",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Belly",
+          "enabled": true,
+          "valueSmall": 60,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BigBelly",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BigTorso",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastGravity2",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastHeight",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsNewSH",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastTopSlope",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 75,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastWidth",
+          "enabled": true,
+          "valueSmall": -50,
+          "valueBig": -50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChubbyArms",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChubbyButt",
+          "enabled": true,
+          "valueSmall": 85,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChubbyLegs",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChubbyWaist",
+          "enabled": true,
+          "valueSmall": 55,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "DoubleMelon",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleDown",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleLength",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleSize",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleTip",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 45,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SternumHeight",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Curvy": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "AppleCheeks",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Back",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BigButt",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastCenter",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastGravity2",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastTopSlope",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Butt",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtCrack",
+          "enabled": true,
+          "valueSmall": 80,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CalfSize",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 45,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CalfSmooth",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChestWidth",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CrotchBack",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 45,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipUpperWidth",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "LegsThin",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleDown",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleSize",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleTip",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 60,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SlimThighs",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Thighs",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "TummyTuck",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WaistHeight",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WideWaistLine",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Curvy (Outfit)": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "AppleCheeks",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "AreolaSize",
+          "enabled": true,
+          "valueSmall": -30,
+          "valueBig": -30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Back",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BigButt",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastCleavage",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastHeight",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 75,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Butt",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtCrack",
+          "enabled": true,
+          "valueSmall": 80,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CalfSize",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 45,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CalfSmooth",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChestWidth",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CrotchBack",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "DoubleMelon",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 45,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipUpperWidth",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "LegsThin",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NipBGone",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "PushUp",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 60,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SlimThighs",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Thighs",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "TummyTuck",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WaistHeight",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WideWaistLine",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Fetish": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "AppleCheeks",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "AreolaSize",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastCleavage",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastHeight",
+          "enabled": true,
+          "valueSmall": -25,
+          "valueBig": -25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsFantasy",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsNewSH",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastTopSlope",
+          "enabled": true,
+          "valueSmall": 45,
+          "valueBig": 45,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChubbyButt",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleAbs",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleArms",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleButt",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleLegs",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleDistance",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleManga",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 75,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NipplePerk2",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NipplePerkiness",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NipplePerkManga",
+          "enabled": true,
+          "valueSmall": 70,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleSize",
+          "enabled": true,
+          "valueSmall": 5,
+          "valueBig": 5,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleTip",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleUp",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "PushUp",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SternumHeight",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Thighs",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "TummyTuck",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WaistHeight",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WideWaistLine",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Fetish v2": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "AppleCheeks",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "AreolaSize",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ArmpitShape_v2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BellyUnder_v2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastCleavage",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastHeight",
+          "enabled": true,
+          "valueSmall": -25,
+          "valueBig": -25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsFantasy",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsNewSH",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastTopSlope",
+          "enabled": true,
+          "valueSmall": 45,
+          "valueBig": 45,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CBPC",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChubbyButt",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Clavicle_v2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CrotchBack",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Cutepuffyness",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipCarved",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleAbs",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleArms",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 58,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleBack_v2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 28,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleButt",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleLegs",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleMoreAbs_v2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 42,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleMoreArms_v2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 29,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleMoreLegs_v2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MusclePecs",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleDistance",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleManga",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 75,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NipplePerkiness",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NipplePerkManga",
+          "enabled": true,
+          "valueSmall": 70,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NipplePuffy_v2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleSize",
+          "enabled": true,
+          "valueSmall": 5,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleTip",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleUp",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "PushUp",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "RibsMore_v2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SternumHeight",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Thighs",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "TummyTuck",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WaistHeight",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WideWaistLine",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Oppai": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "7B Lower",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "7B Upper",
+          "enabled": true,
+          "valueSmall": 70,
+          "valueBig": 70,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "AreolaSize",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastGravity2",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastPerkiness",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": -25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 70,
+          "valueBig": 70,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "DoubleMelon",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SternumHeight",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Petite": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Belly",
+          "enabled": true,
+          "valueSmall": -25,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastCenter",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastGravity2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastHeight",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastPerkiness",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsSmall",
+          "enabled": true,
+          "valueSmall": 80,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastTopSlope",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtSmall",
+          "enabled": true,
+          "valueSmall": 70,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CalfSmooth",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChestDepth",
+          "enabled": true,
+          "valueSmall": -15,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ChestWidth",
+          "enabled": true,
+          "valueSmall": -25,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CrotchGap",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipNarrow_v2",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "LegsThin",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleDown",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleSize",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleTip",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "RibsProminance",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SlimThighs",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SternumDepth",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "TummyTuck",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WaistHeight",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WideWaistLine",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE SevenBase": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "7B Lower",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 70,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "7B Upper",
+          "enabled": true,
+          "valueSmall": 30,
+          "valueBig": 70,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Slim": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastCenter",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastFlatness2",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastGravity2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsSmall",
+          "enabled": true,
+          "valueSmall": 60,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastTopSlope",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Butt",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtCrack",
+          "enabled": true,
+          "valueSmall": 80,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtSmall",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CalfSmooth",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CrotchBack",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipUpperWidth",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "LegsThin",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleDown",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleSize",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleTip",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 70,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SlimThighs",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "TummyTuck",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WaistHeight",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WideWaistLine",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Slim (Outfit)": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "AreolaSize",
+          "enabled": true,
+          "valueSmall": -30,
+          "valueBig": -30,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastCleavage",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastHeight",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsSmall",
+          "enabled": true,
+          "valueSmall": 60,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 65,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Butt",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtCrack",
+          "enabled": true,
+          "valueSmall": 80,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtSmall",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CalfSmooth",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CrotchBack",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipUpperWidth",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "LegsThin",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NipBGone",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "PushUp",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 70,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SlimThighs",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "TummyTuck",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WaistHeight",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WideWaistLine",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Strong": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BigButt",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BigTorso",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 40,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastCenter",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastFlatness2",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastGravity2",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsSmall",
+          "enabled": true,
+          "valueSmall": 60,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastsTogether",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "BreastTopSlope",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Butt",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtCrack",
+          "enabled": true,
+          "valueSmall": 80,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtDimples",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ButtSmall",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CalfSmooth",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CBPC",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "CrotchBack",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipForward",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "HipUpperWidth",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "LegsThin",
+          "enabled": true,
+          "valueSmall": 35,
+          "valueBig": 25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleAbs",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 65,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleArms",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 75,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleBack_v2",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleButt",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 75,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleLegs",
+          "enabled": true,
+          "valueSmall": 75,
+          "valueBig": 75,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleMoreAbs_v2",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 45,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleMoreArms_v2",
+          "enabled": true,
+          "valueSmall": 10,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MuscleMoreLegs_v2",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": 35,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "MusclePecs",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleDown",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleSize",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "NippleTip",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 70,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "SlimThighs",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 10,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "TummyTuck",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WaistHeight",
+          "enabled": true,
+          "valueSmall": 15,
+          "valueBig": 15,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "WideWaistLine",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 20,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "CBBE Vanilla": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "VanillaSSEHi",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "VanillaSSELo",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    }
+  },
+  "CustomMorphTargets": {
+    
+  },
+  "MorphedNPCs": {
+    
+  }
+}

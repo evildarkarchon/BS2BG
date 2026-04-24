@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox fx:id="mainPane" prefHeight="600.0" prefWidth="900.0" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.asdasfa.jbs2bg.MainController">
+  <children>
+    <MenuBar VBox.vgrow="NEVER">
+      <menus>
+        <Menu mnemonicParsing="false" text="File">
+          <items>
+            <MenuItem fx:id="miNew" mnemonicParsing="false" onAction="#showConfirmNewFile" text="New" />
+            <MenuItem fx:id="miOpen" mnemonicParsing="false" onAction="#showConfirmOpenFile" text="Open…" />
+            <MenuItem fx:id="miSave" mnemonicParsing="false" onAction="#save" text="Save" />
+            <MenuItem fx:id="miSaveAs" mnemonicParsing="false" onAction="#saveToFile" text="Save As…" />
+                  <MenuItem fx:id="miExportBosJson" mnemonicParsing="false" onAction="#exportBosJson" text="Export Templates as BoS JSON" />
+            <MenuItem fx:id="miExport" mnemonicParsing="false" onAction="#export" text="Export BodyGen INIs" />
+          </items>
+        </Menu>
+        <Menu mnemonicParsing="false" text="Help">
+          <items>
+            <MenuItem mnemonicParsing="false" onAction="#showAbout" text="About jBS2BG" />
+          </items>
+        </Menu>
+      </menus>
+    </MenuBar>
+    <AnchorPane maxHeight="-1.0" maxWidth="-1.0" prefHeight="-1.0" prefWidth="-1.0" VBox.vgrow="ALWAYS">
+      <children>
+            <TabPane prefHeight="575.0" prefWidth="800.0" tabClosingPolicy="UNAVAILABLE" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+              <tabs>
+                <Tab closable="false" text="Templates">
+                     <content>
+                        <HBox prefHeight="547.0" prefWidth="800.0" spacing="10.0">
+                           <children>
+                              <VBox prefHeight="546.0" prefWidth="254.0" spacing="5.0">
+                                 <children>
+                                    <Button alignment="CENTER" mnemonicParsing="false" onAction="#addXmlPresets" prefHeight="32.0" prefWidth="250.0" text="Add BodySlide XML Presets">
+                                       <VBox.margin>
+                                          <Insets />
+                                       </VBox.margin>
+                                    </Button>
+                                    <ListView fx:id="lvPresets" prefHeight="370.0" prefWidth="240.0" VBox.vgrow="ALWAYS" />
+                                    <GridPane alignment="CENTER" hgap="5.0" vgap="5.0" VBox.vgrow="NEVER">
+                                      <columnConstraints>
+                                          <ColumnConstraints hgrow="SOMETIMES" maxWidth="116.0" minWidth="116.0" prefWidth="116.0" />
+                                        <ColumnConstraints hgrow="SOMETIMES" maxWidth="116.0" minWidth="116.0" prefWidth="116.0" />
+                                      </columnConstraints>
+                                      <rowConstraints>
+                                        <RowConstraints maxHeight="32.0" minHeight="32.0" prefHeight="32.0" vgrow="SOMETIMES" />
+                                        <RowConstraints maxHeight="32.0" minHeight="32.0" prefHeight="32.0" vgrow="SOMETIMES" />
+                                      </rowConstraints>
+                                       <children>
+                                          <Button alignment="CENTER" mnemonicParsing="false" onAction="#showPopupRename" prefHeight="32.0" prefWidth="115.0" text="Rename" GridPane.halignment="CENTER" GridPane.valignment="CENTER" />
+                                          <Button alignment="CENTER" mnemonicParsing="false" onAction="#duplicateSelectedPreset" prefHeight="32.0" prefWidth="115.0" text="Duplicate" GridPane.columnIndex="1" GridPane.halignment="CENTER" GridPane.valignment="CENTER" />
+                                          <Button alignment="CENTER" mnemonicParsing="false" onAction="#showConfirmClearPresets" prefHeight="32.0" prefWidth="115.0" text="Clear" GridPane.halignment="CENTER" GridPane.rowIndex="1" GridPane.valignment="CENTER" />
+                                          <Button alignment="CENTER" mnemonicParsing="false" onAction="#showConfirmRemovePreset" prefHeight="32.0" prefWidth="115.0" text="Remove" GridPane.columnIndex="1" GridPane.halignment="CENTER" GridPane.rowIndex="1" GridPane.valignment="CENTER" />
+                                       </children>
+                                       <VBox.margin>
+                                          <Insets />
+                                       </VBox.margin>
+                                    </GridPane>
+                                 </children>
+                                 <padding>
+                                    <Insets bottom="10.0" left="10.0" top="10.0" />
+                                 </padding>
+                              </VBox>
+                              <VBox prefHeight="534.0" prefWidth="525.0" spacing="5.0" HBox.hgrow="ALWAYS">
+                                 <children>
+                                    <HBox prefHeight="32.0" prefWidth="200.0">
+                                       <children>
+                                          <HBox prefHeight="100.0" prefWidth="200.0" spacing="5.0" HBox.hgrow="ALWAYS">
+                                             <children>
+                                                <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#showPopupSetSliders" prefHeight="32.0" prefWidth="150.0" text="Edit SetSliders" />
+                                                <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#showPopupBosView" prefHeight="32.0" prefWidth="140.0" text="View BoS JSON" />
+                                             </children>
+                                          </HBox>
+                                          <HBox alignment="TOP_RIGHT" prefHeight="100.0" prefWidth="200.0" spacing="5.0" HBox.hgrow="ALWAYS">
+                                             <children>
+                                                <CheckBox fx:id="cbUUNP" minHeight="32.0" mnemonicParsing="false" prefHeight="32.0" prefWidth="75.0" text="UUNP" />
+                                             </children>
+                                          </HBox>
+                                       </children>
+                                       <VBox.margin>
+                                          <Insets />
+                                       </VBox.margin>
+                                    </HBox>
+                                    <TextArea fx:id="taTemplate" editable="false" prefHeight="170.0" prefWidth="626.0" wrapText="true" VBox.vgrow="NEVER">
+                                       <VBox.margin>
+                                          <Insets />
+                                       </VBox.margin>
+                                       <font>
+                                          <Font name="Consolas" size="12.0" />
+                                       </font>
+                                    </TextArea>
+                                    <TextArea fx:id="taTemplatesGen" editable="false" prefHeight="230.0" prefWidth="523.0" VBox.vgrow="ALWAYS">
+                                       <VBox.margin>
+                                          <Insets />
+                                       </VBox.margin>
+                                       <font>
+                                          <Font name="Consolas" size="12.0" />
+                                       </font>
+                                    </TextArea>
+                                    <HBox alignment="BOTTOM_RIGHT" prefHeight="32.0" prefWidth="200.0" spacing="5.0">
+                                       <children>
+                                          <HBox prefHeight="100.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+                                             <children>
+                                                <CheckBox fx:id="cbOmitRedundantSliders" mnemonicParsing="false" prefHeight="32.0" prefWidth="160.0" text="Omit Redundant Sliders" />
+                                             </children>
+                                          </HBox>
+                                          <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#copyTemplates" prefHeight="32.0" prefWidth="140.0" text="Copy" />
+                                        <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#generateTemplates" prefHeight="32.0" prefWidth="140.0" text="Generate Templates" />
+                                       </children>
+                                    </HBox>
+                                 </children>
+                                 <padding>
+                                    <Insets bottom="10.0" right="10.0" top="10.0" />
+                                 </padding>
+                              </VBox>
+                           </children>
+                        </HBox>
+                     </content>
+                  </Tab>
+                <Tab closable="false" text="Morphs">
+                     <content>
+                        <HBox prefHeight="100.0" prefWidth="200.0" spacing="10.0">
+                           <children>
+                              <VBox prefHeight="526.0" prefWidth="500.0" spacing="5.0" HBox.hgrow="ALWAYS">
+                                 <children>
+                                    <HBox prefHeight="210.0" prefWidth="430.0">
+                                       <children>
+                                          <ListView fx:id="lvCustomTargets" prefHeight="200.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+                                             <HBox.margin>
+                                                <Insets right="5.0" />
+                                             </HBox.margin>
+                                          </ListView>
+                                          <VBox prefHeight="261.0" prefWidth="225.0" spacing="5.0">
+                                             <children>
+                                                <Label focusTraversable="false" maxWidth="1.7976931348623157E308" prefHeight="17.0" prefWidth="110.0" text="Custom Target:">
+                                                   <VBox.margin>
+                                                      <Insets />
+                                                   </VBox.margin>
+                                                   <font>
+                                                      <Font name="System Bold" size="12.0" />
+                                                   </font>
+                                                </Label>
+                                                <TextField fx:id="tfCustomTarget" prefHeight="32.0" prefWidth="225.0" promptText="Example: All|Female">
+                                                   <VBox.margin>
+                                                      <Insets />
+                                                   </VBox.margin>
+                                                   <font>
+                                                      <Font name="Consolas" size="12.0" />
+                                                   </font>
+                                                </TextField>
+                                                <VBox prefHeight="80.0" prefWidth="225.0" spacing="5.0">
+                                                   <children>
+                                                      <Button alignment="CENTER" mnemonicParsing="false" onAction="#addCustomMorphTarget" prefHeight="32.0" prefWidth="120.0" text="Add">
+                                                         <VBox.margin>
+                                                            <Insets />
+                                                         </VBox.margin>
+                                                      </Button>
+                                                      <Button alignment="CENTER" mnemonicParsing="false" onAction="#removeSelectedCustomTarget" prefHeight="32.0" prefWidth="120.0" text="Remove">
+                                                         <VBox.margin>
+                                                            <Insets />
+                                                         </VBox.margin>
+                                                      </Button>
+                                                   </children>
+                                                </VBox>
+                                                <VBox alignment="CENTER_LEFT" prefHeight="36.0" prefWidth="225.0" spacing="5.0" VBox.vgrow="ALWAYS">
+                                                   <children>
+                                                      <Button alignment="CENTER" mnemonicParsing="false" onAction="#showConfirmClearCustomTargets" prefHeight="32.0" prefWidth="120.0" text="Clear" />
+                                                   </children>
+                                                </VBox>
+                                             </children>
+                                          </VBox>
+                                       </children>
+                                       <VBox.margin>
+                                          <Insets />
+                                       </VBox.margin>
+                                    </HBox>
+                                    <VBox prefHeight="200.0" prefWidth="400.0" spacing="5.0" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <HBox prefHeight="32.0" prefWidth="480.0" spacing="5.0">
+                                             <VBox.margin>
+                                                <Insets />
+                                             </VBox.margin>
+                                             <children>
+                                                <HBox prefHeight="32.0" prefWidth="230.0" spacing="5.0" HBox.hgrow="ALWAYS">
+                                                   <children>
+                                                      <Label focusTraversable="false" prefHeight="32.0" prefWidth="110.0" text="Individual NPCs:">
+                                                         <HBox.margin>
+                                                            <Insets />
+                                                         </HBox.margin>
+                                                         <font>
+                                                            <Font name="System Bold" size="12.0" />
+                                                         </font>
+                                                      </Label>
+                                                      <Label fx:id="lblNpcCounter" focusTraversable="false" prefHeight="32.0" prefWidth="135.0" text="(999)" HBox.hgrow="ALWAYS">
+                                                         <font>
+                                                            <Font name="System Bold" size="12.0" />
+                                                         </font>
+                                                      </Label>
+                                                   </children>
+                                                </HBox>
+                                                <HBox alignment="TOP_RIGHT" prefHeight="100.0" prefWidth="200.0" spacing="5.0" HBox.hgrow="ALWAYS">
+                                                   <children>
+                                                      <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#showPopupSliderPresetsFill" prefHeight="32.0" prefWidth="110.0" text="Fill Empty" />
+                                                      <Button alignment="CENTER" layoutX="98.0" layoutY="10.0" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#showConfirmClearAssignments" prefHeight="32.0" prefWidth="110.0" text="Clear Assignments">
+                                                         <font>
+                                                            <Font size="11.0" />
+                                                         </font>
+                                                      </Button>
+                                                   </children>
+                                                </HBox>
+                                             </children>
+                                          </HBox>
+                                          <TableView fx:id="tvNpc" prefHeight="224.0" prefWidth="380.0" VBox.vgrow="ALWAYS">
+                                            <columns>
+                                              <TableColumn fx:id="tcName" editable="false" minWidth="50.0" prefWidth="125.0" text="Name" />
+                                              <TableColumn fx:id="tcMaster" editable="false" text="Master" />
+                                                <TableColumn fx:id="tcRace" editable="false" prefWidth="100.0" text="Race" />
+                                                <TableColumn fx:id="tcEditorId" editable="false" prefWidth="125.0" text="EditorID" />
+                                                <TableColumn fx:id="tcFormId" editable="false" prefWidth="75.0" text="FormID" />
+                                                <TableColumn fx:id="tcSliderPresets" editable="false" prefWidth="125.0" text="Slider Presets" />
+                                            </columns>
+                                             <VBox.margin>
+                                                <Insets />
+                                             </VBox.margin>
+                                          </TableView>
+                                          <HBox alignment="BOTTOM_LEFT" prefHeight="32.0" prefWidth="200.0" spacing="5.0">
+                                             <children>
+                                                <HBox alignment="BOTTOM_LEFT" prefHeight="32.0" prefWidth="358.0" spacing="5.0" HBox.hgrow="ALWAYS">
+                                                   <children>
+                                                      <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#showPopupNpcDatabase" prefHeight="32.0" prefWidth="110.0" text="Add NPCs" />
+                                                      <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#showPopupImageView" prefHeight="32.0" prefWidth="110.0" text="View Image" />
+                                                      <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#removeSelectedNpc" prefHeight="32.0" prefWidth="110.0" text="Remove" />
+                                                   </children>
+                                                </HBox>
+                                                <HBox alignment="BOTTOM_RIGHT" prefHeight="100.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+                                                   <children>
+                                                      <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#showConfirmClearNpcs" prefHeight="32.0" prefWidth="110.0" text="Clear" />
+                                                   </children>
+                                                </HBox>
+                                             </children>
+                                          </HBox>
+                                       </children>
+                                    </VBox>
+                                 </children>
+                                 <HBox.margin>
+                                    <Insets bottom="10.0" left="10.0" top="10.0" />
+                                 </HBox.margin>
+                              </VBox>
+                              <VBox prefHeight="546.0" prefWidth="400.0" spacing="5.0">
+                                 <HBox.margin>
+                                    <Insets bottom="10.0" right="10.0" top="10.0" />
+                                 </HBox.margin>
+                                 <children>
+                                    <HBox prefHeight="210.0" prefWidth="330.0">
+                                       <VBox.margin>
+                                          <Insets />
+                                       </VBox.margin>
+                                       <children>
+                                          <ListView fx:id="lvTargetPresets" prefHeight="210.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+                                             <HBox.margin>
+                                                <Insets right="5.0" />
+                                             </HBox.margin>
+                                          </ListView>
+                                          <VBox prefHeight="210.0" prefWidth="175.0" spacing="5.0">
+                                             <children>
+                                                <VBox prefHeight="200.0" prefWidth="100.0" spacing="5.0">
+                                                   <VBox.margin>
+                                                      <Insets bottom="5.0" />
+                                                   </VBox.margin>
+                                                   <children>
+                                                      <Label focusTraversable="false" maxWidth="1.7976931348623157E308" prefHeight="17.0" prefWidth="110.0" text="Slider presets for:">
+                                                         <VBox.margin>
+                                                            <Insets />
+                                                         </VBox.margin>
+                                                         <font>
+                                                            <Font name="System Bold" size="12.0" />
+                                                         </font>
+                                                      </Label>
+                                                      <Label id="lblTargetName" fx:id="lblTargetName" alignment="TOP_LEFT" focusTraversable="false" maxHeight="1.7976931348623157E308" prefHeight="60.0" prefWidth="185.0" text="-null-" wrapText="true" VBox.vgrow="ALWAYS">
+                                                         <VBox.margin>
+                                                            <Insets />
+                                                         </VBox.margin>
+                                                         <font>
+                                                            <Font name="System Bold Italic" size="12.0" />
+                                                         </font>
+                                                      </Label>
+                                                   </children>
+                                                </VBox>
+                                                <HBox prefHeight="17.0" prefWidth="185.0" spacing="15.0">
+                                                   <VBox.margin>
+                                                      <Insets />
+                                                   </VBox.margin>
+                                                   <children>
+                                                      <Label focusTraversable="false" text="Count:">
+                                                         <HBox.margin>
+                                                            <Insets />
+                                                         </HBox.margin>
+                                                         <font>
+                                                            <Font name="System Bold" size="12.0" />
+                                                         </font>
+                                                      </Label>
+                                                      <Label fx:id="lblPresetCounter" focusTraversable="false" text="0">
+                                                         <font>
+                                                            <Font name="System Bold" size="12.0" />
+                                                         </font></Label>
+                                                   </children>
+                                                </HBox>
+                                                <GridPane alignment="CENTER" hgap="5.0" vgap="5.0">
+                                                  <columnConstraints>
+                                                    <ColumnConstraints hgrow="SOMETIMES" minWidth="90.0" prefWidth="90.0" />
+                                                    <ColumnConstraints hgrow="SOMETIMES" minWidth="90.0" prefWidth="90.0" />
+                                                  </columnConstraints>
+                                                  <rowConstraints>
+                                                    <RowConstraints minHeight="32.0" prefHeight="32.0" vgrow="SOMETIMES" />
+                                                    <RowConstraints minHeight="32.0" prefHeight="32.0" vgrow="SOMETIMES" />
+                                                  </rowConstraints>
+                                                   <children>
+                                                      <Button alignment="CENTER" mnemonicParsing="false" onAction="#showPopupSliderPresets" prefHeight="32.0" prefWidth="90.0" text="Add" />
+                                                      <Button alignment="CENTER" mnemonicParsing="false" onAction="#removePresetFromTarget" prefHeight="32.0" prefWidth="90.0" text="Remove" GridPane.rowIndex="1" />
+                                                      <Button alignment="CENTER" mnemonicParsing="false" onAction="#addAllPresetsToTarget" prefHeight="32.0" prefWidth="90.0" text="Add All" GridPane.columnIndex="1" />
+                                                      <Button alignment="CENTER" mnemonicParsing="false" onAction="#showConfirmClearTargetPresets" prefHeight="32.0" prefWidth="90.0" text="Clear" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                                   </children>
+                                                </GridPane>
+                                             </children>
+                                          </VBox>
+                                       </children>
+                                    </HBox>
+                                    <VBox prefHeight="250.0" prefWidth="380.0" spacing="5.0" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <TextArea fx:id="taMorphsGen" editable="false" prefHeight="265.0" prefWidth="380.0" VBox.vgrow="ALWAYS">
+                                             <VBox.margin>
+                                                <Insets />
+                                             </VBox.margin>
+                                             <font>
+                                                <Font name="Consolas" size="12.0" />
+                                             </font>
+                                          </TextArea>
+                                          <HBox alignment="BOTTOM_RIGHT" prefHeight="32.0" prefWidth="200.0" spacing="5.0">
+                                             <children>
+                                              <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#copyMorphs" prefHeight="32.0" prefWidth="140.0" text="Copy" />
+                                                <Button alignment="CENTER" maxHeight="1.7976931348623157E308" mnemonicParsing="false" onAction="#generateMorphs" prefHeight="32.0" prefWidth="140.0" text="Generate Morphs" />
+                                             </children>
+                                          </HBox>
+                                       </children>
+                                    </VBox>
+                                 </children>
+                              </VBox>
+                           </children>
+                        </HBox>
+                     </content></Tab>
+              </tabs>
+            </TabPane>
+      </children>
+    </AnchorPane>
+  </children>
+</VBox>

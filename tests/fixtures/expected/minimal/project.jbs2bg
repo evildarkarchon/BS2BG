@@ -1,0 +1,148 @@
+{
+  "SliderPresets": {
+    "AllCases": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": 25,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Butt",
+          "enabled": true,
+          "valueSmall": 0,
+          "valueBig": 0,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Waist",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "MissingDef": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "NipBGone",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "Negatives": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": -50,
+          "valueBig": -25,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Legs",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    }
+  },
+  "CustomMorphTargets": {
+    "All|Female": {
+      "SliderPresets": [
+        "AllCases",
+        "MissingDef"
+      ]
+    }
+  },
+  "MorphedNPCs": {
+    "Lydia": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "HousecarlWhiterun",
+      "Race": "NordRace",
+      "FormId": "A2C94",
+      "SliderPresets": [
+        "AllCases"
+      ]
+    },
+    "Aela the Huntress": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "CompanionsAela",
+      "Race": "NordRace",
+      "FormId": "1A697",
+      "SliderPresets": [
+        "MissingDef"
+      ]
+    },
+    "Serana": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "DLC1Serana",
+      "Race": "NordRaceVampire",
+      "FormId": "2B74",
+      "SliderPresets": [
+        "Negatives"
+      ]
+    },
+    "Valerica": {
+      "Mod": "Dawnguard.esm",
+      "EditorId": "DLC1Valerica",
+      "Race": "NordRaceVampire",
+      "FormId": "2B6C",
+      "SliderPresets": [
+        "AllCases"
+      ]
+    },
+    "Mjoll the Lioness": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "MjollTheLioness",
+      "Race": "NordRace",
+      "FormId": "1B07A",
+      "SliderPresets": [
+        "MissingDef"
+      ]
+    },
+    "Jenassa": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "Jenassa",
+      "Race": "DarkElfRace",
+      "FormId": "1348E",
+      "SliderPresets": [
+        "Negatives"
+      ]
+    },
+    "Ysolda": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "Ysolda",
+      "Race": "NordRace",
+      "FormId": "1A691",
+      "SliderPresets": [
+        "AllCases"
+      ]
+    }
+  }
+}

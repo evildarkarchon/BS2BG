@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<fx:root alignment="CENTER" cache="true" cacheHint="SPEED" depthTest="DISABLE" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="140.0" prefWidth="320.0" styleClass="setSliderControl" type="VBox" xmlns="http://javafx.com/javafx/8.0.152" xmlns:fx="http://javafx.com/fxml/1">
+   <children>
+      <VBox prefHeight="200.0" prefWidth="310.0" spacing="3.0" VBox.vgrow="ALWAYS">
+         <VBox.margin>
+            <Insets bottom="5.0" left="5.0" right="5.0" top="5.0" />
+         </VBox.margin>
+         <children>
+            <HBox alignment="CENTER" prefHeight="32.0" prefWidth="290.0" VBox.vgrow="ALWAYS">
+               <children>
+                  <GridPane HBox.hgrow="ALWAYS">
+                    <columnConstraints>
+                      <ColumnConstraints hgrow="SOMETIMES" maxWidth="100.0" minWidth="32.0" prefWidth="32.0" />
+                      <ColumnConstraints hgrow="ALWAYS" maxWidth="200.0" minWidth="144.0" prefWidth="144.0" />
+                        <ColumnConstraints hgrow="SOMETIMES" maxWidth="100.0" minWidth="32.0" prefWidth="32.0" />
+                    </columnConstraints>
+                    <rowConstraints>
+                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                    </rowConstraints>
+                     <children>
+                        <CheckBox fx:id="cbEnabled" contentDisplay="CENTER" mnemonicParsing="false" prefHeight="32.0" prefWidth="70.0">
+                           <GridPane.margin>
+                              <Insets left="19.0" right="15.0" />
+                           </GridPane.margin>
+                        </CheckBox>
+                        <TextField fx:id="tfBgFormat" alignment="CENTER" editable="false" focusTraversable="false" prefHeight="32.0" prefWidth="185.0" GridPane.columnIndex="1">
+                           <font>
+                              <Font name="Consolas" size="12.0" />
+                           </font>
+                        </TextField>
+                     </children>
+                  </GridPane>
+               </children>
+            </HBox>
+            <HBox alignment="CENTER" prefHeight="20.0" prefWidth="290.0" styleClass="lblContainer">
+               <children>
+                  <Label alignment="CENTER" focusTraversable="false" maxWidth="1.7976931348623157E308" prefHeight="20.0" styleClass="textColor2" text="Min" HBox.hgrow="ALWAYS" />
+               </children>
+            </HBox>
+            <HBox alignment="CENTER" prefHeight="32.0" prefWidth="200.0" spacing="5.0">
+               <children>
+                  <Slider fx:id="sldMin" blockIncrement="1.0" cache="true" cacheHint="SPEED" majorTickUnit="20.0" minorTickCount="5" prefHeight="32.0" prefWidth="200.0" value="100.0" />
+                  <TextField fx:id="tfMin" alignment="CENTER" editable="false" focusTraversable="false" prefHeight="32.0" prefWidth="49.0" text="100%">
+                     <font>
+                        <Font name="Consolas" size="12.0" />
+                     </font>
+                  </TextField>
+               </children>
+            </HBox>
+            <HBox alignment="CENTER" layoutX="10.0" layoutY="45.0" prefHeight="20.0" prefWidth="290.0" styleClass="lblContainer">
+               <children>
+                  <Label alignment="CENTER" focusTraversable="false" maxWidth="1.7976931348623157E308" prefHeight="20.0" styleClass="textColor1" text="Max" HBox.hgrow="ALWAYS" />
+               </children>
+            </HBox>
+            <HBox alignment="CENTER" layoutX="10.0" layoutY="68.0" prefHeight="32.0" prefWidth="200.0" spacing="5.0">
+               <children>
+                  <Slider fx:id="sldMax" blockIncrement="1.0" cache="true" cacheHint="SPEED" majorTickUnit="20.0" minorTickCount="5" prefHeight="32.0" prefWidth="200.0" value="100.0" />
+                  <TextField fx:id="tfMax" alignment="CENTER" editable="false" focusTraversable="false" prefHeight="32.0" prefWidth="49.0" text="100%">
+                     <font>
+                        <Font name="Consolas" size="12.0" />
+                     </font>
+                  </TextField>
+               </children>
+            </HBox>
+         </children>
+      </VBox>
+   </children>
+</fx:root>

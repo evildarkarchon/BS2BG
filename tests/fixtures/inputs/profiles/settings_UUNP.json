@@ -1,0 +1,59 @@
+{
+  "Defaults": {
+    "Breasts": {
+      "valueSmall": 1,
+      "valueBig": 1
+    },
+    "BreastsSmall": {
+      "valueSmall": 1,
+      "valueBig": 1
+    },
+    "NippleDistance": {
+      "valueSmall": 1,
+      "valueBig": 1
+    },
+    "NippleSize": {
+      "valueSmall": 1,
+      "valueBig": 1
+    },
+    "Arms": {
+      "valueSmall": 1,
+      "valueBig": 1
+    },
+    "ShoulderWidth": {
+      "valueSmall": 1,
+      "valueBig": 1
+    },
+    "ButtCrack": {
+      "valueSmall": 1,
+      "valueBig": 1
+    },
+    "Butt": {
+      "valueSmall": 1,
+      "valueBig": 1
+    },
+    "ButtSmall": {
+      "valueSmall": 1,
+      "valueBig": 1
+    },
+    "Legs": {
+      "valueSmall": 1,
+      "valueBig": 1
+    }
+  },
+  "Multipliers": {
+    
+  },
+  "Inverted": [
+    "Breasts",
+    "BreastsSmall",
+    "NippleDistance",
+    "NippleSize",
+    "Arms",
+    "ShoulderWidth",
+    "ButtCrack",
+    "Butt",
+    "ButtSmall",
+    "Legs"
+  ]
+}

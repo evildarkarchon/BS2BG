@@ -1,0 +1,28 @@
+{
+  "string": {
+    "bodyname": "CBBE Zeroed Sliders",
+    "slidername1": "Ankles",
+    "slidername2": "Arms",
+    "slidername3": "Breasts",
+    "slidername4": "Butt",
+    "slidername5": "Legs",
+    "slidername6": "Waist"
+  },
+  "int": {
+    "slidersnumber": 6
+  },
+  "float": {
+    "highvalue1": 1,
+    "highvalue2": 0,
+    "highvalue3": 0,
+    "highvalue4": 0,
+    "highvalue5": 0,
+    "highvalue6": 1,
+    "lowvalue1": 0,
+    "lowvalue2": 1,
+    "lowvalue3": 0.8,
+    "lowvalue4": 1,
+    "lowvalue5": 1,
+    "lowvalue6": 0
+  }
+}

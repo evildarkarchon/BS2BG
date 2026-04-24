@@ -1,0 +1,125 @@
+/* Dark Theme */
+
+.root {
+	-fx-base: rgb(18, 18, 18);
+	-fx-background: derive(-fx-base, 27%);
+
+	/* Controls (buttons, etc.) */
+	-fx-color: derive(-fx-base, -30%); /* Zero is same, negative is darker, higher is lighter */
+
+	/* TextFields and Table rows background */
+	-fx-control-inner-background: rgb(5, 5, 5);
+	/* Version of -fx-control-inner-background for alternative rows */
+	-fx-control-inner-background-alt: derive(-fx-control-inner-background, 5%);
+
+	/* Text colors depending on background's brightness */
+	-fx-light-text-color: rgb(221, 221, 221); /* For dark background, light text */
+	-fx-mid-text-color: rgb(90, 90, 90);
+	-fx-dark-text-color: rgb(15, 15, 15); /* For light background, dark text */
+
+	/* A bright blue for highlighting/accenting objects.  For example: selected
+	text; selected items in menus, lists, trees, and tables; progress bars */
+	-fx-accent: rgb(0, 90, 110);
+
+	/* Color of selected, non-focused elements */
+	-fx-selection-bar-non-focused: rgb(0, 70, 90);
+	
+	-text-field-bg-color: rgb(131, 131, 131);
+}
+
+/* Button */
+.button {
+	-fx-text-fill: rgb(221, 221, 221);
+}
+
+.list-view {
+	-fx-font-family: 'Consolas';
+}
+
+.table-view {
+	-fx-font-family: 'Consolas';
+}
+
+/* TextField */
+.text-field {
+	-fx-text-fill: rgb(15, 15, 15);
+	-fx-prompt-text-fill: rgb(80, 80, 80);
+	-fx-background-color: -text-field-bg-color;
+	-fx-cursor: text;
+}
+.text-field:focused {
+	/* To keep the glow when focused */
+	-fx-background-color:
+		-fx-focus-color,
+		-text-field-bg-color,
+		-fx-faint-focus-color,
+		-text-field-bg-color;
+	-fx-prompt-text-fill: transparent; /* Hide prompt text once focused */
+}
+
+/* TextArea */
+.text-area {
+	-fx-font-family: 'Consolas';
+}
+.text-area .content {
+	-fx-background-color: #000;
+}
+.text-area:focused .content {
+	-fx-background-color: #000;
+}
+
+/* SetSliders ScrollPane */
+#spSetSlidersList > .viewport {
+	-fx-background-color: #000;
+}
+/* ImageView ScrollPane */
+#spImageContainer > .viewport {
+	-fx-background-color: #000;
+}
+
+/* Morph Target Name Label */
+#lblTargetName {
+	-fx-text-fill: #ff7800;
+}
+
+/* Rename Warning Label*/
+#lblRenameWarning {
+	-fx-text-fill: #ff7800;
+}
+
+/* SetSliderControl */
+.setSliderControl {
+	-fx-background-color: derive(-fx-base, 5%);
+}
+.setSliderControl .text-field {
+	-fx-text-fill: -fx-light-text-color;
+	-fx-background-color: #000;
+	-fx-focus-color: transparent;
+	-fx-faint-focus-color: transparent;
+}
+.setSliderControl .lblContainer {
+	-fx-background-color: derive(-fx-base, 25%);
+}
+
+/* CustomConfirm */
+.customConfirm {
+}
+.customConfirm .headerContainer {
+}
+.customConfirm .icon {
+}
+.customConfirm .contentContainer .contentText {
+}
+.customConfirm .buttonContainer {
+}
+
+/* Various colors used in buttons and labels */
+.textColor1 {
+	-fx-text-fill: #d30000;
+}
+.textColor2 {
+	-fx-text-fill: #00d300;
+}
+.textColor3 {
+	-fx-text-fill: #0000d3;
+}

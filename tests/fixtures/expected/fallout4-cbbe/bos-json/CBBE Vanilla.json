@@ -1,0 +1,28 @@
+{
+  "string": {
+    "bodyname": "CBBE Vanilla",
+    "slidername1": "Arms",
+    "slidername2": "Breasts",
+    "slidername3": "Butt",
+    "slidername4": "Legs",
+    "slidername5": "VanillaFo4",
+    "slidername6": "Waist"
+  },
+  "int": {
+    "slidersnumber": 6
+  },
+  "float": {
+    "highvalue1": 0,
+    "highvalue2": 0,
+    "highvalue3": 0,
+    "highvalue4": 0,
+    "highvalue5": 1,
+    "highvalue6": 1,
+    "lowvalue1": 1,
+    "lowvalue2": 0.8,
+    "lowvalue3": 1,
+    "lowvalue4": 1,
+    "lowvalue5": 0,
+    "lowvalue6": 0
+  }
+}

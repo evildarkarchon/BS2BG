@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SYNTHETIC UUNP fixture — NOT a real-world preset file.
+
+  Hand-authored by evildarkarchon for BS2BG test coverage. UUNP is not
+  installed on the author's machine (it conflicts with CBBE) and no UUNP
+  preset XML was available from any local mod directory. The slider names
+  below were chosen from settings_UUNP.json's Defaults table so the
+  profile-switching mechanism can be exercised:
+
+    Breasts, BreastsSmall, NippleDistance, NippleSize, Arms,
+    ShoulderWidth, ButtCrack, Butt, ButtSmall, Legs, Ankles
+
+  Profile-switching in BS2BG means flipping a SliderPreset's profile from
+  Skyrim-CBBE to Skyrim-UUNP should change which default/inverted/multiplier
+  table is consulted. The three presets below cover:
+
+    - TinyUUNP       : single slider, missing-default injection under UUNP.
+    - StandardUUNP   : a mixed small/big preset, normal math path.
+    - InvertedEdge   : every slider at 100 (UUNP Inverted list excludes
+                       all of these at 100 when omitRedundantSliders=true).
+-->
+<SliderPresets>
+    <Preset name="TinyUUNP" set="UUNP Body">
+        <Group name="UUNP"/>
+        <SetSlider name="Breasts" size="big" value="50"/>
+    </Preset>
+    <Preset name="StandardUUNP" set="UUNP Body">
+        <Group name="UUNP"/>
+        <SetSlider name="Breasts" size="big" value="80"/>
+        <SetSlider name="Breasts" size="small" value="40"/>
+        <SetSlider name="Butt" size="big" value="60"/>
+        <SetSlider name="Butt" size="small" value="60"/>
+        <SetSlider name="ShoulderWidth" size="big" value="50"/>
+        <SetSlider name="ShoulderWidth" size="small" value="50"/>
+    </Preset>
+    <Preset name="InvertedEdge" set="UUNP Body">
+        <Group name="UUNP"/>
+        <SetSlider name="Breasts" size="big" value="100"/>
+        <SetSlider name="Breasts" size="small" value="100"/>
+        <SetSlider name="Butt" size="big" value="100"/>
+        <SetSlider name="Butt" size="small" value="100"/>
+        <SetSlider name="Arms" size="big" value="100"/>
+        <SetSlider name="Arms" size="small" value="100"/>
+    </Preset>
+</SliderPresets>

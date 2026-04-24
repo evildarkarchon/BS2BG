@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox alignment="CENTER" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="200.0" prefWidth="400.0" xmlns="http://javafx.com/javafx/8.0.152" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.asdasfa.jbs2bg.PopupAboutController">
+   <children>
+      <VBox alignment="CENTER" spacing="5.0" VBox.vgrow="ALWAYS">
+         <children>
+            <Label alignment="CENTER" focusTraversable="false" text="jBS2BG">
+               <font>
+                  <Font name="Consolas Bold" size="24.0" />
+               </font>
+            </Label>
+            <Label focusTraversable="false" text="BodySlide to BodyGen Converter">
+               <VBox.margin>
+                  <Insets />
+               </VBox.margin>
+            </Label>
+            <Label fx:id="lblVersion" alignment="CENTER" prefHeight="17.0" prefWidth="100.0" text="v1.00.0000" />
+            <Label focusTraversable="false" text="asdasfa">
+               <VBox.margin>
+                  <Insets />
+               </VBox.margin>
+               <font>
+                  <Font name="System Italic" size="12.0" />
+               </font>
+            </Label>
+            <TextArea fx:id="taDescription" editable="false" prefHeight="200.0" prefWidth="200.0" text="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam venenatis iaculis tellus, a imperdiet purus viverra viverra. Duis ac eros velit. Nunc pharetra vestibulum interdum. Sed eget ultricies leo. Duis efficitur maximus egestas. Maecenas at lectus pretium ligula condimentum hendrerit. Integer ut vestibulum urna. Aliquam in viverra dui. Nullam iaculis lorem vitae magna molestie, in faucibus arcu bibendum. Integer id augue quis tortor euismod facilisis id sit amet lectus. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas." wrapText="true" VBox.vgrow="ALWAYS">
+               <font>
+                  <Font name="Consolas" size="12.0" />
+               </font></TextArea>
+         </children>
+         <VBox.margin>
+            <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+         </VBox.margin>
+      </VBox>
+   </children>
+</VBox>

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; [ -n \"$f\" ] || exit 0; case \"$f\" in *.cs|*.axaml) ;; *) exit 0 ;; esac; ls *.sln >/dev/null 2>&1 || exit 0; dotnet format --include \"$f\" --verbosity quiet; } 2>/dev/null || true",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+# Default: let git detect text/binary and normalize to LF in the repo
+* text=auto
+
+# Byte-identical golden-file corpus — disable all EOL / encoding normalization.
+# BoS JSON expected files are written with LF only (Java minimal-json), INI files
+# are written with CRLF. Any normalization would break parity tests.
+tests/fixtures/expected/** -text
+tests/fixtures/inputs/**   -text
+
+# Shell scripts
+*.ps1 text eol=crlf working-tree-encoding=UTF-8
+*.sh  text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Visual Studio solution files expect CRLF
+*.sln text eol=crlf

@@ -1,0 +1,16 @@
+{
+  "string": {
+    "bodyname": "InvertedEdge",
+    "slidername1": "Legs",
+    "slidername2": "Waist"
+  },
+  "int": {
+    "slidersnumber": 2
+  },
+  "float": {
+    "highvalue1": 0,
+    "highvalue2": 1,
+    "lowvalue1": 1,
+    "lowvalue2": 0
+  }
+}

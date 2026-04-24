@@ -1,0 +1,22 @@
+{
+  "string": {
+    "bodyname": "AllCases",
+    "slidername1": "Arms",
+    "slidername2": "Butt",
+    "slidername3": "Legs",
+    "slidername4": "Waist"
+  },
+  "int": {
+    "slidersnumber": 4
+  },
+  "float": {
+    "highvalue1": 0,
+    "highvalue2": 1,
+    "highvalue3": 0,
+    "highvalue4": 0.6,
+    "lowvalue1": 0.75,
+    "lowvalue2": 1,
+    "lowvalue3": 1,
+    "lowvalue4": 0.4
+  }
+}

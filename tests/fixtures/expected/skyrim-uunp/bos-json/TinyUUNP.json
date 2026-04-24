@@ -1,0 +1,25 @@
+{
+  "string": {
+    "bodyname": "TinyUUNP",
+    "slidername1": "Arms",
+    "slidername2": "Breasts",
+    "slidername3": "Butt",
+    "slidername4": "Legs",
+    "slidername5": "Waist"
+  },
+  "int": {
+    "slidersnumber": 5
+  },
+  "float": {
+    "highvalue1": 0,
+    "highvalue2": 0.5,
+    "highvalue3": 0,
+    "highvalue4": 0,
+    "highvalue5": 1,
+    "lowvalue1": 1,
+    "lowvalue2": 0.8,
+    "lowvalue3": 1,
+    "lowvalue4": 1,
+    "lowvalue5": 0
+  }
+}

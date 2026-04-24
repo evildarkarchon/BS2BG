@@ -1,0 +1,3 @@
+Populated by tests/tools/generate-expected.ps1 once the reference Java build
+is runnable. Until then this tree is intentionally empty — see
+../README.md "Current state" for details.

@@ -1,0 +1,81 @@
+{
+  "SliderPresets": {
+    "InvertedEdge": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Butt",
+          "enabled": true,
+          "valueSmall": 100,
+          "valueBig": 100,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "StandardUUNP": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": 40,
+          "valueBig": 80,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Butt",
+          "enabled": true,
+          "valueSmall": 60,
+          "valueBig": 60,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "ShoulderWidth",
+          "enabled": true,
+          "valueSmall": 50,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "TinyUUNP": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Breasts",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 50,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    }
+  },
+  "CustomMorphTargets": {
+    
+  },
+  "MorphedNPCs": {
+    
+  }
+}
