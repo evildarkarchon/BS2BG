@@ -1,3 +1,4 @@
+using System.Reflection;
 using BS2BG.App.Services;
 using Xunit;
 
@@ -5,6 +6,24 @@ namespace BS2BG.Tests;
 
 public sealed class TemplateProfileCatalogFactoryTests
 {
+    [Fact]
+    public void DefaultCandidateDirectoriesDoNotWalkParentDirectories()
+    {
+        var method = typeof(TemplateProfileCatalogFactory).GetMethod(
+            "CandidateDirectories",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var directories = Assert.IsAssignableFrom<IEnumerable<DirectoryInfo>>(method.Invoke(null, null));
+
+        var fullNames = directories
+            .Select(directory => directory.FullName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Assert.Equal(new[] { new DirectoryInfo(AppContext.BaseDirectory).FullName }, fullNames);
+    }
+
     [Fact]
     public void CreateDefaultThrowsWhenRequiredProfileFileIsMissing()
     {

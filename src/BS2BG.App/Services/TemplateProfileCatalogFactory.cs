@@ -73,20 +73,6 @@ public static class TemplateProfileCatalogFactory
 
     private static IEnumerable<DirectoryInfo> CandidateDirectories()
     {
-        foreach (var path in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
-        {
-            var directory = new DirectoryInfo(path);
-            while (directory is not null)
-            {
-                yield return directory;
-
-                if (File.Exists(Path.Combine(directory.FullName, "PRD.md")))
-                {
-                    break;
-                }
-
-                directory = directory.Parent;
-            }
-        }
+        yield return new DirectoryInfo(AppContext.BaseDirectory);
     }
 }

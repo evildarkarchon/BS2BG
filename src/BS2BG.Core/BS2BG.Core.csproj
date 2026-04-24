@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Text.Encoding.CodePages" />
     <PackageReference Include="System.Text.Json" />
   </ItemGroup>
 </Project>

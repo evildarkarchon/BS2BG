@@ -12,13 +12,14 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
     }
 
     public MainWindow(MainWindowViewModel viewModel)
-        : this(viewModel, null, null)
+        : this(viewModel, null, null, null)
     {
     }
 
     public MainWindow(
         MainWindowViewModel viewModel,
         WindowBodySlideXmlFilePicker? filePicker,
+        WindowNpcTextFilePicker? npcTextFilePicker,
         WindowClipboardService? clipboardService)
     {
         InitializeComponent();
@@ -31,6 +32,7 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
         MinWidth = AppShell.MinWidth;
         MinHeight = AppShell.MinHeight;
         filePicker?.Attach(this);
+        npcTextFilePicker?.Attach(this);
         clipboardService?.Attach(this);
     }
 }

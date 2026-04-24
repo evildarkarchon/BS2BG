@@ -1,4 +1,6 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.LogicalTree;
 using BS2BG.App;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
@@ -32,5 +34,20 @@ public sealed class AppShellTests
         Assert.Equal(AppShell.StartupHeight, window.Height);
         Assert.Equal(AppShell.MinWidth, window.MinWidth);
         Assert.Equal(AppShell.MinHeight, window.MinHeight);
+    }
+
+    [AvaloniaFact]
+    public void MainWindowExposesTemplatesAndMorphsWorkspaces()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var window = provider.GetRequiredService<MainWindow>();
+
+        var tabHeaders = window.GetLogicalDescendants()
+            .OfType<TabItem>()
+            .Select(tab => tab.Header?.ToString())
+            .ToArray();
+        Assert.Contains("Templates", tabHeaders);
+        Assert.Contains("Morphs", tabHeaders);
     }
 }

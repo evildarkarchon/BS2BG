@@ -36,9 +36,16 @@ public sealed class Npc : MorphTargetBase
         set => SetProperty(ref formId, NormalizeFormId(value));
     }
 
+    public string SliderPresetsText => string.Join("|", SliderPresets.Select(sliderPreset => sliderPreset.Name));
+
     public override string ToMorphLine()
     {
         return Mod + "|" + FormId + "=" + string.Join("|", SliderPresets.Select(sliderPreset => sliderPreset.Name));
+    }
+
+    protected override void OnSliderPresetAssignmentsChanged()
+    {
+        NotifyChanged(nameof(SliderPresetsText));
     }
 
     private static string NormalizeFormId(string? value)

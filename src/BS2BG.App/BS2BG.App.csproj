@@ -20,4 +20,9 @@
   <ItemGroup>
     <ProjectReference Include="..\BS2BG.Core\BS2BG.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\settings.json" Link="settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\settings_UUNP.json" Link="settings_UUNP.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

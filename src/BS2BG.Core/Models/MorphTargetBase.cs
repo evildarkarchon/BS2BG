@@ -93,6 +93,12 @@ public abstract class MorphTargetBase : ProjectModelNode
         }
 
         NotifyChanged(nameof(SliderPresets));
+        NotifyChanged(nameof(HasPresets));
+        OnSliderPresetAssignmentsChanged();
+    }
+
+    protected virtual void OnSliderPresetAssignmentsChanged()
+    {
     }
 
     private void SortSliderPresets()
