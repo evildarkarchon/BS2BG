@@ -162,14 +162,14 @@ public sealed class TemplatesViewModelTests
         AddPreset(viewModel, "Beta", 25);
 
         viewModel.SelectedPreset = alpha;
-        Assert.Equal("Alpha=Scale@0.5", viewModel.PreviewTemplateText);
+        Assert.Equal("Alpha = Scale@0.5", viewModel.PreviewTemplateText);
 
         viewModel.SelectedProfileName = "Double";
         Assert.Equal("Double", alpha.ProfileName);
-        Assert.Equal("Alpha=Scale@1.0", viewModel.PreviewTemplateText);
+        Assert.Equal("Alpha = Scale@1.0", viewModel.PreviewTemplateText);
 
         alpha.SetSliders.Single().ValueBig = 75;
-        Assert.Equal("Alpha=Scale@1.5", viewModel.PreviewTemplateText);
+        Assert.Equal("Alpha = Scale@1.5", viewModel.PreviewTemplateText);
 
         viewModel.GenerateTemplates();
         Assert.NotEqual(string.Empty, viewModel.GeneratedTemplateText);
@@ -178,7 +178,7 @@ public sealed class TemplatesViewModelTests
         viewModel.OmitRedundantSliders = true;
 
         Assert.Equal(string.Empty, viewModel.GeneratedTemplateText);
-        Assert.Equal("Alpha=", viewModel.PreviewTemplateText);
+        Assert.Equal("Alpha = ", viewModel.PreviewTemplateText);
     }
 
     [Fact]

@@ -52,14 +52,14 @@ public sealed class SliderMathFormatterTests
 
     [Theory]
     [InlineData("AllCases", false,
-        "AllCases=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@1.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@0.6")]
-    [InlineData("AllCases", true, "AllCases=Arms@0.0, Butt@1.0, Legs@0.0, Waist@0.6")]
+        "AllCases = Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@1.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@0.6")]
+    [InlineData("AllCases", true, "AllCases = Arms@0.0, Butt@1.0, Legs@0.0, Waist@0.6")]
     [InlineData("Negatives", false,
-        "Negatives=Ankles@0.0, Arms@0.0, Breasts@1.25, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.2, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0")]
-    [InlineData("Negatives", true, "Negatives=Arms@0.0, Breasts@1.25, Butt@0.0, Legs@0.2, Waist@1.0")]
+        "Negatives = Ankles@0.0, Arms@0.0, Breasts@1.25, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.2, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0")]
+    [InlineData("Negatives", true, "Negatives = Arms@0.0, Breasts@1.25, Butt@0.0, Legs@0.2, Waist@1.0")]
     [InlineData("MissingDef", false,
-        "MissingDef=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NipBGone@1.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0")]
-    [InlineData("MissingDef", true, "MissingDef=Arms@0.0, Breasts@0.0, Butt@0.0, Legs@0.0, NipBGone@1.0, Waist@1.0")]
+        "MissingDef = Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NipBGone@1.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0")]
+    [InlineData("MissingDef", true, "MissingDef = Arms@0.0, Breasts@0.0, Butt@0.0, Legs@0.0, NipBGone@1.0, Waist@1.0")]
     public void MinimalFixtureTemplateLinesMatchJavaWalkthrough(string presetName, bool omitRedundant, string expected)
     {
         var profile = LoadProfile("settings.json");
@@ -84,7 +84,7 @@ public sealed class SliderMathFormatterTests
 
         var actual = SliderMathFormatter.FormatTemplateLine(preset, profile, false);
 
-        Assert.Equal("Scaled=Scale@0.5:1.5", actual);
+        Assert.Equal("Scaled = Scale@0.5:1.5", actual);
     }
 
     [Theory]

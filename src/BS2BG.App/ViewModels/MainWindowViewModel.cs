@@ -291,7 +291,8 @@ public sealed class MainWindowViewModel : ReactiveObject
 
             this.RaiseAndSetIfChanged(ref selectedThemePreference, value);
             ThemePreferenceApplier.Apply(value);
-            preferencesService.Save(new UserPreferences { Theme = value });
+            if (!preferencesService.Save(new UserPreferences { Theme = value }))
+                StatusMessage = "Saving preferences failed.";
         }
     }
 

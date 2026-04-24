@@ -45,7 +45,7 @@ public sealed class TemplateGenerationServiceTests
             catalog,
             false);
 
-        Assert.Equal("Alpha=Scale@0.25\r\nBeta=Scale@0.5", actual);
+        Assert.Equal("Alpha = Scale@0.25\r\nBeta = Scale@0.5", actual);
     }
 
     [Theory]

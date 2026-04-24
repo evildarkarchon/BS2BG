@@ -21,7 +21,7 @@ public interface IUserPreferencesService
 {
     UserPreferences Load();
 
-    void Save(UserPreferences preferences);
+    bool Save(UserPreferences preferences);
 }
 
 public sealed class UserPreferencesService(string preferencesPath) : IUserPreferencesService
@@ -58,16 +58,32 @@ public sealed class UserPreferencesService(string preferencesPath) : IUserPrefer
         {
             return new UserPreferences();
         }
+        catch (UnauthorizedAccessException)
+        {
+            return new UserPreferences();
+        }
     }
 
-    public void Save(UserPreferences preferences)
+    public bool Save(UserPreferences preferences)
     {
         ArgumentNullException.ThrowIfNull(preferences);
 
-        var directory = Path.GetDirectoryName(preferencesPath);
-        if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+        try
+        {
+            var directory = Path.GetDirectoryName(preferencesPath);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
-        File.WriteAllText(preferencesPath, JsonSerializer.Serialize(preferences, JsonOptions));
+            File.WriteAllText(preferencesPath, JsonSerializer.Serialize(preferences, JsonOptions));
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 }
 

@@ -207,6 +207,19 @@ public sealed class M6UxViewModelTests
         Assert.Equal(ThemePreference.Dark, preferences.Saved.Theme);
     }
 
+    [Fact]
+    public void ThemePreferenceSaveFailureKeepsSelectionAndReportsStatus()
+    {
+        var harness = CreateHarness(
+            CreateProjectWithPresets("Alpha"),
+            new FailingUserPreferencesService());
+
+        harness.Main.SelectedThemePreference = ThemePreference.Dark;
+
+        Assert.Equal(ThemePreference.Dark, harness.Main.SelectedThemePreference);
+        Assert.Equal("Saving preferences failed.", harness.Main.StatusMessage);
+    }
+
     private static TestHarness CreateHarness(
         ProjectModel project,
         IUserPreferencesService? preferences = null)
@@ -332,7 +345,18 @@ public sealed class M6UxViewModelTests
 
         public UserPreferences Load() => Saved;
 
-        public void Save(UserPreferences preferences) => Saved = preferences;
+        public bool Save(UserPreferences preferences)
+        {
+            Saved = preferences;
+            return true;
+        }
+    }
+
+    private sealed class FailingUserPreferencesService : IUserPreferencesService
+    {
+        public UserPreferences Load() => new();
+
+        public bool Save(UserPreferences preferences) => false;
     }
 
     private sealed class TemporaryDirectory : IDisposable

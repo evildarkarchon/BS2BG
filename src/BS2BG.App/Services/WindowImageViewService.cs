@@ -64,6 +64,35 @@ public sealed class WindowImageViewService : IImageViewService
     {
         if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath)) return null;
 
-        return new Bitmap(imagePath);
+        try
+        {
+            using var stream = File.OpenRead(imagePath);
+            if (!HasSupportedImageSignature(stream)) return null;
+
+            stream.Position = 0;
+            return new Bitmap(stream);
+        }
+        catch (Exception exception) when (
+            exception is IOException
+            or UnauthorizedAccessException
+            or ArgumentException
+            or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private static bool HasSupportedImageSignature(Stream stream)
+    {
+        Span<byte> header = stackalloc byte[12];
+        var read = stream.Read(header);
+        var bytes = header[..read];
+
+        return bytes.StartsWith(stackalloc byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A })
+               || bytes.StartsWith(stackalloc byte[] { 0xFF, 0xD8, 0xFF })
+               || bytes.StartsWith("GIF87a"u8)
+               || bytes.StartsWith("GIF89a"u8)
+               || bytes.StartsWith("BM"u8)
+               || (bytes.StartsWith("RIFF"u8) && read >= 12 && bytes[8..12].SequenceEqual("WEBP"u8));
     }
 }

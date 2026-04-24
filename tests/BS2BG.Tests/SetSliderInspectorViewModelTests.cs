@@ -26,7 +26,7 @@ public sealed class SetSliderInspectorViewModelTests
         viewModel.SelectedPreset = preset;
 
         Assert.Equal(new[] { "DefaultOnly", "Scale" }, viewModel.SetSliderRows.Select(row => row.Name));
-        Assert.Equal("Alpha=DefaultOnly@1.0, Scale@1.0", viewModel.PreviewTemplateText);
+        Assert.Equal("Alpha = DefaultOnly@1.0, Scale@1.0", viewModel.PreviewTemplateText);
     }
 
     [Fact]
@@ -44,12 +44,12 @@ public sealed class SetSliderInspectorViewModelTests
         Assert.Equal(75, row.PercentMax);
         Assert.Equal("75%", row.PercentMinText);
         Assert.Equal("75%", row.PercentMaxText);
-        Assert.Equal("Alpha=Scale@0.75", viewModel.PreviewTemplateText);
+        Assert.Equal("Alpha = Scale@0.75", viewModel.PreviewTemplateText);
 
         row.Enabled = false;
 
         Assert.False(preset.SetSliders.Single().Enabled);
-        Assert.Equal("Alpha=", viewModel.PreviewTemplateText);
+        Assert.Equal("Alpha = ", viewModel.PreviewTemplateText);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public sealed class SetSliderInspectorViewModelTests
             Assert.Equal(50, row.PercentMin);
             Assert.Equal(50, row.PercentMax);
         });
-        Assert.Equal("Alpha=Height@0.5, Scale@0.5", viewModel.PreviewTemplateText);
+        Assert.Equal("Alpha = Height@0.5, Scale@0.5", viewModel.PreviewTemplateText);
 
         viewModel.SetAllMinPercentsTo0Command.Execute(null);
         viewModel.SetAllMaxPercentsTo100Command.Execute(null);
@@ -77,7 +77,7 @@ public sealed class SetSliderInspectorViewModelTests
             Assert.Equal(0, row.PercentMin);
             Assert.Equal(100, row.PercentMax);
         });
-        Assert.Equal("Alpha=Height@0.0:1.0, Scale@0.0:1.0", viewModel.PreviewTemplateText);
+        Assert.Equal("Alpha = Height@0.0:1.0, Scale@0.0:1.0", viewModel.PreviewTemplateText);
     }
 
     [Fact]
