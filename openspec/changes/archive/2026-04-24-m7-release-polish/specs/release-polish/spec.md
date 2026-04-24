@@ -22,11 +22,11 @@ The system SHALL either sign release artifacts or document the expected unsigned
 - **THEN** the artifact signing state and verification instructions are included with the release
 
 ### Requirement: Release notes and credits are shipped
-The system SHALL include release notes, source credits, parity notes, and known limitations for v2.0 users.
+The system SHALL include release notes, source credits, parity notes, and known limitations for v1.0.0 users.
 
 #### Scenario: Review release package docs
 - **WHEN** a user opens the packaged documentation
-- **THEN** the original author credit, port author credit, and v2.0 known limitations are visible
+- **THEN** the original author credit, port author credit, and v1.0.0 known limitations are visible
 
 ### Requirement: Launch performance and QA gates pass
 The system SHALL meet the PRD launch target and complete the Windows/DPI/theme manual QA matrix before release.

@@ -18,10 +18,10 @@ internal static class Program
         return AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
+            .RegisterReactiveUIViewsFromEntryAssembly()
             .UseReactiveUIWithMicrosoftDependencyResolver(
                 AppBootstrapper.ConfigureServices,
                 AppBootstrapper.SetServiceProvider)
-            .RegisterReactiveUIViewsFromEntryAssembly()
             .LogToTrace();
     }
 }
