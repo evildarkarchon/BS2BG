@@ -94,6 +94,31 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public void ClearPresetsRemovesAssignmentsFromTargetsAndNpcs()
+    {
+        var project = new ProjectModel();
+        var preset = new ModelSliderPreset("Alpha");
+        var target = new CustomMorphTarget("All|Female");
+        var npc = new Npc("Lydia")
+        {
+            Mod = "Skyrim.esm",
+            EditorId = "HousecarlWhiterun",
+        };
+        project.SliderPresets.Add(preset);
+        project.CustomMorphTargets.Add(target);
+        project.MorphedNpcs.Add(npc);
+        target.AddSliderPreset(preset);
+        npc.AddSliderPreset(preset);
+        var viewModel = CreateViewModel(project: project);
+
+        viewModel.ClearPresets();
+
+        Assert.Empty(project.SliderPresets);
+        Assert.Empty(target.SliderPresets);
+        Assert.Empty(npc.SliderPresets);
+    }
+
+    [Fact]
     public void PreviewUpdatesForSelectionProfileSliderAndOmitState()
     {
         var viewModel = CreateViewModel();
@@ -200,10 +225,11 @@ public sealed class TemplatesViewModelTests
     private static TemplatesViewModel CreateViewModel(
         IBodySlideXmlFilePicker? picker = null,
         IClipboardService? clipboard = null,
-        TemplateProfileCatalog? profileCatalog = null)
+        TemplateProfileCatalog? profileCatalog = null,
+        ProjectModel? project = null)
     {
         return new TemplatesViewModel(
-            new ProjectModel(),
+            project ?? new ProjectModel(),
             new BodySlideXmlParser(),
             new TemplateGenerationService(),
             profileCatalog ?? CreateCatalog(),

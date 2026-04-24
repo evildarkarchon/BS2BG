@@ -75,6 +75,64 @@ public sealed class ProjectFileServiceTests
     }
 
     [Fact]
+    public void SavePreservesNpcsWithDuplicateDisplayNames()
+    {
+        var service = new ProjectFileService();
+        var project = new ProjectModel();
+        project.MorphedNpcs.Add(new Npc("Guard")
+        {
+            Mod = "Skyrim.esm",
+            EditorId = "WhiterunGuard",
+            FormId = "00012345",
+        });
+        project.MorphedNpcs.Add(new Npc("Guard")
+        {
+            Mod = "Dawnguard.esm",
+            EditorId = "DawnguardGuard",
+            FormId = "02012345",
+        });
+
+        var saved = service.SaveToString(project);
+        var reloaded = service.LoadFromString(saved);
+
+        Assert.Equal(2, reloaded.MorphedNpcs.Count);
+        Assert.Equal(new[] { "WhiterunGuard", "DawnguardGuard" }, reloaded.MorphedNpcs.Select(npc => npc.EditorId));
+    }
+
+    [Fact]
+    public void LoadPreservesDuplicateMorphedNpcObjectMembers()
+    {
+        var service = new ProjectFileService();
+
+        var project = service.LoadFromString(
+            """
+            {
+              "SliderPresets": {},
+              "CustomMorphTargets": {},
+              "MorphedNPCs": {
+                "Guard": {
+                  "Mod": "Skyrim.esm",
+                  "EditorId": "WhiterunGuard",
+                  "Race": "NordRace",
+                  "FormId": "00012345",
+                  "SliderPresets": []
+                },
+                "Guard": {
+                  "Mod": "Dawnguard.esm",
+                  "EditorId": "DawnguardGuard",
+                  "Race": "NordRace",
+                  "FormId": "02012345",
+                  "SliderPresets": []
+                }
+              }
+            }
+            """);
+
+        Assert.Equal(2, project.MorphedNpcs.Count);
+        Assert.Equal(new[] { "WhiterunGuard", "DawnguardGuard" }, project.MorphedNpcs.Select(npc => npc.EditorId));
+    }
+
+    [Fact]
     public void ProjectReferenceHelpersRemoveAssignmentsAndTriggerDirtyState()
     {
         var project = new ProjectModel();

@@ -9,12 +9,19 @@ namespace BS2BG.Core.Serialization;
 [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Project file I/O is exposed as an injectable service surface.")]
 public sealed class ProjectFileService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    private static JsonSerializerOptions CreateJsonOptions()
     {
-        AllowTrailingCommas = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        WriteIndented = true,
-    };
+        var options = new JsonSerializerOptions
+        {
+            AllowTrailingCommas = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            WriteIndented = true,
+        };
+        options.Converters.Add(new NamedNpcObjectListJsonConverter());
+        return options;
+    }
 
     public ProjectModel Load(string path)
     {
@@ -156,8 +163,8 @@ public sealed class ProjectFileService
             CustomMorphTargets = project.CustomMorphTargets
                 .OrderBy(target => target.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(target => target.Name, ToDto, StringComparer.Ordinal),
-            MorphedNPCs = project.MorphedNpcs
-                .ToDictionary(npc => npc.Name, ToDto, StringComparer.Ordinal),
+            MorphedNPCs = new NamedNpcObjectList(project.MorphedNpcs
+                .Select(npc => new NamedNpcObject(npc.Name, ToDto(npc)))),
         };
     }
 
@@ -237,7 +244,7 @@ public sealed class ProjectFileService
 
         [JsonPropertyName("MorphedNPCs")]
         [JsonPropertyOrder(2)]
-        public Dictionary<string, NpcDto>? MorphedNPCs { get; set; }
+        public NamedNpcObjectList? MorphedNPCs { get; set; }
     }
 
     private sealed class SliderPresetDto
@@ -310,5 +317,115 @@ public sealed class ProjectFileService
         [JsonPropertyName("SliderPresets")]
         [JsonPropertyOrder(4)]
         public List<string>? SliderPresets { get; set; }
+    }
+
+    private readonly struct NamedNpcObject
+    {
+        public NamedNpcObject(string name, NpcDto? value)
+        {
+            Name = name;
+            Value = value;
+        }
+
+        public string Name { get; }
+
+        public NpcDto? Value { get; }
+    }
+
+    private sealed class NamedNpcObjectList : IReadOnlyList<NamedNpcObject>
+    {
+        private readonly NamedNpcObject[] entries;
+
+        public NamedNpcObjectList(IEnumerable<NamedNpcObject> entries)
+        {
+            this.entries = (entries ?? throw new ArgumentNullException(nameof(entries))).ToArray();
+        }
+
+        public int Count => entries.Length;
+
+        public NamedNpcObject this[int index] => entries[index];
+
+        public IEnumerator<NamedNpcObject> GetEnumerator()
+        {
+            return ((IEnumerable<NamedNpcObject>)entries).GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+    }
+
+    private sealed class NamedNpcObjectListJsonConverter : JsonConverter<NamedNpcObjectList>
+    {
+        public override NamedNpcObjectList Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.Null)
+            {
+                return new NamedNpcObjectList(Array.Empty<NamedNpcObject>());
+            }
+
+            if (reader.TokenType != JsonTokenType.StartObject)
+            {
+                throw new JsonException("Expected MorphedNPCs to be a JSON object.");
+            }
+
+            var entries = new List<NamedNpcObject>();
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndObject)
+                {
+                    return new NamedNpcObjectList(entries);
+                }
+
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                {
+                    throw new JsonException("Expected NPC name property.");
+                }
+
+                var name = reader.GetString() ?? string.Empty;
+                if (!reader.Read())
+                {
+                    throw new JsonException("Expected NPC object.");
+                }
+
+                var value = JsonSerializer.Deserialize<NpcDto>(ref reader, options);
+                entries.Add(new NamedNpcObject(name, value));
+            }
+
+            throw new JsonException("Expected end of MorphedNPCs object.");
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            NamedNpcObjectList value,
+            JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+
+            foreach (var entry in value)
+            {
+                writer.WritePropertyName(entry.Name);
+                JsonSerializer.Serialize(writer, entry.Value, options);
+            }
+
+            writer.WriteEndObject();
+        }
+    }
+
+    private static IEnumerable<KeyValuePair<string, NpcDto?>> Enumerate(NamedNpcObjectList? values)
+    {
+        if (values is null)
+        {
+            yield break;
+        }
+
+        foreach (var entry in values)
+        {
+            yield return new KeyValuePair<string, NpcDto?>(entry.Name, entry.Value);
+        }
     }
 }

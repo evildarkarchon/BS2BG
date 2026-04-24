@@ -377,6 +377,16 @@ public sealed class TemplatesViewModel : ReactiveObject
 
     public void ClearPresets()
     {
+        foreach (var target in project.CustomMorphTargets)
+        {
+            target.ClearSliderPresets();
+        }
+
+        foreach (var npc in project.MorphedNpcs)
+        {
+            npc.ClearSliderPresets();
+        }
+
         Presets.Clear();
         SelectedPreset = null;
         GeneratedTemplateText = string.Empty;
