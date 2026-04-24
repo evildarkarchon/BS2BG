@@ -12,6 +12,7 @@ namespace BS2BG.Core.Serialization;
 public sealed class ProjectFileService
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
     private static JsonSerializerOptions CreateJsonOptions()
     {
@@ -61,7 +62,19 @@ public sealed class ProjectFileService
 
         if (path is null) throw new ArgumentNullException(nameof(path));
 
-        File.WriteAllText(path, SaveToString(project), new UTF8Encoding(false));
+        var targetPath = Path.GetFullPath(path);
+        var tempPath = CreateTempPath(targetPath);
+        try
+        {
+            File.WriteAllText(tempPath, SaveToString(project), Utf8NoBom);
+            ReplaceWithTempFile(tempPath, targetPath);
+            tempPath = null;
+        }
+        finally
+        {
+            if (tempPath is not null) TryDeleteTempFile(tempPath);
+        }
+
         project.MarkClean();
     }
 
@@ -197,6 +210,39 @@ public sealed class ProjectFileService
                && slider.Enabled
                && slider.PercentMin == 100
                && slider.PercentMax == 100;
+    }
+
+    private static string CreateTempPath(string targetPath)
+    {
+        var directory = Path.GetDirectoryName(targetPath)
+                        ?? throw new InvalidOperationException("Project path must include a directory.");
+        var fileName = Path.GetFileName(targetPath);
+        return Path.Combine(directory, "." + fileName + "." + Guid.NewGuid().ToString("N") + ".tmp");
+    }
+
+    private static void ReplaceWithTempFile(string tempPath, string targetPath)
+    {
+        if (File.Exists(targetPath))
+        {
+            File.Replace(tempPath, targetPath, null);
+            return;
+        }
+
+        File.Move(tempPath, targetPath);
+    }
+
+    private static void TryDeleteTempFile(string tempPath)
+    {
+        try
+        {
+            if (File.Exists(tempPath)) File.Delete(tempPath);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private static IEnumerable<KeyValuePair<string, TValue>> Enumerate<TValue>(

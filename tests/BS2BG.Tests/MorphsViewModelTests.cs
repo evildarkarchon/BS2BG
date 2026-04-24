@@ -124,6 +124,63 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void ClearCustomTargetsCanUndoAndRedo()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets[0];
+        var target = new CustomMorphTarget("All|Female");
+        target.AddSliderPreset(alpha);
+        project.CustomMorphTargets.Add(target);
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(), undoRedo: undoRedo);
+
+        viewModel.SelectedCustomTarget = target;
+        viewModel.ClearCustomTargets();
+
+        project.CustomMorphTargets.Should().BeEmpty();
+
+        undoRedo.Undo().Should().BeTrue();
+        project.CustomMorphTargets.Should().ContainSingle().Which.Should().BeSameAs(target);
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        viewModel.SelectedCustomTarget.Should().BeSameAs(target);
+
+        undoRedo.Redo().Should().BeTrue();
+        project.CustomMorphTargets.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ClearVisibleNpcsCanUndoAndRedo()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets[0];
+        var beta = project.SliderPresets[1];
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        lydia.AddSliderPreset(alpha);
+        valerica.AddSliderPreset(beta);
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(valerica);
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(), undoRedo: undoRedo);
+
+        viewModel.SelectedNpc = lydia;
+        viewModel.SearchText = "Skyrim";
+        viewModel.ClearVisibleNpcs().Should().Be(1);
+
+        project.MorphedNpcs.Should().NotContain(lydia);
+        project.MorphedNpcs.Should().Contain(valerica);
+
+        undoRedo.Undo().Should().BeTrue();
+        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Valerica" });
+        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        viewModel.SelectedNpc.Should().BeSameAs(lydia);
+
+        undoRedo.Redo().Should().BeTrue();
+        project.MorphedNpcs.Should().NotContain(lydia);
+        project.MorphedNpcs.Should().Contain(valerica);
+    }
+
+    [Fact]
     public void ClearedNpcsDoNotRefreshViewModelWhenRemovedNpcChanges()
     {
         var project = CreateProjectWithPresets();
@@ -197,7 +254,8 @@ public sealed class MorphsViewModelTests
         IClipboardService? clipboard = null,
         INpcImageLookupService? imageLookupService = null,
         IImageViewService? imageViewService = null,
-        INoPresetNotificationService? noPresetNotificationService = null)
+        INoPresetNotificationService? noPresetNotificationService = null,
+        UndoRedoService? undoRedo = null)
     {
         return new MorphsViewModel(
             project,
@@ -208,7 +266,8 @@ public sealed class MorphsViewModelTests
             clipboard ?? new CapturingClipboardService(),
             imageLookupService ?? new StubNpcImageLookupService(null),
             imageViewService ?? new CapturingImageViewService(),
-            noPresetNotificationService ?? new CapturingNoPresetNotificationService());
+            noPresetNotificationService ?? new CapturingNoPresetNotificationService(),
+            undoRedo);
     }
 
     private static ProjectModel CreateProjectWithPresets()

@@ -363,6 +363,7 @@ public sealed class MainWindowViewModel : ReactiveObject
             Morphs.SelectedCustomTarget = project.CustomMorphTargets.FirstOrDefault();
             Morphs.SelectedNpc = project.MorphedNpcs.FirstOrDefault();
             undoRedo.Clear();
+            project.MarkClean();
             StatusMessage = "Opened " + Path.GetFileName(path) + ".";
             return true;
         }

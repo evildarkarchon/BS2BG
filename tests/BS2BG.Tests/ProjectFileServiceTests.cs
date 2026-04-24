@@ -104,6 +104,32 @@ public sealed class ProjectFileServiceTests
     }
 
     [Fact]
+    public void SaveReplacesExistingProjectAndRemovesTemporaryFile()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "project.jbs2bg");
+            File.WriteAllText(path, "old");
+            var project = new ProjectModel();
+            project.SliderPresets.Add(new SliderPreset("Alpha"));
+            project.MarkDirty();
+            var service = new ProjectFileService();
+
+            service.Save(project, path);
+
+            File.ReadAllText(path).Should().Contain("Alpha");
+            Directory.EnumerateFiles(directory, "*.tmp").Should().BeEmpty();
+            project.IsDirty.Should().BeFalse();
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public void LoadPreservesDuplicateMorphedNpcObjectMembers()
     {
         var service = new ProjectFileService();

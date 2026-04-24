@@ -532,6 +532,21 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public void ClearCustomTargets()
     {
+        var snapshot = CustomTargets
+            .Select((target, index) => new CustomTargetSnapshot(target, index, CaptureAssignments(target)))
+            .ToArray();
+        var selectedTarget = SelectedCustomTarget;
+
+        ApplyClearCustomTargets();
+        if (snapshot.Length > 0)
+            undoRedo.Record(
+                "Clear custom targets",
+                () => RestoreCustomTargets(snapshot, selectedTarget),
+                ApplyClearCustomTargets);
+    }
+
+    private void ApplyClearCustomTargets()
+    {
         foreach (var target in CustomTargets) target.ClearSliderPresets();
 
         CustomTargets.Clear();
@@ -681,17 +696,22 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public int ClearVisibleNpcs()
     {
-        var visible = VisibleNpcs.ToArray();
-        var resetSelectedNpc = SelectedNpc is not null && visible.Contains(SelectedNpc);
-        foreach (var npc in visible) assignmentService.RemoveNpc(project, npc);
+        var snapshot = VisibleNpcs
+            .Select(npc => new NpcRemovalSnapshot(npc, Npcs.IndexOf(npc), CaptureAssignments(npc)))
+            .ToArray();
+        var selectedNpc = SelectedNpc;
+        var removed = ApplyRemoveNpcs(snapshot);
 
-        RefreshVisibleNpcs();
-        if (resetSelectedNpc) SelectedNpc = VisibleNpcs.FirstOrDefault();
-
-        StatusMessage = "Removed " + visible.Length.ToString(CultureInfo.InvariantCulture)
-                                   + " visible NPC" + (visible.Length == 1 ? "." : "s.");
+        StatusMessage = "Removed " + removed.ToString(CultureInfo.InvariantCulture)
+                                   + " visible NPC" + (removed == 1 ? "." : "s.");
         RaiseCommandStatesChanged();
-        return visible.Length;
+        if (removed > 0)
+            undoRedo.Record(
+                "Clear visible NPCs",
+                () => RestoreRemovedNpcs(snapshot, selectedNpc),
+                () => ApplyRemoveNpcs(snapshot));
+
+        return removed;
     }
 
     public int FillEmptyVisibleNpcs(IEnumerable<SliderPreset> presets)
@@ -1224,6 +1244,85 @@ public sealed class MorphsViewModel : ReactiveObject
 
         RaiseSelectedTargetChanged();
         RefreshVisibleNpcs();
+    }
+
+    private void RestoreCustomTargets(
+        IEnumerable<CustomTargetSnapshot> snapshot,
+        CustomMorphTarget? selectedTarget)
+    {
+        CustomTargets.Clear();
+        foreach (var item in snapshot.OrderBy(item => item.Index))
+        {
+            item.Target.ClearSliderPresets();
+            foreach (var preset in item.Assignments) item.Target.AddSliderPreset(preset);
+
+            CustomTargets.Insert(Math.Min(item.Index, CustomTargets.Count), item.Target);
+        }
+
+        SelectedCustomTarget = selectedTarget is not null && CustomTargets.Contains(selectedTarget)
+            ? selectedTarget
+            : CustomTargets.FirstOrDefault();
+        RaiseCommandStatesChanged();
+        RaiseSelectedTargetChanged();
+    }
+
+    private int ApplyRemoveNpcs(IEnumerable<NpcRemovalSnapshot> snapshot)
+    {
+        var items = snapshot.ToArray();
+        var resetSelectedNpc = SelectedNpc is not null
+                              && items.Any(item => ReferenceEquals(item.Npc, SelectedNpc));
+        var removed = 0;
+        foreach (var item in items)
+            if (assignmentService.RemoveNpc(project, item.Npc))
+                removed++;
+
+        RefreshVisibleNpcs();
+        if (resetSelectedNpc) SelectedNpc = VisibleNpcs.FirstOrDefault();
+        return removed;
+    }
+
+    private void RestoreRemovedNpcs(
+        IEnumerable<NpcRemovalSnapshot> snapshot,
+        Npc? selectedNpc)
+    {
+        foreach (var item in snapshot.OrderBy(item => item.Index))
+        {
+            item.Npc.ClearSliderPresets();
+            foreach (var preset in item.Assignments) item.Npc.AddSliderPreset(preset);
+
+            if (!Npcs.Contains(item.Npc)) Npcs.Insert(Math.Min(item.Index, Npcs.Count), item.Npc);
+        }
+
+        RefreshVisibleNpcs();
+        SelectedNpc = selectedNpc is not null && Npcs.Contains(selectedNpc)
+            ? selectedNpc
+            : VisibleNpcs.FirstOrDefault();
+        RaiseCommandStatesChanged();
+        RaiseSelectedTargetChanged();
+    }
+
+    private sealed class CustomTargetSnapshot(
+        CustomMorphTarget target,
+        int index,
+        IReadOnlyList<SliderPreset> assignments)
+    {
+        public CustomMorphTarget Target { get; } = target;
+
+        public int Index { get; } = index;
+
+        public IReadOnlyList<SliderPreset> Assignments { get; } = assignments;
+    }
+
+    private sealed class NpcRemovalSnapshot(
+        Npc npc,
+        int index,
+        IReadOnlyList<SliderPreset> assignments)
+    {
+        public Npc Npc { get; } = npc;
+
+        public int Index { get; } = index;
+
+        public IReadOnlyList<SliderPreset> Assignments { get; } = assignments;
     }
 
     private static void RaiseCanExecuteChanged(ICommand? command)

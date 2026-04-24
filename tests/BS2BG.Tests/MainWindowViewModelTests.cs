@@ -62,6 +62,29 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task OpenProjectRemainsCleanWhenSelectionAddsProfileDefaults()
+    {
+        using var directory = new TemporaryDirectory();
+        var loadedProject = new ProjectModel();
+        loadedProject.SliderPresets.Add(new SliderPreset("Loaded"));
+        var projectPath = Path.Combine(directory.Path, "loaded.jbs2bg");
+        new ProjectFileService().Save(loadedProject, projectPath);
+        var project = new ProjectModel();
+        var dialogs = new FakeFileDialogService { OpenProjectPath = projectPath };
+        var viewModel = CreateViewModel(
+            project,
+            dialogs,
+            profileCatalog: CreateProfileCatalogWithDefault("DefaultOnly"));
+
+        await viewModel.OpenProjectAsync(TestContext.Current.CancellationToken);
+
+        project.IsDirty.Should().BeFalse();
+        project.SliderPresets.Single().MissingDefaultSetSliders
+            .Select(slider => slider.Name)
+            .Should().Equal(new[] { "DefaultOnly" });
+    }
+
+    [Fact]
     public async Task NewProjectKeepsDirtyProjectWhenDiscardIsCancelled()
     {
         var project = CreateProjectWithPreset("Alpha");
@@ -173,19 +196,12 @@ public sealed class MainWindowViewModelTests
     private static MainWindowViewModel CreateViewModel(
         ProjectModel project,
         FakeFileDialogService fileDialogs,
-        FakeAppDialogService? dialogs = null)
+        FakeAppDialogService? dialogs = null,
+        TemplateProfileCatalog? profileCatalog = null)
     {
         var parser = new BodySlideXmlParser();
         var templateGeneration = new TemplateGenerationService();
-        var profileCatalog = new TemplateProfileCatalog(new[]
-        {
-            new TemplateProfile(
-                ProjectProfileMapping.SkyrimCbbe,
-                new SliderProfile(
-                    Array.Empty<SliderDefault>(),
-                    Array.Empty<SliderMultiplier>(),
-                    Array.Empty<string>()))
-        });
+        profileCatalog ??= CreateProfileCatalogWithDefault();
         var templates = new TemplatesViewModel(
             project,
             parser,
@@ -213,6 +229,19 @@ public sealed class MainWindowViewModelTests
             dialogs ?? new FakeAppDialogService(),
             templates,
             morphs);
+    }
+
+    private static TemplateProfileCatalog CreateProfileCatalogWithDefault(params string[] defaultSliders)
+    {
+        return new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile(
+                ProjectProfileMapping.SkyrimCbbe,
+                new SliderProfile(
+                    defaultSliders.Select(slider => new SliderDefault(slider, 0f, 1f)),
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
+        });
     }
 
     private static ProjectModel CreateProjectWithPreset(string presetName)
