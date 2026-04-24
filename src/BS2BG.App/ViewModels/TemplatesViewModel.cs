@@ -153,6 +153,7 @@ public sealed class TemplatesViewModel : ReactiveObject
                 SelectedPreset.ProfileName = resolvedName;
             }
 
+            RefreshSelectedPresetMissingDefaults(resolvedName);
             RefreshPreview();
         }
     }
@@ -412,6 +413,16 @@ public sealed class TemplatesViewModel : ReactiveObject
         }
 
         RefreshPreview();
+    }
+
+    private void RefreshSelectedPresetMissingDefaults(string profileName)
+    {
+        if (SelectedPreset is null)
+        {
+            return;
+        }
+
+        SelectedPreset.RefreshMissingDefaultSetSliders(profileCatalog.GetProfile(profileName).DefaultSliderNames);
     }
 
     private void SetSelectedProfileNameFromPreset(string? profileName)

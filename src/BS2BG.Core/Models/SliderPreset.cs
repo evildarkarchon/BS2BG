@@ -76,12 +76,29 @@ public sealed class SliderPreset : ProjectModelNode
             throw new ArgumentNullException(nameof(defaultSliderNames));
         }
 
+        var defaultNames = defaultSliderNames.ToArray();
+        var activeDefaultNames = new HashSet<string>(
+            defaultNames,
+            StringComparer.OrdinalIgnoreCase);
+        var setSliderNames = new HashSet<string>(
+            SetSliders.Select(slider => slider.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        for (var index = MissingDefaultSetSliders.Count - 1; index >= 0; index--)
+        {
+            var slider = MissingDefaultSetSliders[index];
+            if (!activeDefaultNames.Contains(slider.Name) || setSliderNames.Contains(slider.Name))
+            {
+                MissingDefaultSetSliders.RemoveAt(index);
+            }
+        }
+
         var existingNames = new HashSet<string>(
             SetSliders.Select(slider => slider.Name)
                 .Concat(MissingDefaultSetSliders.Select(slider => slider.Name)),
             StringComparer.OrdinalIgnoreCase);
 
-        foreach (var sliderName in defaultSliderNames)
+        foreach (var sliderName in defaultNames)
         {
             if (!existingNames.Add(sliderName))
             {

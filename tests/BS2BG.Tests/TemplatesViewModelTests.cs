@@ -121,6 +121,26 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public void ProfileSelectionRebuildsMissingDefaultSlidersForSelectedPreset()
+    {
+        var viewModel = CreateViewModel(profileCatalog: CreateCatalogWithProfileDefaults());
+        var preset = new ModelSliderPreset("Alpha", ProjectProfileMapping.SkyrimCbbe);
+        preset.MissingDefaultSetSliders.Add(new ModelSetSlider("RegularOnly"));
+        viewModel.Presets.Add(preset);
+        viewModel.SelectedPreset = preset;
+
+        viewModel.SelectedProfileName = "Double";
+
+        Assert.Equal("Double", preset.ProfileName);
+        Assert.Equal(new[] { "DoubleOnly" }, preset.MissingDefaultSetSliders.Select(slider => slider.Name));
+
+        viewModel.GenerateTemplates();
+
+        Assert.Contains("DoubleOnly@1.0", viewModel.GeneratedTemplateText);
+        Assert.DoesNotContain("RegularOnly@", viewModel.GeneratedTemplateText);
+    }
+
+    [Fact]
     public async Task CopyGeneratedTemplatesUsesClipboardAndReportsEmptyOutput()
     {
         var clipboard = new CapturingClipboardService();
@@ -179,13 +199,14 @@ public sealed class TemplatesViewModelTests
 
     private static TemplatesViewModel CreateViewModel(
         IBodySlideXmlFilePicker? picker = null,
-        IClipboardService? clipboard = null)
+        IClipboardService? clipboard = null,
+        TemplateProfileCatalog? profileCatalog = null)
     {
         return new TemplatesViewModel(
             new ProjectModel(),
             new BodySlideXmlParser(),
             new TemplateGenerationService(),
-            CreateCatalog(),
+            profileCatalog ?? CreateCatalog(),
             picker ?? new BlockingFilePicker(Array.Empty<string>()),
             clipboard ?? new CapturingClipboardService());
     }
@@ -199,6 +220,24 @@ public sealed class TemplatesViewModelTests
         var doubled = new BS2BG.Core.Formatting.SliderProfile(
             defaults: Array.Empty<BS2BG.Core.Formatting.SliderDefault>(),
             multipliers: new[] { new BS2BG.Core.Formatting.SliderMultiplier("Scale", 2f) },
+            invertedNames: Array.Empty<string>());
+
+        return new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, regular),
+            new TemplateProfile("Double", doubled),
+        });
+    }
+
+    private static TemplateProfileCatalog CreateCatalogWithProfileDefaults()
+    {
+        var regular = new BS2BG.Core.Formatting.SliderProfile(
+            defaults: new[] { new BS2BG.Core.Formatting.SliderDefault("RegularOnly", 0f, 1f) },
+            multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
+            invertedNames: Array.Empty<string>());
+        var doubled = new BS2BG.Core.Formatting.SliderProfile(
+            defaults: new[] { new BS2BG.Core.Formatting.SliderDefault("DoubleOnly", 0f, 1f) },
+            multipliers: Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
             invertedNames: Array.Empty<string>());
 
         return new TemplateProfileCatalog(new[]
