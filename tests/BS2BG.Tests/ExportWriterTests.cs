@@ -290,8 +290,47 @@ public sealed class ExportWriterTests
         Directory.GetFiles(directory.Path).Should().BeEquivalentTo(path1, path2, path3);
     }
 
+    [Fact]
+    public void AtomicFileWriterWriteAtomicBatchDeletesTempFilesWhenWritePhaseFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var path1 = Path.Combine(directory.Path, "a.txt");
+        var path2 = Path.Combine(directory.Path, "b.txt");
+
+        var act = () => AtomicFileWriter.WriteAtomicBatch(
+            new[] { (path1, "ONE"), (path2, "TWO") },
+            new FaultingEncoding());
+
+        act.Should().Throw<IOException>();
+
+        File.Exists(path1).Should().BeFalse();
+        File.Exists(path2).Should().BeFalse();
+        Directory.GetFiles(directory.Path).Should().BeEmpty();
+    }
+
     private static bool HasUtf8Bom(byte[] bytes) =>
         bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+
+    private sealed class FaultingEncoding : Encoding
+    {
+        private static readonly Encoding Inner = Encoding.UTF8;
+
+        public override int GetByteCount(char[] chars, int index, int count) =>
+            Inner.GetByteCount(chars, index, count);
+
+        public override int GetBytes(char[] chars, int charIndex, int charCount, byte[] bytes, int byteIndex) =>
+            throw new IOException("simulated mid-write failure");
+
+        public override int GetCharCount(byte[] bytes, int index, int count) =>
+            Inner.GetCharCount(bytes, index, count);
+
+        public override int GetChars(byte[] bytes, int byteIndex, int byteCount, char[] chars, int charIndex) =>
+            Inner.GetChars(bytes, byteIndex, byteCount, chars, charIndex);
+
+        public override int GetMaxByteCount(int charCount) => Inner.GetMaxByteCount(charCount);
+
+        public override int GetMaxCharCount(int byteCount) => Inner.GetMaxCharCount(byteCount);
+    }
 
     private sealed class TemporaryDirectory : IDisposable
     {

@@ -79,18 +79,14 @@ public static class AtomicFileWriter
             normalized.Add((fullPath, CreateTempPath(fullPath), entry.Content));
         }
 
-        var tempsWritten = 0;
         try
         {
-            for (var i = 0; i < normalized.Count; i++)
-            {
-                File.WriteAllText(normalized[i].TempPath, normalized[i].Content, encoding);
-                tempsWritten = i + 1;
-            }
+            foreach (var entry in normalized)
+                File.WriteAllText(entry.TempPath, entry.Content, encoding);
         }
         catch
         {
-            for (var i = 0; i < tempsWritten; i++) TryDeleteTempFile(normalized[i].TempPath);
+            foreach (var entry in normalized) TryDeleteTempFile(entry.TempPath);
 
             throw;
         }
