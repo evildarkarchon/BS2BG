@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using BS2BG.Core.Generation;
+using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 
 namespace BS2BG.Core.Export;
@@ -54,7 +55,7 @@ public class BosJsonExportWriter(TemplateGenerationService templateGenerationSer
         Directory.CreateDirectory(directoryPath);
 
         var usedFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var filePaths = new List<string>();
+        var entries = new List<(string Path, string Content)>();
         foreach (var preset in presets.OrderBy(preset => preset.Name, StringComparer.OrdinalIgnoreCase))
         {
             var fileName = GetUniqueFileName(SanitizeFileStem(preset.Name), usedFileNames);
@@ -62,11 +63,14 @@ public class BosJsonExportWriter(TemplateGenerationService templateGenerationSer
             var json = templateGenerationService.PreviewBosJson(
                 preset,
                 profileCatalog.GetProfile(preset.ProfileName));
-            File.WriteAllText(filePath, json, Utf8NoBom);
-            filePaths.Add(filePath);
+            entries.Add((filePath, json));
         }
 
-        return new BosJsonExportResult(filePaths);
+        if (entries.Count == 0) return new BosJsonExportResult(Array.Empty<string>());
+
+        AtomicFileWriter.WriteAtomicBatch(entries, Utf8NoBom);
+
+        return new BosJsonExportResult(entries.Select(entry => entry.Path).ToArray());
     }
 
     private static string SanitizeFileStem(string name)

@@ -145,6 +145,151 @@ public sealed class ExportWriterTests
         Directory.GetFiles(directory.Path).Should().ContainSingle().Which.Should().Be(path);
     }
 
+    [Fact]
+    public void AtomicFileWriterWriteAtomicPairRestoresFirstTargetWhenSecondCommitFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var firstPath = Path.Combine(directory.Path, "first.txt");
+        var secondPath = Path.Combine(directory.Path, "second.txt");
+        File.WriteAllText(firstPath, "ORIGINAL_FIRST");
+        File.WriteAllText(secondPath, "ORIGINAL_SECOND");
+
+        using (new FileStream(secondPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => AtomicFileWriter.WriteAtomicPair(
+                firstPath,
+                "NEW_FIRST",
+                secondPath,
+                "NEW_SECOND",
+                Encoding.UTF8);
+
+            act.Should().Throw<IOException>();
+        }
+
+        File.ReadAllText(firstPath).Should().Be("ORIGINAL_FIRST");
+        File.ReadAllText(secondPath).Should().Be("ORIGINAL_SECOND");
+        Directory.GetFiles(directory.Path).Should().BeEquivalentTo(firstPath, secondPath);
+    }
+
+    [Fact]
+    public void AtomicFileWriterWriteAtomicBatchRollsBackPreviouslyCommittedTargets()
+    {
+        using var directory = new TemporaryDirectory();
+        var path1 = Path.Combine(directory.Path, "a.txt");
+        var path2 = Path.Combine(directory.Path, "b.txt");
+        var path3 = Path.Combine(directory.Path, "c.txt");
+        File.WriteAllText(path1, "OLD_1");
+        File.WriteAllText(path2, "OLD_2");
+        File.WriteAllText(path3, "OLD_3");
+
+        using (new FileStream(path3, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => AtomicFileWriter.WriteAtomicBatch(
+                new[]
+                {
+                    (path1, "NEW_1"),
+                    (path2, "NEW_2"),
+                    (path3, "NEW_3"),
+                },
+                Encoding.UTF8);
+
+            act.Should().Throw<IOException>();
+        }
+
+        File.ReadAllText(path1).Should().Be("OLD_1");
+        File.ReadAllText(path2).Should().Be("OLD_2");
+        File.ReadAllText(path3).Should().Be("OLD_3");
+        Directory.GetFiles(directory.Path).Should().BeEquivalentTo(path1, path2, path3);
+    }
+
+    [Fact]
+    public void AtomicFileWriterWriteAtomicBatchDeletesNewlyCreatedTargetsOnLaterFailure()
+    {
+        using var directory = new TemporaryDirectory();
+        var path1 = Path.Combine(directory.Path, "new1.txt");
+        var path2 = Path.Combine(directory.Path, "new2.txt");
+        var path3 = Path.Combine(directory.Path, "existing.txt");
+        File.WriteAllText(path3, "OLD_3");
+
+        using (new FileStream(path3, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => AtomicFileWriter.WriteAtomicBatch(
+                new[]
+                {
+                    (path1, "NEW_1"),
+                    (path2, "NEW_2"),
+                    (path3, "NEW_3"),
+                },
+                Encoding.UTF8);
+
+            act.Should().Throw<IOException>();
+        }
+
+        File.Exists(path1).Should().BeFalse();
+        File.Exists(path2).Should().BeFalse();
+        File.ReadAllText(path3).Should().Be("OLD_3");
+        Directory.GetFiles(directory.Path).Should().BeEquivalentTo(path3);
+    }
+
+    [Fact]
+    public void AtomicFileWriterWriteAtomicBatchRejectsDuplicatePaths()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "dup.txt");
+
+        var act = () => AtomicFileWriter.WriteAtomicBatch(
+            new[]
+            {
+                (path, "ONE"),
+                (path.ToUpperInvariant(), "TWO"),
+            },
+            Encoding.UTF8);
+
+        act.Should().Throw<ArgumentException>();
+        File.Exists(path).Should().BeFalse();
+        Directory.GetFiles(directory.Path).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BosJsonExportWriterRollsBackOnLockedTargetMidBatch()
+    {
+        using var directory = new TemporaryDirectory();
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile(
+                ProjectProfileMapping.SkyrimCbbe,
+                new SliderProfile(
+                    Array.Empty<SliderDefault>(),
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
+        });
+        var writer = new BosJsonExportWriter(new TemplateGenerationService());
+        var path1 = Path.Combine(directory.Path, "Preset1.json");
+        var path2 = Path.Combine(directory.Path, "Preset2.json");
+        var path3 = Path.Combine(directory.Path, "Preset3.json");
+        File.WriteAllText(path1, "OLD_1");
+        File.WriteAllText(path2, "OLD_2");
+        File.WriteAllText(path3, "OLD_3");
+
+        var presets = new[]
+        {
+            new SliderPreset("Preset1"),
+            new SliderPreset("Preset2"),
+            new SliderPreset("Preset3"),
+        };
+
+        using (new FileStream(path2, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => writer.Write(directory.Path, presets, catalog);
+            act.Should().Throw<IOException>();
+        }
+
+        File.ReadAllText(path1).Should().Be("OLD_1");
+        File.ReadAllText(path2).Should().Be("OLD_2");
+        File.ReadAllText(path3).Should().Be("OLD_3");
+        Directory.GetFiles(directory.Path).Should().BeEquivalentTo(path1, path2, path3);
+    }
+
     private static bool HasUtf8Bom(byte[] bytes) =>
         bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
 

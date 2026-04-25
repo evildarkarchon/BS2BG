@@ -44,31 +44,109 @@ public static class AtomicFileWriter
 
         if (encoding is null) throw new ArgumentNullException(nameof(encoding));
 
-        var firstTarget = Path.GetFullPath(firstPath);
-        var secondTarget = Path.GetFullPath(secondPath);
-        var firstTemp = CreateTempPath(firstTarget);
-        string? secondTemp = null;
-        var firstReplaced = false;
-        var secondReplaced = false;
+        WriteAtomicBatch(
+            new[] { (firstPath, firstContent), (secondPath, secondContent) },
+            encoding);
+    }
+
+    public static void WriteAtomicBatch(
+        IReadOnlyList<(string Path, string Content)> entries,
+        Encoding encoding)
+    {
+        if (entries is null) throw new ArgumentNullException(nameof(entries));
+
+        if (encoding is null) throw new ArgumentNullException(nameof(encoding));
+
+        if (entries.Count == 0)
+            throw new ArgumentException("Entries must contain at least one item.", nameof(entries));
+
+        var normalized = new List<(string FullPath, string TempPath, string Content)>(entries.Count);
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in entries)
+        {
+            if (entry.Path is null)
+                throw new ArgumentException("Entry path cannot be null.", nameof(entries));
+
+            if (entry.Content is null)
+                throw new ArgumentException("Entry content cannot be null.", nameof(entries));
+
+            var fullPath = Path.GetFullPath(entry.Path);
+            if (!seenPaths.Add(fullPath))
+                throw new ArgumentException(
+                    "Duplicate target path: " + fullPath,
+                    nameof(entries));
+
+            normalized.Add((fullPath, CreateTempPath(fullPath), entry.Content));
+        }
+
+        var tempsWritten = 0;
         try
         {
-            File.WriteAllText(firstTemp, firstContent, encoding);
-
-            secondTemp = CreateTempPath(secondTarget);
-            File.WriteAllText(secondTemp, secondContent, encoding);
-
-            ReplaceWithTempFile(firstTemp, firstTarget);
-            firstReplaced = true;
-
-            ReplaceWithTempFile(secondTemp, secondTarget);
-            secondReplaced = true;
+            for (var i = 0; i < normalized.Count; i++)
+            {
+                File.WriteAllText(normalized[i].TempPath, normalized[i].Content, encoding);
+                tempsWritten = i + 1;
+            }
         }
-        finally
+        catch
         {
-            if (!firstReplaced) TryDeleteTempFile(firstTemp);
+            for (var i = 0; i < tempsWritten; i++) TryDeleteTempFile(normalized[i].TempPath);
 
-            if (secondTemp is not null && !secondReplaced) TryDeleteTempFile(secondTemp);
+            throw;
         }
+
+        var committed = new List<(string FullPath, string? BackupPath)>(normalized.Count);
+        for (var i = 0; i < normalized.Count; i++)
+        {
+            var (fullPath, tempPath, _) = normalized[i];
+            try
+            {
+                if (File.Exists(fullPath))
+                {
+                    var backupPath = fullPath + ".bak." + Guid.NewGuid().ToString("N");
+                    File.Replace(tempPath, fullPath, backupPath);
+                    committed.Add((fullPath, backupPath));
+                }
+                else
+                {
+                    File.Move(tempPath, fullPath);
+                    committed.Add((fullPath, null));
+                }
+            }
+            catch (Exception commitException)
+            {
+                var rollbackExceptions = new List<Exception>();
+                for (var j = committed.Count - 1; j >= 0; j--)
+                {
+                    var (committedPath, backupPath) = committed[j];
+                    try
+                    {
+                        if (backupPath is not null)
+                            File.Replace(backupPath, committedPath, null);
+                        else
+                            File.Delete(committedPath);
+                    }
+                    catch (Exception rollbackException)
+                    {
+                        rollbackExceptions.Add(rollbackException);
+                    }
+                }
+
+                for (var k = i; k < normalized.Count; k++) TryDeleteTempFile(normalized[k].TempPath);
+
+                if (rollbackExceptions.Count == 0) throw;
+
+                var inner = new List<Exception> { commitException };
+                inner.AddRange(rollbackExceptions);
+                throw new AggregateException(
+                    "Atomic batch write failed and rollback was incomplete.",
+                    inner);
+            }
+        }
+
+        foreach (var (_, backupPath) in committed)
+            if (backupPath is not null)
+                TryDeleteTempFile(backupPath);
     }
 
     private static string CreateTempPath(string targetPath)
