@@ -97,6 +97,32 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public void TryRenameSelectedPresetRejectsForbiddenCharacterWithFriendlyMessage()
+    {
+        var viewModel = CreateViewModel();
+        var alpha = AddPreset(viewModel, "Alpha", 25);
+        viewModel.SelectedPreset = alpha;
+
+        viewModel.TryRenameSelectedPreset("foo|bar").Should().BeFalse();
+
+        viewModel.ValidationMessage.Should().Contain("'|'");
+        alpha.Name.Should().Be("Alpha");
+    }
+
+    [Fact]
+    public void TryDuplicateSelectedPresetRejectsForbiddenCharacterWithFriendlyMessage()
+    {
+        var viewModel = CreateViewModel();
+        var alpha = AddPreset(viewModel, "Alpha", 25);
+        viewModel.SelectedPreset = alpha;
+
+        viewModel.TryDuplicateSelectedPreset("foo=bar").Should().BeFalse();
+
+        viewModel.ValidationMessage.Should().Contain("'='");
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+    }
+
+    [Fact]
     public void ClearPresetsRemovesAssignmentsFromTargetsAndNpcs()
     {
         var project = new ProjectModel();

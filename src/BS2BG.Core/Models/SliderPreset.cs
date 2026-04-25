@@ -12,9 +12,11 @@ public sealed class SliderPreset : ProjectModelNode
     private bool sortingMissingDefaults;
     private bool sortingSetSliders;
 
+    public static readonly IReadOnlyList<char> ForbiddenNameCharacters = new[] { '=', '|', ',', '\r', '\n' };
+
     public SliderPreset(string name, string? profileName = null)
     {
-        this.name = NormalizePresetName(name);
+        this.name = ValidateAndNormalize(name);
         this.profileName = ProjectProfileMapping.Resolve(profileName, false);
 
         SetSliders.CollectionChanged += OnSetSlidersChanged;
@@ -24,7 +26,7 @@ public sealed class SliderPreset : ProjectModelNode
     public string Name
     {
         get => name;
-        set => SetProperty(ref name, NormalizePresetName(value));
+        set => SetProperty(ref name, ValidateAndNormalize(value));
     }
 
     public string ProfileName
@@ -189,9 +191,38 @@ public sealed class SliderPreset : ProjectModelNode
         }
     }
 
-    private static string NormalizePresetName(string value)
+    public static bool TryValidateName(string candidate, out string error)
     {
-        return (value ?? throw new ArgumentNullException(nameof(value)))
-            .Replace('.', ' ');
+        var normalized = (candidate ?? string.Empty).Replace('.', ' ');
+        foreach (var forbidden in ForbiddenNameCharacters)
+            if (normalized.Contains(forbidden))
+            {
+                error = "Preset name cannot contain " + DescribeForbiddenChar(forbidden) + ".";
+                return false;
+            }
+
+        error = string.Empty;
+        return true;
     }
+
+    private static string ValidateAndNormalize(string value)
+    {
+        var normalized = (value ?? throw new ArgumentNullException(nameof(value)))
+            .Replace('.', ' ');
+        foreach (var forbidden in ForbiddenNameCharacters)
+            if (normalized.Contains(forbidden))
+                throw new ArgumentException(
+                    "Preset name '" + normalized + "' contains a forbidden character ("
+                    + DescribeForbiddenChar(forbidden) + ").",
+                    nameof(value));
+
+        return normalized;
+    }
+
+    private static string DescribeForbiddenChar(char value) => value switch
+    {
+        '\r' => "carriage return",
+        '\n' => "line feed",
+        _ => "'" + value + "'"
+    };
 }

@@ -4,6 +4,7 @@ using System.Reactive.Threading.Tasks;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
+using BS2BG.App.Views;
 using BS2BG.Core.Export;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
@@ -204,6 +205,165 @@ public sealed class MainWindowViewModelTests
         var file = Path.Combine(directory.Path, "Preset_One.json");
         File.Exists(file).Should().BeTrue();
         File.ReadAllText(file).Should().Contain("\"bodyname\": \"Preset:One\"");
+    }
+
+    [Fact]
+    public async Task HandleDroppedFilesCommandIsDisabledWhileShellSaveIsBusy()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var blocker = new BlockingProjectFileService();
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var viewModel = CreateViewModel(project, dialogs, projectFileService: blocker);
+        var dropCommand = (ICommand)viewModel.HandleDroppedFilesCommand;
+        dropCommand.CanExecute(Array.Empty<string>()).Should().BeTrue();
+
+        var saveTask = viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await blocker.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        try
+        {
+            dropCommand.CanExecute(Array.Empty<string>()).Should().BeFalse();
+        }
+        finally
+        {
+            blocker.ReleaseWrite();
+            await saveTask;
+        }
+
+        dropCommand.CanExecute(Array.Empty<string>()).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DropDuringSaveIsGatedAndPreservesPathAfterSaveCompletes()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var droppedProject = new ProjectModel();
+        droppedProject.SliderPresets.Add(new SliderPreset("Loaded"));
+        var droppedProjectPath = Path.Combine(directory.Path, "loaded.jbs2bg");
+        new ProjectFileService().Save(droppedProject, droppedProjectPath);
+        var blocker = new BlockingProjectFileService();
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var viewModel = CreateViewModel(project, dialogs, projectFileService: blocker);
+        var dropCommand = (ICommand)viewModel.HandleDroppedFilesCommand;
+        var droppedFiles = new[] { droppedProjectPath };
+        dropCommand.CanExecute(droppedFiles).Should().BeTrue();
+
+        var saveTask = viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await blocker.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        try
+        {
+            dropCommand.CanExecute(droppedFiles).Should().BeFalse();
+            project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        }
+        finally
+        {
+            blocker.ReleaseWrite();
+            await saveTask;
+        }
+
+        dropCommand.CanExecute(droppedFiles).Should().BeTrue();
+        viewModel.CurrentProjectPath.Should().Be(Path.Combine(directory.Path, "saved-project.jbs2bg"));
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+    }
+
+    [Fact]
+    public void NotifyDropIgnoredAsBusySetsStatusMessage()
+    {
+        var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService());
+
+        viewModel.NotifyDropIgnoredAsBusy();
+
+        viewModel.StatusMessage.Should().Be("Drop ignored - application is busy.");
+    }
+
+    [Fact]
+    public async Task NotifyDropIgnoredAsBusyDuringBlockedSavePreservesProjectAndStatus()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var blocker = new BlockingProjectFileService();
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var viewModel = CreateViewModel(project, dialogs, projectFileService: blocker);
+
+        var saveTask = viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await blocker.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        try
+        {
+            viewModel.IsAnyBusy.Should().BeTrue();
+            viewModel.NotifyDropIgnoredAsBusy();
+            viewModel.StatusMessage.Should().Be("Drop ignored - application is busy.");
+            project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        }
+        finally
+        {
+            blocker.ReleaseWrite();
+            await saveTask;
+        }
+    }
+
+    [Fact]
+    public async Task IsAnyBusyRaisesWhileHandleDroppedFilesIsExecuting()
+    {
+        using var directory = new TemporaryDirectory();
+        var droppedProject = new ProjectModel();
+        droppedProject.SliderPresets.Add(new SliderPreset("Loaded"));
+        var droppedProjectPath = Path.Combine(directory.Path, "loaded.jbs2bg");
+        new ProjectFileService().Save(droppedProject, droppedProjectPath);
+        var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService());
+        var raised = new List<string?>();
+        viewModel.PropertyChanged += (_, args) => raised.Add(args.PropertyName);
+
+        await viewModel.HandleDroppedFilesCommand.Execute(new[] { droppedProjectPath })
+            .ToTask(TestContext.Current.CancellationToken);
+
+        raised.Should().Contain(nameof(MainWindowViewModel.IsAnyBusy));
+        viewModel.IsAnyBusy.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task MainWindowDispatchDroppedFilePathsRoutesToBusyNotifierWhileSaving()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var droppedProject = new ProjectModel();
+        droppedProject.SliderPresets.Add(new SliderPreset("Loaded"));
+        var droppedProjectPath = Path.Combine(directory.Path, "loaded.jbs2bg");
+        new ProjectFileService().Save(droppedProject, droppedProjectPath);
+
+        var blocker = new BlockingProjectFileService();
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var viewModel = CreateViewModel(project, dialogs, projectFileService: blocker);
+
+        var saveTask = viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await blocker.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        try
+        {
+            viewModel.IsAnyBusy.Should().BeTrue();
+            MainWindow.DispatchDroppedFilePaths(viewModel, new[] { droppedProjectPath });
+
+            viewModel.StatusMessage.Should().Be("Drop ignored - application is busy.");
+            project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        }
+        finally
+        {
+            blocker.ReleaseWrite();
+            await saveTask;
+        }
+
+        viewModel.CurrentProjectPath.Should().Be(Path.Combine(directory.Path, "saved-project.jbs2bg"));
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+    }
+
+    [Fact]
+    public void MainWindowDispatchDroppedFilePathsExecutesCommandWhenIdle()
+    {
+        var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService());
+        viewModel.IsAnyBusy.Should().BeFalse();
+
+        MainWindow.DispatchDroppedFilePaths(viewModel, Array.Empty<string>());
+
+        viewModel.StatusMessage.Should().Be("No files dropped.");
     }
 
     [Fact]

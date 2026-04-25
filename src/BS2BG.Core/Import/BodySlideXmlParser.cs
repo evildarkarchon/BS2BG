@@ -79,6 +79,14 @@ public sealed class BodySlideXmlParser
                 continue;
             }
 
+            if (!SliderPreset.TryValidateName(presetName, out var nameError))
+            {
+                diagnostics.Add(new BodySlideXmlImportDiagnostic(
+                    source,
+                    "Skipped Preset '" + presetName + "': " + nameError));
+                continue;
+            }
+
             var preset = new SliderPreset(presetName);
             var sliders = new List<SetSlider>();
 

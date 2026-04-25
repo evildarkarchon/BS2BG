@@ -119,6 +119,28 @@ public sealed class ProjectFileServiceTests
     }
 
     [Fact]
+    public void LoadFromStringThrowsForPresetNameContainingForbiddenCharacter()
+    {
+        var service = new ProjectFileService();
+
+        var act = () => service.LoadFromString(
+            """
+            {
+              "SliderPresets": {
+                "foo|bar": {
+                  "SetSliders": []
+                }
+              },
+              "CustomMorphTargets": {},
+              "MorphedNPCs": {}
+            }
+            """);
+
+        act.Should().Throw<ArgumentException>()
+            .Which.Message.Should().Contain("'|'");
+    }
+
+    [Fact]
     public void SavePreservesNpcsWithDuplicateDisplayNames()
     {
         var service = new ProjectFileService();

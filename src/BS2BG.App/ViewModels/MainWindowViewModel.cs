@@ -147,17 +147,29 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         SaveProjectAsCommand = ReactiveCommand.CreateFromTask(SaveProjectAsAsync, notBusy);
         ExportBosJsonCommand = ReactiveCommand.CreateFromTask(ExportBosJsonAsync, canExportBosJson);
         ExportBodyGenInisCommand = ReactiveCommand.CreateFromTask(ExportBodyGenInisAsync, canExportBodyGenInis);
+        HandleDroppedFilesCommand = ReactiveCommand.CreateFromTask<IReadOnlyList<string>, Unit>(
+            async (paths, ct) =>
+            {
+                await HandleDroppedFilesAsync(paths, ct);
+                return Unit.Default;
+            },
+            notBusy);
 
-        disposables.Add(Observable.CombineLatest(
-                Templates.WhenAnyValue(x => x.IsBusy),
-                Morphs.WhenAnyValue(x => x.IsBusy),
-                NewProjectCommand.IsExecuting,
-                OpenProjectCommand.IsExecuting,
-                SaveProjectCommand.IsExecuting,
-                SaveProjectAsCommand.IsExecuting,
-                ExportBosJsonCommand.IsExecuting,
-                ExportBodyGenInisCommand.IsExecuting,
-                (a, b, c, d, e, f, g, h) => a || b || c || d || e || f || g || h)
+        var busySources = new IObservable<bool>[]
+        {
+            Templates.WhenAnyValue(x => x.IsBusy),
+            Morphs.WhenAnyValue(x => x.IsBusy),
+            NewProjectCommand.IsExecuting,
+            OpenProjectCommand.IsExecuting,
+            SaveProjectCommand.IsExecuting,
+            SaveProjectAsCommand.IsExecuting,
+            ExportBosJsonCommand.IsExecuting,
+            ExportBodyGenInisCommand.IsExecuting,
+            HandleDroppedFilesCommand.IsExecuting
+        };
+
+        disposables.Add(Observable.CombineLatest(busySources)
+            .Select(values => values.Any(b => b))
             .DistinctUntilChanged()
             .Subscribe(aggregateBusySubject.OnNext));
 
@@ -194,6 +206,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             .Subscribe(ex => ReportCommandFailure("Export BoS JSON", ex)));
         disposables.Add(ExportBodyGenInisCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Export BodyGen INIs", ex)));
+        disposables.Add(HandleDroppedFilesCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Drop files", ex)));
 
         _titleHelper = this.WhenAnyValue(x => x.CurrentProjectPath)
             .CombineLatest(dirtyChanged, (path, _) => FormatTitle())
@@ -272,6 +286,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> CloseCommandPaletteCommand { get; }
 
     public ReactiveCommand<CommandDescriptor, Unit> RunCommandPaletteItemCommand { get; }
+
+    public ReactiveCommand<IReadOnlyList<string>, Unit> HandleDroppedFilesCommand { get; }
 
     public void Dispose() => disposables.Dispose();
 
@@ -471,6 +487,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     }
 
     public void AcknowledgeGlobalSearchFocus() => ShouldFocusGlobalSearch = false;
+
+    public void NotifyDropIgnoredAsBusy() =>
+        StatusMessage = "Drop ignored - application is busy.";
 
     private async Task SaveProjectInternalAsync(
         string? targetPath,

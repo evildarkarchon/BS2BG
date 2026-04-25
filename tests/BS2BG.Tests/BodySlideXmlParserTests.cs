@@ -41,6 +41,30 @@ public sealed class BodySlideXmlParserTests
         breasts.ValueBig.Should().Be(75);
     }
 
+    [Theory]
+    [InlineData("foo|bar", "'|'")]
+    [InlineData("foo=bar", "'='")]
+    [InlineData("foo,bar", "','")]
+    public void ParseStringSkipsPresetWithForbiddenCharacterAndEmitsDiagnostic(string presetName, string expectedDescription)
+    {
+        var xml = $"""
+                    <SliderPresets>
+                      <Preset name="{presetName}">
+                        <SetSlider name="Scale" size="big" value="50"/>
+                      </Preset>
+                    </SliderPresets>
+                    """;
+        var parser = new BodySlideXmlParser();
+
+        var result = parser.ParseString(xml, "sample.xml");
+
+        result.Presets.Should().BeEmpty();
+        var diagnostic = result.Diagnostics.Should().ContainSingle().Which;
+        diagnostic.Source.Should().Be("sample.xml");
+        diagnostic.Message.Should().Contain(presetName);
+        diagnostic.Message.Should().Contain(expectedDescription);
+    }
+
     [Fact]
     public void ParseStringMergesSparseSliderHalvesByName()
     {

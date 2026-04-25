@@ -111,15 +111,27 @@ public partial class MainWindow : Window
         args.Handled = true;
     }
 
-    private async void OnDrop(object? sender, DragEventArgs args)
+    private void OnDrop(object? sender, DragEventArgs args)
     {
         if (viewModel is null) return;
+
+        args.Handled = true;
 
         var paths = args.DataTransfer.TryGetFiles()?
             .Where(file => file.Path.IsFile)
             .Select(file => file.Path.LocalPath)
             .ToArray() ?? Array.Empty<string>();
-        await viewModel.HandleDroppedFilesAsync(paths);
-        args.Handled = true;
+        DispatchDroppedFilePaths(viewModel, paths);
+    }
+
+    internal static void DispatchDroppedFilePaths(MainWindowViewModel viewModel, IReadOnlyList<string> paths)
+    {
+        if (viewModel.IsAnyBusy)
+        {
+            viewModel.NotifyDropIgnoredAsBusy();
+            return;
+        }
+
+        viewModel.HandleDroppedFilesCommand.Execute(paths).Subscribe(_ => { }, _ => { });
     }
 }

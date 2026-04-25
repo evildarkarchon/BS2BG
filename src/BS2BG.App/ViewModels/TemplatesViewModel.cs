@@ -609,6 +609,12 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
             return false;
         }
 
+        if (!SliderPreset.TryValidateName(normalizedName, out var characterError))
+        {
+            ValidationMessage = characterError;
+            return false;
+        }
+
         var candidateName = normalizedName;
         if (Presets.Any(preset =>
                 !ReferenceEquals(preset, existingPresetToIgnore)
