@@ -81,5 +81,15 @@ public sealed class WindowNoPresetNotificationService : INoPresetNotificationSer
 
         Grid.SetRow(customTargetsList, 1);
         Grid.SetRow(npcsList, 2);
+
+        var createdWindow = window;
+        createdWindow.Closed += (_, _) =>
+        {
+            if (!ReferenceEquals(window, createdWindow)) return;
+
+            customTargetsList = null;
+            npcsList = null;
+            window = null;
+        };
     }
 }

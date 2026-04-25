@@ -21,7 +21,10 @@ public sealed class WindowAppDialogService : IAppDialogService
 
         var window = CreateDiscardWindow(action);
         using var registration = cancellationToken.Register(
-            () => Dispatcher.UIThread.Post(() => window.Close(false)));
+            () => Dispatcher.UIThread.Post(() =>
+            {
+                if (window.IsVisible) window.Close(false);
+            }));
         return await window.ShowDialog<bool>(owner);
     }
 

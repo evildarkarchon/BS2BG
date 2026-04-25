@@ -8,6 +8,8 @@ public sealed class AsyncRelayCommand(
     Func<bool>? canExecute = null,
     Action<Exception>? reportException = null) : ICommand
 {
+    private CancellationTokenSource? activeCancellation;
+
     private readonly Func<bool>? canExecute = canExecute;
 
     private readonly Func<CancellationToken, Task> executeAsync =
@@ -21,16 +23,35 @@ public sealed class AsyncRelayCommand(
 
     public async void Execute(object? parameter)
     {
-        if (CanExecute(parameter))
-            try
-            {
-                await executeAsync(CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                ReportException(ex);
-            }
+        if (!CanExecute(parameter)) return;
+
+        var cts = new CancellationTokenSource();
+        var token = cts.Token;
+        var previousCancellation = activeCancellation;
+        activeCancellation = cts;
+        previousCancellation?.Cancel();
+        previousCancellation?.Dispose();
+
+        try
+        {
+            await executeAsync(token);
+        }
+        catch (OperationCanceledException ex) when (token.IsCancellationRequested && ex.CancellationToken == token)
+        {
+        }
+        catch (Exception ex)
+        {
+            ReportException(ex);
+        }
+        finally
+        {
+            if (ReferenceEquals(activeCancellation, cts)) activeCancellation = null;
+
+            cts.Dispose();
+        }
     }
+
+    public void Cancel() => activeCancellation?.Cancel();
 
     public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 

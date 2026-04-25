@@ -204,6 +204,58 @@ public sealed class MainWindowViewModelTests
         File.ReadAllText(file).Should().Contain("\"bodyname\": \"Preset:One\"");
     }
 
+    [Fact]
+    public void IsAnyBusyIsFalseInitially()
+    {
+        var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService());
+
+        viewModel.IsAnyBusy.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IsAnyBusyRaisesWhenShellSaveTogglesIsBusy()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var viewModel = CreateViewModel(project, dialogs);
+        var raised = new List<string?>();
+        viewModel.PropertyChanged += (_, args) => raised.Add(args.PropertyName);
+
+        await viewModel.SaveProjectAsync(TestContext.Current.CancellationToken);
+
+        raised.Should().Contain(nameof(MainWindowViewModel.IsAnyBusy));
+        viewModel.IsAnyBusy.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IsAnyBusyRaisesWhenTemplatesIsBusyToggles()
+    {
+        var project = new ProjectModel();
+        var viewModel = CreateViewModel(project, new FakeFileDialogService());
+        var raised = new List<string?>();
+        viewModel.PropertyChanged += (_, args) => raised.Add(args.PropertyName);
+
+        await viewModel.Templates.ImportPresetsAsync(TestContext.Current.CancellationToken);
+
+        raised.Should().Contain(nameof(MainWindowViewModel.IsAnyBusy));
+        viewModel.IsAnyBusy.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IsAnyBusyRaisesWhenMorphsIsBusyToggles()
+    {
+        var project = new ProjectModel();
+        var viewModel = CreateViewModel(project, new FakeFileDialogService());
+        var raised = new List<string?>();
+        viewModel.PropertyChanged += (_, args) => raised.Add(args.PropertyName);
+
+        await viewModel.Morphs.ImportNpcsAsync(TestContext.Current.CancellationToken);
+
+        raised.Should().Contain(nameof(MainWindowViewModel.IsAnyBusy));
+        viewModel.IsAnyBusy.Should().BeFalse();
+    }
+
     private static MainWindowViewModel CreateViewModel(
         ProjectModel project,
         FakeFileDialogService fileDialogs,

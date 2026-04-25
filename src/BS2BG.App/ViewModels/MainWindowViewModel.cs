@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Globalization;
 using System.Windows.Input;
 using BS2BG.App.Services;
@@ -104,6 +105,8 @@ public sealed class MainWindowViewModel : ReactiveObject
         project.SliderPresets.CollectionChanged += OnProjectOutputStateChanged;
         project.CustomMorphTargets.CollectionChanged += OnProjectOutputStateChanged;
         project.MorphedNpcs.CollectionChanged += OnProjectOutputStateChanged;
+        Templates.PropertyChanged += OnChildBusyChanged;
+        Morphs.PropertyChanged += OnChildBusyChanged;
 
         NewProjectCommand = new AsyncRelayCommand(
             NewProjectAsync,
@@ -193,8 +196,11 @@ public sealed class MainWindowViewModel : ReactiveObject
 
             this.RaiseAndSetIfChanged(ref isBusy, value);
             RaiseCommandStatesChanged();
+            this.RaisePropertyChanged(nameof(IsAnyBusy));
         }
     }
+
+    public bool IsAnyBusy => IsBusy || Templates.IsBusy || Morphs.IsBusy;
 
     public TemplatesViewModel Templates { get; }
 
@@ -551,6 +557,15 @@ public sealed class MainWindowViewModel : ReactiveObject
 
     private void OnProjectOutputStateChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
         RefreshProjectState();
+
+    private void OnChildBusyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(TemplatesViewModel.IsBusy)
+            || args.PropertyName == nameof(MorphsViewModel.IsBusy))
+        {
+            this.RaisePropertyChanged(nameof(IsAnyBusy));
+        }
+    }
 
     private void RefreshProjectState()
     {

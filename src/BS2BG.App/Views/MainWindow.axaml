@@ -143,7 +143,7 @@
                      Height="4"
                      HorizontalAlignment="Right"
                      IsIndeterminate="True"
-                     IsVisible="{Binding Templates.IsBusy}" />
+                     IsVisible="{Binding IsAnyBusy}" />
         <TextBlock x:Name="ShellStatusText"
                    Grid.Column="4"
                    Text="{Binding StatusMessage}"

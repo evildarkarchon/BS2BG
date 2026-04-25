@@ -19,9 +19,9 @@ public static class SliderProfileJsonService
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         return new SliderProfile(
-            ReadDefaults(root),
-            ReadMultipliers(root),
-            ReadInverted(root));
+            ReadDefaults(root).ToArray(),
+            ReadMultipliers(root).ToArray(),
+            ReadInverted(root).ToArray());
     }
 
     private static IEnumerable<SliderDefault> ReadDefaults(JsonElement root)
