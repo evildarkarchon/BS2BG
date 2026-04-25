@@ -5,7 +5,7 @@ using BS2BG.Core.Models;
 
 namespace BS2BG.Core.Export;
 
-public sealed class BosJsonExportWriter(TemplateGenerationService templateGenerationService)
+public class BosJsonExportWriter(TemplateGenerationService templateGenerationService)
 {
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
     private static readonly HashSet<char> WindowsReservedFileNameCharacters = new("<>:\"/\\|?*");
@@ -40,7 +40,7 @@ public sealed class BosJsonExportWriter(TemplateGenerationService templateGenera
                                                                            ?? throw new ArgumentNullException(
                                                                                nameof(templateGenerationService));
 
-    public BosJsonExportResult Write(
+    public virtual BosJsonExportResult Write(
         string directoryPath,
         IEnumerable<SliderPreset> presets,
         TemplateProfileCatalog profileCatalog)

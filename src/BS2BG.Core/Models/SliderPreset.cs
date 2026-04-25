@@ -60,6 +60,18 @@ public sealed class SliderPreset : ProjectModelNode
         }
     }
 
+    public SliderPreset Clone() => Clone(name);
+
+    public SliderPreset Clone(string newName)
+    {
+        var clone = new SliderPreset(newName, profileName);
+        foreach (var slider in SetSliders) clone.AddSetSlider(slider.Clone());
+
+        foreach (var slider in MissingDefaultSetSliders) clone.AddSetSlider(slider.Clone());
+
+        return clone;
+    }
+
     public IEnumerable<SetSlider> GetAllSetSlidersForSave()
     {
         return SetSliders

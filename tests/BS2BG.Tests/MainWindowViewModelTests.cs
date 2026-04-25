@@ -13,6 +13,7 @@ using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 using BS2BG.Core.Serialization;
 using Xunit;
+using SetSlider = BS2BG.Core.Models.SetSlider;
 using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
@@ -206,6 +207,42 @@ public sealed class MainWindowViewModelTests
         var file = Path.Combine(directory.Path, "Preset_One.json");
         File.Exists(file).Should().BeTrue();
         File.ReadAllText(file).Should().Contain("\"bodyname\": \"Preset:One\"");
+    }
+
+    [Fact]
+    public async Task ExportBosJsonSnapshotsPresetsBeforeBackgroundWrite()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = new ProjectModel();
+        var preset = new SliderPreset("Alpha");
+        var slider = new SetSlider("Test") { ValueSmall = 0, ValueBig = 42 };
+        preset.AddSetSlider(slider);
+        project.SliderPresets.Add(preset);
+        project.MarkDirty();
+
+        var templateGeneration = new TemplateGenerationService();
+        var profileCatalog = CreateProfileCatalogWithDefault();
+        var expectedJson = templateGeneration.PreviewBosJson(
+            preset.Clone(),
+            profileCatalog.GetProfile(preset.ProfileName));
+
+        var inspectingWriter = new InspectingBosJsonExportWriter(
+            templateGeneration,
+            () => slider.ValueBig = 999);
+
+        var dialogs = new FakeFileDialogService { BosJsonExportFolder = directory.Path };
+        var viewModel = CreateViewModel(
+            project,
+            dialogs,
+            profileCatalog: profileCatalog,
+            bosJsonExportWriter: inspectingWriter);
+
+        await viewModel.ExportBosJsonAsync(TestContext.Current.CancellationToken);
+
+        var filePath = Path.Combine(directory.Path, "Alpha.json");
+        File.Exists(filePath).Should().BeTrue();
+        File.ReadAllText(filePath).Should().Be(expectedJson);
+        slider.ValueBig.Should().Be(999);
     }
 
     [Fact]
@@ -642,7 +679,8 @@ public sealed class MainWindowViewModelTests
         FakeFileDialogService fileDialogs,
         FakeAppDialogService? dialogs = null,
         TemplateProfileCatalog? profileCatalog = null,
-        ProjectFileService? projectFileService = null)
+        ProjectFileService? projectFileService = null,
+        BosJsonExportWriter? bosJsonExportWriter = null)
     {
         var parser = new BodySlideXmlParser();
         var templateGeneration = new TemplateGenerationService();
@@ -669,7 +707,7 @@ public sealed class MainWindowViewModelTests
             new MorphGenerationService(),
             profileCatalog,
             new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(templateGeneration),
+            bosJsonExportWriter ?? new BosJsonExportWriter(templateGeneration),
             fileDialogs,
             dialogs ?? new FakeAppDialogService(),
             templates,
@@ -768,6 +806,29 @@ public sealed class MainWindowViewModelTests
         public IEnumerator<string> GetEnumerator() => throw new InvalidOperationException(message);
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class InspectingBosJsonExportWriter : BosJsonExportWriter
+    {
+        private readonly Action mutateAfterCapture;
+
+        public InspectingBosJsonExportWriter(
+            TemplateGenerationService templateGenerationService,
+            Action mutateAfterCapture)
+            : base(templateGenerationService)
+        {
+            this.mutateAfterCapture = mutateAfterCapture;
+        }
+
+        public override BosJsonExportResult Write(
+            string directoryPath,
+            IEnumerable<SliderPreset> presets,
+            TemplateProfileCatalog profileCatalog)
+        {
+            var materialized = presets.ToList();
+            mutateAfterCapture();
+            return base.Write(directoryPath, materialized, profileCatalog);
+        }
     }
 
     private sealed class BlockingProjectFileService : ProjectFileService

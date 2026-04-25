@@ -46,4 +46,16 @@ public sealed class SetSlider(string name) : ProjectModelNode
     }
 
     public bool IsMissingDefault => ValueSmall is null && ValueBig is null;
+
+    public SetSlider Clone()
+    {
+        return new SetSlider(name)
+        {
+            Enabled = enabled,
+            ValueSmall = valueSmall,
+            ValueBig = valueBig,
+            PercentMin = percentMin,
+            PercentMax = percentMax
+        };
+    }
 }

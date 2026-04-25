@@ -473,10 +473,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             return;
         }
 
+        var snapshot = project.SliderPresets.Select(preset => preset.Clone()).ToList();
+
         try
         {
             await Task.Run(
-                () => bosJsonExportWriter.Write(directoryPath, project.SliderPresets, profileCatalog),
+                () => bosJsonExportWriter.Write(directoryPath, snapshot, profileCatalog),
                 cancellationToken);
             StatusMessage = "BodyTypes of Skyrim JSON files exported.";
         }

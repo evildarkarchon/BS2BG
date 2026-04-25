@@ -265,7 +265,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
 
         if (!TryValidatePresetName(newName, null, out var normalizedName)) return false;
 
-        var duplicate = ClonePreset(SelectedPreset, normalizedName);
+        var duplicate = SelectedPreset.Clone(normalizedName);
         Presets.Add(duplicate);
         SortPresets();
         SelectedPreset = duplicate;
@@ -470,13 +470,13 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         var existingPreset = project.FindSliderPreset(importedPreset.Name);
         if (existingPreset is null)
         {
-            Presets.Add(ClonePreset(importedPreset, importedPreset.Name));
+            Presets.Add(importedPreset.Clone());
             return;
         }
 
         existingPreset.SetSliders.Clear();
         existingPreset.MissingDefaultSetSliders.Clear();
-        foreach (var slider in importedPreset.SetSliders) existingPreset.AddSetSlider(CloneSetSlider(slider));
+        foreach (var slider in importedPreset.SetSliders) existingPreset.AddSetSlider(slider.Clone());
 
         existingPreset.ProfileName = importedPreset.ProfileName;
     }
@@ -677,7 +677,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         RefreshSetSliderRowPreviews();
     }
 
-    private SliderPreset[] SnapshotPresets() => Presets.Select(preset => ClonePreset(preset, preset.Name)).ToArray();
+    private SliderPreset[] SnapshotPresets() => Presets.Select(preset => preset.Clone()).ToArray();
 
     private PresetAssignmentSnapshot CapturePresetAssignmentSnapshot()
     {
@@ -710,7 +710,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     private void RestorePresetSnapshot(IReadOnlyList<SliderPreset> snapshot)
     {
         Presets.Clear();
-        foreach (var preset in snapshot.Select(preset => ClonePreset(preset, preset.Name))) Presets.Add(preset);
+        foreach (var preset in snapshot.Select(preset => preset.Clone())) Presets.Add(preset);
 
         SortPresets();
         RemapAssignmentsToCurrentPresets();
@@ -789,28 +789,6 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     private void RefreshSetSliderRowPreviews()
     {
         foreach (var row in SetSliderRows) row.RefreshPreview();
-    }
-
-    private static SliderPreset ClonePreset(SliderPreset source, string name)
-    {
-        var clone = new SliderPreset(name, source.ProfileName);
-        foreach (var slider in source.SetSliders) clone.AddSetSlider(CloneSetSlider(slider));
-
-        foreach (var slider in source.MissingDefaultSetSliders) clone.AddSetSlider(CloneSetSlider(slider));
-
-        return clone;
-    }
-
-    private static SetSlider CloneSetSlider(SetSlider source)
-    {
-        return new SetSlider(source.Name)
-        {
-            Enabled = source.Enabled,
-            ValueSmall = source.ValueSmall,
-            ValueBig = source.ValueBig,
-            PercentMin = source.PercentMin,
-            PercentMax = source.PercentMax
-        };
     }
 
     private static string NormalizePresetName(string value) => (value ?? string.Empty).Trim().Replace('.', ' ');
