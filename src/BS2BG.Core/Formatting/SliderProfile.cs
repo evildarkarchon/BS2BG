@@ -27,14 +27,14 @@ public sealed class SliderProfile
     public int GetDefaultSmall(string sliderName)
     {
         return defaultsByName.TryGetValue(sliderName, out var value)
-            ? (int)(value.ValueSmall * 100f)
+            ? (int)MathF.Round(value.ValueSmall * 100f, MidpointRounding.AwayFromZero)
             : 0;
     }
 
     public int GetDefaultBig(string sliderName)
     {
         return defaultsByName.TryGetValue(sliderName, out var value)
-            ? (int)(value.ValueBig * 100f)
+            ? (int)MathF.Round(value.ValueBig * 100f, MidpointRounding.AwayFromZero)
             : 0;
     }
 
