@@ -1,7 +1,9 @@
+using System.Windows.Input;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Threading;
 using BS2BG.App;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
@@ -105,6 +107,25 @@ public sealed class M6UxAppShellTests
         DragDrop.GetAllowDrop(window.FindControl<Control>("NpcDropZone").Should().BeAssignableTo<Control>().Which)
             .Should().BeTrue();
         viewModel.CommandPaletteItems.Select(item => item.Title).Should().Contain("Generate Templates");
+    }
+
+    [AvaloniaFact]
+    public void CommandPaletteListBoxSelectionRunsCommandAndClosesPalette()
+    {
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow(viewModel);
+        window.ApplyTemplate();
+        var listBox = window.FindControl<ListBox>("CommandPaletteListBox").Should().BeAssignableTo<ListBox>().Which;
+
+        ((ICommand)viewModel.OpenCommandPaletteCommand).Execute(null);
+        viewModel.CommandPaletteSearchText = "Generate Templates";
+        var descriptor = viewModel.VisibleCommandPaletteItems.Should().ContainSingle().Which;
+
+        listBox.SelectedItem = descriptor;
+        Dispatcher.UIThread.RunJobs();
+
+        viewModel.IsCommandPaletteOpen.Should().BeFalse();
+        viewModel.CommandPaletteSearchText.Should().BeEmpty();
     }
 
     private static Npc CreateNpc(string name, string race) => new(name)

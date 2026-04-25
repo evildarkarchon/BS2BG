@@ -229,6 +229,29 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public void SelectingDifferentPresetDoesNotMarkCleanProjectDirty()
+    {
+        var project = new ProjectModel();
+        var viewModel = CreateViewModel(
+            profileCatalog: CreateCatalogWithProfileDefaults(),
+            project: project);
+
+        var alpha = new ModelSliderPreset("Alpha", ProjectProfileMapping.SkyrimCbbe);
+        var beta = new ModelSliderPreset("Beta", ProjectProfileMapping.SkyrimCbbe);
+        viewModel.Presets.Add(alpha);
+        viewModel.Presets.Add(beta);
+        viewModel.SelectedPreset = alpha;
+
+        project.MarkClean();
+        project.IsDirty.Should().BeFalse();
+
+        viewModel.SelectedPreset = beta;
+
+        project.IsDirty.Should().BeFalse();
+        beta.MissingDefaultSetSliders.Select(slider => slider.Name).Should().Equal("RegularOnly");
+    }
+
+    [Fact]
     public async Task CopyGeneratedTemplatesUsesClipboardAndReportsEmptyOutput()
     {
         var clipboard = new CapturingClipboardService();

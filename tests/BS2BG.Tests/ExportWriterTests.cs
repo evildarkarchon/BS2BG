@@ -185,12 +185,7 @@ public sealed class ExportWriterTests
         using (new FileStream(path3, FileMode.Open, FileAccess.Read, FileShare.None))
         {
             var act = () => AtomicFileWriter.WriteAtomicBatch(
-                new[]
-                {
-                    (path1, "NEW_1"),
-                    (path2, "NEW_2"),
-                    (path3, "NEW_3"),
-                },
+                new[] { (path1, "NEW_1"), (path2, "NEW_2"), (path3, "NEW_3") },
                 Encoding.UTF8);
 
             act.Should().Throw<IOException>();
@@ -214,12 +209,7 @@ public sealed class ExportWriterTests
         using (new FileStream(path3, FileMode.Open, FileAccess.Read, FileShare.None))
         {
             var act = () => AtomicFileWriter.WriteAtomicBatch(
-                new[]
-                {
-                    (path1, "NEW_1"),
-                    (path2, "NEW_2"),
-                    (path3, "NEW_3"),
-                },
+                new[] { (path1, "NEW_1"), (path2, "NEW_2"), (path3, "NEW_3") },
                 Encoding.UTF8);
 
             act.Should().Throw<IOException>();
@@ -238,11 +228,7 @@ public sealed class ExportWriterTests
         var path = Path.Combine(directory.Path, "dup.txt");
 
         var act = () => AtomicFileWriter.WriteAtomicBatch(
-            new[]
-            {
-                (path, "ONE"),
-                (path.ToUpperInvariant(), "TWO"),
-            },
+            new[] { (path, "ONE"), (path.ToUpperInvariant(), "TWO") },
             Encoding.UTF8);
 
         act.Should().Throw<ArgumentException>();
@@ -271,12 +257,7 @@ public sealed class ExportWriterTests
         File.WriteAllText(path2, "OLD_2");
         File.WriteAllText(path3, "OLD_3");
 
-        var presets = new[]
-        {
-            new SliderPreset("Preset1"),
-            new SliderPreset("Preset2"),
-            new SliderPreset("Preset3"),
-        };
+        var presets = new[] { new SliderPreset("Preset1"), new SliderPreset("Preset2"), new SliderPreset("Preset3") };
 
         using (new FileStream(path2, FileMode.Open, FileAccess.Read, FileShare.None))
         {
@@ -313,7 +294,7 @@ public sealed class ExportWriterTests
 
     private sealed class FaultingEncoding : Encoding
     {
-        private static readonly Encoding Inner = Encoding.UTF8;
+        private static readonly Encoding Inner = UTF8;
 
         public override int GetByteCount(char[] chars, int index, int count) =>
             Inner.GetByteCount(chars, index, count);

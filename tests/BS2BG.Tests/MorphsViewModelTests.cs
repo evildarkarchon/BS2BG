@@ -275,6 +275,23 @@ public sealed class MorphsViewModelTests
         viewModel.StatusMessage.Should().Be("Opened image for Lydia.");
     }
 
+    [Theory]
+    [InlineData("All|Female=Bad")]
+    [InlineData("All|Female\nFoo")]
+    [InlineData("All|Female\rFoo")]
+    [InlineData("All| Female")]
+    [InlineData("All|Female |NordRace")]
+    public void TargetNameValidationRejectsReservedCharactersAndEdgeWhitespace(string rawName)
+    {
+        var viewModel = CreateViewModel(CreateProjectWithPresets(), new QueueRandomAssignmentProvider());
+
+        viewModel.TargetNameInput = rawName;
+
+        viewModel.TargetNameValidationMessage
+            .Should().Be("Custom target must use Context|Gender or Context|Gender|Race[Variant].");
+        viewModel.AddCustomTarget().Should().BeFalse();
+    }
+
     private static MorphsViewModel CreateViewModel(
         ProjectModel project,
         IRandomAssignmentProvider randomProvider,

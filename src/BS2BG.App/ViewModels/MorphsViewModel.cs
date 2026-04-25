@@ -1128,12 +1128,10 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     private string ValidateCustomTargetName(string value)
     {
-        var normalizedName = (value ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(normalizedName)) return string.Empty;
+        if (string.IsNullOrWhiteSpace((value ?? string.Empty).Trim())) return string.Empty;
 
-        var parts = normalizedName.Split('|');
-        if ((parts.Length != 2 && parts.Length != 3) || parts.Any(part => string.IsNullOrWhiteSpace(part)))
-            return "Custom target must use Context|Gender or Context|Gender|Race[Variant].";
+        if (!MorphAssignmentService.TryValidateCustomTargetName(value, out var normalizedName, out var formatError))
+            return formatError;
 
         return CustomTargets.Any(existing => string.Equals(
             existing.Name,

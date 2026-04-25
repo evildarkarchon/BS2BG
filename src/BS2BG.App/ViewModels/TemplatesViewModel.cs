@@ -604,6 +604,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     {
         if (SelectedPreset is null) return;
 
+        using var _ = project.SuppressDirtyTracking();
         SelectedPreset.RefreshMissingDefaultSetSliders(profileCatalog.GetProfile(profileName).DefaultSliderNames);
     }
 

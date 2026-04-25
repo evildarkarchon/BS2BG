@@ -815,10 +815,8 @@ public sealed class MainWindowViewModelTests
         public InspectingBosJsonExportWriter(
             TemplateGenerationService templateGenerationService,
             Action mutateAfterCapture)
-            : base(templateGenerationService)
-        {
+            : base(templateGenerationService) =>
             this.mutateAfterCapture = mutateAfterCapture;
-        }
 
         public override BosJsonExportResult Write(
             string directoryPath,

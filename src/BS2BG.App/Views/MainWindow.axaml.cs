@@ -1,6 +1,8 @@
+using System.Windows.Input;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Models;
@@ -26,7 +28,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        this.ViewModel = viewModel;
+        ViewModel = viewModel;
         DataContext = viewModel;
         Title = viewModel.Title;
         viewModel.PropertyChanged += (_, args) =>
@@ -96,8 +98,15 @@ public partial class MainWindow : Window
 
         if (listBox.SelectedItem is CommandDescriptor descriptor)
         {
-            ViewModel.RunCommandPaletteItemCommand.Execute(descriptor);
-            listBox.SelectedItem = null;
+            // Defer until after SelectionChanged finishes — running the command synchronously here
+            // mutates VisibleCommandPaletteItems (the ListBox's ItemsSource) and corrupts its selection
+            // bookkeeping mid-event.
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (ViewModel is null) return;
+                ((ICommand)ViewModel.RunCommandPaletteItemCommand).Execute(descriptor);
+                listBox.SelectedItem = null;
+            });
         }
     }
 

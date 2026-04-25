@@ -24,6 +24,14 @@ public sealed class ProjectModel : ProjectModelNode
 
     public event EventHandler? DirtyStateChanged;
 
+    private int suppressDirtyDepth;
+
+    public IDisposable SuppressDirtyTracking()
+    {
+        suppressDirtyDepth++;
+        return new SuppressionScope(this);
+    }
+
     public SliderPreset? FindSliderPreset(string name)
     {
         return SliderPresets.FirstOrDefault(sliderPreset => string.Equals(
@@ -131,7 +139,7 @@ public sealed class ProjectModel : ProjectModelNode
     private void OnAnyChange()
     {
         ChangeVersion = unchecked(ChangeVersion + 1);
-        MarkDirty();
+        if (suppressDirtyDepth == 0) MarkDirty();
     }
 
     private void UpdateChildSubscriptions<T>(
@@ -238,5 +246,17 @@ public sealed class ProjectModel : ProjectModelNode
         foreach (var preset in source.SliderPresets)
             if (presetMap.TryGetValue(preset.Name, out var resolvedPreset))
                 target.AddSliderPreset(resolvedPreset);
+    }
+
+    private sealed class SuppressionScope(ProjectModel owner) : IDisposable
+    {
+        private bool disposed;
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            owner.suppressDirtyDepth--;
+        }
     }
 }

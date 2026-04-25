@@ -20,12 +20,7 @@ public sealed class MorphAssignmentService(IRandomAssignmentProvider randomAssig
         if (project is null) throw new ArgumentNullException(nameof(project));
 
         target = null!;
-        var normalizedName = NormalizeCustomTargetName(targetName);
-        if (!IsValidCustomTargetName(normalizedName))
-        {
-            error = "Custom target must use Context|Gender or Context|Gender|Race[Variant].";
-            return false;
-        }
+        if (!TryValidateCustomTargetName(targetName, out var normalizedName, out error)) return false;
 
         if (project.CustomMorphTargets.Any(existing => string.Equals(
                 existing.Name,
@@ -183,14 +178,41 @@ public sealed class MorphAssignmentService(IRandomAssignmentProvider randomAssig
                && string.Equals(left.EditorId, right.EditorId, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string NormalizeCustomTargetName(string value) => (value ?? string.Empty).Trim();
-
-    private static bool IsValidCustomTargetName(string value)
+    public static bool TryValidateCustomTargetName(
+        string? rawValue,
+        out string normalizedName,
+        out string error)
     {
-        if (string.IsNullOrWhiteSpace(value)) return false;
+        normalizedName = (rawValue ?? string.Empty).Trim();
+        const string formatError = "Custom target must use Context|Gender or Context|Gender|Race[Variant].";
 
-        var parts = value.Split('|');
-        return (parts.Length == 2 || parts.Length == 3)
-               && parts.All(part => !string.IsNullOrWhiteSpace(part));
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            error = formatError;
+            return false;
+        }
+
+        var parts = normalizedName.Split('|');
+        if (parts.Length != 2 && parts.Length != 3)
+        {
+            error = formatError;
+            return false;
+        }
+
+        foreach (var part in parts)
+        {
+            if (string.IsNullOrWhiteSpace(part)
+                || part != part.Trim()
+                || part.IndexOfAny(ReservedCustomTargetCharacters) >= 0)
+            {
+                error = formatError;
+                return false;
+            }
+        }
+
+        error = string.Empty;
+        return true;
     }
+
+    private static readonly char[] ReservedCustomTargetCharacters = { '=', '\r', '\n' };
 }

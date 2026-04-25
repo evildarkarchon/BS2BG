@@ -37,6 +37,40 @@ public sealed class MorphCoreTests
         error.Should().Be("Custom target must use Context|Gender or Context|Gender|Race[Variant].");
     }
 
+    [Theory]
+    [InlineData("All|Female=Bad")]
+    [InlineData("All|Female\nFoo")]
+    [InlineData("All|Female\rFoo")]
+    [InlineData("All|Female\r\nFoo")]
+    [InlineData("All=Hidden|Female")]
+    [InlineData("All| Female")]
+    [InlineData("All|Female |NordRace")]
+    [InlineData("All|Female|NordRace=X")]
+    public void TryAddCustomTargetRejectsReservedCharactersAndEdgeWhitespace(string rawName)
+    {
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Alpha"));
+        var service = new MorphAssignmentService(new FixedRandomAssignmentProvider(0));
+
+        var added = service.TryAddCustomTarget(project, rawName, out _, out var error);
+
+        added.Should().BeFalse();
+        error.Should().Be("Custom target must use Context|Gender or Context|Gender|Race[Variant].");
+        project.CustomMorphTargets.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("All|Female", "All|Female")]
+    [InlineData(" All|Female ", "All|Female")]
+    [InlineData("Skyrim.esm|Female|NordRace", "Skyrim.esm|Female|NordRace")]
+    public void TryValidateCustomTargetNameAcceptsWellFormedInputs(string raw, string expectedNormalized)
+    {
+        MorphAssignmentService.TryValidateCustomTargetName(raw, out var normalized, out var error)
+            .Should().BeTrue();
+        normalized.Should().Be(expectedNormalized);
+        error.Should().Be(string.Empty);
+    }
+
     [Fact]
     public void NpcTextParserHandlesBomUtf8FallbackEncodingAndCaseInsensitiveDeDupe()
     {
