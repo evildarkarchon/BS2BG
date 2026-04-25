@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Export;
@@ -37,15 +38,30 @@ public sealed class M6UxViewModelTests
 
         harness.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia" });
 
-        harness.Main.OpenCommandPaletteCommand.Execute(null);
+        ((ICommand)harness.Main.OpenCommandPaletteCommand).Execute(null);
         harness.Main.CommandPaletteSearchText = "Generate Templates";
         var command = harness.Main.VisibleCommandPaletteItems.Should().ContainSingle().Which;
 
-        harness.Main.RunCommandPaletteItemCommand.Execute(command);
+        ((ICommand)harness.Main.RunCommandPaletteItemCommand).Execute(command);
 
-        harness.Main.IsCommandPaletteOpen.Should().BeTrue();
+        harness.Main.IsCommandPaletteOpen.Should().BeFalse();
+        harness.Main.CommandPaletteSearchText.Should().BeEmpty();
         command.Title.Should().Be("Generate Templates");
         harness.Templates.GeneratedTemplateText.Should().Contain("Alpha");
+    }
+
+    [Fact]
+    public void CloseCommandPaletteCommandDismissesPaletteAndClearsSearch()
+    {
+        var harness = CreateHarness(CreateProjectWithPresets("Alpha"));
+
+        ((ICommand)harness.Main.OpenCommandPaletteCommand).Execute(null);
+        harness.Main.CommandPaletteSearchText = "Generate";
+        harness.Main.IsCommandPaletteOpen.Should().BeTrue();
+
+        ((ICommand)harness.Main.CloseCommandPaletteCommand).Execute(null);
+
+        harness.Main.IsCommandPaletteOpen.Should().BeFalse();
     }
 
     [Fact]
@@ -97,8 +113,8 @@ public sealed class M6UxViewModelTests
         harness.Morphs.SelectedNpcs.Add(lydia);
         harness.Morphs.SelectedNpcs.Add(serana);
         harness.Morphs.SelectedAvailablePreset = alpha;
-        harness.Morphs.AssignSelectedNpcsCommand.Execute(null);
-        harness.Morphs.ClearSelectedNpcAssignmentsCommand.Execute(null);
+        ((ICommand)harness.Morphs.AssignSelectedNpcsCommand).Execute(null);
+        ((ICommand)harness.Morphs.ClearSelectedNpcAssignmentsCommand).Execute(null);
 
         lydia.SliderPresets.Should().BeEmpty();
         serana.SliderPresets.Should().BeEmpty();
@@ -125,16 +141,16 @@ public sealed class M6UxViewModelTests
         harness.Templates.SelectedPreset = alpha;
         harness.Templates.TryRenameSelectedPreset("Gamma").Should().BeTrue();
 
-        harness.Main.UndoCommand.Execute(null);
+        ((ICommand)harness.Main.UndoCommand).Execute(null);
         alpha.Name.Should().Be("Alpha");
 
-        harness.Main.RedoCommand.Execute(null);
+        ((ICommand)harness.Main.RedoCommand).Execute(null);
         alpha.Name.Should().Be("Gamma");
 
         harness.Templates.RemoveSelectedPreset().Should().BeTrue();
         target.SliderPresets.Should().BeEmpty();
 
-        harness.Main.UndoCommand.Execute(null);
+        ((ICommand)harness.Main.UndoCommand).Execute(null);
 
         project.SliderPresets.Should().Contain(preset => preset.Name == "Gamma");
         target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Gamma" });
@@ -160,13 +176,13 @@ public sealed class M6UxViewModelTests
         target.SliderPresets.Should().BeEmpty();
         npc.SliderPresets.Should().BeEmpty();
 
-        harness.Main.UndoCommand.Execute(null);
+        ((ICommand)harness.Main.UndoCommand).Execute(null);
 
         project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta" });
         target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
         npc.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
 
-        harness.Main.RedoCommand.Execute(null);
+        ((ICommand)harness.Main.RedoCommand).Execute(null);
 
         project.SliderPresets.Should().BeEmpty();
         target.SliderPresets.Should().BeEmpty();
@@ -194,9 +210,9 @@ public sealed class M6UxViewModelTests
 
         harness.Morphs.SelectedCustomTarget = target;
         harness.Morphs.TargetPresetWarningState.Should().Be(PresetCountWarningState.Error);
-        harness.Morphs.TrimSelectedTargetTo76Command.CanExecute(null).Should().BeTrue();
+        ((ICommand)harness.Morphs.TrimSelectedTargetTo76Command).CanExecute(null).Should().BeTrue();
 
-        harness.Morphs.TrimSelectedTargetTo76Command.Execute(null);
+        ((ICommand)harness.Morphs.TrimSelectedTargetTo76Command).Execute(null);
 
         target.SliderPresets.Count.Should().Be(76);
         target.SliderPresets.TakeLast(4).Select(preset => preset.Name).Should().Equal(new[] { "P76", "P77", "P78", "P79" });

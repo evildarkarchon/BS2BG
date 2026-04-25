@@ -1,5 +1,7 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
+using System.Reactive.Threading.Tasks;
+using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Export;
@@ -222,7 +224,7 @@ public sealed class MainWindowViewModelTests
         var raised = new List<string?>();
         viewModel.PropertyChanged += (_, args) => raised.Add(args.PropertyName);
 
-        await viewModel.SaveProjectAsync(TestContext.Current.CancellationToken);
+        await viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         raised.Should().Contain(nameof(MainWindowViewModel.IsAnyBusy));
         viewModel.IsAnyBusy.Should().BeFalse();
@@ -236,7 +238,7 @@ public sealed class MainWindowViewModelTests
         var raised = new List<string?>();
         viewModel.PropertyChanged += (_, args) => raised.Add(args.PropertyName);
 
-        await viewModel.Templates.ImportPresetsAsync(TestContext.Current.CancellationToken);
+        await viewModel.Templates.ImportPresetsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         raised.Should().Contain(nameof(MainWindowViewModel.IsAnyBusy));
         viewModel.IsAnyBusy.Should().BeFalse();
@@ -250,7 +252,7 @@ public sealed class MainWindowViewModelTests
         var raised = new List<string?>();
         viewModel.PropertyChanged += (_, args) => raised.Add(args.PropertyName);
 
-        await viewModel.Morphs.ImportNpcsAsync(TestContext.Current.CancellationToken);
+        await viewModel.Morphs.ImportNpcsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         raised.Should().Contain(nameof(MainWindowViewModel.IsAnyBusy));
         viewModel.IsAnyBusy.Should().BeFalse();
@@ -260,18 +262,19 @@ public sealed class MainWindowViewModelTests
     public async Task NewProjectCommandIsDisabledWhileTemplatesAreBusy()
     {
         var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService());
+        var newProjectCommand = (ICommand)viewModel.NewProjectCommand;
         var disabledDuringBusy = new List<bool>();
         viewModel.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(MainWindowViewModel.IsAnyBusy) && viewModel.IsAnyBusy)
-                disabledDuringBusy.Add(viewModel.NewProjectCommand.CanExecute(null));
+                disabledDuringBusy.Add(newProjectCommand.CanExecute(null));
         };
 
-        await viewModel.Templates.ImportPresetsAsync(TestContext.Current.CancellationToken);
+        await viewModel.Templates.ImportPresetsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         disabledDuringBusy.Should().NotBeEmpty();
         disabledDuringBusy.Should().OnlyContain(canExecute => !canExecute);
-        viewModel.NewProjectCommand.CanExecute(null).Should().BeTrue();
+        newProjectCommand.CanExecute(null).Should().BeTrue();
     }
 
     [Fact]
@@ -279,18 +282,19 @@ public sealed class MainWindowViewModelTests
     {
         var project = CreateProjectWithPreset("Alpha");
         var viewModel = CreateViewModel(project, new FakeFileDialogService());
+        var saveProjectCommand = (ICommand)viewModel.SaveProjectCommand;
         var disabledDuringBusy = new List<bool>();
         viewModel.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(MainWindowViewModel.IsAnyBusy) && viewModel.IsAnyBusy)
-                disabledDuringBusy.Add(viewModel.SaveProjectCommand.CanExecute(null));
+                disabledDuringBusy.Add(saveProjectCommand.CanExecute(null));
         };
 
-        await viewModel.Morphs.ImportNpcsAsync(TestContext.Current.CancellationToken);
+        await viewModel.Morphs.ImportNpcsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         disabledDuringBusy.Should().NotBeEmpty();
         disabledDuringBusy.Should().OnlyContain(canExecute => !canExecute);
-        viewModel.SaveProjectCommand.CanExecute(null).Should().BeTrue();
+        saveProjectCommand.CanExecute(null).Should().BeTrue();
     }
 
     [Fact]
@@ -298,18 +302,19 @@ public sealed class MainWindowViewModelTests
     {
         var project = CreateProjectWithPreset("Alpha");
         var viewModel = CreateViewModel(project, new FakeFileDialogService());
+        var exportCommand = (ICommand)viewModel.ExportBosJsonCommand;
         var disabledDuringBusy = new List<bool>();
         viewModel.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(MainWindowViewModel.IsAnyBusy) && viewModel.IsAnyBusy)
-                disabledDuringBusy.Add(viewModel.ExportBosJsonCommand.CanExecute(null));
+                disabledDuringBusy.Add(exportCommand.CanExecute(null));
         };
 
-        await viewModel.Templates.ImportPresetsAsync(TestContext.Current.CancellationToken);
+        await viewModel.Templates.ImportPresetsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         disabledDuringBusy.Should().NotBeEmpty();
         disabledDuringBusy.Should().OnlyContain(canExecute => !canExecute);
-        viewModel.ExportBosJsonCommand.CanExecute(null).Should().BeTrue();
+        exportCommand.CanExecute(null).Should().BeTrue();
     }
 
     private static MainWindowViewModel CreateViewModel(

@@ -1,7 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Globalization;
+using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.Core.Export;
@@ -12,6 +15,7 @@ using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 using BS2BG.Core.Serialization;
 using ReactiveUI;
+using ReactiveUI.SourceGenerators;
 
 namespace BS2BG.App.ViewModels;
 
@@ -21,11 +25,12 @@ public enum AppWorkspace
     Morphs
 }
 
-public sealed class MainWindowViewModel : ReactiveObject
+public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 {
     private readonly BodyGenIniExportWriter bodyGenIniExportWriter;
     private readonly BosJsonExportWriter bosJsonExportWriter;
     private readonly IAppDialogService dialogService;
+    private readonly CompositeDisposable disposables = new();
     private readonly IFileDialogService fileDialogService;
     private readonly MorphGenerationService morphGenerationService;
     private readonly IUserPreferencesService preferencesService;
@@ -34,16 +39,17 @@ public sealed class MainWindowViewModel : ReactiveObject
     private readonly ProjectFileService projectFileService;
     private readonly TemplateGenerationService templateGenerationService;
     private readonly UndoRedoService undoRedo;
-    private AppWorkspace activeWorkspace;
-    private string commandPaletteSearchText = string.Empty;
-    private string? currentProjectPath;
-    private string globalSearchText = string.Empty;
-    private bool isBusy;
-    private bool isCommandPaletteOpen;
-    private ThemePreference selectedThemePreference = ThemePreference.System;
-    private bool shouldFocusGlobalSearch;
-    private string statusMessage = string.Empty;
-    private string title = AppShell.Title;
+
+    [Reactive] private AppWorkspace _activeWorkspace;
+    [Reactive] private string _commandPaletteSearchText = string.Empty;
+    [Reactive(SetModifier = AccessModifier.Private)] private string? _currentProjectPath;
+    [Reactive] private string _globalSearchText = string.Empty;
+    [ObservableAsProperty] private bool _isAnyBusy;
+    [Reactive(SetModifier = AccessModifier.Private)] private bool _isCommandPaletteOpen;
+    [Reactive] private ThemePreference _selectedThemePreference = ThemePreference.System;
+    [Reactive(SetModifier = AccessModifier.Private)] private bool _shouldFocusGlobalSearch;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _statusMessage = string.Empty;
+    [ObservableAsProperty] private string _title = AppShell.Title;
 
     public MainWindowViewModel()
         : this(CreateDesignTimeProject())
@@ -98,53 +104,114 @@ public sealed class MainWindowViewModel : ReactiveObject
         this.preferencesService = preferencesService ?? new UserPreferencesService();
         Templates = templates ?? throw new ArgumentNullException(nameof(templates));
         Morphs = morphs ?? throw new ArgumentNullException(nameof(morphs));
-        selectedThemePreference = this.preferencesService.Load().Theme;
-        ThemePreferenceApplier.Apply(selectedThemePreference);
+        _selectedThemePreference = this.preferencesService.Load().Theme;
+        ThemePreferenceApplier.Apply(_selectedThemePreference);
 
-        project.DirtyStateChanged += (_, _) => RefreshProjectState();
-        project.SliderPresets.CollectionChanged += OnProjectOutputStateChanged;
-        project.CustomMorphTargets.CollectionChanged += OnProjectOutputStateChanged;
-        project.MorphedNpcs.CollectionChanged += OnProjectOutputStateChanged;
-        Templates.PropertyChanged += OnChildBusyChanged;
-        Morphs.PropertyChanged += OnChildBusyChanged;
+        var dirtyChanged = Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => project.DirtyStateChanged += h,
+                h => project.DirtyStateChanged -= h)
+            .Select(_ => Unit.Default)
+            .StartWith(Unit.Default);
+        var presetsCount = CollectionChangedObservable.Observe(project.SliderPresets, () => project.SliderPresets.Count);
+        var customTargetsCount = CollectionChangedObservable.Observe(
+            project.CustomMorphTargets,
+            () => project.CustomMorphTargets.Count);
+        var morphedNpcsCount = CollectionChangedObservable.Observe(
+            project.MorphedNpcs,
+            () => project.MorphedNpcs.Count);
+        var undoRedoChanged = Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => this.undoRedo.StateChanged += h,
+                h => this.undoRedo.StateChanged -= h)
+            .Select(_ => Unit.Default)
+            .StartWith(Unit.Default);
 
-        NewProjectCommand = new AsyncRelayCommand(
-            NewProjectAsync,
-            CanRunShellCommand,
-            exception => ReportCommandFailure("New project", exception));
-        OpenProjectCommand = new AsyncRelayCommand(
-            OpenProjectAsync,
-            CanRunShellCommand,
-            exception => ReportCommandFailure("Open project", exception));
-        SaveProjectCommand = new AsyncRelayCommand(
-            SaveProjectAsync,
-            CanSaveProject,
-            exception => ReportCommandFailure("Save project", exception));
-        SaveProjectAsCommand = new AsyncRelayCommand(
-            SaveProjectAsAsync,
-            CanRunShellCommand,
-            exception => ReportCommandFailure("Save project as", exception));
-        ExportBosJsonCommand = new AsyncRelayCommand(
-            ExportBosJsonAsync,
-            CanExportBosJson,
-            exception => ReportCommandFailure("Export BoS JSON", exception));
-        ExportBodyGenInisCommand = new AsyncRelayCommand(
-            ExportBodyGenInisAsync,
-            CanExportBodyGenInis,
-            exception => ReportCommandFailure("Export BodyGen INIs", exception));
-        ShowAboutCommand = new RelayCommand(ShowAbout, () => !IsAnyBusy);
-        UndoCommand = new RelayCommand(() => this.undoRedo.Undo(), () => this.undoRedo.CanUndo);
-        RedoCommand = new RelayCommand(() => this.undoRedo.Redo(), () => this.undoRedo.CanRedo);
-        FocusGlobalSearchCommand = new RelayCommand(FocusGlobalSearch);
-        OpenCommandPaletteCommand = new RelayCommand(OpenCommandPalette);
-        CloseCommandPaletteCommand = new RelayCommand(() => IsCommandPaletteOpen = false);
-        RunCommandPaletteItemCommand = new RelayCommand<CommandDescriptor>(RunCommandPaletteItem);
-        this.undoRedo.StateChanged += (_, _) => RaiseCommandStatesChanged();
+        var aggregateBusySubject = new BehaviorSubject<bool>(false);
+        disposables.Add(aggregateBusySubject);
+        var notBusy = aggregateBusySubject.DistinctUntilChanged().Select(b => !b);
+        var canSave = notBusy.CombineLatest(
+            this.WhenAnyValue(x => x.CurrentProjectPath),
+            dirtyChanged,
+            (busyOk, path, _) => busyOk && (project.IsDirty || path is null));
+        var canExportBosJson = notBusy.CombineLatest(
+            presetsCount,
+            (busyOk, count) => busyOk && count > 0);
+        var canExportBodyGenInis = notBusy.CombineLatest(
+            presetsCount,
+            customTargetsCount,
+            morphedNpcsCount,
+            (busyOk, p, t, n) => busyOk && (p > 0 || t > 0 || n > 0));
+
+        NewProjectCommand = ReactiveCommand.CreateFromTask(NewProjectAsync, notBusy);
+        OpenProjectCommand = ReactiveCommand.CreateFromTask(OpenProjectAsync, notBusy);
+        SaveProjectCommand = ReactiveCommand.CreateFromTask(SaveProjectAsync, canSave);
+        SaveProjectAsCommand = ReactiveCommand.CreateFromTask(SaveProjectAsAsync, notBusy);
+        ExportBosJsonCommand = ReactiveCommand.CreateFromTask(ExportBosJsonAsync, canExportBosJson);
+        ExportBodyGenInisCommand = ReactiveCommand.CreateFromTask(ExportBodyGenInisAsync, canExportBodyGenInis);
+
+        disposables.Add(Observable.CombineLatest(
+                Templates.WhenAnyValue(x => x.IsBusy),
+                Morphs.WhenAnyValue(x => x.IsBusy),
+                NewProjectCommand.IsExecuting,
+                OpenProjectCommand.IsExecuting,
+                SaveProjectCommand.IsExecuting,
+                SaveProjectAsCommand.IsExecuting,
+                ExportBosJsonCommand.IsExecuting,
+                ExportBodyGenInisCommand.IsExecuting,
+                (a, b, c, d, e, f, g, h) => a || b || c || d || e || f || g || h)
+            .DistinctUntilChanged()
+            .Subscribe(aggregateBusySubject.OnNext));
+
+        _isAnyBusyHelper = aggregateBusySubject.ToProperty(this, x => x.IsAnyBusy, initialValue: false);
+
+        ShowAboutCommand = ReactiveCommand.Create(ShowAbout, notBusy);
+        UndoCommand = ReactiveCommand.Create(
+            () => { this.undoRedo.Undo(); },
+            undoRedoChanged.Select(_ => this.undoRedo.CanUndo));
+        RedoCommand = ReactiveCommand.Create(
+            () => { this.undoRedo.Redo(); },
+            undoRedoChanged.Select(_ => this.undoRedo.CanRedo));
+        FocusGlobalSearchCommand = ReactiveCommand.Create(FocusGlobalSearch);
+        OpenCommandPaletteCommand = ReactiveCommand.Create(OpenCommandPalette);
+        CloseCommandPaletteCommand = ReactiveCommand.Create(() => { IsCommandPaletteOpen = false; });
+        RunCommandPaletteItemCommand = ReactiveCommand.Create<CommandDescriptor>(RunCommandPaletteItem);
+
+        disposables.Add(NewProjectCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("New project", ex)));
+        disposables.Add(OpenProjectCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Open project", ex)));
+        disposables.Add(SaveProjectCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Save project", ex)));
+        disposables.Add(SaveProjectAsCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Save project as", ex)));
+        disposables.Add(ExportBosJsonCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Export BoS JSON", ex)));
+        disposables.Add(ExportBodyGenInisCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Export BodyGen INIs", ex)));
+
+        _titleHelper = this.WhenAnyValue(x => x.CurrentProjectPath)
+            .CombineLatest(dirtyChanged, (path, _) => FormatTitle())
+            .DistinctUntilChanged()
+            .ToProperty(this, x => x.Title, initialValue: AppShell.Title);
+
+        disposables.Add(this.WhenAnyValue(x => x.GlobalSearchText)
+            .CombineLatest(this.WhenAnyValue(x => x.ActiveWorkspace), (_, _) => Unit.Default)
+            .Skip(1)
+            .Subscribe(_ => ApplyGlobalSearchText()));
+        disposables.Add(this.WhenAnyValue(x => x.CommandPaletteSearchText)
+            .Skip(1)
+            .Subscribe(_ => RefreshVisibleCommandPaletteItems()));
+        disposables.Add(this.WhenAnyValue(x => x.SelectedThemePreference)
+            .Skip(1)
+            .Subscribe(theme =>
+            {
+                ThemePreferenceApplier.Apply(theme);
+                if (!this.preferencesService.Save(new UserPreferences { Theme = theme }))
+                    StatusMessage = "Saving preferences failed.";
+            }));
+
         RegisterCommandPaletteItems();
         RefreshVisibleCommandPaletteItems();
         ApplyGlobalSearchText();
-
-        RefreshProjectState();
     }
 
     private MainWindowViewModel(ProjectModel project)
@@ -163,45 +230,6 @@ public sealed class MainWindowViewModel : ReactiveObject
     {
     }
 
-    public string Title
-    {
-        get => title;
-        private set => this.RaiseAndSetIfChanged(ref title, value);
-    }
-
-    public string? CurrentProjectPath
-    {
-        get => currentProjectPath;
-        private set
-        {
-            if (string.Equals(currentProjectPath, value, StringComparison.Ordinal)) return;
-
-            this.RaiseAndSetIfChanged(ref currentProjectPath, value);
-            RefreshProjectState();
-        }
-    }
-
-    public string StatusMessage
-    {
-        get => statusMessage;
-        private set => this.RaiseAndSetIfChanged(ref statusMessage, value);
-    }
-
-    public bool IsBusy
-    {
-        get => isBusy;
-        private set
-        {
-            if (isBusy == value) return;
-
-            this.RaiseAndSetIfChanged(ref isBusy, value);
-            RaiseCommandStatesChanged();
-            this.RaisePropertyChanged(nameof(IsAnyBusy));
-        }
-    }
-
-    public bool IsAnyBusy => IsBusy || Templates.IsBusy || Morphs.IsBusy;
-
     public TemplatesViewModel Templates { get; }
 
     public MorphsViewModel Morphs { get; }
@@ -212,95 +240,33 @@ public sealed class MainWindowViewModel : ReactiveObject
 
     public IReadOnlyList<ThemePreference> ThemePreferences { get; } = Enum.GetValues<ThemePreference>();
 
-    public ICommand NewProjectCommand { get; }
+    public ReactiveCommand<Unit, Unit> NewProjectCommand { get; }
 
-    public ICommand OpenProjectCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenProjectCommand { get; }
 
-    public ICommand SaveProjectCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveProjectCommand { get; }
 
-    public ICommand SaveProjectAsCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveProjectAsCommand { get; }
 
-    public ICommand ExportBosJsonCommand { get; }
+    public ReactiveCommand<Unit, Unit> ExportBosJsonCommand { get; }
 
-    public ICommand ExportBodyGenInisCommand { get; }
+    public ReactiveCommand<Unit, Unit> ExportBodyGenInisCommand { get; }
 
-    public ICommand ShowAboutCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowAboutCommand { get; }
 
-    public ICommand UndoCommand { get; }
+    public ReactiveCommand<Unit, Unit> UndoCommand { get; }
 
-    public ICommand RedoCommand { get; }
+    public ReactiveCommand<Unit, Unit> RedoCommand { get; }
 
-    public ICommand FocusGlobalSearchCommand { get; }
+    public ReactiveCommand<Unit, Unit> FocusGlobalSearchCommand { get; }
 
-    public ICommand OpenCommandPaletteCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenCommandPaletteCommand { get; }
 
-    public ICommand CloseCommandPaletteCommand { get; }
+    public ReactiveCommand<Unit, Unit> CloseCommandPaletteCommand { get; }
 
-    public ICommand RunCommandPaletteItemCommand { get; }
+    public ReactiveCommand<CommandDescriptor, Unit> RunCommandPaletteItemCommand { get; }
 
-    public string GlobalSearchText
-    {
-        get => globalSearchText;
-        set
-        {
-            var newValue = value ?? string.Empty;
-            if (string.Equals(globalSearchText, newValue, StringComparison.Ordinal)) return;
-
-            this.RaiseAndSetIfChanged(ref globalSearchText, newValue);
-            ApplyGlobalSearchText();
-        }
-    }
-
-    public AppWorkspace ActiveWorkspace
-    {
-        get => activeWorkspace;
-        set
-        {
-            if (activeWorkspace == value) return;
-
-            this.RaiseAndSetIfChanged(ref activeWorkspace, value);
-            ApplyGlobalSearchText();
-        }
-    }
-
-    public bool IsCommandPaletteOpen
-    {
-        get => isCommandPaletteOpen;
-        private set => this.RaiseAndSetIfChanged(ref isCommandPaletteOpen, value);
-    }
-
-    public string CommandPaletteSearchText
-    {
-        get => commandPaletteSearchText;
-        set
-        {
-            var newValue = value ?? string.Empty;
-            if (string.Equals(commandPaletteSearchText, newValue, StringComparison.Ordinal)) return;
-
-            this.RaiseAndSetIfChanged(ref commandPaletteSearchText, newValue);
-            RefreshVisibleCommandPaletteItems();
-        }
-    }
-
-    public bool ShouldFocusGlobalSearch
-    {
-        get => shouldFocusGlobalSearch;
-        private set => this.RaiseAndSetIfChanged(ref shouldFocusGlobalSearch, value);
-    }
-
-    public ThemePreference SelectedThemePreference
-    {
-        get => selectedThemePreference;
-        set
-        {
-            if (selectedThemePreference == value) return;
-
-            this.RaiseAndSetIfChanged(ref selectedThemePreference, value);
-            ThemePreferenceApplier.Apply(value);
-            if (!preferencesService.Save(new UserPreferences { Theme = value }))
-                StatusMessage = "Saving preferences failed.";
-        }
-    }
+    public void Dispose() => disposables.Dispose();
 
     public async Task NewProjectAsync(CancellationToken cancellationToken = default)
     {
@@ -317,7 +283,6 @@ public sealed class MainWindowViewModel : ReactiveObject
         Morphs.SelectedNpc = null;
         undoRedo.Clear();
         StatusMessage = "New project created.";
-        RefreshProjectState();
     }
 
     public async Task OpenProjectAsync(CancellationToken cancellationToken = default)
@@ -359,7 +324,6 @@ public sealed class MainWindowViewModel : ReactiveObject
             return false;
         }
 
-        IsBusy = true;
         try
         {
             var loadedProject = await Task.Run(() => projectFileService.Load(path), cancellationToken);
@@ -377,11 +341,6 @@ public sealed class MainWindowViewModel : ReactiveObject
         {
             StatusMessage = "Opening jBS2BG file failed: " + FormatExceptionMessage(exception);
             return false;
-        }
-        finally
-        {
-            IsBusy = false;
-            RefreshProjectState();
         }
     }
 
@@ -456,7 +415,6 @@ public sealed class MainWindowViewModel : ReactiveObject
             return;
         }
 
-        IsBusy = true;
         try
         {
             bodyGenIniExportWriter.Write(
@@ -468,10 +426,6 @@ public sealed class MainWindowViewModel : ReactiveObject
         catch (Exception exception)
         {
             StatusMessage = "Exporting Templates and Morphs INI failed: " + FormatExceptionMessage(exception);
-        }
-        finally
-        {
-            IsBusy = false;
         }
     }
 
@@ -490,19 +444,16 @@ public sealed class MainWindowViewModel : ReactiveObject
             return;
         }
 
-        IsBusy = true;
         try
         {
-            bosJsonExportWriter.Write(directoryPath, project.SliderPresets, profileCatalog);
+            await Task.Run(
+                () => bosJsonExportWriter.Write(directoryPath, project.SliderPresets, profileCatalog),
+                cancellationToken);
             StatusMessage = "BodyTypes of Skyrim JSON files exported.";
         }
         catch (Exception exception)
         {
             StatusMessage = "Exporting BoS JSON files failed: " + FormatExceptionMessage(exception);
-        }
-        finally
-        {
-            IsBusy = false;
         }
     }
 
@@ -529,7 +480,6 @@ public sealed class MainWindowViewModel : ReactiveObject
         }
 
         path = EnsureProjectExtension(path);
-        IsBusy = true;
         try
         {
             await Task.Run(() => projectFileService.Save(project, path), cancellationToken);
@@ -539,11 +489,6 @@ public sealed class MainWindowViewModel : ReactiveObject
         catch (Exception exception)
         {
             StatusMessage = "Saving jBS2BG file failed: " + FormatExceptionMessage(exception);
-        }
-        finally
-        {
-            IsBusy = false;
-            RefreshProjectState();
         }
     }
 
@@ -555,25 +500,6 @@ public sealed class MainWindowViewModel : ReactiveObject
                || await dialogService.ConfirmDiscardChangesAsync(action, cancellationToken);
     }
 
-    private void OnProjectOutputStateChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
-        RefreshProjectState();
-
-    private void OnChildBusyChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (args.PropertyName == nameof(TemplatesViewModel.IsBusy)
-            || args.PropertyName == nameof(MorphsViewModel.IsBusy))
-        {
-            this.RaisePropertyChanged(nameof(IsAnyBusy));
-            RaiseCommandStatesChanged();
-        }
-    }
-
-    private void RefreshProjectState()
-    {
-        Title = FormatTitle();
-        RaiseCommandStatesChanged();
-    }
-
     private string FormatTitle()
     {
         if (!string.IsNullOrWhiteSpace(CurrentProjectPath))
@@ -583,33 +509,6 @@ public sealed class MainWindowViewModel : ReactiveObject
         }
 
         return project.IsDirty ? AppShell.Title + " *" : AppShell.Title;
-    }
-
-    private bool CanRunShellCommand() => !IsAnyBusy;
-
-    private bool CanSaveProject() => !IsAnyBusy && (project.IsDirty || CurrentProjectPath is null);
-
-    private bool CanExportBosJson() => !IsAnyBusy && project.SliderPresets.Count > 0;
-
-    private bool CanExportBodyGenInis()
-    {
-        return !IsAnyBusy
-               && (project.SliderPresets.Count > 0
-                   || project.CustomMorphTargets.Count > 0
-                   || project.MorphedNpcs.Count > 0);
-    }
-
-    private void RaiseCommandStatesChanged()
-    {
-        RaiseCanExecuteChanged(NewProjectCommand);
-        RaiseCanExecuteChanged(OpenProjectCommand);
-        RaiseCanExecuteChanged(SaveProjectCommand);
-        RaiseCanExecuteChanged(SaveProjectAsCommand);
-        RaiseCanExecuteChanged(ExportBosJsonCommand);
-        RaiseCanExecuteChanged(ExportBodyGenInisCommand);
-        RaiseCanExecuteChanged(ShowAboutCommand);
-        RaiseCanExecuteChanged(UndoCommand);
-        RaiseCanExecuteChanged(RedoCommand);
     }
 
     private void ApplyGlobalSearchText()
@@ -642,6 +541,8 @@ public sealed class MainWindowViewModel : ReactiveObject
     private void RunCommandPaletteItem(CommandDescriptor? descriptor)
     {
         if (descriptor?.Command.CanExecute(null) == true) descriptor.Command.Execute(null);
+        IsCommandPaletteOpen = false;
+        CommandPaletteSearchText = string.Empty;
     }
 
     private void RegisterCommandPaletteItems()
@@ -683,22 +584,6 @@ public sealed class MainWindowViewModel : ReactiveObject
         return path.EndsWith(".jbs2bg", StringComparison.OrdinalIgnoreCase)
             ? path
             : path + ".jbs2bg";
-    }
-
-    private static void RaiseCanExecuteChanged(ICommand command)
-    {
-        switch (command)
-        {
-            case RelayCommand relayCommand:
-                relayCommand.RaiseCanExecuteChanged();
-                break;
-            case AsyncRelayCommand asyncRelayCommand:
-                asyncRelayCommand.RaiseCanExecuteChanged();
-                break;
-            case RelayCommand<CommandDescriptor> descriptorRelayCommand:
-                descriptorRelayCommand.RaiseCanExecuteChanged();
-                break;
-        }
     }
 
     private static string FormatExceptionMessage(Exception exception)

@@ -4,12 +4,15 @@ using Avalonia.Interactivity;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Models;
-using ReactiveUI.Avalonia;
 
 namespace BS2BG.App.Views;
 
-public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
+public partial class MainWindow : Window
 {
+    private MainWindowViewModel? viewModel;
+
+    public MainWindowViewModel? ViewModel => viewModel;
+
     public MainWindow()
         : this(new MainWindowViewModel())
     {
@@ -27,7 +30,7 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
     {
         InitializeComponent();
 
-        ViewModel = viewModel;
+        this.viewModel = viewModel;
         DataContext = viewModel;
         Title = viewModel.Title;
         viewModel.PropertyChanged += (_, args) =>
@@ -59,43 +62,43 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
 
     private void OnWorkspaceSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (ViewModel is null || sender is not TabControl tabControl) return;
+        if (viewModel is null || sender is not TabControl tabControl) return;
 
-        ViewModel.ActiveWorkspace = tabControl.SelectedIndex == 0
+        viewModel.ActiveWorkspace = tabControl.SelectedIndex == 0
             ? AppWorkspace.Templates
             : AppWorkspace.Morphs;
     }
 
     private void OnNpcSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (ViewModel is null || sender is not ListBox listBox) return;
+        if (viewModel is null || sender is not ListBox listBox) return;
 
-        ViewModel.Morphs.SelectedNpcs.Clear();
+        viewModel.Morphs.SelectedNpcs.Clear();
         foreach (var item in listBox.SelectedItems?.OfType<Npc>() ?? Enumerable.Empty<Npc>())
-            ViewModel.Morphs.SelectedNpcs.Add(item);
+            viewModel.Morphs.SelectedNpcs.Add(item);
     }
 
     private void OnNpcRaceFilterSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (ViewModel is null || sender is not ListBox listBox) return;
+        if (viewModel is null || sender is not ListBox listBox) return;
 
         var selectedRaces = listBox.SelectedItems?.OfType<string>().ToArray() ?? Array.Empty<string>();
-        ViewModel.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, selectedRaces);
+        viewModel.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, selectedRaces);
     }
 
     private void OnNpcRaceFilterClearClick(object? sender, RoutedEventArgs args)
     {
         this.FindControl<ListBox>("NpcRaceFilterValuesListBox")?.SelectedItems?.Clear();
-        ViewModel?.Morphs.ClearNpcRaceFilter();
+        viewModel?.Morphs.ClearNpcRaceFilter();
     }
 
     private void OnCommandPaletteSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (ViewModel is null || sender is not ListBox listBox) return;
+        if (viewModel is null || sender is not ListBox listBox) return;
 
         if (listBox.SelectedItem is CommandDescriptor descriptor)
         {
-            ViewModel.RunCommandPaletteItemCommand.Execute(descriptor);
+            viewModel.RunCommandPaletteItemCommand.Execute(descriptor);
             listBox.SelectedItem = null;
         }
     }
@@ -110,13 +113,13 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
 
     private async void OnDrop(object? sender, DragEventArgs args)
     {
-        if (ViewModel is null) return;
+        if (viewModel is null) return;
 
         var paths = args.DataTransfer.TryGetFiles()?
             .Where(file => file.Path.IsFile)
             .Select(file => file.Path.LocalPath)
             .ToArray() ?? Array.Empty<string>();
-        await ViewModel.HandleDroppedFilesAsync(paths);
+        await viewModel.HandleDroppedFilesAsync(paths);
         args.Handled = true;
     }
 }

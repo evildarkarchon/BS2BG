@@ -2,39 +2,45 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
-using System.Windows.Input;
+using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Linq;
 using BS2BG.App.Services;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using ReactiveUI;
+using ReactiveUI.SourceGenerators;
 using SetSlider = BS2BG.Core.Models.SetSlider;
 using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.App.ViewModels;
 
-public sealed class TemplatesViewModel : ReactiveObject
+public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
 {
     private readonly IClipboardService clipboardService;
+    private readonly CompositeDisposable disposables = new();
     private readonly IBodySlideXmlFilePicker filePicker;
     private readonly BodySlideXmlParser parser;
+    private readonly SerialDisposable presetSubscription = new();
     private readonly TemplateProfileCatalog profileCatalog;
     private readonly ProjectModel project;
     private readonly TemplateGenerationService templateGenerationService;
     private readonly UndoRedoService undoRedo;
-    private string generatedTemplateText = string.Empty;
-    private bool isBusy;
-    private bool omitRedundantSliders;
-    private string presetNameInput = string.Empty;
-    private string previewTemplateText = string.Empty;
-    private string searchText = string.Empty;
-    private string selectedBosJsonText = string.Empty;
-    private SliderPreset? selectedPreset;
-    private string selectedProfileName;
-    private string statusMessage = string.Empty;
     private bool syncingProfileFromPreset;
-    private string validationMessage = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)] private string _generatedTemplateText = string.Empty;
+    [ObservableAsProperty] private bool _isBusy;
+    [Reactive] private bool _omitRedundantSliders;
+    [Reactive] private string _presetNameInput = string.Empty;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _previewTemplateText = string.Empty;
+    [Reactive] private string _searchText = string.Empty;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _selectedBosJsonText = string.Empty;
+    [Reactive] private SliderPreset? _selectedPreset;
+    [Reactive] private string _selectedProfileName = string.Empty;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _statusMessage = string.Empty;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _validationMessage = string.Empty;
 
     public TemplatesViewModel()
         : this(
@@ -72,40 +78,78 @@ public sealed class TemplatesViewModel : ReactiveObject
         this.filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
         this.clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
         this.undoRedo = undoRedo ?? new UndoRedoService();
-        selectedProfileName = profileCatalog.DefaultProfile.Name;
+        _selectedProfileName = profileCatalog.DefaultProfile.Name;
         project.SliderPresets.CollectionChanged += (_, _) => RefreshVisiblePresets();
+        disposables.Add(presetSubscription);
 
-        ImportPresetsCommand = new AsyncRelayCommand(
+        var presetsCount = CollectionChangedObservable.Observe(Presets, () => Presets.Count);
+        var setSliderRowsCount = CollectionChangedObservable.Observe(SetSliderRows, () => SetSliderRows.Count);
+
+        var canEditSelectedPreset = this.WhenAnyValue(x => x.SelectedPreset).Select(p => p is not null);
+        var canManagePresets = presetsCount.Select(c => c > 0);
+        var canCopyBosJson = this.WhenAnyValue(x => x.SelectedBosJsonText)
+            .Select(text => !string.IsNullOrWhiteSpace(text));
+        var canEditSetSliders = setSliderRowsCount.Select(c => c > 0);
+        var canImport = this.WhenAnyValue(x => x.IsBusy).Select(busy => !busy);
+
+        ImportPresetsCommand = ReactiveCommand.CreateFromTask(
             ImportPresetsAsync,
-            () => !IsBusy,
-            exception => ReportCommandFailure("Import presets", exception));
-        RenameSelectedPresetCommand = new RelayCommand(
-            () => TryRenameSelectedPreset(PresetNameInput),
-            () => SelectedPreset is not null);
-        DuplicateSelectedPresetCommand = new RelayCommand(
-            () => TryDuplicateSelectedPreset(PresetNameInput),
-            () => SelectedPreset is not null);
-        RemoveSelectedPresetCommand = new RelayCommand(
-            () => RemoveSelectedPreset(),
-            () => SelectedPreset is not null);
-        ClearPresetsCommand = new RelayCommand(ClearPresets, () => Presets.Count > 0);
-        GenerateTemplatesCommand = new RelayCommand(GenerateTemplates, () => Presets.Count > 0);
-        CopyGeneratedTemplatesCommand = new AsyncRelayCommand(
-            CopyGeneratedTemplatesAsync,
-            reportException: exception => ReportCommandFailure("Copy generated templates", exception));
-        CopySelectedBosJsonCommand = new AsyncRelayCommand(
+            canImport);
+        RenameSelectedPresetCommand = ReactiveCommand.Create(
+            () => { TryRenameSelectedPreset(PresetNameInput); },
+            canEditSelectedPreset);
+        DuplicateSelectedPresetCommand = ReactiveCommand.Create(
+            () => { TryDuplicateSelectedPreset(PresetNameInput); },
+            canEditSelectedPreset);
+        RemoveSelectedPresetCommand = ReactiveCommand.Create(
+            () => { RemoveSelectedPreset(); },
+            canEditSelectedPreset);
+        ClearPresetsCommand = ReactiveCommand.Create(
+            ClearPresets,
+            canManagePresets);
+        GenerateTemplatesCommand = ReactiveCommand.Create(
+            GenerateTemplates,
+            canManagePresets);
+        CopyGeneratedTemplatesCommand = ReactiveCommand.CreateFromTask(
+            CopyGeneratedTemplatesAsync);
+        CopySelectedBosJsonCommand = ReactiveCommand.CreateFromTask(
             CopySelectedBosJsonAsync,
-            () => !string.IsNullOrWhiteSpace(SelectedBosJsonText),
-            exception => ReportCommandFailure("Copy BoS JSON", exception));
-        SetAllSliderPercentsTo0Command = new RelayCommand(() => SetAllSliderPercents(0), CanEditSetSliders);
-        SetAllSliderPercentsTo50Command = new RelayCommand(() => SetAllSliderPercents(50), CanEditSetSliders);
-        SetAllSliderPercentsTo100Command = new RelayCommand(() => SetAllSliderPercents(100), CanEditSetSliders);
-        SetAllMinPercentsTo0Command = new RelayCommand(() => SetAllMinPercents(0), CanEditSetSliders);
-        SetAllMinPercentsTo50Command = new RelayCommand(() => SetAllMinPercents(50), CanEditSetSliders);
-        SetAllMinPercentsTo100Command = new RelayCommand(() => SetAllMinPercents(100), CanEditSetSliders);
-        SetAllMaxPercentsTo0Command = new RelayCommand(() => SetAllMaxPercents(0), CanEditSetSliders);
-        SetAllMaxPercentsTo50Command = new RelayCommand(() => SetAllMaxPercents(50), CanEditSetSliders);
-        SetAllMaxPercentsTo100Command = new RelayCommand(() => SetAllMaxPercents(100), CanEditSetSliders);
+            canCopyBosJson);
+        SetAllSliderPercentsTo0Command = ReactiveCommand.Create(() => SetAllSliderPercents(0), canEditSetSliders);
+        SetAllSliderPercentsTo50Command = ReactiveCommand.Create(() => SetAllSliderPercents(50), canEditSetSliders);
+        SetAllSliderPercentsTo100Command = ReactiveCommand.Create(() => SetAllSliderPercents(100), canEditSetSliders);
+        SetAllMinPercentsTo0Command = ReactiveCommand.Create(() => SetAllMinPercents(0), canEditSetSliders);
+        SetAllMinPercentsTo50Command = ReactiveCommand.Create(() => SetAllMinPercents(50), canEditSetSliders);
+        SetAllMinPercentsTo100Command = ReactiveCommand.Create(() => SetAllMinPercents(100), canEditSetSliders);
+        SetAllMaxPercentsTo0Command = ReactiveCommand.Create(() => SetAllMaxPercents(0), canEditSetSliders);
+        SetAllMaxPercentsTo50Command = ReactiveCommand.Create(() => SetAllMaxPercents(50), canEditSetSliders);
+        SetAllMaxPercentsTo100Command = ReactiveCommand.Create(() => SetAllMaxPercents(100), canEditSetSliders);
+
+        disposables.Add(ImportPresetsCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Import presets", ex)));
+        disposables.Add(CopyGeneratedTemplatesCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Copy generated templates", ex)));
+        disposables.Add(CopySelectedBosJsonCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Copy BoS JSON", ex)));
+
+        _isBusyHelper = ImportPresetsCommand.IsExecuting.ToProperty(this, x => x.IsBusy, initialValue: false);
+
+        disposables.Add(this.WhenAnyValue(x => x.SelectedPreset)
+            .Subscribe(OnSelectedPresetChangedReactive));
+        disposables.Add(this.WhenAnyValue(x => x.SelectedProfileName)
+            .Skip(1)
+            .Subscribe(OnSelectedProfileNameChangedReactive));
+        disposables.Add(this.WhenAnyValue(x => x.OmitRedundantSliders)
+            .Skip(1)
+            .Subscribe(_ =>
+            {
+                GeneratedTemplateText = string.Empty;
+                RefreshPreview();
+            }));
+        disposables.Add(this.WhenAnyValue(x => x.SearchText)
+            .Skip(1)
+            .Subscribe(_ => RefreshVisiblePresets()));
+
         RefreshVisiblePresets();
     }
 
@@ -117,210 +161,59 @@ public sealed class TemplatesViewModel : ReactiveObject
 
     public IReadOnlyList<string> ProfileNames => profileCatalog.ProfileNames;
 
-    public ICommand ImportPresetsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ImportPresetsCommand { get; }
 
-    public ICommand RenameSelectedPresetCommand { get; }
+    public ReactiveCommand<Unit, Unit> RenameSelectedPresetCommand { get; }
 
-    public ICommand DuplicateSelectedPresetCommand { get; }
+    public ReactiveCommand<Unit, Unit> DuplicateSelectedPresetCommand { get; }
 
-    public ICommand RemoveSelectedPresetCommand { get; }
+    public ReactiveCommand<Unit, Unit> RemoveSelectedPresetCommand { get; }
 
-    public ICommand ClearPresetsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearPresetsCommand { get; }
 
-    public ICommand GenerateTemplatesCommand { get; }
+    public ReactiveCommand<Unit, Unit> GenerateTemplatesCommand { get; }
 
-    public ICommand CopyGeneratedTemplatesCommand { get; }
+    public ReactiveCommand<Unit, Unit> CopyGeneratedTemplatesCommand { get; }
 
-    public ICommand CopySelectedBosJsonCommand { get; }
+    public ReactiveCommand<Unit, Unit> CopySelectedBosJsonCommand { get; }
 
-    public ICommand SetAllSliderPercentsTo0Command { get; }
+    public ReactiveCommand<Unit, Unit> SetAllSliderPercentsTo0Command { get; }
 
-    public ICommand SetAllSliderPercentsTo50Command { get; }
+    public ReactiveCommand<Unit, Unit> SetAllSliderPercentsTo50Command { get; }
 
-    public ICommand SetAllSliderPercentsTo100Command { get; }
+    public ReactiveCommand<Unit, Unit> SetAllSliderPercentsTo100Command { get; }
 
-    public ICommand SetAllMinPercentsTo0Command { get; }
+    public ReactiveCommand<Unit, Unit> SetAllMinPercentsTo0Command { get; }
 
-    public ICommand SetAllMinPercentsTo50Command { get; }
+    public ReactiveCommand<Unit, Unit> SetAllMinPercentsTo50Command { get; }
 
-    public ICommand SetAllMinPercentsTo100Command { get; }
+    public ReactiveCommand<Unit, Unit> SetAllMinPercentsTo100Command { get; }
 
-    public ICommand SetAllMaxPercentsTo0Command { get; }
+    public ReactiveCommand<Unit, Unit> SetAllMaxPercentsTo0Command { get; }
 
-    public ICommand SetAllMaxPercentsTo50Command { get; }
+    public ReactiveCommand<Unit, Unit> SetAllMaxPercentsTo50Command { get; }
 
-    public ICommand SetAllMaxPercentsTo100Command { get; }
+    public ReactiveCommand<Unit, Unit> SetAllMaxPercentsTo100Command { get; }
 
-    public SliderPreset? SelectedPreset
-    {
-        get => selectedPreset;
-        set
-        {
-            if (ReferenceEquals(selectedPreset, value)) return;
-
-            if (selectedPreset is not null)
-            {
-                selectedPreset.PropertyChanged -= OnSelectedPresetChanged;
-                selectedPreset.SetSliders.CollectionChanged -= OnSelectedPresetSlidersCollectionChanged;
-                selectedPreset.MissingDefaultSetSliders.CollectionChanged -= OnSelectedPresetSlidersCollectionChanged;
-            }
-
-            this.RaiseAndSetIfChanged(ref selectedPreset, value);
-
-            if (selectedPreset is not null)
-            {
-                selectedPreset.PropertyChanged += OnSelectedPresetChanged;
-                selectedPreset.SetSliders.CollectionChanged += OnSelectedPresetSlidersCollectionChanged;
-                selectedPreset.MissingDefaultSetSliders.CollectionChanged += OnSelectedPresetSlidersCollectionChanged;
-                PresetNameInput = selectedPreset.Name;
-                SetSelectedProfileNameFromPreset(selectedPreset.ProfileName);
-                RefreshSelectedPresetMissingDefaults(SelectedProfileName);
-            }
-            else
-            {
-                PresetNameInput = string.Empty;
-            }
-
-            RebuildSetSliderRows();
-            RefreshPreview();
-            RefreshSelectedBosJson();
-            RaiseCommandStatesChanged();
-        }
-    }
-
-    public string SelectedProfileName
-    {
-        get => selectedProfileName;
-        set
-        {
-            var resolvedName = profileCatalog.GetProfile(value).Name;
-            if (string.Equals(selectedProfileName, resolvedName, StringComparison.Ordinal)) return;
-
-            this.RaiseAndSetIfChanged(ref selectedProfileName, resolvedName);
-
-            if (!syncingProfileFromPreset && SelectedPreset is not null) SelectedPreset.ProfileName = resolvedName;
-
-            RefreshSelectedPresetMissingDefaults(resolvedName);
-            RebuildSetSliderRows();
-            RefreshSetSliderRowPreviews();
-            RefreshPreview();
-            RefreshSelectedBosJson();
-        }
-    }
-
-    public string PresetNameInput
-    {
-        get => presetNameInput;
-        set => this.RaiseAndSetIfChanged(ref presetNameInput, value ?? string.Empty);
-    }
-
-    public string SearchText
-    {
-        get => searchText;
-        set
-        {
-            var newValue = value ?? string.Empty;
-            if (string.Equals(searchText, newValue, StringComparison.Ordinal)) return;
-
-            this.RaiseAndSetIfChanged(ref searchText, newValue);
-            RefreshVisiblePresets();
-        }
-    }
-
-    public string PreviewTemplateText
-    {
-        get => previewTemplateText;
-        private set => this.RaiseAndSetIfChanged(ref previewTemplateText, value);
-    }
-
-    public string GeneratedTemplateText
-    {
-        get => generatedTemplateText;
-        private set => this.RaiseAndSetIfChanged(ref generatedTemplateText, value);
-    }
-
-    public string SelectedBosJsonText
-    {
-        get => selectedBosJsonText;
-        private set => this.RaiseAndSetIfChanged(ref selectedBosJsonText, value);
-    }
-
-    public string ValidationMessage
-    {
-        get => validationMessage;
-        private set => this.RaiseAndSetIfChanged(ref validationMessage, value);
-    }
-
-    public string StatusMessage
-    {
-        get => statusMessage;
-        private set => this.RaiseAndSetIfChanged(ref statusMessage, value);
-    }
-
-    public bool OmitRedundantSliders
-    {
-        get => omitRedundantSliders;
-        set
-        {
-            if (omitRedundantSliders == value) return;
-
-            this.RaiseAndSetIfChanged(ref omitRedundantSliders, value);
-            GeneratedTemplateText = string.Empty;
-            RefreshPreview();
-        }
-    }
-
-    public bool IsBusy
-    {
-        get => isBusy;
-        private set
-        {
-            if (isBusy == value) return;
-
-            this.RaiseAndSetIfChanged(ref isBusy, value);
-            RaiseCommandStatesChanged();
-        }
-    }
+    public void Dispose() => disposables.Dispose();
 
     public async Task ImportPresetsAsync(CancellationToken cancellationToken = default)
     {
-        if (IsBusy) return;
-
-        IsBusy = true;
         ValidationMessage = string.Empty;
         StatusMessage = string.Empty;
-
-        try
-        {
-            await ImportPresetFilesCoreAsync(
-                await filePicker.PickXmlPresetFilesAsync(cancellationToken),
-                "No preset files selected.",
-                cancellationToken);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        await ImportPresetFilesCoreAsync(
+            await filePicker.PickXmlPresetFilesAsync(cancellationToken),
+            "No preset files selected.",
+            cancellationToken);
     }
 
     public async Task ImportPresetFilesAsync(
         IReadOnlyList<string> files,
         CancellationToken cancellationToken = default)
     {
-        if (IsBusy) return;
-
-        IsBusy = true;
         ValidationMessage = string.Empty;
         StatusMessage = string.Empty;
-
-        try
-        {
-            await ImportPresetFilesCoreAsync(files, "No preset files dropped.", cancellationToken);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        await ImportPresetFilesCoreAsync(files, "No preset files dropped.", cancellationToken);
     }
 
     public bool TryRenameSelectedPreset(string newName)
@@ -384,7 +277,6 @@ public sealed class TemplatesViewModel : ReactiveObject
             ? null
             : Presets[Math.Min(currentIndex, Presets.Count - 1)];
         GeneratedTemplateText = string.Empty;
-        RaiseCommandStatesChanged();
         undoRedo.Record(
             "Remove preset",
             () =>
@@ -427,14 +319,12 @@ public sealed class TemplatesViewModel : ReactiveObject
         GeneratedTemplateText = string.Empty;
         StatusMessage = string.Empty;
         ValidationMessage = string.Empty;
-        RaiseCommandStatesChanged();
     }
 
     public void SortPresets()
     {
         project.SortPresets();
         RefreshVisiblePresets();
-        RaiseCommandStatesChanged();
     }
 
     public void GenerateTemplates()
@@ -603,17 +493,61 @@ public sealed class TemplatesViewModel : ReactiveObject
 
     private void RefreshSelectedBosJson()
     {
-        if (SelectedPreset is null)
-            SelectedBosJsonText = string.Empty;
-        else
-            SelectedBosJsonText = templateGenerationService.PreviewBosJson(
+        SelectedBosJsonText = SelectedPreset is null
+            ? string.Empty
+            : templateGenerationService.PreviewBosJson(
                 SelectedPreset,
                 profileCatalog.GetProfile(SelectedProfileName));
-
-        RaiseCanExecuteChanged(CopySelectedBosJsonCommand);
     }
 
-    private void OnSelectedPresetChanged(object? sender, PropertyChangedEventArgs args)
+    private void OnSelectedPresetChangedReactive(SliderPreset? preset)
+    {
+        if (preset is not null)
+        {
+            var subscription = new CompositeDisposable();
+            void Handler(object? sender, PropertyChangedEventArgs args) => OnSelectedPresetPropertyChanged(args);
+            void SlidersHandler(object? sender, NotifyCollectionChangedEventArgs args) => OnSelectedPresetSlidersCollectionChanged(args);
+            preset.PropertyChanged += Handler;
+            preset.SetSliders.CollectionChanged += SlidersHandler;
+            preset.MissingDefaultSetSliders.CollectionChanged += SlidersHandler;
+            subscription.Add(Disposable.Create(() => preset.PropertyChanged -= Handler));
+            subscription.Add(Disposable.Create(() => preset.SetSliders.CollectionChanged -= SlidersHandler));
+            subscription.Add(Disposable.Create(() => preset.MissingDefaultSetSliders.CollectionChanged -= SlidersHandler));
+            presetSubscription.Disposable = subscription;
+            PresetNameInput = preset.Name;
+            SetSelectedProfileNameFromPreset(preset.ProfileName);
+            RefreshSelectedPresetMissingDefaults(SelectedProfileName);
+        }
+        else
+        {
+            presetSubscription.Disposable = null;
+            PresetNameInput = string.Empty;
+        }
+
+        RebuildSetSliderRows();
+        RefreshPreview();
+        RefreshSelectedBosJson();
+    }
+
+    private void OnSelectedProfileNameChangedReactive(string profileName)
+    {
+        var resolvedName = profileCatalog.GetProfile(profileName).Name;
+        if (!string.Equals(profileName, resolvedName, StringComparison.Ordinal))
+        {
+            SelectedProfileName = resolvedName;
+            return;
+        }
+
+        if (!syncingProfileFromPreset && SelectedPreset is not null) SelectedPreset.ProfileName = resolvedName;
+
+        RefreshSelectedPresetMissingDefaults(resolvedName);
+        RebuildSetSliderRows();
+        RefreshSetSliderRowPreviews();
+        RefreshPreview();
+        RefreshSelectedBosJson();
+    }
+
+    private void OnSelectedPresetPropertyChanged(PropertyChangedEventArgs args)
     {
         if (args.PropertyName == nameof(SliderPreset.ProfileName))
             SetSelectedProfileNameFromPreset(SelectedPreset?.ProfileName);
@@ -623,7 +557,7 @@ public sealed class TemplatesViewModel : ReactiveObject
         RefreshSetSliderRowPreviews();
     }
 
-    private void OnSelectedPresetSlidersCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    private void OnSelectedPresetSlidersCollectionChanged(NotifyCollectionChangedEventArgs args)
     {
         RebuildSetSliderRows();
         RefreshAfterSetSliderEdit();
@@ -673,36 +607,12 @@ public sealed class TemplatesViewModel : ReactiveObject
         return true;
     }
 
-    private void RaiseCommandStatesChanged()
-    {
-        RaiseCanExecuteChanged(ImportPresetsCommand);
-        RaiseCanExecuteChanged(RenameSelectedPresetCommand);
-        RaiseCanExecuteChanged(DuplicateSelectedPresetCommand);
-        RaiseCanExecuteChanged(RemoveSelectedPresetCommand);
-        RaiseCanExecuteChanged(ClearPresetsCommand);
-        RaiseCanExecuteChanged(GenerateTemplatesCommand);
-        RaiseCanExecuteChanged(CopySelectedBosJsonCommand);
-        RaiseCanExecuteChanged(SetAllSliderPercentsTo0Command);
-        RaiseCanExecuteChanged(SetAllSliderPercentsTo50Command);
-        RaiseCanExecuteChanged(SetAllSliderPercentsTo100Command);
-        RaiseCanExecuteChanged(SetAllMinPercentsTo0Command);
-        RaiseCanExecuteChanged(SetAllMinPercentsTo50Command);
-        RaiseCanExecuteChanged(SetAllMinPercentsTo100Command);
-        RaiseCanExecuteChanged(SetAllMaxPercentsTo0Command);
-        RaiseCanExecuteChanged(SetAllMaxPercentsTo50Command);
-        RaiseCanExecuteChanged(SetAllMaxPercentsTo100Command);
-    }
-
     private void RebuildSetSliderRows()
     {
         foreach (var row in SetSliderRows) row.Dispose();
 
         SetSliderRows.Clear();
-        if (SelectedPreset is null)
-        {
-            RaiseCommandStatesChanged();
-            return;
-        }
+        if (SelectedPreset is null) return;
 
         var sliders = SelectedPreset.SetSliders
             .Concat(SelectedPreset.MissingDefaultSetSliders)
@@ -715,8 +625,6 @@ public sealed class TemplatesViewModel : ReactiveObject
                 () => profileCatalog.GetProfile(SelectedProfileName),
                 RefreshAfterSetSliderEdit,
                 undoRedo));
-
-        RaiseCommandStatesChanged();
     }
 
     private void RefreshAfterSetSliderEdit()
@@ -754,7 +662,6 @@ public sealed class TemplatesViewModel : ReactiveObject
         GeneratedTemplateText = string.Empty;
         StatusMessage = string.Empty;
         ValidationMessage = string.Empty;
-        RaiseCommandStatesChanged();
     }
 
     private void RestorePresetSnapshot(IReadOnlyList<SliderPreset> snapshot)
@@ -839,21 +746,6 @@ public sealed class TemplatesViewModel : ReactiveObject
     private void RefreshSetSliderRowPreviews()
     {
         foreach (var row in SetSliderRows) row.RefreshPreview();
-    }
-
-    private bool CanEditSetSliders() => SetSliderRows.Count > 0;
-
-    private static void RaiseCanExecuteChanged(ICommand command)
-    {
-        switch (command)
-        {
-            case RelayCommand relayCommand:
-                relayCommand.RaiseCanExecuteChanged();
-                break;
-            case AsyncRelayCommand asyncRelayCommand:
-                asyncRelayCommand.RaiseCanExecuteChanged();
-                break;
-        }
     }
 
     private static SliderPreset ClonePreset(SliderPreset source, string name)

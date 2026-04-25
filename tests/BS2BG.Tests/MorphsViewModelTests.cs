@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Generation;
@@ -266,7 +267,7 @@ public sealed class MorphsViewModelTests
             imageViewService: imageView);
 
         viewModel.SelectedNpc = npc;
-        viewModel.ViewSelectedNpcImageCommand.Execute(null);
+        ((ICommand)viewModel.ViewSelectedNpcImageCommand).Execute(null);
 
         imageLookup.Npc.Should().Be(npc);
         imageView.Npc.Should().Be(npc);

@@ -155,6 +155,7 @@
            Grid.Row="1"
            PlacementTarget="{Binding #GlobalSearchBox}"
            Placement="Bottom"
+           IsLightDismissEnabled="True"
            IsOpen="{Binding IsCommandPaletteOpen}">
       <Border Padding="8"
               Width="420"
@@ -162,6 +163,10 @@
               Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
               BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
               BorderThickness="1">
+        <Border.KeyBindings>
+          <input:KeyBinding Gesture="Escape"
+                            Command="{Binding CloseCommandPaletteCommand}" />
+        </Border.KeyBindings>
         <Grid RowDefinitions="Auto,*">
           <TextBox x:Name="CommandPaletteSearchBox"
                    Grid.Row="0"

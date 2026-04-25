@@ -1,4 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Reactive.Threading.Tasks;
+using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Formatting;
@@ -37,7 +39,7 @@ public sealed class TemplatesViewModelTests
         var picker = new BlockingFilePicker(new[] { firstImport });
         var viewModel = CreateViewModel(picker);
 
-        var importTask = viewModel.ImportPresetsAsync(TestContext.Current.CancellationToken);
+        var importTask = viewModel.ImportPresetsCommand.Execute().ToTask();
         viewModel.IsBusy.Should().BeTrue();
 
         picker.Release();
@@ -50,7 +52,7 @@ public sealed class TemplatesViewModelTests
         alpha.SetSliders.Single().ValueBig.Should().Be(50);
 
         picker.NextFiles = new[] { secondImport };
-        var secondImportTask = viewModel.ImportPresetsAsync(TestContext.Current.CancellationToken);
+        var secondImportTask = viewModel.ImportPresetsCommand.Execute().ToTask();
         picker.Release();
         await secondImportTask;
 
@@ -233,7 +235,7 @@ public sealed class TemplatesViewModelTests
         {
             SynchronizationContext.SetSynchronizationContext(synchronizationContext);
 
-            viewModel.CopyGeneratedTemplatesCommand.Execute(null);
+            ((ICommand)viewModel.CopyGeneratedTemplatesCommand).Execute(null);
         }
         finally
         {

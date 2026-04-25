@@ -3,13 +3,16 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Windows.Input;
+using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Linq;
 using BS2BG.App.Services;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 using ReactiveUI;
+using ReactiveUI.SourceGenerators;
 
 namespace BS2BG.App.ViewModels;
 
@@ -30,10 +33,11 @@ public enum PresetCountWarningState
     Error
 }
 
-public sealed class MorphsViewModel : ReactiveObject
+public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 {
     private readonly MorphAssignmentService assignmentService;
     private readonly IClipboardService clipboardService;
+    private readonly CompositeDisposable disposables = new();
     private readonly INpcImageLookupService imageLookupService;
     private readonly IImageViewService imageViewService;
     private readonly MorphGenerationService morphGenerationService;
@@ -45,21 +49,22 @@ public sealed class MorphsViewModel : ReactiveObject
     private readonly NpcTextParser npcTextParser;
     private readonly ProjectModel project;
     private readonly UndoRedoService undoRedo;
-    private bool assignRandomOnAdd;
-    private string generatedMorphsText = string.Empty;
-    private bool isBusy;
-    private bool isNpcRaceFilterOpen;
-    private string npcDatabaseSearchText = string.Empty;
-    private string searchText = string.Empty;
-    private SliderPreset? selectedAssignedPreset;
-    private SliderPreset? selectedAvailablePreset;
-    private CustomMorphTarget? selectedCustomTarget;
-    private Npc? selectedImportedNpc;
-    private Npc? selectedNpc;
-    private string statusMessage = string.Empty;
     private MorphTargetBase? subscribedTarget;
-    private string targetNameInput = string.Empty;
-    private string validationMessage = string.Empty;
+
+    [Reactive] private bool _assignRandomOnAdd;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _generatedMorphsText = string.Empty;
+    [ObservableAsProperty] private bool _isBusy;
+    [Reactive] private bool _isNpcRaceFilterOpen;
+    [Reactive] private string _npcDatabaseSearchText = string.Empty;
+    [Reactive] private string _searchText = string.Empty;
+    [Reactive] private SliderPreset? _selectedAssignedPreset;
+    [Reactive] private SliderPreset? _selectedAvailablePreset;
+    [Reactive] private CustomMorphTarget? _selectedCustomTarget;
+    [Reactive] private Npc? _selectedImportedNpc;
+    [Reactive] private Npc? _selectedNpc;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _statusMessage = string.Empty;
+    [Reactive] private string _targetNameInput = string.Empty;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _validationMessage = string.Empty;
 
     public MorphsViewModel()
         : this(
@@ -103,72 +108,167 @@ public sealed class MorphsViewModel : ReactiveObject
         project.CustomMorphTargets.CollectionChanged += OnCustomTargetsChanged;
         project.SliderPresets.CollectionChanged += OnPresetsChanged;
         NpcDatabase.CollectionChanged += OnNpcDatabaseChanged;
-        SelectedNpcs.CollectionChanged += (_, _) => RaiseCommandStatesChanged();
         RefreshNpcSubscriptions();
         RefreshVisibleNpcs();
         RefreshVisibleNpcDatabase();
 
-        ImportNpcsCommand = new AsyncRelayCommand(
+        var customTargetsChanged = CollectionChangedObservable.Observe(CustomTargets, () => CustomTargets.Count);
+        var presetsChanged = CollectionChangedObservable.Observe(Presets, () => Presets.Count);
+        var visibleNpcsChanged = CollectionChangedObservable.Observe(VisibleNpcs, () => VisibleNpcs.ToArray());
+        var visibleNpcDatabaseChanged = CollectionChangedObservable.Observe(
+            VisibleNpcDatabase,
+            () => VisibleNpcDatabase.Count);
+        var selectedNpcsChanged = CollectionChangedObservable.Observe(SelectedNpcs, () => SelectedNpcs.ToArray());
+        var npcsChanged = CollectionChangedObservable.Observe(Npcs, () => Npcs.Count);
+
+        var selectedTarget = this.WhenAnyValue(x => x.SelectedCustomTarget)
+            .CombineLatest(
+                this.WhenAnyValue(x => x.SelectedNpc),
+                (target, npc) => (MorphTargetBase?)target ?? npc);
+        var targetPresetsChanged = SelectedTargetPresetsObservable();
+
+        var canAddCustomTarget = this.WhenAnyValue(x => x.IsBusy).Select(busy => !busy);
+        var canRemoveCustomTarget = this.WhenAnyValue(x => x.SelectedCustomTarget).Select(target => target is not null);
+        var canClearCustomTargets = customTargetsChanged.Select(count => count > 0);
+        var canAddSelectedPresetToTarget = selectedTarget.CombineLatest(
+            this.WhenAnyValue(x => x.SelectedAvailablePreset),
+            (target, preset) => target is not null && preset is not null);
+        var canAddAllPresetsToTarget = selectedTarget.CombineLatest(
+            presetsChanged,
+            (target, count) => target is not null && count > 0);
+        var canRemoveSelectedPresetFromTarget = selectedTarget.CombineLatest(
+            this.WhenAnyValue(x => x.SelectedAssignedPreset),
+            (target, preset) => target is not null && preset is not null);
+        var canClearTargetPresets = targetPresetsChanged.Select(presets => presets.Length > 0);
+        var canAddSelectedNpc = this.WhenAnyValue(x => x.SelectedImportedNpc).Select(npc => npc is not null);
+        var canAddAllVisibleImportedNpcs = visibleNpcDatabaseChanged.Select(count => count > 0);
+        var canRemoveSelectedNpc = this.WhenAnyValue(x => x.SelectedNpc).Select(npc => npc is not null);
+        var canClearVisibleNpcs = visibleNpcsChanged.Select(npcs => npcs.Length > 0);
+        var canFillEmptyNpcs = visibleNpcsChanged.CombineLatest(
+            presetsChanged,
+            (npcs, presetCount) => npcs.Any(npc => npc.SliderPresets.Count == 0) && presetCount > 0);
+        var canClearAssignments = visibleNpcsChanged.Select(
+            npcs => npcs.Any(npc => npc.SliderPresets.Count > 0));
+        var canAssignSelectedNpcs = selectedNpcsChanged.CombineLatest(
+            this.WhenAnyValue(x => x.SelectedNpc),
+            this.WhenAnyValue(x => x.SelectedAvailablePreset),
+            (selected, current, preset) =>
+                (selected.Length > 0 || current is not null) && preset is not null);
+        var canClearSelectedNpcAssignments = selectedNpcsChanged.CombineLatest(
+            this.WhenAnyValue(x => x.SelectedNpc),
+            (selected, current) => GetSelectedNpcsForCommandFromSnapshot(selected, current)
+                .Any(npc => npc.SliderPresets.Count > 0));
+        var canTrimSelectedTarget = targetPresetsChanged.Select(presets => presets.Length >= 77);
+        var canGenerateMorphs = customTargetsChanged.CombineLatest(
+            npcsChanged,
+            (customCount, npcCount) => customCount > 0 || npcCount > 0);
+        var canViewSelectedNpcImage = this.WhenAnyValue(x => x.SelectedNpc)
+            .CombineLatest(
+                this.WhenAnyValue(x => x.SelectedImportedNpc),
+                (npc, imported) => (npc ?? imported) is not null);
+
+        ImportNpcsCommand = ReactiveCommand.CreateFromTask(
             ImportNpcsAsync,
-            () => !IsBusy,
-            exception => ReportCommandFailure("Import NPCs", exception));
-        AddCustomTargetCommand = new RelayCommand(() => AddCustomTarget(), () => !IsBusy);
-        RemoveCustomTargetCommand = new RelayCommand(
-            () => RemoveSelectedCustomTarget(),
-            () => SelectedCustomTarget is not null);
-        ClearCustomTargetsCommand = new RelayCommand(
+            canAddCustomTarget);
+        AddCustomTargetCommand = ReactiveCommand.Create(
+            () => { AddCustomTarget(); },
+            canAddCustomTarget);
+        RemoveCustomTargetCommand = ReactiveCommand.Create(
+            () => { RemoveSelectedCustomTarget(); },
+            canRemoveCustomTarget);
+        ClearCustomTargetsCommand = ReactiveCommand.Create(
             ClearCustomTargets,
-            () => CustomTargets.Count > 0);
-        AddSelectedPresetToTargetCommand = new RelayCommand(
-            () => AddSelectedPresetToTarget(),
-            () => SelectedTarget is not null && SelectedAvailablePreset is not null);
-        AddAllPresetsToTargetCommand = new RelayCommand(
-            () => AddAllPresetsToTarget(),
-            () => SelectedTarget is not null && Presets.Count > 0);
-        RemoveSelectedPresetFromTargetCommand = new RelayCommand(
-            () => RemoveSelectedPresetFromTarget(),
-            () => SelectedTarget is not null && SelectedAssignedPreset is not null);
-        ClearTargetPresetsCommand = new RelayCommand(
-            () => ClearTargetPresets(),
-            () => SelectedTarget?.SliderPresets.Count > 0);
-        AddSelectedNpcCommand = new RelayCommand(
-            () => AddSelectedNpc(),
-            () => SelectedImportedNpc is not null);
-        AddAllVisibleImportedNpcsCommand = new RelayCommand(
-            () => AddAllVisibleImportedNpcs(),
-            () => VisibleNpcDatabase.Count > 0);
-        RemoveSelectedNpcCommand = new RelayCommand(
-            () => RemoveSelectedNpc(),
-            () => SelectedNpc is not null);
-        ClearVisibleNpcsCommand = new RelayCommand(
-            () => ClearVisibleNpcs(),
-            () => VisibleNpcs.Count > 0);
-        FillEmptyNpcsCommand = new RelayCommand(
-            () => FillEmptyFromSelectedPreset(),
-            () => VisibleNpcs.Any(npc => npc.SliderPresets.Count == 0) && Presets.Count > 0);
-        ClearAssignmentsCommand = new RelayCommand(
-            () => ClearVisibleNpcAssignments(),
-            () => VisibleNpcs.Any(npc => npc.SliderPresets.Count > 0));
-        AssignSelectedNpcsCommand = new RelayCommand(
-            () => AssignSelectedNpcs(),
-            () => GetSelectedNpcsForCommand().Any() && SelectedAvailablePreset is not null);
-        ClearSelectedNpcAssignmentsCommand = new RelayCommand(
-            () => ClearSelectedNpcAssignments(),
-            () => GetSelectedNpcsForCommand().Any(npc => npc.SliderPresets.Count > 0));
-        TrimSelectedTargetTo76Command = new RelayCommand(
-            () => TrimSelectedTargetTo76(),
-            () => SelectedTarget?.SliderPresets.Count >= 77);
-        ToggleNpcRaceFilterCommand = new RelayCommand(() => IsNpcRaceFilterOpen = !IsNpcRaceFilterOpen);
-        ClearNpcRaceFilterCommand = new RelayCommand(ClearNpcRaceFilter);
-        GenerateMorphsCommand = new RelayCommand(
+            canClearCustomTargets);
+        AddSelectedPresetToTargetCommand = ReactiveCommand.Create(
+            () => { AddSelectedPresetToTarget(); },
+            canAddSelectedPresetToTarget);
+        AddAllPresetsToTargetCommand = ReactiveCommand.Create(
+            () => { AddAllPresetsToTarget(); },
+            canAddAllPresetsToTarget);
+        RemoveSelectedPresetFromTargetCommand = ReactiveCommand.Create(
+            () => { RemoveSelectedPresetFromTarget(); },
+            canRemoveSelectedPresetFromTarget);
+        ClearTargetPresetsCommand = ReactiveCommand.Create(
+            () => { ClearTargetPresets(); },
+            canClearTargetPresets);
+        AddSelectedNpcCommand = ReactiveCommand.Create(
+            () => { AddSelectedNpc(); },
+            canAddSelectedNpc);
+        AddAllVisibleImportedNpcsCommand = ReactiveCommand.Create(
+            () => { AddAllVisibleImportedNpcs(); },
+            canAddAllVisibleImportedNpcs);
+        RemoveSelectedNpcCommand = ReactiveCommand.Create(
+            () => { RemoveSelectedNpc(); },
+            canRemoveSelectedNpc);
+        ClearVisibleNpcsCommand = ReactiveCommand.Create(
+            () => { ClearVisibleNpcs(); },
+            canClearVisibleNpcs);
+        FillEmptyNpcsCommand = ReactiveCommand.Create(
+            () => { FillEmptyFromSelectedPreset(); },
+            canFillEmptyNpcs);
+        ClearAssignmentsCommand = ReactiveCommand.Create(
+            () => { ClearVisibleNpcAssignments(); },
+            canClearAssignments);
+        AssignSelectedNpcsCommand = ReactiveCommand.Create(
+            () => { AssignSelectedNpcs(); },
+            canAssignSelectedNpcs);
+        ClearSelectedNpcAssignmentsCommand = ReactiveCommand.Create(
+            () => { ClearSelectedNpcAssignments(); },
+            canClearSelectedNpcAssignments);
+        TrimSelectedTargetTo76Command = ReactiveCommand.Create(
+            () => { TrimSelectedTargetTo76(); },
+            canTrimSelectedTarget);
+        ToggleNpcRaceFilterCommand = ReactiveCommand.Create(
+            () => { IsNpcRaceFilterOpen = !IsNpcRaceFilterOpen; });
+        ClearNpcRaceFilterCommand = ReactiveCommand.Create(ClearNpcRaceFilter);
+        GenerateMorphsCommand = ReactiveCommand.Create(
             GenerateMorphs,
-            () => CustomTargets.Count > 0 || Npcs.Count > 0);
-        CopyGeneratedMorphsCommand = new AsyncRelayCommand(
-            CopyGeneratedMorphsAsync,
-            reportException: exception => ReportCommandFailure("Copy generated morphs", exception));
-        ViewSelectedNpcImageCommand = new RelayCommand(
+            canGenerateMorphs);
+        CopyGeneratedMorphsCommand = ReactiveCommand.CreateFromTask(
+            CopyGeneratedMorphsAsync);
+        ViewSelectedNpcImageCommand = ReactiveCommand.Create(
             ViewSelectedNpcImage,
-            () => SelectedImageNpc is not null);
+            canViewSelectedNpcImage);
+
+        disposables.Add(ImportNpcsCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Import NPCs", ex)));
+        disposables.Add(CopyGeneratedMorphsCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Copy generated morphs", ex)));
+
+        _isBusyHelper = Observable.CombineLatest(
+                ImportNpcsCommand.IsExecuting,
+                CopyGeneratedMorphsCommand.IsExecuting,
+                (importing, copying) => importing || copying)
+            .ToProperty(this, x => x.IsBusy, initialValue: false);
+
+        disposables.Add(this.WhenAnyValue(x => x.SelectedCustomTarget)
+            .Skip(1)
+            .Subscribe(target =>
+            {
+                if (target is not null)
+                {
+                    SelectedNpc = null;
+                    TargetNameInput = target.Name;
+                }
+
+                RefreshSelectedTargetSubscription();
+            }));
+        disposables.Add(this.WhenAnyValue(x => x.SelectedNpc)
+            .Skip(1)
+            .Subscribe(npc =>
+            {
+                if (npc is not null) SelectedCustomTarget = null;
+
+                RefreshSelectedTargetSubscription();
+            }));
+        disposables.Add(this.WhenAnyValue(x => x.TargetNameInput)
+            .Subscribe(_ => RefreshTargetNameValidation()));
+        disposables.Add(this.WhenAnyValue(x => x.SearchText)
+            .Skip(1)
+            .Subscribe(_ => RefreshVisibleNpcs()));
+        disposables.Add(this.WhenAnyValue(x => x.NpcDatabaseSearchText)
+            .Skip(1)
+            .Subscribe(_ => RefreshVisibleNpcDatabase()));
     }
 
     public ObservableCollection<SliderPreset> Presets => project.SliderPresets;
@@ -187,112 +287,49 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public ObservableCollection<Npc> SelectedNpcs { get; } = new();
 
-    public ICommand ImportNpcsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ImportNpcsCommand { get; }
 
-    public ICommand AddCustomTargetCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddCustomTargetCommand { get; }
 
-    public ICommand RemoveCustomTargetCommand { get; }
+    public ReactiveCommand<Unit, Unit> RemoveCustomTargetCommand { get; }
 
-    public ICommand ClearCustomTargetsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearCustomTargetsCommand { get; }
 
-    public ICommand AddSelectedPresetToTargetCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddSelectedPresetToTargetCommand { get; }
 
-    public ICommand AddAllPresetsToTargetCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddAllPresetsToTargetCommand { get; }
 
-    public ICommand RemoveSelectedPresetFromTargetCommand { get; }
+    public ReactiveCommand<Unit, Unit> RemoveSelectedPresetFromTargetCommand { get; }
 
-    public ICommand ClearTargetPresetsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearTargetPresetsCommand { get; }
 
-    public ICommand AddSelectedNpcCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddSelectedNpcCommand { get; }
 
-    public ICommand AddAllVisibleImportedNpcsCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddAllVisibleImportedNpcsCommand { get; }
 
-    public ICommand RemoveSelectedNpcCommand { get; }
+    public ReactiveCommand<Unit, Unit> RemoveSelectedNpcCommand { get; }
 
-    public ICommand ClearVisibleNpcsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearVisibleNpcsCommand { get; }
 
-    public ICommand FillEmptyNpcsCommand { get; }
+    public ReactiveCommand<Unit, Unit> FillEmptyNpcsCommand { get; }
 
-    public ICommand ClearAssignmentsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearAssignmentsCommand { get; }
 
-    public ICommand AssignSelectedNpcsCommand { get; }
+    public ReactiveCommand<Unit, Unit> AssignSelectedNpcsCommand { get; }
 
-    public ICommand ClearSelectedNpcAssignmentsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearSelectedNpcAssignmentsCommand { get; }
 
-    public ICommand TrimSelectedTargetTo76Command { get; }
+    public ReactiveCommand<Unit, Unit> TrimSelectedTargetTo76Command { get; }
 
-    public ICommand ToggleNpcRaceFilterCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleNpcRaceFilterCommand { get; }
 
-    public ICommand ClearNpcRaceFilterCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearNpcRaceFilterCommand { get; }
 
-    public ICommand GenerateMorphsCommand { get; }
+    public ReactiveCommand<Unit, Unit> GenerateMorphsCommand { get; }
 
-    public ICommand CopyGeneratedMorphsCommand { get; }
+    public ReactiveCommand<Unit, Unit> CopyGeneratedMorphsCommand { get; }
 
-    public ICommand ViewSelectedNpcImageCommand { get; }
-
-    public CustomMorphTarget? SelectedCustomTarget
-    {
-        get => selectedCustomTarget;
-        set
-        {
-            if (ReferenceEquals(selectedCustomTarget, value)) return;
-
-            this.RaiseAndSetIfChanged(ref selectedCustomTarget, value);
-            if (value is not null)
-            {
-                SelectedNpc = null;
-                TargetNameInput = value.Name;
-            }
-
-            RefreshSelectedTargetSubscription();
-        }
-    }
-
-    public Npc? SelectedNpc
-    {
-        get => selectedNpc;
-        set
-        {
-            if (ReferenceEquals(selectedNpc, value)) return;
-
-            this.RaiseAndSetIfChanged(ref selectedNpc, value);
-            if (value is not null) SelectedCustomTarget = null;
-
-            RefreshSelectedTargetSubscription();
-            RaiseCommandStatesChanged();
-        }
-    }
-
-    public Npc? SelectedImportedNpc
-    {
-        get => selectedImportedNpc;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref selectedImportedNpc, value);
-            RaiseCommandStatesChanged();
-        }
-    }
-
-    public SliderPreset? SelectedAvailablePreset
-    {
-        get => selectedAvailablePreset;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref selectedAvailablePreset, value);
-            RaiseCommandStatesChanged();
-        }
-    }
-
-    public SliderPreset? SelectedAssignedPreset
-    {
-        get => selectedAssignedPreset;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref selectedAssignedPreset, value);
-            RaiseCommandStatesChanged();
-        }
-    }
+    public ReactiveCommand<Unit, Unit> ViewSelectedNpcImageCommand { get; }
 
     public MorphTargetBase? SelectedTarget => (MorphTargetBase?)SelectedCustomTarget ?? SelectedNpc;
 
@@ -331,53 +368,11 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public string NpcDatabaseCountBadgeText => "(" + NpcDatabase.Count.ToString(CultureInfo.InvariantCulture) + ")";
 
-    public string TargetNameInput
-    {
-        get => targetNameInput;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref targetNameInput, value ?? string.Empty);
-            RefreshTargetNameValidation();
-        }
-    }
-
     public string TargetNameValidationMessage => ValidateCustomTargetName(TargetNameInput);
 
     [SuppressMessage("Performance", "CA1822:Mark members as static",
         Justification = "Binding-friendly instance property.")]
     public string CustomTargetExamples => "Examples: All|Female, All|Male, Skyrim.esm|Female|NordRace";
-
-    public string SearchText
-    {
-        get => searchText;
-        set
-        {
-            var newValue = value ?? string.Empty;
-            if (string.Equals(searchText, newValue, StringComparison.Ordinal)) return;
-
-            this.RaiseAndSetIfChanged(ref searchText, newValue);
-            RefreshVisibleNpcs();
-        }
-    }
-
-    public string NpcDatabaseSearchText
-    {
-        get => npcDatabaseSearchText;
-        set
-        {
-            var newValue = value ?? string.Empty;
-            if (string.Equals(npcDatabaseSearchText, newValue, StringComparison.Ordinal)) return;
-
-            this.RaiseAndSetIfChanged(ref npcDatabaseSearchText, newValue);
-            RefreshVisibleNpcDatabase();
-        }
-    }
-
-    public bool IsNpcRaceFilterOpen
-    {
-        get => isNpcRaceFilterOpen;
-        set => this.RaiseAndSetIfChanged(ref isNpcRaceFilterOpen, value);
-    }
 
     public string NpcRaceColumnSearchText
     {
@@ -387,81 +382,25 @@ public sealed class MorphsViewModel : ReactiveObject
 
     public IReadOnlyList<string> NpcRaceColumnValues => GetNpcColumnValues(NpcFilterColumn.Race);
 
-    public string GeneratedMorphsText
-    {
-        get => generatedMorphsText;
-        private set => this.RaiseAndSetIfChanged(ref generatedMorphsText, value);
-    }
-
-    public string StatusMessage
-    {
-        get => statusMessage;
-        private set => this.RaiseAndSetIfChanged(ref statusMessage, value);
-    }
-
-    public string ValidationMessage
-    {
-        get => validationMessage;
-        private set => this.RaiseAndSetIfChanged(ref validationMessage, value);
-    }
-
-    public bool AssignRandomOnAdd
-    {
-        get => assignRandomOnAdd;
-        set => this.RaiseAndSetIfChanged(ref assignRandomOnAdd, value);
-    }
-
-    public bool IsBusy
-    {
-        get => isBusy;
-        private set
-        {
-            if (isBusy == value) return;
-
-            this.RaiseAndSetIfChanged(ref isBusy, value);
-            RaiseCommandStatesChanged();
-        }
-    }
+    public void Dispose() => disposables.Dispose();
 
     public async Task ImportNpcsAsync(CancellationToken cancellationToken = default)
     {
-        if (IsBusy) return;
-
-        IsBusy = true;
         ValidationMessage = string.Empty;
         StatusMessage = string.Empty;
-
-        try
-        {
-            await ImportNpcFilesCoreAsync(
-                await npcTextFilePicker.PickNpcTextFilesAsync(cancellationToken),
-                "No NPC files selected.",
-                cancellationToken);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        await ImportNpcFilesCoreAsync(
+            await npcTextFilePicker.PickNpcTextFilesAsync(cancellationToken),
+            "No NPC files selected.",
+            cancellationToken);
     }
 
     public async Task ImportNpcFilesAsync(
         IReadOnlyList<string> files,
         CancellationToken cancellationToken = default)
     {
-        if (IsBusy) return;
-
-        IsBusy = true;
         ValidationMessage = string.Empty;
         StatusMessage = string.Empty;
-
-        try
-        {
-            await ImportNpcFilesCoreAsync(files, "No NPC files dropped.", cancellationToken);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        await ImportNpcFilesCoreAsync(files, "No NPC files dropped.", cancellationToken);
     }
 
     public bool AddCustomTarget()
@@ -481,7 +420,6 @@ public sealed class MorphsViewModel : ReactiveObject
         TargetNameInput = string.Empty;
         ValidationMessage = string.Empty;
         StatusMessage = "Added custom target.";
-        RaiseCommandStatesChanged();
         undoRedo.Record(
             "Add custom target",
             () =>
@@ -510,7 +448,6 @@ public sealed class MorphsViewModel : ReactiveObject
 
         SelectedCustomTarget = CustomTargets.FirstOrDefault();
         StatusMessage = "Removed custom target.";
-        RaiseCommandStatesChanged();
         undoRedo.Record(
             "Remove custom target",
             () =>
@@ -552,7 +489,6 @@ public sealed class MorphsViewModel : ReactiveObject
         CustomTargets.Clear();
         SelectedCustomTarget = null;
         StatusMessage = "Cleared custom targets.";
-        RaiseCommandStatesChanged();
     }
 
     public bool AddSelectedPresetToTarget()
@@ -646,7 +582,6 @@ public sealed class MorphsViewModel : ReactiveObject
             StatusMessage = "NPC is already in the list of morph targets.";
         }
 
-        RaiseCommandStatesChanged();
         return added;
     }
 
@@ -662,7 +597,6 @@ public sealed class MorphsViewModel : ReactiveObject
         StatusMessage = "Added " + added.ToString(CultureInfo.InvariantCulture)
                                  + " NPC" + (added == 1 ? "." : "s.");
         RefreshVisibleNpcs();
-        RaiseCommandStatesChanged();
         if (addedSnapshots.Length > 0)
             undoRedo.Record(
                 "Add visible NPCs",
@@ -708,7 +642,6 @@ public sealed class MorphsViewModel : ReactiveObject
                 });
         }
 
-        RaiseCommandStatesChanged();
         return removed;
     }
 
@@ -722,7 +655,6 @@ public sealed class MorphsViewModel : ReactiveObject
 
         StatusMessage = "Removed " + removed.ToString(CultureInfo.InvariantCulture)
                                    + " visible NPC" + (removed == 1 ? "." : "s.");
-        RaiseCommandStatesChanged();
         if (removed > 0)
             undoRedo.Record(
                 "Clear visible NPCs",
@@ -740,7 +672,6 @@ public sealed class MorphsViewModel : ReactiveObject
         var filled = assignmentService.FillEmptyNpcs(VisibleNpcs.ToArray(), candidates);
         StatusMessage = "Filled " + filled.ToString(CultureInfo.InvariantCulture)
                                   + " empty NPC" + (filled == 1 ? "." : "s.");
-        RaiseCommandStatesChanged();
         RaiseSelectedTargetChanged();
         if (filled > 0) RecordAssignmentChange("Fill empty NPCs", before);
 
@@ -754,7 +685,6 @@ public sealed class MorphsViewModel : ReactiveObject
         var cleared = assignmentService.ClearAssignments(targets);
         StatusMessage = "Cleared assignments from " + cleared.ToString(CultureInfo.InvariantCulture)
                                                     + " NPC" + (cleared == 1 ? "." : "s.");
-        RaiseCommandStatesChanged();
         RaiseSelectedTargetChanged();
         if (cleared > 0) RecordAssignmentChange("Clear visible NPC assignments", before);
 
@@ -775,7 +705,6 @@ public sealed class MorphsViewModel : ReactiveObject
 
         StatusMessage = "Assigned preset to " + added.ToString(CultureInfo.InvariantCulture)
                                               + " NPC" + (added == 1 ? "." : "s.");
-        RaiseCommandStatesChanged();
         RaiseSelectedTargetChanged();
         if (added > 0) RecordAssignmentChange("Assign selected NPCs", before);
 
@@ -789,7 +718,6 @@ public sealed class MorphsViewModel : ReactiveObject
         var cleared = assignmentService.ClearAssignments(targets);
         StatusMessage = "Cleared assignments from " + cleared.ToString(CultureInfo.InvariantCulture)
                                                     + " selected NPC" + (cleared == 1 ? "." : "s.");
-        RaiseCommandStatesChanged();
         RaiseSelectedTargetChanged();
         if (cleared > 0) RecordAssignmentChange("Clear selected NPC assignments", before);
 
@@ -975,14 +903,12 @@ public sealed class MorphsViewModel : ReactiveObject
         RefreshFilteredCollection(Npcs, VisibleNpcs, SearchText);
         this.RaisePropertyChanged(nameof(NpcCountBadgeText));
         this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
-        RaiseCommandStatesChanged();
     }
 
     private void RefreshVisibleNpcDatabase()
     {
         RefreshFilteredCollection(NpcDatabase, VisibleNpcDatabase, NpcDatabaseSearchText);
         this.RaisePropertyChanged(nameof(NpcDatabaseCountBadgeText));
-        RaiseCommandStatesChanged();
     }
 
     private void RefreshFilteredCollection(
@@ -1044,11 +970,11 @@ public sealed class MorphsViewModel : ReactiveObject
     {
         if (SelectedCustomTarget is not null && !CustomTargets.Contains(SelectedCustomTarget))
             SelectedCustomTarget = CustomTargets.FirstOrDefault();
-
-        RaiseCommandStatesChanged();
     }
 
-    private void OnPresetsChanged(object? sender, NotifyCollectionChangedEventArgs args) => RaiseCommandStatesChanged();
+    private void OnPresetsChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+    }
 
     private void OnNpcDatabaseChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
         RefreshVisibleNpcDatabase();
@@ -1150,32 +1076,6 @@ public sealed class MorphsViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(IsTargetPresetWarningVisible));
         this.RaisePropertyChanged(nameof(IsTargetPresetTrimVisible));
         this.RaisePropertyChanged(nameof(TargetPresetWarningText));
-        RaiseCommandStatesChanged();
-    }
-
-    private void RaiseCommandStatesChanged()
-    {
-        RaiseCanExecuteChanged(ImportNpcsCommand);
-        RaiseCanExecuteChanged(AddCustomTargetCommand);
-        RaiseCanExecuteChanged(RemoveCustomTargetCommand);
-        RaiseCanExecuteChanged(ClearCustomTargetsCommand);
-        RaiseCanExecuteChanged(AddSelectedPresetToTargetCommand);
-        RaiseCanExecuteChanged(AddAllPresetsToTargetCommand);
-        RaiseCanExecuteChanged(RemoveSelectedPresetFromTargetCommand);
-        RaiseCanExecuteChanged(ClearTargetPresetsCommand);
-        RaiseCanExecuteChanged(AddSelectedNpcCommand);
-        RaiseCanExecuteChanged(AddAllVisibleImportedNpcsCommand);
-        RaiseCanExecuteChanged(RemoveSelectedNpcCommand);
-        RaiseCanExecuteChanged(ClearVisibleNpcsCommand);
-        RaiseCanExecuteChanged(FillEmptyNpcsCommand);
-        RaiseCanExecuteChanged(ClearAssignmentsCommand);
-        RaiseCanExecuteChanged(AssignSelectedNpcsCommand);
-        RaiseCanExecuteChanged(ClearSelectedNpcAssignmentsCommand);
-        RaiseCanExecuteChanged(TrimSelectedTargetTo76Command);
-        RaiseCanExecuteChanged(ToggleNpcRaceFilterCommand);
-        RaiseCanExecuteChanged(ClearNpcRaceFilterCommand);
-        RaiseCanExecuteChanged(GenerateMorphsCommand);
-        RaiseCanExecuteChanged(ViewSelectedNpcImageCommand);
     }
 
     private string GetNpcColumnSearchText(NpcFilterColumn column)
@@ -1185,13 +1085,18 @@ public sealed class MorphsViewModel : ReactiveObject
             : string.Empty;
     }
 
-    private IEnumerable<Npc> GetSelectedNpcsForCommand()
+    private IEnumerable<Npc> GetSelectedNpcsForCommand() =>
+        GetSelectedNpcsForCommandFromSnapshot(SelectedNpcs.ToArray(), SelectedNpc);
+
+    private static IEnumerable<Npc> GetSelectedNpcsForCommandFromSnapshot(
+        Npc[] selectedNpcs,
+        Npc? selectedNpc)
     {
-        return SelectedNpcs.Count > 0
-            ? SelectedNpcs
-            : SelectedNpc is null
+        return selectedNpcs.Length > 0
+            ? selectedNpcs
+            : selectedNpc is null
                 ? Enumerable.Empty<Npc>()
-                : new[] { SelectedNpc };
+                : new[] { selectedNpc };
     }
 
     private void RefreshTargetNameValidation() => this.RaisePropertyChanged(nameof(TargetNameValidationMessage));
@@ -1280,7 +1185,6 @@ public sealed class MorphsViewModel : ReactiveObject
         SelectedCustomTarget = selectedTarget is not null && CustomTargets.Contains(selectedTarget)
             ? selectedTarget
             : CustomTargets.FirstOrDefault();
-        RaiseCommandStatesChanged();
         RaiseSelectedTargetChanged();
     }
 
@@ -1315,9 +1219,23 @@ public sealed class MorphsViewModel : ReactiveObject
         SelectedNpc = selectedNpc is not null && Npcs.Contains(selectedNpc)
             ? selectedNpc
             : VisibleNpcs.FirstOrDefault();
-        RaiseCommandStatesChanged();
         RaiseSelectedTargetChanged();
     }
+
+    private IObservable<SliderPreset[]> SelectedTargetPresetsObservable() =>
+        this.WhenAnyValue(x => x.SelectedCustomTarget)
+            .CombineLatest(
+                this.WhenAnyValue(x => x.SelectedNpc),
+                (target, npc) => (MorphTargetBase?)target ?? npc)
+            .Select(target =>
+            {
+                if (target is null) return Observable.Return(Array.Empty<SliderPreset>());
+
+                return CollectionChangedObservable.Observe(
+                    target.SliderPresets,
+                    () => target.SliderPresets.ToArray());
+            })
+            .Switch();
 
     private sealed class CustomTargetSnapshot(
         CustomMorphTarget target,
@@ -1341,19 +1259,6 @@ public sealed class MorphsViewModel : ReactiveObject
         public int Index { get; } = index;
 
         public IReadOnlyList<SliderPreset> Assignments { get; } = assignments;
-    }
-
-    private static void RaiseCanExecuteChanged(ICommand? command)
-    {
-        switch (command)
-        {
-            case RelayCommand relayCommand:
-                relayCommand.RaiseCanExecuteChanged();
-                break;
-            case AsyncRelayCommand asyncRelayCommand:
-                asyncRelayCommand.RaiseCanExecuteChanged();
-                break;
-        }
     }
 
     private void ReportCommandFailure(string action, Exception exception) =>

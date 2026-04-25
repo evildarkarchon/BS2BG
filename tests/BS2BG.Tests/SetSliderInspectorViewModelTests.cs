@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Formatting;
@@ -61,7 +62,7 @@ public sealed class SetSliderInspectorViewModelTests
             new SetSlider("Height") { ValueSmall = 0, ValueBig = 100, PercentMin = 25, PercentMax = 75 });
         viewModel.SelectedPreset = preset;
 
-        viewModel.SetAllSliderPercentsTo50Command.Execute(null);
+        ((ICommand)viewModel.SetAllSliderPercentsTo50Command).Execute(null);
         viewModel.SetSliderRows.Should().AllSatisfy(row =>
         {
             row.PercentMin.Should().Be(50);
@@ -69,8 +70,8 @@ public sealed class SetSliderInspectorViewModelTests
         });
         viewModel.PreviewTemplateText.Should().Be("Alpha = Height@0.5, Scale@0.5");
 
-        viewModel.SetAllMinPercentsTo0Command.Execute(null);
-        viewModel.SetAllMaxPercentsTo100Command.Execute(null);
+        ((ICommand)viewModel.SetAllMinPercentsTo0Command).Execute(null);
+        ((ICommand)viewModel.SetAllMaxPercentsTo100Command).Execute(null);
 
         viewModel.SetSliderRows.Should().AllSatisfy(row =>
         {
