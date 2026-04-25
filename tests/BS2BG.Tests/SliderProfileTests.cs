@@ -1,5 +1,4 @@
 using BS2BG.Core.Formatting;
-using FluentAssertions;
 using Xunit;
 
 namespace BS2BG.Tests;

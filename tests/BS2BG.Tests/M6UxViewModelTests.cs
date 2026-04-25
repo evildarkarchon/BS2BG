@@ -31,12 +31,12 @@ public sealed class M6UxViewModelTests
         harness.Main.ActiveWorkspace = AppWorkspace.Templates;
         harness.Main.GlobalSearchText = "wide";
 
-        harness.Templates.VisiblePresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
+        harness.Templates.VisiblePresets.Select(preset => preset.Name).Should().Equal("Beta");
 
         harness.Main.ActiveWorkspace = AppWorkspace.Morphs;
         harness.Main.GlobalSearchText = "housecarl";
 
-        harness.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia" });
+        harness.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Lydia");
 
         ((ICommand)harness.Main.OpenCommandPaletteCommand).Execute(null);
         harness.Main.CommandPaletteSearchText = "Generate Templates";
@@ -91,7 +91,7 @@ public sealed class M6UxViewModelTests
         harness.Main.CurrentProjectPath.Should().Be(projectPath);
         harness.Project.SliderPresets.Should().Contain(preset => preset.Name == "Loaded");
         harness.Project.SliderPresets.Should().Contain(preset => preset.Name == "DropAlpha");
-        harness.Morphs.NpcDatabase.Select(npc => npc.Name).Should().Equal(new[] { "Lydia" });
+        harness.Morphs.NpcDatabase.Select(npc => npc.Name).Should().Equal("Lydia");
         harness.Main.StatusMessage.Should().Contain("Skipped 1 unsupported file");
     }
 
@@ -118,14 +118,14 @@ public sealed class M6UxViewModelTests
 
         lydia.SliderPresets.Should().BeEmpty();
         serana.SliderPresets.Should().BeEmpty();
-        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
 
         harness.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, new[] { "NordRaceVampire" });
         harness.Morphs.SearchText = "Dawnguard";
         harness.Morphs.SetNpcColumnSearchText(NpcFilterColumn.Race, "vamp");
 
-        harness.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Valerica" });
-        harness.Morphs.GetNpcColumnValues(NpcFilterColumn.Race).Should().Equal(new[] { "NordRaceVampire" });
+        harness.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Valerica");
+        harness.Morphs.GetNpcColumnValues(NpcFilterColumn.Race).Should().Equal("NordRaceVampire");
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public sealed class M6UxViewModelTests
         ((ICommand)harness.Main.UndoCommand).Execute(null);
 
         project.SliderPresets.Should().Contain(preset => preset.Name == "Gamma");
-        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Gamma" });
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal("Gamma");
     }
 
     [Fact]
@@ -178,9 +178,9 @@ public sealed class M6UxViewModelTests
 
         ((ICommand)harness.Main.UndoCommand).Execute(null);
 
-        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta" });
-        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
-        npc.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha", "Beta");
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
+        npc.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
 
         ((ICommand)harness.Main.RedoCommand).Execute(null);
 
@@ -215,7 +215,7 @@ public sealed class M6UxViewModelTests
         ((ICommand)harness.Morphs.TrimSelectedTargetTo76Command).Execute(null);
 
         target.SliderPresets.Count.Should().Be(76);
-        target.SliderPresets.TakeLast(4).Select(preset => preset.Name).Should().Equal(new[] { "P76", "P77", "P78", "P79" });
+        target.SliderPresets.TakeLast(4).Select(preset => preset.Name).Should().Equal("P76", "P77", "P78", "P79");
 
         harness.Main.SelectedThemePreference = ThemePreference.Dark;
 

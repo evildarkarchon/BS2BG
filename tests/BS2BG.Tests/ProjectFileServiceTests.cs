@@ -30,7 +30,7 @@ public sealed class ProjectFileServiceTests
         var project = service.Load(ProjectFixturePath("v1-stale-project.jbs2bg"));
 
         project.IsDirty.Should().BeFalse();
-        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta Preset" });
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha", "Beta Preset");
 
         var alpha = project.FindSliderPreset("alpha");
         alpha.Should().NotBeNull();
@@ -51,21 +51,22 @@ public sealed class ProjectFileServiceTests
         arms.PercentMin.Should().Be(25);
         arms.PercentMax.Should().Be(75);
 
-        beta.MissingDefaultSetSliders.Select(slider => slider.Name).Should().Equal(new[] { "MissingKept", "ZedMissingOmitted" });
+        beta.MissingDefaultSetSliders.Select(slider => slider.Name).Should().Equal("MissingKept", "ZedMissingOmitted");
         var keptMissingDefault = beta.MissingDefaultSetSliders.Single(slider => slider.Name == "MissingKept");
         keptMissingDefault.Enabled.Should().BeFalse();
 
-        project.CustomMorphTargets.Select(target => target.Name).Should().Equal(new[] { "TargetA", "TargetZ" });
+        project.CustomMorphTargets.Select(target => target.Name).Should().Equal("TargetA", "TargetZ");
         project.CustomMorphTargets[0].SliderPresets.Should().BeEmpty();
-        project.CustomMorphTargets[1].SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta Preset" });
+        project.CustomMorphTargets[1].SliderPresets.Select(preset => preset.Name).Should()
+            .Equal("Alpha", "Beta Preset");
 
-        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Long Form", "No Assignments" });
+        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal("Long Form", "No Assignments");
         var npc = project.MorphedNpcs[0];
         npc.Mod.Should().Be("Skyrim.esm");
         npc.EditorId.Should().Be("HousecarlWhiterun");
         npc.Race.Should().Be("NordRace");
         npc.FormId.Should().Be("A2C94");
-        npc.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta Preset" });
+        npc.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta Preset");
 
         project.MorphedNpcs[1].Mod.Should().Be("Dawnguard.esm");
         project.MorphedNpcs[1].FormId.Should().Be("0");
@@ -156,7 +157,7 @@ public sealed class ProjectFileServiceTests
         var reloaded = service.LoadFromString(saved);
 
         reloaded.MorphedNpcs.Count.Should().Be(2);
-        reloaded.MorphedNpcs.Select(npc => npc.EditorId).Should().Equal(new[] { "WhiterunGuard", "DawnguardGuard" });
+        reloaded.MorphedNpcs.Select(npc => npc.EditorId).Should().Equal("WhiterunGuard", "DawnguardGuard");
     }
 
     [Fact]
@@ -235,7 +236,7 @@ public sealed class ProjectFileServiceTests
             """);
 
         project.MorphedNpcs.Count.Should().Be(2);
-        project.MorphedNpcs.Select(npc => npc.EditorId).Should().Equal(new[] { "WhiterunGuard", "DawnguardGuard" });
+        project.MorphedNpcs.Select(npc => npc.EditorId).Should().Equal("WhiterunGuard", "DawnguardGuard");
     }
 
     [Fact]

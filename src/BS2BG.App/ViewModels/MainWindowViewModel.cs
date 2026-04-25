@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.Globalization;
 using System.Reactive;
 using System.Reactive.Disposables;
@@ -42,13 +41,24 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
     [Reactive] private AppWorkspace _activeWorkspace;
     [Reactive] private string _commandPaletteSearchText = string.Empty;
-    [Reactive(SetModifier = AccessModifier.Private)] private string? _currentProjectPath;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string? _currentProjectPath;
+
     [Reactive] private string _globalSearchText = string.Empty;
     [ObservableAsProperty] private bool _isAnyBusy;
-    [Reactive(SetModifier = AccessModifier.Private)] private bool _isCommandPaletteOpen;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private bool _isCommandPaletteOpen;
+
     [Reactive] private ThemePreference _selectedThemePreference = ThemePreference.System;
-    [Reactive(SetModifier = AccessModifier.Private)] private bool _shouldFocusGlobalSearch;
-    [Reactive(SetModifier = AccessModifier.Private)] private string _statusMessage = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private bool _shouldFocusGlobalSearch;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _statusMessage = string.Empty;
+
     [ObservableAsProperty] private string _title = AppShell.Title;
 
     public MainWindowViewModel()
@@ -112,7 +122,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
                 h => project.DirtyStateChanged -= h)
             .Select(_ => Unit.Default)
             .StartWith(Unit.Default);
-        var presetsCount = CollectionChangedObservable.Observe(project.SliderPresets, () => project.SliderPresets.Count);
+        var presetsCount =
+            CollectionChangedObservable.Observe(project.SliderPresets, () => project.SliderPresets.Count);
         var customTargetsCount = CollectionChangedObservable.Observe(
             project.CustomMorphTargets,
             () => project.CustomMorphTargets.Count);
@@ -155,17 +166,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             },
             notBusy);
 
-        var busySources = new IObservable<bool>[]
+        var busySources = new[]
         {
-            Templates.WhenAnyValue(x => x.IsBusy),
-            Morphs.WhenAnyValue(x => x.IsBusy),
-            NewProjectCommand.IsExecuting,
-            OpenProjectCommand.IsExecuting,
-            SaveProjectCommand.IsExecuting,
-            SaveProjectAsCommand.IsExecuting,
-            ExportBosJsonCommand.IsExecuting,
-            ExportBodyGenInisCommand.IsExecuting,
-            HandleDroppedFilesCommand.IsExecuting
+            Templates.WhenAnyValue(x => x.IsBusy), Morphs.WhenAnyValue(x => x.IsBusy),
+            NewProjectCommand.IsExecuting, OpenProjectCommand.IsExecuting, SaveProjectCommand.IsExecuting,
+            SaveProjectAsCommand.IsExecuting, ExportBosJsonCommand.IsExecuting,
+            ExportBodyGenInisCommand.IsExecuting, HandleDroppedFilesCommand.IsExecuting
         };
 
         disposables.Add(Observable.CombineLatest(busySources)
@@ -212,7 +218,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         _titleHelper = this.WhenAnyValue(x => x.CurrentProjectPath)
             .CombineLatest(dirtyChanged, (path, _) => FormatTitle())
             .DistinctUntilChanged()
-            .ToProperty(this, x => x.Title, initialValue: AppShell.Title);
+            .ToProperty(this, x => x.Title, AppShell.Title);
 
         disposables.Add(this.WhenAnyValue(x => x.GlobalSearchText)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveWorkspace), (_, _) => Unit.Default)

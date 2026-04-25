@@ -5,6 +5,7 @@ namespace BS2BG.App.Services;
 public sealed class NpcImageLookupService : INpcImageLookupService
 {
     private static readonly string[] SupportedExtensions = { ".jpg", ".jpeg", ".png", ".bmp" };
+
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 

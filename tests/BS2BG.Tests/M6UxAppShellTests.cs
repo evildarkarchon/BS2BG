@@ -7,7 +7,6 @@ using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
 using BS2BG.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 
 namespace BS2BG.Tests;
 
@@ -38,7 +37,8 @@ public sealed class M6UxAppShellTests
         var window = new MainWindow(viewModel);
         window.ApplyTemplate();
         var banner = window.FindControl<Border>("TargetPresetWarningBanner").Should().BeAssignableTo<Border>().Which;
-        var trimButton = window.FindControl<Button>("TargetPresetWarningTrimButton").Should().BeAssignableTo<Button>().Which;
+        var trimButton = window.FindControl<Button>("TargetPresetWarningTrimButton").Should().BeAssignableTo<Button>()
+            .Which;
 
         banner.IsVisible.Should().BeFalse();
         trimButton.IsVisible.Should().BeFalse();
@@ -67,7 +67,8 @@ public sealed class M6UxAppShellTests
         window.ApplyTemplate();
         var button = window.FindControl<Button>("NpcFilterRaceButton").Should().BeAssignableTo<Button>().Which;
         var popup = window.FindControl<Popup>("NpcRaceFilterPopup").Should().BeAssignableTo<Popup>().Which;
-        var valuesList = window.FindControl<ListBox>("NpcRaceFilterValuesListBox").Should().BeAssignableTo<ListBox>().Which;
+        var valuesList = window.FindControl<ListBox>("NpcRaceFilterValuesListBox").Should().BeAssignableTo<ListBox>()
+            .Which;
 
         button.Command.Should().BeSameAs(viewModel.Morphs.ToggleNpcRaceFilterCommand);
 
@@ -78,7 +79,7 @@ public sealed class M6UxAppShellTests
 
         valuesList.SelectedItems!.Add("NordRaceVampire");
 
-        viewModel.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal(["Serana"]);
+        viewModel.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Serana");
     }
 
     [AvaloniaFact]
@@ -99,8 +100,10 @@ public sealed class M6UxAppShellTests
             && binding.Gesture?.Key == Key.P
             && binding.Gesture.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift)).Should().BeTrue();
 
-        (DragDrop.GetAllowDrop(window.FindControl<Control>("TemplatesDropZone").Should().BeAssignableTo<Control>().Which)).Should().BeTrue();
-        (DragDrop.GetAllowDrop(window.FindControl<Control>("NpcDropZone").Should().BeAssignableTo<Control>().Which)).Should().BeTrue();
+        DragDrop.GetAllowDrop(window.FindControl<Control>("TemplatesDropZone").Should().BeAssignableTo<Control>().Which)
+            .Should().BeTrue();
+        DragDrop.GetAllowDrop(window.FindControl<Control>("NpcDropZone").Should().BeAssignableTo<Control>().Which)
+            .Should().BeTrue();
         viewModel.CommandPaletteItems.Select(item => item.Title).Should().Contain("Generate Templates");
     }
 

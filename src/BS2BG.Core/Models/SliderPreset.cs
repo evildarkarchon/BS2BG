@@ -5,14 +5,13 @@ namespace BS2BG.Core.Models;
 
 public sealed class SliderPreset : ProjectModelNode
 {
+    public static readonly IReadOnlyList<char> ForbiddenNameCharacters = new[] { '=', '|', ',', '\r', '\n' };
     private readonly Dictionary<SetSlider, int> missingDefaultSetSliderSubscriptions = new();
     private readonly Dictionary<SetSlider, int> setSliderSubscriptions = new();
     private string name;
     private string profileName;
     private bool sortingMissingDefaults;
     private bool sortingSetSliders;
-
-    public static readonly IReadOnlyList<char> ForbiddenNameCharacters = new[] { '=', '|', ',', '\r', '\n' };
 
     public SliderPreset(string name, string? profileName = null)
     {

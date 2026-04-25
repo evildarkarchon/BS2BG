@@ -36,8 +36,8 @@ public sealed class NpcImageLookupServiceTests
     public void ReturnsNullForRootedNpcName()
     {
         using var directory = new TemporaryDirectory();
-        var rootedBasePath = System.IO.Path.Combine(directory.Path, "Elsewhere", "Serana");
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(rootedBasePath)!);
+        var rootedBasePath = Path.Combine(directory.Path, "Elsewhere", "Serana");
+        Directory.CreateDirectory(Path.GetDirectoryName(rootedBasePath)!);
         File.WriteAllBytes(rootedBasePath + ".png", new byte[] { 0x42 });
         var service = new NpcImageLookupService(directory.Path);
 

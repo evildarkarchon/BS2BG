@@ -31,7 +31,7 @@ public sealed class BodySlideXmlParserTests
         var preset = result.Presets.Should().ContainSingle().Which;
         preset.Name.Should().Be("CBBE Curvy (Outfit)");
 
-        preset.SetSliders.Select(slider => slider.Name).Should().Equal(new[] { "Arms", "Breasts" });
+        preset.SetSliders.Select(slider => slider.Name).Should().Equal("Arms", "Breasts");
         var arms = preset.SetSliders.Single(slider => slider.Name == "Arms");
         arms.ValueSmall.Should().Be(-25);
         arms.ValueBig.Should().BeNull();
@@ -45,15 +45,16 @@ public sealed class BodySlideXmlParserTests
     [InlineData("foo|bar", "'|'")]
     [InlineData("foo=bar", "'='")]
     [InlineData("foo,bar", "','")]
-    public void ParseStringSkipsPresetWithForbiddenCharacterAndEmitsDiagnostic(string presetName, string expectedDescription)
+    public void ParseStringSkipsPresetWithForbiddenCharacterAndEmitsDiagnostic(string presetName,
+        string expectedDescription)
     {
         var xml = $"""
-                    <SliderPresets>
-                      <Preset name="{presetName}">
-                        <SetSlider name="Scale" size="big" value="50"/>
-                      </Preset>
-                    </SliderPresets>
-                    """;
+                   <SliderPresets>
+                     <Preset name="{presetName}">
+                       <SetSlider name="Scale" size="big" value="50"/>
+                     </Preset>
+                   </SliderPresets>
+                   """;
         var parser = new BodySlideXmlParser();
 
         var result = parser.ParseString(xml, "sample.xml");

@@ -48,10 +48,8 @@ public sealed class ExportWriterTests
 
         var result = writer.Write(directory.Path, new[] { first, second }, catalog);
 
-        result.FilePaths.Should().Equal(new[]
-            {
-                Path.Combine(directory.Path, "Preset_One.json"), Path.Combine(directory.Path, "Preset_One (2).json")
-            });
+        result.FilePaths.Should().Equal(Path.Combine(directory.Path, "Preset_One.json"),
+            Path.Combine(directory.Path, "Preset_One (2).json"));
         File.ReadAllText(result.FilePaths[0]).Should().Contain("\"bodyname\": \"Preset:One\"");
         File.ReadAllText(result.FilePaths[1]).Should().Contain("\"bodyname\": \"Preset?One\"");
     }
@@ -75,7 +73,8 @@ public sealed class ExportWriterTests
 
         var result = writer.Write(directory.Path, new[] { first, second }, catalog);
 
-        result.FilePaths.Should().Equal(new[] { Path.Combine(directory.Path, "COM1_.json"), Path.Combine(directory.Path, "CON_.json") });
+        result.FilePaths.Should().Equal(Path.Combine(directory.Path, "COM1_.json"),
+            Path.Combine(directory.Path, "CON_.json"));
         File.ReadAllText(result.FilePaths[0]).Should().Contain("\"bodyname\": \"COM1\"");
         File.ReadAllText(result.FilePaths[1]).Should().Contain("\"bodyname\": \"CON\"");
     }

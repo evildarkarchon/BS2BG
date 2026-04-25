@@ -21,7 +21,7 @@ public sealed class TemplateProfileCatalogFactoryTests
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        fullNames.Should().Equal(new[] { new DirectoryInfo(AppContext.BaseDirectory).FullName });
+        fullNames.Should().Equal(new DirectoryInfo(AppContext.BaseDirectory).FullName);
     }
 
     [Fact]

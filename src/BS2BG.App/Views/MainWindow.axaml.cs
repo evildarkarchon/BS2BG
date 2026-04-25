@@ -9,10 +9,6 @@ namespace BS2BG.App.Views;
 
 public partial class MainWindow : Window
 {
-    private MainWindowViewModel? viewModel;
-
-    public MainWindowViewModel? ViewModel => viewModel;
-
     public MainWindow()
         : this(new MainWindowViewModel())
     {
@@ -30,7 +26,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        this.viewModel = viewModel;
+        this.ViewModel = viewModel;
         DataContext = viewModel;
         Title = viewModel.Title;
         viewModel.PropertyChanged += (_, args) =>
@@ -60,45 +56,47 @@ public partial class MainWindow : Window
         dialogService?.Attach(this);
     }
 
+    public MainWindowViewModel? ViewModel { get; }
+
     private void OnWorkspaceSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (viewModel is null || sender is not TabControl tabControl) return;
+        if (ViewModel is null || sender is not TabControl tabControl) return;
 
-        viewModel.ActiveWorkspace = tabControl.SelectedIndex == 0
+        ViewModel.ActiveWorkspace = tabControl.SelectedIndex == 0
             ? AppWorkspace.Templates
             : AppWorkspace.Morphs;
     }
 
     private void OnNpcSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (viewModel is null || sender is not ListBox listBox) return;
+        if (ViewModel is null || sender is not ListBox listBox) return;
 
-        viewModel.Morphs.SelectedNpcs.Clear();
+        ViewModel.Morphs.SelectedNpcs.Clear();
         foreach (var item in listBox.SelectedItems?.OfType<Npc>() ?? Enumerable.Empty<Npc>())
-            viewModel.Morphs.SelectedNpcs.Add(item);
+            ViewModel.Morphs.SelectedNpcs.Add(item);
     }
 
     private void OnNpcRaceFilterSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (viewModel is null || sender is not ListBox listBox) return;
+        if (ViewModel is null || sender is not ListBox listBox) return;
 
         var selectedRaces = listBox.SelectedItems?.OfType<string>().ToArray() ?? Array.Empty<string>();
-        viewModel.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, selectedRaces);
+        ViewModel.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, selectedRaces);
     }
 
     private void OnNpcRaceFilterClearClick(object? sender, RoutedEventArgs args)
     {
         this.FindControl<ListBox>("NpcRaceFilterValuesListBox")?.SelectedItems?.Clear();
-        viewModel?.Morphs.ClearNpcRaceFilter();
+        ViewModel?.Morphs.ClearNpcRaceFilter();
     }
 
     private void OnCommandPaletteSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (viewModel is null || sender is not ListBox listBox) return;
+        if (ViewModel is null || sender is not ListBox listBox) return;
 
         if (listBox.SelectedItem is CommandDescriptor descriptor)
         {
-            viewModel.RunCommandPaletteItemCommand.Execute(descriptor);
+            ViewModel.RunCommandPaletteItemCommand.Execute(descriptor);
             listBox.SelectedItem = null;
         }
     }
@@ -113,7 +111,7 @@ public partial class MainWindow : Window
 
     private void OnDrop(object? sender, DragEventArgs args)
     {
-        if (viewModel is null) return;
+        if (ViewModel is null) return;
 
         args.Handled = true;
 
@@ -121,7 +119,7 @@ public partial class MainWindow : Window
             .Where(file => file.Path.IsFile)
             .Select(file => file.Path.LocalPath)
             .ToArray() ?? Array.Empty<string>();
-        DispatchDroppedFilePaths(viewModel, paths);
+        DispatchDroppedFilePaths(ViewModel, paths);
     }
 
     internal static void DispatchDroppedFilePaths(MainWindowViewModel viewModel, IReadOnlyList<string> paths)

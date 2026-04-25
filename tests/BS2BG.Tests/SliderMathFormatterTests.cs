@@ -143,18 +143,18 @@ public sealed class SliderMathFormatterTests
         var actual = SliderMathFormatter.FormatBosJson(preset, profile);
 
         actual.Should().Be("{\n" +
-            "  \"string\": {\n" +
-            "    \"bodyname\": \"Body\",\n" +
-            "    \"slidername1\": \"Scale\"\n" +
-            "  },\n" +
-            "  \"int\": {\n" +
-            "    \"slidersnumber\": 1\n" +
-            "  },\n" +
-            "  \"float\": {\n" +
-            "    \"highvalue1\": 0.5,\n" +
-            "    \"lowvalue1\": 0\n" +
-            "  }\n" +
-            "}");
+                           "  \"string\": {\n" +
+                           "    \"bodyname\": \"Body\",\n" +
+                           "    \"slidername1\": \"Scale\"\n" +
+                           "  },\n" +
+                           "  \"int\": {\n" +
+                           "    \"slidersnumber\": 1\n" +
+                           "  },\n" +
+                           "  \"float\": {\n" +
+                           "    \"highvalue1\": 0.5,\n" +
+                           "    \"lowvalue1\": 0\n" +
+                           "  }\n" +
+                           "}");
     }
 
     private static string FormatTemplates(IEnumerable<SliderPreset> presets, SliderProfile profile, bool omitRedundant)

@@ -26,7 +26,7 @@ public sealed class SetSliderInspectorViewModelTests
 
         viewModel.SelectedPreset = preset;
 
-        viewModel.SetSliderRows.Select(row => row.Name).Should().Equal(new[] { "DefaultOnly", "Scale" });
+        viewModel.SetSliderRows.Select(row => row.Name).Should().Equal("DefaultOnly", "Scale");
         viewModel.PreviewTemplateText.Should().Be("Alpha = DefaultOnly@1.0, Scale@1.0");
     }
 
@@ -115,8 +115,8 @@ public sealed class SetSliderInspectorViewModelTests
         await viewModel.CopySelectedBosJsonAsync(TestContext.Current.CancellationToken);
 
         viewModel.SelectedBosJsonText.Should().Be(new TemplateGenerationService().PreviewBosJson(
-                preset,
-                CreateCatalog().GetProfile(ProjectProfileMapping.SkyrimCbbe)));
+            preset,
+            CreateCatalog().GetProfile(ProjectProfileMapping.SkyrimCbbe)));
         clipboard.Text.Should().Be(viewModel.SelectedBosJsonText);
         viewModel.StatusMessage.Should().Be("BoS JSON copied.");
     }

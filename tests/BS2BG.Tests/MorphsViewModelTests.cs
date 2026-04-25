@@ -44,8 +44,8 @@ public sealed class MorphsViewModelTests
         viewModel.GenerateMorphs();
         await viewModel.CopyGeneratedMorphsAsync(TestContext.Current.CancellationToken);
 
-        viewModel.NpcDatabase.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Valerica" });
-        project.CustomMorphTargets.Single().SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta" });
+        viewModel.NpcDatabase.Select(npc => npc.Name).Should().Equal("Lydia", "Valerica");
+        project.CustomMorphTargets.Single().SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha", "Beta");
         viewModel.SelectedTargetName.Should().Be("Lydia");
         viewModel.TargetPresetCountText.Should().Be("1");
         viewModel.NpcCountBadgeText.Should().Be("(1)");
@@ -99,8 +99,8 @@ public sealed class MorphsViewModelTests
         cleared.Should().Be(2);
         lydia.SliderPresets.Should().BeEmpty();
         serana.SliderPresets.Should().BeEmpty();
-        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
-        viewModel.VisibleNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Serana" });
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
+        viewModel.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Serana");
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class MorphsViewModelTests
 
         undoRedo.Undo().Should().BeTrue();
         project.CustomMorphTargets.Should().ContainSingle().Which.Should().BeSameAs(target);
-        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
         viewModel.SelectedCustomTarget.Should().BeSameAs(target);
 
         undoRedo.Redo().Should().BeTrue();
@@ -172,8 +172,8 @@ public sealed class MorphsViewModelTests
         project.MorphedNpcs.Should().Contain(valerica);
 
         undoRedo.Undo().Should().BeTrue();
-        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Valerica" });
-        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Valerica");
+        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
         viewModel.SelectedNpc.Should().BeSameAs(lydia);
 
         undoRedo.Redo().Should().BeTrue();
@@ -195,17 +195,17 @@ public sealed class MorphsViewModelTests
 
         viewModel.AddAllVisibleImportedNpcs().Should().Be(2);
 
-        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Valerica" });
-        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
-        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
+        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Valerica");
+        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
 
         undoRedo.Undo().Should().BeTrue();
         project.MorphedNpcs.Should().BeEmpty();
 
         undoRedo.Redo().Should().BeTrue();
-        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal(new[] { "Lydia", "Valerica" });
-        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
-        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
+        project.MorphedNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Valerica");
+        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
     }
 
     [Fact]
@@ -247,7 +247,7 @@ public sealed class MorphsViewModelTests
 
         viewModel.GenerateMorphs();
 
-        viewModel.NoPresetTargets.Should().Equal(new MorphTargetBase[] { emptyTarget, emptyNpc });
+        viewModel.NoPresetTargets.Should().Equal(emptyTarget, emptyNpc);
         notifier.Targets.Should().Equal(viewModel.NoPresetTargets);
         viewModel.StatusMessage.Should().Be("Generated morphs. 2 targets have no presets.");
     }

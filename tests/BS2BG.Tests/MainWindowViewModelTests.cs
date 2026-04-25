@@ -60,7 +60,7 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.OpenProjectAsync(TestContext.Current.CancellationToken);
 
-        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
         confirmations.ConfirmDiscardCallCount.Should().Be(1);
         dialogs.OpenProjectCallCount.Should().Be(0);
     }
@@ -85,7 +85,7 @@ public sealed class MainWindowViewModelTests
         project.IsDirty.Should().BeFalse();
         project.SliderPresets.Single().MissingDefaultSetSliders
             .Select(slider => slider.Name)
-            .Should().Equal(new[] { "DefaultOnly" });
+            .Should().Equal("DefaultOnly");
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.NewProjectAsync(TestContext.Current.CancellationToken);
 
-        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
         confirmations.ConfirmDiscardCallCount.Should().Be(1);
     }
 
@@ -127,7 +127,7 @@ public sealed class MainWindowViewModelTests
             new[] { droppedProjectPath, xmlPath, npcPath },
             TestContext.Current.CancellationToken);
 
-        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
         project.SliderPresets.Should().NotContain(preset => preset.Name == "DropAlpha");
         viewModel.Morphs.NpcDatabase.Should().BeEmpty();
         viewModel.CurrentProjectPath.Should().BeNull();
@@ -140,7 +140,8 @@ public sealed class MainWindowViewModelTests
     {
         var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService());
 
-        await viewModel.HandleDroppedFilesAsync(new ThrowingReadOnlyList("boom"), TestContext.Current.CancellationToken);
+        await viewModel.HandleDroppedFilesAsync(new ThrowingReadOnlyList("boom"),
+            TestContext.Current.CancellationToken);
 
         viewModel.StatusMessage.Should().Be("Dropped file processing failed: boom");
     }
@@ -254,7 +255,7 @@ public sealed class MainWindowViewModelTests
         try
         {
             dropCommand.CanExecute(droppedFiles).Should().BeFalse();
-            project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+            project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
         }
         finally
         {
@@ -264,7 +265,7 @@ public sealed class MainWindowViewModelTests
 
         dropCommand.CanExecute(droppedFiles).Should().BeTrue();
         viewModel.CurrentProjectPath.Should().Be(Path.Combine(directory.Path, "saved-project.jbs2bg"));
-        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
     }
 
     [Fact]
@@ -293,7 +294,7 @@ public sealed class MainWindowViewModelTests
             viewModel.IsAnyBusy.Should().BeTrue();
             viewModel.NotifyDropIgnoredAsBusy();
             viewModel.StatusMessage.Should().Be("Drop ignored - application is busy.");
-            project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+            project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
         }
         finally
         {
@@ -343,7 +344,7 @@ public sealed class MainWindowViewModelTests
             MainWindow.DispatchDroppedFilePaths(viewModel, new[] { droppedProjectPath });
 
             viewModel.StatusMessage.Should().Be("Drop ignored - application is busy.");
-            project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+            project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
         }
         finally
         {
@@ -352,7 +353,7 @@ public sealed class MainWindowViewModelTests
         }
 
         viewModel.CurrentProjectPath.Should().Be(Path.Combine(directory.Path, "saved-project.jbs2bg"));
-        project.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        project.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
     }
 
     [Fact]
@@ -578,7 +579,7 @@ public sealed class MainWindowViewModelTests
         var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
         var undoRedo = new UndoRedoService();
         undoRedo.Record("test", () => { }, () => { });
-        var viewModel = CreateViewModelWithUndoRedo(project, dialogs, undoRedo, projectFileService: blocker);
+        var viewModel = CreateViewModelWithUndoRedo(project, dialogs, undoRedo, blocker);
         var undoCommand = (ICommand)viewModel.UndoCommand;
         undoCommand.CanExecute(null).Should().BeTrue();
 

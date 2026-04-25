@@ -9,7 +9,6 @@ using BS2BG.App;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
 using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 
 namespace BS2BG.Tests;
 
@@ -64,11 +63,15 @@ public sealed class M7ReleasePolishTests
         window.FindControl<TextBox>("NpcSearchBox")?.Focusable.Should().BeTrue();
         window.FindControl<ListBox>("NpcListBox")?.Focusable.Should().BeTrue();
 
-        window.FindControl<Button>("ImportPresetsButton")?.Command.Should().BeSameAs(viewModel.Templates.ImportPresetsCommand);
-        window.FindControl<Button>("GenerateTemplatesButton")?.Command.Should().BeSameAs(viewModel.Templates.GenerateTemplatesCommand);
+        window.FindControl<Button>("ImportPresetsButton")?.Command.Should()
+            .BeSameAs(viewModel.Templates.ImportPresetsCommand);
+        window.FindControl<Button>("GenerateTemplatesButton")?.Command.Should()
+            .BeSameAs(viewModel.Templates.GenerateTemplatesCommand);
         window.FindControl<Button>("ImportNpcsButton")?.Command.Should().BeSameAs(viewModel.Morphs.ImportNpcsCommand);
-        window.FindControl<Button>("FillEmptyNpcsButton")?.Command.Should().BeSameAs(viewModel.Morphs.FillEmptyNpcsCommand);
-        window.FindControl<Button>("GenerateMorphsButton")?.Command.Should().BeSameAs(viewModel.Morphs.GenerateMorphsCommand);
+        window.FindControl<Button>("FillEmptyNpcsButton")?.Command.Should()
+            .BeSameAs(viewModel.Morphs.FillEmptyNpcsCommand);
+        window.FindControl<Button>("GenerateMorphsButton")?.Command.Should()
+            .BeSameAs(viewModel.Morphs.GenerateMorphsCommand);
 
         window.KeyBindings.Any(binding =>
             ReferenceEquals(binding.Command, viewModel.FocusGlobalSearchCommand)

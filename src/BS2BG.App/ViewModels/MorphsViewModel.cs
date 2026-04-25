@@ -51,10 +51,12 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly NpcTextParser npcTextParser;
     private readonly ProjectModel project;
     private readonly UndoRedoService undoRedo;
-    private MorphTargetBase? subscribedTarget;
 
     [Reactive] private bool _assignRandomOnAdd;
-    [Reactive(SetModifier = AccessModifier.Private)] private string _generatedMorphsText = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _generatedMorphsText = string.Empty;
+
     [ObservableAsProperty] private bool _isBusy;
     [Reactive] private bool _isNpcRaceFilterOpen;
     [Reactive] private string _npcDatabaseSearchText = string.Empty;
@@ -64,9 +66,16 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     [Reactive] private CustomMorphTarget? _selectedCustomTarget;
     [Reactive] private Npc? _selectedImportedNpc;
     [Reactive] private Npc? _selectedNpc;
-    [Reactive(SetModifier = AccessModifier.Private)] private string _statusMessage = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _statusMessage = string.Empty;
+
     [Reactive] private string _targetNameInput = string.Empty;
-    [Reactive(SetModifier = AccessModifier.Private)] private string _validationMessage = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _validationMessage = string.Empty;
+
+    private MorphTargetBase? subscribedTarget;
 
     public MorphsViewModel()
         : this(
@@ -125,8 +134,11 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
         disposables.Add(externalBusy);
         var notExternallyBusy = externalBusy.DistinctUntilChanged().Select(b => !b);
-        IObservable<bool> Gate(IObservable<bool> source) =>
-            source.CombineLatest(notExternallyBusy, (a, ok) => a && ok);
+
+        IObservable<bool> Gate(IObservable<bool> source)
+        {
+            return source.CombineLatest(notExternallyBusy, (a, ok) => a && ok);
+        }
 
         var selectedTarget = this.WhenAnyValue(x => x.SelectedCustomTarget)
             .CombineLatest(
@@ -157,8 +169,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var canFillEmptyNpcs = Gate(visibleNpcsChanged.CombineLatest(
             presetsChanged,
             (npcs, presetCount) => npcs.Any(npc => npc.SliderPresets.Count == 0) && presetCount > 0));
-        var canClearAssignments = Gate(visibleNpcsChanged.Select(
-            npcs => npcs.Any(npc => npc.SliderPresets.Count > 0)));
+        var canClearAssignments = Gate(visibleNpcsChanged.Select(npcs => npcs.Any(npc => npc.SliderPresets.Count > 0)));
         var canAssignSelectedNpcs = Gate(selectedNpcsChanged.CombineLatest(
             this.WhenAnyValue(x => x.SelectedNpc),
             this.WhenAnyValue(x => x.SelectedAvailablePreset),
@@ -228,8 +239,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         TrimSelectedTargetTo76Command = ReactiveCommand.Create(
             () => { TrimSelectedTargetTo76(); },
             canTrimSelectedTarget);
-        ToggleNpcRaceFilterCommand = ReactiveCommand.Create(
-            () => { IsNpcRaceFilterOpen = !IsNpcRaceFilterOpen; });
+        ToggleNpcRaceFilterCommand = ReactiveCommand.Create(() => { IsNpcRaceFilterOpen = !IsNpcRaceFilterOpen; });
         ClearNpcRaceFilterCommand = ReactiveCommand.Create(ClearNpcRaceFilter);
         GenerateMorphsCommand = ReactiveCommand.Create(
             GenerateMorphs,
@@ -245,9 +255,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         disposables.Add(CopyGeneratedMorphsCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Copy generated morphs", ex)));
 
-        _isBusyHelper = Observable.CombineLatest(
-                ImportNpcsCommand.IsExecuting,
-                CopyGeneratedMorphsCommand.IsExecuting,
+        _isBusyHelper = ImportNpcsCommand.IsExecuting.CombineLatest(CopyGeneratedMorphsCommand.IsExecuting,
                 (importing, copying) => importing || copying)
             .ToProperty(this, x => x.IsBusy, initialValue: false);
 
@@ -1209,7 +1217,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     {
         var items = snapshot.ToArray();
         var resetSelectedNpc = SelectedNpc is not null
-                              && items.Any(item => ReferenceEquals(item.Npc, SelectedNpc));
+                               && items.Any(item => ReferenceEquals(item.Npc, SelectedNpc));
         var removed = 0;
         foreach (var item in items)
             if (assignmentService.RemoveNpc(project, item.Npc))
@@ -1254,30 +1262,6 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             })
             .Switch();
 
-    private sealed class CustomTargetSnapshot(
-        CustomMorphTarget target,
-        int index,
-        IReadOnlyList<SliderPreset> assignments)
-    {
-        public CustomMorphTarget Target { get; } = target;
-
-        public int Index { get; } = index;
-
-        public IReadOnlyList<SliderPreset> Assignments { get; } = assignments;
-    }
-
-    private sealed class NpcRemovalSnapshot(
-        Npc npc,
-        int index,
-        IReadOnlyList<SliderPreset> assignments)
-    {
-        public Npc Npc { get; } = npc;
-
-        public int Index { get; } = index;
-
-        public IReadOnlyList<SliderPreset> Assignments { get; } = assignments;
-    }
-
     private void ReportCommandFailure(string action, Exception exception) =>
         StatusMessage = action + " failed: " + FormatExceptionMessage(exception);
 
@@ -1307,6 +1291,30 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     {
         return string.Equals(left.Mod, right.Mod, StringComparison.OrdinalIgnoreCase)
                && string.Equals(left.EditorId, right.EditorId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class CustomTargetSnapshot(
+        CustomMorphTarget target,
+        int index,
+        IReadOnlyList<SliderPreset> assignments)
+    {
+        public CustomMorphTarget Target { get; } = target;
+
+        public int Index { get; } = index;
+
+        public IReadOnlyList<SliderPreset> Assignments { get; } = assignments;
+    }
+
+    private sealed class NpcRemovalSnapshot(
+        Npc npc,
+        int index,
+        IReadOnlyList<SliderPreset> assignments)
+    {
+        public Npc Npc { get; } = npc;
+
+        public int Index { get; } = index;
+
+        public IReadOnlyList<SliderPreset> Assignments { get; } = assignments;
     }
 
     private sealed class EmptyNpcTextFilePicker : INpcTextFilePicker

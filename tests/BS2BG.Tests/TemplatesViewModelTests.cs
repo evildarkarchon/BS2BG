@@ -46,7 +46,7 @@ public sealed class TemplatesViewModelTests
         await importTask;
 
         viewModel.IsBusy.Should().BeFalse();
-        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "beta" });
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal("Alpha", "beta");
         var alpha = viewModel.Presets.Single(preset => preset.Name == "Alpha");
         viewModel.SelectedPreset.Should().BeSameAs(alpha);
         alpha.SetSliders.Single().ValueBig.Should().Be(50);
@@ -60,7 +60,7 @@ public sealed class TemplatesViewModelTests
             string.Equals(preset.Name, "Alpha", StringComparison.OrdinalIgnoreCase)).Which;
         updatedAlpha.Should().BeSameAs(alpha);
         updatedAlpha.SetSliders.Single().ValueBig.Should().Be(75);
-        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "beta" });
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal("Alpha", "beta");
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public sealed class TemplatesViewModelTests
 
         viewModel.TryRenameSelectedPreset("Beta").Should().BeFalse();
         viewModel.ValidationMessage.Should().Be("A preset named 'Beta' already exists.");
-        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha", "Beta" });
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal("Alpha", "Beta");
 
         viewModel.TryRenameSelectedPreset("Gamma").Should().BeTrue();
         alpha.Name.Should().Be("Gamma");
@@ -82,12 +82,12 @@ public sealed class TemplatesViewModelTests
         viewModel.ValidationMessage.Should().Be("A preset named 'Beta' already exists.");
 
         viewModel.TryDuplicateSelectedPreset("Delta").Should().BeTrue();
-        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Beta", "Delta", "Gamma" });
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal("Beta", "Delta", "Gamma");
         viewModel.SelectedPreset?.Name.Should().Be("Delta");
         viewModel.SelectedPreset?.SetSliders.Single().ValueBig.Should().Be(25);
 
         viewModel.RemoveSelectedPreset().Should().BeTrue();
-        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Beta", "Gamma" });
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal("Beta", "Gamma");
 
         viewModel.ClearPresets();
 
@@ -119,7 +119,7 @@ public sealed class TemplatesViewModelTests
         viewModel.TryDuplicateSelectedPreset("foo=bar").Should().BeFalse();
 
         viewModel.ValidationMessage.Should().Contain("'='");
-        viewModel.Presets.Select(preset => preset.Name).Should().Equal(new[] { "Alpha" });
+        viewModel.Presets.Select(preset => preset.Name).Should().Equal("Alpha");
     }
 
     [Fact]
@@ -220,7 +220,7 @@ public sealed class TemplatesViewModelTests
         viewModel.SelectedProfileName = "Double";
 
         preset.ProfileName.Should().Be("Double");
-        preset.MissingDefaultSetSliders.Select(slider => slider.Name).Should().Equal(new[] { "DoubleOnly" });
+        preset.MissingDefaultSetSliders.Select(slider => slider.Name).Should().Equal("DoubleOnly");
 
         viewModel.GenerateTemplates();
 

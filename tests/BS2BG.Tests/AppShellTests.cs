@@ -85,22 +85,19 @@ public sealed class AppShellTests
 
         var window = provider.GetRequiredService<MainWindow>();
 
-        (window.GetLogicalDescendants()
-                .OfType<MenuItem>()
-                .Where(item => item.Name is
-                    "NewProjectMenuItem"
-                    or "OpenProjectMenuItem"
-                    or "SaveProjectMenuItem"
-                    or "SaveProjectAsMenuItem"
-                    or "ExportBosJsonMenuItem"
-                    or "ExportBodyGenInisMenuItem"
-                    or "AboutMenuItem")
-                .Select(item => item.Header?.ToString())
-                .ToArray()).Should().Equal(new[]
-            {
-                "New", "Open...", "Save", "Save As...", "Export Templates as BoS JSON", "Export BodyGen INIs",
-                "About Bodyslide to Bodygen"
-            });
+        window.GetLogicalDescendants()
+            .OfType<MenuItem>()
+            .Where(item => item.Name is
+                "NewProjectMenuItem"
+                or "OpenProjectMenuItem"
+                or "SaveProjectMenuItem"
+                or "SaveProjectAsMenuItem"
+                or "ExportBosJsonMenuItem"
+                or "ExportBodyGenInisMenuItem"
+                or "AboutMenuItem")
+            .Select(item => item.Header?.ToString())
+            .ToArray().Should().Equal("New", "Open...", "Save", "Save As...", "Export Templates as BoS JSON",
+                "Export BodyGen INIs", "About Bodyslide to Bodygen");
     }
 
     [AvaloniaFact]
@@ -113,8 +110,10 @@ public sealed class AppShellTests
         window.ApplyTemplate();
 
         window.FindControl<MenuItem>("NewProjectMenuItem")?.Command.Should().BeSameAs(viewModel.NewProjectCommand);
-        window.FindControl<MenuItem>("SaveProjectAsMenuItem")?.Command.Should().BeSameAs(viewModel.SaveProjectAsCommand);
-        window.FindControl<MenuItem>("ExportBodyGenInisMenuItem")?.Command.Should().BeSameAs(viewModel.ExportBodyGenInisCommand);
+        window.FindControl<MenuItem>("SaveProjectAsMenuItem")?.Command.Should()
+            .BeSameAs(viewModel.SaveProjectAsCommand);
+        window.FindControl<MenuItem>("ExportBodyGenInisMenuItem")?.Command.Should()
+            .BeSameAs(viewModel.ExportBodyGenInisCommand);
         window.FindControl<TextBlock>("ShellStatusText").Should().NotBeNull();
 
         window.KeyBindings.Any(binding =>
@@ -155,7 +154,8 @@ public sealed class AppShellTests
 
         provider.GetRequiredService<INpcImageLookupService>().Should().BeOfType<NpcImageLookupService>();
         provider.GetRequiredService<IImageViewService>().Should().BeOfType<WindowImageViewService>();
-        provider.GetRequiredService<INoPresetNotificationService>().Should().BeOfType<WindowNoPresetNotificationService>();
+        provider.GetRequiredService<INoPresetNotificationService>().Should()
+            .BeOfType<WindowNoPresetNotificationService>();
     }
 
     [AvaloniaFact]

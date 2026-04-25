@@ -28,7 +28,7 @@ public sealed class MorphCoreTests
         error.Should().Be(string.Empty);
         target.Should().NotBeNull();
         target.Name.Should().Be("All|Female|NordRace");
-        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "Beta" });
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
 
         service.TryAddCustomTarget(project, "all|female|nordrace", out _, out error).Should().BeFalse();
         error.Should().Be("A custom target named 'all|female|nordrace' already exists.");
@@ -124,10 +124,10 @@ public sealed class MorphCoreTests
         var result = generator.GenerateMorphs(project);
 
         result.Text.Should().Be("All|Female=Alpha|Beta\r\n"
-            + "Empty|Female=\r\n"
-            + "Dawnguard.esm|2B6C=Alpha\r\n"
-            + "Skyrim.esm|A2C94=Beta");
-        result.TargetsWithoutPresets.Select(target => target.Name).Should().Equal(new[] { "Empty|Female" });
+                                + "Empty|Female=\r\n"
+                                + "Dawnguard.esm|2B6C=Alpha\r\n"
+                                + "Skyrim.esm|A2C94=Beta");
+        result.TargetsWithoutPresets.Select(target => target.Name).Should().Equal("Empty|Female");
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class MorphCoreTests
         target.AddSliderPreset(new SliderPreset("P2"));
         FluentActions.Invoking(() => target.AddSliderPreset(new SliderPreset("P10"))).Should().NotThrow();
         collectionNotifications.Should().BeGreaterThan(0);
-        target.SliderPresets.Select(preset => preset.Name).Should().Equal(new[] { "P10", "P2" });
+        target.SliderPresets.Select(preset => preset.Name).Should().Equal("P10", "P2");
     }
 
     private sealed class FixedRandomAssignmentProvider(int value) : IRandomAssignmentProvider

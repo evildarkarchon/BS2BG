@@ -30,19 +30,32 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     private readonly ProjectModel project;
     private readonly TemplateGenerationService templateGenerationService;
     private readonly UndoRedoService undoRedo;
-    private bool syncingProfileFromPreset;
 
-    [Reactive(SetModifier = AccessModifier.Private)] private string _generatedTemplateText = string.Empty;
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _generatedTemplateText = string.Empty;
+
     [ObservableAsProperty] private bool _isBusy;
     [Reactive] private bool _omitRedundantSliders;
     [Reactive] private string _presetNameInput = string.Empty;
-    [Reactive(SetModifier = AccessModifier.Private)] private string _previewTemplateText = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _previewTemplateText = string.Empty;
+
     [Reactive] private string _searchText = string.Empty;
-    [Reactive(SetModifier = AccessModifier.Private)] private string _selectedBosJsonText = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _selectedBosJsonText = string.Empty;
+
     [Reactive] private SliderPreset? _selectedPreset;
     [Reactive] private string _selectedProfileName = string.Empty;
-    [Reactive(SetModifier = AccessModifier.Private)] private string _statusMessage = string.Empty;
-    [Reactive(SetModifier = AccessModifier.Private)] private string _validationMessage = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _statusMessage = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _validationMessage = string.Empty;
+
+    private bool syncingProfileFromPreset;
 
     public TemplatesViewModel()
         : this(
@@ -519,14 +532,24 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         if (preset is not null)
         {
             var subscription = new CompositeDisposable();
-            void Handler(object? sender, PropertyChangedEventArgs args) => OnSelectedPresetPropertyChanged(args);
-            void SlidersHandler(object? sender, NotifyCollectionChangedEventArgs args) => OnSelectedPresetSlidersCollectionChanged(args);
+
+            void Handler(object? sender, PropertyChangedEventArgs args)
+            {
+                OnSelectedPresetPropertyChanged(args);
+            }
+
+            void SlidersHandler(object? sender, NotifyCollectionChangedEventArgs args)
+            {
+                OnSelectedPresetSlidersCollectionChanged(args);
+            }
+
             preset.PropertyChanged += Handler;
             preset.SetSliders.CollectionChanged += SlidersHandler;
             preset.MissingDefaultSetSliders.CollectionChanged += SlidersHandler;
             subscription.Add(Disposable.Create(() => preset.PropertyChanged -= Handler));
             subscription.Add(Disposable.Create(() => preset.SetSliders.CollectionChanged -= SlidersHandler));
-            subscription.Add(Disposable.Create(() => preset.MissingDefaultSetSliders.CollectionChanged -= SlidersHandler));
+            subscription.Add(
+                Disposable.Create(() => preset.MissingDefaultSetSliders.CollectionChanged -= SlidersHandler));
             presetSubscription.Disposable = subscription;
             PresetNameInput = preset.Name;
             SetSelectedProfileNameFromPreset(preset.ProfileName);

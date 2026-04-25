@@ -1,9 +1,8 @@
 using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
-using BS2BG.Core.Models;
 using BS2BG.App.Services;
-using Xunit;
+using BS2BG.Core.Models;
 
 namespace BS2BG.Tests;
 

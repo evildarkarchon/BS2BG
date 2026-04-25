@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using BS2BG.App.Services;
 using BS2BG.Core.Models;
-using Xunit;
 
 namespace BS2BG.Tests;
 
