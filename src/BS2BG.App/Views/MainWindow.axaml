@@ -1,18 +1,16 @@
-<rxui:ReactiveWindow xmlns="https://github.com/avaloniaui"
-                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-                     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-                     xmlns:automation="using:Avalonia.Automation"
-                     xmlns:input="using:Avalonia.Input"
-                     xmlns:rxui="using:ReactiveUI.Avalonia"
-                     xmlns:services="using:BS2BG.App.Services"
-                     xmlns:vm="using:BS2BG.App.ViewModels"
-                     xmlns:models="using:BS2BG.Core.Models"
-                     x:Class="BS2BG.App.Views.MainWindow"
-                     x:TypeArguments="vm:MainWindowViewModel"
-                     x:DataType="vm:MainWindowViewModel"
-                     mc:Ignorable="d">
-  <rxui:ReactiveWindow.KeyBindings>
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:automation="using:Avalonia.Automation"
+        xmlns:input="using:Avalonia.Input"
+        xmlns:services="using:BS2BG.App.Services"
+        xmlns:vm="using:BS2BG.App.ViewModels"
+        xmlns:models="using:BS2BG.Core.Models"
+        x:Class="BS2BG.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        mc:Ignorable="d">
+  <Window.KeyBindings>
     <input:KeyBinding Gesture="Ctrl+N"
                       Command="{Binding NewProjectCommand}" />
     <input:KeyBinding Gesture="Ctrl+O"
@@ -33,7 +31,7 @@
                       Command="{Binding FocusGlobalSearchCommand}" />
     <input:KeyBinding Gesture="Ctrl+Shift+P"
                       Command="{Binding OpenCommandPaletteCommand}" />
-  </rxui:ReactiveWindow.KeyBindings>
+  </Window.KeyBindings>
 
   <Design.DataContext>
     <vm:MainWindowViewModel />
@@ -927,4 +925,4 @@
       </TabItem>
     </TabControl>
   </Grid>
-</rxui:ReactiveWindow>
+</Window>
