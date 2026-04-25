@@ -99,13 +99,13 @@ values (resolved via defaults at render time), enabled, pctMin=pctMax=100:
 ### Expected `toLine(false)` — omit=false
 
 ```
-AllCases = Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@1.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@0.6
+AllCases=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@1.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@0.6
 ```
 
 ### Expected `toLine(true)` — omit=true
 
 ```
-AllCases = Arms@0.0, Butt@1.0, Legs@0.0, Waist@0.6
+AllCases=Arms@0.0, Butt@1.0, Legs@0.0, Waist@0.6
 ```
 
 ---
@@ -150,13 +150,13 @@ Worked example for `Breasts`:
 ### Expected `toLine(false)`
 
 ```
-Negatives = Ankles@0.0, Arms@0.0, Breasts@1.25, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.2, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0
+Negatives=Ankles@0.0, Arms@0.0, Breasts@1.25, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.2, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0
 ```
 
 ### Expected `toLine(true)`
 
 ```
-Negatives = Arms@0.0, Breasts@1.25, Butt@0.0, Legs@0.2, Waist@1.0
+Negatives=Arms@0.0, Breasts@1.25, Butt@0.0, Legs@0.2, Waist@1.0
 ```
 
 ---
@@ -197,13 +197,13 @@ Missing defaults: all 12 CBBE default sliders.
 ### Expected `toLine(false)`
 
 ```
-MissingDef = Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NipBGone@1.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0
+MissingDef=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NipBGone@1.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0
 ```
 
 ### Expected `toLine(true)`
 
 ```
-MissingDef = Arms@0.0, Breasts@0.0, Butt@0.0, Legs@0.0, NipBGone@1.0, Waist@1.0
+MissingDef=Arms@0.0, Breasts@0.0, Butt@0.0, Legs@0.0, NipBGone@1.0, Waist@1.0
 ```
 
 ---
@@ -215,17 +215,17 @@ Presets appear alphabetically (`Data.sortPresets`) — `AllCases`,
 (`\r\n` on Windows when `System.getProperty("line.separator")` is used).
 
 ```
-AllCases = Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@1.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@0.6
-MissingDef = Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NipBGone@1.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0
-Negatives = Ankles@0.0, Arms@0.0, Breasts@1.25, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.2, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0
+AllCases=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@1.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@0.6
+MissingDef=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NipBGone@1.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0
+Negatives=Ankles@0.0, Arms@0.0, Breasts@1.25, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.2, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@1.0
 ```
 
 ## Expected `templates-omit.ini` (`omit=true`)
 
 ```
-AllCases = Arms@0.0, Butt@1.0, Legs@0.0, Waist@0.6
-MissingDef = Arms@0.0, Breasts@0.0, Butt@0.0, Legs@0.0, NipBGone@1.0, Waist@1.0
-Negatives = Arms@0.0, Breasts@1.25, Butt@0.0, Legs@0.2, Waist@1.0
+AllCases=Arms@0.0, Butt@1.0, Legs@0.0, Waist@0.6
+MissingDef=Arms@0.0, Breasts@0.0, Butt@0.0, Legs@0.0, NipBGone@1.0, Waist@1.0
+Negatives=Arms@0.0, Breasts@1.25, Butt@0.0, Legs@0.2, Waist@1.0
 ```
 
 ---

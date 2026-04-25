@@ -15,7 +15,7 @@ public static class SliderMathFormatter
             .Where(slider => !omitRedundantSliders || !IsRedundant(slider, profile))
             .Select(slider => FormatTemplateValue(slider, profile));
 
-        return preset.Name + " = " + string.Join(", ", values);
+        return preset.Name + "=" + string.Join(", ", values);
     }
 
     public static string FormatBosJson(SliderPreset preset, SliderProfile profile)

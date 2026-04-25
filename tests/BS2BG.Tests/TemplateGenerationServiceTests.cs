@@ -45,7 +45,7 @@ public sealed class TemplateGenerationServiceTests
             catalog,
             false);
 
-        actual.Should().Be("Alpha = Scale@0.25\r\nBeta = Scale@0.5");
+        actual.Should().Be("Alpha=Scale@0.25\r\nBeta=Scale@0.5");
     }
 
     [Theory]

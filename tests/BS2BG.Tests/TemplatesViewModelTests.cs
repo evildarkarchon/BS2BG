@@ -189,14 +189,14 @@ public sealed class TemplatesViewModelTests
         AddPreset(viewModel, "Beta", 25);
 
         viewModel.SelectedPreset = alpha;
-        viewModel.PreviewTemplateText.Should().Be("Alpha = Scale@0.5");
+        viewModel.PreviewTemplateText.Should().Be("Alpha=Scale@0.5");
 
         viewModel.SelectedProfileName = "Double";
         alpha.ProfileName.Should().Be("Double");
-        viewModel.PreviewTemplateText.Should().Be("Alpha = Scale@1.0");
+        viewModel.PreviewTemplateText.Should().Be("Alpha=Scale@1.0");
 
         alpha.SetSliders.Single().ValueBig = 75;
-        viewModel.PreviewTemplateText.Should().Be("Alpha = Scale@1.5");
+        viewModel.PreviewTemplateText.Should().Be("Alpha=Scale@1.5");
 
         viewModel.GenerateTemplates();
         viewModel.GeneratedTemplateText.Should().NotBe(string.Empty);
@@ -205,7 +205,7 @@ public sealed class TemplatesViewModelTests
         viewModel.OmitRedundantSliders = true;
 
         viewModel.GeneratedTemplateText.Should().Be(string.Empty);
-        viewModel.PreviewTemplateText.Should().Be("Alpha = ");
+        viewModel.PreviewTemplateText.Should().Be("Alpha=");
     }
 
     [Fact]

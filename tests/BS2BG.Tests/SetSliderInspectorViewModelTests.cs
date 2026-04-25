@@ -27,7 +27,7 @@ public sealed class SetSliderInspectorViewModelTests
         viewModel.SelectedPreset = preset;
 
         viewModel.SetSliderRows.Select(row => row.Name).Should().Equal("DefaultOnly", "Scale");
-        viewModel.PreviewTemplateText.Should().Be("Alpha = DefaultOnly@1.0, Scale@1.0");
+        viewModel.PreviewTemplateText.Should().Be("Alpha=DefaultOnly@1.0, Scale@1.0");
     }
 
     [Fact]
@@ -45,12 +45,12 @@ public sealed class SetSliderInspectorViewModelTests
         row.PercentMax.Should().Be(75);
         row.PercentMinText.Should().Be("75%");
         row.PercentMaxText.Should().Be("75%");
-        viewModel.PreviewTemplateText.Should().Be("Alpha = Scale@0.75");
+        viewModel.PreviewTemplateText.Should().Be("Alpha=Scale@0.75");
 
         row.Enabled = false;
 
         preset.SetSliders.Single().Enabled.Should().BeFalse();
-        viewModel.PreviewTemplateText.Should().Be("Alpha = ");
+        viewModel.PreviewTemplateText.Should().Be("Alpha=");
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class SetSliderInspectorViewModelTests
             row.PercentMin.Should().Be(50);
             row.PercentMax.Should().Be(50);
         });
-        viewModel.PreviewTemplateText.Should().Be("Alpha = Height@0.5, Scale@0.5");
+        viewModel.PreviewTemplateText.Should().Be("Alpha=Height@0.5, Scale@0.5");
 
         ((ICommand)viewModel.SetAllMinPercentsTo0Command).Execute(null);
         ((ICommand)viewModel.SetAllMaxPercentsTo100Command).Execute(null);
@@ -78,7 +78,7 @@ public sealed class SetSliderInspectorViewModelTests
             row.PercentMin.Should().Be(0);
             row.PercentMax.Should().Be(100);
         });
-        viewModel.PreviewTemplateText.Should().Be("Alpha = Height@0.0:1.0, Scale@0.0:1.0");
+        viewModel.PreviewTemplateText.Should().Be("Alpha=Height@0.0:1.0, Scale@0.0:1.0");
     }
 
     [Fact]
