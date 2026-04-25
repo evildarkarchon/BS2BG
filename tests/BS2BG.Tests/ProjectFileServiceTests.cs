@@ -148,14 +148,34 @@ public sealed class ProjectFileServiceTests
             File.WriteAllText(path, "old");
             var project = new ProjectModel();
             project.SliderPresets.Add(new SliderPreset("Alpha"));
-            project.MarkDirty();
             var service = new ProjectFileService();
 
             service.Save(project, path);
 
             File.ReadAllText(path).Should().Contain("Alpha");
             Directory.EnumerateFiles(directory, "*.tmp").Should().BeEmpty();
-            project.IsDirty.Should().BeFalse();
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void SaveDoesNotMutateProjectDirtyState()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "project.jbs2bg");
+            var project = new ProjectModel();
+            project.SliderPresets.Add(new SliderPreset("Alpha"));
+            project.IsDirty.Should().BeTrue();
+
+            new ProjectFileService().Save(project, path);
+
+            project.IsDirty.Should().BeTrue();
         }
         finally
         {

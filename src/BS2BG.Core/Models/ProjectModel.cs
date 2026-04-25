@@ -20,6 +20,8 @@ public sealed class ProjectModel : ProjectModelNode
 
     public bool IsDirty { get; private set; }
 
+    public int ChangeVersion { get; private set; }
+
     public event EventHandler? DirtyStateChanged;
 
     public SliderPreset? FindSliderPreset(string name)
@@ -122,8 +124,14 @@ public sealed class ProjectModel : ProjectModelNode
         collection.CollectionChanged += (_, args) =>
         {
             UpdateChildSubscriptions(args, childSubscriptions);
-            MarkDirty();
+            OnAnyChange();
         };
+    }
+
+    private void OnAnyChange()
+    {
+        ChangeVersion = unchecked(ChangeVersion + 1);
+        MarkDirty();
     }
 
     private void UpdateChildSubscriptions<T>(
@@ -180,7 +188,7 @@ public sealed class ProjectModel : ProjectModelNode
         childSubscriptions.Clear();
     }
 
-    private void OnChildChanged(object? sender, EventArgs args) => MarkDirty();
+    private void OnChildChanged(object? sender, EventArgs args) => OnAnyChange();
 
     private static void SortCollection<T>(ObservableCollection<T> collection)
         where T : ProjectModelNode

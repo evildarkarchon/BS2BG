@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using BS2BG.App.Services;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
@@ -21,6 +22,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
 {
     private readonly IClipboardService clipboardService;
     private readonly CompositeDisposable disposables = new();
+    private readonly BehaviorSubject<bool> externalBusy = new(false);
     private readonly IBodySlideXmlFilePicker filePicker;
     private readonly BodySlideXmlParser parser;
     private readonly SerialDisposable presetSubscription = new();
@@ -85,12 +87,17 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         var presetsCount = CollectionChangedObservable.Observe(Presets, () => Presets.Count);
         var setSliderRowsCount = CollectionChangedObservable.Observe(SetSliderRows, () => SetSliderRows.Count);
 
-        var canEditSelectedPreset = this.WhenAnyValue(x => x.SelectedPreset).Select(p => p is not null);
-        var canManagePresets = presetsCount.Select(c => c > 0);
+        disposables.Add(externalBusy);
+        var notExternallyBusy = externalBusy.DistinctUntilChanged().Select(b => !b);
+
+        var canEditSelectedPreset = this.WhenAnyValue(x => x.SelectedPreset)
+            .CombineLatest(notExternallyBusy, (p, ok) => p is not null && ok);
+        var canManagePresets = presetsCount.CombineLatest(notExternallyBusy, (c, ok) => c > 0 && ok);
         var canCopyBosJson = this.WhenAnyValue(x => x.SelectedBosJsonText)
             .Select(text => !string.IsNullOrWhiteSpace(text));
-        var canEditSetSliders = setSliderRowsCount.Select(c => c > 0);
-        var canImport = this.WhenAnyValue(x => x.IsBusy).Select(busy => !busy);
+        var canEditSetSliders = setSliderRowsCount.CombineLatest(notExternallyBusy, (c, ok) => c > 0 && ok);
+        var canImport = this.WhenAnyValue(x => x.IsBusy)
+            .CombineLatest(notExternallyBusy, (busy, ok) => !busy && ok);
 
         ImportPresetsCommand = ReactiveCommand.CreateFromTask(
             ImportPresetsAsync,
@@ -196,6 +203,13 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> SetAllMaxPercentsTo100Command { get; }
 
     public void Dispose() => disposables.Dispose();
+
+    public void LinkExternalBusy(IObservable<bool> source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        disposables.Add(source.DistinctUntilChanged().Subscribe(externalBusy.OnNext));
+    }
 
     public async Task ImportPresetsAsync(CancellationToken cancellationToken = default)
     {

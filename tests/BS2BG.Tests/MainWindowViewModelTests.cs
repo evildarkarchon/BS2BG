@@ -317,11 +317,171 @@ public sealed class MainWindowViewModelTests
         exportCommand.CanExecute(null).Should().BeTrue();
     }
 
+    [Fact]
+    public async Task SaveProjectKeepsDirtyWhenProjectIsMutatedDuringSave()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var blocker = new BlockingProjectFileService();
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var viewModel = CreateViewModel(project, dialogs, projectFileService: blocker);
+
+        var saveTask = viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await blocker.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        project.SliderPresets.Add(new SliderPreset("Beta"));
+        blocker.ReleaseWrite();
+        await saveTask;
+
+        File.Exists(Path.Combine(directory.Path, "saved-project.jbs2bg")).Should().BeTrue();
+        project.IsDirty.Should().BeTrue();
+        viewModel.StatusMessage.Should().Contain("later edits remain unsaved");
+    }
+
+    [Fact]
+    public async Task SaveProjectMarksCleanWhenNoEditsHappenDuringSave()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var blocker = new BlockingProjectFileService();
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var viewModel = CreateViewModel(project, dialogs, projectFileService: blocker);
+
+        var saveTask = viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await blocker.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        blocker.ReleaseWrite();
+        await saveTask;
+
+        project.IsDirty.Should().BeFalse();
+        viewModel.StatusMessage.Should().StartWith("Saved");
+        viewModel.StatusMessage.Should().NotContain("later edits");
+    }
+
+    [Fact]
+    public async Task TemplatesRemovePresetCommandIsDisabledWhileSaving()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var blocker = new BlockingProjectFileService();
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var viewModel = CreateViewModel(project, dialogs, projectFileService: blocker);
+        viewModel.Templates.SelectedPreset = project.SliderPresets[0];
+        var removeCommand = (ICommand)viewModel.Templates.RemoveSelectedPresetCommand;
+        removeCommand.CanExecute(null).Should().BeTrue();
+
+        var saveTask = viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await blocker.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        try
+        {
+            removeCommand.CanExecute(null).Should().BeFalse();
+        }
+        finally
+        {
+            blocker.ReleaseWrite();
+            await saveTask;
+        }
+
+        removeCommand.CanExecute(null).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task MorphsAddCustomTargetCommandIsDisabledWhileSaving()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var blocker = new BlockingProjectFileService();
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var viewModel = CreateViewModel(project, dialogs, projectFileService: blocker);
+        var addCommand = (ICommand)viewModel.Morphs.AddCustomTargetCommand;
+        addCommand.CanExecute(null).Should().BeTrue();
+
+        var saveTask = viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await blocker.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        try
+        {
+            addCommand.CanExecute(null).Should().BeFalse();
+        }
+        finally
+        {
+            blocker.ReleaseWrite();
+            await saveTask;
+        }
+
+        addCommand.CanExecute(null).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UndoCommandIsDisabledWhileSaving()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var blocker = new BlockingProjectFileService();
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "saved-project") };
+        var undoRedo = new UndoRedoService();
+        undoRedo.Record("test", () => { }, () => { });
+        var viewModel = CreateViewModelWithUndoRedo(project, dialogs, undoRedo, projectFileService: blocker);
+        var undoCommand = (ICommand)viewModel.UndoCommand;
+        undoCommand.CanExecute(null).Should().BeTrue();
+
+        var saveTask = viewModel.SaveProjectCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await blocker.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        try
+        {
+            undoCommand.CanExecute(null).Should().BeFalse();
+        }
+        finally
+        {
+            blocker.ReleaseWrite();
+            await saveTask;
+        }
+    }
+
+    private static MainWindowViewModel CreateViewModelWithUndoRedo(
+        ProjectModel project,
+        FakeFileDialogService fileDialogs,
+        UndoRedoService undoRedo,
+        ProjectFileService? projectFileService = null)
+    {
+        var parser = new BodySlideXmlParser();
+        var templateGeneration = new TemplateGenerationService();
+        var profileCatalog = CreateProfileCatalogWithDefault();
+        var templates = new TemplatesViewModel(
+            project,
+            parser,
+            templateGeneration,
+            profileCatalog,
+            new EmptyBodySlideXmlFilePicker(),
+            new EmptyClipboardService(),
+            undoRedo);
+        var morphs = new MorphsViewModel(
+            project,
+            new NpcTextParser(),
+            new MorphAssignmentService(new RandomAssignmentProvider()),
+            new MorphGenerationService(),
+            new EmptyNpcTextFilePicker(),
+            new EmptyClipboardService(),
+            undoRedo: undoRedo);
+
+        return new MainWindowViewModel(
+            project,
+            projectFileService ?? new ProjectFileService(),
+            templateGeneration,
+            new MorphGenerationService(),
+            profileCatalog,
+            new BodyGenIniExportWriter(),
+            new BosJsonExportWriter(templateGeneration),
+            fileDialogs,
+            new FakeAppDialogService(),
+            templates,
+            morphs,
+            undoRedo);
+    }
+
     private static MainWindowViewModel CreateViewModel(
         ProjectModel project,
         FakeFileDialogService fileDialogs,
         FakeAppDialogService? dialogs = null,
-        TemplateProfileCatalog? profileCatalog = null)
+        TemplateProfileCatalog? profileCatalog = null,
+        ProjectFileService? projectFileService = null)
     {
         var parser = new BodySlideXmlParser();
         var templateGeneration = new TemplateGenerationService();
@@ -343,7 +503,7 @@ public sealed class MainWindowViewModelTests
 
         return new MainWindowViewModel(
             project,
-            new ProjectFileService(),
+            projectFileService ?? new ProjectFileService(),
             templateGeneration,
             new MorphGenerationService(),
             profileCatalog,
@@ -447,6 +607,22 @@ public sealed class MainWindowViewModelTests
         public IEnumerator<string> GetEnumerator() => throw new InvalidOperationException(message);
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class BlockingProjectFileService : ProjectFileService
+    {
+        private readonly TaskCompletionSource releaseWrite = new();
+
+        public TaskCompletionSource WriteStarted { get; } = new();
+
+        public void ReleaseWrite() => releaseWrite.TrySetResult();
+
+        public override void WriteAtomic(string content, string path)
+        {
+            WriteStarted.TrySetResult();
+            releaseWrite.Task.GetAwaiter().GetResult();
+            base.WriteAtomic(content, path);
+        }
     }
 
     private sealed class TemporaryDirectory : IDisposable

@@ -9,7 +9,7 @@ namespace BS2BG.Core.Serialization;
 
 [SuppressMessage("Performance", "CA1822:Mark members as static",
     Justification = "Project file I/O is exposed as an injectable service surface.")]
-public sealed class ProjectFileService
+public class ProjectFileService
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
@@ -62,11 +62,20 @@ public sealed class ProjectFileService
 
         if (path is null) throw new ArgumentNullException(nameof(path));
 
+        WriteAtomic(SaveToString(project), path);
+    }
+
+    public virtual void WriteAtomic(string content, string path)
+    {
+        if (content is null) throw new ArgumentNullException(nameof(content));
+
+        if (path is null) throw new ArgumentNullException(nameof(path));
+
         var targetPath = Path.GetFullPath(path);
         var tempPath = CreateTempPath(targetPath);
         try
         {
-            File.WriteAllText(tempPath, SaveToString(project), Utf8NoBom);
+            File.WriteAllText(tempPath, content, Utf8NoBom);
             ReplaceWithTempFile(tempPath, targetPath);
             tempPath = null;
         }
@@ -74,8 +83,6 @@ public sealed class ProjectFileService
         {
             if (tempPath is not null) TryDeleteTempFile(tempPath);
         }
-
-        project.MarkClean();
     }
 
     public string SaveToString(ProjectModel project)

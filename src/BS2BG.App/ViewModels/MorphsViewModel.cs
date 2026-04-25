@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using BS2BG.App.Services;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
@@ -38,6 +39,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly MorphAssignmentService assignmentService;
     private readonly IClipboardService clipboardService;
     private readonly CompositeDisposable disposables = new();
+    private readonly BehaviorSubject<bool> externalBusy = new(false);
     private readonly INpcImageLookupService imageLookupService;
     private readonly IImageViewService imageViewService;
     private readonly MorphGenerationService morphGenerationService;
@@ -121,44 +123,52 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var selectedNpcsChanged = CollectionChangedObservable.Observe(SelectedNpcs, () => SelectedNpcs.ToArray());
         var npcsChanged = CollectionChangedObservable.Observe(Npcs, () => Npcs.Count);
 
+        disposables.Add(externalBusy);
+        var notExternallyBusy = externalBusy.DistinctUntilChanged().Select(b => !b);
+        IObservable<bool> Gate(IObservable<bool> source) =>
+            source.CombineLatest(notExternallyBusy, (a, ok) => a && ok);
+
         var selectedTarget = this.WhenAnyValue(x => x.SelectedCustomTarget)
             .CombineLatest(
                 this.WhenAnyValue(x => x.SelectedNpc),
                 (target, npc) => (MorphTargetBase?)target ?? npc);
         var targetPresetsChanged = SelectedTargetPresetsObservable();
 
-        var canAddCustomTarget = this.WhenAnyValue(x => x.IsBusy).Select(busy => !busy);
-        var canRemoveCustomTarget = this.WhenAnyValue(x => x.SelectedCustomTarget).Select(target => target is not null);
-        var canClearCustomTargets = customTargetsChanged.Select(count => count > 0);
-        var canAddSelectedPresetToTarget = selectedTarget.CombineLatest(
+        var canAddCustomTarget = Gate(this.WhenAnyValue(x => x.IsBusy).Select(busy => !busy));
+        var canRemoveCustomTarget = Gate(
+            this.WhenAnyValue(x => x.SelectedCustomTarget).Select(target => target is not null));
+        var canClearCustomTargets = Gate(customTargetsChanged.Select(count => count > 0));
+        var canAddSelectedPresetToTarget = Gate(selectedTarget.CombineLatest(
             this.WhenAnyValue(x => x.SelectedAvailablePreset),
-            (target, preset) => target is not null && preset is not null);
-        var canAddAllPresetsToTarget = selectedTarget.CombineLatest(
+            (target, preset) => target is not null && preset is not null));
+        var canAddAllPresetsToTarget = Gate(selectedTarget.CombineLatest(
             presetsChanged,
-            (target, count) => target is not null && count > 0);
-        var canRemoveSelectedPresetFromTarget = selectedTarget.CombineLatest(
+            (target, count) => target is not null && count > 0));
+        var canRemoveSelectedPresetFromTarget = Gate(selectedTarget.CombineLatest(
             this.WhenAnyValue(x => x.SelectedAssignedPreset),
-            (target, preset) => target is not null && preset is not null);
-        var canClearTargetPresets = targetPresetsChanged.Select(presets => presets.Length > 0);
-        var canAddSelectedNpc = this.WhenAnyValue(x => x.SelectedImportedNpc).Select(npc => npc is not null);
-        var canAddAllVisibleImportedNpcs = visibleNpcDatabaseChanged.Select(count => count > 0);
-        var canRemoveSelectedNpc = this.WhenAnyValue(x => x.SelectedNpc).Select(npc => npc is not null);
-        var canClearVisibleNpcs = visibleNpcsChanged.Select(npcs => npcs.Length > 0);
-        var canFillEmptyNpcs = visibleNpcsChanged.CombineLatest(
+            (target, preset) => target is not null && preset is not null));
+        var canClearTargetPresets = Gate(targetPresetsChanged.Select(presets => presets.Length > 0));
+        var canAddSelectedNpc = Gate(
+            this.WhenAnyValue(x => x.SelectedImportedNpc).Select(npc => npc is not null));
+        var canAddAllVisibleImportedNpcs = Gate(visibleNpcDatabaseChanged.Select(count => count > 0));
+        var canRemoveSelectedNpc = Gate(
+            this.WhenAnyValue(x => x.SelectedNpc).Select(npc => npc is not null));
+        var canClearVisibleNpcs = Gate(visibleNpcsChanged.Select(npcs => npcs.Length > 0));
+        var canFillEmptyNpcs = Gate(visibleNpcsChanged.CombineLatest(
             presetsChanged,
-            (npcs, presetCount) => npcs.Any(npc => npc.SliderPresets.Count == 0) && presetCount > 0);
-        var canClearAssignments = visibleNpcsChanged.Select(
-            npcs => npcs.Any(npc => npc.SliderPresets.Count > 0));
-        var canAssignSelectedNpcs = selectedNpcsChanged.CombineLatest(
+            (npcs, presetCount) => npcs.Any(npc => npc.SliderPresets.Count == 0) && presetCount > 0));
+        var canClearAssignments = Gate(visibleNpcsChanged.Select(
+            npcs => npcs.Any(npc => npc.SliderPresets.Count > 0)));
+        var canAssignSelectedNpcs = Gate(selectedNpcsChanged.CombineLatest(
             this.WhenAnyValue(x => x.SelectedNpc),
             this.WhenAnyValue(x => x.SelectedAvailablePreset),
             (selected, current, preset) =>
-                (selected.Length > 0 || current is not null) && preset is not null);
-        var canClearSelectedNpcAssignments = selectedNpcsChanged.CombineLatest(
+                (selected.Length > 0 || current is not null) && preset is not null));
+        var canClearSelectedNpcAssignments = Gate(selectedNpcsChanged.CombineLatest(
             this.WhenAnyValue(x => x.SelectedNpc),
             (selected, current) => GetSelectedNpcsForCommandFromSnapshot(selected, current)
-                .Any(npc => npc.SliderPresets.Count > 0));
-        var canTrimSelectedTarget = targetPresetsChanged.Select(presets => presets.Length >= 77);
+                .Any(npc => npc.SliderPresets.Count > 0)));
+        var canTrimSelectedTarget = Gate(targetPresetsChanged.Select(presets => presets.Length >= 77));
         var canGenerateMorphs = customTargetsChanged.CombineLatest(
             npcsChanged,
             (customCount, npcCount) => customCount > 0 || npcCount > 0);
@@ -383,6 +393,13 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     public IReadOnlyList<string> NpcRaceColumnValues => GetNpcColumnValues(NpcFilterColumn.Race);
 
     public void Dispose() => disposables.Dispose();
+
+    public void LinkExternalBusy(IObservable<bool> source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        disposables.Add(source.DistinctUntilChanged().Subscribe(externalBusy.OnNext));
+    }
 
     public async Task ImportNpcsAsync(CancellationToken cancellationToken = default)
     {

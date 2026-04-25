@@ -161,15 +161,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             .DistinctUntilChanged()
             .Subscribe(aggregateBusySubject.OnNext));
 
+        Templates.LinkExternalBusy(aggregateBusySubject.AsObservable());
+        Morphs.LinkExternalBusy(aggregateBusySubject.AsObservable());
+
         _isAnyBusyHelper = aggregateBusySubject.ToProperty(this, x => x.IsAnyBusy, initialValue: false);
 
         ShowAboutCommand = ReactiveCommand.Create(ShowAbout, notBusy);
         UndoCommand = ReactiveCommand.Create(
             () => { this.undoRedo.Undo(); },
-            undoRedoChanged.Select(_ => this.undoRedo.CanUndo));
+            undoRedoChanged
+                .Select(_ => this.undoRedo.CanUndo)
+                .CombineLatest(notBusy, (can, ok) => can && ok));
         RedoCommand = ReactiveCommand.Create(
             () => { this.undoRedo.Redo(); },
-            undoRedoChanged.Select(_ => this.undoRedo.CanRedo));
+            undoRedoChanged
+                .Select(_ => this.undoRedo.CanRedo)
+                .CombineLatest(notBusy, (can, ok) => can && ok));
         FocusGlobalSearchCommand = ReactiveCommand.Create(FocusGlobalSearch);
         OpenCommandPaletteCommand = ReactiveCommand.Create(OpenCommandPalette);
         CloseCommandPaletteCommand = ReactiveCommand.Create(() => { IsCommandPaletteOpen = false; });
@@ -482,9 +489,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         path = EnsureProjectExtension(path);
         try
         {
-            await Task.Run(() => projectFileService.Save(project, path), cancellationToken);
+            var versionAtSnapshot = project.ChangeVersion;
+            var snapshot = projectFileService.SaveToString(project);
+            await Task.Run(() => projectFileService.WriteAtomic(snapshot, path), cancellationToken);
             CurrentProjectPath = path;
-            StatusMessage = "Saved " + Path.GetFileName(path) + ".";
+            if (project.ChangeVersion == versionAtSnapshot)
+            {
+                project.MarkClean();
+                StatusMessage = "Saved " + Path.GetFileName(path) + ".";
+            }
+            else
+            {
+                StatusMessage = "Saved " + Path.GetFileName(path)
+                                         + "; later edits remain unsaved.";
+            }
         }
         catch (Exception exception)
         {
