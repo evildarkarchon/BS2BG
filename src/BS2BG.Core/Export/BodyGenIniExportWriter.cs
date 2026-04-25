@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using BS2BG.Core.IO;
 
 namespace BS2BG.Core.Export;
 
@@ -17,8 +18,12 @@ public sealed class BodyGenIniExportWriter
 
         var templatesPath = Path.Combine(directoryPath, "templates.ini");
         var morphsPath = Path.Combine(directoryPath, "morphs.ini");
-        File.WriteAllText(templatesPath, NormalizeCrLf(templatesText), Utf8NoBom);
-        File.WriteAllText(morphsPath, NormalizeCrLf(morphsText), Utf8NoBom);
+        AtomicFileWriter.WriteAtomicPair(
+            templatesPath,
+            NormalizeCrLf(templatesText),
+            morphsPath,
+            NormalizeCrLf(morphsText),
+            Utf8NoBom);
 
         return new BodyGenIniExportResult(templatesPath, morphsPath);
     }

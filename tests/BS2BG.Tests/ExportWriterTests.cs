@@ -1,6 +1,8 @@
+using System.Text;
 using BS2BG.Core.Export;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
+using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 using Xunit;
 using SliderPreset = BS2BG.Core.Models.SliderPreset;
@@ -77,6 +79,70 @@ public sealed class ExportWriterTests
             Path.Combine(directory.Path, "CON_.json"));
         File.ReadAllText(result.FilePaths[0]).Should().Contain("\"bodyname\": \"COM1\"");
         File.ReadAllText(result.FilePaths[1]).Should().Contain("\"bodyname\": \"CON\"");
+    }
+
+    [Fact]
+    public void BodyGenIniExportWriterRemovesTempFilesOnSuccess()
+    {
+        using var directory = new TemporaryDirectory();
+        var writer = new BodyGenIniExportWriter();
+
+        writer.Write(directory.Path, "templates", "morphs");
+
+        Directory.GetFiles(directory.Path).Should().BeEquivalentTo(
+            Path.Combine(directory.Path, "templates.ini"),
+            Path.Combine(directory.Path, "morphs.ini"));
+    }
+
+    [Fact]
+    public void BodyGenIniExportWriterAtomicallyReplacesExistingPair()
+    {
+        using var directory = new TemporaryDirectory();
+        var templatesPath = Path.Combine(directory.Path, "templates.ini");
+        var morphsPath = Path.Combine(directory.Path, "morphs.ini");
+        File.WriteAllText(templatesPath, "OLD_TEMPLATES");
+        File.WriteAllText(morphsPath, "OLD_MORPHS");
+        var writer = new BodyGenIniExportWriter();
+
+        writer.Write(directory.Path, "Alpha=1.0", "All|Female=Alpha");
+
+        File.ReadAllText(templatesPath).Should().Be("Alpha=1.0");
+        File.ReadAllText(morphsPath).Should().Be("All|Female=Alpha");
+        Directory.GetFiles(directory.Path).Should().BeEquivalentTo(templatesPath, morphsPath);
+    }
+
+    [Fact]
+    public void AtomicFileWriterWriteAtomicPairLeavesTargetsUntouchedOnPhase1Failure()
+    {
+        using var directory = new TemporaryDirectory();
+        var firstPath = Path.Combine(directory.Path, "first.txt");
+        var secondPath = Path.Combine(directory.Path, "missing-subdir", "second.txt");
+        File.WriteAllText(firstPath, "ORIGINAL_FIRST");
+
+        var act = () => AtomicFileWriter.WriteAtomicPair(
+            firstPath,
+            "NEW_FIRST",
+            secondPath,
+            "NEW_SECOND",
+            Encoding.UTF8);
+
+        act.Should().Throw<DirectoryNotFoundException>();
+        File.ReadAllText(firstPath).Should().Be("ORIGINAL_FIRST");
+        File.Exists(secondPath).Should().BeFalse();
+        Directory.GetFiles(directory.Path).Should().ContainSingle().Which.Should().Be(firstPath);
+    }
+
+    [Fact]
+    public void AtomicFileWriterWriteAtomicReplacesExistingTarget()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "data.txt");
+        File.WriteAllText(path, "ORIGINAL");
+
+        AtomicFileWriter.WriteAtomic(path, "REPLACED", Encoding.UTF8);
+
+        File.ReadAllText(path).Should().Be("REPLACED");
+        Directory.GetFiles(directory.Path).Should().ContainSingle().Which.Should().Be(path);
     }
 
     private static bool HasUtf8Bom(byte[] bytes) =>

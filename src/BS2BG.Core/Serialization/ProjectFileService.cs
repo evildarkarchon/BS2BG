@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 
 namespace BS2BG.Core.Serialization;
@@ -71,18 +72,7 @@ public class ProjectFileService
 
         if (path is null) throw new ArgumentNullException(nameof(path));
 
-        var targetPath = Path.GetFullPath(path);
-        var tempPath = CreateTempPath(targetPath);
-        try
-        {
-            File.WriteAllText(tempPath, content, Utf8NoBom);
-            ReplaceWithTempFile(tempPath, targetPath);
-            tempPath = null;
-        }
-        finally
-        {
-            if (tempPath is not null) TryDeleteTempFile(tempPath);
-        }
+        AtomicFileWriter.WriteAtomic(path, content, Utf8NoBom);
     }
 
     public string SaveToString(ProjectModel project)
@@ -217,39 +207,6 @@ public class ProjectFileService
                && slider.Enabled
                && slider.PercentMin == 100
                && slider.PercentMax == 100;
-    }
-
-    private static string CreateTempPath(string targetPath)
-    {
-        var directory = Path.GetDirectoryName(targetPath)
-                        ?? throw new InvalidOperationException("Project path must include a directory.");
-        var fileName = Path.GetFileName(targetPath);
-        return Path.Combine(directory, "." + fileName + "." + Guid.NewGuid().ToString("N") + ".tmp");
-    }
-
-    private static void ReplaceWithTempFile(string tempPath, string targetPath)
-    {
-        if (File.Exists(targetPath))
-        {
-            File.Replace(tempPath, targetPath, null);
-            return;
-        }
-
-        File.Move(tempPath, targetPath);
-    }
-
-    private static void TryDeleteTempFile(string tempPath)
-    {
-        try
-        {
-            if (File.Exists(tempPath)) File.Delete(tempPath);
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
     }
 
     private static IEnumerable<KeyValuePair<string, TValue>> Enumerate<TValue>(
