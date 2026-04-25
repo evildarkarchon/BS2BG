@@ -1,0 +1,50 @@
+namespace BS2BG.Core.Models;
+
+public sealed class Npc(string name) : MorphTargetBase(name)
+{
+    private string editorId = string.Empty;
+    private string formId = string.Empty;
+    private string mod = "Skyrim.esm";
+    private string race = string.Empty;
+
+    public string Mod
+    {
+        get => mod;
+        set => SetProperty(ref mod, value ?? string.Empty);
+    }
+
+    public string EditorId
+    {
+        get => editorId;
+        set => SetProperty(ref editorId, value ?? string.Empty);
+    }
+
+    public string Race
+    {
+        get => race;
+        set => SetProperty(ref race, value ?? string.Empty);
+    }
+
+    public string FormId
+    {
+        get => formId;
+        set => SetProperty(ref formId, NormalizeFormId(value));
+    }
+
+    public string SliderPresetsText => string.Join("|", SliderPresets.Select(sliderPreset => sliderPreset.Name));
+
+    public override string ToMorphLine() => Mod + "|" + FormId + "=" +
+                                            string.Join("|", SliderPresets.Select(sliderPreset => sliderPreset.Name));
+
+    protected override void OnSliderPresetAssignmentsChanged() => NotifyChanged(nameof(SliderPresetsText));
+
+    private static string NormalizeFormId(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim();
+
+        if (normalized.Length > 6) normalized = normalized.Substring(normalized.Length - 6);
+
+        normalized = normalized.TrimStart('0');
+        return normalized.Length == 0 ? "0" : normalized;
+    }
+}

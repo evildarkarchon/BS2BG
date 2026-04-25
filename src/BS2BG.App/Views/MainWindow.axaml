@@ -1,0 +1,933 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:automation="using:Avalonia.Automation"
+        xmlns:input="using:Avalonia.Input"
+        xmlns:services="using:BS2BG.App.Services"
+        xmlns:vm="using:BS2BG.App.ViewModels"
+        xmlns:models="using:BS2BG.Core.Models"
+        x:Class="BS2BG.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        mc:Ignorable="d">
+  <Window.KeyBindings>
+    <input:KeyBinding Gesture="Ctrl+N"
+                      Command="{Binding NewProjectCommand}" />
+    <input:KeyBinding Gesture="Ctrl+O"
+                      Command="{Binding OpenProjectCommand}" />
+    <input:KeyBinding Gesture="Ctrl+S"
+                      Command="{Binding SaveProjectCommand}" />
+    <input:KeyBinding Gesture="Ctrl+Alt+S"
+                      Command="{Binding SaveProjectAsCommand}" />
+    <input:KeyBinding Gesture="Ctrl+B"
+                      Command="{Binding ExportBosJsonCommand}" />
+    <input:KeyBinding Gesture="Ctrl+X"
+                      Command="{Binding ExportBodyGenInisCommand}" />
+    <input:KeyBinding Gesture="Ctrl+Z"
+                      Command="{Binding UndoCommand}" />
+    <input:KeyBinding Gesture="Ctrl+Y"
+                      Command="{Binding RedoCommand}" />
+    <input:KeyBinding Gesture="Ctrl+F"
+                      Command="{Binding FocusGlobalSearchCommand}" />
+    <input:KeyBinding Gesture="Ctrl+Shift+P"
+                      Command="{Binding OpenCommandPaletteCommand}" />
+  </Window.KeyBindings>
+
+  <Design.DataContext>
+    <vm:MainWindowViewModel />
+  </Design.DataContext>
+
+  <Grid Background="{DynamicResource BS2BGWindowBackgroundBrush}"
+        RowDefinitions="Auto,Auto,*">
+    <Menu x:Name="MainMenuBar"
+          automation:AutomationProperties.Name="Main menu"
+          Grid.Row="0">
+      <MenuItem Header="File">
+        <MenuItem x:Name="NewProjectMenuItem"
+                  Header="New"
+                  automation:AutomationProperties.Name="New project"
+                  automation:AutomationProperties.AcceleratorKey="Ctrl+N"
+                  Command="{Binding NewProjectCommand}" />
+        <MenuItem x:Name="OpenProjectMenuItem"
+                  Header="Open..."
+                  automation:AutomationProperties.Name="Open project"
+                  automation:AutomationProperties.AcceleratorKey="Ctrl+O"
+                  Command="{Binding OpenProjectCommand}" />
+        <Separator />
+        <MenuItem x:Name="SaveProjectMenuItem"
+                  Header="Save"
+                  automation:AutomationProperties.Name="Save project"
+                  automation:AutomationProperties.AcceleratorKey="Ctrl+S"
+                  Command="{Binding SaveProjectCommand}" />
+        <MenuItem x:Name="SaveProjectAsMenuItem"
+                  Header="Save As..."
+                  automation:AutomationProperties.Name="Save project as"
+                  automation:AutomationProperties.AcceleratorKey="Ctrl+Alt+S"
+                  Command="{Binding SaveProjectAsCommand}" />
+        <Separator />
+        <MenuItem x:Name="ExportBosJsonMenuItem"
+                  Header="Export Templates as BoS JSON"
+                  automation:AutomationProperties.Name="Export templates as BoS JSON"
+                  automation:AutomationProperties.AcceleratorKey="Ctrl+B"
+                  Command="{Binding ExportBosJsonCommand}" />
+        <MenuItem x:Name="ExportBodyGenInisMenuItem"
+                  Header="Export BodyGen INIs"
+                  automation:AutomationProperties.Name="Export BodyGen INIs"
+                  automation:AutomationProperties.AcceleratorKey="Ctrl+X"
+                  Command="{Binding ExportBodyGenInisCommand}" />
+      </MenuItem>
+      <MenuItem Header="Edit">
+        <MenuItem x:Name="UndoMenuItem"
+                  Header="Undo"
+                  automation:AutomationProperties.Name="Undo"
+                  automation:AutomationProperties.AcceleratorKey="Ctrl+Z"
+                  Command="{Binding UndoCommand}" />
+        <MenuItem x:Name="RedoMenuItem"
+                  Header="Redo"
+                  automation:AutomationProperties.Name="Redo"
+                  automation:AutomationProperties.AcceleratorKey="Ctrl+Y"
+                  Command="{Binding RedoCommand}" />
+        <Separator />
+        <MenuItem Header="Command Palette..."
+                  automation:AutomationProperties.Name="Open command palette"
+                  automation:AutomationProperties.AcceleratorKey="Ctrl+Shift+P"
+                  Command="{Binding OpenCommandPaletteCommand}" />
+      </MenuItem>
+      <MenuItem Header="Help">
+        <MenuItem x:Name="AboutMenuItem"
+                  Header="About Bodyslide to Bodygen"
+                  automation:AutomationProperties.Name="About Bodyslide to Bodygen"
+                  Command="{Binding ShowAboutCommand}" />
+      </MenuItem>
+    </Menu>
+
+    <Border Grid.Row="1"
+            Padding="16,12"
+            Background="{DynamicResource BS2BGWindowBackgroundBrush}">
+      <Grid ColumnDefinitions="Auto,260,Auto,Auto,*">
+        <TextBlock DockPanel.Dock="Left"
+                   Grid.Column="0"
+                   Text="{Binding Title}"
+                   FontSize="18"
+                   FontWeight="SemiBold"
+                   Margin="0,0,16,0"
+                   VerticalAlignment="Center" />
+        <TextBox x:Name="GlobalSearchBox"
+                 Grid.Column="1"
+                 TabIndex="0"
+                 automation:AutomationProperties.Name="Search active view"
+                 automation:AutomationProperties.AcceleratorKey="Ctrl+F"
+                 Text="{Binding GlobalSearchText}"
+                 PlaceholderText="Search active view" />
+        <ComboBox x:Name="ThemePreferenceComboBox"
+                  Grid.Column="2"
+                  Width="108"
+                  Margin="8,0,0,0"
+                  TabIndex="1"
+                  automation:AutomationProperties.Name="Theme preference"
+                  ItemsSource="{Binding ThemePreferences}"
+                  SelectedItem="{Binding SelectedThemePreference}" />
+        <Button x:Name="OpenCommandPaletteButton"
+                Grid.Column="3"
+                Margin="8,0,0,0"
+                Content="Commands"
+                TabIndex="2"
+                automation:AutomationProperties.Name="Open command palette"
+                automation:AutomationProperties.AcceleratorKey="Ctrl+Shift+P"
+                Command="{Binding OpenCommandPaletteCommand}" />
+        <ProgressBar DockPanel.Dock="Right"
+                     Grid.Column="4"
+                     Width="160"
+                     Height="4"
+                     HorizontalAlignment="Right"
+                     IsIndeterminate="True"
+                     IsVisible="{Binding IsAnyBusy}" />
+        <TextBlock x:Name="ShellStatusText"
+                   Grid.Column="4"
+                   Text="{Binding StatusMessage}"
+                   Margin="16,0,176,0"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" />
+      </Grid>
+    </Border>
+
+    <Popup x:Name="CommandPalettePopup"
+           Grid.Row="1"
+           PlacementTarget="{Binding #GlobalSearchBox}"
+           Placement="Bottom"
+           IsLightDismissEnabled="True"
+           IsOpen="{Binding IsCommandPaletteOpen}">
+      <Border Padding="8"
+              Width="420"
+              MaxHeight="360"
+              Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+              BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+              BorderThickness="1">
+        <Border.KeyBindings>
+          <input:KeyBinding Gesture="Escape"
+                            Command="{Binding CloseCommandPaletteCommand}" />
+        </Border.KeyBindings>
+        <Grid RowDefinitions="Auto,*">
+          <TextBox x:Name="CommandPaletteSearchBox"
+                   Grid.Row="0"
+                   automation:AutomationProperties.Name="Run command search"
+                   Text="{Binding CommandPaletteSearchText}"
+                   PlaceholderText="Run command" />
+          <ListBox x:Name="CommandPaletteListBox"
+                   Grid.Row="1"
+                   Margin="0,8,0,0"
+                   automation:AutomationProperties.Name="Command palette results"
+                   ItemsSource="{Binding VisibleCommandPaletteItems}"
+                   SelectionChanged="OnCommandPaletteSelectionChanged">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="services:CommandDescriptor">
+                <Grid ColumnDefinitions="*,Auto"
+                      Margin="4">
+                  <TextBlock Grid.Column="0" Text="{Binding Title}" />
+                  <TextBlock Grid.Column="1"
+                             Text="{Binding GestureText}"
+                             Opacity="0.72" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+    </Popup>
+
+    <TabControl x:Name="WorkspaceTabs"
+                Grid.Row="2"
+                Margin="12,0,12,12"
+                SelectionChanged="OnWorkspaceSelectionChanged">
+      <TabItem Header="Templates">
+        <Grid x:Name="TemplatesDropZone"
+              DragDrop.AllowDrop="True"
+              DragDrop.DragOver="OnDragOver"
+              DragDrop.Drop="OnDrop"
+              ColumnDefinitions="280,4,*">
+          <Border Grid.Column="0"
+                  Padding="4,8,12,4">
+            <Grid RowDefinitions="Auto,Auto,*">
+              <StackPanel Grid.Row="0" Spacing="8">
+                <Button x:Name="ImportPresetsButton"
+                        Content="Add BodySlide XML Presets"
+                        automation:AutomationProperties.Name="Add BodySlide XML presets"
+                        Command="{Binding Templates.ImportPresetsCommand}" />
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBox Grid.Column="0"
+                           x:Name="PresetNameInputBox"
+                           automation:AutomationProperties.Name="Preset name"
+                           Text="{Binding Templates.PresetNameInput}"
+                           PlaceholderText="Preset name" />
+                  <StackPanel Grid.Column="1"
+                              Orientation="Horizontal"
+                              Spacing="6"
+                              Margin="8,0,0,0">
+                    <Button x:Name="RenamePresetButton"
+                            Content="Rename"
+                            automation:AutomationProperties.Name="Rename selected preset"
+                            Command="{Binding Templates.RenameSelectedPresetCommand}" />
+                    <Button x:Name="DuplicatePresetButton"
+                            Content="Duplicate"
+                            automation:AutomationProperties.Name="Duplicate selected preset"
+                            Command="{Binding Templates.DuplicateSelectedPresetCommand}" />
+                  </StackPanel>
+                </Grid>
+                <Grid ColumnDefinitions="*,*">
+                  <Button x:Name="RemovePresetButton"
+                          Grid.Column="0"
+                          Content="Remove"
+                          automation:AutomationProperties.Name="Remove selected preset"
+                          Command="{Binding Templates.RemoveSelectedPresetCommand}" />
+                  <Button x:Name="ClearPresetsButton"
+                          Grid.Column="1"
+                          Margin="8,0,0,0"
+                          Content="Clear"
+                          automation:AutomationProperties.Name="Clear presets"
+                          Command="{Binding Templates.ClearPresetsCommand}" />
+                </Grid>
+                <TextBlock Text="{Binding Templates.ValidationMessage}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}" />
+              </StackPanel>
+
+              <Separator Grid.Row="1" Margin="0,12" />
+
+              <ListBox x:Name="PresetListBox"
+                       Grid.Row="2"
+                       Focusable="True"
+                       automation:AutomationProperties.Name="Template presets"
+                       ItemsSource="{Binding Templates.VisiblePresets}"
+                       SelectedItem="{Binding Templates.SelectedPreset}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="models:SliderPreset">
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Grid>
+          </Border>
+
+          <GridSplitter Grid.Column="1"
+                        ResizeDirection="Columns" />
+
+          <Border Grid.Column="2"
+                  Padding="12,8,4,4">
+            <Grid ColumnDefinitions="*,4,320">
+              <Grid Grid.Column="0"
+                    RowDefinitions="Auto,*,Auto,*">
+                <Grid Grid.Row="0"
+                      ColumnDefinitions="Auto,180,Auto,Auto,*"
+                      RowDefinitions="Auto"
+                      Margin="0,0,0,8">
+                  <TextBlock Grid.Column="0"
+                             Text="Profile"
+                             VerticalAlignment="Center"
+                             Margin="0,0,8,0" />
+                  <ComboBox x:Name="TemplateProfileComboBox"
+                            Grid.Column="1"
+                            automation:AutomationProperties.Name="Template profile"
+                            ItemsSource="{Binding Templates.ProfileNames}"
+                            SelectedItem="{Binding Templates.SelectedProfileName}" />
+                  <CheckBox Grid.Column="2"
+                            Margin="16,0,0,0"
+                            Content="Omit Redundant Sliders"
+                            automation:AutomationProperties.Name="Omit redundant sliders"
+                            IsChecked="{Binding Templates.OmitRedundantSliders}" />
+                  <Button x:Name="GenerateTemplatesButton"
+                          Grid.Column="3"
+                          Margin="16,0,0,0"
+                          Content="Generate Templates"
+                          automation:AutomationProperties.Name="Generate templates"
+                          Command="{Binding Templates.GenerateTemplatesCommand}" />
+                  <Button x:Name="CopyGeneratedTemplatesButton"
+                          Grid.Column="4"
+                          Margin="8,0,0,0"
+                          HorizontalAlignment="Left"
+                          Content="Copy"
+                          automation:AutomationProperties.Name="Copy generated templates"
+                          Command="{Binding Templates.CopyGeneratedTemplatesCommand}" />
+                </Grid>
+
+                <TextBox Grid.Row="1"
+                         x:Name="TemplatePreviewTextBox"
+                         automation:AutomationProperties.Name="Template preview"
+                         Text="{Binding Templates.PreviewTemplateText}"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         FontFamily="Consolas"
+                         FontSize="13" />
+
+                <TextBlock Grid.Row="2"
+                           Margin="0,10,0,8"
+                           Text="{Binding Templates.StatusMessage}"
+                           TextWrapping="Wrap" />
+
+                <TextBox Grid.Row="3"
+                         x:Name="GeneratedTemplatesTextBox"
+                         automation:AutomationProperties.Name="Generated templates"
+                         Text="{Binding Templates.GeneratedTemplateText}"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         TextWrapping="NoWrap"
+                         FontFamily="Consolas"
+                         FontSize="13" />
+              </Grid>
+
+              <GridSplitter Grid.Column="1"
+                            ResizeDirection="Columns" />
+
+              <TabControl Grid.Column="2"
+                          Margin="12,0,0,0">
+                <TabItem Header="SetSliders">
+                  <Grid RowDefinitions="Auto,*">
+                    <Grid Grid.Row="0"
+                          RowDefinitions="Auto,Auto,Auto"
+                          ColumnDefinitions="Auto,*,*,*"
+                          Margin="0,0,0,8">
+                      <TextBlock Grid.Row="0"
+                                 Grid.Column="0"
+                                 Text="All"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,8,6" />
+                      <Button Grid.Row="0"
+                              Grid.Column="1"
+                              Content="0"
+                              automation:AutomationProperties.Name="Set all slider percentages to 0"
+                              Command="{Binding Templates.SetAllSliderPercentsTo0Command}"
+                              Margin="0,0,6,6" />
+                      <Button Grid.Row="0"
+                              Grid.Column="2"
+                              Content="50"
+                              automation:AutomationProperties.Name="Set all slider percentages to 50"
+                              Command="{Binding Templates.SetAllSliderPercentsTo50Command}"
+                              Margin="0,0,6,6" />
+                      <Button Grid.Row="0"
+                              Grid.Column="3"
+                              Content="100"
+                              automation:AutomationProperties.Name="Set all slider percentages to 100"
+                              Command="{Binding Templates.SetAllSliderPercentsTo100Command}"
+                              Margin="0,0,0,6" />
+
+                      <TextBlock Grid.Row="1"
+                                 Grid.Column="0"
+                                 Text="Min"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,8,6" />
+                      <Button Grid.Row="1"
+                              Grid.Column="1"
+                              Content="0"
+                              automation:AutomationProperties.Name="Set all minimum percentages to 0"
+                              Command="{Binding Templates.SetAllMinPercentsTo0Command}"
+                              Margin="0,0,6,6" />
+                      <Button Grid.Row="1"
+                              Grid.Column="2"
+                              Content="50"
+                              automation:AutomationProperties.Name="Set all minimum percentages to 50"
+                              Command="{Binding Templates.SetAllMinPercentsTo50Command}"
+                              Margin="0,0,6,6" />
+                      <Button Grid.Row="1"
+                              Grid.Column="3"
+                              Content="100"
+                              automation:AutomationProperties.Name="Set all minimum percentages to 100"
+                              Command="{Binding Templates.SetAllMinPercentsTo100Command}"
+                              Margin="0,0,0,6" />
+
+                      <TextBlock Grid.Row="2"
+                                 Grid.Column="0"
+                                 Text="Max"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,8,0" />
+                      <Button Grid.Row="2"
+                              Grid.Column="1"
+                              Content="0"
+                              automation:AutomationProperties.Name="Set all maximum percentages to 0"
+                              Command="{Binding Templates.SetAllMaxPercentsTo0Command}"
+                              Margin="0,0,6,0" />
+                      <Button Grid.Row="2"
+                              Grid.Column="2"
+                              Content="50"
+                              automation:AutomationProperties.Name="Set all maximum percentages to 50"
+                              Command="{Binding Templates.SetAllMaxPercentsTo50Command}"
+                              Margin="0,0,6,0" />
+                      <Button Grid.Row="2"
+                              Grid.Column="3"
+                              Content="100"
+                              automation:AutomationProperties.Name="Set all maximum percentages to 100"
+                              Command="{Binding Templates.SetAllMaxPercentsTo100Command}" />
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto">
+                      <ItemsControl x:Name="SetSliderInspectorRows"
+                                    ItemsSource="{Binding Templates.SetSliderRows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:SetSliderInspectorRowViewModel">
+                            <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="0,8">
+                              <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+                                <CheckBox Grid.Row="0"
+                                          Content="{Binding Name}"
+                                          IsChecked="{Binding Enabled}" />
+                                <TextBox Grid.Row="1"
+                                         Text="{Binding PreviewText}"
+                                         IsReadOnly="True"
+                                         FontFamily="Consolas"
+                                         FontSize="12"
+                                         Margin="0,4,0,8" />
+                                <Grid Grid.Row="2"
+                                      ColumnDefinitions="Auto,*,Auto"
+                                      Margin="0,0,0,6">
+                                  <TextBlock Grid.Column="0"
+                                             Text="Min"
+                                             Width="32"
+                                             VerticalAlignment="Center" />
+                                  <Slider Grid.Column="1"
+                                          Minimum="0"
+                                          Maximum="100"
+                                          Value="{Binding PercentMin}" />
+                                  <TextBlock Grid.Column="2"
+                                             Text="{Binding PercentMinText}"
+                                             Width="44"
+                                             TextAlignment="Right"
+                                             VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid Grid.Row="3"
+                                      ColumnDefinitions="Auto,*,Auto">
+                                  <TextBlock Grid.Column="0"
+                                             Text="Max"
+                                             Width="32"
+                                             VerticalAlignment="Center" />
+                                  <Slider Grid.Column="1"
+                                          Minimum="0"
+                                          Maximum="100"
+                                          Value="{Binding PercentMax}" />
+                                  <TextBlock Grid.Column="2"
+                                             Text="{Binding PercentMaxText}"
+                                             Width="44"
+                                             TextAlignment="Right"
+                                             VerticalAlignment="Center" />
+                                </Grid>
+                              </Grid>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </Grid>
+                </TabItem>
+
+                <TabItem Header="BoS JSON">
+                  <Grid RowDefinitions="Auto,*">
+                    <Button Grid.Row="0"
+                            Content="Copy"
+                            HorizontalAlignment="Left"
+                            Margin="0,0,0,8"
+                            automation:AutomationProperties.Name="Copy selected BoS JSON"
+                            Command="{Binding Templates.CopySelectedBosJsonCommand}" />
+                    <TextBox x:Name="BosJsonTextBox"
+                             Grid.Row="1"
+                             automation:AutomationProperties.Name="Selected BoS JSON"
+                             Text="{Binding Templates.SelectedBosJsonText}"
+                             AcceptsReturn="True"
+                             IsReadOnly="True"
+                             TextWrapping="NoWrap"
+                             FontFamily="Consolas"
+                             FontSize="12" />
+                  </Grid>
+                </TabItem>
+              </TabControl>
+            </Grid>
+          </Border>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Morphs">
+        <Grid x:Name="NpcDropZone"
+              DragDrop.AllowDrop="True"
+              DragDrop.DragOver="OnDragOver"
+              DragDrop.Drop="OnDrop"
+              ColumnDefinitions="280,4,*,4,300"
+              RowDefinitions="*,Auto,170">
+          <Border Grid.Column="0"
+                  Grid.RowSpan="3"
+                  Padding="4,8,12,4">
+            <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto,220">
+              <TextBlock Grid.Row="0"
+                         Text="Custom Targets"
+                         FontWeight="SemiBold"
+                         Margin="0,0,0,6" />
+              <Grid Grid.Row="1"
+                    ColumnDefinitions="*,Auto"
+                    Margin="0,0,0,8">
+                <TextBox Grid.Column="0"
+                         x:Name="CustomTargetNameInputBox"
+                         automation:AutomationProperties.Name="Custom target name"
+                         Text="{Binding Morphs.TargetNameInput}"
+                         PlaceholderText="Context|Gender|Race" />
+                <Button x:Name="AddCustomTargetButton"
+                        Grid.Column="1"
+                        Margin="8,0,0,0"
+                        Content="Add"
+                        automation:AutomationProperties.Name="Add custom target"
+                        Command="{Binding Morphs.AddCustomTargetCommand}" />
+              </Grid>
+              <ListBox x:Name="CustomTargetsListBox"
+                       Grid.Row="2"
+                       Focusable="True"
+                       automation:AutomationProperties.Name="Custom targets"
+                       ItemsSource="{Binding Morphs.CustomTargets}"
+                       SelectedItem="{Binding Morphs.SelectedCustomTarget}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="models:CustomMorphTarget">
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <Grid Grid.Row="3"
+                    ColumnDefinitions="*,*"
+                    Margin="0,8,0,12">
+                <Button x:Name="RemoveCustomTargetButton"
+                        Grid.Column="0"
+                        Content="Remove"
+                        automation:AutomationProperties.Name="Remove custom target"
+                        Command="{Binding Morphs.RemoveCustomTargetCommand}" />
+                <Button x:Name="ClearCustomTargetsButton"
+                        Grid.Column="1"
+                        Margin="8,0,0,0"
+                        Content="Clear"
+                        automation:AutomationProperties.Name="Clear custom targets"
+                        Command="{Binding Morphs.ClearCustomTargetsCommand}" />
+              </Grid>
+
+              <TextBlock Grid.Row="4"
+                         Text="{Binding Morphs.TargetNameValidationMessage}"
+                         TextWrapping="Wrap"
+                         Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}" />
+
+              <Grid Grid.Row="5"
+                    ColumnDefinitions="Auto,*,Auto"
+                    Margin="0,12,0,8">
+                <TextBlock Grid.Column="0"
+                           Text="Imported NPCs"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Morphs.NpcDatabaseCountBadgeText}"
+                           Margin="6,0,0,0"
+                           VerticalAlignment="Center" />
+                <Button x:Name="ImportNpcsButton"
+                        Grid.Column="2"
+                        Content="Import"
+                        automation:AutomationProperties.Name="Import NPCs"
+                        Command="{Binding Morphs.ImportNpcsCommand}" />
+              </Grid>
+
+              <Grid Grid.Row="6"
+                    RowDefinitions="Auto,*,Auto">
+                <Grid Grid.Row="0"
+                      ColumnDefinitions="*,Auto"
+                      Margin="0,0,0,8">
+                  <TextBox Grid.Column="0"
+                           x:Name="ImportedNpcSearchBox"
+                           automation:AutomationProperties.Name="Search imported NPCs"
+                           Text="{Binding Morphs.NpcDatabaseSearchText}"
+                           PlaceholderText="Search imported NPCs" />
+                  <CheckBox Grid.Column="1"
+                            Margin="8,0,0,0"
+                            Content="Assign Random"
+                            automation:AutomationProperties.Name="Assign random presets on import"
+                            IsChecked="{Binding Morphs.AssignRandomOnAdd}" />
+                </Grid>
+                <ListBox x:Name="ImportedNpcListBox"
+                         Grid.Row="1"
+                         Focusable="True"
+                         automation:AutomationProperties.Name="Imported NPCs"
+                         ItemsSource="{Binding Morphs.VisibleNpcDatabase}"
+                         SelectedItem="{Binding Morphs.SelectedImportedNpc}">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:Npc">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Name}" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Mod}"
+                                   Margin="8,0,0,0"
+                                   Opacity="0.72" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Grid Grid.Row="2"
+                      ColumnDefinitions="*,*"
+                      Margin="0,8,0,0">
+                  <Button x:Name="AddSelectedNpcButton"
+                          Grid.Column="0"
+                          Content="Add"
+                          automation:AutomationProperties.Name="Add selected imported NPC"
+                          Command="{Binding Morphs.AddSelectedNpcCommand}" />
+                  <Button x:Name="AddAllImportedNpcsButton"
+                          Grid.Column="1"
+                          Margin="8,0,0,0"
+                          Content="Add All"
+                          automation:AutomationProperties.Name="Add all visible imported NPCs"
+                          Command="{Binding Morphs.AddAllVisibleImportedNpcsCommand}" />
+                </Grid>
+              </Grid>
+            </Grid>
+          </Border>
+
+          <GridSplitter Grid.Column="1"
+                        Grid.RowSpan="3"
+                        ResizeDirection="Columns" />
+
+          <Border Grid.Column="2"
+                  Grid.Row="0"
+                  Padding="12,8,12,4">
+            <Grid RowDefinitions="Auto,Auto,*">
+              <Grid Grid.Row="0"
+                    ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto"
+                    Margin="0,0,0,8">
+                <TextBlock Grid.Column="0"
+                           Text="Individual NPCs"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Morphs.NpcCountBadgeText}"
+                           Margin="6,0,12,0"
+                           VerticalAlignment="Center" />
+                <TextBox Grid.Column="2"
+                         x:Name="NpcSearchBox"
+                         automation:AutomationProperties.Name="Search NPCs"
+                         Text="{Binding Morphs.SearchText}"
+                         PlaceholderText="Search NPCs" />
+                <Button x:Name="FillEmptyNpcsButton"
+                        Grid.Column="3"
+                        Margin="8,0,0,0"
+                        Content="Fill Empty"
+                        automation:AutomationProperties.Name="Fill empty NPC assignments"
+                        Command="{Binding Morphs.FillEmptyNpcsCommand}" />
+                <Button x:Name="ClearNpcAssignmentsButton"
+                        Grid.Column="4"
+                        Margin="8,0,0,0"
+                        Content="Clear Assignments"
+                        automation:AutomationProperties.Name="Clear visible NPC assignments"
+                        Command="{Binding Morphs.ClearAssignmentsCommand}" />
+                <Button x:Name="RemoveNpcButton"
+                        Grid.Column="5"
+                        Margin="8,0,0,0"
+                        Content="Remove NPC"
+                        automation:AutomationProperties.Name="Remove selected NPC"
+                        Command="{Binding Morphs.RemoveSelectedNpcCommand}" />
+                <Button x:Name="ClearVisibleNpcsButton"
+                        Grid.Column="6"
+                        Margin="8,0,0,0"
+                        Content="Clear"
+                        automation:AutomationProperties.Name="Clear visible NPCs"
+                        Command="{Binding Morphs.ClearVisibleNpcsCommand}" />
+                <Button x:Name="SelectedNpcAssignButton"
+                        Grid.Column="7"
+                        Margin="8,0,0,0"
+                        Content="Assign Selected"
+                        automation:AutomationProperties.Name="Assign preset to selected NPCs"
+                        Command="{Binding Morphs.AssignSelectedNpcsCommand}" />
+                <Button x:Name="SelectedNpcClearAssignmentsButton"
+                        Grid.Column="8"
+                        Margin="8,0,0,0"
+                        Content="Clear Selected"
+                        automation:AutomationProperties.Name="Clear selected NPC assignments"
+                        Command="{Binding Morphs.ClearSelectedNpcAssignmentsCommand}" />
+              </Grid>
+
+              <Grid Grid.Row="1"
+                    ColumnDefinitions="1.2*,*,*,*,*,1.2*"
+                    Margin="8,0,8,4">
+                <TextBlock Grid.Column="0" Text="Name" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="Master" FontWeight="SemiBold" />
+                <Button x:Name="NpcFilterRaceButton"
+                        Grid.Column="2"
+                        Padding="0"
+                        HorizontalAlignment="Left"
+                        Content="Race"
+                        automation:AutomationProperties.Name="Filter NPCs by race"
+                        Command="{Binding Morphs.ToggleNpcRaceFilterCommand}" />
+                <Popup x:Name="NpcRaceFilterPopup"
+                       Grid.Column="2"
+                       PlacementTarget="{Binding #NpcFilterRaceButton}"
+                       Placement="Bottom"
+                       IsOpen="{Binding Morphs.IsNpcRaceFilterOpen, Mode=TwoWay}">
+                  <Border Padding="8"
+                          Width="240"
+                          MaxHeight="280"
+                          Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                          BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                          BorderThickness="1">
+                    <Grid RowDefinitions="Auto,*,Auto">
+                      <TextBox x:Name="NpcRaceFilterSearchBox"
+                               Grid.Row="0"
+                               automation:AutomationProperties.Name="Search NPC races"
+                               Text="{Binding Morphs.NpcRaceColumnSearchText, Mode=TwoWay}"
+                               PlaceholderText="Search races" />
+                      <ListBox x:Name="NpcRaceFilterValuesListBox"
+                               Grid.Row="1"
+                               Margin="0,8,0,8"
+                               Height="160"
+                               SelectionMode="Multiple"
+                               automation:AutomationProperties.Name="NPC race filter values"
+                               ItemsSource="{Binding Morphs.NpcRaceColumnValues}"
+                               SelectionChanged="OnNpcRaceFilterSelectionChanged" />
+                      <Button Grid.Row="2"
+                              HorizontalAlignment="Right"
+                              Content="Clear"
+                              automation:AutomationProperties.Name="Clear NPC race filter"
+                              Click="OnNpcRaceFilterClearClick" />
+                    </Grid>
+                  </Border>
+                </Popup>
+                <TextBlock Grid.Column="3" Text="EditorID" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="4" Text="FormID" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="5" Text="Slider Presets" FontWeight="SemiBold" />
+              </Grid>
+
+              <ListBox Grid.Row="2"
+                       x:Name="NpcListBox"
+                       SelectionMode="Multiple"
+                       Focusable="True"
+                       automation:AutomationProperties.Name="Individual NPCs"
+                       SelectionChanged="OnNpcSelectionChanged"
+                       ItemsSource="{Binding Morphs.VisibleNpcs}"
+                       SelectedItem="{Binding Morphs.SelectedNpc}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="models:Npc">
+                    <Grid ColumnDefinitions="1.2*,*,*,*,*,1.2*">
+                      <TextBlock Grid.Column="0" Text="{Binding Name}" />
+                      <TextBlock Grid.Column="1" Text="{Binding Mod}" />
+                      <TextBlock Grid.Column="2" Text="{Binding Race}" />
+                      <TextBlock Grid.Column="3" Text="{Binding EditorId}" />
+                      <TextBlock Grid.Column="4" Text="{Binding FormId}" />
+                      <TextBlock Grid.Column="5" Text="{Binding SliderPresetsText}" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Grid>
+          </Border>
+
+          <GridSplitter Grid.Column="3"
+                        Grid.RowSpan="3"
+                        ResizeDirection="Columns" />
+
+          <Border Grid.Column="4"
+                  Grid.RowSpan="3"
+                  Padding="12,8,4,4">
+            <Grid RowDefinitions="Auto,*,Auto,*,Auto">
+              <Grid Grid.Row="0"
+                    ColumnDefinitions="*,Auto,Auto"
+                    Margin="0,0,0,8">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Morphs.SelectedTargetName}"
+                           FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Morphs.TargetPresetCountText}"
+                           VerticalAlignment="Center" />
+                <Button x:Name="ViewImageButton"
+                        Grid.Column="2"
+                        Content="View Image"
+                        Margin="8,0,0,0"
+                        automation:AutomationProperties.Name="View selected NPC image"
+                        Command="{Binding Morphs.ViewSelectedNpcImageCommand}" />
+              </Grid>
+
+              <Border x:Name="TargetPresetWarningBanner"
+                      Grid.Row="0"
+                      Margin="0,28,0,8"
+                      Padding="8"
+                      Background="{DynamicResource BS2BGWarningBackgroundBrush}"
+                      BorderBrush="{DynamicResource BS2BGWarningBorderBrush}"
+                      BorderThickness="1"
+                      IsVisible="{Binding Morphs.IsTargetPresetWarningVisible}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Morphs.TargetPresetWarningText}"
+                             Foreground="{DynamicResource BS2BGWarningForegroundBrush}" />
+                  <Button x:Name="TargetPresetWarningTrimButton"
+                          Content="Trim to 76"
+                          automation:AutomationProperties.Name="Trim selected target to 76 presets"
+                          Command="{Binding Morphs.TrimSelectedTargetTo76Command}"
+                          IsVisible="{Binding Morphs.IsTargetPresetTrimVisible}" />
+                </StackPanel>
+              </Border>
+
+              <Grid Grid.Row="1"
+                    RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0"
+                           Text="Available Presets"
+                           Margin="0,0,0,6" />
+                <ListBox Grid.Row="1"
+                         x:Name="AvailablePresetsListBox"
+                         Focusable="True"
+                         automation:AutomationProperties.Name="Available presets"
+                         ItemsSource="{Binding Morphs.Presets}"
+                         SelectedItem="{Binding Morphs.SelectedAvailablePreset}">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:SliderPreset">
+                      <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+
+              <Grid Grid.Row="2"
+                    ColumnDefinitions="*,*"
+                    Margin="0,8,0,8">
+                <Button x:Name="AddSelectedPresetToTargetButton"
+                        Grid.Column="0"
+                        Content="Add"
+                        automation:AutomationProperties.Name="Add selected preset to target"
+                        Command="{Binding Morphs.AddSelectedPresetToTargetCommand}" />
+                <Button x:Name="AddAllPresetsToTargetButton"
+                        Grid.Column="1"
+                        Margin="8,0,0,0"
+                        Content="Add All"
+                        automation:AutomationProperties.Name="Add all presets to target"
+                        Command="{Binding Morphs.AddAllPresetsToTargetCommand}" />
+              </Grid>
+
+              <Grid Grid.Row="3"
+                    RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0"
+                           Text="Assigned Presets"
+                           Margin="0,0,0,6" />
+                <ListBox Grid.Row="1"
+                         x:Name="AssignedPresetsListBox"
+                         Focusable="True"
+                         automation:AutomationProperties.Name="Assigned presets"
+                         ItemsSource="{Binding Morphs.SelectedTargetPresets}"
+                         SelectedItem="{Binding Morphs.SelectedAssignedPreset}">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:SliderPreset">
+                      <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+
+              <Grid Grid.Row="4"
+                    ColumnDefinitions="*,*"
+                    Margin="0,8,0,0">
+                <Button x:Name="RemoveAssignedPresetButton"
+                        Grid.Column="0"
+                        Content="Remove"
+                        automation:AutomationProperties.Name="Remove assigned preset"
+                        Command="{Binding Morphs.RemoveSelectedPresetFromTargetCommand}" />
+                <Button x:Name="ClearAssignedPresetsButton"
+                        Grid.Column="1"
+                        Margin="8,0,0,0"
+                        Content="Clear"
+                        automation:AutomationProperties.Name="Clear assigned presets"
+                        Command="{Binding Morphs.ClearTargetPresetsCommand}" />
+              </Grid>
+            </Grid>
+          </Border>
+
+          <TextBlock Grid.Column="2"
+                     Grid.Row="1"
+                     Padding="12,4"
+                     Text="{Binding Morphs.StatusMessage}"
+                     TextWrapping="Wrap" />
+
+          <Border Grid.Column="2"
+                  Grid.Row="2"
+                  Padding="12,4,12,4">
+            <Grid RowDefinitions="Auto,*">
+              <Grid Grid.Row="0"
+                    ColumnDefinitions="Auto,Auto,*"
+                    Margin="0,0,0,8">
+                <Button x:Name="GenerateMorphsButton"
+                        Grid.Column="0"
+                        Content="Generate Morphs"
+                        automation:AutomationProperties.Name="Generate morphs"
+                        Command="{Binding Morphs.GenerateMorphsCommand}" />
+                <Button Grid.Column="1"
+                        Margin="8,0,0,0"
+                        Content="Copy"
+                        automation:AutomationProperties.Name="Copy generated morphs"
+                        Command="{Binding Morphs.CopyGeneratedMorphsCommand}" />
+              </Grid>
+              <TextBox Grid.Row="1"
+                       x:Name="GeneratedMorphsTextBox"
+                       automation:AutomationProperties.Name="Generated morphs"
+                       Text="{Binding Morphs.GeneratedMorphsText}"
+                       AcceptsReturn="True"
+                       IsReadOnly="True"
+                       TextWrapping="NoWrap"
+                       FontFamily="Consolas"
+                       FontSize="13" />
+            </Grid>
+          </Border>
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</Window>

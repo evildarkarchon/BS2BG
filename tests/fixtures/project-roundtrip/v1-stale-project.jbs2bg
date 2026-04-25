@@ -1,0 +1,69 @@
+{
+  "SliderPresets": {
+    "Beta.Preset": {
+      "isUUNP": true,
+      "SetSliders": [
+        {
+          "name": "ZedMissingOmitted",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        },
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 50,
+          "pctMin": 25,
+          "pctMax": 75
+        },
+        {
+          "name": "MissingKept",
+          "enabled": false,
+          "valueSmall": null,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "Alpha": {
+      "isUUNP": false,
+      "Profile": "Fallout 4 CBBE",
+      "SetSliders": null
+    }
+  },
+  "CustomMorphTargets": {
+    "TargetZ": {
+      "SliderPresets": [
+        "Missing Preset",
+        "beta preset",
+        "Alpha"
+      ]
+    },
+    "TargetA": {
+      "SliderPresets": null
+    }
+  },
+  "MorphedNPCs": {
+    "Long Form": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "HousecarlWhiterun",
+      "Race": "NordRace",
+      "FormId": "000A2C94",
+      "SliderPresets": [
+        "Beta Preset",
+        "Ghost"
+      ]
+    },
+    "No Assignments": {
+      "Mod": "Dawnguard.esm",
+      "EditorId": "DLC1Nobody",
+      "Race": "NordRaceVampire",
+      "FormId": "00000000",
+      "SliderPresets": null
+    }
+  }
+}

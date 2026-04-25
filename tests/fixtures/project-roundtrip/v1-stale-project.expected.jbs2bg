@@ -1,0 +1,60 @@
+{
+  "SliderPresets": {
+    "Alpha": {
+      "isUUNP": false,
+      "Profile": "Fallout 4 CBBE",
+      "SetSliders": []
+    },
+    "Beta Preset": {
+      "isUUNP": true,
+      "Profile": "Skyrim UUNP",
+      "SetSliders": [
+        {
+          "name": "Arms",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": 50,
+          "pctMin": 25,
+          "pctMax": 75
+        },
+        {
+          "name": "MissingKept",
+          "enabled": false,
+          "valueSmall": null,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    }
+  },
+  "CustomMorphTargets": {
+    "TargetA": {
+      "SliderPresets": []
+    },
+    "TargetZ": {
+      "SliderPresets": [
+        "Alpha",
+        "Beta Preset"
+      ]
+    }
+  },
+  "MorphedNPCs": {
+    "Long Form": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "HousecarlWhiterun",
+      "Race": "NordRace",
+      "FormId": "A2C94",
+      "SliderPresets": [
+        "Beta Preset"
+      ]
+    },
+    "No Assignments": {
+      "Mod": "Dawnguard.esm",
+      "EditorId": "DLC1Nobody",
+      "Race": "NordRaceVampire",
+      "FormId": "0",
+      "SliderPresets": []
+    }
+  }
+}

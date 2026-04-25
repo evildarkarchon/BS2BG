@@ -1,0 +1,21 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="BS2BGWindowBackgroundBrush" Color="#F7F9FC" />
+      <SolidColorBrush x:Key="BS2BGFocusBrush" Color="#005FB8" />
+      <SolidColorBrush x:Key="BS2BGWarningBackgroundBrush" Color="#FFF4CE" />
+      <SolidColorBrush x:Key="BS2BGWarningBorderBrush" Color="#8A6100" />
+      <SolidColorBrush x:Key="BS2BGWarningForegroundBrush" Color="#3B2A00" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="BS2BGWindowBackgroundBrush" Color="#11151A" />
+      <SolidColorBrush x:Key="BS2BGFocusBrush" Color="#7CC4FF" />
+      <SolidColorBrush x:Key="BS2BGWarningBackgroundBrush" Color="#3D2E00" />
+      <SolidColorBrush x:Key="BS2BGWarningBorderBrush" Color="#FFD766" />
+      <SolidColorBrush x:Key="BS2BGWarningForegroundBrush" Color="#FFF6D6" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+
+  <x:Double x:Key="BS2BGPagePadding">16</x:Double>
+</ResourceDictionary>
