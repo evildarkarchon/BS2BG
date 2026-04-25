@@ -18,7 +18,9 @@ public sealed class WindowImageViewService : IImageViewService
 
         EnsureWindow();
         window!.Title = npc.Name;
-        imageControl!.Source = CreateBitmap(imagePath);
+        var bitmap = CreateBitmap(imagePath);
+        DisposeImageSource(imageControl);
+        imageControl!.Source = bitmap;
 
         if (!window.IsVisible)
         {
@@ -64,9 +66,19 @@ public sealed class WindowImageViewService : IImageViewService
         {
             if (!ReferenceEquals(window, createdWindow)) return;
 
+            DisposeImageSource(imageControl);
             imageControl = null;
             window = null;
         };
+    }
+
+    private static void DisposeImageSource(Image? image)
+    {
+        if (image is null) return;
+
+        var source = image.Source;
+        image.Source = null;
+        (source as IDisposable)?.Dispose();
     }
 
     private static Bitmap? CreateBitmap(string? imagePath)
