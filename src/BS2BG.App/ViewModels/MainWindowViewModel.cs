@@ -132,7 +132,7 @@ public sealed class MainWindowViewModel : ReactiveObject
             ExportBodyGenInisAsync,
             CanExportBodyGenInis,
             exception => ReportCommandFailure("Export BodyGen INIs", exception));
-        ShowAboutCommand = new RelayCommand(ShowAbout, () => !IsBusy);
+        ShowAboutCommand = new RelayCommand(ShowAbout, () => !IsAnyBusy);
         UndoCommand = new RelayCommand(() => this.undoRedo.Undo(), () => this.undoRedo.CanUndo);
         RedoCommand = new RelayCommand(() => this.undoRedo.Redo(), () => this.undoRedo.CanRedo);
         FocusGlobalSearchCommand = new RelayCommand(FocusGlobalSearch);
@@ -564,6 +564,7 @@ public sealed class MainWindowViewModel : ReactiveObject
             || args.PropertyName == nameof(MorphsViewModel.IsBusy))
         {
             this.RaisePropertyChanged(nameof(IsAnyBusy));
+            RaiseCommandStatesChanged();
         }
     }
 
@@ -584,15 +585,15 @@ public sealed class MainWindowViewModel : ReactiveObject
         return project.IsDirty ? AppShell.Title + " *" : AppShell.Title;
     }
 
-    private bool CanRunShellCommand() => !IsBusy;
+    private bool CanRunShellCommand() => !IsAnyBusy;
 
-    private bool CanSaveProject() => !IsBusy && (project.IsDirty || CurrentProjectPath is null);
+    private bool CanSaveProject() => !IsAnyBusy && (project.IsDirty || CurrentProjectPath is null);
 
-    private bool CanExportBosJson() => !IsBusy && project.SliderPresets.Count > 0;
+    private bool CanExportBosJson() => !IsAnyBusy && project.SliderPresets.Count > 0;
 
     private bool CanExportBodyGenInis()
     {
-        return !IsBusy
+        return !IsAnyBusy
                && (project.SliderPresets.Count > 0
                    || project.CustomMorphTargets.Count > 0
                    || project.MorphedNpcs.Count > 0);

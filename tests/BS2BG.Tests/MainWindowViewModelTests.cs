@@ -256,6 +256,62 @@ public sealed class MainWindowViewModelTests
         viewModel.IsAnyBusy.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task NewProjectCommandIsDisabledWhileTemplatesAreBusy()
+    {
+        var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService());
+        var disabledDuringBusy = new List<bool>();
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(MainWindowViewModel.IsAnyBusy) && viewModel.IsAnyBusy)
+                disabledDuringBusy.Add(viewModel.NewProjectCommand.CanExecute(null));
+        };
+
+        await viewModel.Templates.ImportPresetsAsync(TestContext.Current.CancellationToken);
+
+        disabledDuringBusy.Should().NotBeEmpty();
+        disabledDuringBusy.Should().OnlyContain(canExecute => !canExecute);
+        viewModel.NewProjectCommand.CanExecute(null).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SaveProjectCommandIsDisabledWhileMorphsAreBusy()
+    {
+        var project = CreateProjectWithPreset("Alpha");
+        var viewModel = CreateViewModel(project, new FakeFileDialogService());
+        var disabledDuringBusy = new List<bool>();
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(MainWindowViewModel.IsAnyBusy) && viewModel.IsAnyBusy)
+                disabledDuringBusy.Add(viewModel.SaveProjectCommand.CanExecute(null));
+        };
+
+        await viewModel.Morphs.ImportNpcsAsync(TestContext.Current.CancellationToken);
+
+        disabledDuringBusy.Should().NotBeEmpty();
+        disabledDuringBusy.Should().OnlyContain(canExecute => !canExecute);
+        viewModel.SaveProjectCommand.CanExecute(null).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExportBosJsonCommandIsDisabledWhileTemplatesAreBusy()
+    {
+        var project = CreateProjectWithPreset("Alpha");
+        var viewModel = CreateViewModel(project, new FakeFileDialogService());
+        var disabledDuringBusy = new List<bool>();
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(MainWindowViewModel.IsAnyBusy) && viewModel.IsAnyBusy)
+                disabledDuringBusy.Add(viewModel.ExportBosJsonCommand.CanExecute(null));
+        };
+
+        await viewModel.Templates.ImportPresetsAsync(TestContext.Current.CancellationToken);
+
+        disabledDuringBusy.Should().NotBeEmpty();
+        disabledDuringBusy.Should().OnlyContain(canExecute => !canExecute);
+        viewModel.ExportBosJsonCommand.CanExecute(null).Should().BeTrue();
+    }
+
     private static MainWindowViewModel CreateViewModel(
         ProjectModel project,
         FakeFileDialogService fileDialogs,
