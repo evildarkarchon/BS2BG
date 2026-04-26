@@ -35,8 +35,15 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     private string _generatedTemplateText = string.Empty;
 
     [ObservableAsProperty] private bool _isBusy;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private bool _isProfileFallbackInformationVisible;
+
     [Reactive] private bool _omitRedundantSliders;
     [Reactive] private string _presetNameInput = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _profileFallbackInformationText = string.Empty;
 
     [Reactive(SetModifier = AccessModifier.Private)]
     private string _previewTemplateText = string.Empty;
@@ -559,6 +566,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         {
             presetSubscription.Disposable = null;
             PresetNameInput = string.Empty;
+            RefreshProfileFallbackInformation();
         }
 
         RebuildSetSliderRows();
@@ -578,6 +586,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         if (!syncingProfileFromPreset && SelectedPreset is not null) SelectedPreset.ProfileName = resolvedName;
 
         RefreshSelectedPresetMissingDefaults(resolvedName);
+        RefreshProfileFallbackInformation();
         RebuildSetSliderRows();
         RefreshSetSliderRowPreviews();
         RefreshPreview();
@@ -589,6 +598,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         if (args.PropertyName == nameof(SliderPreset.ProfileName))
             SetSelectedProfileNameFromPreset(SelectedPreset?.ProfileName);
 
+        RefreshProfileFallbackInformation();
         RefreshPreview();
         RefreshSelectedBosJson();
         RefreshSetSliderRowPreviews();
@@ -613,12 +623,35 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         syncingProfileFromPreset = true;
         try
         {
-            SelectedProfileName = profileName ?? profileCatalog.DefaultProfile.Name;
+            SelectedProfileName = profileCatalog.GetProfile(profileName).Name;
         }
         finally
         {
             syncingProfileFromPreset = false;
         }
+
+        RefreshProfileFallbackInformation();
+    }
+
+    /// <summary>
+    /// Refreshes neutral fallback copy for saved project profiles that are not bundled with the current catalog.
+    /// The selected preset keeps its original profile name so project round trips remain lossless until the user chooses a bundled profile.
+    /// </summary>
+    private void RefreshProfileFallbackInformation()
+    {
+        var savedName = SelectedPreset?.ProfileName;
+        if (string.IsNullOrWhiteSpace(savedName) || profileCatalog.ContainsProfile(savedName))
+        {
+            ProfileFallbackInformationText = string.Empty;
+            IsProfileFallbackInformationVisible = false;
+            return;
+        }
+
+        var fallbackName = profileCatalog.GetProfile(savedName).Name;
+        ProfileFallbackInformationText = "Saved profile \"" + savedName
+                                         + "\" is not bundled. BS2BG is using " + fallbackName
+                                         + " calculation rules for preview and generation until you choose a bundled profile.";
+        IsProfileFallbackInformationVisible = true;
     }
 
     private bool TryValidatePresetName(

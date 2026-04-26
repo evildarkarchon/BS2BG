@@ -263,7 +263,7 @@ public sealed class TemplatesViewModelTests
 
         viewModel.IsProfileFallbackInformationVisible.Should().BeTrue();
         viewModel.ProfileFallbackInformationText.Should().Be(
-            "Saved profile \"Community CBBE\" is not bundled. BS2BG is using Skyrim CBBE calculation rules for preview and generation until you choose a bundled profile.");
+            """Saved profile "Community CBBE" is not bundled. BS2BG is using Skyrim CBBE calculation rules for preview and generation until you choose a bundled profile.""");
     }
 
     [Fact]
