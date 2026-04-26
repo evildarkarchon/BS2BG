@@ -229,6 +229,79 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public async Task ImportPresetFilesAsyncAssignsCurrentlySelectedFallout4ProfileWithoutInference()
+    {
+        using var directory = new TemporaryDirectory();
+        var skyrimNamedFolder = directory.CreateDirectory("Skyrim Special Edition BodySlide");
+        var importFile = TemporaryDirectory.WriteXml(
+            skyrimNamedFolder,
+            "custom.xml",
+            """
+            <SliderPresets>
+              <Preset name="LooksMenuPreset"><SetSlider name="Scale" size="big" value="50"/></Preset>
+            </SliderPresets>
+            """);
+        var viewModel = CreateViewModel();
+        viewModel.SelectedProfileName = ProjectProfileMapping.Fallout4Cbbe;
+
+        await viewModel.ImportPresetFilesAsync(new[] { importFile }, TestContext.Current.CancellationToken);
+
+        var preset = viewModel.Presets.Should().ContainSingle().Which;
+        preset.ProfileName.Should().Be(ProjectProfileMapping.Fallout4Cbbe);
+        viewModel.SelectedPreset.Should().BeSameAs(preset);
+        viewModel.PreviewTemplateText.Should().Be("LooksMenuPreset=Scale@2.0");
+    }
+
+    [Fact]
+    public void SelectingPresetWithUnbundledSavedProfileShowsNeutralFallbackInformation()
+    {
+        var viewModel = CreateViewModel();
+        var preset = new ModelSliderPreset("Community", "Community CBBE");
+        viewModel.Presets.Add(preset);
+
+        viewModel.SelectedPreset = preset;
+
+        viewModel.IsProfileFallbackInformationVisible.Should().BeTrue();
+        viewModel.ProfileFallbackInformationText.Should().Be(
+            "Saved profile \"Community CBBE\" is not bundled. BS2BG is using Skyrim CBBE calculation rules for preview and generation until you choose a bundled profile.");
+    }
+
+    [Fact]
+    public void GenerateTemplatesForUnbundledSavedProfileUsesNeutralFallbackWithoutWarnings()
+    {
+        var viewModel = CreateViewModel();
+        var preset = new ModelSliderPreset("Community", "Community CBBE");
+        preset.AddSetSlider(new ModelSetSlider("CustomBodyModSlider") { ValueSmall = 0, ValueBig = 50 });
+        viewModel.Presets.Add(preset);
+        viewModel.SelectedPreset = preset;
+
+        viewModel.GenerateTemplates();
+
+        viewModel.GeneratedTemplateText.Should().Be("Community=CustomBodyModSlider@0.5");
+        viewModel.SelectedPreset.Should().BeSameAs(preset);
+        viewModel.SelectedPreset.ProfileName.Should().Be("Community CBBE");
+        AssertNoProfileWarningLanguage(
+            viewModel.StatusMessage,
+            viewModel.ValidationMessage,
+            viewModel.ProfileFallbackInformationText);
+    }
+
+    [Fact]
+    public void ExplicitBundledProfileSelectionOverwritesUnbundledSavedProfileAndHidesFallbackInformation()
+    {
+        var viewModel = CreateViewModel();
+        var preset = new ModelSliderPreset("Community", "Community CBBE");
+        viewModel.Presets.Add(preset);
+        viewModel.SelectedPreset = preset;
+
+        viewModel.SelectedProfileName = ProjectProfileMapping.SkyrimUunp;
+
+        preset.ProfileName.Should().Be(ProjectProfileMapping.SkyrimUunp);
+        viewModel.IsProfileFallbackInformationVisible.Should().BeFalse();
+        viewModel.ProfileFallbackInformationText.Should().BeEmpty();
+    }
+
+    [Fact]
     public void SelectingDifferentPresetDoesNotMarkCleanProjectDirty()
     {
         var project = new ProjectModel();
@@ -327,6 +400,14 @@ public sealed class TemplatesViewModelTests
             Array.Empty<SliderDefault>(),
             Array.Empty<SliderMultiplier>(),
             Array.Empty<string>());
+        var uunp = new SliderProfile(
+            Array.Empty<SliderDefault>(),
+            new[] { new SliderMultiplier("Scale", 3f) },
+            Array.Empty<string>());
+        var fallout4 = new SliderProfile(
+            Array.Empty<SliderDefault>(),
+            new[] { new SliderMultiplier("Scale", 4f) },
+            Array.Empty<string>());
         var doubled = new SliderProfile(
             Array.Empty<SliderDefault>(),
             new[] { new SliderMultiplier("Scale", 2f) },
@@ -334,8 +415,21 @@ public sealed class TemplatesViewModelTests
 
         return new TemplateProfileCatalog(new[]
         {
-            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, regular), new TemplateProfile("Double", doubled)
+            new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, regular),
+            new TemplateProfile(ProjectProfileMapping.SkyrimUunp, uunp),
+            new TemplateProfile(ProjectProfileMapping.Fallout4Cbbe, fallout4),
+            new TemplateProfile("Double", doubled)
         });
+    }
+
+    private static void AssertNoProfileWarningLanguage(params string[] messages)
+    {
+        foreach (var message in messages)
+        {
+            message.Contains("warning", StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+            message.Contains("mismatch", StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+            message.Contains("experimental", StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+        }
     }
 
     private static TemplateProfileCatalog CreateCatalogWithProfileDefaults()
@@ -415,9 +509,21 @@ public sealed class TemplatesViewModelTests
 
         public void Dispose() => Directory.Delete(path, true);
 
+        public string CreateDirectory(string directoryName)
+        {
+            var directoryPath = Path.Combine(path, directoryName);
+            Directory.CreateDirectory(directoryPath);
+            return directoryPath;
+        }
+
         public string WriteXml(string fileName, string xml)
         {
-            var filePath = Path.Combine(path, fileName);
+            return WriteXml(path, fileName, xml);
+        }
+
+        public static string WriteXml(string directoryPath, string fileName, string xml)
+        {
+            var filePath = Path.Combine(directoryPath, fileName);
             File.WriteAllText(filePath, xml);
             return filePath;
         }
