@@ -20,12 +20,13 @@ Modders can reliably convert existing BodySlide presets into BodyGen and BoS out
 - ✓ `.jbs2bg` project files can be saved and loaded with backward-compatible project data — M0-M7
 - ✓ Avalonia UI exposes template generation, morph assignment, slider inspection, NPC import, undo/redo, and release packaging workflows — M0-M7
 - ✓ Golden-file, ViewModel, service, and headless UI tests protect core behavior — M0-M7
+- ✓ Bundled profile handling distinguishes Skyrim CBBE, Skyrim UUNP, and Fallout 4 CBBE while preserving legacy/unbundled project profiles — Phase 1
+- ✓ Neutral unresolved-profile fallback information, explicit bundled-profile adoption, and release-facing FO4 calibration context are validated — Phase 1
 
 ### Active
 
 - [ ] Preserve Java parity for every subsequent change touching slider math, import, serialization, or export behavior.
 - [ ] Continue improving modder-facing workflows without breaking existing `.jbs2bg`, BodyGen INI, BoS JSON, or BodySlide XML compatibility.
-- [ ] Generalize profile handling beyond the legacy CBBE/UUNP toggle while preserving legacy `isUUNP` project-file round trips.
 - [ ] Maintain Avalonia 12 compiled-binding and ReactiveUI conventions across all new UI work.
 - [ ] Keep release artifacts portable, self-contained, and straightforward for Windows-first modder distribution.
 
@@ -63,6 +64,7 @@ The primary users are Skyrim SE and Fallout 4 modders who are comfortable with B
 | Split Core from Avalonia App | Keeps math, parsing, serialization, and export logic testable and portable | ✓ Good |
 | Use Avalonia 12 with ReactiveUI conventions | Modern desktop UI while keeping MVVM state and command behavior explicit | ✓ Good |
 | Treat Fallout 4 profile support as experimental until calibrated | FO4 slider defaults/inverts/multipliers lack an authoritative parity source | — Pending |
+| Use neutral unresolved-profile fallback UI in Phase 1 | Locked context decisions forbid warning banners, mismatch heuristics, and in-app FO4 experimental labels for this phase | ✓ Good |
 | Continue scoped future changes through GSD/OpenSpec workflows | Prevents broad regressions in a parity-sensitive tool | — Pending |
 
 ## Evolution
@@ -83,4 +85,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-26 after initialization*
+*Last updated: 2026-04-26 after Phase 1 completion*
