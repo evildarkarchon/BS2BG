@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 Plans:
 - [x] 01-01-PLAN.md — Add distinct bundled Fallout 4 CBBE profile data and catalog wiring.
-- [ ] 01-02-PLAN.md — Preserve legacy/unbundled profile semantics and expose detectable fallback.
+- [x] 01-02-PLAN.md — Preserve legacy/unbundled profile semantics and expose detectable fallback.
 - [ ] 01-03-PLAN.md — Implement selected-profile import and neutral unresolved-profile fallback ViewModel state.
 - [ ] 01-04-PLAN.md — Add neutral fallback UI, info resources, and release-facing FO4 profile note.
 **UI hint**: yes
@@ -96,7 +96,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Profile Correctness and Trust | 1/4 | In Progress | - |
+| 1. Profile Correctness and Trust | 2/4 | In Progress | - |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | Not started | - |
 | 3. Validation and Diagnostics | 0/TBD | Not started | - |
 | 4. Profile Extensibility and Controlled Customization | 0/TBD | Not started | - |

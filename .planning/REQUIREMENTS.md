@@ -10,8 +10,8 @@ Requirements for the next GSD roadmap. Each maps to exactly one roadmap phase.
 ### Profile Correctness
 
 - [x] **PROF-01**: User can select a distinct Fallout 4 CBBE profile that does not reuse Skyrim CBBE or Skyrim UUNP defaults, multipliers, or inverted-slider behavior.
-- [ ] **PROF-02**: User can load existing `.jbs2bg` projects with legacy `isUUNP` values and preserve compatible profile semantics on save.
-- [ ] **PROF-03**: User can see a clear warning when a preset, project, or export path uses an unknown, missing, inferred, or likely mismatched profile.
+- [x] **PROF-02**: User can load existing `.jbs2bg` projects with legacy `isUUNP` values and preserve compatible profile semantics on save.
+- [x] **PROF-03**: User can see a clear warning when a preset, project, or export path uses an unknown, missing, inferred, or likely mismatched profile.
 - [x] **PROF-04**: User can generate templates, morphs, and BoS JSON with profile-specific behavior covered by tests for each bundled profile.
 - [ ] **PROF-05**: User can understand that Fallout 4 profile support is experimental unless authoritative calibration data has been validated.
 
@@ -85,8 +85,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROF-01 | Phase 1: Profile Correctness and Trust | Complete |
-| PROF-02 | Phase 1: Profile Correctness and Trust | Pending |
-| PROF-03 | Phase 1: Profile Correctness and Trust | Pending |
+| PROF-02 | Phase 1: Profile Correctness and Trust | Complete |
+| PROF-03 | Phase 1: Profile Correctness and Trust | Complete |
 | PROF-04 | Phase 1: Profile Correctness and Trust | Complete |
 | PROF-05 | Phase 1: Profile Correctness and Trust | Pending |
 | WORK-01 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
