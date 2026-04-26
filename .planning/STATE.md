@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 UI-SPEC approved.
-last_updated: "2026-04-26T13:06:20.162Z"
-last_activity: 2026-04-26 -- Phase 01 planning complete
+stopped_at: Completed 01-profile-correctness-and-trust-01-PLAN.md
+last_updated: "2026-04-26T13:19:14.268Z"
+last_activity: 2026-04-26
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State
@@ -21,30 +21,30 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** Modders can reliably convert existing BodySlide presets into BodyGen and BoS outputs that match the Java tool's behavior byte-for-byte where compatibility matters.
-**Current focus:** Phase 1 — Profile Correctness and Trust
+**Current focus:** Phase 01 — profile-correctness-and-trust
 
 ## Current Position
 
-Phase: 1 of 5 (Profile Correctness and Trust)
-Plan: TBD in current phase
+Phase: 01 (profile-correctness-and-trust) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-04-26 -- Phase 01 planning complete
+Last activity: 2026-04-26
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: N/A
-- Total execution time: 0.0 hours
+- Total plans completed: 1
+- Average duration: 3 min
+- Total execution time: 0.05 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Profile Correctness and Trust | 0/TBD | 0.0h | N/A |
+| 1. Profile Correctness and Trust | 1/4 | 0.05h | 3 min |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | 0.0h | N/A |
 | 3. Validation and Diagnostics | 0/TBD | 0.0h | N/A |
 | 4. Profile Extensibility and Controlled Customization | 0/TBD | 0.0h | N/A |
@@ -52,10 +52,11 @@ Progress: [░░░░░░░░░░] 0%
 
 **Recent Trend:**
 
-- Last 5 plans: none
-- Trend: N/A
+- Last 5 plans: 01-01 (3 min)
+- Trend: Baseline established
 
 *Updated after each plan completion*
+| Phase 01-profile-correctness-and-trust P01 | 3 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 
 - [Roadmap]: Use the research-backed five-phase structure at standard granularity.
 - [Roadmap]: Keep profile correctness before workflow, diagnostics, extensibility, and automation work.
+- [Phase 1]: Keep root-level FO4 profile JSON — Phase 1 D-01/D-03 keep bundled profile files at repository root while registering Fallout 4 CBBE through settings_FO4_CBBE.json.
+- [Phase 1]: Verify FO4 default generation without rebasing golden files — Distinct FO4 profile output intentionally differs from the prior Skyrim reuse path, so focused assertions preserve D-14 without editing expected fixtures.
 
 ### Pending Todos
 
@@ -89,6 +92,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-26 05:47
-Stopped at: Phase 1 UI-SPEC approved.
-Resume file: .planning/phases/01-profile-correctness-and-trust/01-UI-SPEC.md
+Last session: 2026-04-26T13:18:45.678Z
+Stopped at: Completed 01-profile-correctness-and-trust-01-PLAN.md
+Resume file: None
