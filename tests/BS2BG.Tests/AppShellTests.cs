@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Avalonia.Automation;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -100,6 +101,77 @@ public sealed class AppShellTests
                 "Export BodyGen INIs", "About Bodyslide to Bodygen");
     }
 
+    /// <summary>
+    /// Verifies that the Templates workflow exposes the neutral unresolved-profile fallback panel by name and automation label.
+    /// </summary>
+    [AvaloniaFact]
+    public void MainWindowExposesProfileFallbackInformationPanel()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var window = provider.GetRequiredService<MainWindow>();
+        window.ApplyTemplate();
+
+        var panel = window.FindControl<Border>("ProfileFallbackInformationPanel");
+
+        panel.Should().NotBeNull();
+        AutomationProperties.GetName(panel).Should().Be("Profile fallback information");
+    }
+
+    /// <summary>
+    /// Verifies that bundled profile selector names remain exact user-facing labels without confidence qualifiers.
+    /// </summary>
+    [AvaloniaFact]
+    public void MainWindowProfileSelectorUsesBundledDisplayNamesWithoutExperimentalLabel()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var window = provider.GetRequiredService<MainWindow>();
+        var viewModel = window.ViewModel.Should().BeOfType<MainWindowViewModel>().Which;
+
+        viewModel.Templates.ProfileNames.Should().Equal("Skyrim CBBE", "Skyrim UUNP", "Fallout 4 CBBE");
+        viewModel.Templates.ProfileNames.Should().OnlyContain(name =>
+            !name.Contains("experimental", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Verifies that visible shell copy does not introduce mismatch or experimental warnings in the main workflow.
+    /// </summary>
+    [AvaloniaFact]
+    public void MainWindowWorkflowCopyDoesNotContainMismatchOrExperimentalLanguage()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var window = provider.GetRequiredService<MainWindow>();
+        window.ApplyTemplate();
+
+        var shellText = string.Join("\n", CollectMainWorkflowCopy(window));
+
+        shellText.Contains("experimental", StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+        shellText.Contains("mismatch", StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that neutral information brushes exist as resources distinct from warning banner brushes.
+    /// </summary>
+    [AvaloniaFact]
+    public void ThemeResourcesDefineNeutralProfileFallbackBrushesDistinctFromWarnings()
+    {
+        var resources = File.ReadAllText(Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "BS2BG.App", "Themes", "ThemeResources.axaml")));
+
+        resources.Should().Contain("BS2BGInfoBackgroundBrush");
+        resources.Should().Contain("BS2BGInfoBorderBrush");
+        resources.Should().Contain("BS2BGInfoForegroundBrush");
+        resources.Should().Contain("BS2BGWarningBackgroundBrush");
+        resources.Should().Contain("BS2BGWarningBorderBrush");
+        resources.Should().Contain("BS2BGWarningForegroundBrush");
+        resources.Should().Contain("BS2BGInfoBackgroundBrush\" Color=\"#EEF6FF");
+        resources.Should().Contain("BS2BGInfoBackgroundBrush\" Color=\"#102A43");
+        resources.Should().NotContain("BS2BGInfoBackgroundBrush\" Color=\"#FFF4CE");
+        resources.Should().NotContain("BS2BGInfoBackgroundBrush\" Color=\"#3D2E00");
+    }
+
     [AvaloniaFact]
     public void MainWindowRoutesM5CommandsThroughMenuItemsAndKeyBindings()
     {
@@ -128,6 +200,35 @@ public sealed class AppShellTests
             ReferenceEquals(binding.Command, viewModel.ExportBodyGenInisCommand)
             && binding.Gesture?.Key == Key.X
             && binding.Gesture.KeyModifiers == KeyModifiers.Control).Should().BeTrue();
+    }
+
+    private static IEnumerable<string> CollectMainWorkflowCopy(MainWindow window)
+    {
+        foreach (var descendant in window.GetLogicalDescendants())
+        {
+            switch (descendant)
+            {
+                case TextBlock { Text: { Length: > 0 } text }:
+                    yield return text;
+                    break;
+                case Button { Content: not null } button:
+                    yield return button.Content.ToString()!;
+                    break;
+                case MenuItem { Header: not null } menuItem:
+                    yield return menuItem.Header.ToString()!;
+                    break;
+                case ComboBox comboBox:
+                    foreach (var item in comboBox.Items)
+                    {
+                        if (item is not null)
+                        {
+                            yield return item.ToString()!;
+                        }
+                    }
+
+                    break;
+            }
+        }
     }
 
     [AvaloniaFact]
