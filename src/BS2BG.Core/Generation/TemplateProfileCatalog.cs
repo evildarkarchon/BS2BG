@@ -17,17 +17,27 @@ public sealed class TemplateProfileCatalog
 
     public TemplateProfile DefaultProfile => profiles[0];
 
+    /// <summary>
+    /// Returns whether the catalog contains a bundled profile whose display name matches the supplied name.
+    /// Unknown, null, and whitespace-only names remain distinguishable so callers can surface neutral fallback information.
+    /// </summary>
+    public bool ContainsProfile(string? name) => FindProfile(name) is not null;
+
     public TemplateProfile GetProfile(string? name)
     {
-        if (!string.IsNullOrWhiteSpace(name))
-        {
-            var match = profiles.FirstOrDefault(profile => string.Equals(
-                profile.Name,
-                name,
-                StringComparison.OrdinalIgnoreCase));
-            if (match is not null) return match;
-        }
+        var match = FindProfile(name);
+        if (match is not null) return match;
 
         return DefaultProfile;
+    }
+
+    private TemplateProfile? FindProfile(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        return profiles.FirstOrDefault(profile => string.Equals(
+            profile.Name,
+            name,
+            StringComparison.OrdinalIgnoreCase));
     }
 }
