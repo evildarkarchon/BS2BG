@@ -153,8 +153,49 @@ public sealed class SliderMathFormatterTests
                            "  \"float\": {\n" +
                            "    \"highvalue1\": 0.5,\n" +
                            "    \"lowvalue1\": 0\n" +
-                           "  }\n" +
-                           "}");
+                            "  }\n" +
+                            "}");
+    }
+
+    [Fact]
+    public void BosJsonUsesBundledProfileSpecificSliderTables()
+    {
+        var skyrimCbbeProfile = LoadRootProfile("settings.json");
+        var skyrimUunpProfile = LoadRootProfile("settings_UUNP.json");
+        var fallout4CbbeProfile = LoadRootProfile("settings_FO4_CBBE.json");
+        var preset = new SliderPreset(
+            "SharedBody",
+            new[] { new SetSlider("Breasts") { ValueSmall = 50, ValueBig = 100 } });
+
+        var skyrimCbbeJson = NormalizeNewlines(SliderMathFormatter.FormatBosJson(preset, skyrimCbbeProfile));
+        var skyrimUunpJson = NormalizeNewlines(SliderMathFormatter.FormatBosJson(preset, skyrimUunpProfile));
+        var fallout4CbbeJson = NormalizeNewlines(SliderMathFormatter.FormatBosJson(preset, fallout4CbbeProfile));
+
+        fallout4CbbeJson.Should().Contain("\"slidername1\": \"AppleCheeks\"");
+        fallout4CbbeJson.Should().Contain("\"slidername6\": \"BreastCenterBig\"");
+        fallout4CbbeJson.Should().Contain("\"slidername14\": \"ButtNew\"");
+        fallout4CbbeJson.Should().Contain("\"slidername17\": \"ChubbyWaist\"");
+        fallout4CbbeJson.Should().Contain("\"slidername20\": \"HipBack\"");
+        fallout4CbbeJson.Should().Contain("\"slidername24\": \"ShoulderTweak\"");
+
+        skyrimCbbeJson.Should().NotContain("BreastCenterBig");
+        skyrimCbbeJson.Should().NotContain("ButtNew");
+        skyrimCbbeJson.Should().NotContain("ShoulderTweak");
+        skyrimCbbeJson.Should().NotContain("HipBack");
+        skyrimCbbeJson.Should().NotContain("ChubbyWaist");
+        skyrimUunpJson.Should().NotContain("BreastCenterBig");
+        skyrimUunpJson.Should().NotContain("ButtNew");
+        skyrimUunpJson.Should().NotContain("ShoulderTweak");
+        skyrimUunpJson.Should().NotContain("HipBack");
+        skyrimUunpJson.Should().NotContain("ChubbyWaist");
+
+        skyrimCbbeJson.Should().Contain("\"slidername1\": \"Breasts\"");
+        skyrimCbbeJson.Should().Contain("\"highvalue1\": 0");
+        skyrimCbbeJson.Should().Contain("\"lowvalue1\": 0.5");
+        skyrimUunpJson.Should().NotContain("\"slidername1\": \"Breasts\"");
+        fallout4CbbeJson.Should().Contain("\"slidername12\": \"Breasts\"");
+        fallout4CbbeJson.Should().Contain("\"highvalue12\": 1");
+        fallout4CbbeJson.Should().Contain("\"lowvalue12\": 0.5");
     }
 
     private static string FormatTemplates(IEnumerable<SliderPreset> presets, SliderProfile profile, bool omitRedundant)
@@ -213,6 +254,17 @@ public sealed class SliderMathFormatterTests
     private static SliderProfile LoadProfile(string fileName)
     {
         var path = Path.Combine(RepositoryRoot, "tests", "fixtures", "inputs", "profiles", fileName);
+        return LoadProfileFromPath(path);
+    }
+
+    private static SliderProfile LoadRootProfile(string fileName)
+    {
+        var path = Path.Combine(RepositoryRoot, fileName);
+        return LoadProfileFromPath(path);
+    }
+
+    private static SliderProfile LoadProfileFromPath(string path)
+    {
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var root = document.RootElement;
 
