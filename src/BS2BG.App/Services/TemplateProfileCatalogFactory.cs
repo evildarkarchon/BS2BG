@@ -26,7 +26,7 @@ public static class TemplateProfileCatalogFactory
             new TemplateProfile(ProjectProfileMapping.SkyrimUunp,
                 LoadRequiredProfile("settings_UUNP.json", directories)),
             new TemplateProfile(ProjectProfileMapping.Fallout4Cbbe,
-                LoadRequiredProfile("settings.json", directories))
+                LoadRequiredProfile("settings_FO4_CBBE.json", directories))
         });
     }
 

@@ -29,5 +29,6 @@
   <ItemGroup>
     <Content Include="..\..\settings.json" Link="settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/>
     <Content Include="..\..\settings_UUNP.json" Link="settings_UUNP.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/>
+    <Content Include="..\..\settings_FO4_CBBE.json" Link="settings_FO4_CBBE.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/>
   </ItemGroup>
 </Project>

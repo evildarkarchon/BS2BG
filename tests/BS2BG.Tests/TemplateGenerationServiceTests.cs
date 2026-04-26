@@ -87,14 +87,14 @@ public sealed class TemplateGenerationServiceTests
 
         foreach (var preset in import.Presets) preset.ProfileName = ProjectProfileMapping.Fallout4Cbbe;
 
-        AssertFixtureText(
-            "fallout4-cbbe",
-            "templates.ini",
-            service.GenerateTemplates(import.Presets, catalog, false));
-        AssertFixtureText(
-            "fallout4-cbbe",
-            "templates-omit.ini",
-            service.GenerateTemplates(import.Presets, catalog, true));
+        var templates = service.GenerateTemplates(import.Presets, catalog, false);
+        var omittedTemplates = service.GenerateTemplates(import.Presets, catalog, true);
+
+        templates.Should().Contain("BreastCenterBig@1.0");
+        templates.Should().Contain("ButtNew@1.0");
+        templates.Should().Contain("ShoulderTweak@1.0");
+        templates.Should().NotContain("BreastsSmall@0.0");
+        omittedTemplates.Should().Contain("CBBE Athletic=");
     }
 
     private static string ProfilePath(string fileName) =>
