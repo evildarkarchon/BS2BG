@@ -1,23 +1,16 @@
 ---
 phase: 01-profile-correctness-and-trust
-reviewed: 2026-04-26T13:35:00Z
+reviewed: 2026-04-26T14:06:00Z
 depth: standard
-files_reviewed: 14
+files_reviewed: 7
 files_reviewed_list:
-  - settings_FO4_CBBE.json
-  - src/BS2BG.App/BS2BG.App.csproj
-  - src/BS2BG.App/Services/TemplateProfileCatalogFactory.cs
-  - src/BS2BG.Core/Generation/TemplateProfileCatalog.cs
   - src/BS2BG.App/ViewModels/TemplatesViewModel.cs
-  - src/BS2BG.App/Themes/ThemeResources.axaml
-  - src/BS2BG.App/Views/MainWindow.axaml
-  - docs/release/README.md
-  - tests/BS2BG.Tests/TemplateProfileCatalogFactoryTests.cs
-  - tests/BS2BG.Tests/TemplateGenerationServiceTests.cs
-  - tests/BS2BG.Tests/TemplateProfileCatalogTests.cs
-  - tests/BS2BG.Tests/ProjectFileServiceTests.cs
   - tests/BS2BG.Tests/TemplatesViewModelTests.cs
-  - tests/BS2BG.Tests/AppShellTests.cs
+  - tests/BS2BG.Tests/SliderMathFormatterTests.cs
+  - tests/BS2BG.Tests/ExportWriterTests.cs
+  - tests/BS2BG.Tests/MorphCoreTests.cs
+  - .planning/ROADMAP.md
+  - .planning/REQUIREMENTS.md
 findings:
   critical: 0
   warning: 1
@@ -28,50 +21,36 @@ status: issues_found
 
 # Phase 01: Code Review Report
 
-**Reviewed:** 2026-04-26T13:35:00Z  
+**Reviewed:** 2026-04-26T14:06:00Z  
 **Depth:** standard  
-**Files Reviewed:** 14  
+**Files Reviewed:** 7  
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the Phase 01 plan/summary context and the source, test, and release-documentation files changed for profile correctness and trust. The bundled FO4 profile wiring, catalog detection helper, neutral fallback copy, AXAML binding, and focused tests are generally coherent, but the unresolved-profile UX has a behavioral trap: when the fallback calculation profile is already selected, the user cannot explicitly adopt that same bundled profile through the profile selector.
+Reviewed the Phase 01 gap-closure plans 01-05, 01-06, and 01-07 plus the changed ViewModel, tests, and planning contract documents. The prior review warning is resolved: unresolved saved profiles now leave the selector blank, preview/BoS/inspector math uses the fallback calculation profile, and choosing the displayed fallback bundled profile explicitly adopts it. The remaining issue is advisory test coverage: the new UUNP BoS JSON assertion is too weak to catch a regression where the UUNP path accidentally uses the Skyrim CBBE output.
 
 ## Warnings
 
-### WR-01: Fallback-selected default profile cannot be explicitly adopted from the selector
+### WR-01: UUNP BoS JSON coverage does not prove the UUNP profile table is used
 
-**File:** `src/BS2BG.App/ViewModels/TemplatesViewModel.cs:621-633`, `src/BS2BG.App/ViewModels/TemplatesViewModel.cs:577-587`
+**File:** `tests/BS2BG.Tests/SliderMathFormatterTests.cs:192-198`
 
-**Issue:** When a preset is loaded with an unbundled saved profile such as `Community CBBE`, `SetSelectedProfileNameFromPreset` immediately sets `SelectedProfileName` to `profileCatalog.GetProfile(profileName).Name`, usually `Skyrim CBBE`. The only code path that overwrites `SelectedPreset.ProfileName` with a bundled profile is `OnSelectedProfileNameChangedReactive`, which only runs when `SelectedProfileName` changes. If the user wants to accept the displayed fallback profile (`Skyrim CBBE`), selecting the already-selected ComboBox item does not change the bound value, so `SelectedPreset.ProfileName` remains `Community CBBE` and the fallback panel stays visible. This violates the intended “until you choose a bundled profile” behavior for the default fallback profile.
+**Issue:** `BosJsonUsesBundledProfileSpecificSliderTables` adds strong FO4-only assertions and exact Skyrim CBBE `Breasts` values, but the UUNP branch only asserts that the UUNP JSON does not contain `"slidername1": "Breasts"`. That assertion would still pass if the UUNP variable accidentally received the Skyrim CBBE JSON, because Skyrim CBBE emits `Breasts` as `slidername2`, not `slidername1`. This leaves part of the prior verification gap insufficiently protected: the test does not fail for a plausible UUNP profile-regression path.
 
-**Fix:** Add an explicit adoption path for the displayed fallback profile, or avoid preselecting the fallback item as the actual selector value. For example, keep calculation fallback separate from the selector value and only write the preset profile when the user selects an actual bundled value:
+**Fix:** Add exact UUNP assertions that would fail if the output matched Skyrim CBBE or FO4. For example, assert the UUNP default-only `Breasts` preset produces no non-redundant sliders and differs from the CBBE output:
 
 ```csharp
-private string EffectiveProfileName => profileCatalog.GetProfile(SelectedPreset?.ProfileName ?? SelectedProfileName).Name;
-
-private void SetSelectedProfileNameFromPreset(string? profileName)
-{
-    syncingProfileFromPreset = true;
-    try
-    {
-        SelectedProfileName = profileCatalog.ContainsProfile(profileName)
-            ? profileCatalog.GetProfile(profileName).Name
-            : string.Empty; // no bundled selection has been explicitly chosen yet
-    }
-    finally
-    {
-        syncingProfileFromPreset = false;
-    }
-
-    RefreshProfileFallbackInformation();
-}
+skyrimUunpJson.Should().Contain("\"slidersnumber\": 0");
+skyrimUunpJson.Should().NotContain("\"slidername");
+skyrimUunpJson.Should().NotBe(skyrimCbbeJson);
+skyrimUunpJson.Should().NotBe(fallout4CbbeJson);
 ```
 
-Then use `EffectiveProfileName` for preview/generation fallback, or add a visible fallback-panel action such as “Use Skyrim CBBE” that sets `SelectedPreset.ProfileName = profileCatalog.GetProfile(SelectedPreset.ProfileName).Name` and refreshes fallback state.
+If the intent is to prove UUNP inversion with an explicit slider, add a second UUNP-specific preset/assertion with explicit values and exact `highvalue`/`lowvalue` expectations.
 
 ---
 
-_Reviewed: 2026-04-26T13:35:00Z_  
+_Reviewed: 2026-04-26T14:06:00Z_  
 _Reviewer: the agent (gsd-code-reviewer)_  
 _Depth: standard_
