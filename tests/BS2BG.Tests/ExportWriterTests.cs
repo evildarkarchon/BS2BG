@@ -68,7 +68,7 @@ public sealed class ExportWriterTests
 
         var result = writer.Write(directory.Path, templatesText, morphsText);
 
-        File.ReadAllText(result.TemplatesPath).Should().Be("Alpha=Breasts@0.0\r\nBeta=Breasts@0.0");
+        File.ReadAllText(result.TemplatesPath).Should().Be("Alpha=Breasts@0.0\r\nBeta=Breasts@1.0");
         File.ReadAllText(result.MorphsPath).Should().Be("All|Female=Alpha\r\nSkyrim.esm|A2C94=Beta");
     }
 
