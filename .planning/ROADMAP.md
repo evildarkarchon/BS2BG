@@ -29,12 +29,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. User can open and save legacy `.jbs2bg` projects while preserving compatible `isUUNP` profile semantics.
   3. User can see clear warnings for unknown, missing, inferred, mismatched, or experimental profile states before generation or export.
   4. User can generate templates, morphs, and BoS JSON with bundled-profile behavior protected by profile-specific tests.
-**Plans**: 4 plans
+**Plans**: 7 plans
 Plans:
 - [x] 01-01-PLAN.md — Add distinct bundled Fallout 4 CBBE profile data and catalog wiring.
 - [x] 01-02-PLAN.md — Preserve legacy/unbundled profile semantics and expose detectable fallback.
 - [x] 01-03-PLAN.md — Implement selected-profile import and neutral unresolved-profile fallback ViewModel state.
 - [x] 01-04-PLAN.md — Add neutral fallback UI, info resources, and release-facing FO4 profile note.
+- [ ] 01-05-PLAN.md — Fix explicit adoption of the displayed fallback profile without adding warning UX.
+- [ ] 01-06-PLAN.md — Add profile-specific BoS JSON, BodyGen export, and morph profile-independence tests.
+- [ ] 01-07-PLAN.md — Reconcile roadmap/requirements warning wording with locked neutral-fallback decisions.
 **UI hint**: yes
 
 ### Phase 2: Workflow Persistence, Filtering, and Undo Hardening
@@ -96,7 +99,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Profile Correctness and Trust | 4/4 | Complete   | 2026-04-26 |
+| 1. Profile Correctness and Trust | 4/7 | Gap closure planned | 2026-04-26 |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | Not started | - |
 | 3. Validation and Diagnostics | 0/TBD | Not started | - |
 | 4. Profile Extensibility and Controlled Customization | 0/TBD | Not started | - |
