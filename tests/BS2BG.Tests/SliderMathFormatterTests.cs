@@ -165,18 +165,18 @@ public sealed class SliderMathFormatterTests
         var fallout4CbbeProfile = LoadRootProfile("settings_FO4_CBBE.json");
         var preset = new SliderPreset(
             "SharedBody",
-            new[] { new SetSlider("Breasts") { ValueSmall = 50, ValueBig = 100 } });
+            new[] { new SetSlider("Breasts") });
 
         var skyrimCbbeJson = NormalizeNewlines(SliderMathFormatter.FormatBosJson(preset, skyrimCbbeProfile));
         var skyrimUunpJson = NormalizeNewlines(SliderMathFormatter.FormatBosJson(preset, skyrimUunpProfile));
         var fallout4CbbeJson = NormalizeNewlines(SliderMathFormatter.FormatBosJson(preset, fallout4CbbeProfile));
 
-        fallout4CbbeJson.Should().Contain("\"slidername1\": \"AppleCheeks\"");
-        fallout4CbbeJson.Should().Contain("\"slidername6\": \"BreastCenterBig\"");
-        fallout4CbbeJson.Should().Contain("\"slidername14\": \"ButtNew\"");
-        fallout4CbbeJson.Should().Contain("\"slidername17\": \"ChubbyWaist\"");
-        fallout4CbbeJson.Should().Contain("\"slidername20\": \"HipBack\"");
-        fallout4CbbeJson.Should().Contain("\"slidername24\": \"ShoulderTweak\"");
+        fallout4CbbeJson.Should().Contain("\"slidername2\": \"AppleCheeks\"");
+        fallout4CbbeJson.Should().Contain("\"slidername7\": \"BreastCenterBig\"");
+        fallout4CbbeJson.Should().Contain("\"slidername17\": \"ButtNew\"");
+        fallout4CbbeJson.Should().Contain("\"slidername19\": \"ChubbyWaist\"");
+        fallout4CbbeJson.Should().Contain("\"slidername21\": \"HipBack\"");
+        fallout4CbbeJson.Should().Contain("\"slidername27\": \"ShoulderTweak\"");
 
         skyrimCbbeJson.Should().NotContain("BreastCenterBig");
         skyrimCbbeJson.Should().NotContain("ButtNew");
@@ -189,13 +189,13 @@ public sealed class SliderMathFormatterTests
         skyrimUunpJson.Should().NotContain("HipBack");
         skyrimUunpJson.Should().NotContain("ChubbyWaist");
 
-        skyrimCbbeJson.Should().Contain("\"slidername1\": \"Breasts\"");
-        skyrimCbbeJson.Should().Contain("\"highvalue1\": 0");
-        skyrimCbbeJson.Should().Contain("\"lowvalue1\": 0.5");
+        skyrimCbbeJson.Should().Contain("\"slidername2\": \"Breasts\"");
+        skyrimCbbeJson.Should().Contain("\"highvalue2\": 0");
+        skyrimCbbeJson.Should().Contain("\"lowvalue2\": 0.8");
         skyrimUunpJson.Should().NotContain("\"slidername1\": \"Breasts\"");
         fallout4CbbeJson.Should().Contain("\"slidername12\": \"Breasts\"");
         fallout4CbbeJson.Should().Contain("\"highvalue12\": 1");
-        fallout4CbbeJson.Should().Contain("\"lowvalue12\": 0.5");
+        fallout4CbbeJson.Should().Contain("\"lowvalue12\": 1");
     }
 
     private static string FormatTemplates(IEnumerable<SliderPreset> presets, SliderProfile profile, bool omitRedundant)
