@@ -120,6 +120,62 @@ public sealed class ProjectFileServiceTests
     }
 
     [Fact]
+    public void LoadAndSavePreservesUnbundledProfileNameExactly()
+    {
+        var service = new ProjectFileService();
+
+        var project = service.LoadFromString(
+            """
+            {
+              "SliderPresets": {
+                "Alpha": {
+                  "isUUNP": false,
+                  "Profile": "Community CBBE",
+                  "SetSliders": []
+                }
+              },
+              "CustomMorphTargets": {},
+              "MorphedNPCs": {}
+            }
+            """);
+
+        var preset = project.SliderPresets.Should().ContainSingle().Which;
+        preset.ProfileName.Should().Be("Community CBBE");
+        preset.IsUunp.Should().BeFalse();
+
+        var saved = service.SaveToString(project);
+        saved.Should().Contain("\"Profile\": \"Community CBBE\"");
+    }
+
+    [Theory]
+    [InlineData(true, ProjectProfileMapping.SkyrimUunp)]
+    [InlineData(false, ProjectProfileMapping.SkyrimCbbe)]
+    public void LoadLegacyProjectWithoutProfileMapsThroughIsUunp(bool isUunp, string expectedProfile)
+    {
+        var service = new ProjectFileService();
+
+        var project = service.LoadFromString(
+            $$"""
+            {
+              "SliderPresets": {
+                "Alpha": {
+                  "isUUNP": {{isUunp.ToString().ToLowerInvariant()}},
+                  "SetSliders": []
+                }
+              },
+              "CustomMorphTargets": {},
+              "MorphedNPCs": {}
+            }
+            """);
+
+        var preset = project.SliderPresets.Should().ContainSingle().Which;
+        preset.ProfileName.Should().Be(expectedProfile);
+        savedLegacyProfile(project, service).Should().Contain($"\"Profile\": \"{expectedProfile}\"");
+
+        static string savedLegacyProfile(ProjectModel project, ProjectFileService service) => service.SaveToString(project);
+    }
+
+    [Fact]
     public void LoadFromStringThrowsForPresetNameContainingForbiddenCharacter()
     {
         var service = new ProjectFileService();
