@@ -38,7 +38,7 @@ Plans:
 - [x] 01-04-PLAN.md — Add neutral fallback UI, info resources, and release-facing FO4 profile note.
 - [x] 01-05-PLAN.md — Fix explicit adoption of the displayed fallback profile without adding warning UX.
 - [x] 01-06-PLAN.md — Add profile-specific BoS JSON, BodyGen export, and morph profile-independence tests.
-- [ ] 01-07-PLAN.md — Reconcile roadmap/requirements warning wording with locked neutral-fallback decisions.
+- [x] 01-07-PLAN.md — Reconcile roadmap/requirements warning wording with locked neutral-fallback decisions.
 **UI hint**: yes
 
 ### Phase 2: Workflow Persistence, Filtering, and Undo Hardening
@@ -100,7 +100,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Profile Correctness and Trust | 6/7 | In Progress | 2026-04-26 |
+| 1. Profile Correctness and Trust | 7/7 | Complete   | 2026-04-26 |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | Not started | - |
 | 3. Validation and Diagnostics | 0/TBD | Not started | - |
 | 4. Profile Extensibility and Controlled Customization | 0/TBD | Not started | - |
