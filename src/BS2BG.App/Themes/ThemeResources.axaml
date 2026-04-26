@@ -7,6 +7,9 @@
       <SolidColorBrush x:Key="BS2BGWarningBackgroundBrush" Color="#FFF4CE" />
       <SolidColorBrush x:Key="BS2BGWarningBorderBrush" Color="#8A6100" />
       <SolidColorBrush x:Key="BS2BGWarningForegroundBrush" Color="#3B2A00" />
+      <SolidColorBrush x:Key="BS2BGInfoBackgroundBrush" Color="#EEF6FF" />
+      <SolidColorBrush x:Key="BS2BGInfoBorderBrush" Color="#8CBFE8" />
+      <SolidColorBrush x:Key="BS2BGInfoForegroundBrush" Color="#17324D" />
     </ResourceDictionary>
     <ResourceDictionary x:Key="Dark">
       <SolidColorBrush x:Key="BS2BGWindowBackgroundBrush" Color="#11151A" />
@@ -14,6 +17,9 @@
       <SolidColorBrush x:Key="BS2BGWarningBackgroundBrush" Color="#3D2E00" />
       <SolidColorBrush x:Key="BS2BGWarningBorderBrush" Color="#FFD766" />
       <SolidColorBrush x:Key="BS2BGWarningForegroundBrush" Color="#FFF6D6" />
+      <SolidColorBrush x:Key="BS2BGInfoBackgroundBrush" Color="#102A43" />
+      <SolidColorBrush x:Key="BS2BGInfoBorderBrush" Color="#4E8DBD" />
+      <SolidColorBrush x:Key="BS2BGInfoForegroundBrush" Color="#D8ECFF" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 

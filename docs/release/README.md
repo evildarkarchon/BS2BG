@@ -8,6 +8,7 @@ preset XML data into BodyGen `templates.ini`, `morphs.ini`, and BoS JSON output.
 - `BS2BG.App.exe` - self-contained Windows x64 executable.
 - `settings.json` - Skyrim CBBE profile data.
 - `settings_UUNP.json` - Skyrim UUNP profile data.
+- `settings_FO4_CBBE.json` - Fallout 4 CBBE profile data.
 - `assets/res/icon.png` - source icon asset.
 - `CREDITS.md` - original and port author credits.
 - `RELEASE-NOTES.md` - v1.0.0 release notes and known limitations.
@@ -22,6 +23,13 @@ Java runtime, or .NET runtime is required for the packaged Windows build.
 
 Keep the profile JSON files next to the executable. They are loaded from the
 application directory at startup.
+
+## Fallout 4 CBBE profile
+
+The bundled Fallout 4 CBBE profile uses a distinct FO4 slider seed with `1.0`
+defaults, `1.0` multipliers, and no inverted sliders until authoritative
+calibration data is validated. This release note keeps the profile-confidence
+context outside the in-app main workflow.
 
 ## Verification
 
