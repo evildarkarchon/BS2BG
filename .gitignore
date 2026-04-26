@@ -446,3 +446,6 @@ FodyWeavers.xsd
 hs_err_pid*
 replay_pid*
 .claude/worktrees
+# CocoIndex Code (ccc)
+/.cocoindex_code/
+jBS2BG.code-workspace
