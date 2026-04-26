@@ -192,7 +192,10 @@ public sealed class SliderMathFormatterTests
         skyrimCbbeJson.Should().Contain("\"slidername2\": \"Breasts\"");
         skyrimCbbeJson.Should().Contain("\"highvalue2\": 0");
         skyrimCbbeJson.Should().Contain("\"lowvalue2\": 0.8");
-        skyrimUunpJson.Should().NotContain("\"slidername1\": \"Breasts\"");
+        skyrimUunpJson.Should().Contain("\"slidersnumber\": 0");
+        skyrimUunpJson.Should().NotContain("\"slidername");
+        skyrimUunpJson.Should().NotBe(skyrimCbbeJson);
+        skyrimUunpJson.Should().NotBe(fallout4CbbeJson);
         fallout4CbbeJson.Should().Contain("\"slidername12\": \"Breasts\"");
         fallout4CbbeJson.Should().Contain("\"highvalue12\": 1");
         fallout4CbbeJson.Should().Contain("\"lowvalue12\": 1");
