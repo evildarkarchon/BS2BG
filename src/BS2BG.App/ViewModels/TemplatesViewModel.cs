@@ -498,7 +498,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
 
         PreviewTemplateText = templateGenerationService.PreviewTemplate(
             SelectedPreset,
-            profileCatalog.GetProfile(SelectedProfileName),
+            GetSelectedCalculationProfile(),
             OmitRedundantSliders);
     }
 
@@ -531,7 +531,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
             ? string.Empty
             : templateGenerationService.PreviewBosJson(
                 SelectedPreset,
-                profileCatalog.GetProfile(SelectedProfileName));
+                GetSelectedCalculationProfile());
     }
 
     private void OnSelectedPresetChangedReactive(SliderPreset? preset)
@@ -560,7 +560,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
             presetSubscription.Disposable = subscription;
             PresetNameInput = preset.Name;
             SetSelectedProfileNameFromPreset(preset.ProfileName);
-            RefreshSelectedPresetMissingDefaults(SelectedProfileName);
+            RefreshSelectedPresetMissingDefaults(GetSelectedCalculationProfile().Name);
         }
         else
         {
@@ -576,6 +576,8 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
 
     private void OnSelectedProfileNameChangedReactive(string profileName)
     {
+        if (syncingProfileFromPreset && string.IsNullOrWhiteSpace(profileName)) return;
+
         var resolvedName = profileCatalog.GetProfile(profileName).Name;
         if (!string.Equals(profileName, resolvedName, StringComparison.Ordinal))
         {
@@ -623,7 +625,9 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         syncingProfileFromPreset = true;
         try
         {
-            SelectedProfileName = profileCatalog.GetProfile(profileName).Name;
+            SelectedProfileName = profileCatalog.ContainsProfile(profileName)
+                ? profileCatalog.GetProfile(profileName).Name
+                : string.Empty;
         }
         finally
         {
@@ -631,6 +635,18 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         }
 
         RefreshProfileFallbackInformation();
+    }
+
+    /// <summary>
+    /// Resolves the profile used for preview and inspector math without adopting an unbundled saved profile.
+    /// Selector changes remain the only path that writes a bundled profile back to the selected preset.
+    /// </summary>
+    private TemplateProfile GetSelectedCalculationProfile()
+    {
+        if (SelectedPreset is not null && !profileCatalog.ContainsProfile(SelectedPreset.ProfileName))
+            return profileCatalog.GetProfile(SelectedPreset.ProfileName);
+
+        return profileCatalog.GetProfile(SelectedProfileName);
     }
 
     /// <summary>
@@ -699,7 +715,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
             SetSliderRows.Add(new SetSliderInspectorRowViewModel(
                 slider,
                 templateGenerationService,
-                () => profileCatalog.GetProfile(SelectedProfileName),
+                GetSelectedCalculationProfile,
                 RefreshAfterSetSliderEdit,
                 undoRedo));
     }
