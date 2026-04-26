@@ -77,6 +77,18 @@ This project uses the experimental OpenSpec workflow (`openspec/`) to track scop
 - `openspec/specs/` — current delta specs grouped by capability.
 - Use the `openspec-*` / `opsx:*` skills to create, continue, fast-forward, verify, and archive changes. For non-trivial features prefer `opsx:propose` (one-shot) or `opsx:new` → `opsx:continue` (stepwise). Archive with `opsx:archive` once the implementation matches the proposal.
 
+## GSD planning workflow
+
+GSD project initialization artifacts live in `.planning/`:
+
+- `.planning/PROJECT.md` — living project context, core value, constraints, and decisions.
+- `.planning/REQUIREMENTS.md` — current v1 requirements with REQ-IDs and roadmap traceability.
+- `.planning/ROADMAP.md` — five-phase future-work roadmap.
+- `.planning/STATE.md` — current phase state and continuity notes.
+- `.planning/research/` — project research supporting the roadmap.
+
+Current GSD focus is **Phase 1: Profile Correctness and Trust**. Before planning or implementing future work, read `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and `.planning/STATE.md`; then run `/gsd-plan-phase 1` or the phase-specific GSD workflow requested by the user.
+
 ## Java reference
 
 The authoritative implementation lives in `src/com/asdasfa/jbs2bg/`. When porting or cross-checking a feature, consult:

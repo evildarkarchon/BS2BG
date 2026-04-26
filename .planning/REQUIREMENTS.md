@@ -84,37 +84,37 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROF-01 | TBD | Pending |
-| PROF-02 | TBD | Pending |
-| PROF-03 | TBD | Pending |
-| PROF-04 | TBD | Pending |
-| PROF-05 | TBD | Pending |
-| WORK-01 | TBD | Pending |
-| WORK-02 | TBD | Pending |
-| WORK-03 | TBD | Pending |
-| WORK-04 | TBD | Pending |
-| WORK-05 | TBD | Pending |
-| DIAG-01 | TBD | Pending |
-| DIAG-02 | TBD | Pending |
-| DIAG-03 | TBD | Pending |
-| DIAG-04 | TBD | Pending |
-| DIAG-05 | TBD | Pending |
-| EXT-01 | TBD | Pending |
-| EXT-02 | TBD | Pending |
-| EXT-03 | TBD | Pending |
-| EXT-04 | TBD | Pending |
-| EXT-05 | TBD | Pending |
-| AUTO-01 | TBD | Pending |
-| AUTO-02 | TBD | Pending |
-| AUTO-03 | TBD | Pending |
-| AUTO-04 | TBD | Pending |
-| AUTO-05 | TBD | Pending |
+| PROF-01 | Phase 1: Profile Correctness and Trust | Pending |
+| PROF-02 | Phase 1: Profile Correctness and Trust | Pending |
+| PROF-03 | Phase 1: Profile Correctness and Trust | Pending |
+| PROF-04 | Phase 1: Profile Correctness and Trust | Pending |
+| PROF-05 | Phase 1: Profile Correctness and Trust | Pending |
+| WORK-01 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
+| WORK-02 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
+| WORK-03 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
+| WORK-04 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
+| WORK-05 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
+| DIAG-01 | Phase 3: Validation and Diagnostics | Pending |
+| DIAG-02 | Phase 3: Validation and Diagnostics | Pending |
+| DIAG-03 | Phase 3: Validation and Diagnostics | Pending |
+| DIAG-04 | Phase 3: Validation and Diagnostics | Pending |
+| DIAG-05 | Phase 3: Validation and Diagnostics | Pending |
+| EXT-01 | Phase 4: Profile Extensibility and Controlled Customization | Pending |
+| EXT-02 | Phase 4: Profile Extensibility and Controlled Customization | Pending |
+| EXT-03 | Phase 4: Profile Extensibility and Controlled Customization | Pending |
+| EXT-04 | Phase 4: Profile Extensibility and Controlled Customization | Pending |
+| EXT-05 | Phase 4: Profile Extensibility and Controlled Customization | Pending |
+| AUTO-01 | Phase 5: Automation, Sharing, and Release Trust | Pending |
+| AUTO-02 | Phase 5: Automation, Sharing, and Release Trust | Pending |
+| AUTO-03 | Phase 5: Automation, Sharing, and Release Trust | Pending |
+| AUTO-04 | Phase 5: Automation, Sharing, and Release Trust | Pending |
+| AUTO-05 | Phase 5: Automation, Sharing, and Release Trust | Pending |
 
 **Coverage:**
 - v1 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25
+- Mapped to phases: 25
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-26*
-*Last updated: 2026-04-26 after initial definition*
+*Last updated: 2026-04-26 after roadmap creation*
