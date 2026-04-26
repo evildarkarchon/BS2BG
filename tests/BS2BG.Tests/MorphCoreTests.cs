@@ -165,6 +165,21 @@ public sealed class MorphCoreTests
     }
 
     [Fact]
+    public void MorphGenerationDoesNotDependOnPresetProfileNames()
+    {
+        var expected = GenerateProfileIndependentMorphText(
+            ProjectProfileMapping.SkyrimCbbe,
+            ProjectProfileMapping.SkyrimUunp,
+            ProjectProfileMapping.Fallout4Cbbe);
+        var reorderedProfiles = GenerateProfileIndependentMorphText(
+            ProjectProfileMapping.Fallout4Cbbe,
+            ProjectProfileMapping.SkyrimCbbe,
+            ProjectProfileMapping.SkyrimUunp);
+
+        reorderedProfiles.Should().Be(expected);
+    }
+
+    [Fact]
     public void AddingSliderPresetKeepsSortedOrderWhenCollectionHasExternalSubscribers()
     {
         var target = new CustomMorphTarget("All|Female");
@@ -182,6 +197,26 @@ public sealed class MorphCoreTests
         private readonly int value = value;
 
         public int NextIndex(int exclusiveMax) => value;
+    }
+
+    private static string GenerateProfileIndependentMorphText(
+        string alphaProfile,
+        string betaProfile,
+        string gammaProfile)
+    {
+        var alpha = new SliderPreset("Alpha", alphaProfile);
+        var beta = new SliderPreset("Beta", betaProfile);
+        var gamma = new SliderPreset("Gamma", gammaProfile);
+        var project = new ProjectModel();
+        var target = new CustomMorphTarget("All|Female");
+        target.AddSliderPreset(alpha);
+        target.AddSliderPreset(beta);
+        project.CustomMorphTargets.Add(target);
+        var npc = new Npc("Lydia") { Mod = "Skyrim.esm", FormId = "000A2C94" };
+        npc.AddSliderPreset(gamma);
+        project.MorphedNpcs.Add(npc);
+
+        return new MorphGenerationService().GenerateMorphs(project).Text;
     }
 
     private sealed class TemporaryDirectory : IDisposable

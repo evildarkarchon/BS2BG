@@ -5,6 +5,7 @@ using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 using Xunit;
+using ModelSetSlider = BS2BG.Core.Models.SetSlider;
 using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
@@ -29,6 +30,46 @@ public sealed class ExportWriterTests
         HasUtf8Bom(templateBytes).Should().BeFalse();
         templateBytes.Should().Contain((byte)'\r');
         templateBytes.Should().Contain((byte)'\n');
+    }
+
+    [Fact]
+    public void BodyGenExportCombinesProfileSpecificTemplatesWithProfileIndependentMorphs()
+    {
+        using var directory = new TemporaryDirectory();
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile(
+                ProjectProfileMapping.SkyrimCbbe,
+                new SliderProfile(
+                    new[] { new SliderDefault("Breasts", 0.2f, 1f) },
+                    Array.Empty<SliderMultiplier>(),
+                    new[] { "Breasts" })),
+            new TemplateProfile(
+                ProjectProfileMapping.Fallout4Cbbe,
+                new SliderProfile(
+                    new[] { new SliderDefault("Breasts", 1f, 1f) },
+                    Array.Empty<SliderMultiplier>(),
+                    Array.Empty<string>()))
+        });
+        var alpha = new SliderPreset("Alpha", ProjectProfileMapping.SkyrimCbbe);
+        alpha.AddSetSlider(new ModelSetSlider("Breasts"));
+        var beta = new SliderPreset("Beta", ProjectProfileMapping.Fallout4Cbbe);
+        beta.AddSetSlider(new ModelSetSlider("Breasts"));
+        var templatesText = new TemplateGenerationService().GenerateTemplates(new[] { beta, alpha }, catalog, false);
+        var project = new ProjectModel();
+        var customTarget = new CustomMorphTarget("All|Female");
+        customTarget.AddSliderPreset(alpha);
+        project.CustomMorphTargets.Add(customTarget);
+        var npc = new Npc("Lydia") { Mod = "Skyrim.esm", FormId = "000A2C94" };
+        npc.AddSliderPreset(beta);
+        project.MorphedNpcs.Add(npc);
+        var morphsText = new MorphGenerationService().GenerateMorphs(project).Text;
+        var writer = new BodyGenIniExportWriter();
+
+        var result = writer.Write(directory.Path, templatesText, morphsText);
+
+        File.ReadAllText(result.TemplatesPath).Should().Be("Alpha=Breasts@0.0\r\nBeta=Breasts@0.0");
+        File.ReadAllText(result.MorphsPath).Should().Be("All|Female=Alpha\r\nSkyrim.esm|A2C94=Beta");
     }
 
     [Fact]
