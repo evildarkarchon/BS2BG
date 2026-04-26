@@ -12,7 +12,7 @@ This roadmap advances BS2BG from the completed M0-M7 port into future parity-sen
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Profile Correctness and Trust** - Users can choose trustworthy bundled profiles and see profile risks before generating output. (completed 2026-04-26)
+- [x] **Phase 1: Profile Correctness and Trust** - Users can generate output with explicit, profile-specific semantics, neutral unresolved-profile fallback information, and release-facing Fallout 4 profile confidence context. (completed 2026-04-26)
 - [ ] **Phase 2: Workflow Persistence, Filtering, and Undo Hardening** - Users can safely resume, filter, bulk-edit, and undo large modding workflows.
 - [ ] **Phase 3: Validation and Diagnostics** - Users can inspect project health, import effects, and export consequences before committing risky changes.
 - [ ] **Phase 4: Profile Extensibility and Controlled Customization** - Users can manage custom local profiles without corrupting bundled profiles or legacy projects.
@@ -21,14 +21,15 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Profile Correctness and Trust
-**Goal**: Users can generate output with explicit, profile-specific semantics and visible warnings when profile confidence is incomplete.
+**Goal**: Users can generate output with explicit, profile-specific semantics, neutral unresolved-profile fallback information, and release-facing Fallout 4 profile confidence context.
 **Depends on**: Nothing (first phase)
 **Requirements**: PROF-01, PROF-02, PROF-03, PROF-04, PROF-05
 **Success Criteria** (what must be TRUE):
   1. User can select a distinct Fallout 4 CBBE profile whose defaults, multipliers, and inverted-slider behavior are not reused from Skyrim CBBE or UUNP.
   2. User can open and save legacy `.jbs2bg` projects while preserving compatible `isUUNP` profile semantics.
-  3. User can see clear warnings for unknown, missing, inferred, mismatched, or experimental profile states before generation or export.
+  3. User can see neutral unresolved-profile fallback information when a saved project references an unbundled profile, while Phase 1 avoids profile inference, mismatch warnings, and in-app Fallout 4 experimental labels per D-05 through D-10.
   4. User can generate templates, morphs, and BoS JSON with bundled-profile behavior protected by profile-specific tests.
+  Context override: Phase 1 CONTEXT.md D-05 through D-08 intentionally narrow the original warning/experimental wording to neutral fallback information plus release documentation; modal warnings, mismatch heuristics, and in-app FO4 experimental labels remain out of scope.
 **Plans**: 7 plans
 Plans:
 - [x] 01-01-PLAN.md — Add distinct bundled Fallout 4 CBBE profile data and catalog wiring.
