@@ -1,65 +1,88 @@
-using System.Reflection;
 using BS2BG.App.Services;
+using BS2BG.Core.Generation;
+using BS2BG.Core.Models;
 using Xunit;
 
 namespace BS2BG.Tests;
 
 public sealed class TemplateProfileCatalogFactoryTests
 {
+    /// <summary>
+    /// Verifies the bundled catalog exposes the three supported display names in UI order.
+    /// </summary>
     [Fact]
-    public void DefaultCandidateDirectoriesDoNotWalkParentDirectories()
+    public void CreateDefaultExposesBundledProfileNamesInDisplayOrder()
     {
-        var method = typeof(TemplateProfileCatalogFactory).GetMethod(
-            "CandidateDirectories",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        method.Should().NotBeNull();
+        var catalog = TemplateProfileCatalogFactory.CreateDefault();
 
-        var directories = method.Invoke(null, null).Should().BeAssignableTo<IEnumerable<DirectoryInfo>>().Which;
-
-        var fullNames = directories
-            .Select(directory => directory.FullName)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        fullNames.Should().Equal(new DirectoryInfo(AppContext.BaseDirectory).FullName);
+        catalog.ProfileNames.Should().Equal(
+            ProjectProfileMapping.SkyrimCbbe,
+            ProjectProfileMapping.SkyrimUunp,
+            ProjectProfileMapping.Fallout4Cbbe);
     }
 
+    /// <summary>
+    /// Verifies Fallout 4 CBBE loads FO4-only slider defaults instead of reusing Skyrim tables.
+    /// </summary>
     [Fact]
-    public void CreateDefaultThrowsWhenRequiredProfileFileIsMissing()
+    public void Fallout4CbbeProfileLoadsFo4OnlyDefaults()
     {
-        using var directory = new TemporaryDirectory();
-        directory.WriteFile(
-            "settings.json",
-            """
-            {
-              "Defaults": {},
-              "Multipliers": {},
-              "Inverted": []
-            }
-            """);
+        var catalog = TemplateProfileCatalogFactory.CreateDefault();
+        var profile = catalog.GetProfile(ProjectProfileMapping.Fallout4Cbbe).SliderProfile;
 
-        var exception = FluentActions.Invoking(() =>
-                TemplateProfileCatalogFactory.CreateDefault(new[] { directory.Path }))
-            .Should()
-            .ThrowExactly<FileNotFoundException>()
-            .Which;
-
-        exception.Message.Should().Contain("settings_UUNP.json");
+        profile.GetDefaultSmall("BreastCenterBig").Should().Be(100);
+        profile.GetDefaultBig("BreastCenterBig").Should().Be(100);
+        profile.GetDefaultSmall("ButtNew").Should().Be(100);
+        profile.GetDefaultBig("ButtNew").Should().Be(100);
+        profile.GetDefaultSmall("ShoulderTweak").Should().Be(100);
+        profile.GetDefaultBig("ShoulderTweak").Should().Be(100);
+        profile.GetDefaultSmall("HipBack").Should().Be(100);
+        profile.GetDefaultBig("HipBack").Should().Be(100);
+        profile.GetDefaultSmall("ChubbyWaist").Should().Be(100);
+        profile.GetDefaultBig("ChubbyWaist").Should().Be(100);
     }
 
-    private sealed class TemporaryDirectory : IDisposable
+    /// <summary>
+    /// Verifies the Fallout 4 CBBE seed profile leaves inversion empty and multipliers neutral.
+    /// </summary>
+    [Fact]
+    public void Fallout4CbbeProfileUsesEmptyInvertedListAndNeutralMultipliers()
     {
-        public TemporaryDirectory()
-        {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(Path);
-        }
+        var catalog = TemplateProfileCatalogFactory.CreateDefault();
+        var profile = catalog.GetProfile(ProjectProfileMapping.Fallout4Cbbe).SliderProfile;
 
-        public string Path { get; }
+        profile.IsInverted("Ankles").Should().BeFalse();
+        profile.IsInverted("BreastCenterBig").Should().BeFalse();
+        profile.IsInverted("ButtNew").Should().BeFalse();
+        profile.GetMultiplier("Ankles").Should().Be(1.0f);
+        profile.GetMultiplier("BreastCenterBig").Should().Be(1.0f);
+        profile.GetMultiplier("ButtNew").Should().Be(1.0f);
+        profile.GetMultiplier("ShoulderTweak").Should().Be(1.0f);
+        profile.GetMultiplier("ChubbyWaist").Should().Be(1.0f);
+    }
 
-        public void Dispose() => Directory.Delete(Path, true);
+    /// <summary>
+    /// Verifies the distinct FO4-only sliders are absent from both bundled Skyrim profiles.
+    /// </summary>
+    [Fact]
+    public void Fallout4CbbeProfileDoesNotShareFo4OnlyDefaultsWithSkyrimProfiles()
+    {
+        var catalog = TemplateProfileCatalogFactory.CreateDefault();
 
-        public void WriteFile(string fileName, string contents) =>
-            File.WriteAllText(System.IO.Path.Combine(Path, fileName), contents);
+        AssertMissingFo4OnlyDefault(catalog, ProjectProfileMapping.SkyrimCbbe, "BreastCenterBig");
+        AssertMissingFo4OnlyDefault(catalog, ProjectProfileMapping.SkyrimCbbe, "ButtNew");
+        AssertMissingFo4OnlyDefault(catalog, ProjectProfileMapping.SkyrimUunp, "BreastCenterBig");
+        AssertMissingFo4OnlyDefault(catalog, ProjectProfileMapping.SkyrimUunp, "ButtNew");
+    }
+
+    private static void AssertMissingFo4OnlyDefault(
+        TemplateProfileCatalog catalog,
+        string profileName,
+        string sliderName)
+    {
+        var profile = catalog.GetProfile(profileName).SliderProfile;
+
+        profile.GetDefaultSmall(sliderName).Should().Be(0);
+        profile.GetDefaultBig(sliderName).Should().Be(0);
     }
 }
