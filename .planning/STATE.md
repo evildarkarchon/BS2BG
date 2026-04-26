@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-profile-correctness-and-trust-05-PLAN.md
-last_updated: "2026-04-26T13:49:39.153Z"
+stopped_at: Completed 01-profile-correctness-and-trust-06-PLAN.md
+last_updated: "2026-04-26T13:55:05.802Z"
 last_activity: 2026-04-26
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 7
-  completed_plans: 5
-  percent: 71
+  completed_plans: 6
+  percent: 86
 ---
 
 # Project State
@@ -26,17 +26,17 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 01 (profile-correctness-and-trust) — EXECUTING
-Plan: 2 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-04-26
 
-Progress: [███████░░░] 71%
+Progress: [█████████░] 86%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 4
+- Total plans completed: 6
 - Average duration: 3 min
 - Total execution time: 0.17 hours
 
@@ -44,7 +44,7 @@ Progress: [███████░░░] 71%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Profile Correctness and Trust | 4/4 | 0.17h | 3 min |
+| 1. Profile Correctness and Trust | 6/7 | 0.24h | 3 min |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | 0.0h | N/A |
 | 3. Validation and Diagnostics | 0/TBD | 0.0h | N/A |
 | 4. Profile Extensibility and Controlled Customization | 0/TBD | 0.0h | N/A |
@@ -52,7 +52,7 @@ Progress: [███████░░░] 71%
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 (3 min), 01-02 (2 min), 01-03 (3 min), 01-04 (2 min)
+- Last 5 plans: 01-02 (2 min), 01-03 (3 min), 01-04 (2 min), 01-05 (2 min), 01-06 (4 min)
 - Trend: Stable short-plan execution
 
 *Updated after each plan completion*
@@ -61,6 +61,7 @@ Progress: [███████░░░] 71%
 | Phase 01-profile-correctness-and-trust P03 | 3 min | 2 tasks | 3 files |
 | Phase 01-profile-correctness-and-trust P04 | 2 min | 2 tasks | 4 files |
 | Phase 01-profile-correctness-and-trust P05 | 2 min | 2 tasks | 3 files |
+| Phase 01-profile-correctness-and-trust P06 | 4 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ Recent decisions affecting current work:
 - [Phase 01-profile-correctness-and-trust]: Keep unresolved-profile feedback neutral in the Templates workflow and reserve Fallout 4 CBBE calibration context for release documentation. — Satisfies PROF-05 while honoring D-06/D-08 constraints against in-app Fallout 4 experimental labels or mismatch warnings.
 - [Phase 01-profile-correctness-and-trust]: Keep fallback selector blank for unbundled saved profiles until explicit bundled adoption. — Preserves round-trip profile names while making displayed fallback adoption possible through normal selector selection.
 - [Phase 01-profile-correctness-and-trust]: Centralize unresolved-profile math through GetSelectedCalculationProfile. — Preview, BoS JSON, missing-default rows, and inspector rows use fallback calculation without mutating saved profile state.
+- [Phase 01-profile-correctness-and-trust]: Profile-specific BoS JSON coverage uses root bundled profile files directly — Asserts distinguishing substrings instead of rebasing sacred golden fixtures.
+- [Phase 01-profile-correctness-and-trust]: Morph generation remains explicitly profile-independent — Tests assert profile-name changes do not alter morph lines.
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-26T13:49:39.147Z
-Stopped at: Completed 01-profile-correctness-and-trust-05-PLAN.md
+Last session: 2026-04-26T13:54:41.478Z
+Stopped at: Completed 01-profile-correctness-and-trust-06-PLAN.md
 Resume file: None
