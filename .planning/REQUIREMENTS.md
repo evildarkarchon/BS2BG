@@ -11,9 +11,11 @@ Requirements for the next GSD roadmap. Each maps to exactly one roadmap phase.
 
 - [x] **PROF-01**: User can select a distinct Fallout 4 CBBE profile that does not reuse Skyrim CBBE or Skyrim UUNP defaults, multipliers, or inverted-slider behavior.
 - [x] **PROF-02**: User can load existing `.jbs2bg` projects with legacy `isUUNP` values and preserve compatible profile semantics on save.
-- [x] **PROF-03**: User can see a clear warning when a preset, project, or export path uses an unknown, missing, inferred, or likely mismatched profile.
+- [x] **PROF-03**: User can see neutral unresolved-profile fallback information when a preset/project references an unbundled profile name, without profile inference, slider-name mismatch warnings, or generation/export blocking for custom body mods per Phase 1 decisions D-05 through D-12 and D-16.
 - [x] **PROF-04**: User can generate templates, morphs, and BoS JSON with profile-specific behavior covered by tests for each bundled profile.
-- [x] **PROF-05**: User can understand that Fallout 4 profile support is experimental unless authoritative calibration data has been validated.
+- [x] **PROF-05**: User can understand the Fallout 4 CBBE profile seed/calibration status through release-facing documentation while the main workflow does not label Fallout 4 CBBE as experimental per D-06 and D-08.
+
+Accepted Phase 1 override: ROADMAP/requirement wording that previously mentioned warnings, inferred/mismatched states, or experimental in-app status is intentionally narrowed by CONTEXT.md D-05 through D-08; future phases may revisit diagnostics through new specs, but Phase 1 must not add the deferred mismatch/inference work.
 
 ### Workflow Reliability
 
