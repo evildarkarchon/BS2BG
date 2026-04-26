@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 01-profile-correctness-and-trust-04-PLAN.md
-last_updated: "2026-04-26T13:33:46.448Z"
+status: executing
+stopped_at: Completed 01-profile-correctness-and-trust-05-PLAN.md
+last_updated: "2026-04-26T13:49:39.153Z"
 last_activity: 2026-04-26
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  completed_phases: 0
+  total_plans: 7
+  completed_plans: 5
+  percent: 71
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 01 (profile-correctness-and-trust) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Plan: 2 of 7
+Status: Ready to execute
 Last activity: 2026-04-26
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [██████████] 100%
 | Phase 01-profile-correctness-and-trust P02 | 2 min | 2 tasks | 3 files |
 | Phase 01-profile-correctness-and-trust P03 | 3 min | 2 tasks | 3 files |
 | Phase 01-profile-correctness-and-trust P04 | 2 min | 2 tasks | 4 files |
+| Phase 01-profile-correctness-and-trust P05 | 2 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 01-profile-correctness-and-trust]: Unbundled saved profile names stay on the selected preset while selector math resolves to bundled fallback profiles. — Preserves project round-trip compatibility while making fallback generation semantics visible.
 - [Phase 01-profile-correctness-and-trust]: Unresolved profile feedback remains neutral ViewModel information without warning, mismatch, or experimental language. — Matches Phase 1 context decisions D-05 through D-08 and keeps custom body-mod sliders non-blocking.
 - [Phase 01-profile-correctness-and-trust]: Keep unresolved-profile feedback neutral in the Templates workflow and reserve Fallout 4 CBBE calibration context for release documentation. — Satisfies PROF-05 while honoring D-06/D-08 constraints against in-app Fallout 4 experimental labels or mismatch warnings.
+- [Phase 01-profile-correctness-and-trust]: Keep fallback selector blank for unbundled saved profiles until explicit bundled adoption. — Preserves round-trip profile names while making displayed fallback adoption possible through normal selector selection.
+- [Phase 01-profile-correctness-and-trust]: Centralize unresolved-profile math through GetSelectedCalculationProfile. — Preview, BoS JSON, missing-default rows, and inspector rows use fallback calculation without mutating saved profile state.
 
 ### Pending Todos
 
@@ -99,6 +102,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-26T13:33:21.869Z
-Stopped at: Completed 01-profile-correctness-and-trust-04-PLAN.md
+Last session: 2026-04-26T13:49:39.147Z
+Stopped at: Completed 01-profile-correctness-and-trust-05-PLAN.md
 Resume file: None
