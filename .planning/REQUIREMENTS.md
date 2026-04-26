@@ -13,7 +13,7 @@ Requirements for the next GSD roadmap. Each maps to exactly one roadmap phase.
 - [x] **PROF-02**: User can load existing `.jbs2bg` projects with legacy `isUUNP` values and preserve compatible profile semantics on save.
 - [x] **PROF-03**: User can see a clear warning when a preset, project, or export path uses an unknown, missing, inferred, or likely mismatched profile.
 - [x] **PROF-04**: User can generate templates, morphs, and BoS JSON with profile-specific behavior covered by tests for each bundled profile.
-- [ ] **PROF-05**: User can understand that Fallout 4 profile support is experimental unless authoritative calibration data has been validated.
+- [x] **PROF-05**: User can understand that Fallout 4 profile support is experimental unless authoritative calibration data has been validated.
 
 ### Workflow Reliability
 
@@ -88,7 +88,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROF-02 | Phase 1: Profile Correctness and Trust | Complete |
 | PROF-03 | Phase 1: Profile Correctness and Trust | Complete |
 | PROF-04 | Phase 1: Profile Correctness and Trust | Complete |
-| PROF-05 | Phase 1: Profile Correctness and Trust | Pending |
+| PROF-05 | Phase 1: Profile Correctness and Trust | Complete |
 | WORK-01 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
 | WORK-02 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
 | WORK-03 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |

@@ -12,7 +12,7 @@ This roadmap advances BS2BG from the completed M0-M7 port into future parity-sen
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Profile Correctness and Trust** - Users can choose trustworthy bundled profiles and see profile risks before generating output.
+- [x] **Phase 1: Profile Correctness and Trust** - Users can choose trustworthy bundled profiles and see profile risks before generating output. (completed 2026-04-26)
 - [ ] **Phase 2: Workflow Persistence, Filtering, and Undo Hardening** - Users can safely resume, filter, bulk-edit, and undo large modding workflows.
 - [ ] **Phase 3: Validation and Diagnostics** - Users can inspect project health, import effects, and export consequences before committing risky changes.
 - [ ] **Phase 4: Profile Extensibility and Controlled Customization** - Users can manage custom local profiles without corrupting bundled profiles or legacy projects.
@@ -34,7 +34,7 @@ Plans:
 - [x] 01-01-PLAN.md — Add distinct bundled Fallout 4 CBBE profile data and catalog wiring.
 - [x] 01-02-PLAN.md — Preserve legacy/unbundled profile semantics and expose detectable fallback.
 - [x] 01-03-PLAN.md — Implement selected-profile import and neutral unresolved-profile fallback ViewModel state.
-- [ ] 01-04-PLAN.md — Add neutral fallback UI, info resources, and release-facing FO4 profile note.
+- [x] 01-04-PLAN.md — Add neutral fallback UI, info resources, and release-facing FO4 profile note.
 **UI hint**: yes
 
 ### Phase 2: Workflow Persistence, Filtering, and Undo Hardening
@@ -96,7 +96,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Profile Correctness and Trust | 2/4 | In Progress | - |
+| 1. Profile Correctness and Trust | 4/4 | Complete   | 2026-04-26 |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | Not started | - |
 | 3. Validation and Diagnostics | 0/TBD | Not started | - |
 | 4. Profile Extensibility and Controlled Customization | 0/TBD | Not started | - |
