@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Add distinct bundled Fallout 4 CBBE profile data and catalog wiring.
 - [x] 01-02-PLAN.md — Preserve legacy/unbundled profile semantics and expose detectable fallback.
-- [ ] 01-03-PLAN.md — Implement selected-profile import and neutral unresolved-profile fallback ViewModel state.
+- [x] 01-03-PLAN.md — Implement selected-profile import and neutral unresolved-profile fallback ViewModel state.
 - [ ] 01-04-PLAN.md — Add neutral fallback UI, info resources, and release-facing FO4 profile note.
 **UI hint**: yes
 
