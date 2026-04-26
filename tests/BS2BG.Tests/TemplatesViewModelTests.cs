@@ -287,10 +287,50 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public void ChoosingDisplayedFallbackProfileAdoptsBundledProfile()
+    {
+        var profileCatalog = CreateCatalog();
+        var templateGeneration = new TemplateGenerationService();
+        var viewModel = CreateViewModel(profileCatalog: profileCatalog);
+        var preset = new ModelSliderPreset("Community", "Community CBBE");
+        preset.AddSetSlider(new ModelSetSlider("Scale") { ValueSmall = 0, ValueBig = 50 });
+        viewModel.Presets.Add(preset);
+
+        viewModel.SelectedPreset = preset;
+
+        viewModel.SelectedProfileName.Should().BeEmpty();
+        viewModel.IsProfileFallbackInformationVisible.Should().BeTrue();
+        viewModel.ProfileFallbackInformationText.Should().Be(
+            "Saved profile \"Community CBBE\" is not bundled. BS2BG is using "
+            + ProjectProfileMapping.SkyrimCbbe
+            + " calculation rules for preview and generation until you choose a bundled profile.");
+        viewModel.PreviewTemplateText.Should().Be("Community=Scale@0.5");
+        viewModel.SelectedBosJsonText.Should().Be(templateGeneration.PreviewBosJson(
+            preset,
+            profileCatalog.GetProfile(ProjectProfileMapping.SkyrimCbbe)));
+        preset.ProfileName.Should().Be("Community CBBE");
+
+        viewModel.SelectedProfileName = ProjectProfileMapping.SkyrimCbbe;
+
+        preset.ProfileName.Should().Be(ProjectProfileMapping.SkyrimCbbe);
+        viewModel.IsProfileFallbackInformationVisible.Should().BeFalse();
+        viewModel.ProfileFallbackInformationText.Should().BeEmpty();
+        viewModel.PreviewTemplateText.Should().Be("Community=Scale@0.5");
+        viewModel.SelectedBosJsonText.Should().Be(templateGeneration.PreviewBosJson(
+            preset,
+            profileCatalog.GetProfile(ProjectProfileMapping.SkyrimCbbe)));
+        AssertNoProfileWarningLanguage(
+            viewModel.StatusMessage,
+            viewModel.ValidationMessage,
+            viewModel.ProfileFallbackInformationText);
+    }
+
+    [Fact]
     public void ExplicitBundledProfileSelectionOverwritesUnbundledSavedProfileAndHidesFallbackInformation()
     {
         var viewModel = CreateViewModel();
         var preset = new ModelSliderPreset("Community", "Community CBBE");
+        preset.AddSetSlider(new ModelSetSlider("Scale") { ValueSmall = 0, ValueBig = 50 });
         viewModel.Presets.Add(preset);
         viewModel.SelectedPreset = preset;
 
@@ -299,6 +339,7 @@ public sealed class TemplatesViewModelTests
         preset.ProfileName.Should().Be(ProjectProfileMapping.SkyrimUunp);
         viewModel.IsProfileFallbackInformationVisible.Should().BeFalse();
         viewModel.ProfileFallbackInformationText.Should().BeEmpty();
+        viewModel.PreviewTemplateText.Should().Be("Community=Scale@1.5");
     }
 
     [Fact]
