@@ -3,6 +3,7 @@ using BS2BG.App.ViewModels;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
+using System.Text.Json;
 using System.Windows.Input;
 using Xunit;
 using SliderPreset = BS2BG.Core.Models.SliderPreset;
@@ -102,6 +103,60 @@ public sealed class ProfileManagerViewModelTests
         vm.ProfileEntries.Single(entry => entry.Name == "Missing Body").SourceLabel.Should().Be("Missing — using fallback");
     }
 
+    /// <summary>
+    /// Verifies recovery import uses internal profile names only; a matching filename cannot resolve a different profile identity.
+    /// </summary>
+    [Fact]
+    public async Task ImportMatchingProfileRejectsFilenameMatchWhenInternalNameDiffers()
+    {
+        using var directory = new TemporaryDirectory();
+        var file = directory.WriteJson("Missing Body.json", CreateProfileJson("Different Internal Name"));
+        var dialog = new StubProfileManagementDialogService { ImportFiles = [file] };
+        var store = new StubUserProfileStore();
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Preset") { ProfileName = "Missing Body" });
+        var vm = CreateManager(new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile("Bundled Body", CreateSliderProfile())
+        }), project, store, dialog);
+
+        var resolved = await vm.ImportMatchingProfileForMissingReferenceAsync("Missing Body");
+
+        resolved.Should().BeFalse();
+        store.SavedProfiles.Should().BeEmpty();
+        vm.StatusMessage.Should().Contain("Imported profiles resolve missing references only when the internal profile display name matches exactly");
+        vm.ProfileEntries.Should().Contain(entry => entry.Name == "Missing Body" && entry.IsMissing);
+    }
+
+    /// <summary>
+    /// Verifies project-embedded copies can be activated as project-scoped catalog overlays without local store writes.
+    /// </summary>
+    [Fact]
+    public void UseProjectCopyActivatesOverlayWithoutWritingLocalStore()
+    {
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Preset") { ProfileName = "Embedded Body" });
+        project.CustomProfiles.Add(new CustomProfileDefinition(
+            "Embedded Body",
+            string.Empty,
+            CreateSliderProfile(),
+            ProfileSourceKind.EmbeddedProject,
+            null));
+        var store = new StubUserProfileStore();
+        var catalogService = new StubTemplateProfileCatalogService(new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile("Bundled Body", CreateSliderProfile())
+        }));
+        var vm = CreateManager(catalogService.Current, project, store, catalogService: catalogService);
+
+        vm.UseProjectCopyForMissingReference("Embedded Body").Should().BeTrue();
+
+        catalogService.ProjectOverlayNames.Should().Equal("Embedded Body");
+        catalogService.Current.ContainsProfile("Embedded Body").Should().BeTrue();
+        store.SavedProfiles.Should().BeEmpty();
+        vm.StatusMessage.Should().Be("Project copy is active for 'Embedded Body'.");
+    }
+
     private static ProfileManagerViewModel CreateManager(
         TemplateProfileCatalog catalog,
         ProjectModel? project = null,
@@ -128,6 +183,8 @@ public sealed class ProfileManagerViewModelTests
 
         public bool ConfirmDiscardUnsavedEditsResult { get; set; } = true;
 
+        public IReadOnlyList<string> ImportFiles { get; init; } = [];
+
         public int ConfirmDeleteReferencedProfileCalls { get; private set; }
 
         public int ConfirmDiscardUnsavedEditsCalls { get; private set; }
@@ -135,7 +192,7 @@ public sealed class ProfileManagerViewModelTests
         public int LastAffectedPresetCount { get; private set; }
 
         public Task<IReadOnlyList<string>> PickProfileImportFilesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<string>>([]);
+            Task.FromResult(ImportFiles);
 
         public Task<string?> PickProfileExportPathAsync(string suggestedFileName, CancellationToken cancellationToken) =>
             Task.FromResult<string?>(null);
@@ -161,13 +218,18 @@ public sealed class ProfileManagerViewModelTests
     {
         public List<CustomProfileDefinition> DeletedProfiles { get; } = [];
 
+        public List<CustomProfileDefinition> SavedProfiles { get; } = [];
+
         public UserProfileDiscoveryResult DiscoverProfiles() => DiscoverProfiles([]);
 
         public UserProfileDiscoveryResult DiscoverProfiles(IEnumerable<string> existingProfileNames) =>
             new([], []);
 
-        public UserProfileSaveResult SaveProfile(CustomProfileDefinition profile) =>
-            new(true, profile.FilePath, []);
+        public UserProfileSaveResult SaveProfile(CustomProfileDefinition profile)
+        {
+            SavedProfiles.Add(profile);
+            return new(true, profile.FilePath, []);
+        }
 
         public UserProfileDeleteResult DeleteProfile(CustomProfileDefinition profile)
         {
@@ -194,6 +256,8 @@ public sealed class ProfileManagerViewModelTests
 
         public int RefreshCalls { get; private set; }
 
+        public IReadOnlyList<string> ProjectOverlayNames { get; private set; } = [];
+
         public TemplateProfileCatalog Refresh()
         {
             RefreshCalls++;
@@ -203,8 +267,48 @@ public sealed class ProfileManagerViewModelTests
 
         public TemplateProfileCatalog ClearProjectProfiles() => Current;
 
-        public TemplateProfileCatalog WithProjectProfiles(IEnumerable<CustomProfileDefinition> projectProfiles) => Current;
+        public TemplateProfileCatalog WithProjectProfiles(IEnumerable<CustomProfileDefinition> projectProfiles)
+        {
+            var profiles = projectProfiles.ToArray();
+            ProjectOverlayNames = profiles.Select(profile => profile.Name).ToArray();
+            Current = new TemplateProfileCatalog(Current.Entries
+                .Where(entry => profiles.All(profile => !string.Equals(profile.Name, entry.Name, StringComparison.OrdinalIgnoreCase)))
+                .Concat(profiles.Select(profile => new ProfileCatalogEntry(
+                    profile.Name,
+                    new TemplateProfile(profile.Name, profile.SliderProfile),
+                    ProfileSourceKind.EmbeddedProject,
+                    profile.FilePath,
+                    false))));
+            changed.OnNext(Current);
+            return Current;
+        }
 
         public UserProfileSaveResult SaveLocalProfile(CustomProfileDefinition profile) => new(false, null, []);
+    }
+
+    private static string CreateProfileJson(string name) => JsonSerializer.Serialize(new
+    {
+        Version = 1,
+        Name = name,
+        Game = string.Empty,
+        Defaults = new Dictionary<string, float>(),
+        Multipliers = new Dictionary<string, float>(),
+        Inverted = Array.Empty<string>()
+    });
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        private readonly string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+
+        public TemporaryDirectory() => Directory.CreateDirectory(path);
+
+        public void Dispose() => Directory.Delete(path, true);
+
+        public string WriteJson(string fileName, string json)
+        {
+            var filePath = Path.Combine(path, fileName);
+            File.WriteAllText(filePath, json);
+            return filePath;
+        }
     }
 }

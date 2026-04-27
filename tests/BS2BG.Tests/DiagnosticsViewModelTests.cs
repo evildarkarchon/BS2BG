@@ -125,14 +125,52 @@ public sealed class DiagnosticsViewModelTests
         viewModel.StatusMessage.Should().Be("Diagnostics report copied to clipboard.");
     }
 
-    private static DiagnosticsViewModel CreateViewModel(ProjectModel project, IClipboardService? clipboard = null)
+    [Fact]
+    public async Task MissingProfileDiagnosticsExposeExplicitRecoveryActionRowsWithoutMutatingProject()
+    {
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new ModelSliderPreset("Community", "Community Body"));
+        project.CustomProfiles.Add(new CustomProfileDefinition(
+            "Community Body",
+            string.Empty,
+            new SliderProfile([], [], []),
+            ProfileSourceKind.EmbeddedProject,
+            null));
+        project.MarkClean();
+        var changeVersion = project.ChangeVersion;
+        var handler = new CapturingRecoveryActionHandler();
+        var viewModel = CreateViewModel(project, recoveryActionHandler: handler);
+
+        await viewModel.RefreshDiagnosticsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        viewModel.RecoveryActions.Select(action => action.Label).Should().Equal(
+            "Import Matching Profile",
+            "Use Project Copy",
+            "Remap to Installed Profile",
+            "Keep Unresolved for Now");
+        project.IsDirty.Should().BeFalse();
+        project.ChangeVersion.Should().Be(changeVersion);
+
+        await viewModel.RecoveryActions.Single(action => action.Label == "Keep Unresolved for Now")
+            .ExecuteCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        viewModel.StatusMessage.Should().Contain("Community Body");
+        viewModel.Findings.Should().Contain(finding => finding.Code == ProfileRecoveryDiagnosticsService.MissingCustomProfileCode);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    private static DiagnosticsViewModel CreateViewModel(
+        ProjectModel project,
+        IClipboardService? clipboard = null,
+        IProfileRecoveryActionHandler? recoveryActionHandler = null)
     {
         return new DiagnosticsViewModel(
             project,
             CreateCatalog(),
             new ProjectValidationService(),
             new ProfileDiagnosticsService(),
-            clipboard);
+            clipboard,
+            recoveryActionHandler: recoveryActionHandler);
     }
 
     private static TemplateProfileCatalog CreateCatalog()
@@ -153,6 +191,20 @@ public sealed class DiagnosticsViewModelTests
         {
             Text = text;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingRecoveryActionHandler : IProfileRecoveryActionHandler
+    {
+        public List<(ProfileRecoveryActionKind Kind, string MissingProfileName)> Requests { get; } = [];
+
+        public Task<bool> ExecuteRecoveryActionAsync(
+            ProfileRecoveryActionKind actionKind,
+            string missingProfileName,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add((actionKind, missingProfileName));
+            return Task.FromResult(true);
         }
     }
 }
