@@ -1,4 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Reactive.Concurrency;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
@@ -158,6 +160,52 @@ public sealed class MorphsViewModelTests
         project.MorphedNpcs.Should().Contain(valerica);
         viewModel.SelectedNpc.Should().BeNull();
         viewModel.SelectedTarget.Should().BeNull();
+    }
+
+    [Fact]
+    public void HiddenSelectedNpcsRemainSelectedWhenVisibleSelectionChanges()
+    {
+        var project = CreateProjectWithPresets();
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(valerica);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider());
+        viewModel.SelectedNpcs.Add(lydia);
+        viewModel.SelectedNpcs.Add(valerica);
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Mod, new[] { "Skyrim.esm" });
+        viewModel.UpdateVisibleNpcSelection(new[] { lydia });
+
+        viewModel.VisibleNpcs.Should().ContainSingle().Which.Should().BeSameAs(lydia);
+        viewModel.SelectedNpcs.Should().Equal(lydia, valerica);
+        viewModel.StatusMessage.Should().Be("1 visible, 2 selected (1 hidden by filters)");
+    }
+
+    [Fact]
+    public void LargeNpcSearchIsDebouncedBeforeVisibleRowsRefresh()
+    {
+        using var scheduler = new EventLoopScheduler();
+        var project = CreateProjectWithPresets();
+        for (var index = 0; index < 5000; index++)
+        {
+            project.MorphedNpcs.Add(CreateNpc(
+                "Skyrim.esm",
+                "Npc-" + index.ToString("0000", CultureInfo.InvariantCulture),
+                "Editor" + index.ToString(CultureInfo.InvariantCulture),
+                "NordRace",
+                index.ToString("X8", CultureInfo.InvariantCulture)));
+        }
+
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(), filterScheduler: scheduler);
+
+        viewModel.SearchText = "Npc-4";
+        viewModel.SearchText = "Npc-49";
+        viewModel.SearchText = "Npc-4999";
+
+        viewModel.VisibleNpcs.Count.Should().Be(5000);
+        SpinWait.SpinUntil(() => viewModel.VisibleNpcs.Count == 1, TimeSpan.FromSeconds(3)).Should().BeTrue();
+        viewModel.VisibleNpcs.Should().ContainSingle().Which.Name.Should().Be("Npc-4999");
     }
 
     [Fact]
@@ -336,7 +384,8 @@ public sealed class MorphsViewModelTests
         INpcImageLookupService? imageLookupService = null,
         IImageViewService? imageViewService = null,
         INoPresetNotificationService? noPresetNotificationService = null,
-        UndoRedoService? undoRedo = null)
+        UndoRedoService? undoRedo = null,
+        IScheduler? filterScheduler = null)
     {
         return new MorphsViewModel(
             project,
@@ -348,7 +397,8 @@ public sealed class MorphsViewModelTests
             imageLookupService ?? new StubNpcImageLookupService(null),
             imageViewService ?? new CapturingImageViewService(),
             noPresetNotificationService ?? new CapturingNoPresetNotificationService(),
-            undoRedo);
+            undoRedo,
+            filterScheduler);
     }
 
     private static ProjectModel CreateProjectWithPresets()
