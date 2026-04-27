@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-04-27T04:01:11.072Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-04-27T04:07:46.177Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 24
-  completed_plans: 19
-  percent: 79
+  completed_plans: 20
+  percent: 83
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 03 (validation-and-diagnostics) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-04-27
 
-Progress: [████████░░] 79%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [████████░░] 79%
 | Phase 03-validation-and-diagnostics P01 | 6 min | 2 tasks | 8 files |
 | Phase 03-validation-and-diagnostics P02 | 4 min | 2 tasks | 4 files |
 | Phase 03-validation-and-diagnostics P03 | 5min | 2 tasks | 8 files |
+| Phase 03-validation-and-diagnostics P04 | 5 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,8 @@ Recent decisions affecting current work:
 - [Phase 03-validation-and-diagnostics]: Keep existing database/project duplicate classification in NpcImportPreviewService rather than changing parser policy or App mutation paths. — Existing-state duplicate classification is preview-specific and must remain read-only until callers commit imports.
 - [Phase ?]: [Phase 03-validation-and-diagnostics]: Keep export preview read-only by duplicating writer filename rules instead of calling writer Write methods.
 - [Phase ?]: [Phase 03-validation-and-diagnostics]: Preserve existing setup/temp-write exception compatibility while adding outcome ledgers for commit and rollback failures.
+- [Phase 03-validation-and-diagnostics]: Keep Diagnostics ViewModel refresh and copy read-only by consuming Core diagnostic services without mutating ProjectModel state. — Preserves Phase 3 diagnostics boundary and satisfies T-03-04-01.
+- [Phase 03-validation-and-diagnostics]: Format copied diagnostics as grouped plain text from display ViewModels, including profile fallback details, while excluding auto-fix actions. — Keeps report output UI-ready and compliant with D-04 no auto-fix scope.
 
 ### Pending Todos
 
@@ -118,6 +121,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27T04:01:05.787Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-04-27T04:07:46.171Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
