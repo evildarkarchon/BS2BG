@@ -97,6 +97,20 @@ public sealed class NpcFilterState
     }
 
     /// <summary>
+    /// Gets whether any checklist restriction is active for the requested column.
+    /// </summary>
+    /// <param name="column">The filter column to inspect.</param>
+    /// <returns>True when the column currently restricts visible rows.</returns>
+    public bool HasAllowedValues(NpcFilterColumn column) => allowedValues.TryGetValue(column, out var values) && values.Count > 0;
+
+    /// <summary>
+    /// Gets whether any checklist filter or applied global search text currently restricts rows.
+    /// </summary>
+    /// <returns>True when filtered-empty UI should explain that rows may be hidden.</returns>
+    public bool HasAnyFilter() => allowedValues.Any(pair => pair.Value.Count > 0)
+                                  || !string.IsNullOrWhiteSpace(appliedGlobalSearchText);
+
+    /// <summary>
     /// Creates a side-effect-free predicate over NPC row wrappers using the current checklist and applied search state.
     /// </summary>
     /// <returns>A predicate suitable for DynamicData or manual filtering.</returns>
