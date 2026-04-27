@@ -74,7 +74,16 @@ Plans:
   3. User can preview NPC import results, invalid lines, duplicates, charset fallback, and assignment effects before committing import changes.
   4. User can preview export destinations and exact output effects before overwriting files or risking partial output.
   5. User receives save/export failure messages that identify which files were written, restored, skipped, or left untouched.
-**Plans**: TBD
+**Plans**: 8 plans
+Plans:
+- [ ] 03-01-PLAN.md — Create Core project/profile diagnostics services and tests.
+- [ ] 03-02-PLAN.md — Add read-only NPC import preview classification and duplicate diagnostics.
+- [ ] 03-03-PLAN.md — Add export preview and atomic outcome ledger Core contracts.
+- [ ] 03-04-PLAN.md — Expose project/profile diagnostics through a ReactiveUI Diagnostics ViewModel and copyable report.
+- [ ] 03-05-PLAN.md — Integrate optional no-mutation NPC import preview and distinct assignment-effect summaries.
+- [ ] 03-06-PLAN.md — Wire export preview and overwrite-risk confirmation into shell export workflows.
+- [ ] 03-07-PLAN.md — Surface save/export outcome ledgers in failure messages without save preview friction.
+- [ ] 03-08-PLAN.md — Add the first-class compiled-bound Diagnostics tab and visual verification checkpoint.
 **UI hint**: yes
 
 ### Phase 4: Profile Extensibility and Controlled Customization
