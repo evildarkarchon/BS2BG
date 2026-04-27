@@ -122,6 +122,56 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public async Task ImportPreviewedNpcsCommandCommitsRowsToDatabaseWithoutAssigningPresets()
+    {
+        using var directory = new TemporaryDirectory();
+        var npcFile = directory.WriteText(
+            "npcs.txt",
+            "Skyrim.esm|Lydia|HousecarlWhiterun|NordRace|000A2C94");
+        var project = CreateProjectWithPresets();
+        project.MarkClean();
+        var viewModel = CreateViewModel(
+            project,
+            new QueueRandomAssignmentProvider(),
+            new StaticNpcTextFilePicker(new[] { npcFile }));
+
+        await viewModel.PreviewNpcImportCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        viewModel.NpcDatabase.Count.Should().Be(0);
+
+        await viewModel.ImportPreviewedNpcsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        viewModel.NpcDatabase.Should().ContainSingle().Which.Name.Should().Be("Lydia");
+        project.MorphedNpcs.Should().BeEmpty();
+        viewModel.StatusMessage.Should().Contain("does not assign presets");
+        viewModel.NpcImportPreviewRows.Should().BeEmpty();
+        viewModel.HasNpcImportPreview.Should().BeFalse();
+    }
+
+    [Fact]
+    public void AssignmentCommandsExposeBeforeAndAfterEffectCounts()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets.Single(preset => preset.Name == "Alpha");
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var serana = CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74");
+        serana.AddSliderPreset(alpha);
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(serana);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider());
+        viewModel.SelectedAvailablePreset = alpha;
+
+        viewModel.FillEmptyNpcsCommand.Execute().Subscribe();
+
+        viewModel.LastAssignmentEffectSummary.Should().Contain("0 assigned before");
+        viewModel.LastAssignmentEffectSummary.Should().Contain("1 assigned after");
+
+        viewModel.ClearAssignmentsCommand.Execute().Subscribe();
+
+        viewModel.LastAssignmentEffectSummary.Should().Contain("2 assigned before");
+        viewModel.LastAssignmentEffectSummary.Should().Contain("0 assigned after");
+    }
+
+    [Fact]
     public void FilteredBulkOperationsOnlyAffectVisibleNpcs()
     {
         var project = CreateProjectWithPresets();
