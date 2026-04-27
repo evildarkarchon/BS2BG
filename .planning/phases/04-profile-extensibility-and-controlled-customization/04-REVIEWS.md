@@ -1,7 +1,7 @@
 ---
 phase: 4
 reviewers: [gemini, claude, codex]
-reviewed_at: 2026-04-27T00:37:17-07:00
+reviewed_at: 2026-04-27T01:11:38.0504832-07:00
 plans_reviewed:
   - 04-01-PLAN.md
   - 04-02-PLAN.md
@@ -16,323 +16,491 @@ plans_reviewed:
 
 ## Gemini Review
 
-Gemini was invoked but did not produce a plan review.
+# Phase 4 Plan Review: Profile Extensibility and Controlled Customization
 
-```text
-Warning: Skipping extension in C:\Users\evild\.gemini\extensions\logs: Configuration file not found at C:\Users\evild\.gemini\extensions\logs\gemini-extension.json
-When using Gemini API, you must specify the GEMINI_API_KEY environment variable.
-Update your environment and try again (no reload needed if using .env)!
-```
+## Summary
+The implementation plans for Phase 4 provide a comprehensive and architecturally sound roadmap for introducing custom profile management. The strategy effectively balances the need for user flexibility with the strict requirement of preserving bundled profile integrity and backward compatibility. By splitting the work into Core validation/serialization and App orchestration, the plans ensure that profile identity remains stable (internal name-based) and that project sharing is robust (embedding referenced definitions). The inclusion of explicit conflict handling during project load and the non-blocking approach to missing profiles align perfectly with the project's "trust and parity" philosophy.
+
+## Strengths
+- **Identity Integrity**: The decision to use internal `Name` as the sole identity, explicitly rejecting filenames or fuzzy matching for resolution, prevents a common class of data-corruption bugs in modding tools.
+- **Trust Domain Separation**: Clearly tagging catalog entries as `Bundled`, `LocalCustom`, or `EmbeddedProject` allows the UI and generation logic to enforce read-only constraints on bundled data while enabling "Use Project Copy" overlays without forced local installation.
+- **Backward Compatibility**: The use of `[JsonPropertyOrder]` and optional top-level sections in `ProjectFileService` (Plan 03) ensures that older versions of BS2BG can still read Phase 4 projects without failing or losing legacy math fields.
+- **Validation-Gated Workflows**: Gating both `Save` and `Import` commands behind Core-level strict validation ensures the runtime catalog never contains malformed data that could break generation math.
+- **User Safety**: The sequential conflict dialog (Plan 06) and the byte-identical baseline test for project saves (Plan 03) show a high degree of defensive engineering suited for a parity-sensitive tool.
+
+## Concerns
+- **MEDIUM - Project-Scoped Lookup Persistence**: While Plan 06 mentions using `WithProjectProfiles` for an overlay, it is not explicitly clear how this project-scoped state is cleared when the project is closed or a new one is created. A subsequent project might accidentally see embedded profiles from the previous session if the singleton `ITemplateProfileCatalogService` is not reset during the `NewProjectAsync` flow.
+- **LOW - Sanitized Filename Collisions**: Plan 02 uses an 8-character hash for collisions. While deterministic, if a user renames a profile in the editor to something that would collide with another existing profile's file, the logic needs to ensure it does not overwrite the wrong file during the `SaveProfile` call.
+- **LOW - UI/UX for Large Slider Tables**: Profile definitions can have hundreds of sliders. A dense editable row approach in Avalonia without virtualization or a search/filter inside the editor might become sluggish or difficult to navigate for very large custom profiles.
+
+## Suggestions
+- **Explicit Catalog Reset**: In Plan 06, ensure `MainWindowViewModel.NewProjectAsync` explicitly calls `catalogService.Refresh()` or a reset method to clear any `EmbeddedProject` entries from the runtime catalog.
+- **Conflict Equality Edge Case**: In Plan 01, ensure `ProfileDefinitionEquality` treats `null` or missing tables as equivalent to empty objects/arrays to avoid false conflicts when sharing projects with older/newer versions of the schema.
+- **Editor Search**: Consider adding a simple `Filter Sliders` text box inside the `ProfileEditorViewModel` (Plan 05) to help users find specific sliders in a large profile definition.
+- **Bulk-Conflict Handling**: While sequential dialogs are safer, if a project contains 20 custom profiles, the user might find 20 dialogs tedious. A future `Apply to all remaining conflicts` checkbox or summary list would be a good v2 addition.
+
+## Risk Assessment: LOW
+The overall risk is low. The plans are highly surgical, adding new collections and sections rather than refactoring existing sacred slider math. The dependency chain is logical, and the Wave 1-5 structure ensures that UI components are not built before their underlying Core services are validated. The primary success factor - byte-identical output - is protected by specific tasks in Plans 01 and 03.
+
+The plans are approved for execution.
 
 ---
 
 ## the agent Review
 
-# Phase 4 Plan Review: Profile Extensibility and Controlled Customization
+# Cross-AI Plan Review - Phase 4: Profile Extensibility and Controlled Customization
 
-## Overall Assessment
+## Overall Summary
 
-The seven-plan structure is well-decomposed and faithfully maps the locked CONTEXT.md decisions (D-01 through D-17) onto code. Wave parallelization is sensible (04-01 -> {04-02, 04-03, 04-04} -> {04-05, 04-06} -> 04-07). The Core/App split is preserved, sacred files are untouched, and TDD-first plans (04-01 through 04-04) provide solid scaffolding. The main risks are concentrated in **04-06** (project open conflict ordering) and a few specification gaps around DTO shapes, normalization rules, and cross-plan integration that will likely surface during execution.
+This is a strong, well-decomposed plan set for adding custom profile extensibility to BS2BG. The seven plans honor the locked CONTEXT.md decisions (D-01 through D-17), correctly stage Core contracts before App workflows, preserve byte-parity sacred files, and explicitly address review concerns inline (visible in the `truths` notes). Wave dependencies are coherent and the critical path (Plan 01 -> 02/03 -> 04 -> 05/06 -> 07) reflects real data flow rather than arbitrary ordering. Test coverage is mapped to each requirement and the threat models are scoped appropriately for a local-only desktop app. The main risks are integration-heavy (Plan 06's project-open conflict choreography) and subtle compatibility risk (Plan 03 byte-equality guarantee), with a few specification gaps around concurrent collection access, refresh ordering, and the Templates VM's catalog binding.
 
-**Overall risk: MEDIUM** - plans are competent and goal-aligned but contain a few HIGH-impact ambiguities that could cause rework if not clarified before execution.
-
----
-
-## Plan 04-01: Core validation and JSON export
-
-### Summary
-
-Solid TDD foundation. Defines `CustomProfileDefinition`, `ProfileValidationResult`, and `ProfileDefinitionService` with strict-but-permissive validation aligned to D-05/06/07/08.
-
-### Strengths
-
-- Clean Core-only contract; no App leakage
-- Explicit RED tests for blank profiles, broad finite numerics, duplicate names/sliders
-- Reuses existing `SliderProfile`/`SliderDefault`/`SliderMultiplier` for downstream generation compatibility
-- Acceptance criteria are grep-checkable
-
-### Concerns
-
-- **MEDIUM** - Coexistence with `SliderProfileJsonService` is unspecified. The legacy service is still used by `TemplateProfileCatalogFactory.LoadRequiredProfile` for bundled JSON. Plan doesn't say whether `ProfileDefinitionService` replaces it, wraps it, or runs alongside. Risk of two parsers diverging on bundled vs custom JSON.
-- **MEDIUM** - `Game` metadata is introduced for custom profiles but bundled profiles (e.g., `settings.json`) have no `Game` field today. How is `CustomProfileDefinition.Game` populated for bundled profiles when they're wrapped into `ProfileCatalogEntry` in 04-02? Defaults to empty? "Skyrim"? Unclear.
-- **LOW** - Round-trip test (export -> re-validate -> equivalent definition) is mentioned in behavior but not in acceptance criteria. Add a `ExportProfileJson_RoundTrips` test.
-- **LOW** - NaN/Infinity rejection is in `<action>` text but not in acceptance criteria. Add an explicit test.
-- **LOW** - No spec on how `Defaults` table emits when blank - empty object `{}` or omitted? Round-trip with `SliderProfileJsonService.LoadFromString` will diverge if shapes differ.
-
-### Suggestions
-
-- Document the migration plan for `SliderProfileJsonService`: either deprecate it in 04-02 once the factory uses `ProfileDefinitionService.ValidateProfileJson` for required bundled files, or keep it for bundled-only and route custom-only through the new service. State which.
-- Add an `ExportProfileJson_RoundTripIsStable` test asserting `Validate(Export(profile)).Profile == profile`.
-- Specify `Game` field default for bundled profiles (recommend: `"Skyrim"` for Skyrim CBBE/UUNP, `"Fallout4"` for FO4 CBBE) and document in 04-02 factory wiring.
-
-### Risk: **LOW**
+**Overall Risk: MEDIUM** - Plans 1, 2, 4, 5, 7 are LOW-MEDIUM; Plans 3 and 6 carry the bulk of the risk.
 
 ---
 
-## Plan 04-02: AppData storage + catalog composition
+## Plan 04-01: Core validation contracts
 
-### Summary
+**Summary**: Foundation plan. Cleanly separates the immutable contract types (`CustomProfileDefinition`, `ProfileValidationResult`, `ProfileDefinitionEquality`) from the strict parser/exporter. TDD-first with focused acceptance tests that lock D-03/D-06/D-07/D-08/D-12 semantics.
 
-Adds `IUserProfileStore` over `%APPDATA%/jBS2BG/profiles/`, source-tags catalog entries, and composes bundled + custom catalog at startup.
+**Strengths**:
+- `DefinitionallyEquals` is defined here in Plan 01 even though it is consumed in Plan 06 - exactly the right place to lock conflict-equality semantics.
+- Schema versioning (`Version: 1`) introduced proactively as a forward-compatibility seam.
+- Explicit NaN/Infinity rejection rules close a subtle gap that broad-finite-float acceptance could create.
+- `ProfileSourceKind.EmbeddedProject` is declared in Plan 01 even though it is not used until Plan 06 - avoids a ripple-edit later.
 
-### Strengths
+**Concerns**:
+- **MEDIUM**: The `ExportProfileJson` round-trip stability acceptance is asserted in tests but the plan does not specify the exact ordering rule for keys within `Defaults`/`Multipliers` objects. If the export uses dictionary-iteration order, two semantically equal profiles can serialize differently across OS/runtime. Recommend specifying `OrdinalIgnoreCase` or original-source order if preserved deterministic key ordering.
+- **LOW**: `Game` is optional metadata normalized to `string.Empty` when absent but Plan 02 Task 3 wants to seed bundled `Game = "Skyrim"` / `"Fallout4"`. Consider whether `Game` should be a normalized enum or a constrained string set for consistency, or document that it is free-form.
+- **LOW**: `ProfileValidationContext.ForImport` takes an `IEnumerable<string>` of existing names but the threading/lifetime model is not stated. If this is enumerated lazily and the underlying catalog mutates during validation, duplicate checks could be inconsistent. Materializing into a snapshot HashSet inside the constructor would be safer.
 
-- Reuses `AtomicFileWriter` and `Environment.SpecialFolder.ApplicationData` patterns from `UserPreferencesService`
-- Preserves existing `TemplateProfileCatalog` constructor signature for backward compatibility
-- Resilient startup - bundled-only fallback when local profile folder is unreadable
-- DI registration explicit
+**Suggestions**:
+- Add an explicit acceptance criterion for deterministic JSON key ordering inside Defaults/Multipliers.
+- Document `Game` as a string with a recommended-values list rather than free-form.
+- Add a test asserting that two `CustomProfileDefinition` instances built from the same JSON produce identical `ExportProfileJson` strings, byte-for-byte.
 
-### Concerns
-
-- **HIGH** - `TemplateProfileCatalogFactory` is currently a `static class` (`public static class TemplateProfileCatalogFactory`). The plan needs it to consume `IUserProfileStore` - that requires either making it non-static (breaks the existing `services.AddSingleton(_ => TemplateProfileCatalogFactory.CreateDefault())` registration in `AppBootstrapper.cs:46`) or passing the store as a parameter. Plan doesn't choose. **This is a blocking design question.**
-- **MEDIUM** - Filename sanitization rules unspecified. What characters are stripped? Unicode? Length limits? Two custom profiles with names that sanitize to the same filename - what then? Recommend: hash-disambiguating suffix or rejection at save time.
-- **MEDIUM** - Discovery surfaces "rejected-file diagnostics through the store result" but no consumer exists in this plan. Where do they appear? UI? Status message? If 04-05's manager is the consumer, the plan should declare that integration as an explicit downstream contract.
-- **MEDIUM** - Catalog refresh after `SaveProfile`/`DeleteProfile` is not addressed. Catalog is currently a singleton built once at startup. Adding/removing custom profiles at runtime requires either rebuilding it or making it mutable. Plan needs a strategy.
-- **LOW** - `ProfileCatalogEntry.IsEditable = SourceKind == LocalCustom` excludes `EmbeddedProject` entries from editability - but those are introduced in 04-03/04-06 for project-scope profiles. Confirm whether embedded entries surface in `Entries` here or only in `ProjectModel.CustomProfiles`.
-
-### Suggestions
-
-- Decide static vs instance factory before implementation. Instance class with constructor injection of `IUserProfileStore` and bundled `searchDirectories` is cleaner; update `AppBootstrapper` registration accordingly. Add a static `CreateDefault()` shim if existing tests need it.
-- Add Task 4 (or extend Task 3): catalog refresh contract. Recommend: `TemplateProfileCatalog` becomes mutable behind `RefreshFromStore()` or expose `ICatalogService` over it that `ProfileManagerViewModel` calls after save/delete.
-- Specify filename sanitization: `Path.GetInvalidFileNameChars()` stripped, lowercase, max 64 chars, `.json` suffix, collision-resolved with `-{hash8}`.
-
-### Risk: **MEDIUM-HIGH** - the static-factory question is structurally important.
+**Risk: LOW**
 
 ---
 
-## Plan 04-03: Embedded custom profiles in `.jbs2bg`
+## Plan 04-02: AppData store + source-tagged catalog
 
-### Summary
+**Summary**: Introduces user-local profile storage, tags catalog entries with source metadata, and creates a refresh-aware catalog service. Also migrates `TemplateProfileCatalogFactory` from static to injectable while preserving the existing static shim - a meaningful but well-scoped refactor.
 
-Adds optional `CustomProfiles` top-level array (order 3) to project file with referenced-only filtering on save.
+**Strengths**:
+- Single `ITemplateProfileCatalogService.Refresh()` ownership for runtime catalog updates is precisely the right shape for the cross-cutting refresh story across Plans 5/6/7.
+- `WithProjectProfiles` overlay keeps embedded project profiles out of the local store unless explicit - correctly enforces D-13/D-15/D-16.
+- Filename sanitization with deterministic 8-char hash collision suffix is specified, eliminating cross-OS variance.
+- Discovery failures degrade gracefully to bundled-only catalog, matching `UserPreferencesService` non-blocking convention.
 
-### Strengths
+**Concerns**:
+- **HIGH**: `TemplateProfileCatalog`'s existing constructor and lookup is hot-path code consumed by `TemplatesViewModel`, `MainWindowViewModel`, `DiagnosticsViewModel`, `BosJsonExportWriter`, `ProjectValidationService`, and others. Plan 02 says existing consumers can keep using the constructor that wraps inputs as `Bundled`. But the catalog is currently registered as a singleton instance. After refresh, the catalog instance changes, so anyone who captured the old reference will not see updates. The plan acknowledges existing consumers can receive `TemplateProfileCatalog` from `catalogService.Current` until later plans migrate, but Plan 06 then asks Templates/Diagnostics ViewModels to react to recovery state. Recommend either making the existing catalog mutable in place or explicitly migrating affected ViewModels in this plan. The current ambiguity means generation can produce stale results after a profile import until app restart.
+- **MEDIUM**: Concurrent access to the `UserProfileStore` during background discovery vs. foreground import is not specified. If `Refresh()` is invoked from a Plan 05 import command while another `Refresh()` is in-flight, the catalog can race. Specify a lock or serialize through `RxApp.TaskpoolScheduler`.
+- **MEDIUM**: `LastDiscoveryDiagnostics` exposes rejected-file diagnostics on `ITemplateProfileCatalogService`, but no plan in the set actually surfaces those diagnostics in UI. Plan 07 builds the Profiles tab but does not specify a rejected files group. Either add presentation in Plan 07 or drop this property.
+- **LOW**: The plan mentions `SourceKind = "Skyrim"` / `"Fallout4"` for bundled `Game`, but `ProjectProfileMapping` constants are not game-tagged today. Confirm these strings are not load-bearing for any existing test or fixture.
 
-- Correct `[JsonPropertyOrder(3)]` placement after legacy `MorphedNPCs`
-- Preserves all legacy field names/order
-- D-15 referenced-only filter is testable
-- Acceptance criteria explicitly checks legacy fields are still present
+**Suggestions**:
+- Add explicit `MainWindowViewModel`, `TemplatesViewModel`, and `DiagnosticsViewModel` migration to `ITemplateProfileCatalogService.Current` inside Task 3, with a focused acceptance criterion that stale `TemplateProfileCatalog` singleton injection is removed.
+- Document refresh thread-safety, such as serializing all `Refresh()` and `WithProjectProfiles()` calls via a `SemaphoreSlim`.
+- Add a test that proves Templates preview math reflects a newly-imported custom profile within the same session, not via app restart.
 
-### Concerns
-
-- **HIGH** - Backward compatibility byte-stability test missing. The most important assertion is: *project without custom profiles produces byte-identical output before and after this change*. Plan says "preserves `isUUNP` and `Profile` fields" but doesn't require byte-equality with existing `v1-stale-project.expected.jbs2bg` golden, if one exists.
-- **MEDIUM** - `EmbeddedProfileDto` shape is implied but not specified. Should the embedded JSON shape match the standalone profile JSON (uppercase `Defaults`/`Multipliers`/`Inverted`, lowercase `valueSmall`/`valueBig`) for symmetry, or use C#-flavored property naming? This affects whether users can copy-paste between standalone and embedded.
-- **MEDIUM** - Validation of embedded profiles on load is unspecified. If embedded JSON is malformed, does load fail or proceed with diagnostics? Per D-09 should be non-blocking, but 04-03 doesn't address it (defers entirely to 04-06). State this explicitly.
-- **MEDIUM** - `ProjectModel.CustomProfiles` mutation semantics unclear. "Observable or read-only-mutable" - but dirty tracking is critical. Editing an embedded profile through the editor: does it mark project dirty? What about `ChangeVersion`? Recommend: same `ObservableCollection<CustomProfileDefinition>` pattern as `SliderPresets` with `AttachCollection` wiring.
-- **LOW** - Saved order of `CustomProfiles` array unspecified. Recommend ordering by `Name` (case-insensitive) for deterministic output, matching existing `SliderPresets.OrderBy(...)`.
-- **LOW** - Legacy reader behavior with unknown `CustomProfiles` field - `System.Text.Json` ignores unknown properties by default, so old readers will simply drop the section. Worth a one-line note in tests.
-
-### Suggestions
-
-- Add explicit test: `Save_NoCustomProfiles_ProducesByteIdenticalOutputToV1Format()` using an existing golden fixture if available, or capture current output as the baseline.
-- Specify `EmbeddedProfileDto` shape exactly. Recommend matching standalone profile JSON case for `Name`/`Game`/`Defaults`/`Multipliers`/`Inverted` so users can extract embedded -> save as standalone trivially.
-- Add validation behavior on load to acceptance criteria: malformed embedded entries are dropped with a Core-side diagnostic, project still loads.
-
-### Risk: **MEDIUM** - backward-compat test gap is the main concern.
+**Risk: MEDIUM** due to the singleton-vs-refresh mismatch.
 
 ---
 
-## Plan 04-04: Recovery diagnostics service
+## Plan 04-03: Embedded CustomProfiles section
 
-### Summary
+**Summary**: Adds the optional `CustomProfiles` top-level array to `.jbs2bg` while preserving legacy fields. Smartly insists on byte-equality for projects with no custom profiles.
 
-Read-only Core service producing `ProfileRecoveryDiagnostic` findings with three explicit action kinds.
+**Strengths**:
+- The byte-identical to v1 format when no custom profiles acceptance criterion is the correct guardrail for project-roundtrip compatibility.
+- D-15 enforcement is concretely specified: `OrdinalIgnoreCase` match against `SliderPreset.ProfileName`, excluding `Bundled`.
+- Deterministic ordering by `Name` with `OrdinalIgnoreCase` makes saved files diffable.
+- ProjectModel collection wiring follows the existing `AttachCollection` dirty-tracking pattern.
 
-### Strengths
+**Concerns**:
+- **HIGH**: The byte-equality test is described as capturing current serializer output before implementation and asserting it remains byte-identical after implementation. This requires either a fixture file under `tests/fixtures/expected/**` (sacred) or a runtime-baseline comparison. The plan does not say which. Specify the mechanism.
+- **MEDIUM**: `CustomProfiles` ordering at position `JsonPropertyOrder(3)` is defined, but future root-level optional sections will need to know whether `CustomProfiles` should stay last or migrate. Add a comment in `ProjectFileService.cs` documenting the order policy.
+- **MEDIUM**: Malformed embedded profile load behavior is Core-side diagnostics/invalid embedded-profile result data while project open remains possible. But `ProjectFileService.LoadFromString` currently has no diagnostics return channel; it returns a `ProjectModel`. The plan does not specify the new return shape. Either change the signature or attach diagnostics to `ProjectModel`; Plan 06 then needs to consume them during `TryOpenProjectPathAsync`.
+- **LOW**: `EmbeddedProfileDto` shape is defined as matching standalone profile JSON from Plan 01. If Plan 01's standalone JSON changes later, embedded compatibility needs separate consideration. Document the relationship.
 
-- Read-only by design, preserving Phase 3 baseline
-- Exact-match resolution helper enforces D-12 cleanly
-- Action enum matches UI-SPEC verbatim
+**Suggestions**:
+- Add an explicit acceptance criterion specifying the byte-equality test mechanism, such as a string literal in the test file containing canonical v1 JSON output.
+- Define the `LoadFromString` diagnostics return contract, such as `LoadProjectResult` with `ProjectModel` plus `IReadOnlyList<ProjectLoadDiagnostic>`, or transient `ProjectModel.LoadDiagnostics`.
+- Add a test that asserts a project with mixed referenced and unreferenced custom profiles in `ProjectModel.CustomProfiles` only serializes the referenced ones.
 
-### Concerns
-
-- **MEDIUM** - Overlaps with existing `ProfileDiagnosticsService.Analyze` and `ProjectValidationService.AddProfileFindings`. Both already emit "unbundled saved profile" findings for the same condition (preset profile name not in catalog). Without integration, the Diagnostics tab will show duplicate findings for the same missing profile. Plan should either (a) replace those existing findings, (b) deduplicate, or (c) explicitly distinguish "missing custom profile reference (recoverable)" from "unbundled saved profile (legacy/neutral)".
-- **MEDIUM** - Should `depends_on` include `04-03`? Recovery semantics differ when embedded profile data is present in `ProjectModel.CustomProfiles`. If embedded profile matches the missing reference, the diagnostic message and available actions should change (e.g., "import from project copy" becomes one of the recovery options). Plan doesn't address embedded-aware recovery.
-- **LOW** - Test for "no recovery diagnostic when profile is bundled" is implicit in Task 1 (`A project with no missing profile names produces no recovery diagnostics`) but should also cover "no diagnostic when locally available custom profile matches".
-- **LOW** - How does this service interact with the legacy `isUUNP=true` projects whose profile name resolves through `ProjectProfileMapping.Resolve`? If the resolved name is in the catalog, no diagnostic. Worth an explicit test.
-
-### Suggestions
-
-- Add Task 3: integrate or supersede the existing "Unbundled saved profile" finding in `ProjectValidationService` to prevent duplicate findings. Either delete the old finding when this service runs, or filter it out.
-- Add `depends_on: [04-01, 04-03]` and include an embedded-profile-aware code path: if `ProjectModel.CustomProfiles` contains an exact-match definition for a missing reference, the recovery diagnostic should call that out and offer "Use project-embedded copy" as an additional action.
-- Acceptance criterion: existing `ProfileDiagnosticsServiceTests` and `ProjectValidationServiceTests` still pass - confirms no regression in Phase 3 behavior.
-
-### Risk: **MEDIUM** - duplicate-finding risk and the missing 04-03 dependency are real.
+**Risk: MEDIUM** because the byte-equality and diagnostics-channel ambiguities are real.
 
 ---
 
-## Plan 04-05: Profile manager + editor ViewModels
+## Plan 04-04: Recovery diagnostics
 
-### Summary
+**Summary**: Adds a Core-only read-only recovery diagnostics service with exact-match resolution helpers. Correctly depends on Plan 03 so it can detect embedded copies. Task 3 deduplicates with Phase 3 findings.
 
-ReactiveUI ViewModels for the Profile Manager workspace with strict validation gating and a `IProfileManagementDialogService` boundary.
+**Strengths**:
+- Embedded-profile awareness tightly couples recovery UX to project file content.
+- Phase 3 deduplication is critical and easy to miss.
+- Read-only contract preserves Phase 3 diagnostics boundary.
+- Explicit `CanResolveMissingReference` test for filename-vs-internal-name mismatch nails the D-12 anti-pattern.
 
-### Strengths
+**Concerns**:
+- **MEDIUM**: Task 3's deduplication filters by exact missing profile display name and diagnostic category/code, but `ProfileDiagnosticsService` currently emits findings keyed by free-form `Title`/`Detail` strings, not codes. To filter by code reliably, add a `Code` field to `DiagnosticFinding` or change `ProfileDiagnosticsService` to mark fallback-detail findings distinctly.
+- **MEDIUM**: The recovery service inspects `ProjectModel.SliderPresets` and `ProjectModel.CustomProfiles`. If Plan 06 adds a project-scoped overlay through `WithProjectProfiles`, recovery diagnostics need to know whether overlay-active state means resolved or still missing for save/share semantics. Plan 04 should specify which state diagnostics observe.
+- **LOW**: `ProfileRecoveryActionKind.UseProjectEmbeddedCopy` is enum'd here but the command-side behavior is in Plan 06 Task 3. Cross-reference would help future maintainers.
 
-- Faithful to ReactiveUI conventions (compiled, openspec-backed)
-- Validation-gated `Save` via observable canExecute
-- Bundled-vs-custom command availability enforced
-- DI registration explicit
+**Suggestions**:
+- Add a `Code` or `Category` field to `DiagnosticFinding` so deduplication is mechanical, not text-search.
+- Specify whether recovery diagnostics treat embedded copy active via overlay as resolved or still using fallback semantically.
+- Add a test that asserts the recovery service does not produce a diagnostic when a preset's profile name resolves to a bundled profile via existing case-insensitive lookup.
 
-### Concerns
-
-- **MEDIUM** - `IProfileManagementDialogService` interface members aren't specified. "import/conflict/save prompts" is listed but no methods are declared. Suggested minimum: `Task<string?> PickProfileImportFileAsync(CancellationToken)`, `Task<string?> PickProfileExportPathAsync(string suggestedFileName, CancellationToken)`, `Task<bool> ConfirmDeleteProfileAsync(string profileName, CancellationToken)`. Without this, the Window implementation in Task 1 is undefined.
-- **MEDIUM** - `ProfileManagerViewModel` lifetime/instance and editor binding unclear. Is one `ProfileEditorViewModel` instance reused (rebound per selection) or transient per-edit? What happens with unsaved edits + selection change? Plan should specify (recommend: single editor with "Discard Unsaved Edits?" confirmation per UI-SPEC).
-- **MEDIUM** - Catalog refresh after save/delete (link to 04-02 concern): if the catalog is a singleton, the manager needs a way to trigger refresh. Plan doesn't reference this.
-- **MEDIUM** - Test coverage gaps: acceptance criteria check command names and copy strings but not behavior. Recommend tests for:
-  - Save fails with IO error -> editor remains open with unsaved changes intact (per UI-SPEC)
-  - Validation result transitions Valid -> Blocker -> Valid as user edits
-  - Concurrent rapid edits don't lose validation state
-- **LOW** - `Validate Profile` command remains enabled when there are unsaved edits - good. But spec doesn't say what `IsValid` reflects: last-saved or current-buffer state. Should be current-buffer.
-
-### Suggestions
-
-- Specify `IProfileManagementDialogService` interface explicitly in the `<interfaces>` block with method signatures.
-- Add lifetime decision: `ProfileEditorViewModel` is owned by `ProfileManagerViewModel` and rebound on selection change with discard-confirmation guard.
-- Add catalog-refresh contract: `ProfileManagerViewModel` calls a `RefreshCatalog()` method (added to 04-02 scope) after save/delete/import.
-- Strengthen Task 2 acceptance with behavioral tests beyond grep checks.
-
-### Risk: **MEDIUM** - solid skeleton but several integration details are punted.
+**Risk: LOW**
 
 ---
 
-## Plan 04-06: Conflict + recovery integration
+## Plan 04-05: Manager + Editor ViewModels
 
-### Summary
+**Summary**: Creates `ProfileManagerViewModel`, `ProfileEditorViewModel`, and `IProfileManagementDialogService`. Validation-gated save, source-aware command availability, single editor instance with discard confirmation on selection change.
 
-Wires conflict dialog into project open, exposes recovery actions in Diagnostics, and adds undo-aware preset profile remap.
+**Strengths**:
+- Single editor instance with `ConfirmDiscardUnsavedEditsAsync` on selection change is a thoughtful UX detail captured up front.
+- Save-failure preserves unsaved edits, a common forgotten edge case explicitly tested.
+- Bundled rows have explicitly disabled edit/delete commands rather than hidden, matching UI-SPEC `Bundled - read-only` discoverability.
+- Validation transitions are tested as the buffer changes, not only on save attempt.
 
-### Strengths
+**Concerns**:
+- **MEDIUM**: The editor row models are instructed to convert to JSON/definition candidate and validate with `ProfileDefinitionService` before save. For hundreds of slider rows, validating on every keystroke through `JsonDocument.Parse` is wasteful. Specify whether validation is debounced/triggered explicitly, or whether the editor builds a `CustomProfileDefinition` directly and uses a non-JSON validation path.
+- **MEDIUM**: `Refresh()` is called after import/save/delete success, but if `Refresh()` rebuilds the catalog, the manager VM's bound `ProfileEntries` collection will need to be reloaded. Specify the binding strategy: observe `Current` via property change notification or re-query in command result handler.
+- **MEDIUM**: Singleton lifetime for `ProfileManagerViewModel` assumes a single-shell app. This is probably fine for current code, but document the assumption.
+- **LOW**: `ProfileEditorViewModel` is described as a child but no DI registration is specified. Specify whether it is transient or manager-owned.
+- **LOW**: `ConfirmDiscardUnsavedEditsAsync` duplicates existing app-level discard patterns. This is acceptable if copy differs, but note the distinction.
 
-- Explicit four-option conflict resolution matching UI-SPEC
-- Undo integration for remap operations
-- Non-blocking project open preserved
-- Recovery actions match exact UI-SPEC labels
+**Suggestions**:
+- Specify validation cadence, such as editor builds a `CustomProfileDefinition` candidate from row state without round-tripping through JSON; only export uses `ExportProfileJson`.
+- Add an acceptance criterion that the manager's `ProfileEntries` reflects `Refresh()`-induced catalog changes within the same session.
+- Document single-shell assumption for `ProfileManagerViewModel` lifetime.
 
-### Concerns
-
-- **HIGH** - **Project open ordering is fragile.** Current `TryOpenProjectPathAsync` (`MainWindowViewModel.cs:414-426`) does `projectFileService.Load -> project.ReplaceWith -> SelectedPreset/Npc resets -> MarkClean`. Plan says "After ProjectFileService.Load... inspect... before writing to IUserProfileStore or changing local catalog state" - but `ReplaceWith` is itself a project-state mutation visible to all workspace ViewModels. The conflict dialog needs to fire **before** `ReplaceWith` if we want the user to opt out without a flash of "now you have the project loaded but not the profiles". State the exact sequence: `Load -> DetectConflicts -> if conflicts: prompt -> apply ReplaceWith -> optionally save embedded to UserProfileStore -> reset selections -> MarkClean`. If the user cancels mid-conflict-dialog, what state is the app in?
-- **HIGH** - **"Compare normalized profile definitions, not raw JSON text" is not defined.** Float comparison tolerance? Order-insensitive `Inverted` comparison? Case-sensitive vs case-insensitive slider names within tables? This is the equality contract for D-16 conflict detection - a critical spec gap. Recommend: define `CustomProfileDefinition.IsDefinitionallyEqual(other)` in 04-01 with explicit semantics, or here with a public `ProfileDefinitionEquality` comparer.
-- **MEDIUM** - `Use Project Copy` ("keeps embedded definition in project scope without overwriting local") needs a concrete implementation. The catalog is currently global. If the project temporarily exposes a profile that's not in the global catalog, generation needs to find it via project-scope lookup. Plan implies this works but doesn't trace through how `TemplateGenerationService` / `TemplateProfileCatalog.GetProfile` find the project-scoped entry. Either: (a) the catalog gets project-scoped overlay support, or (b) `ProjectModel.CustomProfiles` is queried first by generation. Both are non-trivial - needs a Task or design decision.
-- **MEDIUM** - `Rename Project Copy` mutates both embedded data AND referenced project preset names. This is a project-state change. Plan doesn't say if it marks dirty or is undoable. Should be both.
-- **MEDIUM** - Recovery action "Remap to Installed Profile" undo behavior: undoing should restore the previous (missing/unresolved) reference. The undo action then triggers the recovery diagnostic to reappear. Plan should test this round-trip.
-- **MEDIUM** - Conflict dialog method signature in `IAppDialogService` not specified. Suggested: `Task<ProfileConflictDecision> PromptProfileConflictAsync(ProfileConflictRequest request, CancellationToken ct)` where `ProfileConflictDecision` carries resolution + optional renamed name.
-- **LOW** - Multiple conflicts in one project - does the dialog show one at a time or batched? UI-SPEC implies one dialog per conflict.
-
-### Suggestions
-
-- Specify the exact project-open sequence as pseudocode in the plan (this is the highest-leverage clarification).
-- Move `ProfileDefinitionEquality` definition into 04-01 (or a small Task here) with explicit rules: case-sensitive slider names, case-insensitive profile name (already enforced by identity), exact float bit-equality on `valueSmall/valueBig/multiplier`, set-equality on `Inverted`.
-- Add an explicit task for project-scoped catalog lookup: either extend `TemplateProfileCatalog` with overlay or have generation services consult `ProjectModel.CustomProfiles` first.
-- Add `Rename Project Copy` to the undo records list.
-- Add multi-conflict handling spec (sequential dialogs with "Apply to all matching" optional).
-
-### Risk: **HIGH** - this is the most architecturally consequential plan and has the most under-specified behavior.
+**Risk: LOW-MEDIUM**
 
 ---
 
-## Plan 04-07: Shell UI integration
+## Plan 04-06: Project-open conflict + recovery actions
 
-### Summary
+**Summary**: The most complex plan in the phase. Implements project-open conflict choreography, `Use Project Copy` overlay activation, undo-recorded preset remap, and Diagnostics recovery actions.
 
-First-class Profiles workspace tab with compiled bindings, accessibility, and a human-verify checkpoint.
+**Strengths**:
+- The 8-step `TryOpenProjectPathAsync` sequence is laid out explicitly with cancel semantics.
+- Cancel-leaves-existing-project-unchanged is correctly placed before `project.ReplaceWith(loadedProject)`.
+- Undo-recorded remap with reappearing recovery diagnostic on undo is a strong correctness invariant.
+- Multi-conflict handling is explicitly sequential with no apply-to-all ambiguity.
+- `ProfileDefinitionEquality.DefinitionallyEquals` is correctly leveraged from Plan 01.
 
-### Strengths
+**Concerns**:
+- **HIGH**: Conflict comparison happens before `project.ReplaceWith(loadedProject)`, but local custom profiles are read from `IUserProfileStore` / `ITemplateProfileCatalogService.Current` at the moment of comparison. Between the dialog `await` and actual store mutation/`ReplaceWith`, another import could mutate the local store. Specify a TOCTOU mitigation, such as capturing an `IReadOnlyList<CustomProfileDefinition>` snapshot once at the start of `TryOpenProjectPathAsync` and operating on that snapshot throughout.
+- **HIGH**: `Replace Local Profile` saves embedded definition through `UserProfileStore`, refreshes the catalog, and local profile becomes active. If this happens before `project.ReplaceWith(loadedProject)` and a later conflict dialog or write fails, the local store is changed but the project has not opened. Specify rollback, or defer destructive store operations until after all dialogs resolve.
+- **MEDIUM**: `Rename Project Copy` requires a unique display name, but the uniqueness scope should be specified against the post-decision projected catalog, including all prior rename decisions in this open.
+- **MEDIUM**: Recording undo during project open for `Rename Project Copy` may fight normal open-project behavior that clears undo history. Confirm whether rename-on-open should create an undo entry or simply mark dirty after load.
+- **MEDIUM**: Diagnostics recovery actions add mutating commands to a previously read-only diagnostics area. Phase 4 context permits explicit recovery actions, but the relevant OpenSpec capability specs should be updated to reflect this.
+- **LOW**: The plan modifies `TemplatesViewModel` to add a remap command but does not specify how recovery action invocation flows from `DiagnosticsViewModel` to `TemplatesViewModel`; cross-VM coordination should be specified.
 
-- Adds `Profiles` to `AppWorkspace` enum cleanly
-- Headless smoke tests for tab presence
-- Human verification checkpoint protects UI quality
-- Faithful UI-SPEC copy enforcement
+**Suggestions**:
+- Add an explicit snapshot-local-profiles step before the conflict loop.
+- Defer destructive `UserProfileStore.SaveProfile` writes for `Replace Local Profile` to a single transaction phase after all conflicts are resolved.
+- Specify uniqueness scope for `Rename Project Copy` as unique against the post-decision projected catalog.
+- Add an acceptance test for partial-failure rollback.
+- Document cross-VM coordination for Diagnostics recovery actions, such as routing through `MainWindowViewModel` or a recovery coordinator service.
 
-### Concerns
-
-- **MEDIUM** - Templates "Manage Profiles" navigation: `TemplatesViewModel` doesn't currently know about `MainWindowViewModel.ActiveWorkspace`. Plumbing the navigation requires either an event/observable on Templates that Main subscribes to, or injecting a lightweight `INavigationService` interface. Plan says "Add a navigation command or method" but doesn't specify the wiring. Recommend: introduce `INavigationService` with `NavigateTo(AppWorkspace workspace)`, register in DI, inject into `TemplatesViewModel`.
-- **MEDIUM** - Global search behavior in Profiles workspace: the existing `MainWindowViewModel.ApplyGlobalSearchText` has a switch on `ActiveWorkspace`. Plan adds the case for Profiles "clears other workspace search text" but Profiles itself probably wants a search filter for profile names. Either implement it or explicitly defer.
-- **MEDIUM** - Aggregate `IsAnyBusy` integration: plan says "include `Profiles.WhenAnyValue(x => x.IsBusy) in aggregate busy if the manager exposes busy state". But ProfileManagerViewModel busy state isn't defined in 04-05. Either add `[ObservableAsProperty] _isBusy` to ProfileManagerViewModel in 04-05 or skip this hookup in 04-07.
-- **LOW** - Missing recovery state visualization in the tab - UI-SPEC mentions "Missing references" group at the bottom of the source rail. Headless test should assert that group binding exists, not just `Import Profile` button.
-- **LOW** - Spacing token enforcement is non-testable; gate via human checkpoint is appropriate.
-
-### Suggestions
-
-- Define `INavigationService` (or equivalent) and wire into 04-07 Task 1 explicitly.
-- Specify global-search behavior for Profiles workspace (recommend: filter local profile list by name).
-- Confirm `IsBusy` exposure on `ProfileManagerViewModel` is in scope of 04-05 acceptance criteria.
-
-### Risk: **LOW-MEDIUM**
-
----
-
-## Cross-Plan Concerns
-
-1. **Catalog mutability/refresh contract is missing across 04-02, 04-05, 04-06.** Custom profile add/delete/import/conflict-resolve all imply runtime catalog updates, but no plan owns this. Add a single explicit task in 04-02 or split into a new mini-plan.
-
-2. **Profile-definition equality semantics for D-16 conflict detection are undefined.** This is the single highest-impact spec gap. Define in 04-01 or 04-06 before implementation.
-
-3. **Project-scoped vs global catalog precedence** for "Use Project Copy" conflict resolution is undefined. Without it, 04-06 can't be implemented correctly.
-
-4. **Schema versioning is absent.** Custom profile JSON has no `Version` field. Future profile-shape changes will break older readers. Recommend adding optional `"Version": 1` field now, validated as `1` if present, defaulted to `1` if absent. Cheap to add today, expensive to retrofit.
-
-5. **`ProfileDiagnosticsService` / `ProjectValidationService` integration with new recovery service.** Risk of duplicate findings in Diagnostics workspace. Address explicitly in 04-04.
-
-6. **Test data fixtures.** Plans reference test files like `ProjectFileServiceCustomProfileTests.cs` but don't enumerate JSON test fixtures. Recommend adding a `tests/fixtures/profiles/` directory in 04-01 with: `valid-named.json`, `valid-blank.json`, `malformed.json`, `duplicate-slider.json`, `nan-value.json`, `large-broad-numerics.json`.
+**Risk: HIGH** due to project-open choreography and partial-failure surface area.
 
 ---
 
-## Summary Table
+## Plan 04-07: Profiles workspace UI
 
-| Plan | Risk | Top concern |
-|------|------|-------------|
-| 04-01 | LOW | Coexistence with `SliderProfileJsonService` |
-| 04-02 | MEDIUM-HIGH | Static factory -> instance migration |
-| 04-03 | MEDIUM | Missing byte-identical backward-compat test |
-| 04-04 | MEDIUM | Duplicate findings vs Phase 3 services; missing 04-03 dep |
-| 04-05 | MEDIUM | Dialog interface unspecified; editor lifecycle |
-| 04-06 | **HIGH** | Project-open ordering + equality semantics undefined |
-| 04-07 | LOW-MEDIUM | Cross-VM navigation plumbing |
+**Summary**: Adds the Profiles tab to `MainWindow`, wires `INavigationService` for cross-VM navigation, and includes a human visual verification checkpoint.
 
-## Recommendation
+**Strengths**:
+- `INavigationService` cleanly decouples `TemplatesViewModel` from `MainWindowViewModel` for the `Manage Profiles` button.
+- Profiles search behavior is specified.
+- Headless test asserts the Missing references group is present even when empty.
+- Human verification checkpoint is well-scripted.
+- Spacing tokens are explicitly enumerated.
 
-**Proceed with revisions.** Address the HIGH concerns in 04-02 (static factory), 04-03 (backward-compat test), and 04-06 (open ordering + equality contract) before kicking off Wave 2. The MEDIUM concerns can be resolved during execution if the executor is briefed on them, but pre-resolving in plans will prevent rework.
+**Concerns**:
+- **MEDIUM**: `Profiles.WhenAnyValue(x => x.IsBusy)` is added to the busy aggregate. Plan 05 specifies `IsBusy`, but Plan 06 conflict handling happens in `MainWindowViewModel`, not directly in `ProfileManagerViewModel`. `Profiles.IsBusy` may not capture project-open conflict resolution time. Either route conflict-resolution through a `ProfileManagerViewModel` command or add a separate observable to the aggregate.
+- **LOW**: The Profiles tab likely needs a typed `DataTemplate` for the editor pane with `x:DataType="vm:ProfileEditorViewModel"`. The plan mentions typed DataTemplates for profile rows/editor rows but not the editor pane itself.
+- **LOW**: `ManageProfilesCommand` on `TemplatesViewModel` injects `INavigationService`; confirm the constructor is updated in this plan.
+- **LOW**: The human verification checkpoint references a missing custom profile project fixture/test path if available. Make this concrete with deterministic reproduction steps or a fixture from Plan 06.
 
-Specifically, before executing Wave 2:
+**Suggestions**:
+- Route project-open conflict resolution through a busy source included in the aggregate.
+- Add explicit `x:DataType="vm:ProfileEditorViewModel"` acceptance criterion for the editor pane.
+- Update `TemplatesViewModel` constructor signature in the action text to include `INavigationService`.
+- Make the human checkpoint missing-profile test path concrete.
 
-1. Pin the equality semantics for `CustomProfileDefinition` (suggest: add to 04-01).
-2. Decide static-vs-instance for `TemplateProfileCatalogFactory` (suggest: instance, with `CreateDefault()` shim).
-3. Add catalog refresh contract to 04-02.
-4. Add `depends_on: [04-01, 04-03]` to 04-04 and document embedded-aware recovery.
-5. Add backward-compat byte-identical test to 04-03.
+**Risk: LOW**
+
+---
+
+## Cross-Plan Issues
+
+### Phase Goal Coverage
+
+The five Phase 4 success criteria map cleanly:
+1. **Import/copy/export/validate** - Plans 01, 02, 05
+2. **Strict edit validation** - Plans 01, 05
+3. **Save with legacy fields** - Plan 03
+4. **Resolve missing references with diagnostics** - Plans 04, 06
+5. **Bundle/share project profiles** - Plans 03, 06
+
+Coverage is complete.
+
+### Dependency Ordering
+
+The wave structure is correct:
+- Wave 1 (01) -> 2 (02, 03) -> 3 (04, 05) -> 4 (06) -> 5 (07)
+- Plan 04 correctly depends on 03 for embedded profile awareness.
+- Plan 05 correctly depends on 02 and 01.
+- Plan 06 correctly depends on 02, 03, 04.
+
+One latent concern: Plan 05 starts before Plan 06, meaning the manager VM is built before conflict-handling integration is specified. If Plan 06 reveals API needs on `ProfileManagerViewModel`, those need to go into Plan 06 or a Plan 05 follow-up.
+
+### Test File Strategy
+
+The plans add several new test classes. With xUnit v3, module initializer, and ReactiveUI immediate scheduling, this should work, but the full suite runtime will grow. Consider whether any tests should be tagged for selective CI runs. Not blocking.
+
+### Sacred Files
+
+All plans correctly avoid `JavaFloatFormatting.cs`, `SliderMathFormatter.cs`, `BodyGenIniExportWriter.cs`, `BosJsonExportWriter.cs`, and `tests/fixtures/expected/**`. Plan 03 comes closest by extending `ProjectFileService.cs`, but the byte-equality acceptance is the right guard.
+
+### OpenSpec Updates
+
+None of the plans mention updating OpenSpec capability specs (`project-roundtrip`, `template-generation-flow`, diagnostics workflow if present, plus a new `profile-extensibility` capability). Phase 4 introduces enough behavior to warrant a new capability spec or significant deltas to existing ones. This is a **MEDIUM** concern; recommend adding an explicit OpenSpec spec update task to Plan 07 or as Plan 08.
+
+### Threading Model
+
+No plan specifies the threading contract for `IUserProfileStore` (sync vs. async; if sync, called only from Taskpool) or `ITemplateProfileCatalogService` (thread-safe vs. single-threaded). Plan 06 project-open, Plan 05 import, and Plan 07 UI navigation all touch the same state. Add a one-line threading contract somewhere.
+
+---
+
+## Risk Heatmap
+
+| Plan | Risk | Primary Concern |
+|------|------|-----------------|
+| 04-01 | LOW | Key-ordering determinism in export |
+| 04-02 | MEDIUM | Catalog singleton vs. refresh contract |
+| 04-03 | MEDIUM | Byte-equality test mechanism + load diagnostics channel |
+| 04-04 | LOW | Phase 3 dedup mechanism specificity |
+| 04-05 | LOW-MEDIUM | Validation cadence + refresh propagation to bound list |
+| 04-06 | HIGH | TOCTOU + partial-failure rollback in conflict sequence |
+| 04-07 | LOW | Busy aggregation for project-open path |
+
+**Overall Phase 4 Risk: MEDIUM** - Plans 02, 03, and especially 06 should be re-reviewed after revisions; 01, 04, 05, 07 are largely ready.
+
+## Top Recommendations (Prioritized)
+
+1. **Plan 02**: Migrate `TemplateProfileCatalog` consumers to `ITemplateProfileCatalogService.Current` in this plan, not later. Otherwise refresh is silently broken.
+2. **Plan 06**: Snapshot local profiles at the start of `TryOpenProjectPathAsync` and defer destructive store writes until all conflicts resolve. Document partial-failure semantics.
+3. **Plan 03**: Specify the byte-equality test mechanism explicitly.
+4. **Plan 03**: Define the diagnostics return channel for `LoadFromString` malformed embedded profile data.
+5. **Cross-cutting**: Add an OpenSpec capability spec update task.
+6. **Plan 04**: Add a `Code`/`Category` field to `DiagnosticFinding` so Phase 3/Phase 4 dedup is mechanical.
 
 ---
 
 ## Codex Review
 
-Codex was invoked but did not produce a plan review.
+**Overall**
 
-```text
-Error loading config.toml: invalid type: sequence, expected struct AgentsToml
-in `agents`
-```
+The phase is well decomposed around Core-first validation, App-local storage, project embedding, recovery diagnostics, then UI. The plans mostly achieve EXT-01 through EXT-05 and respect the key trust boundary: bundled, custom, embedded, and unresolved profiles must stay distinguishable. The main risks are not concept quality, but scope density in 04-06, a missing serialization/profile-resolver contract in 04-03, and catalog overlay semantics that could collide with the duplicate-name rule introduced in 04-02.
+
+## 04-01 Core Validation
+
+**Summary:** Strong foundation plan. It defines identity, validation, export, and equality before later plans depend on those semantics.
+
+**Strengths**
+- Keeps validation in Core and out of UI.
+- Explicitly allows blank profiles and broad finite floats.
+- Defines normalized equality before embedded/local conflict handling.
+
+**Concerns**
+- **MEDIUM:** Validation rejects duplicate slider names case-insensitively, but equality compares slider names case-sensitively. That can be valid, but the distinction should be documented in the equality XML comments.
+- **LOW:** `NaN`/`Infinity` tests may be artificial unless JSON parsing options allow named floating-point literals; malformed JSON may already reject them.
+- **LOW:** Export stability should specify indentation/newline behavior so snapshot tests are deterministic.
+
+**Suggestions**
+- Add tests for duplicate JSON object properties found through `JsonElement.EnumerateObject`, not just duplicate DTO rows.
+- Document that filenames and paths are provenance only, never identity.
+- Use one helper for normalized profile-name and table-key comparison.
+
+**Risk Assessment:** **LOW-MEDIUM**. Scope is contained and mostly Core-only.
+
+## 04-02 AppData Store And Catalog
+
+**Summary:** Good next layer, but catalog refresh and duplicate handling need sharper contracts.
+
+**Strengths**
+- Keeps bundled profiles read-only and loaded first.
+- Uses AppData storage and atomic writes.
+- Introduces a refresh-owning catalog service, which later UI workflows need.
+
+**Concerns**
+- **MEDIUM:** Discovery order for multiple custom files is not specified. If two custom files have the same display name, first-wins behavior could become filesystem-order dependent.
+- **MEDIUM:** `WithProjectProfiles` may conflict with the catalog constructor's duplicate-name rejection once project overlays need to temporarily prefer embedded copies.
+- **LOW:** stable hash must not use `string.GetHashCode`, which is process-randomized in modern .NET.
+
+**Suggestions**
+- Sort discovered files by full path before validation and make duplicate handling deterministic.
+- Specify SHA-256 or another stable hash for filename suffixes.
+- Decide whether `TemplateProfileCatalogService` raises change notifications or whether every consumer must explicitly refresh from `Current`.
+
+**Risk Assessment:** **MEDIUM**. The design is sound, but runtime refresh and overlay semantics affect later plans.
+
+## 04-03 Project Embedding
+
+**Summary:** Directionally correct, but this plan has the biggest missing contract before 04-06.
+
+**Strengths**
+- Preserves legacy root fields and adds an optional `CustomProfiles` section.
+- Filters embedded profiles to referenced custom profiles only.
+- Requires byte-identical output when no custom profiles exist.
+
+**Concerns**
+- **HIGH:** Save embeds only `ProjectModel.CustomProfiles`. If a project references a local custom profile from the AppData catalog, this plan does not say how that definition gets into `ProjectModel.CustomProfiles` before save.
+- **HIGH:** Malformed embedded entries produce diagnostics, which requires a load-result contract, but the plan does not define whether `ProjectFileService.LoadFromString` returns `ProjectLoadResult`, stores diagnostics on `ProjectModel`, or uses another channel.
+- **MEDIUM:** `CustomProfileDefinition` is immutable, but `SliderProfile` contents may not be. Dirty tracking and snapshot semantics need cloning/replacement rules.
+
+**Suggestions**
+- Add an explicit profile-definition resolver for save, or require profile selection/remap workflows to copy referenced custom definitions into `ProjectModel.CustomProfiles`.
+- Define a `ProjectLoadResult` or equivalent with `ProjectModel` plus embedded-profile diagnostics.
+- Add tests for local custom profile referenced by a preset but absent from `ProjectModel.CustomProfiles`.
+
+**Risk Assessment:** **HIGH** until the save-time profile source and load-diagnostics contracts are specified.
+
+## 04-04 Recovery Diagnostics
+
+**Summary:** Good read-only diagnostics plan with the right non-blocking tone, but it should depend on 04-02 as well.
+
+**Strengths**
+- Preserves Phase 1 neutral fallback behavior.
+- Enforces exact internal display-name matching.
+- Accounts for embedded project copies.
+
+**Concerns**
+- **MEDIUM:** `depends_on` omits 04-02, but tests and behavior mention locally available custom profiles in the catalog.
+- **MEDIUM:** Dedupe with Phase 3 diagnostics could become brittle if implemented as filtering rather than a shared diagnostic code/model.
+- **LOW:** Exact message text tests may create unnecessary churn.
+
+**Suggestions**
+- Add `04-02` to dependencies.
+- Prefer diagnostic codes/action kinds in tests, with only one or two copy smoke assertions.
+- Make fallback calculation source reuse existing profile fallback logic rather than duplicate it.
+
+**Risk Assessment:** **MEDIUM**. Behavior is clear, integration with existing diagnostics is the main risk.
+
+## 04-05 Profile Manager And Editor ViewModels
+
+**Summary:** Solid App-layer plan, though it tries to build a lot before the shell UI exists.
+
+**Strengths**
+- Uses ReactiveUI commands and service boundaries.
+- Keeps file I/O out of ViewModels.
+- Correctly gates save on Core validation and keeps bundled profiles read-only.
+
+**Concerns**
+- **MEDIUM:** Building validation by converting structured editor rows back into JSON may add avoidable complexity.
+- **MEDIUM:** Delete behavior for a custom profile currently referenced by the open project is not specified.
+- **LOW:** The generic save-failure message conflates validation blockers with I/O failures.
+
+**Suggestions**
+- Add a Core validation overload for an in-memory profile candidate, then have JSON import call into the same rules.
+- Add delete tests for profile is referenced by current project with explicit confirmation and resulting recovery diagnostics.
+- Separate validation failures from store/write failures in user-facing status.
+
+**Risk Assessment:** **MEDIUM**. Mostly manageable, but the editor should not grow its own parallel validation model.
+
+## 04-06 Conflict Handling And Recovery Actions
+
+**Summary:** This is the most important and highest-risk plan. It covers the right behaviors, but it is too dense for one execution unit and has transactional hazards.
+
+**Strengths**
+- Correctly refuses silent embedded/local conflict resolution.
+- Defines cancel-before-mutation semantics.
+- Includes undo-aware remap and project-scoped embedded copy behavior.
+
+**Concerns**
+- **HIGH:** Multiple-conflict flow says cancellation leaves no app state mutation, but store writes could occur after earlier decisions unless all decisions are collected before any write.
+- **HIGH:** `Use Project Copy` can conflict with duplicate-name rejection if local and embedded profiles share a name but differ. Overlay precedence must be explicitly supported.
+- **HIGH:** Embedded profiles that use bundled display names are not addressed. They should not be allowed to shadow bundled profiles.
+- **MEDIUM:** Recording undo during project open for `Rename Project Copy` may fight normal open project clears undo stack behavior.
+- **MEDIUM:** `Replace Local Profile` needs rollback or all-or-nothing behavior if a later profile write fails.
+
+**Suggestions**
+- Split into two plans: project-open conflict transaction, then diagnostics/recovery commands.
+- Collect all conflict decisions first, validate all renamed names, then apply local-store writes and project mutation.
+- Define project overlay semantics as project-scoped profile overrides local for this project without entering the global duplicate set, or choose another explicit rule.
+- Add tests for embedded profile name colliding with bundled profile names.
+- Decide whether rename-on-open should mark dirty without adding undo, or add undo after clearing the normal open stack.
+
+**Risk Assessment:** **HIGH**. The requirements are right, but transaction ordering and overlay identity need tightening before implementation.
+
+## 04-07 Profiles Workspace UI
+
+**Summary:** Good final integration plan with a useful human checkpoint. Most risk depends on whether 04-05/04-06 expose clean bindings.
+
+**Strengths**
+- Requires compiled bindings and automation names.
+- Adds source labels as text, not color-only state.
+- Includes Templates-to-Profiles navigation and headless UI coverage.
+
+**Concerns**
+- **MEDIUM:** `INavigationService` can create a circular dependency if implemented by directly depending on `MainWindowViewModel`.
+- **LOW:** Global search behavior is more detailed than the core phase goal and could distract if the shell is already complex.
+- **LOW:** MainWindow AXAML may become too large; a dedicated Profiles view could reduce binding complexity.
+
+**Suggestions**
+- Implement navigation as a small shell-owned service or observable request, not a hard VM cycle.
+- Consider extracting a `ProfileManagerView` once the Profiles tab grows beyond simple layout.
+- Keep the human checkpoint, but run full `dotnet test` after any UI fixes from that checkpoint.
+
+**Risk Assessment:** **MEDIUM**. UI integration is broad, but the plan has good verification gates.
+
+## Phase-Level Recommendations
+
+- Add an explicit save/load profile-definition contract before starting 04-03.
+- Add `04-02` as a dependency for 04-04.
+- Split 04-06 or at least add a pre-mutation decision-collection step and rollback policy.
+- Define project-scoped overlay behavior so it can coexist with duplicate-name rejection.
+- Add tests for bundled-name collision, referenced local custom profile embedding, duplicate custom files during discovery, and delete-currently-referenced custom profile.
+
+Overall phase risk: **MEDIUM-HIGH**. The architecture is pointed in the right direction and should achieve Phase 4, but 04-03 and 04-06 need tightening before execution to avoid subtle profile trust and project-sharing regressions.
 
 ---
 
 ## Consensus Summary
 
-Only the agent CLI returned a substantive review. Gemini and Codex were invoked but failed before reviewing, so there is no true multi-reviewer consensus to synthesize. The following summary captures the substantive external review plus the operational failures that prevented broader consensus.
+All three reviewers agree that the Phase 4 plan set is directionally sound, well decomposed, and aligned with the locked custom-profile decisions. They consistently praised the Core-first sequencing, strict validation before catalog inclusion, source-tagged trust domains (`Bundled`, `LocalCustom`, `EmbeddedProject`), non-blocking missing-profile recovery, and preservation of byte-sensitive generation/export behavior.
+
+The consensus risk is concentrated in integration boundaries rather than core concept quality. Plan 04-06 is the dominant concern across reviewers because project-open conflict handling, project-scoped overlays, local-store writes, remap/rename behavior, and undo/dirty semantics interact in ways that can silently mutate profile trust state if ordering is wrong. Plan 04-03 is the second major concern because embedded profile save/load behavior needs a precise contract for referenced local custom definitions and load diagnostics. Plan 04-02 also needs a sharper runtime catalog refresh contract so custom profile imports/edits take effect in existing ViewModels without requiring an app restart.
 
 ### Agreed Strengths
 
-No multi-reviewer agreement is available because only one external reviewer completed. The completed review found the seven-plan wave structure strong, the Core/App separation well preserved, and the TDD-first Core plans well aligned with Phase 4 locked decisions.
+- Core validation and export are staged before App storage, project embedding, and UI workflows.
+- Profile identity is correctly based on internal display name, not filename or fuzzy matching.
+- Bundled profile trust is protected through read-only source tagging and duplicate-name rejection.
+- Project embedding is optional and intended to preserve legacy `.jbs2bg` fields and compatibility.
+- Recovery is explicit, visible, and non-blocking rather than a silent fallback or warning-heavy workflow.
+- The plans avoid sacred formatter/export/golden-file surfaces.
 
 ### Agreed Concerns
 
-No concern was independently raised by 2+ successful reviewers. The highest-priority concerns from the completed review are:
-
-- 04-06 needs a precise project-open conflict ordering sequence before implementation.
-- 04-06 needs explicit normalized profile equality semantics for embedded/local conflict detection.
-- 04-02 needs a catalog/factory refresh strategy because custom profiles are added, deleted, imported, and conflict-resolved at runtime.
-- 04-03 should add a byte-identical backward-compatibility test for project saves without custom profiles.
-- 04-04 should address duplicate findings between the new recovery diagnostics and existing Phase 3 profile diagnostics.
+- **HIGH - Tighten Plan 04-06 conflict transaction semantics.** The agent and Codex both flagged project-open conflict handling as high risk. Required clarifications include collecting all conflict decisions before any local-store writes, snapshotting local profiles, rollback or all-or-nothing behavior for `Replace Local Profile`, uniqueness rules for renamed project copies, and whether rename-on-open participates in undo after the open stack is cleared.
+- **HIGH - Define Plan 04-03 save/load profile contracts.** The agent and Codex both called out missing details around how malformed embedded profiles surface diagnostics from `ProjectFileService.LoadFromString`, and Codex additionally flagged that saving only `ProjectModel.CustomProfiles` may omit referenced local custom profiles from AppData unless a resolver/copy-in contract is defined.
+- **MEDIUM/HIGH - Resolve runtime catalog refresh and overlay semantics.** Gemini, the agent, and Codex all raised catalog lifecycle concerns: clearing project-scoped overlays on new/closed projects, avoiding stale singleton `TemplateProfileCatalog` references, deciding notification vs. explicit refresh, and ensuring `WithProjectProfiles` can coexist with duplicate-name rejection for project-scoped overrides.
+- **MEDIUM - Strengthen deterministic serialization and validation details.** Reviewers asked for deterministic key ordering/newline behavior in `ExportProfileJson`, a clear byte-equality test mechanism for no-custom project saves, stable hash implementation details, deterministic custom file discovery order, and duplicate JSON-property tests.
+- **MEDIUM - Specify diagnostics and recovery integration more mechanically.** The agent and Codex both warned that Phase 3/Phase 4 diagnostic dedup should use diagnostic codes/action kinds rather than brittle text filtering. Codex also noted Plan 04-04 should depend on 04-02 because it tests local custom profiles through the catalog.
+- **MEDIUM - Clarify Profile Manager/editor refresh and validation cadence.** The agent and Codex both noted that Plan 04-05 needs a clear strategy for manager list updates after catalog refresh and should avoid repeatedly converting structured editor rows to JSON for validation on every keystroke.
 
 ### Divergent Views
 
-No divergent reviewer views are available. The failed reviewers should be rerun after configuring Gemini credentials and fixing Codex config if independent consensus is required before replanning.
+- Gemini rated the overall plan risk **LOW** and approved execution, while the agent rated it **MEDIUM** and Codex rated it **MEDIUM-HIGH**. The difference is mainly how strongly they weigh Plan 04-06's transaction hazards and Plan 04-03's missing save/load contracts.
+- Gemini uniquely emphasized clearing project-scoped overlays on new project creation and editor filtering for large slider tables.
+- Codex uniquely recommended splitting Plan 04-06 into two plans: one for project-open conflict transactions and one for diagnostics/recovery commands.
+- The agent uniquely recommended adding an OpenSpec capability spec update task and a `Code`/`Category` field to `DiagnosticFinding` for mechanical deduplication.
