@@ -55,10 +55,10 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Persist Omit Redundant Sliders as local workflow preference state.
 - [x] 02-02-PLAN.md — Remember separate project and export folders for shell-level file workflows.
-- [ ] 02-03-PLAN.md — Remember separate BodySlide XML and NPC text import folders.
+- [x] 02-03-PLAN.md — Remember separate BodySlide XML and NPC text import folders.
 - [x] 02-04-PLAN.md — Create stable NPC row identity and filter predicate contracts.
 - [x] 02-05-PLAN.md — Integrate stable, debounced NPC filtering into Morphs ViewModel.
-- [ ] 02-06-PLAN.md — Expose full checklist filtering in the Avalonia Morphs UI.
+- [x] 02-06-PLAN.md — Expose full checklist filtering in the Avalonia Morphs UI.
 - [ ] 02-07-PLAN.md — Add explicit scoped NPC bulk operations and scope selector UI.
 - [x] 02-08-PLAN.md — Bound undo history and harden template/profile undo snapshots.
 - [ ] 02-09-PLAN.md — Harden morph/NPC undo snapshots and scoped bulk undo behavior.
