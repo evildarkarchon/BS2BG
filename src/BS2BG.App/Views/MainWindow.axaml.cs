@@ -71,7 +71,8 @@ public partial class MainWindow : Window
         {
             0 => AppWorkspace.Templates,
             1 => AppWorkspace.Morphs,
-            _ => AppWorkspace.Diagnostics
+            2 => AppWorkspace.Diagnostics,
+            _ => AppWorkspace.Profiles
         };
     }
 

@@ -27,6 +27,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     private readonly IBodySlideXmlFilePicker filePicker;
     private readonly BodySlideXmlParser parser;
     private readonly SerialDisposable presetSubscription = new();
+    private readonly INavigationService navigationService;
     private readonly ITemplateProfileCatalogService profileCatalogService;
     private readonly IUserPreferencesService preferencesService;
     private readonly ProjectModel project;
@@ -115,7 +116,8 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         IBodySlideXmlFilePicker filePicker,
         IClipboardService clipboardService,
         UndoRedoService? undoRedo = null,
-        IUserPreferencesService? preferencesService = null)
+        IUserPreferencesService? preferencesService = null,
+        INavigationService? navigationService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.parser = parser ?? throw new ArgumentNullException(nameof(parser));
@@ -124,6 +126,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         this.profileCatalogService = profileCatalogService ?? throw new ArgumentNullException(nameof(profileCatalogService));
         this.filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
         this.clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
+        this.navigationService = navigationService ?? new NullNavigationService();
         this.undoRedo = undoRedo ?? new UndoRedoService();
         this.preferencesService = preferencesService ?? new UserPreferencesService();
         currentPreferences = this.preferencesService.Load();
@@ -170,6 +173,9 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         CopySelectedBosJsonCommand = ReactiveCommand.CreateFromTask(
             CopySelectedBosJsonAsync,
             canCopyBosJson);
+        ManageProfilesCommand = ReactiveCommand.Create(
+            () => this.navigationService.NavigateTo(AppWorkspace.Profiles),
+            notExternallyBusy);
         SetAllSliderPercentsTo0Command = ReactiveCommand.Create(() => SetAllSliderPercents(0), canEditSetSliders);
         SetAllSliderPercentsTo50Command = ReactiveCommand.Create(() => SetAllSliderPercents(50), canEditSetSliders);
         SetAllSliderPercentsTo100Command = ReactiveCommand.Create(() => SetAllSliderPercents(100), canEditSetSliders);
@@ -237,6 +243,8 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> CopyGeneratedTemplatesCommand { get; }
 
     public ReactiveCommand<Unit, Unit> CopySelectedBosJsonCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ManageProfilesCommand { get; }
 
     public ReactiveCommand<Unit, Unit> SetAllSliderPercentsTo0Command { get; }
 
@@ -1117,5 +1125,12 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     private sealed class EmptyClipboardService : IClipboardService
     {
         public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class NullNavigationService : INavigationService
+    {
+        public event EventHandler<AppWorkspace>? WorkspaceRequested;
+
+        public void NavigateTo(AppWorkspace workspace) => WorkspaceRequested?.Invoke(this, workspace);
     }
 }

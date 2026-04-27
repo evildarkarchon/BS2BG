@@ -25,7 +25,8 @@ public enum AppWorkspace
 {
     Templates,
     Morphs,
-    Diagnostics
+    Diagnostics,
+    Profiles
 }
 
 public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
@@ -40,6 +41,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly IUserPreferencesService preferencesService;
     private readonly ITemplateProfileCatalogService profileCatalogService;
     private readonly ProjectModel project;
+    private readonly BehaviorSubject<bool> projectOpenProfileRecoveryBusy = new(false);
     private readonly ProjectFileService projectFileService;
     private readonly TemplateGenerationService templateGenerationService;
     private readonly UndoRedoService undoRedo;
@@ -124,7 +126,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             undoRedo,
             preferencesService,
             exportPreviewService,
-            diagnostics)
+            diagnostics,
+            profiles: null,
+            navigationService: null)
     {
     }
 
@@ -143,7 +147,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         UndoRedoService? undoRedo = null,
         IUserPreferencesService? preferencesService = null,
         ExportPreviewService? exportPreviewService = null,
-        DiagnosticsViewModel? diagnostics = null)
+        DiagnosticsViewModel? diagnostics = null,
+        ProfileManagerViewModel? profiles = null,
+        INavigationService? navigationService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
@@ -164,6 +170,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         Templates = templates ?? throw new ArgumentNullException(nameof(templates));
         Morphs = morphs ?? throw new ArgumentNullException(nameof(morphs));
         Diagnostics = diagnostics ?? new DiagnosticsViewModel(project, profileCatalogService, new ProjectValidationService(), new ProfileDiagnosticsService());
+        Profiles = profiles ?? new ProfileManagerViewModel(
+            project,
+            profileCatalogService,
+            new EmptyUserProfileStore(),
+            new ProfileDefinitionService(),
+            new NullProfileManagementDialogService());
         currentPreferences = this.preferencesService.Load();
         _selectedThemePreference = currentPreferences.Theme;
         ThemePreferenceApplier.Apply(_selectedThemePreference);
@@ -226,7 +238,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         var busySources = new[]
         {
             Templates.WhenAnyValue(x => x.IsBusy), Morphs.WhenAnyValue(x => x.IsBusy),
-            Diagnostics.WhenAnyValue(x => x.IsBusy),
+            Diagnostics.WhenAnyValue(x => x.IsBusy), Profiles.WhenAnyValue(x => x.IsBusy),
+            projectOpenProfileRecoveryBusy.AsObservable(),
             NewProjectCommand.IsExecuting, OpenProjectCommand.IsExecuting, SaveProjectCommand.IsExecuting,
             SaveProjectAsCommand.IsExecuting, ExportBosJsonCommand.IsExecuting,
             ExportBodyGenInisCommand.IsExecuting, PreviewBosJsonExportCommand.IsExecuting,
@@ -240,6 +253,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
         Templates.LinkExternalBusy(aggregateBusySubject.AsObservable());
         Morphs.LinkExternalBusy(aggregateBusySubject.AsObservable());
+        disposables.Add(projectOpenProfileRecoveryBusy);
+
+        if (navigationService is not null)
+        {
+            disposables.Add(Disposable.Create(() => navigationService.WorkspaceRequested -= OnWorkspaceRequested));
+            navigationService.WorkspaceRequested += OnWorkspaceRequested;
+        }
 
         _isAnyBusyHelper = aggregateBusySubject.ToProperty(this, x => x.IsAnyBusy, initialValue: false);
 
@@ -344,6 +364,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     public MorphsViewModel Morphs { get; }
 
     public DiagnosticsViewModel Diagnostics { get; }
+
+    public ProfileManagerViewModel Profiles { get; }
 
     public ObservableCollection<CommandDescriptor> CommandPaletteItems { get; } = new();
 
@@ -457,11 +479,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             var localSnapshot = profileCatalogService.LocalCustomProfiles.Select(profile => profile.Clone()).ToArray();
             var projectOverlaySnapshot = profileCatalogService.ProjectProfiles.Select(profile => profile.Clone()).ToArray();
             var currentCatalogSnapshot = profileCatalogService.Current;
-            var conflictResult = await ResolveProjectProfileConflictsAsync(
-                loadedProject,
-                localSnapshot,
-                currentCatalogSnapshot,
-                cancellationToken);
+            ProjectProfileConflictTransactionResult conflictResult;
+            projectOpenProfileRecoveryBusy.OnNext(true);
+            try
+            {
+                conflictResult = await ResolveProjectProfileConflictsAsync(
+                    loadedProject,
+                    localSnapshot,
+                    currentCatalogSnapshot,
+                    cancellationToken);
+            }
+            finally
+            {
+                projectOpenProfileRecoveryBusy.OnNext(false);
+            }
             if (!conflictResult.Succeeded)
             {
                 profileCatalogService.WithProjectProfiles(projectOverlaySnapshot);
@@ -1024,17 +1055,27 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             case AppWorkspace.Templates:
                 Templates.SearchText = GlobalSearchText;
                 Morphs.SearchText = string.Empty;
+                Profiles.SearchText = string.Empty;
                 break;
             case AppWorkspace.Morphs:
                 Morphs.SearchText = GlobalSearchText;
                 Templates.SearchText = string.Empty;
+                Profiles.SearchText = string.Empty;
                 break;
             case AppWorkspace.Diagnostics:
+                Templates.SearchText = string.Empty;
+                Morphs.SearchText = string.Empty;
+                Profiles.SearchText = string.Empty;
+                break;
+            case AppWorkspace.Profiles:
+                Profiles.SearchText = GlobalSearchText;
                 Templates.SearchText = string.Empty;
                 Morphs.SearchText = string.Empty;
                 break;
         }
     }
+
+    private void OnWorkspaceRequested(object? sender, AppWorkspace workspace) => ActiveWorkspace = workspace;
 
     private void FocusGlobalSearch()
     {
@@ -1072,6 +1113,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         AddCommand("Import BodySlide XML Presets", "Templates", string.Empty, Templates.ImportPresetsCommand);
         AddCommand("Generate Templates", "Templates", string.Empty, Templates.GenerateTemplatesCommand);
         AddCommand("Copy Generated Templates", "Templates", string.Empty, Templates.CopyGeneratedTemplatesCommand);
+        AddCommand("Manage Profiles", "Profiles", string.Empty, Templates.ManageProfilesCommand);
         AddCommand("Import NPCs", "Morphs", string.Empty, Morphs.ImportNpcsCommand);
         AddCommand("Assign Preset to Selected NPCs", "Morphs", string.Empty, Morphs.AssignSelectedNpcsCommand);
         AddCommand("Clear Selected NPC Assignments", "Morphs", string.Empty, Morphs.ClearSelectedNpcAssignmentsCommand);
@@ -1157,6 +1199,40 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
         public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) =>
             Task.FromResult<string?>(null);
+    }
+
+    private sealed class EmptyUserProfileStore : IUserProfileStore
+    {
+        public UserProfileDiscoveryResult DiscoverProfiles() => DiscoverProfiles([]);
+
+        public UserProfileDiscoveryResult DiscoverProfiles(IEnumerable<string> existingProfileNames) => new([], []);
+
+        public UserProfileSaveResult SaveProfile(CustomProfileDefinition profile) => new(false, null, []);
+
+        public UserProfileDeleteResult DeleteProfile(CustomProfileDefinition profile) => new(false, null, []);
+
+        public string GetDefaultProfileDirectory() => string.Empty;
+    }
+
+    private sealed class NullProfileManagementDialogService : IProfileManagementDialogService
+    {
+        public Task<IReadOnlyList<string>> PickProfileImportFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
+
+        public Task<string?> PickProfileExportPathAsync(string suggestedFileName, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
+
+        public Task<bool> ConfirmDeleteProfileAsync(string profileName, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> ConfirmDeleteReferencedProfileAsync(
+            string profileName,
+            int affectedPresetCount,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> ConfirmDiscardUnsavedEditsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(true);
     }
 
     private sealed class NullAppDialogService : IAppDialogService

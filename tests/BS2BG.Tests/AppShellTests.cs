@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Windows.Input;
 using Avalonia.Automation;
 using Avalonia;
 using Avalonia.Controls;
@@ -39,6 +40,58 @@ public sealed class AppShellTests
         viewModel.Diagnostics.Should().BeSameAs(provider.GetRequiredService<DiagnosticsViewModel>());
         viewModel.ActiveWorkspace = AppWorkspace.Diagnostics;
         viewModel.ActiveWorkspace.Should().Be(AppWorkspace.Diagnostics);
+    }
+
+    [Fact]
+    public void ServiceProviderResolvesRootViewModelWithProfilesWorkspace()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var viewModel = provider.GetRequiredService<MainWindowViewModel>();
+
+        viewModel.Profiles.Should().BeSameAs(provider.GetRequiredService<ProfileManagerViewModel>());
+        viewModel.ActiveWorkspace = AppWorkspace.Profiles;
+        viewModel.ActiveWorkspace.Should().Be(AppWorkspace.Profiles);
+    }
+
+    [Fact]
+    public void ManageProfilesCommandNavigatesToProfilesWorkspace()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+        var viewModel = provider.GetRequiredService<MainWindowViewModel>();
+
+        ((ICommand)viewModel.Templates.ManageProfilesCommand).Execute(null);
+
+        viewModel.ActiveWorkspace.Should().Be(AppWorkspace.Profiles);
+    }
+
+    [Fact]
+    public void CommandPaletteIncludesManageProfilesEntry()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var viewModel = provider.GetRequiredService<MainWindowViewModel>();
+
+        viewModel.CommandPaletteItems.Select(item => item.Title).Should().Contain("Manage Profiles");
+    }
+
+    [Fact]
+    public void GlobalSearchRoutesToProfilesWorkspaceOnlyWhenActive()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+        var viewModel = provider.GetRequiredService<MainWindowViewModel>();
+
+        viewModel.ActiveWorkspace = AppWorkspace.Profiles;
+        viewModel.GlobalSearchText = "custom";
+
+        viewModel.Profiles.SearchText.Should().Be("custom");
+        viewModel.Templates.SearchText.Should().BeEmpty();
+        viewModel.Morphs.SearchText.Should().BeEmpty();
+
+        viewModel.ActiveWorkspace = AppWorkspace.Templates;
+
+        viewModel.Profiles.SearchText.Should().BeEmpty();
+        viewModel.Templates.SearchText.Should().Be("custom");
     }
 
     [AvaloniaFact]

@@ -29,6 +29,7 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
     [ObservableAsProperty] private bool _isBusy;
     [Reactive(SetModifier = AccessModifier.Private)] private ProfileEditorViewModel _editor;
+    [Reactive] private string _searchText = string.Empty;
     [Reactive] private ProfileManagerEntryViewModel? _selectedProfile;
     [Reactive(SetModifier = AccessModifier.Private)] private string _statusMessage = string.Empty;
 
@@ -90,6 +91,9 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
             .ToProperty(this, x => x.IsBusy, initialValue: false);
 
         disposables.Add(catalogService.CatalogChanged.Skip(1).Subscribe(_ => RefreshProfileEntries()));
+        disposables.Add(this.WhenAnyValue(x => x.SearchText)
+            .Skip(1)
+            .Subscribe(_ => RefreshProfileEntries()));
         disposables.Add(this.WhenAnyValue(x => x.SelectedProfile).Skip(1).Subscribe(entry =>
         {
             if (selectingInternally) return;
@@ -356,11 +360,15 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
     {
         var selectedName = SelectedProfile?.Name;
         ProfileEntries.Clear();
-        foreach (var entry in catalogService.Current.Entries)
-            ProfileEntries.Add(ProfileManagerEntryViewModel.FromCatalogEntry(entry));
+        foreach (var entry in catalogService.Current.Entries
+                     .Select(ProfileManagerEntryViewModel.FromCatalogEntry)
+                     .Where(MatchesSearch))
+            ProfileEntries.Add(entry);
 
-        foreach (var missing in MissingProjectProfileNames())
-            ProfileEntries.Add(ProfileManagerEntryViewModel.Missing(missing));
+        foreach (var missing in MissingProjectProfileNames()
+                     .Select(ProfileManagerEntryViewModel.Missing)
+                     .Where(MatchesSearch))
+            ProfileEntries.Add(missing);
 
         SelectedProfile = ProfileEntries.FirstOrDefault(entry => ProfileNamesEqual(entry.Name, selectedName))
                           ?? ProfileEntries.FirstOrDefault();
@@ -372,6 +380,11 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         .Select(preset => preset.ProfileName)
         .Where(name => !string.IsNullOrWhiteSpace(name) && !catalogService.Current.ContainsProfile(name))
         .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private bool MatchesSearch(ProfileManagerEntryViewModel entry) =>
+        string.IsNullOrWhiteSpace(SearchText)
+        || entry.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+        || entry.SourceLabel.Contains(SearchText, StringComparison.OrdinalIgnoreCase);
 
     private IEnumerable<string> ExistingNamesFor(string? currentName) => catalogService.Current.ProfileNames
         .Where(name => !ProfileNamesEqual(name, currentName));

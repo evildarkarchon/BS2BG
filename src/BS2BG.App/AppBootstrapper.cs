@@ -76,6 +76,9 @@ public static class AppBootstrapper
         services.AddSingleton<ProfileManagementDialogService>();
         services.AddSingleton<IProfileManagementDialogService>(provider =>
             provider.GetRequiredService<ProfileManagementDialogService>());
+        services.AddSingleton<NavigationService>();
+        services.AddSingleton<INavigationService>(provider =>
+            provider.GetRequiredService<NavigationService>());
         services.AddSingleton<TemplatesViewModel>();
         services.AddSingleton<MorphsViewModel>();
         services.AddSingleton<DiagnosticsViewModel>();
