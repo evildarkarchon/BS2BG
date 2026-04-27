@@ -32,6 +32,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly MorphAssignmentService assignmentService;
     private readonly IClipboardService clipboardService;
     private readonly CompositeDisposable disposables = new();
+    private readonly IAppDialogService dialogService;
     private readonly BehaviorSubject<bool> externalBusy = new(false);
     private readonly INpcImageLookupService imageLookupService;
     private readonly IImageViewService imageViewService;
@@ -73,6 +74,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     [Reactive] private CustomMorphTarget? _selectedCustomTarget;
     [Reactive] private Npc? _selectedImportedNpc;
     [Reactive] private Npc? _selectedNpc;
+    [Reactive] private NpcBulkScope _selectedNpcBulkScope = NpcBulkScope.All;
 
     [Reactive(SetModifier = AccessModifier.Private)]
     private string _statusMessage = string.Empty;
@@ -109,7 +111,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         IImageViewService? imageViewService = null,
         INoPresetNotificationService? noPresetNotificationService = null,
         UndoRedoService? undoRedo = null,
-        IScheduler? filterScheduler = null)
+        IScheduler? filterScheduler = null,
+        IAppDialogService? dialogService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.npcTextParser = npcTextParser ?? throw new ArgumentNullException(nameof(npcTextParser));
@@ -123,6 +126,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         this.noPresetNotificationService = noPresetNotificationService ?? new NullNoPresetNotificationService();
         this.undoRedo = undoRedo ?? new UndoRedoService();
         this.filterScheduler = filterScheduler ?? CurrentThreadScheduler.Instance;
+        this.dialogService = dialogService ?? new NullAppDialogService();
 
         project.MorphedNpcs.CollectionChanged += OnNpcsChanged;
         project.CustomMorphTargets.CollectionChanged += OnCustomTargetsChanged;
@@ -144,6 +148,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             () => VisibleNpcDatabase.Count);
         var selectedNpcsChanged = CollectionChangedObservable.Observe(SelectedNpcs, () => SelectedNpcs.ToArray());
         var npcsChanged = CollectionChangedObservable.Observe(Npcs, () => Npcs.Count);
+        var npcScopeChanged = this.WhenAnyValue(x => x.SelectedNpcBulkScope);
 
         disposables.Add(externalBusy);
         var notExternallyBusy = externalBusy.DistinctUntilChanged().Select(b => !b);
@@ -182,7 +187,11 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var canFillEmptyNpcs = Gate(visibleNpcsChanged.CombineLatest(
             presetsChanged,
             (npcs, presetCount) => npcs.Any(npc => npc.SliderPresets.Count == 0) && presetCount > 0));
-        var canClearAssignments = Gate(visibleNpcsChanged.Select(npcs => npcs.Any(npc => npc.SliderPresets.Count > 0)));
+        var canClearAssignments = Gate(npcScopeChanged.CombineLatest(
+            visibleNpcsChanged,
+            selectedNpcsChanged,
+            npcsChanged,
+            (scope, visible, selected, _) => ResolveNpcTargets(scope).Any(npc => npc.SliderPresets.Count > 0)));
         var canAssignSelectedNpcs = Gate(selectedNpcsChanged.CombineLatest(
             this.WhenAnyValue(x => x.SelectedNpc),
             this.WhenAnyValue(x => x.SelectedAvailablePreset),
@@ -234,14 +243,14 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         RemoveSelectedNpcCommand = ReactiveCommand.Create(
             () => { RemoveSelectedNpc(); },
             canRemoveSelectedNpc);
-        ClearVisibleNpcsCommand = ReactiveCommand.Create(
-            () => { ClearVisibleNpcs(); },
+        ClearVisibleNpcsCommand = ReactiveCommand.CreateFromTask(
+            ClearNpcsForSelectedScopeAsync,
             canClearVisibleNpcs);
         FillEmptyNpcsCommand = ReactiveCommand.Create(
             () => { FillEmptyFromSelectedPreset(); },
             canFillEmptyNpcs);
-        ClearAssignmentsCommand = ReactiveCommand.Create(
-            () => { ClearVisibleNpcAssignments(); },
+        ClearAssignmentsCommand = ReactiveCommand.CreateFromTask(
+            ClearAssignmentsForSelectedScopeAsync,
             canClearAssignments);
         AssignSelectedNpcsCommand = ReactiveCommand.Create(
             () => { AssignSelectedNpcs(); },
@@ -330,6 +339,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     public ObservableCollection<MorphTargetBase> NoPresetTargets { get; } = new();
 
     public ObservableCollection<Npc> SelectedNpcs { get; } = new();
+
+    public IReadOnlyList<NpcBulkScope> NpcBulkScopes { get; } =
+        [NpcBulkScope.All, NpcBulkScope.Visible, NpcBulkScope.Selected, NpcBulkScope.VisibleEmpty];
 
     public ReactiveCommand<Unit, Unit> ImportNpcsCommand { get; }
 
@@ -899,6 +911,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         else
             npcFilterState.SetAllowedValues(column, selected);
 
+        if (npcFilterState.HasAnyFilter() && SelectedNpcBulkScope == NpcBulkScope.All)
+            SelectedNpcBulkScope = NpcBulkScope.Visible;
+
         RefreshVisibleNpcs();
         RaiseNpcColumnFilterStateChanged(column);
     }
@@ -1065,7 +1080,89 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var candidates = SelectedAvailablePreset is null
             ? Presets.ToArray()
             : new[] { SelectedAvailablePreset };
-        return FillEmptyVisibleNpcs(candidates);
+        return FillEmptyNpcsForScope(NpcBulkScope.VisibleEmpty, candidates);
+    }
+
+    private async Task ClearNpcsForSelectedScopeAsync(CancellationToken cancellationToken)
+    {
+        if (SelectedNpcBulkScope == NpcBulkScope.All
+            && !await ConfirmDestructiveAllScopeAsync(
+                "Clear all NPCs",
+                "This will remove every NPC, including rows hidden by filters. You can undo this action. Continue?",
+                cancellationToken))
+            return;
+
+        ClearNpcsForScope(SelectedNpcBulkScope);
+    }
+
+    private async Task ClearAssignmentsForSelectedScopeAsync(CancellationToken cancellationToken)
+    {
+        if (SelectedNpcBulkScope == NpcBulkScope.All
+            && !await ConfirmDestructiveAllScopeAsync(
+                "Clear all NPC assignments",
+                "This will clear assignments for every NPC, including rows hidden by filters. You can undo this action. Continue?",
+                cancellationToken))
+            return;
+
+        ClearNpcAssignmentsForScope(SelectedNpcBulkScope);
+    }
+
+    private async Task<bool> ConfirmDestructiveAllScopeAsync(
+        string title,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        return await dialogService.ConfirmBulkOperationAsync(title, message, cancellationToken);
+    }
+
+    private int FillEmptyNpcsForScope(NpcBulkScope scope, IEnumerable<SliderPreset> presets)
+    {
+        var candidates = presets?.ToArray() ?? Array.Empty<SliderPreset>();
+        var targets = ResolveNpcTargets(scope).ToArray();
+        var before = CaptureAssignments(targets);
+        var filled = assignmentService.FillEmptyNpcs(targets, candidates);
+        StatusMessage = "Assigned presets to " + filled.ToString(CultureInfo.InvariantCulture)
+                                        + " " + FormatScopeLabel(scope)
+                                        + " NPC" + (filled == 1 ? "." : "s.");
+        RaiseSelectedTargetChanged();
+        if (filled > 0) RecordAssignmentChange("Fill " + FormatScopeLabel(scope) + " NPCs", before);
+
+        return filled;
+    }
+
+    private int ClearNpcAssignmentsForScope(NpcBulkScope scope)
+    {
+        var targets = ResolveNpcTargets(scope).ToArray();
+        var before = CaptureAssignments(targets);
+        var cleared = assignmentService.ClearAssignments(targets);
+        StatusMessage = "Cleared assignments from " + cleared.ToString(CultureInfo.InvariantCulture)
+                                                    + " " + FormatScopeLabel(scope)
+                                                    + " NPC" + (cleared == 1 ? "." : "s.");
+        RaiseSelectedTargetChanged();
+        if (cleared > 0) RecordAssignmentChange("Clear " + FormatScopeLabel(scope) + " NPC assignments", before);
+
+        return cleared;
+    }
+
+    private int ClearNpcsForScope(NpcBulkScope scope)
+    {
+        var targets = ResolveNpcTargets(scope).ToArray();
+        var snapshot = targets
+            .Select(npc => new NpcRemovalSnapshot(npc, Npcs.IndexOf(npc), CaptureAssignments(npc)))
+            .ToArray();
+        var selectedNpc = SelectedNpc;
+        var removed = ApplyRemoveNpcs(snapshot);
+
+        StatusMessage = "Removed " + removed.ToString(CultureInfo.InvariantCulture)
+                                   + " " + FormatScopeLabel(scope)
+                                   + " NPC" + (removed == 1 ? "." : "s.");
+        if (removed > 0)
+            undoRedo.Record(
+                "Clear " + FormatScopeLabel(scope) + " NPCs",
+                () => RestoreRemovedNpcs(snapshot, selectedNpc),
+                () => ApplyRemoveNpcs(snapshot));
+
+        return removed;
     }
 
     private void RefreshVisibleNpcs()
@@ -1416,6 +1513,33 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private IEnumerable<Npc> GetSelectedNpcsForCommand() =>
         GetSelectedNpcsForCommandFromSnapshot(SelectedNpcs.ToArray(), SelectedNpc);
 
+    private Npc[] ResolveNpcTargets(NpcBulkScope scope)
+    {
+        var targetIds = NpcBulkScopeResolver.Resolve(
+            scope,
+            GetRowsForNpcs(Npcs, npcRowsByNpc),
+            GetRowsForNpcs(VisibleNpcs, npcRowsByNpc),
+            GetRowsForNpcs(GetSelectedNpcsForCommand(), npcRowsByNpc));
+        var targetIdSet = targetIds.ToHashSet();
+
+        // Return NPC models in backing collection order so undo snapshots restore a deterministic user-visible order.
+        return Npcs
+            .Where(npc => npcRowsByNpc.TryGetValue(npc, out var row) && targetIdSet.Contains(row.RowId))
+            .ToArray();
+    }
+
+    private static string FormatScopeLabel(NpcBulkScope scope)
+    {
+        return scope switch
+        {
+            NpcBulkScope.All => "all",
+            NpcBulkScope.Visible => "visible",
+            NpcBulkScope.Selected => "selected",
+            NpcBulkScope.VisibleEmpty => "visible empty",
+            _ => "selected"
+        };
+    }
+
     private static IEnumerable<Npc> GetSelectedNpcsForCommandFromSnapshot(
         Npc[] selectedNpcs,
         Npc? selectedNpc)
@@ -1639,6 +1763,24 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private sealed class NullNoPresetNotificationService : INoPresetNotificationService
     {
         public void ShowTargetsWithoutPresets(IReadOnlyList<MorphTargetBase> targets)
+        {
+        }
+    }
+
+    private sealed class NullAppDialogService : IAppDialogService
+    {
+        public Task<bool> ConfirmDiscardChangesAsync(
+            DiscardChangesAction action,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> ConfirmBulkOperationAsync(
+            string title,
+            string message,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public void ShowAbout()
         {
         }
     }

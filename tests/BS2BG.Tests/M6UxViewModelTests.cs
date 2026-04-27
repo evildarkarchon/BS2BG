@@ -373,6 +373,12 @@ public sealed class M6UxViewModelTests
             ConfirmDiscardChangesAsync(DiscardChangesAction action, CancellationToken cancellationToken) =>
             Task.FromResult(true);
 
+        public Task<bool> ConfirmBulkOperationAsync(
+            string title,
+            string message,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
         public void ShowAbout()
         {
         }

@@ -27,6 +27,21 @@ public sealed class WindowAppDialogService : IAppDialogService
         return await window.ShowDialog<bool>(owner);
     }
 
+    public async Task<bool> ConfirmBulkOperationAsync(
+        string title,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        if (owner is null) return true;
+
+        var window = CreateConfirmationWindow(title, message);
+        using var registration = cancellationToken.Register(() => Dispatcher.UIThread.Post(() =>
+        {
+            if (window.IsVisible) window.Close(false);
+        }));
+        return await window.ShowDialog<bool>(owner);
+    }
+
     public void ShowAbout()
     {
         var window = CreateAboutWindow();
@@ -126,6 +141,51 @@ public sealed class WindowAppDialogService : IAppDialogService
                             : "You're starting a new file.\nAll unsaved changes will be discarded.",
                         TextWrapping = TextWrapping.Wrap
                     },
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { okButton, cancelButton }
+                    }
+                }
+            }
+        };
+
+        okButton.Click += (_, _) => window.Close(true);
+        cancelButton.Click += (_, _) => window.Close(false);
+        return window;
+    }
+
+    private static Window CreateConfirmationWindow(string title, string message)
+    {
+        var okButton = new Button
+        {
+            Content = "Continue",
+            Width = 110,
+            HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        var cancelButton = new Button
+        {
+            Content = "Cancel", Width = 100, HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        var window = new Window
+        {
+            Title = title,
+            Width = 440,
+            Height = 220,
+            MinWidth = 440,
+            MinHeight = 220,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(14),
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock { Text = title, FontSize = 16, FontWeight = FontWeight.SemiBold },
+                    new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
                     new StackPanel
                     {
                         Orientation = Orientation.Horizontal,

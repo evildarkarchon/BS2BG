@@ -723,6 +723,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             CancellationToken cancellationToken) =>
             Task.FromResult(true);
 
+        public Task<bool> ConfirmBulkOperationAsync(
+            string title,
+            string message,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
         public void ShowAbout()
         {
         }
