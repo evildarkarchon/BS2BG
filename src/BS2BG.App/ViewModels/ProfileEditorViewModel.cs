@@ -89,6 +89,8 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     public ObservableCollection<ProfileMultiplierRowViewModel> MultiplierRows { get; } = [];
     public ObservableCollection<ProfileInvertedRowViewModel> InvertedRows { get; } = [];
     public ObservableCollection<ProfileDefaultRowViewModel> VisibleDefaultRows { get; } = [];
+    public ObservableCollection<ProfileMultiplierRowViewModel> VisibleMultiplierRows { get; } = [];
+    public ObservableCollection<ProfileInvertedRowViewModel> VisibleInvertedRows { get; } = [];
     public ObservableCollection<ProfileEditorStatusRowViewModel> ValidationRows { get; } = [];
     public ObservableCollection<ProfileEditorStatusRowViewModel> StatusRows { get; } = [];
     public ReactiveCommand<Unit, Unit> AddDefaultCommand { get; }
@@ -261,7 +263,11 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     private void AttachMultiplierRow(ProfileMultiplierRowViewModel row)
     {
         if (multiplierRowSubscriptions.ContainsKey(row)) return;
-        PropertyChangedEventHandler handler = (_, _) => ValidateProfile();
+        PropertyChangedEventHandler handler = (_, _) =>
+        {
+            RefreshVisibleRows();
+            ValidateProfile();
+        };
         row.PropertyChanged += handler;
         multiplierRowSubscriptions[row] = Disposable.Create(() => row.PropertyChanged -= handler);
     }
@@ -280,7 +286,11 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     private void AttachInvertedRow(ProfileInvertedRowViewModel row)
     {
         if (invertedRowSubscriptions.ContainsKey(row)) return;
-        PropertyChangedEventHandler handler = (_, _) => ValidateProfile();
+        PropertyChangedEventHandler handler = (_, _) =>
+        {
+            RefreshVisibleRows();
+            ValidateProfile();
+        };
         row.PropertyChanged += handler;
         invertedRowSubscriptions[row] = Disposable.Create(() => row.PropertyChanged -= handler);
     }
@@ -463,9 +473,26 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     private void RefreshVisibleRows()
     {
         VisibleDefaultRows.Clear();
-        foreach (var row in DefaultRows.Where(row => string.IsNullOrWhiteSpace(SearchText) || row.Slider.Contains(SearchText, StringComparison.OrdinalIgnoreCase)))
+        foreach (var row in DefaultRows.Where(MatchesSearch))
             VisibleDefaultRows.Add(row);
+
+        VisibleMultiplierRows.Clear();
+        foreach (var row in MultiplierRows.Where(MatchesSearch))
+            VisibleMultiplierRows.Add(row);
+
+        VisibleInvertedRows.Clear();
+        foreach (var row in InvertedRows.Where(MatchesSearch))
+            VisibleInvertedRows.Add(row);
     }
+
+    private bool MatchesSearch(ProfileDefaultRowViewModel row) => MatchesSearch(row.Slider);
+
+    private bool MatchesSearch(ProfileMultiplierRowViewModel row) => MatchesSearch(row.Slider);
+
+    private bool MatchesSearch(ProfileInvertedRowViewModel row) => MatchesSearch(row.Slider);
+
+    private bool MatchesSearch(string slider) =>
+        string.IsNullOrWhiteSpace(SearchText) || slider.Contains(SearchText, StringComparison.OrdinalIgnoreCase);
 
     private string CreateFingerprint() => string.Join("|", new[]
     {
