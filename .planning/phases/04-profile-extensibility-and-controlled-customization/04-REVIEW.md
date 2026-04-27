@@ -1,49 +1,56 @@
 ---
 phase: 04-profile-extensibility-and-controlled-customization
-reviewed: 2026-04-27T11:14:28Z
+reviewed: 2026-04-27T12:51:05Z
 depth: standard
-files_reviewed: 40
+files_reviewed: 47
 files_reviewed_list:
-  - AGENTS.md
-  - .planning/REQUIREMENTS.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-01-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-02-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-03-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-04-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-05-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-06-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-07-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-08-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-09-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-10-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-11-PLAN.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-01-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-02-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-03-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-04-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-05-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-06-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-07-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-08-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-09-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-10-SUMMARY.md
-  - .planning/phases/04-profile-extensibility-and-controlled-customization/04-11-SUMMARY.md
-  - src/BS2BG.App/ViewModels/ProfileManagerViewModel.cs
-  - src/BS2BG.App/ViewModels/ProfileEditorViewModel.cs
+  - openspec/specs/profile-extensibility/spec.md
+  - openspec/specs/project-roundtrip/spec.md
+  - openspec/specs/template-generation-flow/spec.md
+  - src/BS2BG.App/AppBootstrapper.cs
+  - src/BS2BG.App/Services/IAppDialogService.cs
+  - src/BS2BG.App/Services/NavigationService.cs
+  - src/BS2BG.App/Services/ProfileManagementDialogService.cs
+  - src/BS2BG.App/Services/TemplateProfileCatalogFactory.cs
+  - src/BS2BG.App/Services/TemplateProfileCatalogService.cs
+  - src/BS2BG.App/Services/UserProfileStore.cs
+  - src/BS2BG.App/Services/WindowAppDialogService.cs
+  - src/BS2BG.App/ViewModels/DiagnosticFindingViewModel.cs
+  - src/BS2BG.App/ViewModels/DiagnosticsViewModel.cs
   - src/BS2BG.App/ViewModels/MainWindowViewModel.cs
+  - src/BS2BG.App/ViewModels/MorphsViewModel.cs
+  - src/BS2BG.App/ViewModels/ProfileEditorViewModel.cs
+  - src/BS2BG.App/ViewModels/ProfileManagerViewModel.cs
+  - src/BS2BG.App/ViewModels/TemplatesViewModel.cs
   - src/BS2BG.App/Views/MainWindow.axaml
   - src/BS2BG.App/Views/MainWindow.axaml.cs
-  - src/BS2BG.App/Services/TemplateProfileCatalogService.cs
-  - src/BS2BG.App/Services/TemplateProfileCatalogFactory.cs
-  - src/BS2BG.App/Services/UserProfileStore.cs
-  - src/BS2BG.Core/Serialization/ProjectFileService.cs
-  - src/BS2BG.Core/Models/ProjectModel.cs
+  - src/BS2BG.Core/Diagnostics/DiagnosticFinding.cs
+  - src/BS2BG.Core/Diagnostics/ProfileDiagnosticsService.cs
+  - src/BS2BG.Core/Diagnostics/ProfileRecoveryDiagnosticsService.cs
+  - src/BS2BG.Core/Diagnostics/ProjectValidationService.cs
+  - src/BS2BG.Core/Generation/ProfileDefinitionService.cs
+  - src/BS2BG.Core/Generation/TemplateProfileCatalog.cs
+  - src/BS2BG.Core/IsExternalInit.cs
   - src/BS2BG.Core/Models/CustomProfileDefinition.cs
-  - tests/BS2BG.Tests/ProfileManagerViewModelTests.cs
-  - tests/BS2BG.Tests/ProfileEditorViewModelTests.cs
-  - tests/BS2BG.Tests/MainWindowViewModelTests.cs
-  - tests/BS2BG.Tests/MainWindowViewModelProfileRecoveryTests.cs
+  - src/BS2BG.Core/Models/ProjectModel.cs
+  - src/BS2BG.Core/Serialization/ProjectFileService.cs
+  - tests/BS2BG.Tests/AppShellTests.cs
+  - tests/BS2BG.Tests/DiagnosticsViewModelTests.cs
+  - tests/BS2BG.Tests/M6UxViewModelTests.cs
   - tests/BS2BG.Tests/MainWindowHeadlessTests.cs
+  - tests/BS2BG.Tests/MainWindowViewModelProfileRecoveryTests.cs
+  - tests/BS2BG.Tests/MainWindowViewModelTests.cs
+  - tests/BS2BG.Tests/MorphsViewModelTests.cs
+  - tests/BS2BG.Tests/ProfileDefinitionServiceTests.cs
+  - tests/BS2BG.Tests/ProfileDiagnosticsServiceTests.cs
+  - tests/BS2BG.Tests/ProfileEditorViewModelTests.cs
+  - tests/BS2BG.Tests/ProfileManagerViewModelTests.cs
+  - tests/BS2BG.Tests/ProfileRecoveryDiagnosticsServiceTests.cs
+  - tests/BS2BG.Tests/ProjectFileServiceCustomProfileTests.cs
+  - tests/BS2BG.Tests/ProjectValidationServiceTests.cs
+  - tests/BS2BG.Tests/TemplateProfileCatalogFactoryTests.cs
+  - tests/BS2BG.Tests/TemplatesViewModelTests.cs
+  - tests/BS2BG.Tests/UserProfileStoreTests.cs
 findings:
   critical: 3
   warning: 2
@@ -52,86 +59,107 @@ findings:
 status: issues_found
 ---
 
-# Phase 04: Code Review Report
+# Phase 4: Code Review Report
 
-**Reviewed:** 2026-04-27T11:14:28Z
+**Reviewed:** 2026-04-27T12:51:05Z
 **Depth:** standard
-**Files Reviewed:** 40 files (source/test files plus Phase 04 plans/summaries)
+**Files Reviewed:** 47
 **Status:** issues_found
 
 ## Summary
 
-Reviewed Phase 04 source changes after gap-closure plans 04-09, 04-10, and 04-11, with emphasis on profile-management correctness, GUI save/share behavior, Avalonia bindings, and ReactiveUI conventions. The prior 04-09/04-10/04-11 gaps are partially closed, but the Profiles workspace still has shipping blockers around newly-created/copied profiles and unsaved-editor state loss.
+Reviewed profile extensibility specs, App/Core implementation, UI bindings, and tests. The implementation still has functional gaps that can break required recovery workflows, abort otherwise loadable projects, and silently overwrite imported profile data.
 
 ## Critical Issues
 
-### CR-01: Created and copied custom profiles cannot be saved from the Profiles UI
+### CR-01: Advertised recovery remap action is not implemented
 
-**Classification:** BLOCKER
-**File:** `src/BS2BG.App/ViewModels/ProfileManagerViewModel.cs:81,309-329`; `src/BS2BG.App/Views/MainWindow.axaml:1581-1585`
-**Issue:** The only visible `Save Profile` button is bound to `ProfileManagerViewModel.SaveProfileCommand`, but that command can execute only when `SelectedProfile.SourceKind == LocalCustom`. Both `CreateBlankProfile()` and `CopyBundledProfile()` intentionally clear `SelectedProfile` before creating the editable local-custom candidate, so the user can author a blank/copy editor buffer but cannot save it through the UI. This breaks EXT-01/EXT-02 for the primary create/copy custom-profile workflows.
-**Fix:** Gate manager save on the current editor candidate, not only the selected catalog row. For example, expose an editor `CanSaveCandidate` observable or combine `Editor.IsValid` with an explicit local-candidate state, then save with `SelectedProfile?.FilePath` only when editing an existing local custom profile.
+**File:** `src/BS2BG.App/ViewModels/ProfileManagerViewModel.cs:272-284`
+
+**Issue:** `ProfileRecoveryDiagnosticsService` advertises `RemapToInstalledProfile`, and Diagnostics creates an action row for it, but `ExecuteRecoveryActionAsync` falls through to `false`. Clicking **Remap to Installed Profile** does not remap presets or create the required undoable recovery operation.
+
+**Fix:** Implement the remap action through a real installed-profile selection flow and call `TemplatesViewModel.RemapProfileReferences`, or stop advertising the action until that flow exists.
+
 ```csharp
-var canSaveEditor = this.WhenAnyValue(x => x.Editor.IsValid, x => x.Editor.HasUnsavedChanges,
-    (isValid, hasChanges) => isValid && hasChanges);
-SaveProfileCommand = ReactiveCommand.CreateFromTask(SaveSelectedProfileAsync, canSaveEditor);
+ProfileRecoveryActionKind.RemapToInstalledProfile =>
+    RemapMissingProfileToInstalledProfileAsync(missingProfileName, cancellationToken),
 ```
-Also add an app/headless test that clicks `Create Blank Profile` or `Copy as Custom Profile`, edits a valid name, and verifies `Save Profile` can execute and refreshes the catalog.
 
-### CR-02: Declining the unsaved-edits prompt leaves `SelectedProfile` on the newly clicked row
+### CR-02: Malformed `CustomProfiles` section can abort whole project load
 
-**Classification:** BLOCKER
-**File:** `src/BS2BG.App/ViewModels/ProfileManagerViewModel.cs:97-102,138-153`
-**Issue:** UI row selection writes directly to `SelectedProfile` through the ListBox binding before `TrySelectProfileAsync` runs. If the current editor has unsaved changes and the user declines the discard prompt, the method only raises `PropertyChanged` and returns false; it never restores the previous `SelectedProfile`. The editor remains for the old profile, but commands such as delete/export/save are now gated by and operate on the newly clicked row, creating a wrong-target operation/data-loss risk.
-**Fix:** Track the committed selection separately and roll back the property when discard is declined, or route row selection through a command that asks before mutating `SelectedProfile`.
+**File:** `src/BS2BG.Core/Serialization/ProjectFileService.cs:73`
+
+**Issue:** `ProjectFileDto.CustomProfiles` is a `List<JsonElement>?`. If the optional `CustomProfiles` section has the wrong shape, for example an object or string instead of an array, `JsonSerializer.Deserialize<ProjectFileDto>` throws before legacy `SliderPresets`, `CustomMorphTargets`, or `MorphedNPCs` can be hydrated. The spec requires malformed embedded profile data to produce load diagnostics without blocking legacy project data.
+
+**Fix:** Deserialize the root with `JsonDocument` or make `CustomProfiles` a `JsonElement?`, then validate that it is an array inside `LoadEmbeddedProfiles` and add a `ProjectLoadDiagnostic` instead of throwing.
+
 ```csharp
-if (Editor.HasUnsavedChanges && !await dialogService.ConfirmDiscardUnsavedEditsAsync(cancellationToken))
+if (customProfilesElement.ValueKind != JsonValueKind.Array)
 {
-    selectingInternally = true;
-    try { SelectedProfile = committedSelectedProfile; }
-    finally { selectingInternally = false; }
-    return false;
-}
-committedSelectedProfile = entry;
-```
-Add a test that simulates the actual property-set path (`vm.SelectedProfile = otherRow`) with a declined prompt and verifies both `SelectedProfile` and `Editor` still target the original row.
-
-### CR-03: Catalog/search refresh silently replaces an unsaved profile editor
-
-**Classification:** BLOCKER
-**File:** `src/BS2BG.App/ViewModels/ProfileManagerViewModel.cs:93-96,370-415`
-**Issue:** `CatalogChanged` and every `SearchText` change call `RefreshProfileEntries()`, which clears/rebuilds rows, assigns `SelectedProfile`, and recreates `Editor` without checking `Editor.HasUnsavedChanges` or prompting. A user editing an unsaved custom profile can lose all unsaved row/metadata edits simply by typing in the Profiles search box or by any catalog refresh from import/save/delete/recovery actions.
-**Fix:** Separate row projection refresh from editor replacement. Preserve the current editor when it has unsaved changes unless the user explicitly confirms discard; for search filtering, update visible collections without recreating `Editor`.
-```csharp
-var currentEditor = Editor;
-var hasUnsaved = currentEditor.HasUnsavedChanges;
-// rebuild row collections
-if (!hasUnsaved)
-{
-    SelectedProfile = restoredSelection;
-    Editor = restoredSelection is null ? EmptyEditor() : EditorFrom(restoredSelection);
+    diagnostics.Add(new ProjectLoadDiagnostic(
+        "EmbeddedProfileSectionInvalid",
+        "CustomProfiles must be an array; embedded profiles were ignored.",
+        null));
+    return profiles;
 }
 ```
-Add regression tests for changing `SearchText` and receiving `CatalogChanged` while `Editor.HasUnsavedChanges` is true.
+
+### CR-03: Multi-file profile import can overwrite an earlier imported duplicate
+
+**File:** `src/BS2BG.App/ViewModels/ProfileManagerViewModel.cs:292-330`
+
+**Issue:** Each selected import file is validated against `catalogService.Current.ProfileNames`, but the catalog is refreshed only after the loop. Two selected JSON files with the same internal `Name` both pass validation in the same batch. `UserProfileStore.SaveProfile` may then choose the same sanitized target path and overwrite the first imported profile with the second, violating the duplicate-name rejection requirement and risking profile data loss.
+
+**Fix:** Maintain a case-insensitive accepted-name set for the whole import batch and add each successfully saved profile name before validating the next file.
+
+```csharp
+var acceptedNames = catalogService.Current.ProfileNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+...
+var validation = ProfileDefinitionService.ValidateProfileJson(
+    json,
+    ProfileValidationContext.ForImport(acceptedNames, ProfileSourceKind.LocalCustom, file));
+...
+if (saved.Succeeded)
+{
+    acceptedNames.Add(validation.Profile.Name);
+    importedAny = true;
+}
+```
 
 ## Warnings
 
-### WR-01: Profile editor search only filters Defaults rows
+### WR-01: Custom profile delete command is not exposed in the Profiles UI
 
-**Classification:** WARNING
-**File:** `src/BS2BG.App/ViewModels/ProfileEditorViewModel.cs:463-468`; `src/BS2BG.App/Views/MainWindow.axaml:1672,1697`
-**Issue:** `SearchText` populates only `VisibleDefaultRows`; Multipliers and Inverted rows are bound directly to `MultiplierRows` and `InvertedRows`. The UI label says `Filter profile sliders`, and Phase 04 requires large slider tables to be searchable, but two of the three editable tables ignore the filter.
-**Fix:** Add `VisibleMultiplierRows` and `VisibleInvertedRows`, refresh them alongside defaults, and bind the AXAML tables to those visible collections. Add tests that filtering hides nonmatching multiplier and inverted rows without removing them from the saved candidate.
+**File:** `src/BS2BG.App/Views/MainWindow.axaml:1556-1585`
 
-### WR-02: Profile import/export file I/O failures escape without user-facing recovery status
+**Issue:** `ProfileManagerViewModel` implements `DeleteCustomProfileCommand` with referenced-profile confirmation, but the Profiles workspace only exposes Copy, Export, Validate, and Save buttons. Users cannot invoke the delete workflow from the first-class profile manager UI, leaving local custom-profile cleanup inaccessible.
 
-**Classification:** WARNING
-**File:** `src/BS2BG.App/ViewModels/ProfileManagerViewModel.cs:210,292,366`
-**Issue:** Profile import reads selected files and export writes selected JSON paths directly without handling normal local I/O failures. Unlike project/export save paths, these commands do not catch `IOException`/`UnauthorizedAccessException` or set an actionable status message. A denied/missing file or unwritable export path can surface as a command exception and leave the Profiles workspace without clear failure copy.
-**Fix:** Wrap user-selected file reads/writes in recoverable exception handling, preserve the current editor/selection, and set status text such as `Profile JSON could not be read` or `Profile JSON could not be exported` with the path/error details. Consider routing writes through the existing file-operation failure pattern if overwrite/partial-write reporting is needed.
+**Fix:** Add a delete button bound to `DeleteCustomProfileCommand`, visible/enabled only when the command can execute.
+
+```xml
+<Button Content="Delete Custom Profile"
+        automation:AutomationProperties.Name="Delete Custom Profile"
+        Command="{Binding DeleteCustomProfileCommand}" />
+```
+
+### WR-02: Blank slider validation reports the wrong error
+
+**File:** `src/BS2BG.App/ViewModels/ProfileEditorViewModel.cs:439-442`
+
+**Issue:** A blank slider name emits `BlankSliderName` but the message says the table contains a duplicate slider. This misleads users fixing malformed profile rows and weakens validation diagnostics.
+
+**Fix:** Use a blank-name-specific message.
+
+```csharp
+diagnostics.Add(Blocker(
+    "BlankSliderName",
+    $"{table} contains a blank slider name. Each slider name can appear once per table.",
+    table,
+    slider));
+```
 
 ---
 
-_Reviewed: 2026-04-27T11:14:28Z_
+_Reviewed: 2026-04-27T12:51:05Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
