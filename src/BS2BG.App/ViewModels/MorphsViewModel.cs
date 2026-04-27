@@ -69,6 +69,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     [Reactive] private bool _isNpcPresetFilterOpen;
     [Reactive] private bool _isNpcRaceFilterOpen;
     [Reactive(SetModifier = AccessModifier.Private)] private bool _hasNpcImportPreview;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _lastAssignmentEffectSummary = string.Empty;
     [Reactive] private string _npcDatabaseSearchText = string.Empty;
 
     [Reactive(SetModifier = AccessModifier.Private)]
@@ -225,6 +226,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             .CombineLatest(
                 this.WhenAnyValue(x => x.SelectedImportedNpc),
                 (npc, imported) => (npc ?? imported) is not null);
+        var canImportPreviewedNpcs = Gate(this.WhenAnyValue(x => x.HasNpcImportPreview)
+            .Select(_ => NpcImportPreviewRows.Any(row => row.CanImport)));
 
         ImportNpcsCommand = ReactiveCommand.CreateFromTask(
             ImportNpcsAsync,
@@ -232,6 +235,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         PreviewNpcImportCommand = ReactiveCommand.CreateFromTask(
             PreviewNpcImportAsync,
             canAddCustomTarget);
+        ImportPreviewedNpcsCommand = ReactiveCommand.Create(
+            () => { ImportPreviewedNpcs(); },
+            canImportPreviewedNpcs);
         AddCustomTargetCommand = ReactiveCommand.Create(
             () => { AddCustomTarget(); },
             canAddCustomTarget);
@@ -304,6 +310,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             .Subscribe(ex => ReportCommandFailure("Import NPCs", ex)));
         disposables.Add(PreviewNpcImportCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Preview NPC import", ex)));
+        disposables.Add(ImportPreviewedNpcsCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Import previewed NPCs", ex)));
         disposables.Add(CopyGeneratedMorphsCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Copy generated morphs", ex)));
 
@@ -371,6 +379,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> ImportNpcsCommand { get; }
 
     public ReactiveCommand<Unit, Unit> PreviewNpcImportCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ImportPreviewedNpcsCommand { get; }
 
     public ReactiveCommand<Unit, Unit> AddCustomTargetCommand { get; }
 
@@ -603,6 +613,31 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         }
 
         PopulateNpcImportPreview(results);
+    }
+
+    /// <summary>
+    /// Commits the addable rows from the current NPC import preview into the NPC database only.
+    /// Preset assignment remains a separate Morphs workflow so import effects and assignment effects stay distinct.
+    /// </summary>
+    /// <returns>The number of previewed NPCs added to the NPC database.</returns>
+    public int ImportPreviewedNpcs()
+    {
+        var rowsToAdd = NpcImportPreviewRows
+            .Where(row => row.CanImport && row.Npc is not null)
+            .Select(row => row.Npc!)
+            .ToArray();
+        var added = AddNpcsToDatabase(rowsToAdd);
+        var skipped = rowsToAdd.Length - added;
+
+        ClearNpcImportPreview();
+        StatusMessage = "Imported " + added.ToString(CultureInfo.InvariantCulture)
+                                  + " previewed NPC" + (added == 1 ? string.Empty : "s")
+                                  + " to the NPC database. Import preview does not assign presets.";
+        if (skipped > 0)
+            StatusMessage += " " + skipped.ToString(CultureInfo.InvariantCulture)
+                             + " duplicate" + (skipped == 1 ? " was" : "s were") + " skipped.";
+
+        return added;
     }
 
     public bool AddCustomTarget()
@@ -1230,6 +1265,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var targets = ResolveNpcTargets(scope).ToArray();
         var before = CaptureAssignments(targets);
         var filled = assignmentService.FillEmptyNpcs(targets, candidates);
+        LastAssignmentEffectSummary = FormatAssignmentEffectSummary(scope, before, targets);
         StatusMessage = "Assigned presets to " + filled.ToString(CultureInfo.InvariantCulture)
                                         + " " + FormatScopeLabel(scope)
                                         + " NPC" + (filled == 1 ? "." : "s.");
@@ -1244,6 +1280,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var targets = ResolveNpcTargets(scope).ToArray();
         var before = CaptureAssignments(targets);
         var cleared = assignmentService.ClearAssignments(targets);
+        LastAssignmentEffectSummary = FormatAssignmentEffectSummary(scope, before, targets);
         StatusMessage = "Cleared assignments from " + cleared.ToString(CultureInfo.InvariantCulture)
                                                     + " " + FormatScopeLabel(scope)
                                                     + " NPC" + (cleared == 1 ? "." : "s.");
@@ -1260,7 +1297,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             .Select(CreateNpcSnapshot)
             .ToArray();
         var selectedNpc = SelectedNpc;
+        var assignedBefore = targets.Count(npc => npc.HasPresets);
         var removed = ApplyRemoveNpcs(snapshot);
+        LastAssignmentEffectSummary = FormatTargetRemovalEffectSummary(scope, targets.Length, assignedBefore, Npcs.Count);
 
         StatusMessage = "Removed " + removed.ToString(CultureInfo.InvariantCulture)
                                    + " " + FormatScopeLabel(scope)
@@ -1654,6 +1693,37 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             NpcBulkScope.VisibleEmpty => "visible empty",
             _ => "selected"
         };
+    }
+
+    private static string FormatAssignmentEffectSummary(
+        NpcBulkScope scope,
+        IReadOnlyCollection<MorphTargetAssignmentSnapshot> before,
+        IReadOnlyCollection<Npc> afterTargets)
+    {
+        var assignedBefore = before.Count(snapshot => snapshot.AssignedPresetNames.Count > 0);
+        var assignedAfter = afterTargets.Count(npc => npc.HasPresets);
+        return "Assignment effect for " + FormatScopeLabel(scope) + " NPCs: "
+                                        + assignedBefore.ToString(CultureInfo.InvariantCulture)
+                                        + " assigned before, "
+                                        + assignedAfter.ToString(CultureInfo.InvariantCulture)
+                                        + " assigned after.";
+    }
+
+    private static string FormatTargetRemovalEffectSummary(
+        NpcBulkScope scope,
+        int targetsBefore,
+        int assignedBefore,
+        int targetsAfter)
+    {
+        return "Assignment effect for " + FormatScopeLabel(scope) + " NPCs: "
+                                        + targetsBefore.ToString(CultureInfo.InvariantCulture)
+                                        + " target" + (targetsBefore == 1 ? string.Empty : "s")
+                                        + " before, "
+                                        + targetsAfter.ToString(CultureInfo.InvariantCulture)
+                                        + " target" + (targetsAfter == 1 ? string.Empty : "s")
+                                        + " after; "
+                                        + assignedBefore.ToString(CultureInfo.InvariantCulture)
+                                        + " assigned before removal.";
     }
 
     private static IEnumerable<Npc> GetSelectedNpcsForCommandFromSnapshot(
