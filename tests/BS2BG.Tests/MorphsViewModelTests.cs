@@ -2,11 +2,13 @@ using System.Diagnostics.CodeAnalysis;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
+using BS2BG.App.ViewModels.Workflow;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 using Xunit;
+using WorkflowNpcFilterColumn = BS2BG.App.ViewModels.Workflow.NpcFilterColumn;
 
 namespace BS2BG.Tests;
 
@@ -101,6 +103,40 @@ public sealed class MorphsViewModelTests
         serana.SliderPresets.Should().BeEmpty();
         valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
         viewModel.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Serana");
+    }
+
+    [Fact]
+    public void NpcColumnFiltersCoverRequiredFieldsAndPreserveMorphGenerationModels()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets.Single(preset => preset.Name == "Alpha");
+        var beta = project.SliderPresets.Single(preset => preset.Name == "Beta");
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        lydia.AddSliderPreset(alpha);
+        var serana = CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74");
+        serana.AddSliderPreset(beta);
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(serana);
+        project.MorphedNpcs.Add(valerica);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider());
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Mod, new[] { "Skyrim.esm" });
+        viewModel.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Serana");
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Name, new[] { "Serana" });
+        viewModel.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Serana");
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.EditorId, new[] { "DLC1Serana" });
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.FormId, new[] { "2B74" });
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Race, new[] { "NordRaceVampire" });
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.AssignmentState, new[] { NpcFilterState.AssignedValue });
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Preset, new[] { "Beta" });
+
+        viewModel.VisibleNpcs.Should().ContainSingle().Which.Should().BeSameAs(serana);
+
+        viewModel.GenerateMorphs();
+        viewModel.GeneratedMorphsText.Should().Contain("Skyrim.esm|2B74=Beta");
     }
 
     [Fact]
