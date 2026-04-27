@@ -51,14 +51,16 @@ public sealed class NpcFilterStateTests
     [Fact]
     public void NpcFilterColumnCoversRequiredNpcFilterDimensions()
     {
-        Enum.GetValues<NpcFilterColumn>().Should().BeEquivalentTo(
+        Enum.GetValues<NpcFilterColumn>().Should().BeEquivalentTo(new[]
+        {
             NpcFilterColumn.Mod,
             NpcFilterColumn.Name,
             NpcFilterColumn.EditorId,
             NpcFilterColumn.FormId,
             NpcFilterColumn.Race,
             NpcFilterColumn.AssignmentState,
-            NpcFilterColumn.Preset);
+            NpcFilterColumn.Preset
+        });
     }
 
     [Fact]
