@@ -24,7 +24,8 @@ namespace BS2BG.App.ViewModels;
 public enum AppWorkspace
 {
     Templates,
-    Morphs
+    Morphs,
+    Diagnostics
 }
 
 public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
@@ -106,7 +107,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         MorphsViewModel morphs,
         UndoRedoService? undoRedo = null,
         IUserPreferencesService? preferencesService = null,
-        ExportPreviewService? exportPreviewService = null)
+        ExportPreviewService? exportPreviewService = null,
+        DiagnosticsViewModel? diagnostics = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
@@ -126,6 +128,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         this.preferencesService = preferencesService ?? new UserPreferencesService();
         Templates = templates ?? throw new ArgumentNullException(nameof(templates));
         Morphs = morphs ?? throw new ArgumentNullException(nameof(morphs));
+        Diagnostics = diagnostics ?? new DiagnosticsViewModel(project, profileCatalog, new ProjectValidationService(), new ProfileDiagnosticsService());
         currentPreferences = this.preferencesService.Load();
         _selectedThemePreference = currentPreferences.Theme;
         ThemePreferenceApplier.Apply(_selectedThemePreference);
@@ -188,6 +191,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         var busySources = new[]
         {
             Templates.WhenAnyValue(x => x.IsBusy), Morphs.WhenAnyValue(x => x.IsBusy),
+            Diagnostics.WhenAnyValue(x => x.IsBusy),
             NewProjectCommand.IsExecuting, OpenProjectCommand.IsExecuting, SaveProjectCommand.IsExecuting,
             SaveProjectAsCommand.IsExecuting, ExportBosJsonCommand.IsExecuting,
             ExportBodyGenInisCommand.IsExecuting, PreviewBosJsonExportCommand.IsExecuting,
@@ -303,6 +307,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     public TemplatesViewModel Templates { get; }
 
     public MorphsViewModel Morphs { get; }
+
+    public DiagnosticsViewModel Diagnostics { get; }
 
     public ObservableCollection<CommandDescriptor> CommandPaletteItems { get; } = new();
 
@@ -760,15 +766,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
     private void ApplyGlobalSearchText()
     {
-        if (ActiveWorkspace == AppWorkspace.Templates)
+        switch (ActiveWorkspace)
         {
-            Templates.SearchText = GlobalSearchText;
-            Morphs.SearchText = string.Empty;
-        }
-        else
-        {
-            Morphs.SearchText = GlobalSearchText;
-            Templates.SearchText = string.Empty;
+            case AppWorkspace.Templates:
+                Templates.SearchText = GlobalSearchText;
+                Morphs.SearchText = string.Empty;
+                break;
+            case AppWorkspace.Morphs:
+                Morphs.SearchText = GlobalSearchText;
+                Templates.SearchText = string.Empty;
+                break;
+            case AppWorkspace.Diagnostics:
+                Templates.SearchText = string.Empty;
+                Morphs.SearchText = string.Empty;
+                break;
         }
     }
 
