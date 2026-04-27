@@ -50,7 +50,8 @@ public sealed class ProfileDiagnosticsServiceTests
         report.Summary.CalculationFallbackProfileName.Should().Be("Measured");
         report.Findings.Should().Contain(finding =>
             finding.Severity == DiagnosticSeverity.Info
-            && finding.Title == "Profile fallback detail"
+            && finding.Code == "MissingCustomProfile"
+            && finding.Category == "ProfileRecovery"
             && finding.Detail.Contains("calculation fallback")
             && finding.Detail.Contains("Measured"));
         findingText.Should().Contain("Saved profile");

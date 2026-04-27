@@ -65,10 +65,7 @@ public sealed class ProjectValidationServiceTests
             finding.Severity == DiagnosticSeverity.Blocker
             && finding.Area == "Morphs/NPCs"
             && finding.TargetKey == "All|Female");
-        report.Findings.Should().Contain(finding =>
-            finding.Severity == DiagnosticSeverity.Info
-            && finding.Area == "Profiles"
-            && finding.Detail.Contains("Unbundled Body"));
+        report.Findings.Should().NotContain(finding => finding.Title == "Unbundled saved profile");
     }
 
     private static TemplateProfileCatalog CreateCatalog()

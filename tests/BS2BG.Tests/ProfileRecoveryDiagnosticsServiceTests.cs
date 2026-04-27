@@ -121,6 +121,26 @@ public sealed class ProfileRecoveryDiagnosticsServiceTests
         canResolve.Should().BeFalse();
     }
 
+    [Fact]
+    public void CombinedDiagnosticsContainSingleRecoveryFindingForMissingCustomProfile()
+    {
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new ModelSliderPreset("CommunityPreset", "Community CBBE"));
+        var catalog = CreateCatalog();
+
+        var findings = new ProjectValidationService().Validate(project, catalog).Findings
+            .Concat(new ProfileDiagnosticsService().Analyze(project, catalog).Findings)
+            .ToArray();
+
+        findings.Where(finding => finding.Category == "ProfileRecovery" && finding.Code == "MissingCustomProfile")
+            .Should().ContainSingle()
+            .Which.Detail.Should().Contain("visible fallback calculation");
+        findings.Should().NotContain(finding => finding.Title == "Unbundled saved profile");
+        findings.Count(finding => finding.TargetKey == "Community CBBE"
+                                  && (finding.Code == "MissingCustomProfile" || finding.Code == "ProfileFallbackDetail"))
+            .Should().Be(1);
+    }
+
     private static TemplateProfileCatalog CreateCatalog()
     {
         return new TemplateProfileCatalog(new[]
