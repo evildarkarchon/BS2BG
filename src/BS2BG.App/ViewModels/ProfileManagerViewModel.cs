@@ -197,7 +197,22 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         var files = await dialogService.PickProfileImportFilesAsync(cancellationToken);
         foreach (var file in files)
         {
-            var json = await File.ReadAllTextAsync(file, cancellationToken);
+            string json;
+            try
+            {
+                json = await File.ReadAllTextAsync(file, cancellationToken);
+            }
+            catch (IOException exception)
+            {
+                StatusMessage = "Profile JSON could not be read: " + exception.Message;
+                return false;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                StatusMessage = "Profile JSON could not be read: " + exception.Message;
+                return false;
+            }
+
             var validation = ProfileDefinitionService.ValidateProfileJson(
                 json,
                 ProfileValidationContext.ForImport(catalogService.Current.ProfileNames, ProfileSourceKind.LocalCustom, file));
@@ -277,9 +292,25 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
     private async Task ImportProfilesAsync(CancellationToken cancellationToken)
     {
         var files = await dialogService.PickProfileImportFilesAsync(cancellationToken);
+        var importedAny = false;
         foreach (var file in files)
         {
-            var json = await File.ReadAllTextAsync(file, cancellationToken);
+            string json;
+            try
+            {
+                json = await File.ReadAllTextAsync(file, cancellationToken);
+            }
+            catch (IOException exception)
+            {
+                StatusMessage = "Profile JSON could not be read: " + exception.Message;
+                continue;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                StatusMessage = "Profile JSON could not be read: " + exception.Message;
+                continue;
+            }
+
             var validation = ProfileDefinitionService.ValidateProfileJson(
                 json,
                 ProfileValidationContext.ForImport(catalogService.Current.ProfileNames, ProfileSourceKind.LocalCustom, file));
@@ -293,9 +324,10 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
             var saved = store.SaveProfile(validation.Profile);
             StatusMessage = saved.Succeeded ? "Profile imported." : FormatDiagnostics(saved.Diagnostics);
+            importedAny |= saved.Succeeded;
         }
 
-        if (files.Count > 0) catalogService.Refresh();
+        if (importedAny) catalogService.Refresh();
     }
 
     private void CreateBlankProfile()
@@ -375,7 +407,21 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         var path = await dialogService.PickProfileExportPathAsync(entry.Name + ".json", cancellationToken);
         if (string.IsNullOrWhiteSpace(path)) return;
 
-        await File.WriteAllTextAsync(path, ProfileDefinitionService.ExportProfileJson(entry.ToCustomProfileDefinition()), cancellationToken);
+        try
+        {
+            await File.WriteAllTextAsync(path, ProfileDefinitionService.ExportProfileJson(entry.ToCustomProfileDefinition()), cancellationToken);
+        }
+        catch (IOException exception)
+        {
+            StatusMessage = "Profile JSON could not be exported: " + exception.Message;
+            return;
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            StatusMessage = "Profile JSON could not be exported: " + exception.Message;
+            return;
+        }
+
         StatusMessage = "Profile JSON exported.";
     }
 
