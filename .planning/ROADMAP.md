@@ -99,7 +99,7 @@ Plans:
 **Plans**: 7 plans
 Plans:
 **Wave 1**
-- [ ] 04-01-PLAN.md — Create Core custom profile validation and JSON export contracts.
+- [x] 04-01-PLAN.md — Create Core custom profile validation and JSON export contracts.
 **Wave 2 (blocked on Wave 1 completion)**
 - [ ] 04-02-PLAN.md — Add AppData custom profile storage and source-tagged catalog composition.
 - [ ] 04-03-PLAN.md — Embed referenced custom profile definitions in `.jbs2bg` projects while preserving legacy fields.

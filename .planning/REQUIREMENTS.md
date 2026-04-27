@@ -35,8 +35,8 @@ Accepted Phase 1 override: ROADMAP/requirement wording that previously mentioned
 
 ### Profile Extensibility
 
-- [ ] **EXT-01**: User can import, copy, export, and validate local JSON profile files without corrupting bundled profiles or existing projects.
-- [ ] **EXT-02**: User can edit supported profile metadata and slider tables through validated workflows that reject malformed or ambiguous profile data.
+- [x] **EXT-01**: User can import, copy, export, and validate local JSON profile files without corrupting bundled profiles or existing projects.
+- [x] **EXT-02**: User can edit supported profile metadata and slider tables through validated workflows that reject malformed or ambiguous profile data.
 - [ ] **EXT-03**: User can save projects that reference custom profiles while preserving legacy compatibility fields for older `.jbs2bg` consumers.
 - [ ] **EXT-04**: User can resolve missing custom profile references through clear diagnostics rather than silent fallback.
 - [ ] **EXT-05**: User can bundle or copy project-specific profiles when sharing a project with another machine.
@@ -101,8 +101,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIAG-03 | Phase 3: Validation and Diagnostics | Complete |
 | DIAG-04 | Phase 3: Validation and Diagnostics | Complete |
 | DIAG-05 | Phase 3: Validation and Diagnostics | Complete |
-| EXT-01 | Phase 4: Profile Extensibility and Controlled Customization | Pending |
-| EXT-02 | Phase 4: Profile Extensibility and Controlled Customization | Pending |
+| EXT-01 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
+| EXT-02 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | EXT-03 | Phase 4: Profile Extensibility and Controlled Customization | Pending |
 | EXT-04 | Phase 4: Profile Extensibility and Controlled Customization | Pending |
 | EXT-05 | Phase 4: Profile Extensibility and Controlled Customization | Pending |

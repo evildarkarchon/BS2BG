@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 04 UI-SPEC approved
-last_updated: "2026-04-27T07:47:42.941Z"
-last_activity: 2026-04-27 -- Phase 04 planning complete
+stopped_at: Completed 04-profile-extensibility-and-controlled-customization-01-PLAN.md
+last_updated: "2026-04-27T08:24:21.765Z"
+last_activity: 2026-04-27
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 31
-  completed_plans: 24
-  percent: 77
+  total_plans: 32
+  completed_plans: 25
+  percent: 78
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** Modders can reliably convert existing BodySlide presets into BodyGen and BoS outputs that match the Java tool's behavior byte-for-byte where compatibility matters.
-**Current focus:** Phase 03 — validation-and-diagnostics
+**Current focus:** Phase 04 — profile-extensibility-and-controlled-customization
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
+Phase: 04 (profile-extensibility-and-controlled-customization) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-04-27 -- Phase 04 planning complete
+Last activity: 2026-04-27
 
-Progress: [██████████] 100%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [██████████] 100%
 | Phase 03-validation-and-diagnostics P06 | 4 min | 2 tasks | 8 files |
 | Phase 03-validation-and-diagnostics P07 | 4 min | 2 tasks | 5 files |
 | Phase 03-validation-and-diagnostics P08 | 11 min | 3 tasks | 5 files |
+| Phase 04-profile-extensibility-and-controlled-customization P01 | 4 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,9 @@ Recent decisions affecting current work:
 - [Phase 03-validation-and-diagnostics]: Keep file operation ledger presentation in the App ViewModel layer using binding-ready rows while Core continues to own atomic write outcomes. — Allows UI-SPEC labels without changing Core enums or writer behavior.
 - [Phase 03-validation-and-diagnostics]: Treat Diagnostics as a first-class workspace beside Templates and Morphs rather than a modal or text-only report. — Satisfies the Phase 3 UI-SPEC and keeps validation visible in the main workflow.
 - [Phase 03-validation-and-diagnostics]: Keep preview, import, export, and ledger actions visibly distinct in the Diagnostics tab. — Preserves the read-only diagnostics boundary while making mutation/export affordances explicit.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Custom profile identity uses only the internal Name property; file path remains source metadata. — Prevents filenames from becoming profile identity and satisfies Phase 4 D-12.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Profile definition equality normalizes display names/table order while preserving exact game metadata, slider-name casing, and float values. — Gives downstream embedded/local conflict handling an explicit normalized comparison contract.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Custom profile export normalizes indented System.Text.Json output to LF for byte-stable sharing on Windows. — Utf8JsonWriter indentation follows environment newlines, while custom profile exports need deterministic bytes.
 
 ### Pending Todos
 
@@ -135,6 +139,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27T07:26:08.802Z
-Stopped at: Phase 04 UI-SPEC approved
-Resume file: .planning/phases/04-profile-extensibility-and-controlled-customization/04-UI-SPEC.md
+Last session: 2026-04-27T08:24:05.022Z
+Stopped at: Completed 04-profile-extensibility-and-controlled-customization-01-PLAN.md
+Resume file: None
