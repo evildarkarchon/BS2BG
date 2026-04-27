@@ -152,6 +152,7 @@ public sealed class M6UxAppShellTests
         var scopeLabel = window.FindControl<TextBlock>("NpcBulkScopeLabel").Should().BeAssignableTo<TextBlock>().Which;
         var scopeSelector = window.FindControl<ComboBox>("NpcBulkScopeComboBox").Should().BeAssignableTo<ComboBox>().Which;
         var fillButton = window.FindControl<Button>("FillEmptyNpcsButton").Should().BeAssignableTo<Button>().Which;
+        var clearButton = window.FindControl<Button>("ClearVisibleNpcsButton").Should().BeAssignableTo<Button>().Which;
 
         scopeLabel.Text.Should().Be("Scope");
         scopeSelector.ItemsSource.Should().BeSameAs(viewModel.Morphs.NpcBulkScopes);
@@ -161,6 +162,7 @@ public sealed class M6UxAppShellTests
             .Should().Equal("All", "Visible", "Selected", "Visible Empty");
         fillButton.Content.Should().Be("Fill Visible Empty");
         fillButton.GetValue(Avalonia.Automation.AutomationProperties.NameProperty).Should().Be("Fill Visible Empty");
+        clearButton.GetValue(Avalonia.Automation.AutomationProperties.NameProperty).Should().Be("Clear scoped NPCs");
     }
 
     [AvaloniaFact]

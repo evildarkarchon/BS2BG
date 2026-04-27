@@ -721,7 +721,7 @@
                         Grid.Column="8"
                         Margin="8,0,0,0"
                         Content="Clear"
-                        automation:AutomationProperties.Name="Clear visible NPCs"
+                        automation:AutomationProperties.Name="Clear scoped NPCs"
                         Command="{Binding Morphs.ClearVisibleNpcsCommand}" />
                 <Button x:Name="SelectedNpcAssignButton"
                         Grid.Column="9"
