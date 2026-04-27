@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-profile-extensibility-and-controlled-customization-04-PLAN.md
-last_updated: "2026-04-27T08:49:01.574Z"
+stopped_at: Completed 04-profile-extensibility-and-controlled-customization-05-PLAN.md
+last_updated: "2026-04-27T08:57:33.908Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 32
-  completed_plans: 28
-  percent: 88
+  completed_plans: 29
+  percent: 91
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 04 (profile-extensibility-and-controlled-customization) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-04-27
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -77,6 +77,7 @@ Progress: [█████████░] 88%
 | Phase 04-profile-extensibility-and-controlled-customization P02 | 7 min | 3 tasks | 10 files |
 | Phase 04-profile-extensibility-and-controlled-customization P03 | 22 min | 2 tasks | 6 files |
 | Phase 04-profile-extensibility-and-controlled-customization P04 | 5 min | 3 tasks | 7 files |
+| Phase 04-profile-extensibility-and-controlled-customization P05 | 6 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,9 @@ Recent decisions affecting current work:
 - [Phase 04-profile-extensibility-and-controlled-customization]: Missing custom profile references are represented by one recovery-coded informational finding instead of separate generic unbundled and fallback rows. — Prevents duplicate profile findings in the Diagnostics workspace.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Imported profile recovery identity uses only CustomProfileDefinition.Name with OrdinalIgnoreCase; FilePath remains source metadata only. — Satisfies D-12 and prevents filename masquerading.
 - [Phase 04-profile-extensibility-and-controlled-customization]: ProjectValidationService no longer emits generic unbundled-profile rows; ProfileDiagnosticsService owns recovery-aware profile fallback findings. — Keeps recovery deduplication mechanical through Code/Category.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Profile manager owns one editor instance per single-shell workspace session and prompts before discarding unsaved editor buffers. — Preserves unsaved custom-profile edits across selection changes until explicit discard.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Profile editor validation is performed from in-memory row state instead of JSON serialization round-trips. — Keeps large profile table editing responsive while Core JSON validation remains the import/export boundary.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Referenced custom profile deletion preserves preset ProfileName values so recovery diagnostics reappear. — Avoids silent remapping and keeps fallback state visible.
 
 ### Pending Todos
 
@@ -124,6 +128,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27T08:48:47.260Z
-Stopped at: Completed 04-profile-extensibility-and-controlled-customization-04-PLAN.md
+Last session: 2026-04-27T08:57:33.902Z
+Stopped at: Completed 04-profile-extensibility-and-controlled-customization-05-PLAN.md
 Resume file: None

@@ -105,7 +105,7 @@ Plans:
 - [x] 04-03-PLAN.md — Embed referenced custom profile definitions in `.jbs2bg` projects while preserving legacy fields.
 **Wave 3 (blocked on Wave 2 completion; 04-04 also depends on 04-02 for local catalog semantics)**
 - [x] 04-04-PLAN.md — Add read-only missing-profile recovery diagnostics and exact-match resolution checks.
-- [ ] 04-05-PLAN.md — Build ReactiveUI profile manager/editor workflows for import, copy, edit, validate, save, export, and delete.
+- [x] 04-05-PLAN.md — Build ReactiveUI profile manager/editor workflows for import, copy, edit, validate, save, export, and delete.
 **Wave 4 (blocked on Wave 3 recovery diagnostics and catalog/project contracts)**
 - [ ] 04-06-PLAN.md — Integrate explicit embedded-profile project-open conflict transactions and overlay reset.
 **Wave 5 (blocked on Wave 4 conflict transaction and Profile Manager workflows)**
