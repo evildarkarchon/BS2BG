@@ -16,7 +16,7 @@ public sealed class UserPreferencesServiceTests
             "user-preferences.json",
             """
             {
-              "Theme": "Dark"
+              "Theme": 2
             }
             """);
 
@@ -40,7 +40,7 @@ public sealed class UserPreferencesServiceTests
 
         saved.Should().BeTrue();
         using var document = JsonDocument.Parse(File.ReadAllText(preferencesPath));
-        document.RootElement.GetProperty(nameof(UserPreferences.Theme)).GetString().Should().Be("Light");
+        document.RootElement.GetProperty(nameof(UserPreferences.Theme)).GetInt32().Should().Be((int)ThemePreference.Light);
         document.RootElement.GetProperty(nameof(UserPreferences.OmitRedundantSliders)).GetBoolean().Should().BeTrue();
     }
 
