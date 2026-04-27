@@ -27,9 +27,11 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     private readonly BodySlideXmlParser parser;
     private readonly SerialDisposable presetSubscription = new();
     private readonly TemplateProfileCatalog profileCatalog;
+    private readonly IUserPreferencesService preferencesService;
     private readonly ProjectModel project;
     private readonly TemplateGenerationService templateGenerationService;
     private readonly UndoRedoService undoRedo;
+    private UserPreferences currentPreferences;
 
     [Reactive(SetModifier = AccessModifier.Private)]
     private string _generatedTemplateText = string.Empty;
@@ -90,7 +92,8 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         TemplateProfileCatalog profileCatalog,
         IBodySlideXmlFilePicker filePicker,
         IClipboardService clipboardService,
-        UndoRedoService? undoRedo = null)
+        UndoRedoService? undoRedo = null,
+        IUserPreferencesService? preferencesService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.parser = parser ?? throw new ArgumentNullException(nameof(parser));
@@ -100,7 +103,10 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         this.filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
         this.clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
         this.undoRedo = undoRedo ?? new UndoRedoService();
+        this.preferencesService = preferencesService ?? new UserPreferencesService();
+        currentPreferences = this.preferencesService.Load();
         _selectedProfileName = profileCatalog.DefaultProfile.Name;
+        _omitRedundantSliders = currentPreferences.OmitRedundantSliders;
         project.SliderPresets.CollectionChanged += (_, _) => RefreshVisiblePresets();
         disposables.Add(presetSubscription);
 
@@ -170,6 +176,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
             .Skip(1)
             .Subscribe(_ =>
             {
+                SaveOmitRedundantSlidersPreference();
                 GeneratedTemplateText = string.Empty;
                 RefreshPreview();
             }));
@@ -471,6 +478,21 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
 
     private void ReportCommandFailure(string action, Exception exception) =>
         StatusMessage = action + " failed: " + FormatExceptionMessage(exception);
+
+    /// <summary>
+    /// Saves the local workflow preference without writing it into the shared project model.
+    /// Save failures are intentionally non-blocking because preferences are convenience state only.
+    /// </summary>
+    private void SaveOmitRedundantSlidersPreference()
+    {
+        currentPreferences = new UserPreferences
+        {
+            Theme = currentPreferences.Theme,
+            OmitRedundantSliders = OmitRedundantSliders
+        };
+        if (!preferencesService.Save(currentPreferences))
+            StatusMessage = "This workflow preference could not be saved. BS2BG will continue using defaults for this session.";
+    }
 
     private void AddOrUpdatePreset(SliderPreset importedPreset)
     {

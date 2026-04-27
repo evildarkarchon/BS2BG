@@ -7,6 +7,7 @@ using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
+using BS2BG.Core.Serialization;
 using Xunit;
 using ModelSetSlider = BS2BG.Core.Models.SetSlider;
 using ModelSliderPreset = BS2BG.Core.Models.SliderPreset;
@@ -206,6 +207,59 @@ public sealed class TemplatesViewModelTests
 
         viewModel.GeneratedTemplateText.Should().Be(string.Empty);
         viewModel.PreviewTemplateText.Should().Be("Alpha=");
+    }
+
+    [Fact]
+    public void ConstructorHydratesOmitRedundantSlidersFromLocalPreferences()
+    {
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            Theme = ThemePreference.Dark,
+            OmitRedundantSliders = true
+        });
+
+        var viewModel = CreateViewModel(preferences: preferences);
+
+        viewModel.OmitRedundantSliders.Should().BeTrue();
+        preferences.LoadCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void ChangingOmitRedundantSlidersSavesLocalPreferenceWithoutProjectSerialization()
+    {
+        var project = new ProjectModel();
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            Theme = ThemePreference.Dark,
+            OmitRedundantSliders = false
+        });
+        var viewModel = CreateViewModel(project: project, preferences: preferences);
+
+        viewModel.OmitRedundantSliders = true;
+
+        preferences.Saved.Should().BeEquivalentTo(new UserPreferences
+        {
+            Theme = ThemePreference.Dark,
+            OmitRedundantSliders = true
+        });
+        new ProjectFileService().SaveToString(project).Should().NotContain(nameof(UserPreferences.OmitRedundantSliders));
+    }
+
+    [Fact]
+    public void OmitRedundantSlidersSaveFailureReportsNonBlockingStatusAndAllowsGeneration()
+    {
+        var viewModel = CreateViewModel(preferences: new FailingUserPreferencesService(new UserPreferences
+        {
+            OmitRedundantSliders = false
+        }));
+        AddPreset(viewModel, "Alpha", 50);
+
+        viewModel.OmitRedundantSliders = true;
+
+        viewModel.StatusMessage.Should().Be(
+            "This workflow preference could not be saved. BS2BG will continue using defaults for this session.");
+        viewModel.GenerateTemplates();
+        viewModel.GeneratedTemplateText.Should().Be("Alpha=Scale@0.5");
     }
 
     [Fact]
@@ -423,7 +477,8 @@ public sealed class TemplatesViewModelTests
         IClipboardService? clipboard = null,
         TemplateProfileCatalog? profileCatalog = null,
         ProjectModel? project = null,
-        UndoRedoService? undoRedo = null)
+        UndoRedoService? undoRedo = null,
+        IUserPreferencesService? preferences = null)
     {
         return new TemplatesViewModel(
             project ?? new ProjectModel(),
@@ -432,7 +487,8 @@ public sealed class TemplatesViewModelTests
             profileCatalog ?? CreateCatalog(),
             picker ?? new BlockingFilePicker(Array.Empty<string>()),
             clipboard ?? new CapturingClipboardService(),
-            undoRedo);
+            undoRedo,
+            preferences ?? new CapturingUserPreferencesService(new UserPreferences()));
     }
 
     private static TemplateProfileCatalog CreateCatalog()
@@ -523,6 +579,32 @@ public sealed class TemplatesViewModelTests
         private readonly Exception exception = exception;
 
         public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.FromException(exception);
+    }
+
+    private sealed class CapturingUserPreferencesService(UserPreferences initial) : IUserPreferencesService
+    {
+        public int LoadCount { get; private set; }
+
+        public UserPreferences Saved { get; private set; } = initial;
+
+        public UserPreferences Load()
+        {
+            LoadCount++;
+            return Saved;
+        }
+
+        public bool Save(UserPreferences preferences)
+        {
+            Saved = preferences;
+            return true;
+        }
+    }
+
+    private sealed class FailingUserPreferencesService(UserPreferences preferences) : IUserPreferencesService
+    {
+        public UserPreferences Load() => preferences;
+
+        public bool Save(UserPreferences preferences) => false;
     }
 
     private sealed class RecordingSynchronizationContext : SynchronizationContext

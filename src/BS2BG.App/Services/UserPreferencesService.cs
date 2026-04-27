@@ -15,6 +15,8 @@ public enum ThemePreference
 public sealed class UserPreferences
 {
     public ThemePreference Theme { get; set; } = ThemePreference.System;
+
+    public bool OmitRedundantSliders { get; set; }
 }
 
 public interface IUserPreferencesService
