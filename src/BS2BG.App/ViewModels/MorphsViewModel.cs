@@ -438,6 +438,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public IReadOnlyList<string> NpcRaceColumnValues => GetNpcColumnValues(NpcFilterColumn.Race);
 
+    public string NpcRaceFilterBadgeText => GetNpcFilterBadgeText(NpcFilterColumn.Race, "Race");
+
     public string NpcModColumnSearchText
     {
         get => GetNpcColumnSearchText(NpcFilterColumn.Mod);
@@ -445,6 +447,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     }
 
     public IReadOnlyList<string> NpcModColumnValues => GetNpcColumnValues(NpcFilterColumn.Mod);
+
+    public string NpcModFilterBadgeText => GetNpcFilterBadgeText(NpcFilterColumn.Mod, "Mod");
 
     public string NpcNameColumnSearchText
     {
@@ -454,6 +458,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public IReadOnlyList<string> NpcNameColumnValues => GetNpcColumnValues(NpcFilterColumn.Name);
 
+    public string NpcNameFilterBadgeText => GetNpcFilterBadgeText(NpcFilterColumn.Name, "Name");
+
     public string NpcEditorIdColumnSearchText
     {
         get => GetNpcColumnSearchText(NpcFilterColumn.EditorId);
@@ -461,6 +467,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     }
 
     public IReadOnlyList<string> NpcEditorIdColumnValues => GetNpcColumnValues(NpcFilterColumn.EditorId);
+
+    public string NpcEditorIdFilterBadgeText => GetNpcFilterBadgeText(NpcFilterColumn.EditorId, "Editor ID");
 
     public string NpcFormIdColumnSearchText
     {
@@ -470,6 +478,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public IReadOnlyList<string> NpcFormIdColumnValues => GetNpcColumnValues(NpcFilterColumn.FormId);
 
+    public string NpcFormIdFilterBadgeText => GetNpcFilterBadgeText(NpcFilterColumn.FormId, "Form ID");
+
     public string NpcAssignmentStateColumnSearchText
     {
         get => GetNpcColumnSearchText(NpcFilterColumn.AssignmentState);
@@ -478,6 +488,10 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public IReadOnlyList<string> NpcAssignmentStateColumnValues => GetNpcColumnValues(NpcFilterColumn.AssignmentState);
 
+    public string NpcAssignmentStateFilterBadgeText => GetNpcFilterBadgeText(
+        NpcFilterColumn.AssignmentState,
+        "Assignment");
+
     public string NpcPresetColumnSearchText
     {
         get => GetNpcColumnSearchText(NpcFilterColumn.Preset);
@@ -485,6 +499,10 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     }
 
     public IReadOnlyList<string> NpcPresetColumnValues => GetNpcColumnValues(NpcFilterColumn.Preset);
+
+    public string NpcPresetFilterBadgeText => GetNpcFilterBadgeText(NpcFilterColumn.Preset, "Preset");
+
+    public bool IsNpcFilteredEmptyVisible => Npcs.Count > 0 && VisibleNpcs.Count == 0 && npcFilterState.HasAnyFilter();
 
     public void Dispose()
     {
@@ -1061,8 +1079,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
         RefreshFilteredCollection(Npcs, npcRowsByNpc, npcFilterState, VisibleNpcs);
         this.RaisePropertyChanged(nameof(NpcCountBadgeText));
-        this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
         RaiseAllNpcColumnValuesChanged();
+        this.RaisePropertyChanged(nameof(IsNpcFilteredEmptyVisible));
         UpdateHiddenSelectionStatus();
     }
 
@@ -1320,12 +1338,21 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
         this.RaisePropertyChanged(nameof(NpcAssignmentStateColumnValues));
         this.RaisePropertyChanged(nameof(NpcPresetColumnValues));
+        this.RaisePropertyChanged(nameof(NpcModFilterBadgeText));
+        this.RaisePropertyChanged(nameof(NpcNameFilterBadgeText));
+        this.RaisePropertyChanged(nameof(NpcEditorIdFilterBadgeText));
+        this.RaisePropertyChanged(nameof(NpcFormIdFilterBadgeText));
+        this.RaisePropertyChanged(nameof(NpcRaceFilterBadgeText));
+        this.RaisePropertyChanged(nameof(NpcAssignmentStateFilterBadgeText));
+        this.RaisePropertyChanged(nameof(NpcPresetFilterBadgeText));
     }
 
     private void RaiseNpcColumnSearchPropertiesChanged(NpcFilterColumn column)
     {
         this.RaisePropertyChanged(GetNpcColumnSearchPropertyName(column));
         this.RaisePropertyChanged(GetNpcColumnValuesPropertyName(column));
+        this.RaisePropertyChanged(GetNpcColumnBadgePropertyName(column));
+        this.RaisePropertyChanged(nameof(IsNpcFilteredEmptyVisible));
     }
 
     private void RaiseNpcColumnFilterStateChanged(NpcFilterColumn column)
@@ -1360,6 +1387,29 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             NpcFilterColumn.AssignmentState => nameof(NpcAssignmentStateColumnValues),
             NpcFilterColumn.Preset => nameof(NpcPresetColumnValues),
             _ => nameof(NpcRaceColumnValues)
+        };
+    }
+
+    private string GetNpcFilterBadgeText(NpcFilterColumn column, string label)
+    {
+        var count = npcFilterState.GetAllowedValues(column).Count;
+        return count == 0
+            ? string.Empty
+            : label + ": " + count.ToString(CultureInfo.InvariantCulture) + " selected";
+    }
+
+    private static string GetNpcColumnBadgePropertyName(NpcFilterColumn column)
+    {
+        return column switch
+        {
+            NpcFilterColumn.Mod => nameof(NpcModFilterBadgeText),
+            NpcFilterColumn.Name => nameof(NpcNameFilterBadgeText),
+            NpcFilterColumn.EditorId => nameof(NpcEditorIdFilterBadgeText),
+            NpcFilterColumn.FormId => nameof(NpcFormIdFilterBadgeText),
+            NpcFilterColumn.Race => nameof(NpcRaceFilterBadgeText),
+            NpcFilterColumn.AssignmentState => nameof(NpcAssignmentStateFilterBadgeText),
+            NpcFilterColumn.Preset => nameof(NpcPresetFilterBadgeText),
+            _ => nameof(NpcRaceFilterBadgeText)
         };
     }
 

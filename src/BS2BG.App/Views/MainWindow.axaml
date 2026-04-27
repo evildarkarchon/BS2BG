@@ -722,9 +722,13 @@
                         Grid.Column="0"
                         Padding="0"
                         HorizontalAlignment="Left"
-                        Content="Name"
                         automation:AutomationProperties.Name="Filter NPCs by name"
-                        Command="{Binding Morphs.ToggleNpcNameFilterCommand}" />
+                        Command="{Binding Morphs.ToggleNpcNameFilterCommand}">
+                  <StackPanel>
+                    <TextBlock Text="Name" />
+                    <TextBlock x:Name="NpcNameFilterBadge" Text="{Binding Morphs.NpcNameFilterBadgeText}" Foreground="{DynamicResource BS2BGActiveFilterForegroundBrush}" FontSize="12" />
+                  </StackPanel>
+                </Button>
                 <Popup x:Name="NpcNameFilterPopup"
                        Grid.Column="0"
                        PlacementTarget="{Binding #NpcNameFilterButton}"
@@ -743,9 +747,13 @@
                         Grid.Column="1"
                         Padding="0"
                         HorizontalAlignment="Left"
-                        Content="Master"
                         automation:AutomationProperties.Name="Filter NPCs by mod"
-                        Command="{Binding Morphs.ToggleNpcModFilterCommand}" />
+                        Command="{Binding Morphs.ToggleNpcModFilterCommand}">
+                  <StackPanel>
+                    <TextBlock Text="Master" />
+                    <TextBlock x:Name="NpcModFilterBadge" Text="{Binding Morphs.NpcModFilterBadgeText}" Foreground="{DynamicResource BS2BGActiveFilterForegroundBrush}" FontSize="12" />
+                  </StackPanel>
+                </Button>
                 <Popup x:Name="NpcModFilterPopup" Grid.Column="1" PlacementTarget="{Binding #NpcModFilterButton}" Placement="Bottom" IsLightDismissEnabled="True" IsOpen="{Binding Morphs.IsNpcModFilterOpen, Mode=TwoWay}">
                   <Border Padding="8" Width="240" MaxHeight="280" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1">
                     <Grid RowDefinitions="Auto,*,Auto">
@@ -759,9 +767,13 @@
                         Grid.Column="2"
                         Padding="0"
                         HorizontalAlignment="Left"
-                        Content="Race"
                         automation:AutomationProperties.Name="Filter NPCs by race"
-                        Command="{Binding Morphs.ToggleNpcRaceFilterCommand}" />
+                        Command="{Binding Morphs.ToggleNpcRaceFilterCommand}">
+                  <StackPanel>
+                    <TextBlock Text="Race" />
+                    <TextBlock x:Name="NpcRaceFilterButtonBadge" Text="{Binding Morphs.NpcRaceFilterBadgeText}" Foreground="{DynamicResource BS2BGActiveFilterForegroundBrush}" FontSize="12" />
+                  </StackPanel>
+                </Button>
                 <Popup x:Name="NpcRaceFilterPopup"
                        Grid.Column="2"
                        PlacementTarget="{Binding #NpcRaceFilterButton}"
@@ -797,7 +809,15 @@
                     </Grid>
                   </Border>
                 </Popup>
-                <Button x:Name="NpcEditorIdFilterButton" Grid.Column="3" Padding="0" HorizontalAlignment="Left" Content="EditorID" automation:AutomationProperties.Name="Filter NPCs by editor ID" Command="{Binding Morphs.ToggleNpcEditorIdFilterCommand}" />
+                <TextBlock x:Name="NpcRaceFilterBadge"
+                           Grid.Column="2"
+                           Margin="0,20,0,0"
+                           Text="{Binding Morphs.NpcRaceFilterBadgeText}"
+                           Foreground="{DynamicResource BS2BGActiveFilterForegroundBrush}"
+                           FontSize="12" />
+                <Button x:Name="NpcEditorIdFilterButton" Grid.Column="3" Padding="0" HorizontalAlignment="Left" automation:AutomationProperties.Name="Filter NPCs by editor ID" Command="{Binding Morphs.ToggleNpcEditorIdFilterCommand}">
+                  <StackPanel><TextBlock Text="EditorID" /><TextBlock x:Name="NpcEditorIdFilterBadge" Text="{Binding Morphs.NpcEditorIdFilterBadgeText}" Foreground="{DynamicResource BS2BGActiveFilterForegroundBrush}" FontSize="12" /></StackPanel>
+                </Button>
                 <Popup x:Name="NpcEditorIdFilterPopup" Grid.Column="3" PlacementTarget="{Binding #NpcEditorIdFilterButton}" Placement="Bottom" IsLightDismissEnabled="True" IsOpen="{Binding Morphs.IsNpcEditorIdFilterOpen, Mode=TwoWay}">
                   <Border Padding="8" Width="240" MaxHeight="280" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1">
                     <Grid RowDefinitions="Auto,*,Auto">
@@ -807,7 +827,9 @@
                     </Grid>
                   </Border>
                 </Popup>
-                <Button x:Name="NpcFormIdFilterButton" Grid.Column="4" Padding="0" HorizontalAlignment="Left" Content="FormID" automation:AutomationProperties.Name="Filter NPCs by form ID" Command="{Binding Morphs.ToggleNpcFormIdFilterCommand}" />
+                <Button x:Name="NpcFormIdFilterButton" Grid.Column="4" Padding="0" HorizontalAlignment="Left" automation:AutomationProperties.Name="Filter NPCs by form ID" Command="{Binding Morphs.ToggleNpcFormIdFilterCommand}">
+                  <StackPanel><TextBlock Text="FormID" /><TextBlock x:Name="NpcFormIdFilterBadge" Text="{Binding Morphs.NpcFormIdFilterBadgeText}" Foreground="{DynamicResource BS2BGActiveFilterForegroundBrush}" FontSize="12" /></StackPanel>
+                </Button>
                 <Popup x:Name="NpcFormIdFilterPopup" Grid.Column="4" PlacementTarget="{Binding #NpcFormIdFilterButton}" Placement="Bottom" IsLightDismissEnabled="True" IsOpen="{Binding Morphs.IsNpcFormIdFilterOpen, Mode=TwoWay}">
                   <Border Padding="8" Width="240" MaxHeight="280" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1">
                     <Grid RowDefinitions="Auto,*,Auto">
@@ -817,7 +839,9 @@
                     </Grid>
                   </Border>
                 </Popup>
-                <Button x:Name="NpcAssignmentStateFilterButton" Grid.Column="5" Padding="0" HorizontalAlignment="Left" Content="Assignment" automation:AutomationProperties.Name="Filter NPCs by assignment state" Command="{Binding Morphs.ToggleNpcAssignmentStateFilterCommand}" />
+                <Button x:Name="NpcAssignmentStateFilterButton" Grid.Column="5" Padding="0" HorizontalAlignment="Left" automation:AutomationProperties.Name="Filter NPCs by assignment state" Command="{Binding Morphs.ToggleNpcAssignmentStateFilterCommand}">
+                  <StackPanel><TextBlock Text="Assignment" /><TextBlock x:Name="NpcAssignmentStateFilterBadge" Text="{Binding Morphs.NpcAssignmentStateFilterBadgeText}" Foreground="{DynamicResource BS2BGActiveFilterForegroundBrush}" FontSize="12" /></StackPanel>
+                </Button>
                 <Popup x:Name="NpcAssignmentStateFilterPopup" Grid.Column="5" PlacementTarget="{Binding #NpcAssignmentStateFilterButton}" Placement="Bottom" IsLightDismissEnabled="True" IsOpen="{Binding Morphs.IsNpcAssignmentStateFilterOpen, Mode=TwoWay}">
                   <Border Padding="8" Width="240" MaxHeight="280" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1">
                     <Grid RowDefinitions="Auto,*,Auto">
@@ -827,7 +851,9 @@
                     </Grid>
                   </Border>
                 </Popup>
-                <Button x:Name="NpcPresetFilterButton" Grid.Column="6" Padding="0" HorizontalAlignment="Left" Content="Slider Presets" automation:AutomationProperties.Name="Filter NPCs by presets" Command="{Binding Morphs.ToggleNpcPresetFilterCommand}" />
+                <Button x:Name="NpcPresetFilterButton" Grid.Column="6" Padding="0" HorizontalAlignment="Left" automation:AutomationProperties.Name="Filter NPCs by presets" Command="{Binding Morphs.ToggleNpcPresetFilterCommand}">
+                  <StackPanel><TextBlock Text="Slider Presets" /><TextBlock x:Name="NpcPresetFilterBadge" Text="{Binding Morphs.NpcPresetFilterBadgeText}" Foreground="{DynamicResource BS2BGActiveFilterForegroundBrush}" FontSize="12" /></StackPanel>
+                </Button>
                 <Popup x:Name="NpcPresetFilterPopup" Grid.Column="6" PlacementTarget="{Binding #NpcPresetFilterButton}" Placement="Bottom" IsLightDismissEnabled="True" IsOpen="{Binding Morphs.IsNpcPresetFilterOpen, Mode=TwoWay}">
                   <Border Padding="8" Width="240" MaxHeight="280" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1">
                     <Grid RowDefinitions="Auto,*,Auto">
@@ -839,28 +865,53 @@
                 </Popup>
               </Grid>
 
-              <ListBox Grid.Row="2"
-                       x:Name="NpcListBox"
-                       SelectionMode="Multiple"
-                       Focusable="True"
-                       automation:AutomationProperties.Name="Individual NPCs"
-                       SelectionChanged="OnNpcSelectionChanged"
-                       ItemsSource="{Binding Morphs.VisibleNpcs}"
-                       SelectedItem="{Binding Morphs.SelectedNpc}">
-                <ListBox.ItemTemplate>
-                  <DataTemplate x:DataType="models:Npc">
-                    <Grid ColumnDefinitions="*,*,*,*,*,*,1.2*">
-                      <TextBlock Grid.Column="0" Text="{Binding Name}" />
-                      <TextBlock Grid.Column="1" Text="{Binding Mod}" />
-                      <TextBlock Grid.Column="2" Text="{Binding Race}" />
-                      <TextBlock Grid.Column="3" Text="{Binding EditorId}" />
-                      <TextBlock Grid.Column="4" Text="{Binding FormId}" />
-                      <TextBlock Grid.Column="5" Text="{Binding HasPresets}" />
-                      <TextBlock Grid.Column="6" Text="{Binding SliderPresetsText}" />
-                    </Grid>
-                  </DataTemplate>
-                </ListBox.ItemTemplate>
-              </ListBox>
+              <Grid Grid.Row="2">
+                <ListBox x:Name="NpcListBox"
+                         SelectionMode="Multiple"
+                         Focusable="True"
+                         automation:AutomationProperties.Name="Individual NPCs"
+                         SelectionChanged="OnNpcSelectionChanged"
+                         ItemsSource="{Binding Morphs.VisibleNpcs}"
+                         SelectedItem="{Binding Morphs.SelectedNpc}">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:Npc">
+                      <Grid ColumnDefinitions="*,*,*,*,*,*,1.2*">
+                        <TextBlock Grid.Column="0" Text="{Binding Name}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Mod}" />
+                        <TextBlock Grid.Column="2" Text="{Binding Race}" />
+                        <TextBlock Grid.Column="3" Text="{Binding EditorId}" />
+                        <TextBlock Grid.Column="4" Text="{Binding FormId}" />
+                        <TextBlock Grid.Column="5" Text="{Binding HasPresets}" />
+                        <TextBlock Grid.Column="6" Text="{Binding SliderPresetsText}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Border x:Name="NpcFilteredEmptyState"
+                        Padding="16"
+                        Margin="24"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource BS2BGInfoBackgroundBrush}"
+                        BorderBrush="{DynamicResource BS2BGInfoBorderBrush}"
+                        BorderThickness="1"
+                        IsVisible="{Binding Morphs.IsNpcFilteredEmptyVisible}"
+                        automation:AutomationProperties.Name="NPC filtered empty state">
+                  <StackPanel Spacing="8" MaxWidth="420">
+                    <TextBlock x:Name="NpcFilteredEmptyHeading"
+                               Text="No NPCs match the current filters"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource BS2BGInfoForegroundBrush}"
+                               TextAlignment="Center" />
+                    <TextBlock x:Name="NpcFilteredEmptyBody"
+                               Text="Clear one or more filters to show hidden NPCs, or change the bulk scope before running an action."
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource BS2BGInfoForegroundBrush}"
+                               TextAlignment="Center" />
+                  </StackPanel>
+                </Border>
+              </Grid>
             </Grid>
           </Border>
 

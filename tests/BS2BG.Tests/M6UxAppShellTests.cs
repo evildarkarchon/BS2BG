@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using BS2BG.App;
 using BS2BG.App.ViewModels;
+using BS2BG.App.ViewModels.Workflow;
 using BS2BG.App.Views;
 using BS2BG.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,9 @@ namespace BS2BG.Tests;
 
 public sealed class M6UxAppShellTests
 {
+    private static readonly string[] NordRaceFilterValues = ["NordRace"];
+    private static readonly string[] FalloutModFilterValues = ["Fallout4.esm"];
+
     [AvaloniaFact]
     public void MainWindowExposesM6SearchPaletteThemeAndSelectionControls()
     {
@@ -120,12 +124,13 @@ public sealed class M6UxAppShellTests
     {
         var viewModel = new MainWindowViewModel();
         viewModel.Morphs.Npcs.Add(CreateNpc("Lydia", "NordRace", "Skyrim.esm", "LydiaEditor", "000A2C8E"));
+        viewModel.Morphs.Npcs.Add(CreateNpc("Piper", "HumanRace", "Fallout4.esm", "PiperEditor", "00002F1F"));
         var window = new MainWindow(viewModel);
         window.ApplyTemplate();
-        var raceValuesList = window.FindControl<ListBox>("NpcRaceFilterValuesListBox").Should().BeAssignableTo<ListBox>()
-            .Which;
 
-        raceValuesList.SelectedItems!.Add("NoMatchingRace");
+        viewModel.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, NordRaceFilterValues);
+        viewModel.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Mod, FalloutModFilterValues);
+        Dispatcher.UIThread.RunJobs();
 
         window.FindControl<TextBlock>("NpcRaceFilterBadge").Should().BeAssignableTo<TextBlock>().Which
             .Text.Should().Be("Race: 1 selected");

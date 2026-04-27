@@ -4,6 +4,9 @@
     <ResourceDictionary x:Key="Light">
       <SolidColorBrush x:Key="BS2BGWindowBackgroundBrush" Color="#F7F9FC" />
       <SolidColorBrush x:Key="BS2BGFocusBrush" Color="#005FB8" />
+      <SolidColorBrush x:Key="BS2BGActiveFilterBackgroundBrush" Color="#DDEEFF" />
+      <SolidColorBrush x:Key="BS2BGActiveFilterBorderBrush" Color="#005FB8" />
+      <SolidColorBrush x:Key="BS2BGActiveFilterForegroundBrush" Color="#003F7A" />
       <SolidColorBrush x:Key="BS2BGWarningBackgroundBrush" Color="#FFF4CE" />
       <SolidColorBrush x:Key="BS2BGWarningBorderBrush" Color="#8A6100" />
       <SolidColorBrush x:Key="BS2BGWarningForegroundBrush" Color="#3B2A00" />
@@ -14,6 +17,9 @@
     <ResourceDictionary x:Key="Dark">
       <SolidColorBrush x:Key="BS2BGWindowBackgroundBrush" Color="#11151A" />
       <SolidColorBrush x:Key="BS2BGFocusBrush" Color="#7CC4FF" />
+      <SolidColorBrush x:Key="BS2BGActiveFilterBackgroundBrush" Color="#17324D" />
+      <SolidColorBrush x:Key="BS2BGActiveFilterBorderBrush" Color="#7CC4FF" />
+      <SolidColorBrush x:Key="BS2BGActiveFilterForegroundBrush" Color="#D8ECFF" />
       <SolidColorBrush x:Key="BS2BGWarningBackgroundBrush" Color="#3D2E00" />
       <SolidColorBrush x:Key="BS2BGWarningBorderBrush" Color="#FFD766" />
       <SolidColorBrush x:Key="BS2BGWarningForegroundBrush" Color="#FFF6D6" />
