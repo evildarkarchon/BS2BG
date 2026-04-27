@@ -92,6 +92,29 @@ public sealed class AppShellTests
     }
 
     [AvaloniaFact]
+    public void MainWindowExposesDiagnosticsWorkspaceTabAndActions()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var window = provider.GetRequiredService<MainWindow>();
+        window.ApplyTemplate();
+
+        var tabHeaders = window.GetLogicalDescendants()
+            .OfType<TabItem>()
+            .Select(tab => tab.Header?.ToString())
+            .ToArray();
+        tabHeaders.Should().Contain("Diagnostics");
+        window.FindControl<Button>("RunDiagnosticsButton")?.Command.Should()
+            .BeSameAs(window.ViewModel?.Diagnostics.RefreshDiagnosticsCommand);
+        window.FindControl<Button>("CopyDiagnosticsReportButton")?.Command.Should()
+            .BeSameAs(window.ViewModel?.Diagnostics.CopyReportCommand);
+        AutomationProperties.GetName(window.FindControl<Button>("PreviewNpcImportButton"))
+            .Should().Be("Preview NPC Import");
+        AutomationProperties.GetName(window.FindControl<Button>("PreviewExportButton"))
+            .Should().Be("Preview Export");
+    }
+
+    [AvaloniaFact]
     public void MainWindowExposesM5FileAndHelpMenus()
     {
         using var provider = AppBootstrapper.CreateServiceProvider();
