@@ -3,6 +3,7 @@ using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using Xunit;
+using ModelSliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
@@ -39,16 +40,17 @@ public sealed class ProjectValidationServiceTests
 
         var report = new ProjectValidationService().Validate(new ProjectModel(), CreateCatalog());
 
+        var allowedAreas = new[] { "Project", "Profiles", "Templates", "Morphs/NPCs", "Import", "Export" };
         report.Findings.Select(finding => finding.Area).Distinct()
-            .Should().OnlyContain(area => area is "Project" or "Profiles" or "Templates" or "Morphs/NPCs" or "Import" or "Export");
+            .Should().OnlyContain(area => allowedAreas.Contains(area));
     }
 
     [Fact]
     public void ValidateReportsMissingPresetReferencesAndUnbundledProfilesAsNeutralInformation()
     {
         var project = new ProjectModel();
-        var alpha = new SliderPreset("Alpha", "Unbundled Body");
-        var missingReference = new SliderPreset("Missing");
+        var alpha = new ModelSliderPreset("Alpha", "Unbundled Body");
+        var missingReference = new ModelSliderPreset("Missing");
         project.SliderPresets.Add(alpha);
         var target = new CustomMorphTarget("All|Female");
         target.AddSliderPreset(missingReference);
