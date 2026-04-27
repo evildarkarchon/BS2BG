@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 04-profile-extensibility-and-controlled-customization-01-PLAN.md
-last_updated: "2026-04-27T08:24:21.765Z"
+last_updated: "2026-04-27T08:35:57.658Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 32
-  completed_plans: 25
-  percent: 78
+  completed_plans: 26
+  percent: 81
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 04 (profile-extensibility-and-controlled-customization) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-04-27
 
-Progress: [████████░░] 78%
+Progress: [████████░░] 81%
 
 ## Performance Metrics
 
@@ -74,6 +74,7 @@ Progress: [████████░░] 78%
 | Phase 03-validation-and-diagnostics P07 | 4 min | 2 tasks | 5 files |
 | Phase 03-validation-and-diagnostics P08 | 11 min | 3 tasks | 5 files |
 | Phase 04-profile-extensibility-and-controlled-customization P01 | 4 min | 2 tasks | 4 files |
+| Phase 04-profile-extensibility-and-controlled-customization P02 | 7 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,9 @@ Recent decisions affecting current work:
 - [Phase 04-profile-extensibility-and-controlled-customization]: Custom profile identity uses only the internal Name property; file path remains source metadata. — Prevents filenames from becoming profile identity and satisfies Phase 4 D-12.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Profile definition equality normalizes display names/table order while preserving exact game metadata, slider-name casing, and float values. — Gives downstream embedded/local conflict handling an explicit normalized comparison contract.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Custom profile export normalizes indented System.Text.Json output to LF for byte-stable sharing on Windows. — Utf8JsonWriter indentation follows environment newlines, while custom profile exports need deterministic bytes.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Custom profile discovery failures remain non-fatal diagnostics while bundled profile startup remains available.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Runtime profile catalog refresh is owned by a SemaphoreSlim-serialized App service observed by existing ViewModels.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Embedded project profile overlays may override local custom entries for the active project but cannot shadow bundled names.
 
 ### Pending Todos
 
@@ -139,6 +143,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27T08:24:05.022Z
+Last session: 2026-04-27T08:32:43.290Z
 Stopped at: Completed 04-profile-extensibility-and-controlled-customization-01-PLAN.md
 Resume file: None

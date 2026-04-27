@@ -101,7 +101,7 @@ Plans:
 **Wave 1**
 - [x] 04-01-PLAN.md — Create Core custom profile validation and JSON export contracts.
 **Wave 2 (blocked on Wave 1 completion)**
-- [ ] 04-02-PLAN.md — Add AppData custom profile storage and source-tagged catalog composition.
+- [x] 04-02-PLAN.md — Add AppData custom profile storage and source-tagged catalog composition.
 - [ ] 04-03-PLAN.md — Embed referenced custom profile definitions in `.jbs2bg` projects while preserving legacy fields.
 **Wave 3 (blocked on Wave 2 completion; 04-04 also depends on 04-02 for local catalog semantics)**
 - [ ] 04-04-PLAN.md — Add read-only missing-profile recovery diagnostics and exact-match resolution checks.
