@@ -14,6 +14,10 @@ public interface ITemplateProfileCatalogService
 
     IReadOnlyList<ProfileValidationDiagnostic> LastDiscoveryDiagnostics { get; }
 
+    IReadOnlyList<CustomProfileDefinition> LocalCustomProfiles { get; }
+
+    IReadOnlyList<CustomProfileDefinition> ProjectProfiles { get; }
+
     IObservable<TemplateProfileCatalog> CatalogChanged { get; }
 
     TemplateProfileCatalog Refresh();
@@ -21,6 +25,8 @@ public interface ITemplateProfileCatalogService
     TemplateProfileCatalog ClearProjectProfiles();
 
     TemplateProfileCatalog WithProjectProfiles(IEnumerable<CustomProfileDefinition> projectProfiles);
+
+    UserProfileSaveResult SaveLocalProfile(CustomProfileDefinition profile);
 }
 
 /// <summary>
@@ -32,6 +38,7 @@ public sealed class TemplateProfileCatalogService : ITemplateProfileCatalogServi
     private readonly BehaviorSubject<TemplateProfileCatalog> catalogChanged;
     private readonly SemaphoreSlim semaphore = new(1, 1);
     private TemplateProfileCatalog current;
+    private IReadOnlyList<CustomProfileDefinition> localCustomProfiles = Array.Empty<CustomProfileDefinition>();
     private IReadOnlyList<CustomProfileDefinition> projectProfiles = Array.Empty<CustomProfileDefinition>();
     private IReadOnlyList<ProfileValidationDiagnostic> lastDiscoveryDiagnostics = Array.Empty<ProfileValidationDiagnostic>();
 
@@ -44,6 +51,7 @@ public sealed class TemplateProfileCatalogService : ITemplateProfileCatalogServi
         this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
         var result = this.factory.Create();
         current = result.Catalog;
+        localCustomProfiles = result.LocalProfiles;
         lastDiscoveryDiagnostics = result.DiscoveryDiagnostics;
         catalogChanged = new BehaviorSubject<TemplateProfileCatalog>(current);
     }
@@ -63,6 +71,10 @@ public sealed class TemplateProfileCatalogService : ITemplateProfileCatalogServi
 
     public IReadOnlyList<ProfileValidationDiagnostic> LastDiscoveryDiagnostics => lastDiscoveryDiagnostics;
 
+    public IReadOnlyList<CustomProfileDefinition> LocalCustomProfiles => localCustomProfiles;
+
+    public IReadOnlyList<CustomProfileDefinition> ProjectProfiles => projectProfiles;
+
     public IObservable<TemplateProfileCatalog> CatalogChanged => catalogChanged.AsObservable();
 
     /// <summary>
@@ -75,6 +87,7 @@ public sealed class TemplateProfileCatalogService : ITemplateProfileCatalogServi
         try
         {
             var result = factory.Create();
+            localCustomProfiles = result.LocalProfiles;
             lastDiscoveryDiagnostics = result.DiscoveryDiagnostics;
             Publish(ApplyProjectProfiles(result.Catalog, projectProfiles));
             return current;
@@ -98,7 +111,10 @@ public sealed class TemplateProfileCatalogService : ITemplateProfileCatalogServi
         try
         {
             this.projectProfiles = projectProfiles.ToArray();
-            Publish(ApplyProjectProfiles(factory.Create().Catalog, this.projectProfiles));
+            var result = factory.Create();
+            localCustomProfiles = result.LocalProfiles;
+            lastDiscoveryDiagnostics = result.DiscoveryDiagnostics;
+            Publish(ApplyProjectProfiles(result.Catalog, this.projectProfiles));
             return current;
         }
         finally
@@ -117,7 +133,10 @@ public sealed class TemplateProfileCatalogService : ITemplateProfileCatalogServi
         try
         {
             projectProfiles = Array.Empty<CustomProfileDefinition>();
-            Publish(factory.Create().Catalog);
+            var result = factory.Create();
+            localCustomProfiles = result.LocalProfiles;
+            lastDiscoveryDiagnostics = result.DiscoveryDiagnostics;
+            Publish(result.Catalog);
             return current;
         }
         finally
@@ -131,6 +150,13 @@ public sealed class TemplateProfileCatalogService : ITemplateProfileCatalogServi
         catalogChanged.Dispose();
         semaphore.Dispose();
     }
+
+    /// <summary>
+    /// Saves a local custom profile through the configured store without refreshing the catalog automatically.
+    /// </summary>
+    /// <param name="profile">Profile data to persist.</param>
+    /// <returns>Store save result with diagnostics for recoverable failures.</returns>
+    public UserProfileSaveResult SaveLocalProfile(CustomProfileDefinition profile) => factory.SaveLocalProfile(profile);
 
     private TemplateProfileCatalog ApplyProjectProfiles(
         TemplateProfileCatalog baseCatalog,

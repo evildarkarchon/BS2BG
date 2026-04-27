@@ -195,10 +195,7 @@ public sealed class MainWindowViewModelProfileRecoveryTests
     {
         var currentProject = new ProjectModel();
         var services = CreateViewModel(currentProject, []);
-        var path = WriteProject(CreateProjectWithPreset(
-            "Imported",
-            ProjectProfileMapping.SkyrimCbbe,
-            CreateProfile(ProjectProfileMapping.SkyrimCbbe, 99f, ProfileSourceKind.EmbeddedProject)));
+        var path = WriteRawProjectWithBundledEmbeddedProfile();
 
         await services.ViewModel.OpenProjectPathAsync(path, TestContext.Current.CancellationToken);
 
@@ -284,10 +281,37 @@ public sealed class MainWindowViewModelProfileRecoveryTests
         return path;
     }
 
+    private static string WriteRawProjectWithBundledEmbeddedProfile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".jbs2bg");
+        File.WriteAllText(path, """
+        {
+          "SliderPresets": {
+            "Imported": {
+              "isUUNP": false,
+              "Profile": "Skyrim CBBE",
+              "SetSliders": []
+            }
+          },
+          "CustomProfiles": [
+            {
+              "Version": 1,
+              "Name": "Skyrim CBBE",
+              "Game": "Skyrim",
+              "Defaults": { "Probe": { "valueSmall": 99, "valueBig": 99 } },
+              "Multipliers": {},
+              "Inverted": []
+            }
+          ]
+        }
+        """);
+        return path;
+    }
+
     private static CustomProfileDefinition CreateProfile(string name, float probeDefault, ProfileSourceKind sourceKind) => new(
         name,
         "Skyrim",
-        new SliderProfile([new SliderDefault("Probe", probeDefault, probeDefault)], [], []),
+        new SliderProfile([new SliderDefault("Probe", probeDefault / 100f, probeDefault / 100f)], [], []),
         sourceKind,
         sourceKind == ProfileSourceKind.LocalCustom ? Path.Combine("C:/profiles", name + ".json") : null);
 

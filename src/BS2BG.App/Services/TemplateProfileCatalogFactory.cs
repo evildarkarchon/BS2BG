@@ -10,6 +10,7 @@ namespace BS2BG.App.Services;
 /// <param name="DiscoveryDiagnostics">Diagnostics for custom profile files skipped during local discovery.</param>
 public sealed record TemplateProfileCatalogFactoryResult(
     TemplateProfileCatalog Catalog,
+    IReadOnlyList<CustomProfileDefinition> LocalProfiles,
     IReadOnlyList<ProfileValidationDiagnostic> DiscoveryDiagnostics);
 
 /// <summary>
@@ -80,8 +81,17 @@ public sealed class TemplateProfileCatalogFactory
 
         return new TemplateProfileCatalogFactoryResult(
             new TemplateProfileCatalog(bundledEntries.Concat(customEntries)),
+            discovery.Profiles,
             discovery.Diagnostics);
     }
+
+    /// <summary>
+    /// Persists an accepted custom profile through the configured user-local profile store.
+    /// </summary>
+    /// <param name="profile">Profile definition to save as local custom data.</param>
+    /// <returns>The save result from the user profile store.</returns>
+    public UserProfileSaveResult SaveLocalProfile(CustomProfileDefinition profile) =>
+        userProfileStore.SaveProfile(profile);
 
     private IEnumerable<ProfileCatalogEntry> CreateBundledEntries()
     {

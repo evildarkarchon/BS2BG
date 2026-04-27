@@ -186,6 +186,10 @@ public sealed class ProfileManagerViewModelTests
 
         public IReadOnlyList<ProfileValidationDiagnostic> LastDiscoveryDiagnostics => [];
 
+        public IReadOnlyList<CustomProfileDefinition> LocalCustomProfiles => [];
+
+        public IReadOnlyList<CustomProfileDefinition> ProjectProfiles => [];
+
         public IObservable<TemplateProfileCatalog> CatalogChanged => changed;
 
         public int RefreshCalls { get; private set; }
@@ -200,5 +204,7 @@ public sealed class ProfileManagerViewModelTests
         public TemplateProfileCatalog ClearProjectProfiles() => Current;
 
         public TemplateProfileCatalog WithProjectProfiles(IEnumerable<CustomProfileDefinition> projectProfiles) => Current;
+
+        public UserProfileSaveResult SaveLocalProfile(CustomProfileDefinition profile) => new(false, null, []);
     }
 }

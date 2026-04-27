@@ -450,7 +450,38 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
         try
         {
-            var loadedProject = await Task.Run(() => projectFileService.Load(path), cancellationToken);
+            var loadedResult = await Task.Run(
+                () => projectFileService.LoadWithDiagnosticsFromString(File.ReadAllText(path)),
+                cancellationToken);
+            var loadedProject = loadedResult.Project;
+            var localSnapshot = profileCatalogService.LocalCustomProfiles.Select(profile => profile.Clone()).ToArray();
+            var projectOverlaySnapshot = profileCatalogService.ProjectProfiles.Select(profile => profile.Clone()).ToArray();
+            var currentCatalogSnapshot = profileCatalogService.Current;
+            var conflictResult = await ResolveProjectProfileConflictsAsync(
+                loadedProject,
+                localSnapshot,
+                currentCatalogSnapshot,
+                cancellationToken);
+            if (!conflictResult.Succeeded)
+            {
+                profileCatalogService.WithProjectProfiles(projectOverlaySnapshot);
+                StatusMessage = conflictResult.StatusMessage;
+                return false;
+            }
+
+            foreach (var profile in conflictResult.ProfilesToSave)
+            {
+                var saveResult = profileCatalogService.SaveLocalProfile(profile);
+                if (!saveResult.Succeeded)
+                {
+                    profileCatalogService.WithProjectProfiles(projectOverlaySnapshot);
+                    StatusMessage = FormatProfileSaveFailure(saveResult);
+                    return false;
+                }
+            }
+
+            if (conflictResult.ProfilesToSave.Count > 0) profileCatalogService.Refresh();
+
             project.ReplaceWith(loadedProject);
             CurrentProjectPath = path;
             Templates.SelectedPreset = project.SliderPresets.FirstOrDefault();
@@ -458,8 +489,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             Morphs.SelectedNpc = project.MorphedNpcs.FirstOrDefault();
             undoRedo.Clear();
             project.MarkClean();
-            ClearProjectPresentationState();
-            StatusMessage = "Opened " + Path.GetFileName(path) + ".";
+            if (conflictResult.MarkDirtyAfterOpen) project.MarkDirty();
+
+            ClearProjectPresentationState(clearProjectProfiles: false);
+            profileCatalogService.WithProjectProfiles(loadedProject.CustomProfiles.Select(profile => profile.Clone()).ToArray());
+            var statusParts = new List<string> { "Opened " + Path.GetFileName(path) + "." };
+            if (loadedResult.Diagnostics.Count > 0)
+                statusParts.Add("Project opened with embedded profile diagnostics.");
+            if (HasMissingCustomProfileReference(loadedProject, profileCatalogService.Current))
+                statusParts.Add("Missing custom profile references use visible fallback until resolved.");
+            StatusMessage = string.Join(" ", statusParts);
             return true;
         }
         catch (Exception exception)
@@ -513,6 +552,134 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         {
             StatusMessage = "Dropped file processing failed: " + FormatExceptionMessage(exception);
         }
+    }
+
+    /// <summary>
+    /// Collects and applies embedded/local conflict decisions to a loaded project before any caller-visible open mutation occurs.
+    /// </summary>
+    /// <param name="loadedProject">Detached project loaded from disk.</param>
+    /// <param name="localProfiles">Snapshot of local custom profile definitions captured before user dialogs.</param>
+    /// <param name="catalogSnapshot">Catalog snapshot used for bundled-name uniqueness checks.</param>
+    /// <param name="cancellationToken">Cancels prompts and aborts without mutation.</param>
+    /// <returns>A transaction result containing project changes and any deferred local profile writes.</returns>
+    private async Task<ProjectProfileConflictTransactionResult> ResolveProjectProfileConflictsAsync(
+        ProjectModel loadedProject,
+        IReadOnlyList<CustomProfileDefinition> localProfiles,
+        TemplateProfileCatalog catalogSnapshot,
+        CancellationToken cancellationToken)
+    {
+        var localByName = localProfiles.ToDictionary(profile => profile.Name, StringComparer.OrdinalIgnoreCase);
+        var conflicts = loadedProject.CustomProfiles
+            .Where(embedded => localByName.TryGetValue(embedded.Name, out var local)
+                               && !ProfileDefinitionEquality.DefinitionallyEquals(local, embedded))
+            .Select(embedded => new ProjectProfileConflict(embedded, localByName[embedded.Name]))
+            .ToArray();
+        if (conflicts.Length == 0) return ProjectProfileConflictTransactionResult.Success([], false);
+
+        var decisions = new List<(ProjectProfileConflict Conflict, ProfileConflictDecision Decision)>();
+        foreach (var conflict in conflicts)
+        {
+            var decision = await dialogService.PromptProfileConflictAsync(
+                new ProfileConflictRequest(
+                    conflict.Embedded.Name,
+                    CreateProfileSummary(conflict.Local),
+                    CreateProfileSummary(conflict.Embedded)),
+                cancellationToken);
+            if (decision is null)
+                return ProjectProfileConflictTransactionResult.Failure("Profile conflict resolution cancelled; project was not opened.");
+
+            decisions.Add((conflict, decision));
+        }
+
+        var renameValidation = ValidateRenameDecisions(decisions, catalogSnapshot, localProfiles, loadedProject.CustomProfiles);
+        if (renameValidation is not null) return ProjectProfileConflictTransactionResult.Failure(renameValidation);
+
+        var profilesToSave = new List<CustomProfileDefinition>();
+        var profilesToRemove = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var renameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (conflict, decision) in decisions)
+        {
+            switch (decision.Resolution)
+            {
+                case ProfileConflictResolution.UseProjectCopy:
+                    break;
+                case ProfileConflictResolution.ReplaceLocalProfile:
+                    profilesToSave.Add(new CustomProfileDefinition(
+                        conflict.Embedded.Name,
+                        conflict.Embedded.Game,
+                        conflict.Embedded.SliderProfile,
+                        ProfileSourceKind.LocalCustom,
+                        conflict.Local.FilePath));
+                    profilesToRemove.Add(conflict.Embedded.Name);
+                    break;
+                case ProfileConflictResolution.RenameProjectCopy:
+                    var renamed = decision.RenamedProfileName?.Trim() ?? string.Empty;
+                    renameMap.Add(conflict.Embedded.Name, renamed);
+                    conflict.Embedded.Name = renamed;
+                    break;
+                case ProfileConflictResolution.KeepLocalProfile:
+                    profilesToRemove.Add(conflict.Embedded.Name);
+                    break;
+            }
+        }
+
+        foreach (var removeName in profilesToRemove)
+        {
+            var matching = loadedProject.CustomProfiles.FirstOrDefault(profile => string.Equals(profile.Name, removeName, StringComparison.OrdinalIgnoreCase));
+            if (matching is not null) loadedProject.CustomProfiles.Remove(matching);
+        }
+
+        foreach (var preset in loadedProject.SliderPresets)
+            if (renameMap.TryGetValue(preset.ProfileName, out var renamedProfileName))
+                preset.ProfileName = renamedProfileName;
+
+        return ProjectProfileConflictTransactionResult.Success(profilesToSave, renameMap.Count > 0);
+    }
+
+    private static string? ValidateRenameDecisions(
+        IEnumerable<(ProjectProfileConflict Conflict, ProfileConflictDecision Decision)> decisions,
+        TemplateProfileCatalog catalogSnapshot,
+        IReadOnlyList<CustomProfileDefinition> localProfiles,
+        IReadOnlyList<CustomProfileDefinition> embeddedProfiles)
+    {
+        var occupied = catalogSnapshot.Entries
+            .Where(entry => entry.SourceKind == ProfileSourceKind.Bundled)
+            .Select(entry => entry.Name)
+            .Concat(localProfiles.Select(profile => profile.Name))
+            .Concat(embeddedProfiles.Select(profile => profile.Name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var (conflict, decision) in decisions)
+        {
+            if (decision.Resolution != ProfileConflictResolution.RenameProjectCopy) continue;
+
+            var renamed = decision.RenamedProfileName?.Trim();
+            if (string.IsNullOrWhiteSpace(renamed))
+                return "Rename Project Copy requires a unique display name.";
+
+            occupied.Remove(conflict.Embedded.Name);
+            if (!occupied.Add(renamed))
+                return $"Profile name '{renamed}' conflicts with an existing bundled, local, embedded, or renamed profile.";
+        }
+
+        return null;
+    }
+
+    private static string CreateProfileSummary(CustomProfileDefinition profile)
+    {
+        var source = profile.SourceKind == ProfileSourceKind.LocalCustom ? "Local custom" : "Embedded project";
+        var location = string.IsNullOrWhiteSpace(profile.FilePath) ? "no source path" : profile.FilePath;
+        return source + " profile, game " + profile.Game + ", " + location + ".";
+    }
+
+    private static bool HasMissingCustomProfileReference(ProjectModel loadedProject, TemplateProfileCatalog catalog) =>
+        loadedProject.SliderPresets.Any(preset => !catalog.ContainsProfile(preset.ProfileName));
+
+    private static string FormatProfileSaveFailure(UserProfileSaveResult saveResult)
+    {
+        var detail = saveResult.Diagnostics.FirstOrDefault()?.Message;
+        return string.IsNullOrWhiteSpace(detail)
+            ? "Could not save custom profile; project was not opened."
+            : detail + "; project was not opened.";
     }
 
     public async Task SaveProjectAsync(CancellationToken cancellationToken = default) =>
@@ -722,13 +889,46 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Resets diagnostics, previews, and file ledger state that belongs to the previous project instance.
     /// </summary>
-    private void ClearProjectPresentationState()
+    private void ClearProjectPresentationState(bool clearProjectProfiles = true)
     {
-        profileCatalogService.ClearProjectProfiles();
+        if (clearProjectProfiles) profileCatalogService.ClearProjectProfiles();
         Diagnostics.ClearReport();
         ClearExportPreview();
         ClearFileOperationLedger();
         Morphs.ClearNpcImportPreviewState();
+    }
+
+    private sealed record ProjectProfileConflict(CustomProfileDefinition Embedded, CustomProfileDefinition Local);
+
+    private sealed class ProjectProfileConflictTransactionResult
+    {
+        private ProjectProfileConflictTransactionResult(
+            bool succeeded,
+            string statusMessage,
+            IReadOnlyList<CustomProfileDefinition> profilesToSave,
+            bool markDirtyAfterOpen)
+        {
+            Succeeded = succeeded;
+            StatusMessage = statusMessage;
+            ProfilesToSave = profilesToSave;
+            MarkDirtyAfterOpen = markDirtyAfterOpen;
+        }
+
+        public bool Succeeded { get; }
+
+        public string StatusMessage { get; }
+
+        public IReadOnlyList<CustomProfileDefinition> ProfilesToSave { get; }
+
+        public bool MarkDirtyAfterOpen { get; }
+
+        public static ProjectProfileConflictTransactionResult Success(
+            IReadOnlyList<CustomProfileDefinition> profilesToSave,
+            bool markDirtyAfterOpen) =>
+            new(true, string.Empty, profilesToSave, markDirtyAfterOpen);
+
+        public static ProjectProfileConflictTransactionResult Failure(string statusMessage) =>
+            new(false, statusMessage, [], false);
     }
 
     /// <summary>
