@@ -98,13 +98,19 @@ Plans:
   5. User can bundle or copy project-specific profiles when sharing a project with another machine.
 **Plans**: 7 plans
 Plans:
+**Wave 1**
 - [ ] 04-01-PLAN.md — Create Core custom profile validation and JSON export contracts.
+**Wave 2 (blocked on Wave 1 completion)**
 - [ ] 04-02-PLAN.md — Add AppData custom profile storage and source-tagged catalog composition.
 - [ ] 04-03-PLAN.md — Embed referenced custom profile definitions in `.jbs2bg` projects while preserving legacy fields.
+**Wave 3 (blocked on Wave 2 completion for 04-04 via 04-03; 04-05 can run after 04-02)**
 - [ ] 04-04-PLAN.md — Add read-only missing-profile recovery diagnostics and exact-match resolution checks.
 - [ ] 04-05-PLAN.md — Build ReactiveUI profile manager/editor workflows for import, copy, edit, validate, save, export, and delete.
+**Wave 4 (blocked on Wave 3 recovery diagnostics)**
 - [ ] 04-06-PLAN.md — Integrate explicit embedded-profile conflict handling and undo-aware recovery/remap actions.
+**Wave 5 (blocked on Wave 4 integration)**
 - [ ] 04-07-PLAN.md — Wire the first-class Profiles workspace UI with compiled bindings and visual verification.
+Cross-cutting constraints: custom profile identity is internal display-name based; bundled profiles stay read-only; unresolved/missing profile behavior remains neutral and non-blocking; all profile mutations use explicit user actions and validation before catalog inclusion.
 **UI hint**: yes
 
 ### Phase 5: Automation, Sharing, and Release Trust
