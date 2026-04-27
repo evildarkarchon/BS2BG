@@ -101,7 +101,7 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     /// Creates an editor from a manager row while preserving the row's source metadata for save/export workflows.
     /// </summary>
     public static ProfileEditorViewModel FromEntry(ProfileManagerEntryViewModel entry, ProfileDefinitionService service, IEnumerable<string> existingNames) =>
-        FromProfile(entry.Name, string.Empty, entry.SliderProfile, entry.SourceKind, entry.FilePath, service, existingNames);
+        FromProfile(entry.Name, entry.Game, entry.SliderProfile, entry.SourceKind, entry.FilePath, service, existingNames);
 
     /// <summary>
     /// Creates an editor from profile metadata and generation tables.
