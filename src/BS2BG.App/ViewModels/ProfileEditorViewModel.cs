@@ -59,6 +59,12 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         foreach (var slider in sliderProfile.InvertedNames)
             InvertedRows.Add(new ProfileInvertedRowViewModel(slider, true));
 
+        AddDefaultCommand = ReactiveCommand.Create(AddDefaultRow);
+        RemoveDefaultCommand = ReactiveCommand.Create<ProfileDefaultRowViewModel?>(RemoveDefaultRow);
+        AddMultiplierCommand = ReactiveCommand.Create(AddMultiplierRow);
+        RemoveMultiplierCommand = ReactiveCommand.Create<ProfileMultiplierRowViewModel?>(RemoveMultiplierRow);
+        AddInvertedCommand = ReactiveCommand.Create(AddInvertedRow);
+        RemoveInvertedCommand = ReactiveCommand.Create<ProfileInvertedRowViewModel?>(RemoveInvertedRow);
         ValidateProfileCommand = ReactiveCommand.Create(ValidateProfile);
         SaveProfileCommand = ReactiveCommand.CreateFromTask(SaveProfileAsync, this.WhenAnyValue(x => x.IsValid));
         savedFingerprint = CreateFingerprint();
@@ -78,6 +84,12 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     public ObservableCollection<ProfileDefaultRowViewModel> VisibleDefaultRows { get; } = [];
     public ObservableCollection<ProfileEditorStatusRowViewModel> ValidationRows { get; } = [];
     public ObservableCollection<ProfileEditorStatusRowViewModel> StatusRows { get; } = [];
+    public ReactiveCommand<Unit, Unit> AddDefaultCommand { get; }
+    public ReactiveCommand<ProfileDefaultRowViewModel?, Unit> RemoveDefaultCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddMultiplierCommand { get; }
+    public ReactiveCommand<ProfileMultiplierRowViewModel?, Unit> RemoveMultiplierCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddInvertedCommand { get; }
+    public ReactiveCommand<ProfileInvertedRowViewModel?, Unit> RemoveInvertedCommand { get; }
     public ReactiveCommand<Unit, Unit> ValidateProfileCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveProfileCommand { get; }
     public bool HasUnsavedChanges => !string.Equals(CreateFingerprint(), savedFingerprint, StringComparison.Ordinal);
@@ -164,6 +176,45 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     {
         RefreshVisibleRows();
         ValidateProfile();
+    }
+
+    /// <summary>
+    /// Adds a Defaults row with finite starter values so blank profiles can be built up without immediately creating malformed numeric data.
+    /// </summary>
+    private void AddDefaultRow() => DefaultRows.Add(new ProfileDefaultRowViewModel(NextUniqueSliderName("Default Slider", DefaultRows.Select(row => row.Slider)), "0", "1"));
+
+    /// <summary>
+    /// Removes the supplied Defaults row when it is still present in the current editor buffer.
+    /// </summary>
+    private void RemoveDefaultRow(ProfileDefaultRowViewModel? row)
+    {
+        if (row is not null) DefaultRows.Remove(row);
+    }
+
+    /// <summary>
+    /// Adds a Multipliers row with a neutral multiplier so the new row is valid until the user edits it.
+    /// </summary>
+    private void AddMultiplierRow() => MultiplierRows.Add(new ProfileMultiplierRowViewModel(NextUniqueSliderName("Multiplier Slider", MultiplierRows.Select(row => row.Slider)), "1"));
+
+    /// <summary>
+    /// Removes the supplied Multipliers row when it is still present in the current editor buffer.
+    /// </summary>
+    private void RemoveMultiplierRow(ProfileMultiplierRowViewModel? row)
+    {
+        if (row is not null) MultiplierRows.Remove(row);
+    }
+
+    /// <summary>
+    /// Adds an enabled Inverted row with a non-conflicting slider name for blank-profile authoring.
+    /// </summary>
+    private void AddInvertedRow() => InvertedRows.Add(new ProfileInvertedRowViewModel(NextUniqueSliderName("Inverted Slider", InvertedRows.Select(row => row.Slider)), true));
+
+    /// <summary>
+    /// Removes the supplied Inverted row when it is still present in the current editor buffer.
+    /// </summary>
+    private void RemoveInvertedRow(ProfileInvertedRowViewModel? row)
+    {
+        if (row is not null) InvertedRows.Remove(row);
     }
 
     private Task SaveProfileAsync(CancellationToken cancellationToken)
@@ -311,6 +362,21 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     });
 
     private static string FormatFloat(float value) => value.ToString("R", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Returns a display-friendly slider name that does not duplicate existing rows in the same editable table.
+    /// </summary>
+    private static string NextUniqueSliderName(string prefix, IEnumerable<string> existingNames)
+    {
+        var existing = new HashSet<string>(existingNames, StringComparer.OrdinalIgnoreCase);
+        if (!existing.Contains(prefix)) return prefix;
+
+        for (var i = 2; ; i++)
+        {
+            var candidate = $"{prefix} {i.ToString(CultureInfo.InvariantCulture)}";
+            if (!existing.Contains(candidate)) return candidate;
+        }
+    }
 
     private static ProfileValidationDiagnostic Blocker(string code, string message, string? table, string? sliderName) =>
         new(ProfileValidationSeverity.Blocker, code, message, table, sliderName);
