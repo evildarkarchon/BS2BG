@@ -6,6 +6,8 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Windows.Input;
 using BS2BG.App.Services;
+using BS2BG.App.ViewModels.Workflow;
+using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
@@ -30,6 +32,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly BosJsonExportWriter bosJsonExportWriter;
     private readonly IAppDialogService dialogService;
     private readonly CompositeDisposable disposables = new();
+    private readonly ExportPreviewService exportPreviewService;
     private readonly IFileDialogService fileDialogService;
     private readonly MorphGenerationService morphGenerationService;
     private readonly IUserPreferencesService preferencesService;
@@ -47,12 +50,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     private string? _currentProjectPath;
 
     [Reactive] private string _globalSearchText = string.Empty;
+    [Reactive(SetModifier = AccessModifier.Private)] private bool _hasExportPreview;
     [ObservableAsProperty] private bool _isAnyBusy;
 
     [Reactive(SetModifier = AccessModifier.Private)]
     private bool _isCommandPaletteOpen;
 
     [Reactive] private ThemePreference _selectedThemePreference = ThemePreference.System;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _exportPreviewSummary = string.Empty;
 
     [Reactive(SetModifier = AccessModifier.Private)]
     private bool _shouldFocusGlobalSearch;
@@ -96,7 +103,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         TemplatesViewModel templates,
         MorphsViewModel morphs,
         UndoRedoService? undoRedo = null,
-        IUserPreferencesService? preferencesService = null)
+        IUserPreferencesService? preferencesService = null,
+        ExportPreviewService? exportPreviewService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
@@ -111,6 +119,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
                                    ?? throw new ArgumentNullException(nameof(bosJsonExportWriter));
         this.fileDialogService = fileDialogService ?? throw new ArgumentNullException(nameof(fileDialogService));
         this.dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
+        this.exportPreviewService = exportPreviewService ?? new ExportPreviewService(templateGenerationService);
         this.undoRedo = undoRedo ?? new UndoRedoService();
         this.preferencesService = preferencesService ?? new UserPreferencesService();
         Templates = templates ?? throw new ArgumentNullException(nameof(templates));
@@ -164,6 +173,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         SaveProjectAsCommand = ReactiveCommand.CreateFromTask(SaveProjectAsAsync, notBusy);
         ExportBosJsonCommand = ReactiveCommand.CreateFromTask(ExportBosJsonAsync, canExportBosJson);
         ExportBodyGenInisCommand = ReactiveCommand.CreateFromTask(ExportBodyGenInisAsync, canExportBodyGenInis);
+        PreviewBosJsonExportCommand = ReactiveCommand.CreateFromTask(PreviewBosJsonExportAsync, canExportBosJson);
+        PreviewBodyGenExportCommand = ReactiveCommand.CreateFromTask(PreviewBodyGenExportAsync, canExportBodyGenInis);
         HandleDroppedFilesCommand = ReactiveCommand.CreateFromTask<IReadOnlyList<string>, Unit>(
             async (paths, ct) =>
             {
@@ -177,7 +188,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             Templates.WhenAnyValue(x => x.IsBusy), Morphs.WhenAnyValue(x => x.IsBusy),
             NewProjectCommand.IsExecuting, OpenProjectCommand.IsExecuting, SaveProjectCommand.IsExecuting,
             SaveProjectAsCommand.IsExecuting, ExportBosJsonCommand.IsExecuting,
-            ExportBodyGenInisCommand.IsExecuting, HandleDroppedFilesCommand.IsExecuting
+            ExportBodyGenInisCommand.IsExecuting, PreviewBosJsonExportCommand.IsExecuting,
+            PreviewBodyGenExportCommand.IsExecuting, HandleDroppedFilesCommand.IsExecuting
         };
 
         disposables.Add(Observable.CombineLatest(busySources)
@@ -218,6 +230,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             .Subscribe(ex => ReportCommandFailure("Export BoS JSON", ex)));
         disposables.Add(ExportBodyGenInisCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Export BodyGen INIs", ex)));
+        disposables.Add(PreviewBosJsonExportCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Preview BoS JSON export", ex)));
+        disposables.Add(PreviewBodyGenExportCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Preview BodyGen export", ex)));
         disposables.Add(HandleDroppedFilesCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Drop files", ex)));
 
@@ -290,6 +306,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<CommandDescriptor> VisibleCommandPaletteItems { get; } = new();
 
+    public ObservableCollection<ExportPreviewViewModel> ExportPreviewFiles { get; } = new();
+
     public IReadOnlyList<ThemePreference> ThemePreferences { get; } = Enum.GetValues<ThemePreference>();
 
     public ReactiveCommand<Unit, Unit> NewProjectCommand { get; }
@@ -303,6 +321,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> ExportBosJsonCommand { get; }
 
     public ReactiveCommand<Unit, Unit> ExportBodyGenInisCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> PreviewBosJsonExportCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> PreviewBodyGenExportCommand { get; }
 
     public ReactiveCommand<Unit, Unit> ShowAboutCommand { get; }
 
@@ -483,6 +505,37 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Builds a read-only BodyGen export preview using the same generated text that the writer receives.
+    /// </summary>
+    public async Task PreviewBodyGenExportAsync(CancellationToken cancellationToken = default)
+    {
+        Templates.GenerateTemplates();
+        Morphs.GenerateMorphs();
+
+        if (string.IsNullOrWhiteSpace(Templates.GeneratedTemplateText)
+            && string.IsNullOrWhiteSpace(Morphs.GeneratedMorphsText))
+        {
+            ClearExportPreview();
+            StatusMessage = "No generated BodyGen output to preview.";
+            return;
+        }
+
+        var directoryPath = await fileDialogService.PickBodyGenExportFolderAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(directoryPath))
+        {
+            StatusMessage = "BodyGen export preview cancelled.";
+            return;
+        }
+
+        var preview = exportPreviewService.PreviewBodyGen(
+            directoryPath,
+            Templates.GeneratedTemplateText,
+            Morphs.GeneratedMorphsText);
+        ApplyExportPreview("BodyGen", preview);
+        StatusMessage = "BodyGen export preview ready.";
+    }
+
     public async Task ExportBosJsonAsync(CancellationToken cancellationToken = default)
     {
         if (project.SliderPresets.Count == 0)
@@ -511,6 +564,31 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         {
             StatusMessage = "Exporting BoS JSON files failed: " + FormatExceptionMessage(exception);
         }
+    }
+
+    /// <summary>
+    /// Builds a read-only BoS JSON export preview from cloned presets so preview cannot observe later UI edits.
+    /// </summary>
+    public async Task PreviewBosJsonExportAsync(CancellationToken cancellationToken = default)
+    {
+        if (project.SliderPresets.Count == 0)
+        {
+            ClearExportPreview();
+            StatusMessage = "No presets to preview as BoS JSON.";
+            return;
+        }
+
+        var directoryPath = await fileDialogService.PickBosJsonExportFolderAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(directoryPath))
+        {
+            StatusMessage = "BoS JSON export preview cancelled.";
+            return;
+        }
+
+        var snapshot = project.SliderPresets.Select(preset => preset.Clone()).ToList();
+        var preview = exportPreviewService.PreviewBosJson(directoryPath, snapshot, profileCatalog);
+        ApplyExportPreview("BoS JSON", preview);
+        StatusMessage = "BoS JSON export preview ready.";
     }
 
     public void ShowAbout()
@@ -560,6 +638,25 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         {
             StatusMessage = "Saving jBS2BG file failed: " + FormatExceptionMessage(exception);
         }
+    }
+
+    private void ApplyExportPreview(string kind, ExportPreviewResult preview)
+    {
+        ExportPreviewFiles.Clear();
+        foreach (var file in preview.Files)
+            ExportPreviewFiles.Add(new ExportPreviewViewModel(kind, file));
+
+        HasExportPreview = ExportPreviewFiles.Count > 0;
+        ExportPreviewSummary = preview.Files.Any(file => file.WillOverwrite)
+            ? "Existing files will be overwritten. Confirm only after reviewing the paths and snippets below."
+            : "New files will be created at the paths below. No overwrite confirmation is required.";
+    }
+
+    private void ClearExportPreview()
+    {
+        ExportPreviewFiles.Clear();
+        HasExportPreview = false;
+        ExportPreviewSummary = string.Empty;
     }
 
     private async Task<bool> ConfirmDiscardChangesIfNeededAsync(
@@ -624,6 +721,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         AddCommand("Save Project As", "File", "Ctrl+Alt+S", SaveProjectAsCommand);
         AddCommand("Export Templates as BoS JSON", "File", "Ctrl+B", ExportBosJsonCommand);
         AddCommand("Export BodyGen INIs", "File", "Ctrl+X", ExportBodyGenInisCommand);
+        AddCommand("Preview Templates as BoS JSON", "File", string.Empty, PreviewBosJsonExportCommand);
+        AddCommand("Preview BodyGen INIs", "File", string.Empty, PreviewBodyGenExportCommand);
         AddCommand("Undo", "Edit", "Ctrl+Z", UndoCommand);
         AddCommand("Redo", "Edit", "Ctrl+Y", RedoCommand);
         AddCommand("Import BodySlide XML Presets", "Templates", string.Empty, Templates.ImportPresetsCommand);
