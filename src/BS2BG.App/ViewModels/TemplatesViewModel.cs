@@ -27,7 +27,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     private readonly IBodySlideXmlFilePicker filePicker;
     private readonly BodySlideXmlParser parser;
     private readonly SerialDisposable presetSubscription = new();
-    private readonly TemplateProfileCatalog profileCatalog;
+    private readonly ITemplateProfileCatalogService profileCatalogService;
     private readonly IUserPreferencesService preferencesService;
     private readonly ProjectModel project;
     private readonly TemplateGenerationService templateGenerationService;
@@ -95,18 +95,39 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         IClipboardService clipboardService,
         UndoRedoService? undoRedo = null,
         IUserPreferencesService? preferencesService = null)
+        : this(
+            project,
+            parser,
+            templateGenerationService,
+            new TemplateProfileCatalogService(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog))),
+            filePicker,
+            clipboardService,
+            undoRedo,
+            preferencesService)
+    {
+    }
+
+    public TemplatesViewModel(
+        ProjectModel project,
+        BodySlideXmlParser parser,
+        TemplateGenerationService templateGenerationService,
+        ITemplateProfileCatalogService profileCatalogService,
+        IBodySlideXmlFilePicker filePicker,
+        IClipboardService clipboardService,
+        UndoRedoService? undoRedo = null,
+        IUserPreferencesService? preferencesService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.parser = parser ?? throw new ArgumentNullException(nameof(parser));
         this.templateGenerationService = templateGenerationService
                                          ?? throw new ArgumentNullException(nameof(templateGenerationService));
-        this.profileCatalog = profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog));
+        this.profileCatalogService = profileCatalogService ?? throw new ArgumentNullException(nameof(profileCatalogService));
         this.filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
         this.clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
         this.undoRedo = undoRedo ?? new UndoRedoService();
         this.preferencesService = preferencesService ?? new UserPreferencesService();
         currentPreferences = this.preferencesService.Load();
-        _selectedProfileName = profileCatalog.DefaultProfile.Name;
+        _selectedProfileName = CurrentCatalog.DefaultProfile.Name;
         _omitRedundantSliders = currentPreferences.OmitRedundantSliders;
         project.SliderPresets.CollectionChanged += (_, _) => RefreshVisiblePresets();
         disposables.Add(presetSubscription);
@@ -184,6 +205,9 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         disposables.Add(this.WhenAnyValue(x => x.SearchText)
             .Skip(1)
             .Subscribe(_ => RefreshVisiblePresets()));
+        disposables.Add(profileCatalogService.CatalogChanged
+            .Skip(1)
+            .Subscribe(_ => OnCatalogChanged()));
 
         RefreshVisiblePresets();
     }
@@ -194,7 +218,9 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<SetSliderInspectorRowViewModel> SetSliderRows { get; } = new();
 
-    public IReadOnlyList<string> ProfileNames => profileCatalog.ProfileNames;
+    public IReadOnlyList<string> ProfileNames => CurrentCatalog.ProfileNames;
+
+    private TemplateProfileCatalog CurrentCatalog => profileCatalogService.Current;
 
     public ReactiveCommand<Unit, Unit> ImportPresetsCommand { get; }
 
@@ -384,7 +410,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
 
         GeneratedTemplateText = templateGenerationService.GenerateTemplates(
             Presets,
-            profileCatalog,
+            CurrentCatalog,
             OmitRedundantSliders);
         StatusMessage = "Generated " + Presets.Count.ToString(CultureInfo.InvariantCulture)
                                      + " template line" + (Presets.Count == 1 ? "." : "s.");
@@ -607,11 +633,26 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         RefreshSelectedBosJson();
     }
 
+    /// <summary>
+    /// Refreshes profile-dependent presentation when the runtime catalog changes in-place after a local import, save, or delete.
+    /// </summary>
+    private void OnCatalogChanged()
+    {
+        this.RaisePropertyChanged(nameof(ProfileNames));
+        if (!CurrentCatalog.ContainsProfile(SelectedProfileName)) SelectedProfileName = CurrentCatalog.DefaultProfile.Name;
+        RefreshSelectedPresetMissingDefaults(GetSelectedCalculationProfile().Name);
+        RefreshProfileFallbackInformation();
+        RebuildSetSliderRows();
+        RefreshSetSliderRowPreviews();
+        RefreshPreview();
+        RefreshSelectedBosJson();
+    }
+
     private void OnSelectedProfileNameChangedReactive(string profileName)
     {
         if (syncingProfileFromPreset && string.IsNullOrWhiteSpace(profileName)) return;
 
-        var resolvedName = profileCatalog.GetProfile(profileName).Name;
+        var resolvedName = CurrentCatalog.GetProfile(profileName).Name;
         if (!string.Equals(profileName, resolvedName, StringComparison.Ordinal))
         {
             SelectedProfileName = resolvedName;
@@ -660,7 +701,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         if (SelectedPreset is null) return;
 
         using var _ = project.SuppressDirtyTracking();
-        SelectedPreset.RefreshMissingDefaultSetSliders(profileCatalog.GetProfile(profileName).DefaultSliderNames);
+        SelectedPreset.RefreshMissingDefaultSetSliders(CurrentCatalog.GetProfile(profileName).DefaultSliderNames);
     }
 
     private void SetSelectedProfileNameFromPreset(string? profileName)
@@ -668,8 +709,8 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         syncingProfileFromPreset = true;
         try
         {
-            SelectedProfileName = profileCatalog.ContainsProfile(profileName)
-                ? profileCatalog.GetProfile(profileName).Name
+            SelectedProfileName = CurrentCatalog.ContainsProfile(profileName)
+                ? CurrentCatalog.GetProfile(profileName).Name
                 : string.Empty;
         }
         finally
@@ -686,10 +727,10 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     /// </summary>
     private TemplateProfile GetSelectedCalculationProfile()
     {
-        if (SelectedPreset is not null && !profileCatalog.ContainsProfile(SelectedPreset.ProfileName))
-            return profileCatalog.GetProfile(SelectedPreset.ProfileName);
+        if (SelectedPreset is not null && !CurrentCatalog.ContainsProfile(SelectedPreset.ProfileName))
+            return CurrentCatalog.GetProfile(SelectedPreset.ProfileName);
 
-        return profileCatalog.GetProfile(SelectedProfileName);
+        return CurrentCatalog.GetProfile(SelectedProfileName);
     }
 
     /// <summary>
@@ -699,14 +740,14 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     private void RefreshProfileFallbackInformation()
     {
         var savedName = SelectedPreset?.ProfileName;
-        if (string.IsNullOrWhiteSpace(savedName) || profileCatalog.ContainsProfile(savedName))
+        if (string.IsNullOrWhiteSpace(savedName) || CurrentCatalog.ContainsProfile(savedName))
         {
             ProfileFallbackInformationText = string.Empty;
             IsProfileFallbackInformationVisible = false;
             return;
         }
 
-        var fallbackName = profileCatalog.GetProfile(savedName).Name;
+        var fallbackName = CurrentCatalog.GetProfile(savedName).Name;
         ProfileFallbackInformationText = "Saved profile \"" + savedName
                                          + "\" is not bundled. BS2BG is using " + fallbackName
                                          + " calculation rules for preview and generation until you choose a bundled profile.";

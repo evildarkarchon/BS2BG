@@ -38,7 +38,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly IFileDialogService fileDialogService;
     private readonly MorphGenerationService morphGenerationService;
     private readonly IUserPreferencesService preferencesService;
-    private readonly TemplateProfileCatalog profileCatalog;
+    private readonly ITemplateProfileCatalogService profileCatalogService;
     private readonly ProjectModel project;
     private readonly ProjectFileService projectFileService;
     private readonly TemplateGenerationService templateGenerationService;
@@ -109,6 +109,41 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         IUserPreferencesService? preferencesService = null,
         ExportPreviewService? exportPreviewService = null,
         DiagnosticsViewModel? diagnostics = null)
+        : this(
+            project,
+            projectFileService,
+            templateGenerationService,
+            morphGenerationService,
+            new TemplateProfileCatalogService(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog))),
+            bodyGenIniExportWriter,
+            bosJsonExportWriter,
+            fileDialogService,
+            dialogService,
+            templates,
+            morphs,
+            undoRedo,
+            preferencesService,
+            exportPreviewService,
+            diagnostics)
+    {
+    }
+
+    public MainWindowViewModel(
+        ProjectModel project,
+        ProjectFileService projectFileService,
+        TemplateGenerationService templateGenerationService,
+        MorphGenerationService morphGenerationService,
+        ITemplateProfileCatalogService profileCatalogService,
+        BodyGenIniExportWriter bodyGenIniExportWriter,
+        BosJsonExportWriter bosJsonExportWriter,
+        IFileDialogService fileDialogService,
+        IAppDialogService dialogService,
+        TemplatesViewModel templates,
+        MorphsViewModel morphs,
+        UndoRedoService? undoRedo = null,
+        IUserPreferencesService? preferencesService = null,
+        ExportPreviewService? exportPreviewService = null,
+        DiagnosticsViewModel? diagnostics = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
@@ -116,7 +151,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
                                          ?? throw new ArgumentNullException(nameof(templateGenerationService));
         this.morphGenerationService = morphGenerationService
                                       ?? throw new ArgumentNullException(nameof(morphGenerationService));
-        this.profileCatalog = profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog));
+        this.profileCatalogService = profileCatalogService ?? throw new ArgumentNullException(nameof(profileCatalogService));
         this.bodyGenIniExportWriter = bodyGenIniExportWriter
                                       ?? throw new ArgumentNullException(nameof(bodyGenIniExportWriter));
         this.bosJsonExportWriter = bosJsonExportWriter
@@ -128,7 +163,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         this.preferencesService = preferencesService ?? new UserPreferencesService();
         Templates = templates ?? throw new ArgumentNullException(nameof(templates));
         Morphs = morphs ?? throw new ArgumentNullException(nameof(morphs));
-        Diagnostics = diagnostics ?? new DiagnosticsViewModel(project, profileCatalog, new ProjectValidationService(), new ProfileDiagnosticsService());
+        Diagnostics = diagnostics ?? new DiagnosticsViewModel(project, profileCatalogService, new ProjectValidationService(), new ProfileDiagnosticsService());
         currentPreferences = this.preferencesService.Load();
         _selectedThemePreference = currentPreferences.Theme;
         ThemePreferenceApplier.Apply(_selectedThemePreference);
@@ -319,6 +354,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     public ObservableCollection<FileOperationLedgerViewModel> LastFileOperationLedger { get; } = new();
 
     public IReadOnlyList<ThemePreference> ThemePreferences { get; } = Enum.GetValues<ThemePreference>();
+
+    private TemplateProfileCatalog CurrentCatalog => profileCatalogService.Current;
 
     public ReactiveCommand<Unit, Unit> NewProjectCommand { get; }
 
@@ -581,7 +618,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         try
         {
             ClearFileOperationLedger();
-            var preview = exportPreviewService.PreviewBosJson(directoryPath, snapshot, profileCatalog);
+            var preview = exportPreviewService.PreviewBosJson(directoryPath, snapshot, CurrentCatalog);
             ApplyExportPreview("BoS JSON", preview);
             if (RequiresExportConfirmation(preview)
                 && !await dialogService.ConfirmExportOverwriteAsync(preview, cancellationToken))
@@ -591,7 +628,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             }
 
             await Task.Run(
-                () => bosJsonExportWriter.Write(directoryPath, snapshot, profileCatalog),
+                () => bosJsonExportWriter.Write(directoryPath, snapshot, CurrentCatalog),
                 cancellationToken);
             StatusMessage = "BodyTypes of Skyrim JSON files exported.";
         }
@@ -621,7 +658,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         var snapshot = project.SliderPresets.Select(preset => preset.Clone()).ToList();
-        var preview = exportPreviewService.PreviewBosJson(directoryPath, snapshot, profileCatalog);
+        var preview = exportPreviewService.PreviewBosJson(directoryPath, snapshot, CurrentCatalog);
         ApplyExportPreview("BoS JSON", preview);
         StatusMessage = "BoS JSON export preview ready.";
     }
@@ -687,6 +724,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     private void ClearProjectPresentationState()
     {
+        profileCatalogService.ClearProjectProfiles();
         Diagnostics.ClearReport();
         ClearExportPreview();
         ClearFileOperationLedger();

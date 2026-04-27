@@ -34,6 +34,7 @@ public static class AppBootstrapper
         services.AddSingleton<ProjectFileService>();
         services.AddSingleton<TemplateGenerationService>();
         services.AddSingleton<MorphGenerationService>();
+        services.AddSingleton<ProfileDefinitionService>();
         services.AddSingleton<ProjectValidationService>();
         services.AddSingleton<ProfileDiagnosticsService>();
         services.AddSingleton<DiagnosticsReportFormatter>();
@@ -41,9 +42,11 @@ public static class AppBootstrapper
         services.AddSingleton<BosJsonExportWriter>();
         services.AddSingleton<UndoRedoService>();
         services.AddSingleton<IUserPreferencesService, UserPreferencesService>();
+        services.AddSingleton<IUserProfileStore, UserProfileStore>();
+        services.AddSingleton<TemplateProfileCatalogFactory>();
+        services.AddSingleton<ITemplateProfileCatalogService, TemplateProfileCatalogService>();
         services.AddSingleton<IRandomAssignmentProvider, RandomAssignmentProvider>();
         services.AddSingleton<MorphAssignmentService>();
-        services.AddSingleton(_ => TemplateProfileCatalogFactory.CreateDefault());
         services.AddSingleton(provider =>
             new WindowBodySlideXmlFilePicker(provider.GetRequiredService<IUserPreferencesService>()));
         services.AddSingleton<IBodySlideXmlFilePicker>(provider =>

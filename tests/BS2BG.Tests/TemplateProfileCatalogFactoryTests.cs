@@ -1,8 +1,10 @@
 using BS2BG.App.Services;
+using BS2BG.App.ViewModels;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using Xunit;
+using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
@@ -139,6 +141,68 @@ public sealed class TemplateProfileCatalogFactoryTests
         AssertMissingFo4OnlyDefault(catalog, ProjectProfileMapping.SkyrimUunp, "ButtNew");
     }
 
+    /// <summary>
+    /// Verifies instance catalog composition appends valid local custom profiles after bundled entries.
+    /// </summary>
+    [Fact]
+    public void InstanceFactoryAppendsLocalCustomProfilesAfterBundledEntries()
+    {
+        var custom = CreateCustomProfile("Local Body", "C:/profiles/local.json");
+        var factory = new TemplateProfileCatalogFactory(new StubUserProfileStore([custom]));
+
+        var result = factory.Create();
+
+        result.Catalog.ProfileNames.Should().Contain("Local Body");
+        result.Catalog.Entries.Take(3).Should().OnlyContain(entry => entry.SourceKind == ProfileSourceKind.Bundled);
+        result.Catalog.Entries.Last().SourceKind.Should().Be(ProfileSourceKind.LocalCustom);
+        result.Catalog.Entries.Last().IsEditable.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies bundled-name collisions are passed to discovery so local custom files cannot replace bundled math.
+    /// </summary>
+    [Fact]
+    public void InstanceFactorySkipsBundledNameDuplicatesWithoutReplacingBundledProfile()
+    {
+        var custom = CreateCustomProfile(ProjectProfileMapping.SkyrimCbbe, "C:/profiles/cbbe.json");
+        var factory = new TemplateProfileCatalogFactory(new StubUserProfileStore([custom]));
+
+        var result = factory.Create();
+
+        result.Catalog.Entries.Where(entry => string.Equals(entry.Name, ProjectProfileMapping.SkyrimCbbe, StringComparison.OrdinalIgnoreCase))
+            .Should().ContainSingle()
+            .Which.SourceKind.Should().Be(ProfileSourceKind.Bundled);
+        result.DiscoveryDiagnostics.Should().Contain(diagnostic => diagnostic.Code == "DuplicateProfileName");
+    }
+
+    /// <summary>
+    /// Verifies existing ViewModels observe refreshes through the catalog service rather than a stale singleton catalog.
+    /// </summary>
+    [Fact]
+    public void CatalogServiceRefreshPublishesProfilesForExistingTemplatesPreview()
+    {
+        var store = new StubUserProfileStore([]);
+        var service = new TemplateProfileCatalogService(new TemplateProfileCatalogFactory(store));
+        var project = new ProjectModel();
+        var templates = new TemplatesViewModel(
+            project,
+            new BS2BG.Core.Import.BodySlideXmlParser(),
+            new TemplateGenerationService(),
+            service,
+            new EmptyBodySlideXmlFilePicker(),
+            new EmptyClipboardService());
+        project.SliderPresets.Add(new SliderPreset("Preset") { ProfileName = "Local Body" });
+        templates.SelectedPreset = project.SliderPresets[0];
+        store.Profiles = [CreateCustomProfile("Local Body", "C:/profiles/local.json")];
+
+        service.Refresh();
+        templates.SelectedProfileName = "Local Body";
+        templates.GenerateTemplates();
+
+        templates.ProfileNames.Should().Contain("Local Body");
+        templates.GeneratedTemplateText.Should().Contain("Preset");
+    }
+
     private static void AssertMissingFo4OnlyDefault(
         TemplateProfileCatalog catalog,
         string profileName,
@@ -148,5 +212,62 @@ public sealed class TemplateProfileCatalogFactoryTests
 
         profile.GetDefaultSmall(sliderName).Should().Be(0);
         profile.GetDefaultBig(sliderName).Should().Be(0);
+    }
+
+    private static CustomProfileDefinition CreateCustomProfile(string name, string filePath) => new(
+        name,
+        "Skyrim",
+        new SliderProfile([new SliderDefault("CustomSlider", 0f, 1f)], [], []),
+        ProfileSourceKind.LocalCustom,
+        filePath);
+
+    private sealed class StubUserProfileStore(IReadOnlyList<CustomProfileDefinition> profiles) : IUserProfileStore
+    {
+        public IReadOnlyList<CustomProfileDefinition> Profiles { get; set; } = profiles;
+
+        public UserProfileDiscoveryResult DiscoverProfiles() => DiscoverProfiles(Array.Empty<string>());
+
+        public UserProfileDiscoveryResult DiscoverProfiles(IEnumerable<string> existingProfileNames)
+        {
+            var existing = new HashSet<string>(existingProfileNames, StringComparer.OrdinalIgnoreCase);
+            var accepted = new List<CustomProfileDefinition>();
+            var diagnostics = new List<ProfileValidationDiagnostic>();
+            foreach (var profile in Profiles)
+            {
+                if (!existing.Add(profile.Name))
+                {
+                    diagnostics.Add(new ProfileValidationDiagnostic(
+                        ProfileValidationSeverity.Blocker,
+                        "DuplicateProfileName",
+                        "Duplicate profile name.",
+                        null,
+                        profile.Name));
+                    continue;
+                }
+
+                accepted.Add(profile);
+            }
+
+            return new UserProfileDiscoveryResult(accepted, diagnostics);
+        }
+
+        public UserProfileSaveResult SaveProfile(CustomProfileDefinition profile) =>
+            new(false, null, Array.Empty<ProfileValidationDiagnostic>());
+
+        public UserProfileDeleteResult DeleteProfile(CustomProfileDefinition profile) =>
+            new(false, null, Array.Empty<ProfileValidationDiagnostic>());
+
+        public string GetDefaultProfileDirectory() => string.Empty;
+    }
+
+    private sealed class EmptyBodySlideXmlFilePicker : IBodySlideXmlFilePicker
+    {
+        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+    }
+
+    private sealed class EmptyClipboardService : IClipboardService
+    {
+        public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

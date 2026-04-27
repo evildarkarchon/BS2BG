@@ -24,7 +24,7 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
     };
 
     private readonly CompositeDisposable disposables = new();
-    private readonly TemplateProfileCatalog profileCatalog;
+    private readonly ITemplateProfileCatalogService profileCatalogService;
     private readonly ProfileDiagnosticsService profileDiagnosticsService;
     private readonly ProjectModel project;
     private readonly ProjectValidationService projectValidationService;
@@ -73,9 +73,26 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
         ProfileDiagnosticsService profileDiagnosticsService,
         IClipboardService? clipboardService = null,
         DiagnosticsReportFormatter? reportFormatter = null)
+        : this(
+            project,
+            new TemplateProfileCatalogService(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog))),
+            projectValidationService,
+            profileDiagnosticsService,
+            clipboardService,
+            reportFormatter)
+    {
+    }
+
+    public DiagnosticsViewModel(
+        ProjectModel project,
+        ITemplateProfileCatalogService profileCatalogService,
+        ProjectValidationService projectValidationService,
+        ProfileDiagnosticsService profileDiagnosticsService,
+        IClipboardService? clipboardService = null,
+        DiagnosticsReportFormatter? reportFormatter = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
-        this.profileCatalog = profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog));
+        this.profileCatalogService = profileCatalogService ?? throw new ArgumentNullException(nameof(profileCatalogService));
         this.projectValidationService = projectValidationService
                                         ?? throw new ArgumentNullException(nameof(projectValidationService));
         this.profileDiagnosticsService = profileDiagnosticsService
@@ -146,8 +163,8 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var projectReport = projectValidationService.Validate(project, profileCatalog);
-        var profileReport = profileDiagnosticsService.Analyze(project, profileCatalog);
+        var projectReport = projectValidationService.Validate(project, profileCatalogService.Current);
+        var profileReport = profileDiagnosticsService.Analyze(project, profileCatalogService.Current);
         var findings = projectReport.Findings
             .Concat(profileReport.Findings)
             .Select(finding => new DiagnosticFindingViewModel(finding))
