@@ -31,3 +31,29 @@ The system SHALL generate one template line per preset using Java-compatible ord
 - **WHEN** presets have been imported and the user runs Generate Templates
 - **THEN** the generated text contains one correctly formatted line for each preset
 
+### Requirement: Runtime profile catalog supports project-scoped overlays
+The system SHALL calculate previews and generated templates against the current runtime profile catalog, including explicit project-scoped embedded profile overlays.
+
+#### Scenario: Use project copy for missing profile
+- **WHEN** an embedded project profile is explicitly activated for a missing reference
+- **THEN** template preview and generation use the project-scoped profile definition
+- **AND** the embedded definition is not written to the local profile store by that action
+
+### Requirement: Missing profile fallback remains visible
+The system SHALL keep unresolved saved profile names on presets until the user explicitly remaps or adopts an installed profile.
+
+#### Scenario: Generate with unresolved custom profile
+- **WHEN** a selected preset references a profile absent from the current catalog
+- **THEN** preview and generation continue with visible fallback calculation rules
+- **AND** the saved preset `ProfileName` remains the unresolved value
+- **AND** `Keep Unresolved for Now` does not hide the fallback information
+
+### Requirement: Recovery remap updates template state transactionally
+The system SHALL update template preview, missing-default rows, profile selector state, generated text, and undo state when profile recovery remaps presets to an installed profile.
+
+#### Scenario: Undo recovery remap
+- **WHEN** a recovery remap changes affected preset profile references
+- **AND** the user runs undo
+- **THEN** the previous unresolved profile names are restored
+- **AND** visible fallback information and recovery diagnostics can reappear
+

@@ -31,3 +31,20 @@ The system SHALL silently discard target and NPC assignment references that do n
 - **WHEN** a project file references a preset name absent from `SliderPresets`
 - **THEN** the assignment is omitted without failing the load
 
+### Requirement: CustomProfiles section is optional and legacy-compatible
+The system SHALL preserve legacy `.jbs2bg` root fields while accepting and emitting an optional `CustomProfiles` section for referenced custom profile definitions.
+
+#### Scenario: Save project without custom profiles
+- **WHEN** a project has no referenced custom profiles
+- **THEN** the saved JSON omits `CustomProfiles`
+- **AND** legacy `SliderPresets`, `CustomMorphTargets`, `MorphedNPCs`, `isUUNP`, and `Profile` field behavior is preserved
+
+#### Scenario: Load project with embedded profiles
+- **WHEN** a project file contains `CustomProfiles`
+- **THEN** valid non-bundled definitions are hydrated into `ProjectModel.CustomProfiles`
+- **AND** malformed, duplicate, or bundled-name entries produce load diagnostics without preventing legacy project fields from loading
+
+#### Scenario: Preserve unknown legacy-compatible data
+- **WHEN** future or legacy readers ignore `CustomProfiles`
+- **THEN** the existing preset, morph target, NPC assignment, `isUUNP`, and `Profile` fields remain sufficient for a compatible project round trip
+
