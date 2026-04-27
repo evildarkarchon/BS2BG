@@ -366,6 +366,83 @@ public sealed class ProfileManagerViewModelTests
         ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeFalse();
     }
 
+    /// <summary>
+    /// Verifies the one-way-to-source ListBox selection path rolls back to the committed row when discard is declined.
+    /// </summary>
+    [Fact]
+    public async Task DeclinedPropertySetSelectionRestoresCommittedRowAndEditor()
+    {
+        var dialog = new StubProfileManagementDialogService { ConfirmDiscardUnsavedEditsResult = false };
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new ProfileCatalogEntry("Bundled Body", new TemplateProfile("Bundled Body", CreateSliderProfile()), ProfileSourceKind.Bundled, null, false),
+            new ProfileCatalogEntry("Custom Body", new TemplateProfile("Custom Body", CreateSliderProfile()), ProfileSourceKind.LocalCustom, "custom.json", true)
+        });
+        var vm = CreateManager(catalog, dialog: dialog);
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Custom Body");
+        vm.Editor.Name = "Dirty Custom";
+        var priorEditor = vm.Editor;
+
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Bundled Body");
+        await Task.Yield();
+
+        dialog.ConfirmDiscardUnsavedEditsCalls.Should().Be(1);
+        vm.SelectedProfile!.Name.Should().Be("Custom Body");
+        vm.Editor.Should().BeSameAs(priorEditor);
+    }
+
+    /// <summary>
+    /// Verifies profile search refresh preserves dirty editor buffers instead of replacing them with the first visible row.
+    /// </summary>
+    [Fact]
+    public void DirtyEditorSurvivesSearchRefreshWhenSelectedRowIsFilteredOut()
+    {
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new ProfileCatalogEntry("Bundled Body", new TemplateProfile("Bundled Body", CreateSliderProfile()), ProfileSourceKind.Bundled, null, false),
+            new ProfileCatalogEntry("Custom Body", new TemplateProfile("Custom Body", CreateSliderProfile()), ProfileSourceKind.LocalCustom, "custom.json", true)
+        });
+        var vm = CreateManager(catalog);
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Custom Body");
+        vm.Editor.Game = "Dirty Game";
+        var priorEditor = vm.Editor;
+
+        vm.SearchText = "Bundled";
+
+        vm.SelectedProfile!.Name.Should().Be("Custom Body");
+        vm.Editor.Should().BeSameAs(priorEditor);
+        vm.Editor.Game.Should().Be("Dirty Game");
+    }
+
+    /// <summary>
+    /// Verifies catalog refreshes preserve dirty editor buffers while clean editors can be rebuilt from catalog state.
+    /// </summary>
+    [Fact]
+    public void DirtyCatalogRefreshPreservesEditorWhileCleanRefreshRebuildsEditor()
+    {
+        var catalogService = new StubTemplateProfileCatalogService(new TemplateProfileCatalog(new[]
+        {
+            new ProfileCatalogEntry("Bundled Body", new TemplateProfile("Bundled Body", CreateSliderProfile()), ProfileSourceKind.Bundled, null, false),
+            new ProfileCatalogEntry("Custom Body", new TemplateProfile("Custom Body", CreateSliderProfile()), ProfileSourceKind.LocalCustom, "custom.json", true)
+        }));
+        var vm = CreateManager(catalogService.Current, catalogService: catalogService);
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Custom Body");
+        vm.Editor.Game = "Dirty Game";
+        var dirtyEditor = vm.Editor;
+
+        catalogService.Refresh();
+
+        vm.SelectedProfile!.Name.Should().Be("Custom Body");
+        vm.Editor.Should().BeSameAs(dirtyEditor);
+        vm.Editor.Game.Should().Be("Dirty Game");
+
+        vm.Editor.AcceptSaved();
+        catalogService.Refresh();
+
+        vm.Editor.Should().NotBeSameAs(dirtyEditor);
+        vm.Editor.Name.Should().Be("Custom Body");
+    }
+
     private static ProfileManagerViewModel CreateManager(
         TemplateProfileCatalog catalog,
         ProjectModel? project = null,
