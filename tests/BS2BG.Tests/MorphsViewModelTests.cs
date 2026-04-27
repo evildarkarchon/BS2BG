@@ -310,6 +310,22 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void ClearNpcsCommandIsEnabledForSelectedScopeTargetsHiddenByFilters()
+    {
+        var project = CreateProjectWithPresets();
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(valerica);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider());
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Name, new[] { "Missing" });
+        viewModel.SelectedNpcBulkScope = NpcBulkScope.All;
+
+        ((ICommand)viewModel.ClearVisibleNpcsCommand).CanExecute(null).Should().BeTrue();
+    }
+
+    [Fact]
     public void DestructiveAllScopeClearAssignmentsRequiresConfirmationAndRecordsOneUndoOperation()
     {
         var project = CreateProjectWithPresets();

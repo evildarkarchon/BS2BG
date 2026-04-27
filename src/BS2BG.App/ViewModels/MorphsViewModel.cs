@@ -183,7 +183,11 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var canAddAllVisibleImportedNpcs = Gate(visibleNpcDatabaseChanged.Select(count => count > 0));
         var canRemoveSelectedNpc = Gate(
             this.WhenAnyValue(x => x.SelectedNpc).Select(npc => npc is not null));
-        var canClearVisibleNpcs = Gate(visibleNpcsChanged.Select(npcs => npcs.Length > 0));
+        var canClearNpcsForSelectedScope = Gate(npcScopeChanged.CombineLatest(
+            visibleNpcsChanged,
+            selectedNpcsChanged,
+            npcsChanged,
+            (scope, _, _, _) => ResolveNpcTargets(scope).Length > 0));
         var canFillEmptyNpcs = Gate(visibleNpcsChanged.CombineLatest(
             presetsChanged,
             (npcs, presetCount) => npcs.Any(npc => npc.SliderPresets.Count == 0) && presetCount > 0));
@@ -245,7 +249,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             canRemoveSelectedNpc);
         ClearVisibleNpcsCommand = ReactiveCommand.CreateFromTask(
             ClearNpcsForSelectedScopeAsync,
-            canClearVisibleNpcs);
+            canClearNpcsForSelectedScope);
         FillEmptyNpcsCommand = ReactiveCommand.Create(
             () => { FillEmptyFromSelectedPreset(); },
             canFillEmptyNpcs);
