@@ -33,6 +33,31 @@ public sealed class ProfileManagerViewModelTests
     }
 
     /// <summary>
+    /// Verifies copy-as-custom captures the selected bundled row before clearing row selection for the new editor.
+    /// </summary>
+    [Fact]
+    public void CopyBundledProfileSeedsEditorFromSelectedBundledProfile()
+    {
+        var sourceProfile = new SliderProfile(
+            [new SliderDefault("SourceSlider", 0.25f, 0.75f)],
+            [new SliderMultiplier("SourceSlider", 1.5f)],
+            ["SourceSlider"]);
+        var vm = CreateManager(new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile("Bundled Body", sourceProfile)
+        }));
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Bundled Body");
+
+        vm.CopyBundledProfileCommand.Execute().Subscribe();
+
+        vm.SelectedProfile.Should().BeNull();
+        vm.Editor.Name.Should().BeEmpty();
+        vm.Editor.DefaultRows.Should().ContainSingle(row => row.Slider == "SourceSlider" && row.ValueSmall == "0.25" && row.ValueBig == "0.75");
+        vm.Editor.MultiplierRows.Should().ContainSingle(row => row.Slider == "SourceSlider" && row.Value == "1.5");
+        vm.Editor.InvertedRows.Should().ContainSingle(row => row.Slider == "SourceSlider" && row.IsInverted);
+    }
+
+    /// <summary>
     /// Verifies selection changes honor unsaved-editor discard confirmation and retain the prior editor when declined.
     /// </summary>
     [Fact]
@@ -217,6 +242,38 @@ public sealed class ProfileManagerViewModelTests
         ((ICommand)vm.ExportProfileCommand).CanExecute(null).Should().BeTrue();
     }
 
+    /// <summary>
+    /// Verifies selected profile JSON export preserves Game metadata from the source custom definition.
+    /// </summary>
+    [Fact]
+    public async Task ExportProfileJsonPreservesSelectedCustomProfileGameMetadata()
+    {
+        using var directory = new TemporaryDirectory();
+        var exportPath = Path.Combine(directory.DirectoryPath, "exported.json");
+        var dialog = new StubProfileManagementDialogService { ExportPath = exportPath };
+        var localProfile = new CustomProfileDefinition(
+            "Custom Body",
+            "Skyrim Special Edition",
+            CreateSliderProfile(),
+            ProfileSourceKind.LocalCustom,
+            "custom.json");
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new ProfileCatalogEntry("Bundled Body", new TemplateProfile("Bundled Body", CreateSliderProfile()), ProfileSourceKind.Bundled, null, false),
+            new ProfileCatalogEntry("Custom Body", new TemplateProfile("Custom Body", localProfile.SliderProfile), ProfileSourceKind.LocalCustom, "custom.json", true)
+        });
+        var catalogService = new StubTemplateProfileCatalogService(catalog)
+        {
+            LocalCustomProfilesOverride = [localProfile]
+        };
+        var vm = CreateManager(catalog, dialog: dialog, catalogService: catalogService);
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Custom Body");
+
+        await vm.ExportProfileCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        File.ReadAllText(exportPath).Should().Contain("\"Game\": \"Skyrim Special Edition\"");
+    }
+
     private static ProfileManagerViewModel CreateManager(
         TemplateProfileCatalog catalog,
         ProjectModel? project = null,
@@ -310,7 +367,9 @@ public sealed class ProfileManagerViewModelTests
 
         public IReadOnlyList<ProfileValidationDiagnostic> LastDiscoveryDiagnostics => [];
 
-        public IReadOnlyList<CustomProfileDefinition> LocalCustomProfiles => [];
+        public IReadOnlyList<CustomProfileDefinition> LocalCustomProfiles => LocalCustomProfilesOverride;
+
+        public IReadOnlyList<CustomProfileDefinition> LocalCustomProfilesOverride { get; init; } = [];
 
         public IReadOnlyList<CustomProfileDefinition> ProjectProfiles => [];
 
