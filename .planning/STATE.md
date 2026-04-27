@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-04-27T04:07:46.177Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-04-27T04:16:15.345Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 24
-  completed_plans: 20
-  percent: 83
+  completed_plans: 21
+  percent: 88
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 03 (validation-and-diagnostics) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-04-27
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Progress: [████████░░] 83%
 | Phase 03-validation-and-diagnostics P02 | 4 min | 2 tasks | 4 files |
 | Phase 03-validation-and-diagnostics P03 | 5min | 2 tasks | 8 files |
 | Phase 03-validation-and-diagnostics P04 | 5 min | 2 tasks | 5 files |
+| Phase 03-validation-and-diagnostics P05 | 5 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 03-validation-and-diagnostics]: Preserve existing setup/temp-write exception compatibility while adding outcome ledgers for commit and rollback failures.
 - [Phase 03-validation-and-diagnostics]: Keep Diagnostics ViewModel refresh and copy read-only by consuming Core diagnostic services without mutating ProjectModel state. — Preserves Phase 3 diagnostics boundary and satisfies T-03-04-01.
 - [Phase 03-validation-and-diagnostics]: Format copied diagnostics as grouped plain text from display ViewModels, including profile fallback details, while excluding auto-fix actions. — Keeps report output UI-ready and compliant with D-04 no auto-fix scope.
+- [Phase 03-validation-and-diagnostics]: Keep NPC import preview optional and no-mutation; direct import remains available through the existing ImportNpcsCommand path.
+- [Phase 03-validation-and-diagnostics]: Commit previewed NPC rows through the existing AddNpcsToDatabase duplicate policy and keep preset assignment as a separate Morphs action.
+- [Phase 03-validation-and-diagnostics]: Expose assignment effect summaries from scoped command results instead of changing assignment algorithms or random-provider behavior.
 
 ### Pending Todos
 
@@ -121,6 +125,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27T04:07:46.171Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-04-27T04:16:15.168Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None
