@@ -38,6 +38,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly ProjectFileService projectFileService;
     private readonly TemplateGenerationService templateGenerationService;
     private readonly UndoRedoService undoRedo;
+    private UserPreferences currentPreferences;
 
     [Reactive] private AppWorkspace _activeWorkspace;
     [Reactive] private string _commandPaletteSearchText = string.Empty;
@@ -114,7 +115,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         this.preferencesService = preferencesService ?? new UserPreferencesService();
         Templates = templates ?? throw new ArgumentNullException(nameof(templates));
         Morphs = morphs ?? throw new ArgumentNullException(nameof(morphs));
-        _selectedThemePreference = this.preferencesService.Load().Theme;
+        currentPreferences = this.preferencesService.Load();
+        _selectedThemePreference = currentPreferences.Theme;
         ThemePreferenceApplier.Apply(_selectedThemePreference);
 
         var dirtyChanged = Observable.FromEventPattern<EventHandler, EventArgs>(
@@ -232,13 +234,26 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             .Subscribe(theme =>
             {
                 ThemePreferenceApplier.Apply(theme);
-                if (!this.preferencesService.Save(new UserPreferences { Theme = theme }))
-                    StatusMessage = "Saving preferences failed.";
+                SaveThemePreference(theme);
             }));
 
         RegisterCommandPaletteItems();
         RefreshVisibleCommandPaletteItems();
         ApplyGlobalSearchText();
+    }
+
+    /// <summary>
+    /// Persists theme selection while preserving workflow preferences stored in the same local file.
+    /// The preferences file is best-effort state, so save failure reports status without blocking UI commands.
+    /// </summary>
+    private void SaveThemePreference(ThemePreference theme)
+    {
+        currentPreferences = new UserPreferences
+        {
+            Theme = theme,
+            OmitRedundantSliders = preferencesService.Load().OmitRedundantSliders
+        };
+        if (!preferencesService.Save(currentPreferences)) StatusMessage = "Saving preferences failed.";
     }
 
     private MainWindowViewModel(ProjectModel project)
