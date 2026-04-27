@@ -92,7 +92,7 @@ public sealed class UserProfileStoreTests : IDisposable
         result.FilePath.Should().EndWith(".json");
         Path.GetFileNameWithoutExtension(result.FilePath).Should().StartWith("body-name-");
         Path.GetFileNameWithoutExtension(result.FilePath).Should().HaveLength("body-name-".Length + 8);
-        Path.GetFileNameWithoutExtension(result.FilePath).Should().EndWith(ExpectedHash8(profile.Name, result.FilePath));
+        Path.GetFileNameWithoutExtension(result.FilePath).Should().EndWith(ExpectedHash8(profile.Name, conflictingPath));
         var bytes = File.ReadAllBytes(result.FilePath!);
         bytes.Take(3).Should().NotEqual(new byte[] { 0xEF, 0xBB, 0xBF });
         File.ReadAllText(result.FilePath!).Should().Contain("\"Name\": \"Body:Name\"");
