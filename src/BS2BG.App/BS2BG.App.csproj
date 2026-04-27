@@ -12,6 +12,7 @@
     <PackageReference Include="Avalonia.Desktop"/>
     <PackageReference Include="Avalonia.Fonts.Inter"/>
     <PackageReference Include="Avalonia.Themes.Fluent"/>
+    <PackageReference Include="DynamicData"/>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
     <PackageReference Include="ReactiveUI.Avalonia"/>
     <PackageReference Include="ReactiveUI.Avalonia.Microsoft.Extensions.DependencyInjection"/>
