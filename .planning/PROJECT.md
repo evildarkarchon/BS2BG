@@ -4,7 +4,7 @@
 
 BS2BG is a C# / Avalonia desktop utility for Skyrim SE and Fallout 4 modders that converts BodySlide preset XML into BodyGen `templates.ini`, `morphs.ini`, and BodyTypes of Skyrim JSON exports. It is a port and modernization of the Java/JavaFX `jBS2BG` v1.1.2 tool by Totiman / asdasfa, preserving file-format compatibility while improving maintainability, workflow clarity, and release packaging.
 
-The current codebase has implemented the M0-M7 porting milestones: core import/generation/export, project serialization, Avalonia UI, template and morph workflows, undo/redo, NPC import and assignment, and release packaging. Future work continues through scoped GSD/OpenSpec phases, with byte-identical output parity and modder trust as the primary constraints.
+The current codebase has implemented the M0-M7 porting milestones plus GSD Phases 1-2: core import/generation/export, project serialization, Avalonia UI, template and morph workflows, undo/redo, NPC import and assignment, release packaging, profile correctness, workflow preference persistence, NPC filtering, scoped bulk operations, and undo hardening. Future work continues through scoped GSD/OpenSpec phases, with byte-identical output parity and modder trust as the primary constraints.
 
 ## Core Value
 
@@ -22,6 +22,10 @@ Modders can reliably convert existing BodySlide presets into BodyGen and BoS out
 - ✓ Golden-file, ViewModel, service, and headless UI tests protect core behavior — M0-M7
 - ✓ Bundled profile handling distinguishes Skyrim CBBE, Skyrim UUNP, and Fallout 4 CBBE while preserving legacy/unbundled project profiles — Phase 1
 - ✓ Neutral unresolved-profile fallback information, explicit bundled-profile adoption, and release-facing FO4 calibration context are validated — Phase 1
+- ✓ Workflow preferences and file-picker folders persist outside project serialization while remaining best-effort and non-blocking — Phase 2
+- ✓ NPC rows have stable App-layer identity with filter predicates and UI controls for mod, name, editor ID, form ID, race, assignment, and preset values — Phase 2
+- ✓ NPC bulk operations support explicit all, visible, selected, and visible-empty scopes with hidden-row protections — Phase 2
+- ✓ Template, profile, morph, NPC, and scoped bulk undo paths use bounded history and value snapshots to avoid mutable live-state corruption — Phase 2
 
 ### Active
 
@@ -85,4 +89,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-26 after Phase 1 completion*
+*Last updated: 2026-04-27 after Phase 2 completion*
