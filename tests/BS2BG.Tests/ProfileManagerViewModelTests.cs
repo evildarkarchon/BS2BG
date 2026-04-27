@@ -278,6 +278,94 @@ public sealed class ProfileManagerViewModelTests
         File.ReadAllText(exportPath).Should().Contain("\"Game\": \"Skyrim Special Edition\"");
     }
 
+    /// <summary>
+    /// Verifies newly created custom-profile candidates can be saved from the visible manager-level Save Profile command.
+    /// </summary>
+    [Fact]
+    public async Task CreateBlankProfileCanBeSavedFromVisibleManagerSaveCommand()
+    {
+        var store = new StubUserProfileStore();
+        var catalogService = new StubTemplateProfileCatalogService(new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile("Bundled Body", CreateSliderProfile())
+        }));
+        var vm = CreateManager(catalogService.Current, store: store, catalogService: catalogService);
+
+        vm.CreateBlankProfileCommand.Execute().Subscribe();
+        vm.Editor.Name = "Created Body";
+
+        ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeTrue();
+        await vm.SaveProfileCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        store.SavedProfiles.Should().ContainSingle(profile => profile.Name == "Created Body");
+        vm.StatusMessage.Should().Be("Profile saved.");
+        catalogService.RefreshCalls.Should().Be(1);
+        vm.Editor.HasUnsavedChanges.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies copied bundled profiles save as new local custom profiles without inheriting bundled row file metadata.
+    /// </summary>
+    [Fact]
+    public async Task CopyBundledProfileCanBeSavedAsLocalCustomWithoutFilePath()
+    {
+        var sourceProfile = new SliderProfile(
+            [new SliderDefault("SourceSlider", 0.25f, 0.75f)],
+            [new SliderMultiplier("SourceSlider", 1.5f)],
+            ["SourceSlider"]);
+        var store = new StubUserProfileStore();
+        var catalogService = new StubTemplateProfileCatalogService(new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile("Bundled Body", sourceProfile)
+        }));
+        var vm = CreateManager(catalogService.Current, store: store, catalogService: catalogService);
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Bundled Body");
+
+        vm.CopyBundledProfileCommand.Execute().Subscribe();
+        vm.Editor.Name = "Copied Body";
+        await vm.SaveProfileCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        store.SavedProfiles.Should().ContainSingle();
+        store.SavedProfiles[0].Name.Should().Be("Copied Body");
+        store.SavedProfiles[0].SourceKind.Should().Be(ProfileSourceKind.LocalCustom);
+        store.SavedProfiles[0].FilePath.Should().BeNull();
+        store.SavedProfiles[0].SliderProfile.Defaults.Should().ContainSingle(row => row.Name == "SourceSlider");
+        store.SavedProfiles[0].SliderProfile.Multipliers.Should().ContainSingle(row => row.Name == "SourceSlider");
+        store.SavedProfiles[0].SliderProfile.InvertedNames.Should().ContainSingle().Which.Should().Be("SourceSlider");
+    }
+
+    /// <summary>
+    /// Verifies existing local rows keep their file path while non-local editor states remain blocked from manager save.
+    /// </summary>
+    [Fact]
+    public async Task ManagerSaveKeepsExistingLocalPathAndBlocksInvalidEditors()
+    {
+        var store = new StubUserProfileStore();
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new ProfileCatalogEntry("Bundled Body", new TemplateProfile("Bundled Body", CreateSliderProfile()), ProfileSourceKind.Bundled, null, false),
+            new ProfileCatalogEntry("Custom Body", new TemplateProfile("Custom Body", CreateSliderProfile()), ProfileSourceKind.LocalCustom, "custom.json", true),
+            new ProfileCatalogEntry("Embedded Body", new TemplateProfile("Embedded Body", CreateSliderProfile()), ProfileSourceKind.EmbeddedProject, null, false)
+        });
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Preset") { ProfileName = "Missing Body" });
+        var vm = CreateManager(catalog, project, store);
+
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Custom Body");
+        await vm.SaveProfileCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        store.SavedProfiles.Should().ContainSingle(profile => profile.FilePath == "custom.json");
+
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Bundled Body");
+        ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeFalse();
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Embedded Body");
+        ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeFalse();
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Missing Body");
+        ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeFalse();
+        vm.CreateBlankProfileCommand.Execute().Subscribe();
+        ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeFalse();
+    }
+
     private static ProfileManagerViewModel CreateManager(
         TemplateProfileCatalog catalog,
         ProjectModel? project = null,
@@ -339,6 +427,8 @@ public sealed class ProfileManagerViewModelTests
 
     private sealed class StubUserProfileStore : IUserProfileStore
     {
+        public bool SaveSucceeds { get; set; } = true;
+
         public List<CustomProfileDefinition> DeletedProfiles { get; } = [];
 
         public List<CustomProfileDefinition> SavedProfiles { get; } = [];
@@ -350,6 +440,11 @@ public sealed class ProfileManagerViewModelTests
 
         public UserProfileSaveResult SaveProfile(CustomProfileDefinition profile)
         {
+            if (!SaveSucceeds)
+            {
+                return new(false, null, [new ProfileValidationDiagnostic(ProfileValidationSeverity.Blocker, "ProfileSaveFailed", "Denied", null, null)]);
+            }
+
             SavedProfiles.Add(profile);
             return new(true, profile.FilePath, []);
         }
