@@ -8,6 +8,7 @@ using BS2BG.App;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.App.ViewModels.Workflow;
+using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
@@ -1022,6 +1023,11 @@ public sealed class MorphsViewModelTests
             BulkConfirmationMessages.Add(message);
             return Task.FromResult(ConfirmBulkOperationResult);
         }
+
+        public Task<bool> ConfirmExportOverwriteAsync(
+            ExportPreviewResult preview,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
 
         public void ShowAbout()
         {

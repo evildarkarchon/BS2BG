@@ -5,6 +5,7 @@ using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
+using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
@@ -1089,7 +1090,7 @@ public sealed class MainWindowViewModelTests
             Task.FromResult(true);
 
         public Task<bool> ConfirmExportOverwriteAsync(
-            object preview,
+            ExportPreviewResult preview,
             CancellationToken cancellationToken)
         {
             ConfirmExportOverwriteCallCount++;

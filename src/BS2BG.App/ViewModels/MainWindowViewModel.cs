@@ -493,6 +493,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
         try
         {
+            var preview = exportPreviewService.PreviewBodyGen(
+                directoryPath,
+                Templates.GeneratedTemplateText,
+                Morphs.GeneratedMorphsText);
+            ApplyExportPreview("BodyGen", preview);
+            if (RequiresExportConfirmation(preview)
+                && !await dialogService.ConfirmExportOverwriteAsync(preview, cancellationToken))
+            {
+                StatusMessage = "Export cancelled; existing files kept.";
+                return;
+            }
+
             bodyGenIniExportWriter.Write(
                 directoryPath,
                 Templates.GeneratedTemplateText,
@@ -555,6 +567,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
         try
         {
+            var preview = exportPreviewService.PreviewBosJson(directoryPath, snapshot, profileCatalog);
+            ApplyExportPreview("BoS JSON", preview);
+            if (RequiresExportConfirmation(preview)
+                && !await dialogService.ConfirmExportOverwriteAsync(preview, cancellationToken))
+            {
+                StatusMessage = "Export cancelled; existing files kept.";
+                return;
+            }
+
             await Task.Run(
                 () => bosJsonExportWriter.Write(directoryPath, snapshot, profileCatalog),
                 cancellationToken);
@@ -658,6 +679,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         HasExportPreview = false;
         ExportPreviewSummary = string.Empty;
     }
+
+    private static bool RequiresExportConfirmation(ExportPreviewResult preview) =>
+        preview.Files.Any(file => file.WillOverwrite);
 
     private async Task<bool> ConfirmDiscardChangesIfNeededAsync(
         DiscardChangesAction action,
@@ -825,6 +849,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         public Task<bool> ConfirmBulkOperationAsync(
             string title,
             string message,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> ConfirmExportOverwriteAsync(
+            ExportPreviewResult preview,
             CancellationToken cancellationToken) =>
             Task.FromResult(true);
 

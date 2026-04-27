@@ -15,7 +15,7 @@ public sealed class ExportPreviewViewModel
     public ExportPreviewViewModel(string kind, ExportPreviewFile file)
     {
         Kind = kind ?? throw new ArgumentNullException(nameof(kind));
-        if (file is null) throw new ArgumentNullException(nameof(file));
+        ArgumentNullException.ThrowIfNull(file);
 
         TargetPath = file.Path;
         IsOverwrite = file.WillOverwrite;

@@ -3,6 +3,7 @@ using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.App.ViewModels.Workflow;
+using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
@@ -376,6 +377,11 @@ public sealed class M6UxViewModelTests
         public Task<bool> ConfirmBulkOperationAsync(
             string title,
             string message,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> ConfirmExportOverwriteAsync(
+            ExportPreviewResult preview,
             CancellationToken cancellationToken) =>
             Task.FromResult(true);
 

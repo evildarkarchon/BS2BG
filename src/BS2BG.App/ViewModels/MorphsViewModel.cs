@@ -10,6 +10,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels.Workflow;
+using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
@@ -2001,6 +2002,11 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         public Task<bool> ConfirmBulkOperationAsync(
             string title,
             string message,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> ConfirmExportOverwriteAsync(
+            ExportPreviewResult preview,
             CancellationToken cancellationToken) =>
             Task.FromResult(true);
 
