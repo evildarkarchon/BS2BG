@@ -54,11 +54,11 @@ public sealed class ExportPreviewServiceTests
         result.Files.Should().HaveCount(2);
         result.Files[0].Path.Should().Be(existingPath);
         result.Files[0].WillOverwrite.Should().BeTrue();
-        result.Files[0].SnippetLines.Should().Equal("{", "\"bodyname\": \"Preset:One\",", "\"sliders\": {");
+        result.Files[0].SnippetLines.Should().Equal("{", "\"string\": {", "\"bodyname\": \"Preset:One\",");
         result.Files[1].Path.Should().Be(Path.Combine(directory.Path, "Preset_One (2).json"));
         result.Files[1].WillOverwrite.Should().BeFalse();
         result.Files[1].WillCreate.Should().BeTrue();
-        result.Files[1].SnippetLines.Should().Equal("{", "\"bodyname\": \"Preset?One\",", "\"sliders\": {");
+        result.Files[1].SnippetLines.Should().Equal("{", "\"string\": {", "\"bodyname\": \"Preset?One\",");
         File.Exists(result.Files[1].Path).Should().BeFalse();
         File.ReadAllText(existingPath).Should().Be("OLD");
     }
