@@ -72,13 +72,46 @@ public sealed class DiagnosticsViewModelTests
         provider.GetRequiredService<DiagnosticsViewModel>().Should().NotBeNull();
     }
 
-    private static DiagnosticsViewModel CreateViewModel(ProjectModel project)
+    [Fact]
+    public async Task CopyReportWritesGroupedProfileFallbackReportAndSuccessStatus()
+    {
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new ModelSliderPreset("Community", "Saved profile"));
+        var clipboard = new CapturingClipboardService();
+        var viewModel = CreateViewModel(project, clipboard);
+        await viewModel.RefreshDiagnosticsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        await viewModel.CopyReportCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        clipboard.Text.Should().Contain("## Project");
+        clipboard.Text.Should().Contain("## Profiles");
+        clipboard.Text.Should().Contain("Info");
+        clipboard.Text.Should().Contain("Saved profile: Saved profile; calculation fallback: Measured. This is informational and does not block generation or export.");
+        clipboard.Text.Should().NotContain("Fix");
+        clipboard.Text.Should().NotContain("Auto-fix");
+        viewModel.StatusMessage.Should().Be("Diagnostics report copied to clipboard.");
+    }
+
+    [Fact]
+    public async Task CopyReportForEmptyDiagnosticsIncludesEmptyStateAndDoesNotThrow()
+    {
+        var clipboard = new CapturingClipboardService();
+        var viewModel = CreateViewModel(new ProjectModel(), clipboard);
+
+        await viewModel.CopyReportCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        clipboard.Text.Should().Contain("No diagnostics yet");
+        viewModel.StatusMessage.Should().Be("Diagnostics report copied to clipboard.");
+    }
+
+    private static DiagnosticsViewModel CreateViewModel(ProjectModel project, IClipboardService? clipboard = null)
     {
         return new DiagnosticsViewModel(
             project,
             CreateCatalog(),
             new ProjectValidationService(),
-            new ProfileDiagnosticsService());
+            new ProfileDiagnosticsService(),
+            clipboard);
     }
 
     private static TemplateProfileCatalog CreateCatalog()
@@ -89,5 +122,16 @@ public sealed class DiagnosticsViewModelTests
             Array.Empty<string>());
 
         return new TemplateProfileCatalog(new[] { new TemplateProfile("Measured", profile) });
+    }
+
+    private sealed class CapturingClipboardService : IClipboardService
+    {
+        public string? Text { get; private set; }
+
+        public Task SetTextAsync(string text, CancellationToken cancellationToken)
+        {
+            Text = text;
+            return Task.CompletedTask;
+        }
     }
 }
