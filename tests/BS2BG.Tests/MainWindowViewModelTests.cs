@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Threading.Tasks;
+using System.Text.Json;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
@@ -51,6 +52,35 @@ public sealed class MainWindowViewModelTests
         await viewModel.SaveProjectAsAsync(TestContext.Current.CancellationToken);
 
         File.Exists(Path.Combine(directory.Path, "explicit-name.jbs2bg")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SaveProjectEmbedsOnlyReferencedLocalCustomProfiles()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha", "Shared Body");
+        var dialogs = new FakeFileDialogService { SaveProjectPath = Path.Combine(directory.Path, "shared-project") };
+        var catalogService = new StubTemplateProfileCatalogService(
+            new[]
+            {
+                CreateCustomProfile("Shared Body", 42f),
+                CreateCustomProfile("Unrelated Body", 99f),
+            });
+        var viewModel = CreateViewModel(project, dialogs, profileCatalogService: catalogService);
+
+        await viewModel.SaveProjectAsAsync(TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory.Path, "shared-project.jbs2bg")));
+        var root = document.RootElement;
+        root.TryGetProperty("SliderPresets", out _).Should().BeTrue();
+        root.TryGetProperty("CustomMorphTargets", out _).Should().BeTrue();
+        root.TryGetProperty("MorphedNPCs", out _).Should().BeTrue();
+        var customProfiles = root.GetProperty("CustomProfiles").EnumerateArray().ToArray();
+        customProfiles.Should().ContainSingle();
+        customProfiles[0].GetProperty("Name").GetString().Should().Be("Shared Body");
+        customProfiles[0].GetProperty("Defaults").TryGetProperty("Probe", out _).Should().BeTrue();
+        customProfiles.Select(profile => profile.GetProperty("Name").GetString())
+            .Should().NotContain("Unrelated Body");
     }
 
     [Fact]
@@ -1014,6 +1044,7 @@ public sealed class MainWindowViewModelTests
         FakeFileDialogService fileDialogs,
         FakeAppDialogService? dialogs = null,
         TemplateProfileCatalog? profileCatalog = null,
+        ITemplateProfileCatalogService? profileCatalogService = null,
         ProjectFileService? projectFileService = null,
         BosJsonExportWriter? bosJsonExportWriter = null,
         INpcTextFilePicker? npcTextFilePicker = null)
@@ -1021,13 +1052,21 @@ public sealed class MainWindowViewModelTests
         var parser = new BodySlideXmlParser();
         var templateGeneration = new TemplateGenerationService();
         profileCatalog ??= CreateProfileCatalogWithDefault();
-        var templates = new TemplatesViewModel(
-            project,
-            parser,
-            templateGeneration,
-            profileCatalog,
-            new EmptyBodySlideXmlFilePicker(),
-            new EmptyClipboardService());
+        var templates = profileCatalogService is null
+            ? new TemplatesViewModel(
+                project,
+                parser,
+                templateGeneration,
+                profileCatalog,
+                new EmptyBodySlideXmlFilePicker(),
+                new EmptyClipboardService())
+            : new TemplatesViewModel(
+                project,
+                parser,
+                templateGeneration,
+                profileCatalogService,
+                new EmptyBodySlideXmlFilePicker(),
+                new EmptyClipboardService());
         var morphs = new MorphsViewModel(
             project,
             new NpcTextParser(),
@@ -1036,18 +1075,31 @@ public sealed class MainWindowViewModelTests
             npcTextFilePicker ?? new EmptyNpcTextFilePicker(),
             new EmptyClipboardService());
 
-        return new MainWindowViewModel(
-            project,
-            projectFileService ?? new ProjectFileService(),
-            templateGeneration,
-            new MorphGenerationService(),
-            profileCatalog,
-            new BodyGenIniExportWriter(),
-            bosJsonExportWriter ?? new BosJsonExportWriter(templateGeneration),
-            fileDialogs,
-            dialogs ?? new FakeAppDialogService(),
-            templates,
-            morphs);
+        return profileCatalogService is null
+            ? new MainWindowViewModel(
+                project,
+                projectFileService ?? new ProjectFileService(),
+                templateGeneration,
+                new MorphGenerationService(),
+                profileCatalog,
+                new BodyGenIniExportWriter(),
+                bosJsonExportWriter ?? new BosJsonExportWriter(templateGeneration),
+                fileDialogs,
+                dialogs ?? new FakeAppDialogService(),
+                templates,
+                morphs)
+            : new MainWindowViewModel(
+                project,
+                projectFileService ?? new ProjectFileService(),
+                templateGeneration,
+                new MorphGenerationService(),
+                profileCatalogService,
+                new BodyGenIniExportWriter(),
+                bosJsonExportWriter ?? new BosJsonExportWriter(templateGeneration),
+                fileDialogs,
+                dialogs ?? new FakeAppDialogService(),
+                templates,
+                morphs);
     }
 
     private static TemplateProfileCatalog CreateProfileCatalogWithDefault(params string[] defaultSliders)
@@ -1071,6 +1123,74 @@ public sealed class MainWindowViewModelTests
             : new SliderPreset(presetName, profileName));
         project.MarkDirty();
         return project;
+    }
+
+    private static CustomProfileDefinition CreateCustomProfile(string name, float probeDefault) => new(
+        name,
+        "Skyrim",
+        new SliderProfile([new SliderDefault("Probe", probeDefault / 100f, probeDefault / 100f)], [], []),
+        ProfileSourceKind.LocalCustom,
+        Path.Combine("C:/profiles", name + ".json"));
+
+    private sealed class StubTemplateProfileCatalogService(IReadOnlyList<CustomProfileDefinition> localProfiles) : ITemplateProfileCatalogService
+    {
+        public TemplateProfileCatalog Current { get; private set; } = BuildCatalog(localProfiles, []);
+
+        public IReadOnlyList<ProfileValidationDiagnostic> LastDiscoveryDiagnostics => [];
+
+        public IReadOnlyList<CustomProfileDefinition> LocalCustomProfiles { get; } = localProfiles;
+
+        public IReadOnlyList<CustomProfileDefinition> ProjectProfiles { get; private set; } = [];
+
+        public IObservable<TemplateProfileCatalog> CatalogChanged => System.Reactive.Linq.Observable.Return(Current);
+
+        public TemplateProfileCatalog Refresh()
+        {
+            Current = BuildCatalog(LocalCustomProfiles, ProjectProfiles);
+            return Current;
+        }
+
+        public TemplateProfileCatalog ClearProjectProfiles()
+        {
+            ProjectProfiles = [];
+            Current = BuildCatalog(LocalCustomProfiles, ProjectProfiles);
+            return Current;
+        }
+
+        public TemplateProfileCatalog WithProjectProfiles(IEnumerable<CustomProfileDefinition> projectProfiles)
+        {
+            ProjectProfiles = projectProfiles.ToArray();
+            Current = BuildCatalog(LocalCustomProfiles, ProjectProfiles);
+            return Current;
+        }
+
+        public UserProfileSaveResult SaveLocalProfile(CustomProfileDefinition profile) =>
+            new(false, null, []);
+
+        private static TemplateProfileCatalog BuildCatalog(
+            IEnumerable<CustomProfileDefinition> localProfiles,
+            IEnumerable<CustomProfileDefinition> projectProfiles)
+        {
+            var bundled = new ProfileCatalogEntry(
+                ProjectProfileMapping.SkyrimCbbe,
+                new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, new SliderProfile([], [], [])),
+                ProfileSourceKind.Bundled,
+                null,
+                false);
+            var localEntries = localProfiles.Select(profile => new ProfileCatalogEntry(
+                profile.Name,
+                new TemplateProfile(profile.Name, profile.SliderProfile),
+                ProfileSourceKind.LocalCustom,
+                profile.FilePath,
+                true));
+            var projectEntries = projectProfiles.Select(profile => new ProfileCatalogEntry(
+                profile.Name,
+                new TemplateProfile(profile.Name, profile.SliderProfile),
+                ProfileSourceKind.EmbeddedProject,
+                profile.FilePath,
+                false));
+            return new TemplateProfileCatalog(new[] { bundled }.Concat(localEntries).Concat(projectEntries));
+        }
     }
 
     private sealed class FakeFileDialogService : IFileDialogService

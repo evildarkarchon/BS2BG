@@ -169,6 +169,47 @@ public sealed class MainWindowViewModelProfileRecoveryTests
     }
 
     /// <summary>
+    /// Verifies Rename Project Copy cannot keep the same display name as the local profile that caused the conflict.
+    /// </summary>
+    [Fact]
+    public async Task RenameProjectCopyRejectsOriginalConflictingLocalProfileName()
+    {
+        var currentProject = new ProjectModel();
+        var local = CreateProfile("Shared Body", 1f, ProfileSourceKind.LocalCustom);
+        var embedded = CreateProfile("Shared Body", 2f, ProfileSourceKind.EmbeddedProject);
+        var services = CreateViewModel(currentProject, [local]);
+        services.Dialog.Enqueue(new ProfileConflictDecision(ProfileConflictResolution.RenameProjectCopy, "Shared Body"));
+        var path = WriteProject(CreateProjectWithPreset("Imported", "Shared Body", embedded));
+
+        await services.ViewModel.OpenProjectPathAsync(path, TestContext.Current.CancellationToken);
+
+        currentProject.SliderPresets.Should().BeEmpty();
+        currentProject.CustomProfiles.Should().BeEmpty();
+        services.ViewModel.StatusMessage.Should().Contain("conflicts with an existing bundled, local, embedded, or renamed profile");
+    }
+
+    /// <summary>
+    /// Verifies Rename Project Copy cannot choose any other existing local custom profile display name.
+    /// </summary>
+    [Fact]
+    public async Task RenameProjectCopyRejectsAnotherLocalCustomProfileName()
+    {
+        var currentProject = new ProjectModel();
+        var local = CreateProfile("Shared Body", 1f, ProfileSourceKind.LocalCustom);
+        var otherLocal = CreateProfile("Other Body", 3f, ProfileSourceKind.LocalCustom);
+        var embedded = CreateProfile("Shared Body", 2f, ProfileSourceKind.EmbeddedProject);
+        var services = CreateViewModel(currentProject, [local, otherLocal]);
+        services.Dialog.Enqueue(new ProfileConflictDecision(ProfileConflictResolution.RenameProjectCopy, "Other Body"));
+        var path = WriteProject(CreateProjectWithPreset("Imported", "Shared Body", embedded));
+
+        await services.ViewModel.OpenProjectPathAsync(path, TestContext.Current.CancellationToken);
+
+        currentProject.SliderPresets.Should().BeEmpty();
+        currentProject.CustomProfiles.Should().BeEmpty();
+        services.ViewModel.StatusMessage.Should().Contain("conflicts with an existing bundled, local, embedded, or renamed profile");
+    }
+
+    /// <summary>
     /// Verifies keeping local profile data prevents the embedded conflict copy from becoming the active overlay.
     /// </summary>
     [Fact]

@@ -673,22 +673,35 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         IReadOnlyList<CustomProfileDefinition> localProfiles,
         IReadOnlyList<CustomProfileDefinition> embeddedProfiles)
     {
-        var occupied = catalogSnapshot.Entries
+        var bundledNames = catalogSnapshot.Entries
             .Where(entry => entry.SourceKind == ProfileSourceKind.Bundled)
             .Select(entry => entry.Name)
-            .Concat(localProfiles.Select(profile => profile.Name))
-            .Concat(embeddedProfiles.Select(profile => profile.Name))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var (conflict, decision) in decisions)
-        {
-            if (decision.Resolution != ProfileConflictResolution.RenameProjectCopy) continue;
+        var localNames = localProfiles
+            .Select(profile => profile.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var renameDecisions = decisions
+            .Where(item => item.Decision.Resolution == ProfileConflictResolution.RenameProjectCopy)
+            .ToArray();
+        var embeddedNamesBeingRenamed = renameDecisions
+            .Select(item => item.Conflict.Embedded.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var occupiedEmbeddedNames = embeddedProfiles
+            .Select(profile => profile.Name)
+            .Where(name => !embeddedNamesBeingRenamed.Contains(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var renamedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        foreach (var (conflict, decision) in renameDecisions)
+        {
             var renamed = decision.RenamedProfileName?.Trim();
             if (string.IsNullOrWhiteSpace(renamed))
                 return "Rename Project Copy requires a unique display name.";
 
-            occupied.Remove(conflict.Embedded.Name);
-            if (!occupied.Add(renamed))
+            if (bundledNames.Contains(renamed)
+                || localNames.Contains(renamed)
+                || occupiedEmbeddedNames.Contains(renamed)
+                || !renamedNames.Add(renamed))
                 return $"Profile name '{renamed}' conflicts with an existing bundled, local, embedded, or renamed profile.";
         }
 
@@ -891,7 +904,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         {
             ClearFileOperationLedger();
             var versionAtSnapshot = project.ChangeVersion;
-            var snapshot = projectFileService.SaveToString(project);
+            var snapshot = projectFileService.SaveToString(project, BuildProjectSaveContext());
             await Task.Run(() => projectFileService.WriteAtomic(snapshot, path), cancellationToken);
             CurrentProjectPath = path;
             if (project.ChangeVersion == versionAtSnapshot)
@@ -909,6 +922,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         {
             ReportFileOperationFailure("Saving jBS2BG file", exception);
         }
+    }
+
+    /// <summary>
+    /// Captures runtime custom profiles available to the GUI save path so Core can embed only project-referenced definitions.
+    /// </summary>
+    /// <returns>A case-insensitive save context containing local custom profiles and active project-scoped profile overlays.</returns>
+    private ProjectSaveContext BuildProjectSaveContext()
+    {
+        var availableProfiles = new Dictionary<string, CustomProfileDefinition>(StringComparer.OrdinalIgnoreCase);
+        foreach (var profile in profileCatalogService.LocalCustomProfiles)
+            availableProfiles[profile.Name] = profile;
+
+        foreach (var profile in profileCatalogService.ProjectProfiles)
+            availableProfiles[profile.Name] = profile;
+
+        return new ProjectSaveContext(availableProfiles);
     }
 
     private void ClearFileOperationLedger()
