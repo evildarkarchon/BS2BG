@@ -443,6 +443,82 @@ public sealed class ProfileManagerViewModelTests
         vm.Editor.Name.Should().Be("Custom Body");
     }
 
+    /// <summary>
+    /// Verifies profile import read failures become status text without mutating manager state.
+    /// </summary>
+    [Fact]
+    public async Task ImportProfileReadFailureSetsStatusAndPreservesSelectionAndEditor()
+    {
+        var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "missing.json");
+        var dialog = new StubProfileManagementDialogService { ImportFiles = [missingPath] };
+        var store = new StubUserProfileStore();
+        var vm = CreateManager(new TemplateProfileCatalog(new[]
+        {
+            new ProfileCatalogEntry("Custom Body", new TemplateProfile("Custom Body", CreateSliderProfile()), ProfileSourceKind.LocalCustom, "custom.json", true)
+        }), store: store, dialog: dialog);
+        var priorSelection = vm.SelectedProfile;
+        var priorEditor = vm.Editor;
+
+        var act = async () => await vm.ImportProfileCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        await act.Should().NotThrowAsync();
+        store.SavedProfiles.Should().BeEmpty();
+        vm.SelectedProfile.Should().BeSameAs(priorSelection);
+        vm.Editor.Should().BeSameAs(priorEditor);
+        vm.StatusMessage.Should().StartWith("Profile JSON could not be read:");
+    }
+
+    /// <summary>
+    /// Verifies missing-reference recovery import read failures preserve the missing row for a later retry.
+    /// </summary>
+    [Fact]
+    public async Task ImportMatchingProfileReadFailureSetsStatusAndKeepsMissingReference()
+    {
+        var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "missing.json");
+        var dialog = new StubProfileManagementDialogService { ImportFiles = [missingPath] };
+        var store = new StubUserProfileStore();
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Preset") { ProfileName = "Missing Body" });
+        var vm = CreateManager(new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile("Bundled Body", CreateSliderProfile())
+        }), project, store, dialog);
+        var priorEditor = vm.Editor;
+
+        var resolved = await vm.ImportMatchingProfileForMissingReferenceAsync(
+            "Missing Body",
+            TestContext.Current.CancellationToken);
+
+        resolved.Should().BeFalse();
+        store.SavedProfiles.Should().BeEmpty();
+        vm.Editor.Should().BeSameAs(priorEditor);
+        vm.ProfileEntries.Should().Contain(entry => entry.Name == "Missing Body" && entry.IsMissing);
+        vm.StatusMessage.Should().StartWith("Profile JSON could not be read:");
+    }
+
+    /// <summary>
+    /// Verifies profile export write failures become status text instead of command exceptions.
+    /// </summary>
+    [Fact]
+    public async Task ExportProfileWriteFailureSetsStatusAndPreservesSelection()
+    {
+        var exportPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "exported.json");
+        var dialog = new StubProfileManagementDialogService { ExportPath = exportPath };
+        var vm = CreateManager(new TemplateProfileCatalog(new[]
+        {
+            new ProfileCatalogEntry("Custom Body", new TemplateProfile("Custom Body", CreateSliderProfile()), ProfileSourceKind.LocalCustom, "custom.json", true)
+        }), dialog: dialog);
+        var priorSelection = vm.SelectedProfile;
+        var priorEditor = vm.Editor;
+
+        var act = async () => await vm.ExportProfileCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        await act.Should().NotThrowAsync();
+        vm.SelectedProfile.Should().BeSameAs(priorSelection);
+        vm.Editor.Should().BeSameAs(priorEditor);
+        vm.StatusMessage.Should().StartWith("Profile JSON could not be exported:");
+    }
+
     private static ProfileManagerViewModel CreateManager(
         TemplateProfileCatalog catalog,
         ProjectModel? project = null,
