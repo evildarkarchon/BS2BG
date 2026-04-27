@@ -97,6 +97,31 @@ public sealed class MainWindowHeadlessTests
         buttonAutomationNames.Should().Contain("Remove inverted slider");
     }
 
+    /// <summary>
+    /// Verifies profile table ItemsControl bindings target the filtered visible collections used by the editor search box.
+    /// </summary>
+    [Fact]
+    public void ProfilesWorkspaceBindsAllEditableTablesToFilteredRows()
+    {
+        var axaml = File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "BS2BG.App",
+            "Views",
+            "MainWindow.axaml"));
+
+        axaml.Should().Contain("ItemsSource=\"{Binding VisibleDefaultRows}\"");
+        axaml.Should().Contain("ItemsSource=\"{Binding VisibleMultiplierRows}\"");
+        axaml.Should().Contain("ItemsSource=\"{Binding VisibleInvertedRows}\"");
+        axaml.Should().Contain("DataTemplate x:DataType=\"vm:ProfileMultiplierRowViewModel\"");
+        axaml.Should().Contain("DataTemplate x:DataType=\"vm:ProfileInvertedRowViewModel\"");
+    }
+
     private static void ExecuteCommand(ICommand command)
     {
         command.CanExecute(null).Should().BeTrue();
