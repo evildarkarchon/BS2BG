@@ -66,13 +66,16 @@ public class ProjectFileService
         WriteAtomic(SaveToString(project), path);
     }
 
+    /// <summary>
+    /// Writes serialized project content atomically while preserving ledger details for commit failures.
+    /// </summary>
     public virtual void WriteAtomic(string content, string path)
     {
         if (content is null) throw new ArgumentNullException(nameof(content));
 
         if (path is null) throw new ArgumentNullException(nameof(path));
 
-        AtomicFileWriter.WriteAtomic(path, content, Utf8NoBom);
+        AtomicFileWriter.WriteAtomicBatch(new[] { (path, content) }, Utf8NoBom);
     }
 
     public string SaveToString(ProjectModel project)
