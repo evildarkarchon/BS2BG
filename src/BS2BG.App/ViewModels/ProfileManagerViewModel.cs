@@ -25,6 +25,7 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
     private readonly ProfileDefinitionService profileDefinitionService;
     private readonly ProjectModel project;
     private readonly IUserProfileStore store;
+    private ProfileManagerEntryViewModel? committedSelectedProfile;
     private bool selectingInternally;
 
     [ObservableAsProperty] private bool _isBusy;
@@ -144,28 +145,13 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         if (ReferenceEquals(SelectedProfile, entry) && Editor.Matches(entry)) return true;
         if (Editor.HasUnsavedChanges && !await dialogService.ConfirmDiscardUnsavedEditsAsync(cancellationToken))
         {
-            selectingInternally = true;
-            try
-            {
-                this.RaisePropertyChanged(nameof(SelectedProfile));
-            }
-            finally
-            {
-                selectingInternally = false;
-            }
+            SetSelectedProfileInternally(committedSelectedProfile);
 
             return false;
         }
 
-        selectingInternally = true;
-        try
-        {
-            SelectedProfile = entry;
-        }
-        finally
-        {
-            selectingInternally = false;
-        }
+        SetSelectedProfileInternally(entry);
+        committedSelectedProfile = entry;
 
         Editor = entry is null
             ? ProfileEditorViewModel.Empty(profileDefinitionService, catalogService.Current.ProfileNames)
@@ -314,7 +300,8 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
     private void CreateBlankProfile()
     {
-        SelectedProfile = null;
+        SetSelectedProfileInternally(null);
+        committedSelectedProfile = null;
         Editor = ProfileEditorViewModel.Blank(profileDefinitionService, catalogService.Current.ProfileNames);
     }
 
@@ -323,7 +310,8 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         var selected = SelectedProfile;
         if (selected is null) return;
 
-        SelectedProfile = null;
+        SetSelectedProfileInternally(null);
+        committedSelectedProfile = null;
         Editor = ProfileEditorViewModel.FromProfile(
             selected.Name,
             selected.Game,
@@ -393,7 +381,8 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
     private void RefreshProfileEntries()
     {
-        var selectedName = SelectedProfile?.Name;
+        var selectedName = committedSelectedProfile?.Name ?? SelectedProfile?.Name;
+        var preserveDirtyEditor = Editor.HasUnsavedChanges;
         ProfileEntries.Clear();
         BundledProfiles.Clear();
         CustomProfiles.Clear();
@@ -432,10 +421,43 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         foreach (var diagnostic in catalogService.LastDiscoveryDiagnostics)
             RejectedProfileFiles.Add(diagnostic);
 
-        SelectedProfile = ProfileEntries.FirstOrDefault(entry => ProfileNamesEqual(entry.Name, selectedName))
-                          ?? ProfileEntries.FirstOrDefault();
-        if (SelectedProfile is not null)
-            Editor = ProfileEditorViewModel.FromEntry(SelectedProfile, profileDefinitionService, ExistingNamesFor(SelectedProfile.Name));
+        var refreshedSelection = ProfileEntries.FirstOrDefault(entry => ProfileNamesEqual(entry.Name, selectedName));
+        if (preserveDirtyEditor)
+        {
+            if (refreshedSelection is not null)
+            {
+                SetSelectedProfileInternally(refreshedSelection);
+                committedSelectedProfile = refreshedSelection;
+            }
+            else
+            {
+                SetSelectedProfileInternally(committedSelectedProfile);
+            }
+
+            return;
+        }
+
+        refreshedSelection ??= ProfileEntries.FirstOrDefault();
+        SetSelectedProfileInternally(refreshedSelection);
+        committedSelectedProfile = refreshedSelection;
+        if (refreshedSelection is not null)
+            Editor = ProfileEditorViewModel.FromEntry(refreshedSelection, profileDefinitionService, ExistingNamesFor(refreshedSelection.Name));
+    }
+
+    /// <summary>
+    /// Updates selected row state without re-entering asynchronous selection confirmation logic.
+    /// </summary>
+    private void SetSelectedProfileInternally(ProfileManagerEntryViewModel? entry)
+    {
+        selectingInternally = true;
+        try
+        {
+            SelectedProfile = entry;
+        }
+        finally
+        {
+            selectingInternally = false;
+        }
     }
 
     private IEnumerable<string> MissingProjectProfileNames() => project.SliderPresets
