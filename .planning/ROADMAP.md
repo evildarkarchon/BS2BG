@@ -111,7 +111,7 @@ Plans:
 **Wave 5 (blocked on Wave 4 conflict transaction and Profile Manager workflows)**
 - [x] 04-07-PLAN.md — Expose explicit diagnostics/profile recovery actions, undo-aware remaps, selected JSON export, and OpenSpec deltas.
 **Wave 6 (blocked on Wave 5 recovery/action contracts)**
-- [ ] 04-08-PLAN.md — Wire the first-class Profiles workspace UI with compiled bindings and visual verification.
+- [x] 04-08-PLAN.md — Wire the first-class Profiles workspace UI with compiled bindings and visual verification.
 Cross-cutting constraints: custom profile identity is internal display-name based; bundled profiles stay read-only; unresolved/missing profile behavior remains neutral and non-blocking; all profile mutations use explicit user actions and validation before catalog inclusion.
 **UI hint**: yes
 
@@ -138,5 +138,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Profile Correctness and Trust | 7/7 | Complete   | 2026-04-26 |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | Not started | - |
 | 3. Validation and Diagnostics | 8/8 | Complete | 2026-04-27 |
-| 4. Profile Extensibility and Controlled Customization | 3/8 | In Progress | - |
+| 4. Profile Extensibility and Controlled Customization | 8/8 | Complete | 2026-04-27 |
 | 5. Automation, Sharing, and Release Trust | 0/TBD | Not started | - |
