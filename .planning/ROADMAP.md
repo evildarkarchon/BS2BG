@@ -109,7 +109,7 @@ Plans:
 **Wave 4 (blocked on Wave 3 recovery diagnostics and catalog/project contracts)**
 - [x] 04-06-PLAN.md — Integrate explicit embedded-profile project-open conflict transactions and overlay reset.
 **Wave 5 (blocked on Wave 4 conflict transaction and Profile Manager workflows)**
-- [ ] 04-07-PLAN.md — Expose explicit diagnostics/profile recovery actions, undo-aware remaps, selected JSON export, and OpenSpec deltas.
+- [x] 04-07-PLAN.md — Expose explicit diagnostics/profile recovery actions, undo-aware remaps, selected JSON export, and OpenSpec deltas.
 **Wave 6 (blocked on Wave 5 recovery/action contracts)**
 - [ ] 04-08-PLAN.md — Wire the first-class Profiles workspace UI with compiled bindings and visual verification.
 Cross-cutting constraints: custom profile identity is internal display-name based; bundled profiles stay read-only; unresolved/missing profile behavior remains neutral and non-blocking; all profile mutations use explicit user actions and validation before catalog inclusion.
