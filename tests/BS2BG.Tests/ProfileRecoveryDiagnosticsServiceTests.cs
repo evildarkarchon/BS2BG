@@ -83,6 +83,44 @@ public sealed class ProfileRecoveryDiagnosticsServiceTests
         diagnostics.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("Community CBBE", "Community CBBE")]
+    [InlineData("Community CBBE", "community cbbe")]
+    public void CanResolveMissingReferenceMatchesOnlyInternalProfileNameIgnoringCase(
+        string missingProfileName,
+        string importedProfileName)
+    {
+        var importedProfile = new CustomProfileDefinition(
+            importedProfileName,
+            "Skyrim",
+            EmptyProfile(),
+            ProfileSourceKind.LocalCustom,
+            "unrelated-file-name.json");
+
+        var canResolve = ProfileRecoveryDiagnosticsService.CanResolveMissingReference(
+            missingProfileName,
+            importedProfile);
+
+        canResolve.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanResolveMissingReferenceIgnoresFilePathWhenInternalNameDiffers()
+    {
+        var importedProfile = new CustomProfileDefinition(
+            "Different Internal Name",
+            "Skyrim",
+            EmptyProfile(),
+            ProfileSourceKind.LocalCustom,
+            "C:/profiles/Community CBBE.json");
+
+        var canResolve = ProfileRecoveryDiagnosticsService.CanResolveMissingReference(
+            "Community CBBE",
+            importedProfile);
+
+        canResolve.Should().BeFalse();
+    }
+
     private static TemplateProfileCatalog CreateCatalog()
     {
         return new TemplateProfileCatalog(new[]
