@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reactive.Concurrency;
+using System.Text.Json;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
@@ -359,6 +360,55 @@ public sealed class MorphsViewModelTests
         viewModel.StatusMessage.Should().Be("Opened image for Lydia.");
     }
 
+    [Fact]
+    public async Task NpcTextPickerUsesAndUpdatesRememberedFolder()
+    {
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            NpcTextFolder = @"C:\NPCs\Old"
+        });
+        var backend = new CapturingNpcTextPickerBackend(new[] { @"D:\NPCs\actors.txt" })
+        {
+            ResolvedStartFolder = @"C:\NPCs\Old"
+        };
+        var picker = new WindowNpcTextFilePicker(preferences, backend);
+
+        var files = await picker.PickNpcTextFilesAsync(TestContext.Current.CancellationToken);
+
+        files.Should().Equal(@"D:\NPCs\actors.txt");
+        backend.RequestedStartFolder.Should().Be(@"C:\NPCs\Old");
+        preferences.Saved.NpcTextFolder.Should().Be(@"D:\NPCs");
+    }
+
+    [Fact]
+    public async Task NpcTextPickerContinuesWhenPreferenceSaveFails()
+    {
+        var backend = new CapturingNpcTextPickerBackend(new[] { @"D:\NPCs\actors.txt" });
+        var picker = new WindowNpcTextFilePicker(
+            new FailingUserPreferencesService(new UserPreferences()),
+            backend);
+
+        var files = await picker.PickNpcTextFilesAsync(TestContext.Current.CancellationToken);
+
+        files.Should().Equal(@"D:\NPCs\actors.txt");
+    }
+
+    [Fact]
+    public void UserPreferencesJsonDoesNotPersistNpcSearchOrFilterState()
+    {
+        var preferences = new UserPreferences
+        {
+            NpcTextFolder = @"D:\NPCs"
+        };
+
+        var json = JsonSerializer.Serialize(preferences);
+
+        json.Should().Contain(nameof(UserPreferences.NpcTextFolder));
+        json.Should().NotContain(nameof(MorphsViewModel.SearchText));
+        json.Should().NotContain("NpcFilter", StringComparison.OrdinalIgnoreCase);
+        json.Should().NotContain("AllowedValues", StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("All|Female=Bad")]
     [InlineData("All|Female\nFoo")]
@@ -474,6 +524,48 @@ public sealed class MorphsViewModelTests
         public IReadOnlyList<MorphTargetBase> Targets { get; private set; } = Array.Empty<MorphTargetBase>();
 
         public void ShowTargetsWithoutPresets(IReadOnlyList<MorphTargetBase> targets) => Targets = targets.ToArray();
+    }
+
+    private sealed class CapturingUserPreferencesService(UserPreferences initial) : IUserPreferencesService
+    {
+        public UserPreferences Saved { get; private set; } = initial;
+
+        public UserPreferences Load() => Saved;
+
+        public bool Save(UserPreferences preferences)
+        {
+            Saved = preferences;
+            return true;
+        }
+    }
+
+    private sealed class FailingUserPreferencesService(UserPreferences preferences) : IUserPreferencesService
+    {
+        public UserPreferences Load() => preferences;
+
+        public bool Save(UserPreferences preferences) => false;
+    }
+
+    private sealed class CapturingNpcTextPickerBackend(IReadOnlyList<string> files) : INpcTextPickerBackend
+    {
+        private readonly IReadOnlyList<string> files = files;
+
+        public bool CanOpen => true;
+
+        public string? RequestedStartFolder { get; private set; }
+
+        public string? ResolvedStartFolder { get; init; }
+
+        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(
+            string? suggestedStartFolder,
+            CancellationToken cancellationToken)
+        {
+            RequestedStartFolder = suggestedStartFolder;
+            return Task.FromResult(files);
+        }
+
+        public Task<string?> ResolveStartFolderAsync(string? path, CancellationToken cancellationToken) =>
+            Task.FromResult(ResolvedStartFolder);
     }
 
     private sealed class TemporaryDirectory : IDisposable
