@@ -1429,11 +1429,15 @@
                   <StackPanel Spacing="8">
                     <TextBlock Text="Bundled"
                                FontWeight="SemiBold" />
-                    <ItemsControl ItemsSource="{Binding BundledProfiles}">
-                      <ItemsControl.ItemTemplate>
+                    <ListBox x:Name="BundledProfilesList"
+                             automation:AutomationProperties.Name="Bundled profile rows"
+                             ItemsSource="{Binding BundledProfiles}"
+                             SelectedItem="{Binding SelectedProfile, Mode=OneWayToSource}">
+                      <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:ProfileManagerEntryViewModel">
                           <Border Padding="8"
                                   Margin="0,0,0,4"
+                                  automation:AutomationProperties.Name="{Binding Name, StringFormat='Select bundled profile {0}'}"
                                   BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                                   BorderThickness="0,0,0,1">
                             <Grid RowDefinitions="Auto,Auto">
@@ -1444,18 +1448,22 @@
                             </Grid>
                           </Border>
                         </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
                   </StackPanel>
 
                   <StackPanel Spacing="8">
                     <TextBlock Text="Custom"
                                FontWeight="SemiBold" />
-                    <ItemsControl ItemsSource="{Binding CustomProfiles}">
-                      <ItemsControl.ItemTemplate>
+                    <ListBox x:Name="CustomProfilesList"
+                             automation:AutomationProperties.Name="Custom profile rows"
+                             ItemsSource="{Binding CustomProfiles}"
+                             SelectedItem="{Binding SelectedProfile, Mode=OneWayToSource}">
+                      <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:ProfileManagerEntryViewModel">
                           <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                                   BorderThickness="0,0,0,1"
+                                  automation:AutomationProperties.Name="{Binding Name, StringFormat='Select custom profile {0}'}"
                                   Padding="0,8">
                             <Grid RowDefinitions="Auto,Auto">
                               <TextBlock Grid.Row="0" Text="{Binding Name}" />
@@ -1463,18 +1471,22 @@
                             </Grid>
                           </Border>
                         </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
                   </StackPanel>
 
                   <StackPanel Spacing="8">
                     <TextBlock Text="Embedded in project"
                                FontWeight="SemiBold" />
-                    <ItemsControl ItemsSource="{Binding EmbeddedProjectProfiles}">
-                      <ItemsControl.ItemTemplate>
+                    <ListBox x:Name="EmbeddedProjectProfilesList"
+                             automation:AutomationProperties.Name="Embedded project profile rows"
+                             ItemsSource="{Binding EmbeddedProjectProfiles}"
+                             SelectedItem="{Binding SelectedProfile, Mode=OneWayToSource}">
+                      <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:ProfileManagerEntryViewModel">
                           <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                                   BorderThickness="0,0,0,1"
+                                  automation:AutomationProperties.Name="{Binding Name, StringFormat='Select embedded project profile {0}'}"
                                   Padding="0,8">
                             <Grid RowDefinitions="Auto,Auto">
                               <TextBlock Grid.Row="0" Text="{Binding Name}" />
@@ -1482,19 +1494,22 @@
                             </Grid>
                           </Border>
                         </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
                   </StackPanel>
 
                   <StackPanel Spacing="8">
                     <TextBlock Text="Missing references"
                                FontWeight="SemiBold" />
-                    <ItemsControl x:Name="MissingProfileReferencesList"
-                                  ItemsSource="{Binding MissingProfiles}">
-                      <ItemsControl.ItemTemplate>
+                    <ListBox x:Name="MissingProfileReferencesList"
+                             automation:AutomationProperties.Name="Missing profile reference rows"
+                             ItemsSource="{Binding MissingProfiles}"
+                             SelectedItem="{Binding SelectedProfile, Mode=OneWayToSource}">
+                      <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:ProfileManagerEntryViewModel">
                           <Border Padding="8"
                                   Background="{DynamicResource BS2BGInfoBackgroundBrush}"
+                                  automation:AutomationProperties.Name="{Binding Name, StringFormat='Select missing profile reference {0}'}"
                                   BorderBrush="{DynamicResource BS2BGInfoBorderBrush}"
                                   BorderThickness="1">
                             <Grid RowDefinitions="Auto,Auto">
@@ -1503,8 +1518,8 @@
                             </Grid>
                           </Border>
                         </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
                   </StackPanel>
 
                   <StackPanel Spacing="8">

@@ -314,13 +314,14 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
     private void CopyBundledProfile()
     {
-        if (SelectedProfile is null) return;
+        var selected = SelectedProfile;
+        if (selected is null) return;
 
         SelectedProfile = null;
         Editor = ProfileEditorViewModel.FromProfile(
-            SelectedProfileNameForCopy(),
-            string.Empty,
-            SelectedProfileSliderProfileForCopy(),
+            selected.Name,
+            selected.Game,
+            selected.SliderProfile,
             ProfileSourceKind.LocalCustom,
             null,
             profileDefinitionService,
@@ -376,7 +377,8 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         MissingProfiles.Clear();
         RejectedProfileFiles.Clear();
 
-        foreach (var entry in catalogService.Current.Entries.Select(ProfileManagerEntryViewModel.FromCatalogEntry))
+        foreach (var entry in catalogService.Current.Entries.Select(entry =>
+                     ProfileManagerEntryViewModel.FromCatalogEntry(entry, GameMetadataFor(entry))))
         {
             if (!MatchesSearch(entry)) continue;
 
@@ -425,9 +427,24 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
     private IEnumerable<string> ExistingNamesFor(string? currentName) => catalogService.Current.ProfileNames
         .Where(name => !ProfileNamesEqual(name, currentName));
 
-    private string SelectedProfileNameForCopy() => SelectedProfile?.Name ?? string.Empty;
+    private string GameMetadataFor(ProfileCatalogEntry entry)
+    {
+        var sourceProfiles = entry.SourceKind == ProfileSourceKind.LocalCustom
+            ? catalogService.LocalCustomProfiles
+            : entry.SourceKind == ProfileSourceKind.EmbeddedProject
+                ? catalogService.ProjectProfiles
+                : Array.Empty<CustomProfileDefinition>();
 
-    private SliderProfile SelectedProfileSliderProfileForCopy() => SelectedProfile?.SliderProfile ?? new SliderProfile([], [], []);
+        return sourceProfiles.FirstOrDefault(profile => ProfileNamesEqual(profile.Name, entry.Name))?.Game
+               ?? BundledGameMetadata(entry.Name);
+    }
+
+    private static string BundledGameMetadata(string name)
+    {
+        if (ProfileNamesEqual(name, ProjectProfileMapping.Fallout4Cbbe)) return "Fallout 4";
+        if (ProfileNamesEqual(name, ProjectProfileMapping.SkyrimCbbe) || ProfileNamesEqual(name, ProjectProfileMapping.SkyrimUunp)) return "Skyrim";
+        return string.Empty;
+    }
 
     private static bool ProfileNamesEqual(string? left, string? right) =>
         string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
@@ -465,9 +482,11 @@ public sealed class ProfileManagerEntryViewModel
         ProfileSourceKind sourceKind,
         string? filePath,
         bool isEditable,
+        string game,
         bool isMissing = false)
     {
         Name = name;
+        Game = game;
         SliderProfile = sliderProfile;
         SourceKind = sourceKind;
         FilePath = filePath;
@@ -476,6 +495,7 @@ public sealed class ProfileManagerEntryViewModel
     }
 
     public string Name { get; }
+    public string Game { get; }
     public SliderProfile SliderProfile { get; }
     public ProfileSourceKind SourceKind { get; }
     public string? FilePath { get; }
@@ -490,12 +510,12 @@ public sealed class ProfileManagerEntryViewModel
         _ => "Missing — using fallback"
     };
 
-    public static ProfileManagerEntryViewModel FromCatalogEntry(ProfileCatalogEntry entry) =>
-        new(entry.Name, entry.TemplateProfile.SliderProfile, entry.SourceKind, entry.FilePath, entry.IsEditable);
+    public static ProfileManagerEntryViewModel FromCatalogEntry(ProfileCatalogEntry entry, string game) =>
+        new(entry.Name, entry.TemplateProfile.SliderProfile, entry.SourceKind, entry.FilePath, entry.IsEditable, game);
 
     public static ProfileManagerEntryViewModel Missing(string name) =>
-        new(name, new SliderProfile([], [], []), ProfileSourceKind.EmbeddedProject, null, false, true);
+        new(name, new SliderProfile([], [], []), ProfileSourceKind.EmbeddedProject, null, false, string.Empty, true);
 
     public CustomProfileDefinition ToCustomProfileDefinition() =>
-        new(Name, string.Empty, SliderProfile, SourceKind, FilePath);
+        new(Name, Game, SliderProfile, SourceKind, FilePath);
 }

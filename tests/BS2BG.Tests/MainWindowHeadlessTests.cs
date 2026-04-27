@@ -48,4 +48,17 @@ public sealed class MainWindowHeadlessTests
         window.FindControl<ItemsControl>("MissingProfileReferencesList").Should().NotBeNull();
         window.FindControl<ItemsControl>("RejectedProfileFilesList").Should().NotBeNull();
     }
+
+    [AvaloniaFact]
+    public void ProfilesWorkspaceSourceRowsExposeSelectableLists()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+        var window = provider.GetRequiredService<MainWindow>();
+        window.ApplyTemplate();
+
+        window.FindControl<ListBox>("BundledProfilesList").Should().NotBeNull();
+        window.FindControl<ListBox>("CustomProfilesList").Should().NotBeNull();
+        window.FindControl<ListBox>("EmbeddedProjectProfilesList").Should().NotBeNull();
+        window.FindControl<ListBox>("MissingProfileReferencesList").Should().NotBeNull();
+    }
 }
