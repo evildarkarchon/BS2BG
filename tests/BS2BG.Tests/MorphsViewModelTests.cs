@@ -233,6 +233,85 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void ScopedFillDefaultsToVisibleEmptyAndLeavesHiddenOrAssignedRowsUnchanged()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets.Single(preset => preset.Name == "Alpha");
+        var beta = project.SliderPresets.Single(preset => preset.Name == "Beta");
+        var visibleEmpty = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var visibleAssigned = CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74");
+        visibleAssigned.AddSliderPreset(beta);
+        var hiddenEmpty = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        project.MorphedNpcs.Add(visibleEmpty);
+        project.MorphedNpcs.Add(visibleAssigned);
+        project.MorphedNpcs.Add(hiddenEmpty);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(0));
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Mod, new[] { "Skyrim.esm" });
+        viewModel.SelectedAvailablePreset = alpha;
+
+        viewModel.FillEmptyNpcsCommand.Execute().Subscribe();
+
+        visibleEmpty.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
+        visibleAssigned.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
+        hiddenEmpty.SliderPresets.Should().BeEmpty();
+        viewModel.SelectedNpcBulkScope.Should().Be(NpcBulkScope.Visible);
+        viewModel.StatusMessage.Should().Be("Assigned presets to 1 visible empty NPC.");
+    }
+
+    [Fact]
+    public void ScopedRoutineBulkOperationsDefaultToVisibleWhenFiltersAreActive()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets.Single(preset => preset.Name == "Alpha");
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var serana = CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        lydia.AddSliderPreset(alpha);
+        serana.AddSliderPreset(alpha);
+        valerica.AddSliderPreset(alpha);
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(serana);
+        project.MorphedNpcs.Add(valerica);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider());
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Mod, new[] { "Skyrim.esm" });
+        viewModel.ClearAssignmentsCommand.Execute().Subscribe();
+
+        lydia.SliderPresets.Should().BeEmpty();
+        serana.SliderPresets.Should().BeEmpty();
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
+        viewModel.StatusMessage.Should().Be("Cleared assignments from 2 visible NPCs.");
+    }
+
+    [Fact]
+    public void DestructiveAllScopeClearAssignmentsRequiresConfirmationAndRecordsOneUndoOperation()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets.Single(preset => preset.Name == "Alpha");
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        lydia.AddSliderPreset(alpha);
+        valerica.AddSliderPreset(alpha);
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(valerica);
+        var undoRedo = new UndoRedoService();
+        var dialog = new CapturingAppDialogService { ConfirmBulkOperationResult = true };
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(), undoRedo: undoRedo, dialogService: dialog);
+        viewModel.SelectedNpcBulkScope = NpcBulkScope.All;
+
+        viewModel.ClearAssignmentsCommand.Execute().Subscribe();
+
+        dialog.BulkConfirmationMessages.Should().ContainSingle()
+            .Which.Should().Be("This will clear assignments for every NPC, including rows hidden by filters. You can undo this action. Continue?");
+        lydia.SliderPresets.Should().BeEmpty();
+        valerica.SliderPresets.Should().BeEmpty();
+        undoRedo.Undo().Should().BeTrue();
+        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
+        undoRedo.Undo().Should().BeFalse();
+    }
+
+    [Fact]
     public void LargeNpcSearchIsDebouncedBeforeVisibleRowsRefresh()
     {
         using var scheduler = new EventLoopScheduler();
@@ -484,7 +563,8 @@ public sealed class MorphsViewModelTests
         IImageViewService? imageViewService = null,
         INoPresetNotificationService? noPresetNotificationService = null,
         UndoRedoService? undoRedo = null,
-        IScheduler? filterScheduler = null)
+        IScheduler? filterScheduler = null,
+        IAppDialogService? dialogService = null)
     {
         return new MorphsViewModel(
             project,
@@ -497,7 +577,8 @@ public sealed class MorphsViewModelTests
             imageViewService ?? new CapturingImageViewService(),
             noPresetNotificationService ?? new CapturingNoPresetNotificationService(),
             undoRedo,
-            filterScheduler);
+            filterScheduler,
+            dialogService);
     }
 
     private static ProjectModel CreateProjectWithPresets()
@@ -573,6 +654,29 @@ public sealed class MorphsViewModelTests
         public IReadOnlyList<MorphTargetBase> Targets { get; private set; } = Array.Empty<MorphTargetBase>();
 
         public void ShowTargetsWithoutPresets(IReadOnlyList<MorphTargetBase> targets) => Targets = targets.ToArray();
+    }
+
+    private sealed class CapturingAppDialogService : IAppDialogService
+    {
+        public bool ConfirmBulkOperationResult { get; init; }
+
+        public List<string> BulkConfirmationMessages { get; } = new();
+
+        public Task<bool> ConfirmDiscardChangesAsync(DiscardChangesAction action, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> ConfirmBulkOperationAsync(
+            string title,
+            string message,
+            CancellationToken cancellationToken)
+        {
+            BulkConfirmationMessages.Add(message);
+            return Task.FromResult(ConfirmBulkOperationResult);
+        }
+
+        public void ShowAbout()
+        {
+        }
     }
 
     private sealed class CapturingUserPreferencesService(UserPreferences initial) : IUserPreferencesService
