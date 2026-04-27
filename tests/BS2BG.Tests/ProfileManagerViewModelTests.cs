@@ -3,6 +3,7 @@ using BS2BG.App.ViewModels;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
+using System.Windows.Input;
 using Xunit;
 using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
@@ -23,9 +24,9 @@ public sealed class ProfileManagerViewModelTests
 
         vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Bundled Body");
 
-        vm.CopyBundledProfileCommand.CanExecute(null).Should().BeTrue();
-        vm.DeleteCustomProfileCommand.CanExecute(null).Should().BeFalse();
-        vm.SaveProfileCommand.CanExecute(null).Should().BeFalse();
+        ((ICommand)vm.CopyBundledProfileCommand).CanExecute(null).Should().BeTrue();
+        ((ICommand)vm.DeleteCustomProfileCommand).CanExecute(null).Should().BeFalse();
+        ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeFalse();
         vm.SelectedProfile.SourceLabel.Should().Be("Bundled — read-only");
     }
 
