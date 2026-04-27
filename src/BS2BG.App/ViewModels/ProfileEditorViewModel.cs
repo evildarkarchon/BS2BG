@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Globalization;
 using System.Reactive;
 using System.Reactive.Disposables;
@@ -23,7 +24,10 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     public const string SaveFailureMessage = "Profile could not be saved. Review the validation messages below; malformed or ambiguous profile data is not added to the catalog.";
     private readonly IReadOnlyList<string> existingNames;
     private readonly CompositeDisposable disposables = new();
+    private readonly Dictionary<ProfileDefaultRowViewModel, IDisposable> defaultRowSubscriptions = [];
     private readonly string? filePath;
+    private readonly Dictionary<ProfileInvertedRowViewModel, IDisposable> invertedRowSubscriptions = [];
+    private readonly Dictionary<ProfileMultiplierRowViewModel, IDisposable> multiplierRowSubscriptions = [];
     private readonly ProfileDefinitionService profileDefinitionService;
     private readonly ProfileSourceKind sourceKind;
     private readonly IUserProfileStore store;
@@ -59,6 +63,12 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         foreach (var slider in sliderProfile.InvertedNames)
             InvertedRows.Add(new ProfileInvertedRowViewModel(slider, true));
 
+        AddDefaultCommand = ReactiveCommand.Create(AddDefaultRow);
+        RemoveDefaultCommand = ReactiveCommand.Create<ProfileDefaultRowViewModel?>(RemoveDefaultRow);
+        AddMultiplierCommand = ReactiveCommand.Create(AddMultiplierRow);
+        RemoveMultiplierCommand = ReactiveCommand.Create<ProfileMultiplierRowViewModel?>(RemoveMultiplierRow);
+        AddInvertedCommand = ReactiveCommand.Create(AddInvertedRow);
+        RemoveInvertedCommand = ReactiveCommand.Create<ProfileInvertedRowViewModel?>(RemoveInvertedRow);
         ValidateProfileCommand = ReactiveCommand.Create(ValidateProfile);
         SaveProfileCommand = ReactiveCommand.CreateFromTask(SaveProfileAsync, this.WhenAnyValue(x => x.IsValid));
         savedFingerprint = CreateFingerprint();
@@ -66,6 +76,9 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         DefaultRows.CollectionChanged += OnRowsChanged;
         MultiplierRows.CollectionChanged += OnRowsChanged;
         InvertedRows.CollectionChanged += OnRowsChanged;
+        foreach (var row in DefaultRows) AttachDefaultRow(row);
+        foreach (var row in MultiplierRows) AttachMultiplierRow(row);
+        foreach (var row in InvertedRows) AttachInvertedRow(row);
         disposables.Add(this.WhenAnyValue(x => x.SearchText).Subscribe(_ => RefreshVisibleRows()));
         disposables.Add(this.WhenAnyValue(x => x.Name, x => x.Game).Skip(1).Subscribe(_ => ValidateProfile()));
         RefreshVisibleRows();
@@ -78,6 +91,12 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     public ObservableCollection<ProfileDefaultRowViewModel> VisibleDefaultRows { get; } = [];
     public ObservableCollection<ProfileEditorStatusRowViewModel> ValidationRows { get; } = [];
     public ObservableCollection<ProfileEditorStatusRowViewModel> StatusRows { get; } = [];
+    public ReactiveCommand<Unit, Unit> AddDefaultCommand { get; }
+    public ReactiveCommand<ProfileDefaultRowViewModel?, Unit> RemoveDefaultCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddMultiplierCommand { get; }
+    public ReactiveCommand<ProfileMultiplierRowViewModel?, Unit> RemoveMultiplierCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddInvertedCommand { get; }
+    public ReactiveCommand<ProfileInvertedRowViewModel?, Unit> RemoveInvertedCommand { get; }
     public ReactiveCommand<Unit, Unit> ValidateProfileCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveProfileCommand { get; }
     public bool HasUnsavedChanges => !string.Equals(CreateFingerprint(), savedFingerprint, StringComparison.Ordinal);
@@ -157,13 +176,160 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         DefaultRows.CollectionChanged -= OnRowsChanged;
         MultiplierRows.CollectionChanged -= OnRowsChanged;
         InvertedRows.CollectionChanged -= OnRowsChanged;
+        foreach (var subscription in defaultRowSubscriptions.Values) subscription.Dispose();
+        foreach (var subscription in multiplierRowSubscriptions.Values) subscription.Dispose();
+        foreach (var subscription in invertedRowSubscriptions.Values) subscription.Dispose();
+        defaultRowSubscriptions.Clear();
+        multiplierRowSubscriptions.Clear();
+        invertedRowSubscriptions.Clear();
         disposables.Dispose();
     }
 
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
+        if (sender == DefaultRows)
+        {
+            UpdateRowSubscriptions<ProfileDefaultRowViewModel>(args, AttachDefaultRow, DetachDefaultRow);
+            PruneRowSubscriptions(DefaultRows, defaultRowSubscriptions);
+        }
+        else if (sender == MultiplierRows)
+        {
+            UpdateRowSubscriptions<ProfileMultiplierRowViewModel>(args, AttachMultiplierRow, DetachMultiplierRow);
+            PruneRowSubscriptions(MultiplierRows, multiplierRowSubscriptions);
+        }
+        else if (sender == InvertedRows)
+        {
+            UpdateRowSubscriptions<ProfileInvertedRowViewModel>(args, AttachInvertedRow, DetachInvertedRow);
+            PruneRowSubscriptions(InvertedRows, invertedRowSubscriptions);
+        }
+
         RefreshVisibleRows();
         ValidateProfile();
+    }
+
+    /// <summary>
+    /// Applies collection-change subscription updates so added rows validate live and removed rows no longer affect the active editor.
+    /// </summary>
+    private static void UpdateRowSubscriptions<T>(NotifyCollectionChangedEventArgs args, Action<T> attach, Action<T> detach)
+    {
+        if (args.OldItems is not null)
+            foreach (var row in args.OldItems.OfType<T>()) detach(row);
+        if (args.NewItems is not null)
+            foreach (var row in args.NewItems.OfType<T>()) attach(row);
+    }
+
+    /// <summary>
+    /// Disposes subscriptions for rows absent from a collection after reset-style mutations that omit old item lists.
+    /// </summary>
+    private static void PruneRowSubscriptions<T>(IEnumerable<T> currentRows, Dictionary<T, IDisposable> subscriptions)
+        where T : notnull
+    {
+        var current = new HashSet<T>(currentRows);
+        foreach (var removed in subscriptions.Keys.Where(row => !current.Contains(row)).ToArray())
+        {
+            subscriptions[removed].Dispose();
+            subscriptions.Remove(removed);
+        }
+    }
+
+    /// <summary>
+    /// Subscribes a Defaults row so slider-name and numeric text edits rebuild validation and visible filtering state immediately.
+    /// </summary>
+    private void AttachDefaultRow(ProfileDefaultRowViewModel row)
+    {
+        if (defaultRowSubscriptions.ContainsKey(row)) return;
+        PropertyChangedEventHandler handler = (_, _) =>
+        {
+            RefreshVisibleRows();
+            ValidateProfile();
+        };
+        row.PropertyChanged += handler;
+        defaultRowSubscriptions[row] = Disposable.Create(() => row.PropertyChanged -= handler);
+    }
+
+    /// <summary>
+    /// Detaches a Defaults row subscription after removal to prevent stale row edits from toggling validation state.
+    /// </summary>
+    private void DetachDefaultRow(ProfileDefaultRowViewModel row)
+    {
+        if (defaultRowSubscriptions.Remove(row, out var subscription)) subscription.Dispose();
+    }
+
+    /// <summary>
+    /// Subscribes a Multipliers row so slider-name and multiplier edits immediately update validation and save gating.
+    /// </summary>
+    private void AttachMultiplierRow(ProfileMultiplierRowViewModel row)
+    {
+        if (multiplierRowSubscriptions.ContainsKey(row)) return;
+        PropertyChangedEventHandler handler = (_, _) => ValidateProfile();
+        row.PropertyChanged += handler;
+        multiplierRowSubscriptions[row] = Disposable.Create(() => row.PropertyChanged -= handler);
+    }
+
+    /// <summary>
+    /// Detaches a Multipliers row subscription after removal to avoid stale validation work.
+    /// </summary>
+    private void DetachMultiplierRow(ProfileMultiplierRowViewModel row)
+    {
+        if (multiplierRowSubscriptions.Remove(row, out var subscription)) subscription.Dispose();
+    }
+
+    /// <summary>
+    /// Subscribes an Inverted row so slider-name and inclusion edits immediately update validation and save gating.
+    /// </summary>
+    private void AttachInvertedRow(ProfileInvertedRowViewModel row)
+    {
+        if (invertedRowSubscriptions.ContainsKey(row)) return;
+        PropertyChangedEventHandler handler = (_, _) => ValidateProfile();
+        row.PropertyChanged += handler;
+        invertedRowSubscriptions[row] = Disposable.Create(() => row.PropertyChanged -= handler);
+    }
+
+    /// <summary>
+    /// Detaches an Inverted row subscription after removal to keep removed rows isolated from current validation state.
+    /// </summary>
+    private void DetachInvertedRow(ProfileInvertedRowViewModel row)
+    {
+        if (invertedRowSubscriptions.Remove(row, out var subscription)) subscription.Dispose();
+    }
+
+    /// <summary>
+    /// Adds a Defaults row with finite starter values so blank profiles can be built up without immediately creating malformed numeric data.
+    /// </summary>
+    private void AddDefaultRow() => DefaultRows.Add(new ProfileDefaultRowViewModel(NextUniqueSliderName("Default Slider", DefaultRows.Select(row => row.Slider)), "0", "1"));
+
+    /// <summary>
+    /// Removes the supplied Defaults row when it is still present in the current editor buffer.
+    /// </summary>
+    private void RemoveDefaultRow(ProfileDefaultRowViewModel? row)
+    {
+        if (row is not null) DefaultRows.Remove(row);
+    }
+
+    /// <summary>
+    /// Adds a Multipliers row with a neutral multiplier so the new row is valid until the user edits it.
+    /// </summary>
+    private void AddMultiplierRow() => MultiplierRows.Add(new ProfileMultiplierRowViewModel(NextUniqueSliderName("Multiplier Slider", MultiplierRows.Select(row => row.Slider)), "1"));
+
+    /// <summary>
+    /// Removes the supplied Multipliers row when it is still present in the current editor buffer.
+    /// </summary>
+    private void RemoveMultiplierRow(ProfileMultiplierRowViewModel? row)
+    {
+        if (row is not null) MultiplierRows.Remove(row);
+    }
+
+    /// <summary>
+    /// Adds an enabled Inverted row with a non-conflicting slider name for blank-profile authoring.
+    /// </summary>
+    private void AddInvertedRow() => InvertedRows.Add(new ProfileInvertedRowViewModel(NextUniqueSliderName("Inverted Slider", InvertedRows.Select(row => row.Slider)), true));
+
+    /// <summary>
+    /// Removes the supplied Inverted row when it is still present in the current editor buffer.
+    /// </summary>
+    private void RemoveInvertedRow(ProfileInvertedRowViewModel? row)
+    {
+        if (row is not null) InvertedRows.Remove(row);
     }
 
     private Task SaveProfileAsync(CancellationToken cancellationToken)
@@ -311,6 +477,21 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     });
 
     private static string FormatFloat(float value) => value.ToString("R", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Returns a display-friendly slider name that does not duplicate existing rows in the same editable table.
+    /// </summary>
+    private static string NextUniqueSliderName(string prefix, IEnumerable<string> existingNames)
+    {
+        var existing = new HashSet<string>(existingNames, StringComparer.OrdinalIgnoreCase);
+        if (!existing.Contains(prefix)) return prefix;
+
+        for (var i = 2; ; i++)
+        {
+            var candidate = $"{prefix} {i.ToString(CultureInfo.InvariantCulture)}";
+            if (!existing.Contains(candidate)) return candidate;
+        }
+    }
 
     private static ProfileValidationDiagnostic Blocker(string code, string message, string? table, string? sliderName) =>
         new(ProfileValidationSeverity.Blocker, code, message, table, sliderName);
