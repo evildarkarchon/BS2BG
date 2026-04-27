@@ -10,6 +10,7 @@ using BS2BG.Core.Export;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
+using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 using BS2BG.Core.Serialization;
@@ -237,6 +238,56 @@ public sealed class MainWindowViewModelTests
         await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
 
         viewModel.StatusMessage.Should().ContainEquivalentOf("failed");
+    }
+
+    [Fact]
+    public async Task SaveProjectReportsAtomicLedgerWithoutExportConfirmation()
+    {
+        using var directory = new TemporaryDirectory();
+        var projectPath = Path.Combine(directory.Path, "saved-project.jbs2bg");
+        var confirmations = new FakeAppDialogService();
+        var viewModel = CreateViewModel(
+            CreateProjectWithPreset("Alpha"),
+            new FakeFileDialogService { SaveProjectPath = projectPath },
+            confirmations,
+            projectFileService: new ThrowingProjectFileService(projectPath));
+
+        await viewModel.SaveProjectAsAsync(TestContext.Current.CancellationToken);
+
+        confirmations.ConfirmExportOverwriteCallCount.Should().Be(0);
+        viewModel.StatusMessage.Should().StartWith("File operation incomplete");
+        viewModel.StatusMessage.Should().Contain("Review which files were written, restored, skipped, or left untouched");
+        viewModel.StatusMessage.Should().Contain("save exploded");
+        viewModel.HasFileOperationLedger.Should().BeTrue();
+        viewModel.LastFileOperationLedger.Should().ContainSingle(row =>
+            row.Path == projectPath
+            && row.OutcomeLabel == "Left untouched"
+            && row.Detail == "target locked");
+    }
+
+    [Fact]
+    public async Task ExportBodyGenInisReportsAtomicLedgerRows()
+    {
+        using var directory = new TemporaryDirectory();
+        var templatesPath = Path.Combine(directory.Path, "templates.ini");
+        var morphsPath = Path.Combine(directory.Path, "morphs.ini");
+        File.WriteAllText(templatesPath, "OLD_TEMPLATES");
+        File.WriteAllText(morphsPath, "OLD_MORPHS");
+        var project = CreateProjectWithPreset("Alpha");
+        var target = new CustomMorphTarget("All|Female");
+        target.AddSliderPreset(project.SliderPresets[0]);
+        project.CustomMorphTargets.Add(target);
+        var viewModel = CreateViewModel(
+            project,
+            new FakeFileDialogService { BodyGenExportFolder = directory.Path });
+
+        using (new FileStream(morphsPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
+
+        viewModel.StatusMessage.Should().StartWith("File operation incomplete");
+        viewModel.StatusMessage.Should().Contain("left untouched");
+        viewModel.LastFileOperationLedger.Select(row => row.OutcomeLabel)
+            .Should().Contain(new[] { "Restored", "Left untouched" });
     }
 
     [Fact]
@@ -1163,6 +1214,15 @@ public sealed class MainWindowViewModelTests
             releaseWrite.Task.GetAwaiter().GetResult();
             base.WriteAtomic(content, path);
         }
+    }
+
+    private sealed class ThrowingProjectFileService(string targetPath) : ProjectFileService
+    {
+        public override void WriteAtomic(string content, string path) =>
+            throw new AtomicWriteException(
+                "save exploded",
+                new IOException("save exploded"),
+                new[] { new FileWriteLedgerEntry(targetPath, FileWriteOutcome.LeftUntouched, "target locked") });
     }
 
     private sealed class TemporaryDirectory : IDisposable
