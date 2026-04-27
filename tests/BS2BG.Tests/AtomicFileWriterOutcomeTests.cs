@@ -25,10 +25,10 @@ public sealed class AtomicFileWriterOutcomeTests
 
             var exception = act.Should().Throw<AtomicWriteException>().Which;
             exception.InnerException.Should().BeOfType<IOException>();
-            exception.Entries.Should().Equal(
-                new FileWriteLedgerEntry(firstPath, FileWriteOutcome.Restored),
-                new FileWriteLedgerEntry(secondPath, FileWriteOutcome.LeftUntouched),
-                new FileWriteLedgerEntry(thirdPath, FileWriteOutcome.Skipped));
+            exception.Entries.Select(entry => (entry.Path, entry.Outcome)).Should().Equal(
+                (firstPath, FileWriteOutcome.Restored),
+                (secondPath, FileWriteOutcome.LeftUntouched),
+                (thirdPath, FileWriteOutcome.Skipped));
         }
 
         File.ReadAllText(firstPath).Should().Be("ORIGINAL_FIRST");
@@ -60,9 +60,9 @@ public sealed class AtomicFileWriterOutcomeTests
 
                 var exception = act.Should().Throw<AtomicWriteException>().Which;
                 exception.RollbackException.Should().BeOfType<AggregateException>();
-                exception.Entries.Should().Equal(
-                    new FileWriteLedgerEntry(firstPath, FileWriteOutcome.Incomplete),
-                    new FileWriteLedgerEntry(secondPath, FileWriteOutcome.LeftUntouched));
+                exception.Entries.Select(entry => (entry.Path, entry.Outcome)).Should().Equal(
+                    (firstPath, FileWriteOutcome.Incomplete),
+                    (secondPath, FileWriteOutcome.LeftUntouched));
             }
         }
         finally

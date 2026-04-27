@@ -4,6 +4,8 @@ namespace BS2BG.Core.IO;
 
 public static class AtomicFileWriter
 {
+    internal static Action<string>? RollbackFailureInjector { get; set; }
+
     public static void WriteAtomic(string targetPath, string content, Encoding encoding)
     {
         if (targetPath is null) throw new ArgumentNullException(nameof(targetPath));
@@ -79,6 +81,8 @@ public static class AtomicFileWriter
             normalized.Add((fullPath, CreateTempPath(fullPath), entry.Content));
         }
 
+        var ledger = new WriteOutcomeLedger(normalized.Select(entry => entry.FullPath));
+
         try
         {
             foreach (var entry in normalized)
@@ -91,7 +95,7 @@ public static class AtomicFileWriter
             throw;
         }
 
-        var committed = new List<(string FullPath, string? BackupPath)>(normalized.Count);
+        var committed = new List<(int Index, string FullPath, string? BackupPath)>(normalized.Count);
         for (var i = 0; i < normalized.Count; i++)
         {
             var (fullPath, tempPath, _) = normalized[i];
@@ -101,46 +105,63 @@ public static class AtomicFileWriter
                 {
                     var backupPath = fullPath + ".bak." + Guid.NewGuid().ToString("N");
                     File.Replace(tempPath, fullPath, backupPath);
-                    committed.Add((fullPath, backupPath));
+                    committed.Add((i, fullPath, backupPath));
                 }
                 else
                 {
                     File.Move(tempPath, fullPath);
-                    committed.Add((fullPath, null));
+                    committed.Add((i, fullPath, null));
                 }
+
+                ledger.SetOutcome(i, FileWriteOutcome.Written);
             }
             catch (Exception commitException)
             {
                 var rollbackExceptions = new List<Exception>();
                 for (var j = committed.Count - 1; j >= 0; j--)
                 {
-                    var (committedPath, backupPath) = committed[j];
+                    var (committedIndex, committedPath, backupPath) = committed[j];
                     try
                     {
+                        RollbackFailureInjector?.Invoke(committedPath);
                         if (backupPath is not null)
                             File.Replace(backupPath, committedPath, null);
                         else
                             File.Delete(committedPath);
+
+                        ledger.SetOutcome(committedIndex, FileWriteOutcome.Restored);
                     }
                     catch (Exception rollbackException)
                     {
+                        ledger.SetOutcome(committedIndex, FileWriteOutcome.Incomplete, rollbackException.Message);
                         rollbackExceptions.Add(rollbackException);
                     }
                 }
 
                 for (var k = i; k < normalized.Count; k++) TryDeleteTempFile(normalized[k].TempPath);
 
-                if (rollbackExceptions.Count == 0) throw;
+                ledger.SetOutcome(i, FileWriteOutcome.LeftUntouched, commitException.Message);
+                for (var k = i + 1; k < normalized.Count; k++)
+                    ledger.SetOutcome(k, FileWriteOutcome.Skipped);
 
-                var inner = new List<Exception> { commitException };
-                inner.AddRange(rollbackExceptions);
-                throw new AggregateException(
+                if (rollbackExceptions.Count == 0)
+                    throw new AtomicWriteException(
+                        "Atomic batch write failed and all committed targets were restored.",
+                        commitException,
+                        ledger.Snapshot());
+
+                var rollbackAggregate = new AggregateException(
                     "Atomic batch write failed and rollback was incomplete.",
-                    inner);
+                    rollbackExceptions);
+                throw new AtomicWriteException(
+                    "Atomic batch write failed and rollback was incomplete.",
+                    commitException,
+                    ledger.Snapshot(),
+                    rollbackAggregate);
             }
         }
 
-        foreach (var (_, backupPath) in committed)
+        foreach (var (_, _, backupPath) in committed)
             if (backupPath is not null)
                 TryDeleteTempFile(backupPath);
     }
@@ -172,9 +193,11 @@ public static class AtomicFileWriter
         }
         catch (IOException)
         {
+            // Best-effort cleanup must not hide the original write or rollback failure.
         }
         catch (UnauthorizedAccessException)
         {
+            // Best-effort cleanup must not hide the original write or rollback failure.
         }
     }
 }
