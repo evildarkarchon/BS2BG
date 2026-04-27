@@ -4,6 +4,7 @@ using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
+using BS2BG.Core.Serialization;
 using Xunit;
 using ModelSetSlider = BS2BG.Core.Models.SetSlider;
 using SliderPreset = BS2BG.Core.Models.SliderPreset;
@@ -328,6 +329,47 @@ public sealed class ExportWriterTests
         File.Exists(path1).Should().BeFalse();
         File.Exists(path2).Should().BeFalse();
         Directory.GetFiles(directory.Path).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BodyGenIniExportWriterPropagatesAtomicWriteExceptionLedgerWhenCommitFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var templatesPath = Path.Combine(directory.Path, "templates.ini");
+        var morphsPath = Path.Combine(directory.Path, "morphs.ini");
+        File.WriteAllText(templatesPath, "OLD_TEMPLATES");
+        File.WriteAllText(morphsPath, "OLD_MORPHS");
+        var writer = new BodyGenIniExportWriter();
+
+        using (new FileStream(morphsPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => writer.Write(directory.Path, "NEW_TEMPLATES", "NEW_MORPHS");
+
+            var exception = act.Should().Throw<AtomicWriteException>().Which;
+            exception.Entries.Should().Contain(entry => entry.Path == templatesPath && entry.Outcome == FileWriteOutcome.Restored);
+            exception.Entries.Should().Contain(entry => entry.Path == morphsPath && entry.Outcome == FileWriteOutcome.LeftUntouched);
+        }
+    }
+
+    [Fact]
+    public void ProjectFileServiceWriteAtomicPropagatesAtomicWriteExceptionLedgerWhenCommitFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var projectPath = Path.Combine(directory.Path, "project.jbs2bg");
+        File.WriteAllText(projectPath, "OLD_PROJECT");
+        var service = new ProjectFileService();
+
+        using (new FileStream(projectPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => service.Save(new ProjectModel(), projectPath);
+
+            var exception = act.Should().Throw<AtomicWriteException>().Which;
+            exception.Entries.Should().ContainSingle()
+                .Which.Should().Match<FileWriteLedgerEntry>(entry =>
+                    entry.Path == projectPath && entry.Outcome == FileWriteOutcome.LeftUntouched);
+        }
+
+        File.ReadAllText(projectPath).Should().Be("OLD_PROJECT");
     }
 
     private static bool HasUtf8Bom(byte[] bytes) =>
