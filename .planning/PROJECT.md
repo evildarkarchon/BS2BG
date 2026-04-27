@@ -27,6 +27,7 @@ Modders can reliably convert existing BodySlide presets into BodyGen and BoS out
 - ✓ NPC bulk operations support explicit all, visible, selected, and visible-empty scopes with hidden-row protections — Phase 2
 - ✓ Template, profile, morph, NPC, and scoped bulk undo paths use bounded history and value snapshots to avoid mutable live-state corruption — Phase 2
 - ✓ Diagnostics, import preview, export preview, overwrite/batch-risk confirmation, and atomic write outcome reporting are validated — Phase 3
+- ✓ Custom profile creation, validation, local storage, project embedding, recovery diagnostics, profile sharing, and Profiles workspace editing/filtering are validated — Phase 4
 
 ### Active
 
@@ -90,4 +91,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-27 after Phase 3 completion*
+*Last updated: 2026-04-27 after Phase 4 completion*
