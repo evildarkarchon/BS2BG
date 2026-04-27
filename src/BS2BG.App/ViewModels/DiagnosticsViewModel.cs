@@ -123,6 +123,22 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
     public void Dispose() => disposables.Dispose();
 
     /// <summary>
+    /// Clears presentation-only diagnostics so a replaced project cannot display findings from an earlier project.
+    /// </summary>
+    public void ClearReport()
+    {
+        Findings.Clear();
+        ProfileSliderDiagnostics.Clear();
+        SelectedFinding = null;
+        BlockerCount = 0;
+        CautionCount = 0;
+        InfoCount = 0;
+        SummaryText = "No diagnostics yet";
+        ProfileSummaryText = string.Empty;
+        StatusMessage = "No diagnostics yet";
+    }
+
+    /// <summary>
     /// Refreshes project and profile diagnostic findings using read-only Core services.
     /// The method intentionally avoids dirty/version mutations so diagnostics can be run safely before export.
     /// </summary>

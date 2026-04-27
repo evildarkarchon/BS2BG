@@ -92,6 +92,50 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task NewProjectClearsDiagnosticsPreviewsLedgerAndNpcImportPreview()
+    {
+        using var directory = new TemporaryDirectory();
+        var npcPath = directory.WriteText(
+            "npcs.txt",
+            "Skyrim.esm|Lydia|HousecarlWhiterun|NordRace|000A2C94");
+        var project = CreateProjectWithPreset("Alpha", "Saved profile");
+        var target = new CustomMorphTarget("All|Female");
+        target.AddSliderPreset(project.SliderPresets[0]);
+        project.CustomMorphTargets.Add(target);
+        var viewModel = CreateViewModel(
+            project,
+            new FakeFileDialogService
+            {
+                BodyGenExportFolder = directory.Path,
+                SaveProjectPath = Path.Combine(directory.Path, "blocked-project.jbs2bg")
+            },
+            projectFileService: new ThrowingProjectFileService(Path.Combine(directory.Path, "blocked-project.jbs2bg")),
+            npcTextFilePicker: new FakeNpcTextFilePicker(npcPath));
+
+        await viewModel.Diagnostics.RefreshDiagnosticsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await viewModel.PreviewBodyGenExportCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+        await viewModel.SaveProjectAsAsync(TestContext.Current.CancellationToken);
+        await viewModel.Morphs.PreviewNpcImportAsync(TestContext.Current.CancellationToken);
+
+        viewModel.Diagnostics.Findings.Should().NotBeEmpty();
+        viewModel.HasExportPreview.Should().BeTrue();
+        viewModel.HasFileOperationLedger.Should().BeTrue();
+        viewModel.Morphs.HasNpcImportPreview.Should().BeTrue();
+
+        await viewModel.NewProjectAsync(TestContext.Current.CancellationToken);
+
+        viewModel.Diagnostics.Findings.Should().BeEmpty();
+        viewModel.Diagnostics.ProfileSliderDiagnostics.Should().BeEmpty();
+        viewModel.Diagnostics.SummaryText.Should().Be("No diagnostics yet");
+        viewModel.HasExportPreview.Should().BeFalse();
+        viewModel.ExportPreviewFiles.Should().BeEmpty();
+        viewModel.HasFileOperationLedger.Should().BeFalse();
+        viewModel.LastFileOperationLedger.Should().BeEmpty();
+        viewModel.Morphs.HasNpcImportPreview.Should().BeFalse();
+        viewModel.Morphs.NpcImportPreviewRows.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task NewProjectKeepsDirtyProjectWhenDiscardIsCancelled()
     {
         var project = CreateProjectWithPreset("Alpha");
@@ -971,7 +1015,8 @@ public sealed class MainWindowViewModelTests
         FakeAppDialogService? dialogs = null,
         TemplateProfileCatalog? profileCatalog = null,
         ProjectFileService? projectFileService = null,
-        BosJsonExportWriter? bosJsonExportWriter = null)
+        BosJsonExportWriter? bosJsonExportWriter = null,
+        INpcTextFilePicker? npcTextFilePicker = null)
     {
         var parser = new BodySlideXmlParser();
         var templateGeneration = new TemplateGenerationService();
@@ -988,7 +1033,7 @@ public sealed class MainWindowViewModelTests
             new NpcTextParser(),
             new MorphAssignmentService(new RandomAssignmentProvider()),
             new MorphGenerationService(),
-            new EmptyNpcTextFilePicker(),
+            npcTextFilePicker ?? new EmptyNpcTextFilePicker(),
             new EmptyClipboardService());
 
         return new MainWindowViewModel(
@@ -1018,10 +1063,12 @@ public sealed class MainWindowViewModelTests
         });
     }
 
-    private static ProjectModel CreateProjectWithPreset(string presetName)
+    private static ProjectModel CreateProjectWithPreset(string presetName, string? profileName = null)
     {
         var project = new ProjectModel();
-        project.SliderPresets.Add(new SliderPreset(presetName));
+        project.SliderPresets.Add(profileName is null
+            ? new SliderPreset(presetName)
+            : new SliderPreset(presetName, profileName));
         project.MarkDirty();
         return project;
     }
@@ -1180,6 +1227,12 @@ public sealed class MainWindowViewModelTests
     {
         public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+    }
+
+    private sealed class FakeNpcTextFilePicker(params string[] paths) : INpcTextFilePicker
+    {
+        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(paths);
     }
 
     private sealed class EmptyClipboardService : IClipboardService

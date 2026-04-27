@@ -641,6 +641,11 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         return added;
     }
 
+    /// <summary>
+    /// Clears NPC import preview rows when the owning project is replaced without importing the previewed data.
+    /// </summary>
+    public void ClearNpcImportPreviewState() => ClearNpcImportPreview();
+
     public bool AddCustomTarget()
     {
         var added = assignmentService.TryAddCustomTarget(

@@ -368,6 +368,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         Morphs.SelectedCustomTarget = null;
         Morphs.SelectedNpc = null;
         undoRedo.Clear();
+        ClearProjectPresentationState();
         StatusMessage = "New project created.";
     }
 
@@ -420,6 +421,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             Morphs.SelectedNpc = project.MorphedNpcs.FirstOrDefault();
             undoRedo.Clear();
             project.MarkClean();
+            ClearProjectPresentationState();
             StatusMessage = "Opened " + Path.GetFileName(path) + ".";
             return true;
         }
@@ -678,6 +680,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     {
         LastFileOperationLedger.Clear();
         HasFileOperationLedger = false;
+    }
+
+    /// <summary>
+    /// Resets diagnostics, previews, and file ledger state that belongs to the previous project instance.
+    /// </summary>
+    private void ClearProjectPresentationState()
+    {
+        Diagnostics.ClearReport();
+        ClearExportPreview();
+        ClearFileOperationLedger();
+        Morphs.ClearNpcImportPreviewState();
     }
 
     /// <summary>
