@@ -236,11 +236,51 @@ public sealed class M6UxViewModelTests
         harness.Main.StatusMessage.Should().Be("Saving preferences failed.");
     }
 
+    [Fact]
+    public void UndoRedoHistoryPrunesOldestOperationsAndKeepsRedoSemantics()
+    {
+        var undoRedo = new UndoRedoService(historyLimit: 2);
+        var value = 0;
+
+        undoRedo.Record("First", () => value = 0, () => value = 1);
+        value = 1;
+        undoRedo.Record("Second", () => value = 1, () => value = 2);
+        value = 2;
+        undoRedo.Record("Third", () => value = 2, () => value = 3);
+        value = 3;
+
+        undoRedo.Undo().Should().BeTrue();
+        value.Should().Be(2);
+        undoRedo.Undo().Should().BeTrue();
+        value.Should().Be(1);
+        undoRedo.Undo().Should().BeFalse();
+        value.Should().Be(1);
+
+        undoRedo.Redo().Should().BeTrue();
+        value.Should().Be(2);
+        undoRedo.Record("Fourth", () => value = 2, () => value = 4);
+
+        undoRedo.CanRedo.Should().BeFalse();
+    }
+
+    [Fact]
+    public void MainWindowReportsNonBlockingStatusWhenUndoHistoryIsPruned()
+    {
+        var undoRedo = new UndoRedoService(historyLimit: 1);
+        var harness = CreateHarness(CreateProjectWithPresets("Alpha"), undoRedo: undoRedo);
+
+        undoRedo.Record("First", () => { }, () => { });
+        undoRedo.Record("Second", () => { }, () => { });
+
+        harness.Main.StatusMessage.Should().Be("Undo history trimmed to keep large workflows responsive.");
+    }
+
     private static TestHarness CreateHarness(
         ProjectModel project,
-        IUserPreferencesService? preferences = null)
+        IUserPreferencesService? preferences = null,
+        UndoRedoService? undoRedo = null)
     {
-        var undoRedo = new UndoRedoService();
+        undoRedo ??= new UndoRedoService();
         var templateGeneration = new TemplateGenerationService();
         var profileCatalog = CreateCatalog();
         var templates = new TemplatesViewModel(

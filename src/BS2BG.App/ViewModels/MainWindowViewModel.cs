@@ -137,6 +137,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
                 h => this.undoRedo.StateChanged -= h)
             .Select(_ => Unit.Default)
             .StartWith(Unit.Default);
+        disposables.Add(Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => this.undoRedo.HistoryPruned += h,
+                h => this.undoRedo.HistoryPruned -= h)
+            .Subscribe(_ => StatusMessage = "Undo history trimmed to keep large workflows responsive."));
 
         var aggregateBusySubject = new BehaviorSubject<bool>(false);
         disposables.Add(aggregateBusySubject);

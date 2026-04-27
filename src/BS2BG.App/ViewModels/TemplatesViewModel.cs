@@ -7,6 +7,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using BS2BG.App.Services;
+using BS2BG.App.ViewModels.Workflow;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
@@ -280,6 +281,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         if (!TryValidatePresetName(newName, null, out var normalizedName)) return false;
 
         var duplicate = SelectedPreset.Clone(normalizedName);
+        var duplicateSnapshot = PresetValueSnapshot.Create(duplicate);
         Presets.Add(duplicate);
         SortPresets();
         SelectedPreset = duplicate;
@@ -288,14 +290,15 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
             "Duplicate preset",
             () =>
             {
-                Presets.Remove(duplicate);
+                project.RemoveSliderPreset(duplicateSnapshot.Name);
                 SelectedPreset = Presets.FirstOrDefault();
             },
             () =>
             {
-                Presets.Add(duplicate);
+                var restoredDuplicate = duplicateSnapshot.ToPreset();
+                Presets.Add(restoredDuplicate);
                 SortPresets();
-                SelectedPreset = duplicate;
+                SelectedPreset = restoredDuplicate;
             });
         return true;
     }
@@ -306,6 +309,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
 
         var preset = SelectedPreset;
         var currentIndex = Presets.IndexOf(preset);
+        var removedSnapshot = PresetValueSnapshot.Create(preset);
         var assignedTargets = project.CustomMorphTargets
             .Cast<MorphTargetBase>()
             .Concat(project.MorphedNpcs)
@@ -322,16 +326,17 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
             "Remove preset",
             () =>
             {
-                Presets.Add(preset);
+                var restoredPreset = removedSnapshot.ToPreset();
+                Presets.Add(restoredPreset);
                 SortPresets();
-                foreach (var target in assignedTargets) target.AddSliderPreset(preset);
+                foreach (var target in assignedTargets) target.AddSliderPreset(restoredPreset);
 
-                SelectedPreset = preset;
+                SelectedPreset = restoredPreset;
                 GeneratedTemplateText = string.Empty;
             },
             () =>
             {
-                project.RemoveSliderPreset(preset.Name);
+                project.RemoveSliderPreset(removedSnapshot.Name);
                 SelectedPreset = Presets.FirstOrDefault();
                 GeneratedTemplateText = string.Empty;
             });
@@ -610,7 +615,9 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        if (!syncingProfileFromPreset && SelectedPreset is not null) SelectedPreset.ProfileName = resolvedName;
+        var preset = SelectedPreset;
+        var before = preset is null || syncingProfileFromPreset ? null : PresetValueSnapshot.Create(preset);
+        if (!syncingProfileFromPreset && preset is not null) preset.ProfileName = resolvedName;
 
         RefreshSelectedPresetMissingDefaults(resolvedName);
         RefreshProfileFallbackInformation();
@@ -618,6 +625,14 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         RefreshSetSliderRowPreviews();
         RefreshPreview();
         RefreshSelectedBosJson();
+        if (preset is not null && before is not null)
+        {
+            var after = PresetValueSnapshot.Create(preset);
+            undoRedo.Record(
+                "Change preset profile",
+                () => RestorePresetValues(preset, before),
+                () => RestorePresetValues(preset, after));
+        }
     }
 
     private void OnSelectedPresetPropertyChanged(PropertyChangedEventArgs args)
@@ -752,40 +767,50 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         RefreshSetSliderRowPreviews();
     }
 
-    private SliderPreset[] SnapshotPresets() => Presets.Select(preset => preset.Clone()).ToArray();
+    private PresetValueSnapshot[] SnapshotPresets() => Presets.Select(PresetValueSnapshot.Create).ToArray();
 
     private PresetAssignmentSnapshot CapturePresetAssignmentSnapshot()
     {
         return new PresetAssignmentSnapshot(
-            Presets.ToArray(),
+            Presets.Select(PresetValueSnapshot.Create).ToArray(),
             project.CustomMorphTargets
-                .Select(target => new MorphTargetAssignmentSnapshot(target, target.SliderPresets.ToArray()))
+                .Select(target => new MorphTargetAssignmentSnapshot(
+                    target,
+                    target.SliderPresets.Select(preset => preset.Name).ToArray()))
                 .ToArray(),
             project.MorphedNpcs
-                .Select(npc => new MorphTargetAssignmentSnapshot(npc, npc.SliderPresets.ToArray()))
+                .Select(npc => new MorphTargetAssignmentSnapshot(
+                    npc,
+                    npc.SliderPresets.Select(preset => preset.Name).ToArray()))
                 .ToArray(),
-            SelectedPreset);
+            SelectedPreset?.Name);
     }
 
     private void RestorePresetAssignmentSnapshot(PresetAssignmentSnapshot snapshot)
     {
         Presets.Clear();
-        foreach (var preset in snapshot.Presets) Presets.Add(preset);
+        foreach (var preset in snapshot.Presets.Select(preset => preset.ToPreset())) Presets.Add(preset);
 
-        RestoreAssignmentSnapshots(snapshot.CustomTargetAssignments);
-        RestoreAssignmentSnapshots(snapshot.NpcAssignments);
-        SelectedPreset = snapshot.SelectedPreset is not null && Presets.Contains(snapshot.SelectedPreset)
-            ? snapshot.SelectedPreset
+        var presetsByName = Presets.ToDictionary(
+            preset => preset.Name,
+            preset => preset,
+            StringComparer.OrdinalIgnoreCase);
+
+        RestoreAssignmentSnapshots(snapshot.CustomTargetAssignments, presetsByName);
+        RestoreAssignmentSnapshots(snapshot.NpcAssignments, presetsByName);
+        SelectedPreset = snapshot.SelectedPresetName is not null
+                         && presetsByName.TryGetValue(snapshot.SelectedPresetName, out var selectedPreset)
+            ? selectedPreset
             : Presets.FirstOrDefault();
         GeneratedTemplateText = string.Empty;
         StatusMessage = string.Empty;
         ValidationMessage = string.Empty;
     }
 
-    private void RestorePresetSnapshot(IReadOnlyList<SliderPreset> snapshot)
+    private void RestorePresetSnapshot(IReadOnlyList<PresetValueSnapshot> snapshot)
     {
         Presets.Clear();
-        foreach (var preset in snapshot.Select(preset => preset.Clone())) Presets.Add(preset);
+        foreach (var preset in snapshot.Select(preset => preset.ToPreset())) Presets.Add(preset);
 
         SortPresets();
         RemapAssignmentsToCurrentPresets();
@@ -816,12 +841,28 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
                 target.AddSliderPreset(restoredPreset);
     }
 
-    private static void RestoreAssignmentSnapshots(IEnumerable<MorphTargetAssignmentSnapshot> snapshots)
+    private void RestorePresetValues(SliderPreset preset, PresetValueSnapshot snapshot)
+    {
+        snapshot.ApplyTo(preset);
+        SetSelectedProfileNameFromPreset(preset.ProfileName);
+        RefreshSelectedPresetMissingDefaults(GetSelectedCalculationProfile().Name);
+        RebuildSetSliderRows();
+        RefreshSetSliderRowPreviews();
+        RefreshPreview();
+        RefreshSelectedBosJson();
+        GeneratedTemplateText = string.Empty;
+    }
+
+    private static void RestoreAssignmentSnapshots(
+        IEnumerable<MorphTargetAssignmentSnapshot> snapshots,
+        Dictionary<string, SliderPreset> presetsByName)
     {
         foreach (var snapshot in snapshots)
         {
             snapshot.Target.ClearSliderPresets();
-            foreach (var preset in snapshot.Presets) snapshot.Target.AddSliderPreset(preset);
+            foreach (var presetName in snapshot.PresetNames)
+                if (presetsByName.TryGetValue(presetName, out var preset))
+                    snapshot.Target.AddSliderPreset(preset);
         }
     }
 
@@ -938,30 +979,30 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
     }
 
     private sealed class PresetAssignmentSnapshot(
-        IReadOnlyList<SliderPreset> presets,
+        IReadOnlyList<PresetValueSnapshot> presets,
         IReadOnlyList<MorphTargetAssignmentSnapshot> customTargetAssignments,
         IReadOnlyList<MorphTargetAssignmentSnapshot> npcAssignments,
-        SliderPreset? selectedPreset)
+        string? selectedPresetName)
     {
-        public IReadOnlyList<SliderPreset> Presets { get; } = presets;
+        public IReadOnlyList<PresetValueSnapshot> Presets { get; } = presets;
 
         public IReadOnlyList<MorphTargetAssignmentSnapshot> CustomTargetAssignments { get; } = customTargetAssignments;
 
         public IReadOnlyList<MorphTargetAssignmentSnapshot> NpcAssignments { get; } = npcAssignments;
 
-        public SliderPreset? SelectedPreset { get; } = selectedPreset;
+        public string? SelectedPresetName { get; } = selectedPresetName;
 
         public bool HasState =>
             Presets.Count > 0
-            || CustomTargetAssignments.Any(snapshot => snapshot.Presets.Count > 0)
-            || NpcAssignments.Any(snapshot => snapshot.Presets.Count > 0);
+            || CustomTargetAssignments.Any(snapshot => snapshot.PresetNames.Count > 0)
+            || NpcAssignments.Any(snapshot => snapshot.PresetNames.Count > 0);
     }
 
-    private sealed class MorphTargetAssignmentSnapshot(MorphTargetBase target, IReadOnlyList<SliderPreset> presets)
+    private sealed class MorphTargetAssignmentSnapshot(MorphTargetBase target, IReadOnlyList<string> presetNames)
     {
         public MorphTargetBase Target { get; } = target;
 
-        public IReadOnlyList<SliderPreset> Presets { get; } = presets;
+        public IReadOnlyList<string> PresetNames { get; } = presetNames;
     }
 
     private sealed class EmptyBodySlideXmlFilePicker : IBodySlideXmlFilePicker

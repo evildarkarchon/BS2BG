@@ -183,6 +183,76 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public void UndoRemovePresetRestoresCapturedValuesInsteadOfMutatedRemovedReference()
+    {
+        var undoRedo = new UndoRedoService();
+        var project = new ProjectModel();
+        var preset = new ModelSliderPreset("Alpha", ProjectProfileMapping.SkyrimCbbe);
+        preset.AddSetSlider(new ModelSetSlider("Scale") { ValueSmall = 0, ValueBig = 25 });
+        project.SliderPresets.Add(preset);
+        var viewModel = CreateViewModel(project: project, undoRedo: undoRedo);
+        viewModel.SelectedPreset = preset;
+
+        viewModel.RemoveSelectedPreset().Should().BeTrue();
+        preset.Name = "Corrupted";
+        preset.ProfileName = "Double";
+        preset.SetSliders.Single().ValueBig = 99;
+        undoRedo.Undo().Should().BeTrue();
+
+        var restored = project.SliderPresets.Should().ContainSingle().Which;
+        restored.Name.Should().Be("Alpha");
+        restored.ProfileName.Should().Be(ProjectProfileMapping.SkyrimCbbe);
+        restored.SetSliders.Single().ValueBig.Should().Be(25);
+        restored.Should().NotBeSameAs(preset);
+    }
+
+    [Fact]
+    public void UndoClearPresetsRestoresCapturedValuesInsteadOfMutatedClearedReferences()
+    {
+        var undoRedo = new UndoRedoService();
+        var project = new ProjectModel();
+        var preset = new ModelSliderPreset("Alpha", ProjectProfileMapping.SkyrimCbbe);
+        preset.AddSetSlider(new ModelSetSlider("Scale") { ValueSmall = 0, ValueBig = 25 });
+        project.SliderPresets.Add(preset);
+        var viewModel = CreateViewModel(project: project, undoRedo: undoRedo);
+        viewModel.SelectedPreset = preset;
+
+        viewModel.ClearPresets();
+        preset.Name = "Corrupted";
+        preset.ProfileName = "Double";
+        preset.SetSliders.Single().ValueBig = 99;
+        undoRedo.Undo().Should().BeTrue();
+
+        var restored = project.SliderPresets.Should().ContainSingle().Which;
+        restored.Name.Should().Be("Alpha");
+        restored.ProfileName.Should().Be(ProjectProfileMapping.SkyrimCbbe);
+        restored.SetSliders.Single().ValueBig.Should().Be(25);
+        restored.Should().NotBeSameAs(preset);
+    }
+
+    [Fact]
+    public void ProfileSelectionUndoRedoRestoresPresetProfileFromValueSnapshots()
+    {
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(undoRedo: undoRedo, profileCatalog: CreateCatalogWithProfileDefaults());
+        var preset = new ModelSliderPreset("Alpha", ProjectProfileMapping.SkyrimCbbe);
+        viewModel.Presets.Add(preset);
+        viewModel.SelectedPreset = preset;
+
+        viewModel.SelectedProfileName = "Double";
+        preset.ProfileName = "Mutated Before Undo";
+
+        undoRedo.Undo().Should().BeTrue();
+        preset.ProfileName.Should().Be(ProjectProfileMapping.SkyrimCbbe);
+        viewModel.SelectedProfileName.Should().Be(ProjectProfileMapping.SkyrimCbbe);
+
+        preset.ProfileName = "Mutated Before Redo";
+        undoRedo.Redo().Should().BeTrue();
+        preset.ProfileName.Should().Be("Double");
+        viewModel.SelectedProfileName.Should().Be("Double");
+    }
+
+    [Fact]
     public void PreviewUpdatesForSelectionProfileSliderAndOmitState()
     {
         var viewModel = CreateViewModel();
