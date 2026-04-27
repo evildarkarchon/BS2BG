@@ -83,16 +83,16 @@ public sealed class NpcFilterStateTests
     [Fact]
     public void CreatePredicateUsesAppliedGlobalSearchAcrossNpcAndPresetValues()
     {
-        var cbbe = new SliderPreset("Preset Match");
-        var matchingPreset = new NpcRowViewModel(CreateNpc(name: "No Text Match"));
+        var cbbe = new SliderPreset("Needle Preset");
+        var matchingPreset = new NpcRowViewModel(CreateNpc());
         matchingPreset.Npc.AddSliderPreset(cbbe);
         var rows = new[]
         {
-            new NpcRowViewModel(CreateNpc(mod: "ModMatch.esm")),
-            new NpcRowViewModel(CreateNpc(name: "Name Match")),
-            new NpcRowViewModel(CreateNpc(editorId: "EditorMatch")),
-            new NpcRowViewModel(CreateNpc(formId: "00ABCD")),
-            new NpcRowViewModel(CreateNpc(race: "RaceMatch")),
+            new NpcRowViewModel(CreateNpc(mod: "Needle.esm")),
+            new NpcRowViewModel(CreateNpc(name: "Needle Name")),
+            new NpcRowViewModel(CreateNpc(editorId: "NeedleEditor")),
+            new NpcRowViewModel(CreateNpc(formId: "Needle")),
+            new NpcRowViewModel(CreateNpc(race: "NeedleRace")),
             matchingPreset,
             new NpcRowViewModel(CreateNpc(name: "Different"))
         };
@@ -101,7 +101,7 @@ public sealed class NpcFilterStateTests
         filter.CreatePredicate().Should().NotBeNull();
         rows.Where(filter.CreatePredicate()).Should().HaveCount(rows.Length);
 
-        filter.PendingGlobalSearchText = "match";
+        filter.PendingGlobalSearchText = "needle";
         rows.Where(filter.CreatePredicate()).Should().HaveCount(rows.Length);
 
         filter.ApplyPendingGlobalSearchText();
