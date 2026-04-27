@@ -53,10 +53,10 @@ Plans:
   5. User can operate on large real-world preset and NPC datasets without UI freezes or unbounded filter/import delays.
 **Plans**: 9 plans
 Plans:
-- [ ] 02-01-PLAN.md — Persist Omit Redundant Sliders as local workflow preference state.
+- [x] 02-01-PLAN.md — Persist Omit Redundant Sliders as local workflow preference state.
 - [ ] 02-02-PLAN.md — Remember separate project and export folders for shell-level file workflows.
 - [ ] 02-03-PLAN.md — Remember separate BodySlide XML and NPC text import folders.
-- [ ] 02-04-PLAN.md — Create stable NPC row identity and filter predicate contracts.
+- [x] 02-04-PLAN.md — Create stable NPC row identity and filter predicate contracts.
 - [ ] 02-05-PLAN.md — Integrate stable, debounced NPC filtering into Morphs ViewModel.
 - [ ] 02-06-PLAN.md — Expose full checklist filtering in the Avalonia Morphs UI.
 - [ ] 02-07-PLAN.md — Add explicit scoped NPC bulk operations and scope selector UI.
