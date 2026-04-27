@@ -208,7 +208,7 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         foreach (var file in files)
         {
             var json = await File.ReadAllTextAsync(file, cancellationToken);
-            var validation = profileDefinitionService.ValidateProfileJson(
+            var validation = ProfileDefinitionService.ValidateProfileJson(
                 json,
                 ProfileValidationContext.ForImport(catalogService.Current.ProfileNames, ProfileSourceKind.LocalCustom, file));
             if (!validation.IsValid || validation.Profile is null)
@@ -290,12 +290,14 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         foreach (var file in files)
         {
             var json = await File.ReadAllTextAsync(file, cancellationToken);
-            var validation = profileDefinitionService.ValidateProfileJson(
+            var validation = ProfileDefinitionService.ValidateProfileJson(
                 json,
                 ProfileValidationContext.ForImport(catalogService.Current.ProfileNames, ProfileSourceKind.LocalCustom, file));
             if (!validation.IsValid || validation.Profile is null)
             {
-                StatusMessage = validation.Diagnostics.FirstOrDefault()?.Message ?? "Profile JSON is malformed. Fix the JSON and import again.";
+                StatusMessage = validation.Diagnostics.Count > 0
+                    ? validation.Diagnostics[0].Message
+                    : "Profile JSON is malformed. Fix the JSON and import again.";
                 continue;
             }
 
@@ -363,7 +365,7 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         var path = await dialogService.PickProfileExportPathAsync(entry.Name + ".json", cancellationToken);
         if (string.IsNullOrWhiteSpace(path)) return;
 
-        await File.WriteAllTextAsync(path, profileDefinitionService.ExportProfileJson(entry.ToCustomProfileDefinition()), cancellationToken);
+        await File.WriteAllTextAsync(path, ProfileDefinitionService.ExportProfileJson(entry.ToCustomProfileDefinition()), cancellationToken);
         StatusMessage = "Profile JSON exported.";
     }
 

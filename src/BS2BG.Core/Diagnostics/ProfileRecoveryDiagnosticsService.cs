@@ -70,7 +70,7 @@ public sealed class ProfileRecoveryDiagnosticsService
     /// <param name="project">Project whose saved preset profile names should be inspected.</param>
     /// <param name="catalog">Active runtime catalog containing bundled and locally available custom profiles.</param>
     /// <returns>Neutral recovery diagnostics for profile names absent from the active catalog.</returns>
-    public IReadOnlyList<ProfileRecoveryDiagnostic> Analyze(ProjectModel project, TemplateProfileCatalog catalog)
+    public static IReadOnlyList<ProfileRecoveryDiagnostic> Analyze(ProjectModel project, TemplateProfileCatalog catalog)
     {
         if (project is null) throw new ArgumentNullException(nameof(project));
         if (catalog is null) throw new ArgumentNullException(nameof(catalog));
@@ -115,7 +115,7 @@ public sealed class ProfileRecoveryDiagnosticsService
         return detail;
     }
 
-    private static IReadOnlyList<ProfileRecoveryActionKind> CreateActions(bool hasEmbeddedCopy)
+    private static List<ProfileRecoveryActionKind> CreateActions(bool hasEmbeddedCopy)
     {
         var actions = new List<ProfileRecoveryActionKind>
         {

@@ -353,10 +353,10 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         return Task.CompletedTask;
     }
 
-    private IReadOnlyList<ProfileValidationDiagnostic> ValidateCandidate(out CustomProfileDefinition? profile) =>
+    private List<ProfileValidationDiagnostic> ValidateCandidate(out CustomProfileDefinition? profile) =>
         ValidateCandidate(out profile, sourceKind, filePath);
 
-    private IReadOnlyList<ProfileValidationDiagnostic> ValidateCandidate(
+    private List<ProfileValidationDiagnostic> ValidateCandidate(
         out CustomProfileDefinition? profile,
         ProfileSourceKind candidateSourceKind,
         string? candidateFilePath)
@@ -378,7 +378,7 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         return diagnostics;
     }
 
-    private IReadOnlyList<SliderDefault> BuildDefaults(List<ProfileValidationDiagnostic> diagnostics)
+    private List<SliderDefault> BuildDefaults(List<ProfileValidationDiagnostic> diagnostics)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var values = new List<SliderDefault>();
@@ -393,7 +393,7 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         return values;
     }
 
-    private IReadOnlyList<SliderMultiplier> BuildMultipliers(List<ProfileValidationDiagnostic> diagnostics)
+    private List<SliderMultiplier> BuildMultipliers(List<ProfileValidationDiagnostic> diagnostics)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var values = new List<SliderMultiplier>();
@@ -407,7 +407,7 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         return values;
     }
 
-    private IReadOnlyList<string> BuildInverted(List<ProfileValidationDiagnostic> diagnostics)
+    private List<string> BuildInverted(List<ProfileValidationDiagnostic> diagnostics)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var values = new List<string>();

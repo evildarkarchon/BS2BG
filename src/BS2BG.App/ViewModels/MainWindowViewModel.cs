@@ -720,7 +720,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
     private static string FormatProfileSaveFailure(UserProfileSaveResult saveResult)
     {
-        var detail = saveResult.Diagnostics.FirstOrDefault()?.Message;
+        var detail = saveResult.Diagnostics.Count > 0 ? saveResult.Diagnostics[0].Message : null;
         return string.IsNullOrWhiteSpace(detail)
             ? "Could not save custom profile; project was not opened."
             : detail + "; project was not opened.";

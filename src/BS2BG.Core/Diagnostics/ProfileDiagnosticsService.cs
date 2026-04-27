@@ -15,7 +15,7 @@ public sealed class ProfileDiagnosticsService
     /// <param name="catalog">Profile catalog that supplies bundled profiles and fallback behavior.</param>
     /// <param name="selectedPresetName">Optional preset name filter for drilldown diagnostics.</param>
     /// <returns>Summary, slider-level details, and neutral informational findings.</returns>
-    public ProfileDiagnosticsReport Analyze(ProjectModel project, TemplateProfileCatalog catalog, string? selectedPresetName = null)
+    public static ProfileDiagnosticsReport Analyze(ProjectModel project, TemplateProfileCatalog catalog, string? selectedPresetName = null)
     {
         if (project is null) throw new ArgumentNullException(nameof(project));
         if (catalog is null) throw new ArgumentNullException(nameof(catalog));
@@ -86,7 +86,7 @@ public sealed class ProfileDiagnosticsService
             }
         }
 
-        foreach (var recoveryDiagnostic in new ProfileRecoveryDiagnosticsService().Analyze(project, catalog))
+        foreach (var recoveryDiagnostic in ProfileRecoveryDiagnosticsService.Analyze(project, catalog))
             findings.Add(ToFinding(recoveryDiagnostic));
 
         var summary = new ProfileDiagnosticsSummary(
@@ -113,7 +113,7 @@ public sealed class ProfileDiagnosticsService
             StringComparison.OrdinalIgnoreCase));
     }
 
-    private static void AddName(ISet<string> names, string name)
+    private static void AddName(HashSet<string> names, string name)
     {
         if (!string.IsNullOrWhiteSpace(name)) names.Add(name);
     }

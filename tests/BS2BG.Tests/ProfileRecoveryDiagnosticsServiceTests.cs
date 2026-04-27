@@ -16,7 +16,7 @@ public sealed class ProfileRecoveryDiagnosticsServiceTests
         project.SliderPresets.Add(new ModelSliderPreset("CommunityPreset", "Community CBBE"));
         project.MarkClean();
 
-        var diagnostics = new ProfileRecoveryDiagnosticsService().Analyze(project, CreateCatalog()).ToArray();
+        var diagnostics = ProfileRecoveryDiagnosticsService.Analyze(project, CreateCatalog()).ToArray();
 
         project.IsDirty.Should().BeFalse("recovery diagnostics are read-only and must not block generation");
         diagnostics.Should().ContainSingle();
@@ -49,7 +49,7 @@ public sealed class ProfileRecoveryDiagnosticsServiceTests
             filePath: null));
         project.MarkClean();
 
-        var diagnostic = new ProfileRecoveryDiagnosticsService().Analyze(project, CreateCatalog()).Single();
+        var diagnostic = ProfileRecoveryDiagnosticsService.Analyze(project, CreateCatalog()).Single();
 
         project.IsDirty.Should().BeFalse();
         diagnostic.Detail.Should().Contain("project-embedded copy is available");
@@ -78,7 +78,7 @@ public sealed class ProfileRecoveryDiagnosticsServiceTests
                 true)
         }));
 
-        var diagnostics = new ProfileRecoveryDiagnosticsService().Analyze(project, localCatalog);
+        var diagnostics = ProfileRecoveryDiagnosticsService.Analyze(project, localCatalog);
 
         diagnostics.Should().BeEmpty();
     }
@@ -128,8 +128,8 @@ public sealed class ProfileRecoveryDiagnosticsServiceTests
         project.SliderPresets.Add(new ModelSliderPreset("CommunityPreset", "Community CBBE"));
         var catalog = CreateCatalog();
 
-        var findings = new ProjectValidationService().Validate(project, catalog).Findings
-            .Concat(new ProfileDiagnosticsService().Analyze(project, catalog).Findings)
+        var findings = ProjectValidationService.Validate(project, catalog).Findings
+            .Concat(ProfileDiagnosticsService.Analyze(project, catalog).Findings)
             .ToArray();
 
         findings.Where(finding => finding.Category == "ProfileRecovery" && finding.Code == "MissingCustomProfile")

@@ -10,6 +10,8 @@ namespace BS2BG.Tests;
 
 public sealed class ProfileDiagnosticsServiceTests
 {
+    private static readonly string[] FlippedInvertedNames = ["Flipped"];
+
     [Fact]
     public void AnalyzeReportsWholeProjectCoverageUnknownDefaultsMultipliersAndInversions()
     {
@@ -21,7 +23,7 @@ public sealed class ProfileDiagnosticsServiceTests
         alpha.AddSetSlider(new ModelSetSlider("CustomOnly") { ValueSmall = 0, ValueBig = 50 });
         project.SliderPresets.Add(alpha);
 
-        var report = new ProfileDiagnosticsService().Analyze(project, CreateCatalog());
+        var report = ProfileDiagnosticsService.Analyze(project, CreateCatalog());
 
         report.Summary.AffectedPresetCount.Should().Be(1);
         report.Summary.KnownSliderCount.Should().Be(3);
@@ -41,7 +43,7 @@ public sealed class ProfileDiagnosticsServiceTests
         preset.AddSetSlider(new ModelSetSlider("KnownDefault") { ValueSmall = 0, ValueBig = 50 });
         project.SliderPresets.Add(preset);
 
-        var report = new ProfileDiagnosticsService().Analyze(project, CreateCatalog());
+        var report = ProfileDiagnosticsService.Analyze(project, CreateCatalog());
         var findingText = string.Join(" ", report.Findings.Select(finding =>
             finding.Severity + " " + finding.Title + " " + finding.Detail + " " + finding.ActionHint));
 
@@ -74,7 +76,7 @@ public sealed class ProfileDiagnosticsServiceTests
         project.SliderPresets.Add(alpha);
         project.SliderPresets.Add(beta);
 
-        var report = new ProfileDiagnosticsService().Analyze(project, CreateCatalog(), "Beta");
+        var report = ProfileDiagnosticsService.Analyze(project, CreateCatalog(), "Beta");
 
         report.Summary.AffectedPresetCount.Should().Be(1);
         report.SliderDiagnostics.Select(slider => slider.PresetName).Should().OnlyContain(name => name == "Beta");
@@ -90,7 +92,7 @@ public sealed class ProfileDiagnosticsServiceTests
                 new SliderDefault("MissingDefault", 0f, 1f)
             },
             new[] { new SliderMultiplier("Amplified", 2f) },
-            new[] { "Flipped" });
+            FlippedInvertedNames);
 
         return new TemplateProfileCatalog(new[] { new TemplateProfile("Measured", profile) });
     }

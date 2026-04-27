@@ -7,6 +7,14 @@ namespace BS2BG.Tests;
 
 public sealed class ProjectFileServiceCustomProfileTests
 {
+    private static readonly string[] ExpectedEmbeddedProfileDiagnosticCodes =
+    [
+        "EmbeddedProfileBundledNameCollision",
+        "EmbeddedProfileDuplicateName",
+    ];
+
+    private static readonly string[] ScaleInvertedNames = ["Scale"];
+
     [Fact]
     public void LoadProjectWithoutCustomProfilesLeavesEmbeddedProfilesEmptyAndPreservesLegacyFields()
     {
@@ -52,7 +60,7 @@ public sealed class ProjectFileServiceCustomProfileTests
     }
 
     [Fact]
-    public void Save_NoCustomProfiles_ProducesByteIdenticalOutputToV1Format()
+    public void SaveNoCustomProfilesProducesByteIdenticalOutputToV1Format()
     {
         var service = new ProjectFileService();
         var project = new ProjectModel();
@@ -213,11 +221,7 @@ public sealed class ProjectFileServiceCustomProfileTests
             }
             """);
 
-        result.Diagnostics.Select(diagnostic => diagnostic.Code).Should().Contain(new[]
-        {
-            "EmbeddedProfileBundledNameCollision",
-            "EmbeddedProfileDuplicateName",
-        });
+        result.Diagnostics.Select(diagnostic => diagnostic.Code).Should().Contain(ExpectedEmbeddedProfileDiagnosticCodes);
         result.Project.CustomProfiles.Select(profile => profile.Name).Should().Equal("Community Body");
     }
 
@@ -228,7 +232,7 @@ public sealed class ProjectFileServiceCustomProfileTests
             new SliderProfile(
                 new[] { new SliderDefault("Scale", 0f, 1f) },
                 new[] { new SliderMultiplier("Scale", 2f) },
-                new[] { "Scale" }),
+                ScaleInvertedNames),
             ProfileSourceKind.EmbeddedProject,
             null);
 }

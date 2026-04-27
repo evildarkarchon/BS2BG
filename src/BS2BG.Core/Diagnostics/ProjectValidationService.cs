@@ -20,7 +20,7 @@ public sealed class ProjectValidationService
     /// <param name="project">Project model to inspect.</param>
     /// <param name="profileCatalog">Bundled profile catalog used to identify neutral fallback profile references.</param>
     /// <returns>A report containing severity-coded findings grouped by workflow area.</returns>
-    public ProjectValidationReport Validate(ProjectModel project, TemplateProfileCatalog profileCatalog)
+    public static ProjectValidationReport Validate(ProjectModel project, TemplateProfileCatalog profileCatalog)
     {
         if (project is null) throw new ArgumentNullException(nameof(project));
         if (profileCatalog is null) throw new ArgumentNullException(nameof(profileCatalog));

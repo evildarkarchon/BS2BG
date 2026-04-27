@@ -74,7 +74,9 @@ public sealed class ProfileManagerViewModelTests
         vm.Editor.Name = "Unsaved Custom";
         var priorEditor = vm.Editor;
 
-        var changed = await vm.TrySelectProfileAsync(vm.ProfileEntries.Single(entry => entry.Name == "Bundled Body"));
+        var changed = await vm.TrySelectProfileAsync(
+            vm.ProfileEntries.Single(entry => entry.Name == "Bundled Body"),
+            TestContext.Current.CancellationToken);
 
         changed.Should().BeFalse();
         dialog.ConfirmDiscardUnsavedEditsCalls.Should().Be(1);
@@ -128,7 +130,7 @@ public sealed class ProfileManagerViewModelTests
         var vm = CreateManager(catalogService.Current, project, store, dialog, catalogService);
         vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Custom Body");
 
-        await vm.DeleteSelectedCustomProfileAsync();
+        await vm.DeleteSelectedCustomProfileAsync(TestContext.Current.CancellationToken);
 
         dialog.ConfirmDeleteReferencedProfileCalls.Should().Be(1);
         dialog.LastAffectedPresetCount.Should().Be(1);
@@ -170,7 +172,9 @@ public sealed class ProfileManagerViewModelTests
             new TemplateProfile("Bundled Body", CreateSliderProfile())
         }), project, store, dialog);
 
-        var resolved = await vm.ImportMatchingProfileForMissingReferenceAsync("Missing Body");
+        var resolved = await vm.ImportMatchingProfileForMissingReferenceAsync(
+            "Missing Body",
+            TestContext.Current.CancellationToken);
 
         resolved.Should().BeFalse();
         store.SavedProfiles.Should().BeEmpty();
@@ -359,7 +363,7 @@ public sealed class ProfileManagerViewModelTests
         public string GetDefaultProfileDirectory() => string.Empty;
     }
 
-    private sealed class StubTemplateProfileCatalogService(TemplateProfileCatalog catalog) : ITemplateProfileCatalogService
+    private sealed class StubTemplateProfileCatalogService(TemplateProfileCatalog catalog) : ITemplateProfileCatalogService, IDisposable
     {
         private readonly System.Reactive.Subjects.BehaviorSubject<TemplateProfileCatalog> changed = new(catalog);
 
@@ -405,6 +409,8 @@ public sealed class ProfileManagerViewModelTests
         }
 
         public UserProfileSaveResult SaveLocalProfile(CustomProfileDefinition profile) => new(false, null, []);
+
+        public void Dispose() => changed.Dispose();
     }
 
     private static string CreateProfileJson(string name) => JsonSerializer.Serialize(new

@@ -158,7 +158,7 @@ public sealed class TemplateProfileCatalogService : ITemplateProfileCatalogServi
     /// <returns>Store save result with diagnostics for recoverable failures.</returns>
     public UserProfileSaveResult SaveLocalProfile(CustomProfileDefinition profile) => factory.SaveLocalProfile(profile);
 
-    private TemplateProfileCatalog ApplyProjectProfiles(
+    private static TemplateProfileCatalog ApplyProjectProfiles(
         TemplateProfileCatalog baseCatalog,
         IEnumerable<CustomProfileDefinition> projectProfiles)
     {

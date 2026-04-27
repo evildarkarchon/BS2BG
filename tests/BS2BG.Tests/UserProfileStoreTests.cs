@@ -105,7 +105,7 @@ public sealed class UserProfileStoreTests : IDisposable
         ProfileSourceKind.LocalCustom,
         null);
 
-    private static string CreateProfileJson(string name) => new ProfileDefinitionService().ExportProfileJson(CreateProfile(name));
+    private static string CreateProfileJson(string name) => ProfileDefinitionService.ExportProfileJson(CreateProfile(name));
 
     private static string ExpectedHash8(string name, string candidatePath)
     {

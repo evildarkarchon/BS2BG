@@ -60,7 +60,6 @@ public sealed class UserProfileStore : IUserProfileStore
 {
     private static readonly UTF8Encoding Utf8NoBom = new(false);
     private readonly string profileDirectory;
-    private readonly ProfileDefinitionService profileDefinitionService;
 
     /// <summary>
     /// Creates a store rooted at the default AppData profile folder.
@@ -79,7 +78,7 @@ public sealed class UserProfileStore : IUserProfileStore
     public UserProfileStore(string profileDirectory, ProfileDefinitionService profileDefinitionService)
     {
         this.profileDirectory = profileDirectory ?? throw new ArgumentNullException(nameof(profileDirectory));
-        this.profileDefinitionService = profileDefinitionService ?? throw new ArgumentNullException(nameof(profileDefinitionService));
+        ArgumentNullException.ThrowIfNull(profileDefinitionService);
     }
 
     /// <summary>
@@ -128,7 +127,7 @@ public sealed class UserProfileStore : IUserProfileStore
                 continue;
             }
 
-            var result = profileDefinitionService.ValidateProfileJson(
+            var result = ProfileDefinitionService.ValidateProfileJson(
                 json,
                 ProfileValidationContext.ForImport(acceptedNames, ProfileSourceKind.LocalCustom, file));
             diagnostics.AddRange(result.Diagnostics);
@@ -160,7 +159,7 @@ public sealed class UserProfileStore : IUserProfileStore
                 profile.SliderProfile,
                 ProfileSourceKind.LocalCustom,
                 targetPath);
-            AtomicFileWriter.WriteAtomic(targetPath, profileDefinitionService.ExportProfileJson(localProfile), Utf8NoBom);
+            AtomicFileWriter.WriteAtomic(targetPath, ProfileDefinitionService.ExportProfileJson(localProfile), Utf8NoBom);
             return new UserProfileSaveResult(true, targetPath, Array.Empty<ProfileValidationDiagnostic>());
         }
         catch (Exception exception) when (IsNormalFileFailure(exception) || exception is AtomicWriteException)
@@ -228,13 +227,13 @@ public sealed class UserProfileStore : IUserProfileStore
         }
     }
 
-    private bool CanWriteProfilePath(string path, string profileName)
+    private static bool CanWriteProfilePath(string path, string profileName)
     {
         if (!File.Exists(path)) return true;
 
         try
         {
-            var result = profileDefinitionService.ValidateProfileJson(
+            var result = ProfileDefinitionService.ValidateProfileJson(
                 File.ReadAllText(path, Utf8NoBom),
                 ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom, path));
 

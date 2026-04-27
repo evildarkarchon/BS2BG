@@ -161,9 +161,13 @@ public sealed class AppShellTests
             .BeSameAs(window.ViewModel?.Diagnostics.RefreshDiagnosticsCommand);
         window.FindControl<Button>("CopyDiagnosticsReportButton")?.Command.Should()
             .BeSameAs(window.ViewModel?.Diagnostics.CopyReportCommand);
-        AutomationProperties.GetName(window.FindControl<Button>("PreviewNpcImportButton"))
+        var previewNpcImportButton = window.FindControl<Button>("PreviewNpcImportButton");
+        var previewExportButton = window.FindControl<Button>("PreviewExportButton");
+        previewNpcImportButton.Should().NotBeNull();
+        previewExportButton.Should().NotBeNull();
+        AutomationProperties.GetName(previewNpcImportButton!)
             .Should().Be("Preview NPC Import");
-        AutomationProperties.GetName(window.FindControl<Button>("PreviewExportButton"))
+        AutomationProperties.GetName(previewExportButton!)
             .Should().Be("Preview Export");
     }
 

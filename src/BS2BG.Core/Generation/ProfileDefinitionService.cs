@@ -19,7 +19,7 @@ public sealed class ProfileDefinitionService
     /// <param name="json">Candidate profile JSON containing Version, Name, Game, Defaults, Multipliers, and Inverted metadata.</param>
     /// <param name="context">Validation context containing existing names and the source metadata to apply when validation succeeds.</param>
     /// <returns>A validation result whose profile is non-null only when no blocker diagnostics were found.</returns>
-    public ProfileValidationResult ValidateProfileJson(string json, ProfileValidationContext context)
+    public static ProfileValidationResult ValidateProfileJson(string json, ProfileValidationContext context)
     {
         if (json is null) throw new ArgumentNullException(nameof(json));
         if (context is null) throw new ArgumentNullException(nameof(context));
@@ -40,7 +40,7 @@ public sealed class ProfileDefinitionService
     /// </summary>
     /// <param name="profile">Profile definition to export.</param>
     /// <returns>UTF-8-compatible JSON text with LF newlines, deterministic table ordering, and no trailing newline.</returns>
-    public string ExportProfileJson(CustomProfileDefinition profile)
+    public static string ExportProfileJson(CustomProfileDefinition profile)
     {
         if (profile is null) throw new ArgumentNullException(nameof(profile));
 

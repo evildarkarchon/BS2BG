@@ -172,9 +172,9 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var projectReport = projectValidationService.Validate(project, profileCatalogService.Current);
-        var profileReport = profileDiagnosticsService.Analyze(project, profileCatalogService.Current);
-        var recoveryDiagnostics = profileRecoveryDiagnosticsService.Analyze(project, profileCatalogService.Current);
+        var projectReport = ProjectValidationService.Validate(project, profileCatalogService.Current);
+        var profileReport = ProfileDiagnosticsService.Analyze(project, profileCatalogService.Current);
+        var recoveryDiagnostics = ProfileRecoveryDiagnosticsService.Analyze(project, profileCatalogService.Current);
         var findings = projectReport.Findings
             .Concat(profileReport.Findings)
             .Select(finding => new DiagnosticFindingViewModel(finding))

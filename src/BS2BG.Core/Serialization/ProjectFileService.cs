@@ -327,16 +327,15 @@ public class ProjectFileService
         Dictionary<string, TValue>? values) =>
         values ?? Enumerable.Empty<KeyValuePair<string, TValue>>();
 
-    private static IReadOnlyList<CustomProfileDefinition> LoadEmbeddedProfiles(
+    private static List<CustomProfileDefinition> LoadEmbeddedProfiles(
         IEnumerable<JsonElement>? profileDtos,
         List<ProjectLoadDiagnostic> diagnostics)
     {
-        var service = new ProfileDefinitionService();
         var profiles = new List<CustomProfileDefinition>();
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var profileDto in profileDtos ?? Enumerable.Empty<JsonElement>())
         {
-            var result = service.ValidateProfileJson(
+            var result = ProfileDefinitionService.ValidateProfileJson(
                 profileDto.GetRawText(),
                 ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.EmbeddedProject));
             if (!result.IsValid || result.Profile is null)

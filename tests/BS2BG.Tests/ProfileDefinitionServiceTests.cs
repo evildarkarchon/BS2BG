@@ -8,11 +8,16 @@ namespace BS2BG.Tests;
 
 public sealed class ProfileDefinitionServiceTests
 {
+    private static readonly string[] ExistingSkyrimCbbeProfileNames = ["Skyrim CBBE"];
+    private static readonly string[] DefinitionLeftInvertedNames = ["InvertA", "invertb"];
+    private static readonly string[] DefinitionRightInvertedNames = ["invertb", "InvertA"];
+    private static readonly string[] SingleInvertAName = ["InvertA"];
+    private static readonly string[] SortedInvertedNames = ["zeta", "Alpha"];
+
     [Fact]
-    public void ValidateProfileJson_AllowsValidNamedProfile()
+    public void ValidateProfileJsonAllowsValidNamedProfile()
     {
-        var service = new ProfileDefinitionService();
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "Community CBBE",
@@ -40,10 +45,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_AllowsBlankProfile()
+    public void ValidateProfileJsonAllowsBlankProfile()
     {
-        var service = new ProfileDefinitionService();
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "Blank Start",
@@ -63,10 +67,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_AllowsBroadFiniteNumbers()
+    public void ValidateProfileJsonAllowsBroadFiniteNumbers()
     {
-        var service = new ProfileDefinitionService();
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "Broad Numbers",
@@ -89,10 +92,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_RejectsDuplicateDisplayName()
+    public void ValidateProfileJsonRejectsDuplicateDisplayName()
     {
-        var service = new ProfileDefinitionService();
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "skyrim cbbe",
@@ -101,7 +103,7 @@ public sealed class ProfileDefinitionServiceTests
               "Inverted": []
             }
             """,
-            ProfileValidationContext.ForImport(new[] { "Skyrim CBBE" }, ProfileSourceKind.LocalCustom));
+            ProfileValidationContext.ForImport(ExistingSkyrimCbbeProfileNames, ProfileSourceKind.LocalCustom));
 
         result.IsValid.Should().BeFalse();
         result.Profile.Should().BeNull();
@@ -110,10 +112,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_RejectsDuplicateSliderNamesAndBlankSliderNames()
+    public void ValidateProfileJsonRejectsDuplicateSliderNamesAndBlankSliderNames()
     {
-        var service = new ProfileDefinitionService();
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "Bad Sliders",
@@ -142,7 +143,7 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void DefinitionallyEquals_UsesNormalizedConflictSemantics()
+    public void DefinitionallyEqualsUsesNormalizedConflictSemantics()
     {
         var left = new CustomProfileDefinition(
             "Community CBBE",
@@ -158,7 +159,7 @@ public sealed class ProfileDefinitionServiceTests
                     new SliderMultiplier("Arms", 2f),
                     new SliderMultiplier("Legs", -3f),
                 },
-                new[] { "InvertA", "invertb" }),
+                DefinitionLeftInvertedNames),
             ProfileSourceKind.LocalCustom,
             "left.json");
         var right = new CustomProfileDefinition(
@@ -175,7 +176,7 @@ public sealed class ProfileDefinitionServiceTests
                     new SliderMultiplier("Legs", -3f),
                     new SliderMultiplier("Arms", 2f),
                 },
-                new[] { "invertb", "InvertA" }),
+                DefinitionRightInvertedNames),
             ProfileSourceKind.EmbeddedProject,
             "right.json");
         var caseChangedSlider = new CustomProfileDefinition(
@@ -197,11 +198,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_ReturnsInvalidJsonDiagnosticForMalformedJson()
+    public void ValidateProfileJsonReturnsInvalidJsonDiagnosticForMalformedJson()
     {
-        var service = new ProfileDefinitionService();
-
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             "{ not valid json }",
             ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
 
@@ -211,11 +210,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_RejectsNonnumericTableValues()
+    public void ValidateProfileJsonRejectsNonnumericTableValues()
     {
-        var service = new ProfileDefinitionService();
-
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "Bad Numbers",
@@ -236,11 +233,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_UsesInternalNameInsteadOfFileName()
+    public void ValidateProfileJsonUsesInternalNameInsteadOfFileName()
     {
-        var service = new ProfileDefinitionService();
-
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "Internal Identity",
@@ -256,11 +251,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_RejectsUnsupportedVersion()
+    public void ValidateProfileJsonRejectsUnsupportedVersion()
     {
-        var service = new ProfileDefinitionService();
-
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Version": 2,
@@ -277,24 +270,23 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ExportProfileJson_RoundTripsStableProfile()
+    public void ExportProfileJsonRoundTripsStableProfile()
     {
-        var service = new ProfileDefinitionService();
         var profile = new CustomProfileDefinition(
             "Community CBBE",
             "Skyrim",
             new SliderProfile(
                 new[] { new SliderDefault("Breasts", 0.25f, 0.75f) },
                 new[] { new SliderMultiplier("Waist", 2.75f) },
-                new[] { "InvertA" }),
+                SingleInvertAName),
             ProfileSourceKind.LocalCustom,
             "community.json");
 
-        var firstExport = service.ExportProfileJson(profile);
-        var roundTrip = service.ValidateProfileJson(
+        var firstExport = ProfileDefinitionService.ExportProfileJson(profile);
+        var roundTrip = ProfileDefinitionService.ValidateProfileJson(
             firstExport,
             ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
-        var secondExport = service.ExportProfileJson(roundTrip.Profile!);
+        var secondExport = ProfileDefinitionService.ExportProfileJson(roundTrip.Profile!);
 
         roundTrip.IsValid.Should().BeTrue();
         secondExport.Should().Be(firstExport);
@@ -303,9 +295,8 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ExportProfileJson_SortsTableKeysDeterministically()
+    public void ExportProfileJsonSortsTableKeysDeterministically()
     {
-        var service = new ProfileDefinitionService();
         var profile = new CustomProfileDefinition(
             "Sorted",
             string.Empty,
@@ -320,11 +311,11 @@ public sealed class ProfileDefinitionServiceTests
                     new SliderMultiplier("zeta", 2f),
                     new SliderMultiplier("Alpha", 1f),
                 },
-                new[] { "zeta", "Alpha" }),
+                SortedInvertedNames),
             ProfileSourceKind.LocalCustom,
             null);
 
-        var json = service.ExportProfileJson(profile);
+        var json = ProfileDefinitionService.ExportProfileJson(profile);
 
         json.IndexOf("\"Alpha\"", StringComparison.Ordinal).Should().BeLessThan(json.IndexOf("\"zeta\"", StringComparison.Ordinal));
         json.IndexOf("\"Alpha\": 1", StringComparison.Ordinal).Should().BeLessThan(json.IndexOf("\"zeta\": 2", StringComparison.Ordinal));
@@ -332,11 +323,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_RejectsDuplicateJsonObjectProperties()
+    public void ValidateProfileJsonRejectsDuplicateJsonObjectProperties()
     {
-        var service = new ProfileDefinitionService();
-
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "Duplicate Json Properties",
@@ -353,11 +342,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_RejectsNonFiniteNumbers()
+    public void ValidateProfileJsonRejectsNonFiniteNumbers()
     {
-        var service = new ProfileDefinitionService();
-
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "Nonfinite",
@@ -378,11 +365,9 @@ public sealed class ProfileDefinitionServiceTests
     }
 
     [Fact]
-    public void ValidateProfileJson_DefaultsMissingVersionToOne()
+    public void ValidateProfileJsonDefaultsMissingVersionToOne()
     {
-        var service = new ProfileDefinitionService();
-
-        var result = service.ValidateProfileJson(
+        var result = ProfileDefinitionService.ValidateProfileJson(
             """
             {
               "Name": "Missing Version",
@@ -394,6 +379,6 @@ public sealed class ProfileDefinitionServiceTests
             ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
 
         result.IsValid.Should().BeTrue();
-        service.ExportProfileJson(result.Profile!).Should().StartWith("{\n  \"Version\": 1,");
+        ProfileDefinitionService.ExportProfileJson(result.Profile!).Should().StartWith("{\n  \"Version\": 1,");
     }
 }

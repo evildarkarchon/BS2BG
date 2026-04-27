@@ -13,6 +13,8 @@ namespace BS2BG.Tests;
 
 public sealed class ExportWriterTests
 {
+    private static readonly string[] BreastInvertedNames = ["Breasts"];
+
     [Fact]
     public void BodyGenIniExportWriterWritesTemplatesAndMorphsWithCrLfUtf8NoBom()
     {
@@ -44,7 +46,7 @@ public sealed class ExportWriterTests
                 new SliderProfile(
                     new[] { new SliderDefault("Breasts", 0.2f, 1f) },
                     Array.Empty<SliderMultiplier>(),
-                    new[] { "Breasts" })),
+                    BreastInvertedNames)),
             new TemplateProfile(
                 ProjectProfileMapping.Fallout4Cbbe,
                 new SliderProfile(

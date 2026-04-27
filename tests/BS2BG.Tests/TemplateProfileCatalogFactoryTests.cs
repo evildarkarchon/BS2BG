@@ -154,8 +154,9 @@ public sealed class TemplateProfileCatalogFactoryTests
 
         result.Catalog.ProfileNames.Should().Contain("Local Body");
         result.Catalog.Entries.Take(3).Should().OnlyContain(entry => entry.SourceKind == ProfileSourceKind.Bundled);
-        result.Catalog.Entries.Last().SourceKind.Should().Be(ProfileSourceKind.LocalCustom);
-        result.Catalog.Entries.Last().IsEditable.Should().BeTrue();
+        var lastEntry = result.Catalog.Entries[result.Catalog.Entries.Count - 1];
+        lastEntry.SourceKind.Should().Be(ProfileSourceKind.LocalCustom);
+        lastEntry.IsEditable.Should().BeTrue();
     }
 
     /// <summary>

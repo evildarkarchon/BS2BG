@@ -9,22 +9,24 @@ namespace BS2BG.Tests;
 
 public sealed class ProjectValidationServiceTests
 {
+    private static readonly string[] ExpectedValidationAreas = ["Project", "Templates", "Morphs/NPCs", "Export"];
+    private static readonly string[] AllowedValidationAreas = ["Project", "Profiles", "Templates", "Morphs/NPCs", "Import", "Export"];
+
     [Fact]
     public void ValidateReportsEmptyProjectReadinessWithoutMutatingProject()
     {
         var project = new ProjectModel();
         var catalog = CreateCatalog();
         var initialVersion = project.ChangeVersion;
-        var service = new ProjectValidationService();
 
-        var report = service.Validate(project, catalog);
+        var report = ProjectValidationService.Validate(project, catalog);
 
         project.IsDirty.Should().BeFalse("D-04 and DIAG-01 require validation to be read-only");
         project.ChangeVersion.Should().Be(initialVersion);
         report.BlockerCount.Should().Be(1);
         report.InfoCount.Should().BeGreaterThan(0);
         report.Findings.Select(finding => finding.Area)
-            .Should().Contain(new[] { "Project", "Templates", "Morphs/NPCs", "Export" });
+            .Should().Contain(ExpectedValidationAreas);
         report.Findings.Should().Contain(finding =>
             finding.Severity == DiagnosticSeverity.Blocker
             && finding.Area == "Templates"
@@ -38,11 +40,10 @@ public sealed class ProjectValidationServiceTests
 
         severities.Should().Equal("Blocker", "Caution", "Info");
 
-        var report = new ProjectValidationService().Validate(new ProjectModel(), CreateCatalog());
+        var report = ProjectValidationService.Validate(new ProjectModel(), CreateCatalog());
 
-        var allowedAreas = new[] { "Project", "Profiles", "Templates", "Morphs/NPCs", "Import", "Export" };
         report.Findings.Select(finding => finding.Area).Distinct()
-            .Should().OnlyContain(area => allowedAreas.Contains(area));
+            .Should().OnlyContain(area => AllowedValidationAreas.Contains(area));
     }
 
     [Fact]
@@ -56,9 +57,8 @@ public sealed class ProjectValidationServiceTests
         target.AddSliderPreset(missingReference);
         project.CustomMorphTargets.Add(target);
         project.MarkClean();
-        var service = new ProjectValidationService();
 
-        var report = service.Validate(project, CreateCatalog());
+        var report = ProjectValidationService.Validate(project, CreateCatalog());
 
         project.IsDirty.Should().BeFalse();
         report.Findings.Should().Contain(finding =>

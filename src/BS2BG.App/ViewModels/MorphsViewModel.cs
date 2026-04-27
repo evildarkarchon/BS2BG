@@ -1378,17 +1378,78 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     /// <param name="filterPredicate">The current filter predicate stream.</param>
     /// <param name="target">The public visible NPC collection bound to the UI and commands.</param>
     /// <returns>A disposable subscription that owns the DynamicData binding.</returns>
-    private static IDisposable ConnectFilteredCollection(
+    private static CompositeDisposable ConnectFilteredCollection(
         SourceCache<NpcRowViewModel, Guid> rowSource,
         IObservable<Func<NpcRowViewModel, bool>> filterPredicate,
         IObservableCollection<Npc> target)
     {
-        return rowSource.Connect()
+        var sortedRows = new ObservableCollection<NpcRowViewModel>();
+        var mirrorSubscription = Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
+                handler => sortedRows.CollectionChanged += handler,
+                handler => sortedRows.CollectionChanged -= handler)
+            .Subscribe(args => MirrorNpcRowChange(target, sortedRows, args.EventArgs));
+
+        var bindSubscription = rowSource.Connect()
             .Filter(filterPredicate)
-            .Sort(SortExpressionComparer<NpcRowViewModel>.Ascending(row => row.SortOrder))
-            .Transform(row => row.Npc)
-            .Bind(target)
+            .SortAndBind(sortedRows, SortExpressionComparer<NpcRowViewModel>.Ascending(row => row.SortOrder))
             .Subscribe();
+
+        return new CompositeDisposable(bindSubscription, mirrorSubscription, Disposable.Create(target.Clear));
+    }
+
+    /// <summary>
+    /// Mirrors DynamicData's sorted row collection into the public NPC collection while preserving the existing NPC-facing bindings.
+    /// </summary>
+    /// <param name="target">The public NPC collection consumed by the UI.</param>
+    /// <param name="sortedRows">The current sorted row snapshot maintained by DynamicData.</param>
+    /// <param name="args">The collection change emitted by the sorted row snapshot.</param>
+    private static void MirrorNpcRowChange(
+        IObservableCollection<Npc> target,
+        IEnumerable<NpcRowViewModel> sortedRows,
+        NotifyCollectionChangedEventArgs args)
+    {
+        switch (args.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                if (args.NewItems is null) return;
+                var addIndex = args.NewStartingIndex;
+                foreach (NpcRowViewModel row in args.NewItems)
+                {
+                    if (addIndex >= 0) target.Insert(addIndex++, row.Npc);
+                    else target.Add(row.Npc);
+                }
+
+                return;
+            case NotifyCollectionChangedAction.Remove:
+                if (args.OldItems is null) return;
+                if (args.OldStartingIndex >= 0)
+                {
+                    for (var i = 0; i < args.OldItems.Count; i++) target.RemoveAt(args.OldStartingIndex);
+                    return;
+                }
+
+                foreach (NpcRowViewModel row in args.OldItems) target.Remove(row.Npc);
+                return;
+            case NotifyCollectionChangedAction.Replace:
+                if (args.NewItems is null || args.NewStartingIndex < 0) break;
+                var replaceIndex = args.NewStartingIndex;
+                foreach (NpcRowViewModel row in args.NewItems) target[replaceIndex++] = row.Npc;
+                return;
+            case NotifyCollectionChangedAction.Move:
+                if (args.OldItems?.Count == 1 && args.OldStartingIndex >= 0 && args.NewStartingIndex >= 0)
+                {
+                    target.Move(args.OldStartingIndex, args.NewStartingIndex);
+                    return;
+                }
+
+                break;
+            case NotifyCollectionChangedAction.Reset:
+                break;
+            default:
+                break;
+        }
+
+        target.Load(sortedRows.Select(row => row.Npc));
     }
 
     private void OnNpcsChanged(object? sender, NotifyCollectionChangedEventArgs args)
