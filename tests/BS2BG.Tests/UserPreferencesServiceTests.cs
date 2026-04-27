@@ -24,6 +24,33 @@ public sealed class UserPreferencesServiceTests
 
         loaded.Theme.Should().Be(ThemePreference.Dark);
         loaded.OmitRedundantSliders.Should().BeFalse();
+        loaded.ProjectFolder.Should().BeNull();
+        loaded.BodyGenExportFolder.Should().BeNull();
+        loaded.BosJsonExportFolder.Should().BeNull();
+    }
+
+    [Fact]
+    public void SaveWritesIndependentProjectAndExportFolderPreferences()
+    {
+        using var directory = new TemporaryDirectory();
+        var preferencesPath = Path.Combine(directory.Path, "user-preferences.json");
+
+        var saved = new UserPreferencesService(preferencesPath).Save(new UserPreferences
+        {
+            Theme = ThemePreference.Light,
+            OmitRedundantSliders = true,
+            ProjectFolder = @"C:\Projects\BS2BG",
+            BodyGenExportFolder = @"D:\ModOutput\BodyGen",
+            BosJsonExportFolder = @"E:\BoS\Exports"
+        });
+
+        saved.Should().BeTrue();
+        var loaded = new UserPreferencesService(preferencesPath).Load();
+        loaded.Theme.Should().Be(ThemePreference.Light);
+        loaded.OmitRedundantSliders.Should().BeTrue();
+        loaded.ProjectFolder.Should().Be(@"C:\Projects\BS2BG");
+        loaded.BodyGenExportFolder.Should().Be(@"D:\ModOutput\BodyGen");
+        loaded.BosJsonExportFolder.Should().Be(@"E:\BoS\Exports");
     }
 
     [Fact]
@@ -83,9 +110,12 @@ public sealed class UserPreferencesServiceTests
         {
             var loaded = new UserPreferencesService(preferencesPath).Load();
 
-            loaded.Theme.Should().Be(ThemePreference.System);
-            loaded.OmitRedundantSliders.Should().BeFalse();
-        }
+        loaded.Theme.Should().Be(ThemePreference.System);
+        loaded.OmitRedundantSliders.Should().BeFalse();
+        loaded.ProjectFolder.Should().BeNull();
+        loaded.BodyGenExportFolder.Should().BeNull();
+        loaded.BosJsonExportFolder.Should().BeNull();
+    }
         finally
         {
             security = file.GetAccessControl();
