@@ -59,7 +59,7 @@ Plans:
 - [x] 02-04-PLAN.md — Create stable NPC row identity and filter predicate contracts.
 - [x] 02-05-PLAN.md — Integrate stable, debounced NPC filtering into Morphs ViewModel.
 - [x] 02-06-PLAN.md — Expose full checklist filtering in the Avalonia Morphs UI.
-- [ ] 02-07-PLAN.md — Add explicit scoped NPC bulk operations and scope selector UI.
+- [x] 02-07-PLAN.md — Add explicit scoped NPC bulk operations and scope selector UI.
 - [x] 02-08-PLAN.md — Bound undo history and harden template/profile undo snapshots.
 - [ ] 02-09-PLAN.md — Harden morph/NPC undo snapshots and scoped bulk undo behavior.
 **UI hint**: yes
