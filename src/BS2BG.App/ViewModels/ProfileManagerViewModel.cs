@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using BS2BG.App.Services;
+using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
@@ -16,7 +17,7 @@ namespace BS2BG.App.ViewModels;
 /// Coordinates the single-shell profile-management workspace over the runtime catalog and local profile store.
 /// The ViewModel intentionally owns one editor instance at a time because the current App shell exposes one profile manager tab per workspace session.
 /// </summary>
-public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposable
+public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposable, IProfileRecoveryActionHandler
 {
     private readonly ITemplateProfileCatalogService catalogService;
     private readonly IProfileManagementDialogService dialogService;
@@ -172,6 +173,96 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
         catalogService.Refresh();
         StatusMessage = "Custom profile deleted.";
+    }
+
+    /// <summary>
+    /// Imports a profile JSON for an unresolved project reference, saving it only when the internal display name matches exactly.
+    /// Filenames are intentionally ignored so a masquerading file cannot resolve a different profile identity.
+    /// </summary>
+    public async Task<bool> ImportMatchingProfileForMissingReferenceAsync(
+        string missingProfileName,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(missingProfileName)) return false;
+
+        var files = await dialogService.PickProfileImportFilesAsync(cancellationToken);
+        foreach (var file in files)
+        {
+            var json = await File.ReadAllTextAsync(file, cancellationToken);
+            var validation = profileDefinitionService.ValidateProfileJson(
+                json,
+                ProfileValidationContext.ForImport(catalogService.Current.ProfileNames, ProfileSourceKind.LocalCustom, file));
+            if (!validation.IsValid || validation.Profile is null)
+            {
+                StatusMessage = validation.Diagnostics.Count > 0
+                    ? FormatDiagnostics(validation.Diagnostics)
+                    : "Profile JSON is malformed. Fix the JSON and import again.";
+                continue;
+            }
+
+            if (!ProfileRecoveryDiagnosticsService.CanResolveMissingReference(missingProfileName, validation.Profile))
+            {
+                StatusMessage = "Imported profiles resolve missing references only when the internal profile display name matches exactly, ignoring case. Filenames are not used as identity.";
+                continue;
+            }
+
+            var saved = store.SaveProfile(validation.Profile);
+            if (!saved.Succeeded)
+            {
+                StatusMessage = FormatDiagnostics(saved.Diagnostics);
+                return false;
+            }
+
+            catalogService.Refresh();
+            RefreshProfileEntries();
+            StatusMessage = "Profile imported.";
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Activates the matching project-embedded profile as an in-memory overlay without writing it to local storage.
+    /// </summary>
+    public bool UseProjectCopyForMissingReference(string missingProfileName)
+    {
+        var profile = project.CustomProfiles.FirstOrDefault(candidate => ProfileNamesEqual(candidate.Name, missingProfileName));
+        if (profile is null) return false;
+
+        catalogService.WithProjectProfiles(project.CustomProfiles);
+        RefreshProfileEntries();
+        StatusMessage = "Project copy is active for '" + profile.Name + "'.";
+        return true;
+    }
+
+    /// <summary>
+    /// Records an explicit user acknowledgement while leaving unresolved profile fallback rows visible.
+    /// </summary>
+    public void KeepMissingReferenceUnresolved(string missingProfileName) =>
+        StatusMessage = "Kept '" + missingProfileName + "' unresolved for now; fallback information remains visible.";
+
+    /// <summary>
+    /// Routes diagnostics recovery actions to the profile manager workflows that own profile store and catalog mutations.
+    /// </summary>
+    public Task<bool> ExecuteRecoveryActionAsync(
+        ProfileRecoveryActionKind actionKind,
+        string missingProfileName,
+        CancellationToken cancellationToken) => actionKind switch
+        {
+            ProfileRecoveryActionKind.ImportMatchingProfile =>
+                ImportMatchingProfileForMissingReferenceAsync(missingProfileName, cancellationToken),
+            ProfileRecoveryActionKind.UseProjectEmbeddedCopy =>
+                Task.FromResult(UseProjectCopyForMissingReference(missingProfileName)),
+            ProfileRecoveryActionKind.KeepUnresolvedForNow =>
+                Task.FromResult(KeepMissingReferenceUnresolvedAndReturnHandled(missingProfileName)),
+            _ => Task.FromResult(false)
+        };
+
+    private bool KeepMissingReferenceUnresolvedAndReturnHandled(string missingProfileName)
+    {
+        KeepMissingReferenceUnresolved(missingProfileName);
+        return true;
     }
 
     private async Task ImportProfilesAsync(CancellationToken cancellationToken)

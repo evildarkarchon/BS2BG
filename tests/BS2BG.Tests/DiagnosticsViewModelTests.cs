@@ -75,11 +75,11 @@ public sealed class DiagnosticsViewModelTests
         await viewModel.RefreshDiagnosticsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         var fallback = viewModel.Findings
-            .Where(finding => finding.Area == "Profiles" && finding.Title == "Profile fallback detail")
+            .Where(finding => finding.Area == "Profiles" && finding.Code == ProfileRecoveryDiagnosticsService.MissingCustomProfileCode)
             .ToArray();
         fallback.Should().ContainSingle();
-        fallback[0].Detail.Should().Be(
-            "Saved profile: Saved profile; calculation fallback: Measured. This is informational and does not block generation or export.");
+        fallback[0].Detail.Should().Contain("Project references custom profile 'Saved profile'");
+        fallback[0].Detail.Should().Contain("calculation fallback uses 'Measured'");
         viewModel.InfoCount.Should().Be(viewModel.Findings.Count(finding => finding.Severity == DiagnosticSeverity.Info));
     }
 
@@ -107,7 +107,8 @@ public sealed class DiagnosticsViewModelTests
         clipboard.Text.Should().Contain("## Project");
         clipboard.Text.Should().Contain("## Profiles");
         clipboard.Text.Should().Contain("Info");
-        clipboard.Text.Should().Contain("Saved profile: Saved profile; calculation fallback: Measured. This is informational and does not block generation or export.");
+        clipboard.Text.Should().Contain("Project references custom profile 'Saved profile'");
+        clipboard.Text.Should().Contain("calculation fallback uses 'Measured'");
         clipboard.Text.Should().NotContain("Fix");
         clipboard.Text.Should().NotContain("Auto-fix");
         viewModel.StatusMessage.Should().Be("Diagnostics report copied to clipboard.");

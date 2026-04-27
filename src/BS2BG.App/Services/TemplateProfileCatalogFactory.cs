@@ -154,6 +154,16 @@ public sealed class TemplateProfileCatalogFactory
     private static IEnumerable<string> CandidateDirectories()
     {
         yield return AppContext.BaseDirectory;
+
+        var currentDirectory = Directory.GetCurrentDirectory();
+        yield return currentDirectory;
+
+        for (var directory = new DirectoryInfo(currentDirectory); directory is not null; directory = directory.Parent)
+        {
+            // Test hosts run from bin folders without bundled profile JSON copied beside the test assembly.
+            // Walking parents keeps production base-directory behavior while making App DI smoke tests deterministic.
+            yield return directory.FullName;
+        }
     }
 
     private sealed class EmptyUserProfileStore : IUserProfileStore

@@ -22,6 +22,8 @@ public sealed class DiagnosticFindingViewModel
         Detail = finding.Detail;
         TargetKey = finding.TargetKey;
         ActionHint = finding.ActionHint;
+        Code = finding.Code;
+        Category = finding.Category;
         CanNavigate = !string.IsNullOrWhiteSpace(finding.TargetKey);
         NavigationTarget = finding.TargetKey ?? string.Empty;
     }
@@ -39,6 +41,10 @@ public sealed class DiagnosticFindingViewModel
     public string? TargetKey { get; }
 
     public string? ActionHint { get; }
+
+    public string? Code { get; }
+
+    public string? Category { get; }
 
     public bool CanNavigate { get; }
 

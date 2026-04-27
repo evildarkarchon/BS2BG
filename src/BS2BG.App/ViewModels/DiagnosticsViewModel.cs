@@ -26,6 +26,8 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
     private readonly CompositeDisposable disposables = new();
     private readonly ITemplateProfileCatalogService profileCatalogService;
     private readonly ProfileDiagnosticsService profileDiagnosticsService;
+    private readonly ProfileRecoveryDiagnosticsService profileRecoveryDiagnosticsService = new();
+    private readonly IProfileRecoveryActionHandler recoveryActionHandler;
     private readonly ProjectModel project;
     private readonly ProjectValidationService projectValidationService;
     private readonly IClipboardService clipboardService;
@@ -72,14 +74,16 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
         ProjectValidationService projectValidationService,
         ProfileDiagnosticsService profileDiagnosticsService,
         IClipboardService? clipboardService = null,
-        DiagnosticsReportFormatter? reportFormatter = null)
+        DiagnosticsReportFormatter? reportFormatter = null,
+        IProfileRecoveryActionHandler? recoveryActionHandler = null)
         : this(
             project,
             new TemplateProfileCatalogService(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog))),
             projectValidationService,
             profileDiagnosticsService,
             clipboardService,
-            reportFormatter)
+            reportFormatter,
+            recoveryActionHandler)
     {
     }
 
@@ -89,7 +93,8 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
         ProjectValidationService projectValidationService,
         ProfileDiagnosticsService profileDiagnosticsService,
         IClipboardService? clipboardService = null,
-        DiagnosticsReportFormatter? reportFormatter = null)
+        DiagnosticsReportFormatter? reportFormatter = null,
+        IProfileRecoveryActionHandler? recoveryActionHandler = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.profileCatalogService = profileCatalogService ?? throw new ArgumentNullException(nameof(profileCatalogService));
@@ -99,6 +104,7 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
                                          ?? throw new ArgumentNullException(nameof(profileDiagnosticsService));
         this.clipboardService = clipboardService ?? new EmptyClipboardService();
         this.reportFormatter = reportFormatter ?? new DiagnosticsReportFormatter();
+        this.recoveryActionHandler = recoveryActionHandler ?? new NoOpProfileRecoveryActionHandler();
 
         foreach (var area in AreaOrder) Areas.Add(area);
 
@@ -133,6 +139,8 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<ProfileSliderDiagnostic> ProfileSliderDiagnostics { get; } = new();
 
+    public ObservableCollection<ProfileRecoveryActionViewModel> RecoveryActions { get; } = new();
+
     public ReactiveCommand<Unit, Unit> RefreshDiagnosticsCommand { get; }
 
     public ReactiveCommand<Unit, Unit> CopyReportCommand { get; }
@@ -146,6 +154,7 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
     {
         Findings.Clear();
         ProfileSliderDiagnostics.Clear();
+        RecoveryActions.Clear();
         SelectedFinding = null;
         BlockerCount = 0;
         CautionCount = 0;
@@ -165,6 +174,7 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
 
         var projectReport = projectValidationService.Validate(project, profileCatalogService.Current);
         var profileReport = profileDiagnosticsService.Analyze(project, profileCatalogService.Current);
+        var recoveryDiagnostics = profileRecoveryDiagnosticsService.Analyze(project, profileCatalogService.Current);
         var findings = projectReport.Findings
             .Concat(profileReport.Findings)
             .Select(finding => new DiagnosticFindingViewModel(finding))
@@ -178,6 +188,14 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
 
         ProfileSliderDiagnostics.Clear();
         foreach (var slider in profileReport.SliderDiagnostics) ProfileSliderDiagnostics.Add(slider);
+
+        RecoveryActions.Clear();
+        foreach (var diagnostic in recoveryDiagnostics)
+        foreach (var action in diagnostic.Actions)
+            RecoveryActions.Add(new ProfileRecoveryActionViewModel(
+                diagnostic.MissingProfileName,
+                action,
+                () => ExecuteRecoveryActionAsync(diagnostic.MissingProfileName, action, cancellationToken)));
 
         BlockerCount = findings.Count(finding => finding.Severity == DiagnosticSeverity.Blocker);
         CautionCount = findings.Count(finding => finding.Severity == DiagnosticSeverity.Caution);
@@ -200,6 +218,24 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
         var report = reportFormatter.Format(Findings, DateTimeOffset.Now);
         await clipboardService.SetTextAsync(report, cancellationToken);
         StatusMessage = "Diagnostics report copied to clipboard.";
+    }
+
+    private async Task ExecuteRecoveryActionAsync(
+        string missingProfileName,
+        ProfileRecoveryActionKind actionKind,
+        CancellationToken cancellationToken)
+    {
+        if (actionKind == ProfileRecoveryActionKind.KeepUnresolvedForNow)
+        {
+            StatusMessage = "Kept '" + missingProfileName + "' unresolved for now; fallback information remains visible.";
+            return;
+        }
+
+        var handled = await recoveryActionHandler.ExecuteRecoveryActionAsync(actionKind, missingProfileName, cancellationToken);
+        StatusMessage = handled
+            ? "Recovery action completed for '" + missingProfileName + "'."
+            : "Recovery action did not resolve '" + missingProfileName + "'.";
+        await RefreshDiagnosticsAsync(cancellationToken);
     }
 
     private static string FormatSelectedDetail(DiagnosticFindingViewModel? finding)
@@ -260,4 +296,57 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
     {
         public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
     }
+}
+
+/// <summary>
+/// App-layer boundary that lets Diagnostics route explicit recovery actions without owning file pickers or project mutations.
+/// </summary>
+public interface IProfileRecoveryActionHandler
+{
+    Task<bool> ExecuteRecoveryActionAsync(
+        ProfileRecoveryActionKind actionKind,
+        string missingProfileName,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Binding-ready action row for a missing custom-profile diagnostic.
+/// </summary>
+public sealed class ProfileRecoveryActionViewModel
+{
+    /// <summary>
+    /// Creates a row with the exact user-facing label and command for an explicit recovery action.
+    /// </summary>
+    public ProfileRecoveryActionViewModel(
+        string missingProfileName,
+        ProfileRecoveryActionKind actionKind,
+        Func<Task> executeAsync)
+    {
+        MissingProfileName = missingProfileName ?? throw new ArgumentNullException(nameof(missingProfileName));
+        ActionKind = actionKind;
+        Label = FormatLabel(actionKind);
+        ExecuteCommand = ReactiveCommand.CreateFromTask(executeAsync ?? throw new ArgumentNullException(nameof(executeAsync)));
+    }
+
+    public string MissingProfileName { get; }
+    public ProfileRecoveryActionKind ActionKind { get; }
+    public string Label { get; }
+    public ReactiveCommand<Unit, Unit> ExecuteCommand { get; }
+
+    private static string FormatLabel(ProfileRecoveryActionKind actionKind) => actionKind switch
+    {
+        ProfileRecoveryActionKind.ImportMatchingProfile => "Import Matching Profile",
+        ProfileRecoveryActionKind.RemapToInstalledProfile => "Remap to Installed Profile",
+        ProfileRecoveryActionKind.UseProjectEmbeddedCopy => "Use Project Copy",
+        ProfileRecoveryActionKind.KeepUnresolvedForNow => "Keep Unresolved for Now",
+        _ => actionKind.ToString()
+    };
+}
+
+internal sealed class NoOpProfileRecoveryActionHandler : IProfileRecoveryActionHandler
+{
+    public Task<bool> ExecuteRecoveryActionAsync(
+        ProfileRecoveryActionKind actionKind,
+        string missingProfileName,
+        CancellationToken cancellationToken) => Task.FromResult(false);
 }

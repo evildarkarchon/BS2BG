@@ -43,7 +43,8 @@ public static class AppBootstrapper
         services.AddSingleton<UndoRedoService>();
         services.AddSingleton<IUserPreferencesService, UserPreferencesService>();
         services.AddSingleton<IUserProfileStore, UserProfileStore>();
-        services.AddSingleton<TemplateProfileCatalogFactory>();
+        services.AddSingleton(provider =>
+            new TemplateProfileCatalogFactory(provider.GetRequiredService<IUserProfileStore>()));
         services.AddSingleton<ITemplateProfileCatalogService, TemplateProfileCatalogService>();
         services.AddSingleton<IRandomAssignmentProvider, RandomAssignmentProvider>();
         services.AddSingleton<MorphAssignmentService>();
@@ -79,6 +80,8 @@ public static class AppBootstrapper
         services.AddSingleton<MorphsViewModel>();
         services.AddSingleton<DiagnosticsViewModel>();
         services.AddSingleton<ProfileManagerViewModel>();
+        services.AddSingleton<IProfileRecoveryActionHandler>(provider =>
+            provider.GetRequiredService<ProfileManagerViewModel>());
         services.AddSingleton<MainWindowViewModel>();
         services.AddTransient<MainWindow>();
     }
