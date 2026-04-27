@@ -58,6 +58,30 @@ public sealed class ProfileManagerViewModelTests
     }
 
     /// <summary>
+    /// Verifies a row selected after the initial profile becomes the manager's actionable profile target.
+    /// </summary>
+    [Fact]
+    public async Task SelectingNonInitialProfileRowChangesActionTarget()
+    {
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new ProfileCatalogEntry("Bundled Body", new TemplateProfile("Bundled Body", CreateSliderProfile()), ProfileSourceKind.Bundled, null, false),
+            new ProfileCatalogEntry("Custom Body", new TemplateProfile("Custom Body", CreateSliderProfile()), ProfileSourceKind.LocalCustom, "custom.json", true)
+        });
+        var vm = CreateManager(catalog);
+        var initial = vm.SelectedProfile;
+
+        var changed = await vm.TrySelectProfileAsync(
+            vm.ProfileEntries.Single(entry => entry.Name == "Custom Body"),
+            TestContext.Current.CancellationToken);
+
+        changed.Should().BeTrue();
+        vm.SelectedProfile.Should().NotBeSameAs(initial);
+        vm.SelectedProfile!.Name.Should().Be("Custom Body");
+        vm.Editor.Name.Should().Be("Custom Body");
+    }
+
+    /// <summary>
     /// Verifies referenced custom-profile deletes require explicit confirmation and keep project references unresolved.
     /// </summary>
     [Fact]
