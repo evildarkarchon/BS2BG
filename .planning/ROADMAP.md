@@ -83,7 +83,7 @@ Plans:
 - [x] 03-05-PLAN.md — Integrate optional no-mutation NPC import preview and distinct assignment-effect summaries.
 - [x] 03-06-PLAN.md — Wire export preview and overwrite-risk confirmation into shell export workflows.
 - [x] 03-07-PLAN.md — Surface save/export outcome ledgers in failure messages without save preview friction.
-- [ ] 03-08-PLAN.md — Add the first-class compiled-bound Diagnostics tab and visual verification checkpoint.
+- [x] 03-08-PLAN.md — Add the first-class compiled-bound Diagnostics tab and visual verification checkpoint.
 **UI hint**: yes
 
 ### Phase 4: Profile Extensibility and Controlled Customization
@@ -121,6 +121,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Profile Correctness and Trust | 7/7 | Complete   | 2026-04-26 |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | Not started | - |
-| 3. Validation and Diagnostics | 6/8 | In Progress | - |
+| 3. Validation and Diagnostics | 8/8 | Complete | 2026-04-27 |
 | 4. Profile Extensibility and Controlled Customization | 0/TBD | Not started | - |
 | 5. Automation, Sharing, and Release Trust | 0/TBD | Not started | - |
