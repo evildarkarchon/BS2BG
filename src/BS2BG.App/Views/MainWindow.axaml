@@ -6,6 +6,7 @@
         xmlns:input="using:Avalonia.Input"
         xmlns:services="using:BS2BG.App.Services"
         xmlns:vm="using:BS2BG.App.ViewModels"
+        xmlns:workflow="using:BS2BG.App.ViewModels.Workflow"
         xmlns:models="using:BS2BG.Core.Models"
         x:Class="BS2BG.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -36,6 +37,10 @@
   <Design.DataContext>
     <vm:MainWindowViewModel />
   </Design.DataContext>
+
+  <Window.Resources>
+    <services:NpcBulkScopeDisplayConverter x:Key="NpcBulkScopeDisplayConverter" />
+  </Window.Resources>
 
   <Grid Background="{DynamicResource BS2BGWindowBackgroundBrush}"
         RowDefinitions="Auto,Auto,*">
@@ -662,7 +667,7 @@
                   Padding="12,8,12,4">
             <Grid RowDefinitions="Auto,Auto,*">
               <Grid Grid.Row="0"
-                    ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto"
+                    ColumnDefinitions="Auto,Auto,*,Auto,140,Auto,Auto,Auto,Auto,Auto,Auto"
                     Margin="0,0,0,8">
                 <TextBlock Grid.Column="0"
                            Text="Individual NPCs"
@@ -673,42 +678,59 @@
                            Margin="6,0,12,0"
                            VerticalAlignment="Center" />
                 <TextBox Grid.Column="2"
-                         x:Name="NpcSearchBox"
-                         automation:AutomationProperties.Name="Search NPCs"
-                         Text="{Binding Morphs.SearchText}"
-                         PlaceholderText="Search NPCs" />
+                          x:Name="NpcSearchBox"
+                          automation:AutomationProperties.Name="Search NPCs"
+                          Text="{Binding Morphs.SearchText}"
+                          PlaceholderText="Search NPCs" />
+                <TextBlock x:Name="NpcBulkScopeLabel"
+                         Grid.Column="3"
+                         Margin="8,0,0,0"
+                         Text="Scope"
+                         VerticalAlignment="Center" />
+                <ComboBox x:Name="NpcBulkScopeComboBox"
+                          Grid.Column="4"
+                          Margin="8,0,0,0"
+                          automation:AutomationProperties.Name="Scope"
+                          ItemsSource="{Binding Morphs.NpcBulkScopes}"
+                          SelectedItem="{Binding Morphs.SelectedNpcBulkScope}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="workflow:NpcBulkScope">
+                      <TextBlock Text="{Binding ., Converter={StaticResource NpcBulkScopeDisplayConverter}}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
                 <Button x:Name="FillEmptyNpcsButton"
-                        Grid.Column="3"
+                        Grid.Column="5"
                         Margin="8,0,0,0"
-                        Content="Fill Empty"
-                        automation:AutomationProperties.Name="Fill empty NPC assignments"
+                        Content="Fill Visible Empty"
+                        automation:AutomationProperties.Name="Fill Visible Empty"
                         Command="{Binding Morphs.FillEmptyNpcsCommand}" />
                 <Button x:Name="ClearNpcAssignmentsButton"
-                        Grid.Column="4"
+                        Grid.Column="6"
                         Margin="8,0,0,0"
                         Content="Clear Assignments"
                         automation:AutomationProperties.Name="Clear visible NPC assignments"
                         Command="{Binding Morphs.ClearAssignmentsCommand}" />
                 <Button x:Name="RemoveNpcButton"
-                        Grid.Column="5"
+                        Grid.Column="7"
                         Margin="8,0,0,0"
                         Content="Remove NPC"
                         automation:AutomationProperties.Name="Remove selected NPC"
                         Command="{Binding Morphs.RemoveSelectedNpcCommand}" />
                 <Button x:Name="ClearVisibleNpcsButton"
-                        Grid.Column="6"
+                        Grid.Column="8"
                         Margin="8,0,0,0"
                         Content="Clear"
                         automation:AutomationProperties.Name="Clear visible NPCs"
                         Command="{Binding Morphs.ClearVisibleNpcsCommand}" />
                 <Button x:Name="SelectedNpcAssignButton"
-                        Grid.Column="7"
+                        Grid.Column="9"
                         Margin="8,0,0,0"
                         Content="Assign Selected"
                         automation:AutomationProperties.Name="Assign preset to selected NPCs"
                         Command="{Binding Morphs.AssignSelectedNpcsCommand}" />
                 <Button x:Name="SelectedNpcClearAssignmentsButton"
-                        Grid.Column="8"
+                        Grid.Column="10"
                         Margin="8,0,0,0"
                         Content="Clear Selected"
                         automation:AutomationProperties.Name="Clear selected NPC assignments"

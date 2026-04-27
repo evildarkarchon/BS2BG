@@ -12,6 +12,29 @@ public enum NpcBulkScope
 }
 
 /// <summary>
+/// Provides user-facing labels for NPC bulk scopes while keeping the enum values stable for command logic.
+/// </summary>
+public static class NpcBulkScopeDisplayExtensions
+{
+    /// <summary>
+    /// Converts a scope value into the exact UI label required by the workflow contract.
+    /// </summary>
+    /// <param name="scope">The scope value to display.</param>
+    /// <returns>The label shown in the Morphs bulk scope selector.</returns>
+    public static string ToDisplayName(this NpcBulkScope scope)
+    {
+        return scope switch
+        {
+            NpcBulkScope.All => "All",
+            NpcBulkScope.Visible => "Visible",
+            NpcBulkScope.Selected => "Selected",
+            NpcBulkScope.VisibleEmpty => "Visible Empty",
+            _ => scope.ToString()
+        };
+    }
+}
+
+/// <summary>
 /// Resolves NPC bulk-operation scopes to immutable row ID snapshots before any mutation occurs.
 /// Snapshotting IDs prevents filter or selection changes during a command from changing the affected targets.
 /// </summary>
