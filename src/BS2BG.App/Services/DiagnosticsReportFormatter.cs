@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using BS2BG.App.ViewModels;
@@ -14,7 +15,7 @@ public sealed class DiagnosticsReportFormatter
         "Project", "Profiles", "Templates", "Morphs/NPCs", "Import", "Export"
     };
 
-    private static readonly IReadOnlyDictionary<string, string> AreaHeadings = new Dictionary<string, string>
+    private static readonly Dictionary<string, string> AreaHeadings = new()
     {
         ["Project"] = "## Project",
         ["Profiles"] = "## Profiles",
@@ -30,6 +31,8 @@ public sealed class DiagnosticsReportFormatter
     /// <param name="findings">Binding-ready diagnostic findings to include in the report.</param>
     /// <param name="generatedAt">Timestamp to include for report context.</param>
     /// <returns>A plain-text report grouped by workflow area, or an empty-state report when there are no findings.</returns>
+    [SuppressMessage("Performance", "CA1822:Mark members as static",
+        Justification = "Formatter remains an injectable App service seam for tests and future report variants.")]
     public string Format(IEnumerable<DiagnosticFindingViewModel> findings, DateTimeOffset generatedAt)
     {
         ArgumentNullException.ThrowIfNull(findings);
