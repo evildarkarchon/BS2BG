@@ -184,6 +184,55 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void NpcBulkScopeResolverReturnsMaterializedRowIdsForAllVisibleAndSelectedScopes()
+    {
+        var lydia = new NpcRowViewModel(CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94"));
+        var serana = new NpcRowViewModel(CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74"));
+        var valerica = new NpcRowViewModel(CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C"));
+        var selectedRows = new List<NpcRowViewModel> { serana };
+
+        var all = NpcBulkScopeResolver.Resolve(
+            NpcBulkScope.All,
+            new[] { lydia, serana, valerica },
+            new[] { lydia, serana },
+            selectedRows);
+        var visible = NpcBulkScopeResolver.Resolve(
+            NpcBulkScope.Visible,
+            new[] { lydia, serana, valerica },
+            new[] { lydia, serana },
+            selectedRows);
+        var selected = NpcBulkScopeResolver.Resolve(
+            NpcBulkScope.Selected,
+            new[] { lydia, serana, valerica },
+            new[] { lydia, serana },
+            selectedRows);
+
+        selectedRows.Clear();
+
+        all.Should().Equal(lydia.RowId, serana.RowId, valerica.RowId);
+        visible.Should().Equal(lydia.RowId, serana.RowId);
+        selected.Should().Equal(serana.RowId);
+    }
+
+    [Fact]
+    public void NpcBulkScopeResolverVisibleEmptyExcludesHiddenAndAssignedRows()
+    {
+        var alpha = new SliderPreset("Alpha");
+        var visibleEmpty = new NpcRowViewModel(CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94"));
+        var visibleAssigned = new NpcRowViewModel(CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74"));
+        var hiddenEmpty = new NpcRowViewModel(CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C"));
+        visibleAssigned.Npc.AddSliderPreset(alpha);
+
+        var targetIds = NpcBulkScopeResolver.Resolve(
+            NpcBulkScope.VisibleEmpty,
+            new[] { visibleEmpty, visibleAssigned, hiddenEmpty },
+            new[] { visibleEmpty, visibleAssigned },
+            Array.Empty<NpcRowViewModel>());
+
+        targetIds.Should().Equal(visibleEmpty.RowId);
+    }
+
+    [Fact]
     public void LargeNpcSearchIsDebouncedBeforeVisibleRowsRefresh()
     {
         using var scheduler = new EventLoopScheduler();
