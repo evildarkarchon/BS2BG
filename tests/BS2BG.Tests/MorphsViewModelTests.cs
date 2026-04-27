@@ -284,6 +284,32 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void FreeTextFilteredBulkOperationsDefaultToVisibleScope()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets.Single(preset => preset.Name == "Alpha");
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var serana = CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        lydia.AddSliderPreset(alpha);
+        serana.AddSliderPreset(alpha);
+        valerica.AddSliderPreset(alpha);
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(serana);
+        project.MorphedNpcs.Add(valerica);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider());
+
+        viewModel.SearchText = "Skyrim";
+        viewModel.ClearAssignmentsCommand.Execute().Subscribe();
+
+        lydia.SliderPresets.Should().BeEmpty();
+        serana.SliderPresets.Should().BeEmpty();
+        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
+        viewModel.SelectedNpcBulkScope.Should().Be(NpcBulkScope.Visible);
+        viewModel.StatusMessage.Should().Be("Cleared assignments from 2 visible NPCs.");
+    }
+
+    [Fact]
     public void DestructiveAllScopeClearAssignmentsRequiresConfirmationAndRecordsOneUndoOperation()
     {
         var project = CreateProjectWithPresets();

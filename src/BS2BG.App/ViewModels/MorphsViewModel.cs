@@ -1189,7 +1189,14 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         this.RaisePropertyChanged(nameof(NpcDatabaseCountBadgeText));
     }
 
-    private void ApplyPendingNpcSearchText() => RefreshVisibleNpcs(true);
+    private void ApplyPendingNpcSearchText()
+    {
+        npcFilterState.ApplyPendingGlobalSearchText();
+        if (npcFilterState.HasAnyFilter() && SelectedNpcBulkScope == NpcBulkScope.All)
+            SelectedNpcBulkScope = NpcBulkScope.Visible;
+
+        RefreshVisibleNpcs();
+    }
 
     private void ApplyPendingNpcDatabaseSearchText() => RefreshVisibleNpcDatabase(true);
 
