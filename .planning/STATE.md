@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
+status: executing
 stopped_at: Phase 03 UI-SPEC approved
-last_updated: "2026-04-27T03:28:59.432Z"
+last_updated: "2026-04-27T03:48:24.111Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
+  total_plans: 24
+  completed_plans: 17
+  percent: 71
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** Modders can reliably convert existing BodySlide presets into BodyGen and BoS outputs that match the Java tool's behavior byte-for-byte where compatibility matters.
-**Current focus:** Phase 02 — workflow-persistence-filtering-and-undo-hardening
+**Current focus:** Phase 03 — validation-and-diagnostics
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
-Status: Ready to plan
+Phase: 03 (validation-and-diagnostics) — EXECUTING
+Plan: 2 of 8
+Status: Ready to execute
 Last activity: 2026-04-27
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [██░░░░░░░░] 20%
 | Phase 01-profile-correctness-and-trust P05 | 2 min | 2 tasks | 3 files |
 | Phase 01-profile-correctness-and-trust P06 | 4 min | 2 tasks | 3 files |
 | Phase 01-profile-correctness-and-trust P07 | 1 min | 2 tasks | 2 files |
+| Phase 03-validation-and-diagnostics P01 | 6 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,8 @@ Recent decisions affecting current work:
 - [Phase 01-profile-correctness-and-trust]: Morph generation remains explicitly profile-independent — Tests assert profile-name changes do not alter morph lines.
 - [Phase 01-profile-correctness-and-trust]: Treat D-05 through D-08 as the accepted override for Phase 1 warning/experimental wording. — ROADMAP and REQUIREMENTS now require neutral fallback information plus release-facing FO4 calibration context instead of warning UX.
 - [Phase 01-profile-correctness-and-trust]: Keep PROF-03 neutral and non-blocking. — Unbundled/custom profile handling remains informational without inference, mismatch warnings, or generation/export blocking.
+- [Phase 03-validation-and-diagnostics]: Keep project/profile diagnostics read-only and Core-only so App diagnostics presentation can reuse them without mutating ProjectModel state. — Preserves Phase 3 read-only diagnostics boundary.
+- [Phase 03-validation-and-diagnostics]: Expose profile multiplier and inversion tables from SliderProfile for diagnostics rather than re-parsing profile JSON or duplicating formatter logic. — Allows DIAG-02 counts to use the loaded profile tables without changing formatter output semantics.
 
 ### Pending Todos
 
@@ -109,6 +112,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27T03:28:59.426Z
+Last session: 2026-04-27T03:48:06.989Z
 Stopped at: Phase 03 UI-SPEC approved
-Resume file: .planning/phases/03-validation-and-diagnostics/03-UI-SPEC.md
+Resume file: None

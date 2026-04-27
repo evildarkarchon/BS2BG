@@ -76,7 +76,7 @@ Plans:
   5. User receives save/export failure messages that identify which files were written, restored, skipped, or left untouched.
 **Plans**: 8 plans
 Plans:
-- [ ] 03-01-PLAN.md — Create Core project/profile diagnostics services and tests.
+- [x] 03-01-PLAN.md — Create Core project/profile diagnostics services and tests.
 - [ ] 03-02-PLAN.md — Add read-only NPC import preview classification and duplicate diagnostics.
 - [ ] 03-03-PLAN.md — Add export preview and atomic outcome ledger Core contracts.
 - [ ] 03-04-PLAN.md — Expose project/profile diagnostics through a ReactiveUI Diagnostics ViewModel and copyable report.
