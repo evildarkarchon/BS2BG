@@ -2,6 +2,8 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.LogicalTree;
+using Avalonia.VisualTree;
+using System.Windows.Input;
 using BS2BG.App;
 using BS2BG.App.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,9 +69,21 @@ public sealed class MainWindowHeadlessTests
     {
         using var provider = AppBootstrapper.CreateServiceProvider();
         var window = provider.GetRequiredService<MainWindow>();
+        window.Show();
         window.ApplyTemplate();
+        var tabs = window.GetLogicalDescendants()
+            .OfType<TabControl>()
+            .Single(control => control.Items.OfType<TabItem>().Any(tab => tab.Header?.ToString() == "Profiles"));
+        tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => tab.Header?.ToString() == "Profiles");
 
-        var buttonAutomationNames = window.GetLogicalDescendants()
+        var editor = window.ViewModel!.Profiles.Editor;
+        ExecuteCommand(editor.AddDefaultCommand);
+        ExecuteCommand(editor.AddMultiplierCommand);
+        ExecuteCommand(editor.AddInvertedCommand);
+        window.ApplyTemplate();
+        window.UpdateLayout();
+
+        var buttonAutomationNames = window.GetVisualDescendants()
             .OfType<Button>()
             .Select(AutomationProperties.GetName)
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -81,5 +95,11 @@ public sealed class MainWindowHeadlessTests
         buttonAutomationNames.Should().Contain("Remove multiplier slider");
         buttonAutomationNames.Should().Contain("Add inverted slider");
         buttonAutomationNames.Should().Contain("Remove inverted slider");
+    }
+
+    private static void ExecuteCommand(ICommand command)
+    {
+        command.CanExecute(null).Should().BeTrue();
+        command.Execute(null);
     }
 }

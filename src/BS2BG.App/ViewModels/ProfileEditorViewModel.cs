@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Globalization;
 using System.Reactive;
 using System.Reactive.Disposables;
@@ -23,7 +24,10 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     public const string SaveFailureMessage = "Profile could not be saved. Review the validation messages below; malformed or ambiguous profile data is not added to the catalog.";
     private readonly IReadOnlyList<string> existingNames;
     private readonly CompositeDisposable disposables = new();
+    private readonly Dictionary<ProfileDefaultRowViewModel, IDisposable> defaultRowSubscriptions = [];
     private readonly string? filePath;
+    private readonly Dictionary<ProfileInvertedRowViewModel, IDisposable> invertedRowSubscriptions = [];
+    private readonly Dictionary<ProfileMultiplierRowViewModel, IDisposable> multiplierRowSubscriptions = [];
     private readonly ProfileDefinitionService profileDefinitionService;
     private readonly ProfileSourceKind sourceKind;
     private readonly IUserProfileStore store;
@@ -72,6 +76,9 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         DefaultRows.CollectionChanged += OnRowsChanged;
         MultiplierRows.CollectionChanged += OnRowsChanged;
         InvertedRows.CollectionChanged += OnRowsChanged;
+        foreach (var row in DefaultRows) AttachDefaultRow(row);
+        foreach (var row in MultiplierRows) AttachMultiplierRow(row);
+        foreach (var row in InvertedRows) AttachInvertedRow(row);
         disposables.Add(this.WhenAnyValue(x => x.SearchText).Subscribe(_ => RefreshVisibleRows()));
         disposables.Add(this.WhenAnyValue(x => x.Name, x => x.Game).Skip(1).Subscribe(_ => ValidateProfile()));
         RefreshVisibleRows();
@@ -169,13 +176,121 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
         DefaultRows.CollectionChanged -= OnRowsChanged;
         MultiplierRows.CollectionChanged -= OnRowsChanged;
         InvertedRows.CollectionChanged -= OnRowsChanged;
+        foreach (var subscription in defaultRowSubscriptions.Values) subscription.Dispose();
+        foreach (var subscription in multiplierRowSubscriptions.Values) subscription.Dispose();
+        foreach (var subscription in invertedRowSubscriptions.Values) subscription.Dispose();
+        defaultRowSubscriptions.Clear();
+        multiplierRowSubscriptions.Clear();
+        invertedRowSubscriptions.Clear();
         disposables.Dispose();
     }
 
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
+        if (sender == DefaultRows)
+        {
+            UpdateRowSubscriptions<ProfileDefaultRowViewModel>(args, AttachDefaultRow, DetachDefaultRow);
+            PruneRowSubscriptions(DefaultRows, defaultRowSubscriptions);
+        }
+        else if (sender == MultiplierRows)
+        {
+            UpdateRowSubscriptions<ProfileMultiplierRowViewModel>(args, AttachMultiplierRow, DetachMultiplierRow);
+            PruneRowSubscriptions(MultiplierRows, multiplierRowSubscriptions);
+        }
+        else if (sender == InvertedRows)
+        {
+            UpdateRowSubscriptions<ProfileInvertedRowViewModel>(args, AttachInvertedRow, DetachInvertedRow);
+            PruneRowSubscriptions(InvertedRows, invertedRowSubscriptions);
+        }
+
         RefreshVisibleRows();
         ValidateProfile();
+    }
+
+    /// <summary>
+    /// Applies collection-change subscription updates so added rows validate live and removed rows no longer affect the active editor.
+    /// </summary>
+    private static void UpdateRowSubscriptions<T>(NotifyCollectionChangedEventArgs args, Action<T> attach, Action<T> detach)
+    {
+        if (args.OldItems is not null)
+            foreach (var row in args.OldItems.OfType<T>()) detach(row);
+        if (args.NewItems is not null)
+            foreach (var row in args.NewItems.OfType<T>()) attach(row);
+    }
+
+    /// <summary>
+    /// Disposes subscriptions for rows absent from a collection after reset-style mutations that omit old item lists.
+    /// </summary>
+    private static void PruneRowSubscriptions<T>(IEnumerable<T> currentRows, Dictionary<T, IDisposable> subscriptions)
+        where T : notnull
+    {
+        var current = new HashSet<T>(currentRows);
+        foreach (var removed in subscriptions.Keys.Where(row => !current.Contains(row)).ToArray())
+        {
+            subscriptions[removed].Dispose();
+            subscriptions.Remove(removed);
+        }
+    }
+
+    /// <summary>
+    /// Subscribes a Defaults row so slider-name and numeric text edits rebuild validation and visible filtering state immediately.
+    /// </summary>
+    private void AttachDefaultRow(ProfileDefaultRowViewModel row)
+    {
+        if (defaultRowSubscriptions.ContainsKey(row)) return;
+        PropertyChangedEventHandler handler = (_, _) =>
+        {
+            RefreshVisibleRows();
+            ValidateProfile();
+        };
+        row.PropertyChanged += handler;
+        defaultRowSubscriptions[row] = Disposable.Create(() => row.PropertyChanged -= handler);
+    }
+
+    /// <summary>
+    /// Detaches a Defaults row subscription after removal to prevent stale row edits from toggling validation state.
+    /// </summary>
+    private void DetachDefaultRow(ProfileDefaultRowViewModel row)
+    {
+        if (defaultRowSubscriptions.Remove(row, out var subscription)) subscription.Dispose();
+    }
+
+    /// <summary>
+    /// Subscribes a Multipliers row so slider-name and multiplier edits immediately update validation and save gating.
+    /// </summary>
+    private void AttachMultiplierRow(ProfileMultiplierRowViewModel row)
+    {
+        if (multiplierRowSubscriptions.ContainsKey(row)) return;
+        PropertyChangedEventHandler handler = (_, _) => ValidateProfile();
+        row.PropertyChanged += handler;
+        multiplierRowSubscriptions[row] = Disposable.Create(() => row.PropertyChanged -= handler);
+    }
+
+    /// <summary>
+    /// Detaches a Multipliers row subscription after removal to avoid stale validation work.
+    /// </summary>
+    private void DetachMultiplierRow(ProfileMultiplierRowViewModel row)
+    {
+        if (multiplierRowSubscriptions.Remove(row, out var subscription)) subscription.Dispose();
+    }
+
+    /// <summary>
+    /// Subscribes an Inverted row so slider-name and inclusion edits immediately update validation and save gating.
+    /// </summary>
+    private void AttachInvertedRow(ProfileInvertedRowViewModel row)
+    {
+        if (invertedRowSubscriptions.ContainsKey(row)) return;
+        PropertyChangedEventHandler handler = (_, _) => ValidateProfile();
+        row.PropertyChanged += handler;
+        invertedRowSubscriptions[row] = Disposable.Create(() => row.PropertyChanged -= handler);
+    }
+
+    /// <summary>
+    /// Detaches an Inverted row subscription after removal to keep removed rows isolated from current validation state.
+    /// </summary>
+    private void DetachInvertedRow(ProfileInvertedRowViewModel row)
+    {
+        if (invertedRowSubscriptions.Remove(row, out var subscription)) subscription.Dispose();
     }
 
     /// <summary>

@@ -1594,7 +1594,8 @@
                               Content="{Binding Editor}">
                 <ContentControl.ContentTemplate>
                   <DataTemplate x:DataType="vm:ProfileEditorViewModel">
-                    <Grid x:DataType="vm:ProfileEditorViewModel"
+                    <Grid x:Name="ProfileEditorRoot"
+                          x:DataType="vm:ProfileEditorViewModel"
                           RowDefinitions="Auto,Auto,Auto,Auto,*">
                       <Grid Grid.Row="0"
                             ColumnDefinitions="*,*"
@@ -1635,36 +1636,83 @@
                                     VerticalScrollBarVisibility="Auto">
                         <StackPanel Spacing="16">
                           <TextBlock Text="Metadata" FontSize="16" FontWeight="SemiBold" />
-                          <TextBlock Text="Defaults" FontSize="16" FontWeight="SemiBold" />
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Defaults" FontSize="16" FontWeight="SemiBold" />
+                            <Button Grid.Column="1"
+                                    Content="Add default slider"
+                                    automation:AutomationProperties.Name="Add default slider"
+                                    Command="{Binding AddDefaultCommand}" />
+                          </Grid>
                           <ItemsControl ItemsSource="{Binding VisibleDefaultRows}">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:ProfileDefaultRowViewModel">
-                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
-                                  <TextBlock Grid.Column="0" Text="{Binding Slider}" />
-                                  <TextBox Grid.Column="1" Width="64" Text="{Binding ValueSmall}" automation:AutomationProperties.Name="Default small value" />
-                                  <TextBox Grid.Column="2" Width="64" Margin="8,0,0,0" Text="{Binding ValueBig}" automation:AutomationProperties.Name="Default big value" />
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,8">
+                                  <TextBox Grid.Column="0"
+                                           Text="{Binding Slider, UpdateSourceTrigger=PropertyChanged}"
+                                           automation:AutomationProperties.Name="Default slider name" />
+                                  <TextBox Grid.Column="1" Width="64" Text="{Binding ValueSmall, UpdateSourceTrigger=PropertyChanged}" automation:AutomationProperties.Name="Default small value" />
+                                  <TextBox Grid.Column="2" Width="64" Margin="8,0,0,0" Text="{Binding ValueBig, UpdateSourceTrigger=PropertyChanged}" automation:AutomationProperties.Name="Default big value" />
+                                  <Button Grid.Column="3"
+                                          Margin="8,0,0,0"
+                                          Content="Remove"
+                                          automation:AutomationProperties.Name="Remove default slider"
+                                          Command="{Binding #ProfileEditorRoot.DataContext.RemoveDefaultCommand}"
+                                          CommandParameter="{Binding .}" />
                                 </Grid>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
-                          <TextBlock Text="Multipliers" FontSize="16" FontWeight="SemiBold" />
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Multipliers" FontSize="16" FontWeight="SemiBold" />
+                            <Button Grid.Column="1"
+                                    Content="Add multiplier slider"
+                                    automation:AutomationProperties.Name="Add multiplier slider"
+                                    Command="{Binding AddMultiplierCommand}" />
+                          </Grid>
                           <ItemsControl ItemsSource="{Binding MultiplierRows}">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:ProfileMultiplierRowViewModel">
-                                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-                                  <TextBlock Grid.Column="0" Text="{Binding Slider}" />
-                                  <TextBox Grid.Column="1" Width="64" Text="{Binding Value}" automation:AutomationProperties.Name="Multiplier value" />
+                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+                                  <TextBox Grid.Column="0"
+                                           Text="{Binding Slider, UpdateSourceTrigger=PropertyChanged}"
+                                           automation:AutomationProperties.Name="Multiplier slider name" />
+                                  <TextBox Grid.Column="1" Width="64" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" automation:AutomationProperties.Name="Multiplier value" />
+                                  <Button Grid.Column="2"
+                                          Margin="8,0,0,0"
+                                          Content="Remove"
+                                          automation:AutomationProperties.Name="Remove multiplier slider"
+                                          Command="{Binding #ProfileEditorRoot.DataContext.RemoveMultiplierCommand}"
+                                          CommandParameter="{Binding .}" />
                                 </Grid>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
-                          <TextBlock Text="Inverted Sliders" FontSize="16" FontWeight="SemiBold" />
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Inverted Sliders" FontSize="16" FontWeight="SemiBold" />
+                            <Button Grid.Column="1"
+                                    Content="Add inverted slider"
+                                    automation:AutomationProperties.Name="Add inverted slider"
+                                    Command="{Binding AddInvertedCommand}" />
+                          </Grid>
                           <ItemsControl ItemsSource="{Binding InvertedRows}">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:ProfileInvertedRowViewModel">
-                                <CheckBox Content="{Binding Slider}"
-                                          IsChecked="{Binding IsInverted}"
-                                          automation:AutomationProperties.Name="Inverted slider" />
+                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+                                  <TextBox Grid.Column="0"
+                                           Text="{Binding Slider, UpdateSourceTrigger=PropertyChanged}"
+                                           automation:AutomationProperties.Name="Inverted slider name" />
+                                  <CheckBox Grid.Column="1"
+                                            Margin="8,0,0,0"
+                                            Content="Included"
+                                            IsChecked="{Binding IsInverted}"
+                                            automation:AutomationProperties.Name="Inverted slider" />
+                                  <Button Grid.Column="2"
+                                          Margin="8,0,0,0"
+                                          Content="Remove"
+                                          automation:AutomationProperties.Name="Remove inverted slider"
+                                          Command="{Binding #ProfileEditorRoot.DataContext.RemoveInvertedCommand}"
+                                          CommandParameter="{Binding .}" />
+                                </Grid>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
