@@ -59,6 +59,12 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private string _generatedMorphsText = string.Empty;
 
     [ObservableAsProperty] private bool _isBusy;
+    [Reactive] private bool _isNpcAssignmentStateFilterOpen;
+    [Reactive] private bool _isNpcEditorIdFilterOpen;
+    [Reactive] private bool _isNpcFormIdFilterOpen;
+    [Reactive] private bool _isNpcModFilterOpen;
+    [Reactive] private bool _isNpcNameFilterOpen;
+    [Reactive] private bool _isNpcPresetFilterOpen;
     [Reactive] private bool _isNpcRaceFilterOpen;
     [Reactive] private string _npcDatabaseSearchText = string.Empty;
     [Reactive] private string _searchText = string.Empty;
@@ -246,7 +252,16 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         TrimSelectedTargetTo76Command = ReactiveCommand.Create(
             () => { TrimSelectedTargetTo76(); },
             canTrimSelectedTarget);
+        ToggleNpcModFilterCommand = ReactiveCommand.Create(() => { IsNpcModFilterOpen = !IsNpcModFilterOpen; });
+        ToggleNpcNameFilterCommand = ReactiveCommand.Create(() => { IsNpcNameFilterOpen = !IsNpcNameFilterOpen; });
+        ToggleNpcEditorIdFilterCommand = ReactiveCommand.Create(() => { IsNpcEditorIdFilterOpen = !IsNpcEditorIdFilterOpen; });
+        ToggleNpcFormIdFilterCommand = ReactiveCommand.Create(() => { IsNpcFormIdFilterOpen = !IsNpcFormIdFilterOpen; });
         ToggleNpcRaceFilterCommand = ReactiveCommand.Create(() => { IsNpcRaceFilterOpen = !IsNpcRaceFilterOpen; });
+        ToggleNpcAssignmentStateFilterCommand = ReactiveCommand.Create(() =>
+        {
+            IsNpcAssignmentStateFilterOpen = !IsNpcAssignmentStateFilterOpen;
+        });
+        ToggleNpcPresetFilterCommand = ReactiveCommand.Create(() => { IsNpcPresetFilterOpen = !IsNpcPresetFilterOpen; });
         ClearNpcRaceFilterCommand = ReactiveCommand.Create(ClearNpcRaceFilter);
         GenerateMorphsCommand = ReactiveCommand.Create(
             GenerateMorphs,
@@ -350,7 +365,19 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public ReactiveCommand<Unit, Unit> TrimSelectedTargetTo76Command { get; }
 
+    public ReactiveCommand<Unit, Unit> ToggleNpcModFilterCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ToggleNpcNameFilterCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ToggleNpcEditorIdFilterCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ToggleNpcFormIdFilterCommand { get; }
+
     public ReactiveCommand<Unit, Unit> ToggleNpcRaceFilterCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ToggleNpcAssignmentStateFilterCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ToggleNpcPresetFilterCommand { get; }
 
     public ReactiveCommand<Unit, Unit> ClearNpcRaceFilterCommand { get; }
 
@@ -410,6 +437,54 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     }
 
     public IReadOnlyList<string> NpcRaceColumnValues => GetNpcColumnValues(NpcFilterColumn.Race);
+
+    public string NpcModColumnSearchText
+    {
+        get => GetNpcColumnSearchText(NpcFilterColumn.Mod);
+        set => SetNpcColumnSearchText(NpcFilterColumn.Mod, value);
+    }
+
+    public IReadOnlyList<string> NpcModColumnValues => GetNpcColumnValues(NpcFilterColumn.Mod);
+
+    public string NpcNameColumnSearchText
+    {
+        get => GetNpcColumnSearchText(NpcFilterColumn.Name);
+        set => SetNpcColumnSearchText(NpcFilterColumn.Name, value);
+    }
+
+    public IReadOnlyList<string> NpcNameColumnValues => GetNpcColumnValues(NpcFilterColumn.Name);
+
+    public string NpcEditorIdColumnSearchText
+    {
+        get => GetNpcColumnSearchText(NpcFilterColumn.EditorId);
+        set => SetNpcColumnSearchText(NpcFilterColumn.EditorId, value);
+    }
+
+    public IReadOnlyList<string> NpcEditorIdColumnValues => GetNpcColumnValues(NpcFilterColumn.EditorId);
+
+    public string NpcFormIdColumnSearchText
+    {
+        get => GetNpcColumnSearchText(NpcFilterColumn.FormId);
+        set => SetNpcColumnSearchText(NpcFilterColumn.FormId, value);
+    }
+
+    public IReadOnlyList<string> NpcFormIdColumnValues => GetNpcColumnValues(NpcFilterColumn.FormId);
+
+    public string NpcAssignmentStateColumnSearchText
+    {
+        get => GetNpcColumnSearchText(NpcFilterColumn.AssignmentState);
+        set => SetNpcColumnSearchText(NpcFilterColumn.AssignmentState, value);
+    }
+
+    public IReadOnlyList<string> NpcAssignmentStateColumnValues => GetNpcColumnValues(NpcFilterColumn.AssignmentState);
+
+    public string NpcPresetColumnSearchText
+    {
+        get => GetNpcColumnSearchText(NpcFilterColumn.Preset);
+        set => SetNpcColumnSearchText(NpcFilterColumn.Preset, value);
+    }
+
+    public IReadOnlyList<string> NpcPresetColumnValues => GetNpcColumnValues(NpcFilterColumn.Preset);
 
     public void Dispose()
     {
@@ -807,6 +882,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             npcFilterState.SetAllowedValues(column, selected);
 
         RefreshVisibleNpcs();
+        RaiseNpcColumnFilterStateChanged(column);
     }
 
     /// <summary>
@@ -849,11 +925,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         if (string.Equals(GetNpcColumnSearchText(column), normalized, StringComparison.Ordinal)) return;
 
         npcColumnSearchText[column] = normalized;
-        if (column == NpcFilterColumn.Race)
-        {
-            this.RaisePropertyChanged(nameof(NpcRaceColumnSearchText));
-            this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
-        }
+        RaiseNpcColumnSearchPropertiesChanged(column);
     }
 
     public IReadOnlyList<string> GetNpcColumnValues(NpcFilterColumn column)
@@ -867,8 +939,17 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public void ClearNpcRaceFilter()
     {
-        SetNpcColumnAllowedValues(NpcFilterColumn.Race, Array.Empty<string>());
-        NpcRaceColumnSearchText = string.Empty;
+        ClearNpcColumnFilter(NpcFilterColumn.Race);
+    }
+
+    /// <summary>
+    /// Clears one checklist filter and its popup search text while leaving other active filters intact.
+    /// </summary>
+    /// <param name="column">The checklist filter column to clear.</param>
+    public void ClearNpcColumnFilter(NpcFilterColumn column)
+    {
+        SetNpcColumnAllowedValues(column, Array.Empty<string>());
+        SetNpcColumnSearchText(column, string.Empty);
     }
 
     public void GenerateMorphs()
@@ -981,6 +1062,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         RefreshFilteredCollection(Npcs, npcRowsByNpc, npcFilterState, VisibleNpcs);
         this.RaisePropertyChanged(nameof(NpcCountBadgeText));
         this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
+        RaiseAllNpcColumnValuesChanged();
         UpdateHiddenSelectionStatus();
     }
 
@@ -1227,6 +1309,58 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         return npcColumnSearchText.TryGetValue(column, out var value)
             ? value
             : string.Empty;
+    }
+
+    private void RaiseAllNpcColumnValuesChanged()
+    {
+        this.RaisePropertyChanged(nameof(NpcModColumnValues));
+        this.RaisePropertyChanged(nameof(NpcNameColumnValues));
+        this.RaisePropertyChanged(nameof(NpcEditorIdColumnValues));
+        this.RaisePropertyChanged(nameof(NpcFormIdColumnValues));
+        this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
+        this.RaisePropertyChanged(nameof(NpcAssignmentStateColumnValues));
+        this.RaisePropertyChanged(nameof(NpcPresetColumnValues));
+    }
+
+    private void RaiseNpcColumnSearchPropertiesChanged(NpcFilterColumn column)
+    {
+        this.RaisePropertyChanged(GetNpcColumnSearchPropertyName(column));
+        this.RaisePropertyChanged(GetNpcColumnValuesPropertyName(column));
+    }
+
+    private void RaiseNpcColumnFilterStateChanged(NpcFilterColumn column)
+    {
+        this.RaisePropertyChanged(GetNpcColumnValuesPropertyName(column));
+    }
+
+    private static string GetNpcColumnSearchPropertyName(NpcFilterColumn column)
+    {
+        return column switch
+        {
+            NpcFilterColumn.Mod => nameof(NpcModColumnSearchText),
+            NpcFilterColumn.Name => nameof(NpcNameColumnSearchText),
+            NpcFilterColumn.EditorId => nameof(NpcEditorIdColumnSearchText),
+            NpcFilterColumn.FormId => nameof(NpcFormIdColumnSearchText),
+            NpcFilterColumn.Race => nameof(NpcRaceColumnSearchText),
+            NpcFilterColumn.AssignmentState => nameof(NpcAssignmentStateColumnSearchText),
+            NpcFilterColumn.Preset => nameof(NpcPresetColumnSearchText),
+            _ => nameof(NpcRaceColumnSearchText)
+        };
+    }
+
+    private static string GetNpcColumnValuesPropertyName(NpcFilterColumn column)
+    {
+        return column switch
+        {
+            NpcFilterColumn.Mod => nameof(NpcModColumnValues),
+            NpcFilterColumn.Name => nameof(NpcNameColumnValues),
+            NpcFilterColumn.EditorId => nameof(NpcEditorIdColumnValues),
+            NpcFilterColumn.FormId => nameof(NpcFormIdColumnValues),
+            NpcFilterColumn.Race => nameof(NpcRaceColumnValues),
+            NpcFilterColumn.AssignmentState => nameof(NpcAssignmentStateColumnValues),
+            NpcFilterColumn.Preset => nameof(NpcPresetColumnValues),
+            _ => nameof(NpcRaceColumnValues)
+        };
     }
 
     private IEnumerable<Npc> GetSelectedNpcsForCommand() =>

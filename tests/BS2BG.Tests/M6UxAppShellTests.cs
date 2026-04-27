@@ -27,7 +27,7 @@ public sealed class M6UxAppShellTests
         window.FindControl<ComboBox>("ThemePreferenceComboBox").Should().NotBeNull();
         window.FindControl<MenuItem>("UndoMenuItem").Should().NotBeNull();
         window.FindControl<MenuItem>("RedoMenuItem").Should().NotBeNull();
-        window.FindControl<Button>("NpcFilterRaceButton").Should().NotBeNull();
+        window.FindControl<Button>("NpcRaceFilterButton").Should().NotBeNull();
         window.FindControl<Button>("SelectedNpcAssignButton").Should().NotBeNull();
         window.FindControl<Button>("SelectedNpcClearAssignmentsButton").Should().NotBeNull();
     }
@@ -67,7 +67,7 @@ public sealed class M6UxAppShellTests
         viewModel.Morphs.Npcs.Add(CreateNpc("Serana", "NordRaceVampire"));
         var window = new MainWindow(viewModel);
         window.ApplyTemplate();
-        var button = window.FindControl<Button>("NpcFilterRaceButton").Should().BeAssignableTo<Button>().Which;
+        var button = window.FindControl<Button>("NpcRaceFilterButton").Should().BeAssignableTo<Button>().Which;
         var popup = window.FindControl<Popup>("NpcRaceFilterPopup").Should().BeAssignableTo<Popup>().Which;
         var valuesList = window.FindControl<ListBox>("NpcRaceFilterValuesListBox").Should().BeAssignableTo<ListBox>()
             .Which;

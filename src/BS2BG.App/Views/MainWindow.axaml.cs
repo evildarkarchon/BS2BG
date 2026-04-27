@@ -79,16 +79,74 @@ public partial class MainWindow : Window
 
     private void OnNpcRaceFilterSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
+        ApplyNpcColumnFilterSelection(sender, NpcFilterColumn.Race);
+    }
+
+    private void OnNpcModFilterSelectionChanged(object? sender, SelectionChangedEventArgs args) =>
+        ApplyNpcColumnFilterSelection(sender, NpcFilterColumn.Mod);
+
+    private void OnNpcNameFilterSelectionChanged(object? sender, SelectionChangedEventArgs args) =>
+        ApplyNpcColumnFilterSelection(sender, NpcFilterColumn.Name);
+
+    private void OnNpcEditorIdFilterSelectionChanged(object? sender, SelectionChangedEventArgs args) =>
+        ApplyNpcColumnFilterSelection(sender, NpcFilterColumn.EditorId);
+
+    private void OnNpcFormIdFilterSelectionChanged(object? sender, SelectionChangedEventArgs args) =>
+        ApplyNpcColumnFilterSelection(sender, NpcFilterColumn.FormId);
+
+    private void OnNpcAssignmentStateFilterSelectionChanged(object? sender, SelectionChangedEventArgs args) =>
+        ApplyNpcColumnFilterSelection(sender, NpcFilterColumn.AssignmentState);
+
+    private void OnNpcPresetFilterSelectionChanged(object? sender, SelectionChangedEventArgs args) =>
+        ApplyNpcColumnFilterSelection(sender, NpcFilterColumn.Preset);
+
+    /// <summary>
+    /// Forwards checklist selections from view-owned ListBox controls into the ViewModel filter state.
+    /// Avalonia multi-selection is a control collection rather than an ICommand parameter, so this code-behind remains view-only glue.
+    /// </summary>
+    /// <param name="sender">The checklist ListBox that raised the selection event.</param>
+    /// <param name="column">The filter column represented by that ListBox.</param>
+    private void ApplyNpcColumnFilterSelection(object? sender, NpcFilterColumn column)
+    {
         if (ViewModel is null || sender is not ListBox listBox) return;
 
-        var selectedRaces = listBox.SelectedItems?.OfType<string>().ToArray() ?? Array.Empty<string>();
-        ViewModel.Morphs.SetNpcColumnAllowedValues(NpcFilterColumn.Race, selectedRaces);
+        var selectedValues = listBox.SelectedItems?.OfType<string>().ToArray() ?? Array.Empty<string>();
+        ViewModel.Morphs.SetNpcColumnAllowedValues(column, selectedValues);
     }
 
     private void OnNpcRaceFilterClearClick(object? sender, RoutedEventArgs args)
     {
         this.FindControl<ListBox>("NpcRaceFilterValuesListBox")?.SelectedItems?.Clear();
         ViewModel?.Morphs.ClearNpcRaceFilter();
+    }
+
+    private void OnNpcModFilterClearClick(object? sender, RoutedEventArgs args) =>
+        ClearNpcColumnFilter("NpcModFilterValuesListBox", NpcFilterColumn.Mod);
+
+    private void OnNpcNameFilterClearClick(object? sender, RoutedEventArgs args) =>
+        ClearNpcColumnFilter("NpcNameFilterValuesListBox", NpcFilterColumn.Name);
+
+    private void OnNpcEditorIdFilterClearClick(object? sender, RoutedEventArgs args) =>
+        ClearNpcColumnFilter("NpcEditorIdFilterValuesListBox", NpcFilterColumn.EditorId);
+
+    private void OnNpcFormIdFilterClearClick(object? sender, RoutedEventArgs args) =>
+        ClearNpcColumnFilter("NpcFormIdFilterValuesListBox", NpcFilterColumn.FormId);
+
+    private void OnNpcAssignmentStateFilterClearClick(object? sender, RoutedEventArgs args) =>
+        ClearNpcColumnFilter("NpcAssignmentStateFilterValuesListBox", NpcFilterColumn.AssignmentState);
+
+    private void OnNpcPresetFilterClearClick(object? sender, RoutedEventArgs args) =>
+        ClearNpcColumnFilter("NpcPresetFilterValuesListBox", NpcFilterColumn.Preset);
+
+    /// <summary>
+    /// Clears both the view selection collection and the matching ViewModel checklist filter.
+    /// </summary>
+    /// <param name="listBoxName">The named checklist ListBox to clear.</param>
+    /// <param name="column">The filter column to clear in the ViewModel.</param>
+    private void ClearNpcColumnFilter(string listBoxName, NpcFilterColumn column)
+    {
+        this.FindControl<ListBox>(listBoxName)?.SelectedItems?.Clear();
+        ViewModel?.Morphs.ClearNpcColumnFilter(column);
     }
 
     private void OnCommandPaletteSelectionChanged(object? sender, SelectionChangedEventArgs args)
