@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 03 UI-SPEC approved
-last_updated: "2026-04-27T03:48:24.111Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-04-27T03:54:05.131Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 24
-  completed_plans: 17
-  percent: 71
+  completed_plans: 18
+  percent: 75
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 03 (validation-and-diagnostics) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-04-27
 
-Progress: [███████░░░] 71%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [███████░░░] 71%
 | Phase 01-profile-correctness-and-trust P06 | 4 min | 2 tasks | 3 files |
 | Phase 01-profile-correctness-and-trust P07 | 1 min | 2 tasks | 2 files |
 | Phase 03-validation-and-diagnostics P01 | 6 min | 2 tasks | 8 files |
+| Phase 03-validation-and-diagnostics P02 | 4 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,8 @@ Recent decisions affecting current work:
 - [Phase 01-profile-correctness-and-trust]: Keep PROF-03 neutral and non-blocking. — Unbundled/custom profile handling remains informational without inference, mismatch warnings, or generation/export blocking.
 - [Phase 03-validation-and-diagnostics]: Keep project/profile diagnostics read-only and Core-only so App diagnostics presentation can reuse them without mutating ProjectModel state. — Preserves Phase 3 read-only diagnostics boundary.
 - [Phase 03-validation-and-diagnostics]: Expose profile multiplier and inversion tables from SliderProfile for diagnostics rather than re-parsing profile JSON or duplicating formatter logic. — Allows DIAG-02 counts to use the loaded profile tables without changing formatter output semantics.
+- [Phase 03-validation-and-diagnostics]: Use existing NpcImportDiagnostic entries for within-file duplicate rows so direct import keeps skip behavior while preview can explain skipped rows. — Duplicate rows are parser diagnostics and direct imports already consume parser diagnostics.
+- [Phase 03-validation-and-diagnostics]: Keep existing database/project duplicate classification in NpcImportPreviewService rather than changing parser policy or App mutation paths. — Existing-state duplicate classification is preview-specific and must remain read-only until callers commit imports.
 
 ### Pending Todos
 
@@ -112,6 +115,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27T03:48:06.989Z
-Stopped at: Phase 03 UI-SPEC approved
+Last session: 2026-04-27T03:53:46.518Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None

@@ -29,7 +29,7 @@ Accepted Phase 1 override: ROADMAP/requirement wording that previously mentioned
 
 - [x] **DIAG-01**: User can run a read-only project validation report that identifies profile, preset, target, NPC assignment, reference, and export-readiness issues.
 - [x] **DIAG-02**: User can inspect profile diagnostics showing slider coverage, unknown sliders, injected defaults, multipliers, inversions, and likely profile mismatch indicators.
-- [ ] **DIAG-03**: User can preview NPC import results, including parsed rows, invalid lines, duplicates, charset fallback, and assignment effects before committing import changes.
+- [x] **DIAG-03**: User can preview NPC import results, including parsed rows, invalid lines, duplicates, charset fallback, and assignment effects before committing import changes.
 - [ ] **DIAG-04**: User can preview export destinations and exact output effects before writing files when the workflow involves risk of overwriting or partial output.
 - [ ] **DIAG-05**: User receives actionable save/export failure messages that identify which files were written, restored, skipped, or left untouched.
 
@@ -98,7 +98,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WORK-05 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
 | DIAG-01 | Phase 3: Validation and Diagnostics | Complete |
 | DIAG-02 | Phase 3: Validation and Diagnostics | Complete |
-| DIAG-03 | Phase 3: Validation and Diagnostics | Pending |
+| DIAG-03 | Phase 3: Validation and Diagnostics | Complete |
 | DIAG-04 | Phase 3: Validation and Diagnostics | Pending |
 | DIAG-05 | Phase 3: Validation and Diagnostics | Pending |
 | EXT-01 | Phase 4: Profile Extensibility and Controlled Customization | Pending |

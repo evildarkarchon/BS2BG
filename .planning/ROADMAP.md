@@ -77,7 +77,7 @@ Plans:
 **Plans**: 8 plans
 Plans:
 - [x] 03-01-PLAN.md — Create Core project/profile diagnostics services and tests.
-- [ ] 03-02-PLAN.md — Add read-only NPC import preview classification and duplicate diagnostics.
+- [x] 03-02-PLAN.md — Add read-only NPC import preview classification and duplicate diagnostics.
 - [ ] 03-03-PLAN.md — Add export preview and atomic outcome ledger Core contracts.
 - [ ] 03-04-PLAN.md — Expose project/profile diagnostics through a ReactiveUI Diagnostics ViewModel and copyable report.
 - [ ] 03-05-PLAN.md — Integrate optional no-mutation NPC import preview and distinct assignment-effect summaries.
@@ -121,6 +121,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Profile Correctness and Trust | 7/7 | Complete   | 2026-04-26 |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | Not started | - |
-| 3. Validation and Diagnostics | 0/TBD | Not started | - |
+| 3. Validation and Diagnostics | 2/8 | In Progress | - |
 | 4. Profile Extensibility and Controlled Customization | 0/TBD | Not started | - |
 | 5. Automation, Sharing, and Release Trust | 0/TBD | Not started | - |
