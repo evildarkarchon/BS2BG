@@ -16,6 +16,7 @@ using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 using DynamicData;
+using DynamicData.Binding;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 
@@ -39,11 +40,13 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly IImageViewService imageViewService;
     private readonly MorphGenerationService morphGenerationService;
     private readonly NpcFilterState npcDatabaseFilterState = new();
+    private readonly BehaviorSubject<Func<NpcRowViewModel, bool>> npcDatabaseFilterPredicate = new(static _ => true);
     private readonly Dictionary<Npc, NpcRowViewModel> npcDatabaseRowsByNpc = new(ReferenceEqualityComparer.Instance);
     private readonly SourceCache<NpcRowViewModel, Guid> npcDatabaseRowSource = new(row => row.RowId);
     private readonly INoPresetNotificationService noPresetNotificationService;
     private readonly Dictionary<NpcFilterColumn, string> npcColumnSearchText = new();
     private readonly NpcFilterState npcFilterState = new();
+    private readonly BehaviorSubject<Func<NpcRowViewModel, bool>> npcFilterPredicate = new(static _ => true);
     private readonly Dictionary<Npc, int> npcPropertySubscriptions = new();
     private readonly Dictionary<Npc, NpcRowViewModel> npcRowsByNpc = new(ReferenceEqualityComparer.Instance);
     private readonly SourceCache<NpcRowViewModel, Guid> npcRowSource = new(row => row.RowId);
@@ -52,6 +55,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly NpcTextParser npcTextParser;
     private readonly ProjectModel project;
     private readonly HashSet<Guid> selectedNpcRowIds = new();
+    private readonly ObservableCollectionExtended<Npc> visibleNpcDatabase = new();
+    private readonly ObservableCollectionExtended<Npc> visibleNpcs = new();
     private readonly IScheduler filterScheduler;
     private bool syncingSelectedNpcs;
     private readonly UndoRedoService undoRedo;
@@ -148,6 +153,12 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         NpcDatabase.CollectionChanged += OnNpcDatabaseChanged;
         SelectedNpcs.CollectionChanged += OnSelectedNpcsChanged;
         disposables.Add(Disposable.Create(() => SelectedNpcs.CollectionChanged -= OnSelectedNpcsChanged));
+        disposables.Add(npcFilterPredicate);
+        disposables.Add(npcDatabaseFilterPredicate);
+        disposables.Add(npcRowSource);
+        disposables.Add(npcDatabaseRowSource);
+        disposables.Add(ConnectFilteredCollection(npcRowSource, npcFilterPredicate, visibleNpcs));
+        disposables.Add(ConnectFilteredCollection(npcDatabaseRowSource, npcDatabaseFilterPredicate, visibleNpcDatabase));
         SyncRowsFromCollection(Npcs, npcRowsByNpc, npcRowSource);
         SyncRowsFromCollection(NpcDatabase, npcDatabaseRowsByNpc, npcDatabaseRowSource);
         RefreshNpcSubscriptions();
@@ -364,9 +375,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<Npc> NpcDatabase { get; } = new();
 
-    public ObservableCollection<Npc> VisibleNpcs { get; } = new();
+    public ObservableCollection<Npc> VisibleNpcs => visibleNpcs;
 
-    public ObservableCollection<Npc> VisibleNpcDatabase { get; } = new();
+    public ObservableCollection<Npc> VisibleNpcDatabase => visibleNpcDatabase;
 
     public ObservableCollection<MorphTargetBase> NoPresetTargets { get; } = new();
 
@@ -1328,7 +1339,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     {
         if (applyPendingSearchText) npcFilterState.ApplyPendingGlobalSearchText();
 
-        RefreshFilteredCollection(Npcs, npcRowsByNpc, npcFilterState, VisibleNpcs);
+        npcFilterPredicate.OnNext(npcFilterState.CreatePredicate());
         this.RaisePropertyChanged(nameof(NpcCountBadgeText));
         RaiseAllNpcColumnValuesChanged();
         this.RaisePropertyChanged(nameof(IsNpcFilteredEmptyVisible));
@@ -1344,7 +1355,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     {
         if (applyPendingSearchText) npcDatabaseFilterState.ApplyPendingGlobalSearchText();
 
-        RefreshFilteredCollection(NpcDatabase, npcDatabaseRowsByNpc, npcDatabaseFilterState, VisibleNpcDatabase);
+        npcDatabaseFilterPredicate.OnNext(npcDatabaseFilterState.CreatePredicate());
         this.RaisePropertyChanged(nameof(NpcDatabaseCountBadgeText));
     }
 
@@ -1359,17 +1370,25 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     private void ApplyPendingNpcDatabaseSearchText() => RefreshVisibleNpcDatabase(true);
 
-    private static void RefreshFilteredCollection(
-        IEnumerable<Npc> source,
-        Dictionary<Npc, NpcRowViewModel> rowsByNpc,
-        NpcFilterState filterState,
-        ObservableCollection<Npc> target)
+    /// <summary>
+    /// Binds a keyed NPC row cache into a public NPC collection through incremental DynamicData filter changes.
+    /// The public collections stay as NPC models for existing bindings while avoiding full clear/rebuild refreshes.
+    /// </summary>
+    /// <param name="rowSource">The keyed row cache for the backing NPC collection.</param>
+    /// <param name="filterPredicate">The current filter predicate stream.</param>
+    /// <param name="target">The public visible NPC collection bound to the UI and commands.</param>
+    /// <returns>A disposable subscription that owns the DynamicData binding.</returns>
+    private static IDisposable ConnectFilteredCollection(
+        SourceCache<NpcRowViewModel, Guid> rowSource,
+        IObservable<Func<NpcRowViewModel, bool>> filterPredicate,
+        IObservableCollection<Npc> target)
     {
-        var predicate = filterState.CreatePredicate();
-        target.Clear();
-        foreach (var npc in source)
-            if (rowsByNpc.TryGetValue(npc, out var row) && predicate(row))
-                target.Add(npc);
+        return rowSource.Connect()
+            .Filter(filterPredicate)
+            .Sort(SortExpressionComparer<NpcRowViewModel>.Ascending(row => row.SortOrder))
+            .Transform(row => row.Npc)
+            .Bind(target)
+            .Subscribe();
     }
 
     private void OnNpcsChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -1450,7 +1469,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         Dictionary<Npc, NpcRowViewModel> rowsByNpc,
         SourceCache<NpcRowViewModel, Guid> rowSource)
     {
-        var currentNpcs = source.ToHashSet();
+        var sourceSnapshot = source.ToArray();
+        var currentNpcs = sourceSnapshot.ToHashSet(ReferenceEqualityComparer.Instance);
         var removedRows = rowsByNpc
             .Where(pair => !currentNpcs.Contains(pair.Key))
             .Select(pair => pair.Value)
@@ -1462,11 +1482,21 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             rowSource.Remove(row.RowId);
         }
 
-        foreach (var npc in currentNpcs)
+        for (var index = 0; index < sourceSnapshot.Length; index++)
         {
-            if (rowsByNpc.ContainsKey(npc)) continue;
+            var npc = sourceSnapshot[index];
+            if (rowsByNpc.TryGetValue(npc, out var existingRow))
+            {
+                if (existingRow.SortOrder != index)
+                {
+                    existingRow.UpdateSortOrder(index);
+                    rowSource.Refresh(existingRow);
+                }
 
-            var row = new NpcRowViewModel(npc);
+                continue;
+            }
+
+            var row = new NpcRowViewModel(npc, sortOrder: index);
             rowsByNpc.Add(npc, row);
             rowSource.AddOrUpdate(row);
         }
@@ -1545,7 +1575,11 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             or nameof(Npc.FormId)
             or nameof(Npc.SliderPresetsText)
             or nameof(Npc.SliderPresets))
+        {
+            if (sender is Npc npc && npcRowsByNpc.TryGetValue(npc, out var row)) npcRowSource.Refresh(row);
+
             RefreshVisibleNpcs();
+        }
     }
 
     private void RefreshSelectedTargetSubscription()

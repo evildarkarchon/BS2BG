@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reactive.Concurrency;
@@ -600,6 +601,27 @@ public sealed class MorphsViewModelTests
         viewModel.VisibleNpcs.Count.Should().Be(5000);
         SpinWait.SpinUntil(() => viewModel.VisibleNpcs.Count == 1, TimeSpan.FromSeconds(3)).Should().BeTrue();
         viewModel.VisibleNpcs.Should().ContainSingle().Which.Name.Should().Be("Npc-4999");
+    }
+
+    [Fact]
+    public void ChecklistFilteringUpdatesVisibleRowsIncrementallyWithoutReset()
+    {
+        var project = CreateProjectWithPresets();
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var serana = CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(serana);
+        project.MorphedNpcs.Add(valerica);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider());
+        var collectionActions = new List<NotifyCollectionChangedAction>();
+        viewModel.VisibleNpcs.CollectionChanged += (_, args) => collectionActions.Add(args.Action);
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Name, new[] { "Lydia" });
+
+        viewModel.VisibleNpcs.Should().Equal(lydia);
+        collectionActions.Should().NotContain(NotifyCollectionChangedAction.Reset);
+        collectionActions.Should().OnlyContain(action => action == NotifyCollectionChangedAction.Remove);
     }
 
     [Fact]

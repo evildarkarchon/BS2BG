@@ -12,17 +12,25 @@ public sealed class NpcRowViewModel
     /// Initializes a new NPC row wrapper with a generated stable UI identity.
     /// </summary>
     /// <param name="npc">The mutable Core NPC model represented by this UI row.</param>
+    /// <param name="rowId">An optional existing UI identity to preserve when undo restores a removed row.</param>
+    /// <param name="sortOrder">The current row position in the backing workflow collection.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="npc" /> is null.</exception>
-    public NpcRowViewModel(Npc npc, Guid? rowId = null)
+    public NpcRowViewModel(Npc npc, Guid? rowId = null, int sortOrder = 0)
     {
         Npc = npc ?? throw new ArgumentNullException(nameof(npc));
         RowId = rowId ?? Guid.NewGuid();
+        SortOrder = sortOrder;
     }
 
     /// <summary>
     /// Gets the stable UI identity used for filtering, selection preservation, and future undo targeting.
     /// </summary>
     public Guid RowId { get; }
+
+    /// <summary>
+    /// Gets the current backing collection position used to keep incremental filtered views in user-visible order.
+    /// </summary>
+    public int SortOrder { get; private set; }
 
     /// <summary>
     /// Gets the mutable Core NPC model; domain/export fields remain owned by Core.
@@ -63,4 +71,10 @@ public sealed class NpcRowViewModel
     /// Gets the current pipe-delimited assigned preset names from the wrapped NPC.
     /// </summary>
     public string PresetsText => Npc.SliderPresetsText;
+
+    /// <summary>
+    /// Updates the backing collection position after inserts, removes, or undo restore operations.
+    /// </summary>
+    /// <param name="sortOrder">The zero-based backing collection index to sort by.</param>
+    public void UpdateSortOrder(int sortOrder) => SortOrder = sortOrder;
 }

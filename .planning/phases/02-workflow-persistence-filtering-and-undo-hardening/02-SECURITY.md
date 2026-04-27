@@ -1,8 +1,8 @@
 ---
 phase: 02
 slug: workflow-persistence-filtering-and-undo-hardening
-status: blocked
-threats_open: 1
+status: verified
+threats_open: 0
 asvs_level: unspecified
 created: 2026-04-26
 audited_by: gsd-security-auditor
@@ -38,7 +38,7 @@ Per-phase security contract: threat register, accepted risks, and audit trail.
 | T-02-03-02 | I | UserPreferences import folders | mitigate | Do not serialize import folder paths or filter state into `.jbs2bg`; keep them local only per D-02/D-04. | closed |
 | T-02-04-01 | D | NpcFilterState | mitigate | Keep predicate generation pure and side-effect free; add large-list unit coverage so malformed/large values do not mutate data. | closed |
 | T-02-04-02 | T | NpcRowViewModel | mitigate | Generate row IDs independent of mutable display/export fields per D-05 and do not serialize them. | closed |
-| T-02-05-01 | D | MorphsViewModel filtering | mitigate | Debounce free-text search and use keyed incremental filtering for large datasets per D-08/WORK-05. | open |
+| T-02-05-01 | D | MorphsViewModel filtering | mitigate | Debounce free-text search and use keyed incremental filtering for large datasets per D-08/WORK-05. | closed |
 | T-02-05-02 | T | SelectedNpcs / stable IDs | mitigate | Preserve selection by generated row ID instead of mutable fields or visible collection references per D-05/D-07. | closed |
 | T-02-06-01 | I | MainWindow.axaml filter values | mitigate | Bind values as text through Avalonia controls; do not log/export filter values or paths. | closed |
 | T-02-06-02 | D | MainWindow.axaml compiled bindings | mitigate | Add headless UI tests and run build to catch missing `x:DataType`/binding failures. | closed |
@@ -65,7 +65,7 @@ Disposition: mitigate, accept, or transfer.
 | T-02-03-02 | CLOSED | Import folder paths are local `UserPreferences` fields only; NPC filter/search state is absent from preference JSON and Core serialization. | `src/BS2BG.App/Services/UserPreferencesService.cs`; `tests/BS2BG.Tests/MorphsViewModelTests.cs:874-888` |
 | T-02-04-01 | CLOSED | `NpcFilterState.CreatePredicate` snapshots allowed values and returns a side-effect-free predicate; large-list test verifies no row mutation. | `src/BS2BG.App/ViewModels/Workflow/NpcFilterState.cs:117-145`; `tests/BS2BG.Tests/NpcFilterStateTests.cs:113-136` |
 | T-02-04-02 | CLOSED | `NpcRowViewModel` generates App-layer `Guid RowId`, independent of mutable NPC fields; Core `Npc` has no `RowId`. | `src/BS2BG.App/ViewModels/Workflow/NpcRowViewModel.cs:16-30`; tests |
-| T-02-05-01 | OPEN | Debounce is present, but declared keyed incremental filtering is not verified. `SourceCache` sidecars exist, visible collections still clear/rebuild in `RefreshFilteredCollection`, and no `.Connect().Filter().Bind()` incremental pipeline was found. | `src/BS2BG.App/ViewModels/MorphsViewModel.cs:43-49,347-356,1362-1373`; `tests/BS2BG.Tests/MorphsViewModelTests.cs:579-603` |
+| T-02-05-01 | CLOSED | Debounce remains in place and visible NPC collections are now bound from keyed `SourceCache` rows through a DynamicData `.Connect().Filter().Sort().Transform().Bind()` pipeline. The removed `RefreshFilteredCollection`/`target.Clear()` path no longer exists, and regression coverage verifies checklist filtering updates visible rows without a collection reset. | `src/BS2BG.App/ViewModels/MorphsViewModel.cs:43-60,154-163,1328-1395`; `src/BS2BG.App/ViewModels/Workflow/NpcRowViewModel.cs:16-36,72-78`; `tests/BS2BG.Tests/MorphsViewModelTests.cs:580-629`; `dotnet test`; `dotnet build BS2BG.sln` |
 | T-02-05-02 | CLOSED | Selection is tracked by generated row IDs and hidden selections are preserved when visible selection changes. | `src/BS2BG.App/ViewModels/MorphsViewModel.cs:54,1013-1045,1407-1428`; tests |
 | T-02-06-01 | CLOSED | Filter values are bound as Avalonia text values; no App logging APIs were found. | `src/BS2BG.App/Views/MainWindow.axaml:742-913`; App grep |
 | T-02-06-02 | CLOSED | MainWindow root and DataTemplates declare `x:DataType`; headless UI tests cover required filter controls and summary reports build passed. | `src/BS2BG.App/Views/MainWindow.axaml`; `tests/BS2BG.Tests/M6UxAppShellTests.cs`; `02-06-SUMMARY.md` |
@@ -78,9 +78,7 @@ Disposition: mitigate, accept, or transfer.
 
 ## Open Threats
 
-| Threat ID | Category | Mitigation Expected | Files Searched |
-|-----------|----------|---------------------|----------------|
-| T-02-05-01 | D | Keyed incremental filtering for large datasets in addition to debounced search; expected DynamicData incremental filter/bind pipeline or equivalent that avoids full visible collection clear/rebuild. | `src/BS2BG.App/ViewModels/MorphsViewModel.cs`; `tests/BS2BG.Tests/MorphsViewModelTests.cs` |
+None.
 
 ## Unregistered Flags
 
@@ -95,14 +93,16 @@ No accepted risks.
 | Metric | Count |
 |--------|-------|
 | Threats found | 18 |
-| Closed | 17 |
-| Open | 1 |
+| Closed | 18 |
+| Open | 0 |
 
 ## Security Audit Trail
 
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-04-26 | 18 | 17 | 1 | gsd-security-auditor |
+| 2026-04-26 | 18 | 18 | 0 | Kilo remediation audit |
+| 2026-04-26 | 18 | 18 | 0 | gsd-security-auditor remediation recheck |
 
 Audit notes:
 
@@ -113,12 +113,17 @@ Audit notes:
 - Verified absence of App logging APIs by grepping `src/BS2BG.App/**/*.cs` for common logging sinks; no matches found.
 - Independently confirmed the open T-02-05-01 evidence by reading `MorphsViewModel.RefreshFilteredCollection`, which still calls `target.Clear()` and repopulates visible collections, and by searching for `.Connect(` in `MorphsViewModel.cs` with no matches.
 - User gate decision: block advancement; no accepted risk recorded.
+- Remediated T-02-05-01 by binding keyed `SourceCache<NpcRowViewModel, Guid>` caches into `VisibleNpcs` and `VisibleNpcDatabase` through incremental DynamicData filter/sort/transform bindings.
+- Added `NpcRowViewModel.SortOrder` so incremental bindings preserve backing collection order across insert, remove, and undo restore operations.
+- Added regression coverage proving checklist filtering does not emit a collection reset, which guards against the prior clear/rebuild behavior.
+- Verified remediation with `dotnet test --filter FullyQualifiedName~MorphsViewModelTests`, `dotnet build BS2BG.sln`, `dotnet test`, and grep checks confirming `.Connect(` exists while `RefreshFilteredCollection`/`target.Clear()` no longer exist in `MorphsViewModel.cs`.
+- Rechecked T-02-05-01 with `gsd-security-auditor`; result: `## SECURED`, correction needed: none.
 
 ## Sign-Off
 
 - [x] All threats have a disposition: mitigate.
 - [x] Accepted risks documented in Accepted Risks Log: none.
-- [ ] `threats_open: 0` confirmed.
-- [ ] `status: verified` set in frontmatter.
+- [x] `threats_open: 0` confirmed.
+- [x] `status: verified` set in frontmatter.
 
-Approval: blocked 2026-04-26 pending remediation of T-02-05-01.
+Approval: verified 2026-04-26 after remediation of T-02-05-01.
