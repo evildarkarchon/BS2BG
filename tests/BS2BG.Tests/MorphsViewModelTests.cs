@@ -405,8 +405,8 @@ public sealed class MorphsViewModelTests
 
         json.Should().Contain(nameof(UserPreferences.NpcTextFolder));
         json.Should().NotContain(nameof(MorphsViewModel.SearchText));
-        json.Should().NotContain("NpcFilter", StringComparison.OrdinalIgnoreCase);
-        json.Should().NotContain("AllowedValues", StringComparison.OrdinalIgnoreCase);
+        json.Contains("NpcFilter", StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+        json.Contains("AllowedValues", StringComparison.OrdinalIgnoreCase).Should().BeFalse();
     }
 
     [Theory]

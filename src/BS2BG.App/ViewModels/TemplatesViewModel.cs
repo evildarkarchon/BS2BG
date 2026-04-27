@@ -496,6 +496,7 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
             OmitRedundantSliders = OmitRedundantSliders,
             ProjectFolder = currentPreferences.ProjectFolder,
             BodySlideXmlFolder = currentPreferences.BodySlideXmlFolder,
+            NpcTextFolder = currentPreferences.NpcTextFolder,
             BodyGenExportFolder = currentPreferences.BodyGenExportFolder,
             BosJsonExportFolder = currentPreferences.BosJsonExportFolder
         };

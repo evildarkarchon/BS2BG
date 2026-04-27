@@ -22,6 +22,8 @@ public sealed class UserPreferences
 
     public string? BodySlideXmlFolder { get; set; }
 
+    public string? NpcTextFolder { get; set; }
+
     public string? BodyGenExportFolder { get; set; }
 
     public string? BosJsonExportFolder { get; set; }
