@@ -25,7 +25,8 @@ public partial class MainWindow : Window
         WindowImageViewService? imageViewService = null,
         WindowNoPresetNotificationService? noPresetNotificationService = null,
         WindowFileDialogService? fileDialogService = null,
-        WindowAppDialogService? dialogService = null)
+        WindowAppDialogService? dialogService = null,
+        ProfileManagementDialogService? profileManagementDialogService = null)
     {
         InitializeComponent();
 
@@ -57,6 +58,7 @@ public partial class MainWindow : Window
         noPresetNotificationService?.Attach(this);
         fileDialogService?.Attach(this);
         dialogService?.Attach(this);
+        profileManagementDialogService?.Attach(this);
     }
 
     public MainWindowViewModel? ViewModel { get; }

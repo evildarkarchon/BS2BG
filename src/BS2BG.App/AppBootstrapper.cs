@@ -72,9 +72,13 @@ public static class AppBootstrapper
         services.AddSingleton<WindowAppDialogService>();
         services.AddSingleton<IAppDialogService>(provider =>
             provider.GetRequiredService<WindowAppDialogService>());
+        services.AddSingleton<ProfileManagementDialogService>();
+        services.AddSingleton<IProfileManagementDialogService>(provider =>
+            provider.GetRequiredService<ProfileManagementDialogService>());
         services.AddSingleton<TemplatesViewModel>();
         services.AddSingleton<MorphsViewModel>();
         services.AddSingleton<DiagnosticsViewModel>();
+        services.AddSingleton<ProfileManagerViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddTransient<MainWindow>();
     }
