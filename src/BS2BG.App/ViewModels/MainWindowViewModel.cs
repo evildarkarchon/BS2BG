@@ -732,7 +732,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         HasExportPreview = ExportPreviewFiles.Count > 0;
         ExportPreviewSummary = preview.Files.Any(file => file.WillOverwrite)
             ? "Existing files will be overwritten. Confirm only after reviewing the paths and snippets below."
-            : "New files will be created at the paths below. No overwrite confirmation is required.";
+            : preview.HasBatchRisk
+                ? "Multiple files will be written. Confirm after reviewing the paths and snippets below."
+                : "New files will be created at the paths below. No overwrite confirmation is required.";
     }
 
     private void ClearExportPreview()
@@ -743,7 +745,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     }
 
     private static bool RequiresExportConfirmation(ExportPreviewResult preview) =>
-        preview.Files.Any(file => file.WillOverwrite);
+        preview.HasBatchRisk;
 
     private async Task<bool> ConfirmDiscardChangesIfNeededAsync(
         DiscardChangesAction action,

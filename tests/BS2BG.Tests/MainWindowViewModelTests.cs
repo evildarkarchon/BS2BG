@@ -168,14 +168,14 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ExportBodyGenInisDoesNotConfirmRoutineCreateNewExport()
+    public async Task ExportBodyGenInisConfirmsMultiFileCreateRiskBeforeWriting()
     {
         using var directory = new TemporaryDirectory();
         var project = CreateProjectWithPreset("Alpha");
         var target = new CustomMorphTarget("All|Female");
         target.AddSliderPreset(project.SliderPresets[0]);
         project.CustomMorphTargets.Add(target);
-        var confirmations = new FakeAppDialogService();
+        var confirmations = new FakeAppDialogService { ConfirmExportOverwriteResult = false };
         var viewModel = CreateViewModel(
             project,
             new FakeFileDialogService { BodyGenExportFolder = directory.Path },
@@ -183,9 +183,10 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
 
-        confirmations.ConfirmExportOverwriteCallCount.Should().Be(0);
-        File.Exists(Path.Combine(directory.Path, "templates.ini")).Should().BeTrue();
-        File.Exists(Path.Combine(directory.Path, "morphs.ini")).Should().BeTrue();
+        confirmations.ConfirmExportOverwriteCallCount.Should().Be(1);
+        File.Exists(Path.Combine(directory.Path, "templates.ini")).Should().BeFalse();
+        File.Exists(Path.Combine(directory.Path, "morphs.ini")).Should().BeFalse();
+        viewModel.StatusMessage.Should().Be("Export cancelled; existing files kept.");
     }
 
     [Fact]
@@ -339,7 +340,7 @@ public sealed class MainWindowViewModelTests
 
         viewModel.HasExportPreview.Should().BeTrue();
         viewModel.ExportPreviewSummary.Should()
-            .Be("New files will be created at the paths below. No overwrite confirmation is required.");
+            .Be("Multiple files will be written. Confirm after reviewing the paths and snippets below.");
         viewModel.ExportPreviewFiles.Select(file => (file.Kind, file.TargetPath, file.EffectLabel, file.IsOverwrite))
             .Should().Equal(
                 ("BodyGen", Path.Combine(directory.Path, "templates.ini"), "Create", false),
