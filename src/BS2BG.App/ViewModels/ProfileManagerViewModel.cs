@@ -106,6 +106,16 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
     public ObservableCollection<ProfileManagerEntryViewModel> ProfileEntries { get; } = [];
 
+    public ObservableCollection<ProfileManagerEntryViewModel> BundledProfiles { get; } = [];
+
+    public ObservableCollection<ProfileManagerEntryViewModel> CustomProfiles { get; } = [];
+
+    public ObservableCollection<ProfileManagerEntryViewModel> EmbeddedProjectProfiles { get; } = [];
+
+    public ObservableCollection<ProfileManagerEntryViewModel> MissingProfiles { get; } = [];
+
+    public ObservableCollection<ProfileValidationDiagnostic> RejectedProfileFiles { get; } = [];
+
     public ReactiveCommand<Unit, Unit> ImportProfileCommand { get; }
 
     public ReactiveCommand<Unit, Unit> CreateBlankProfileCommand { get; }
@@ -360,15 +370,41 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
     {
         var selectedName = SelectedProfile?.Name;
         ProfileEntries.Clear();
-        foreach (var entry in catalogService.Current.Entries
-                     .Select(ProfileManagerEntryViewModel.FromCatalogEntry)
-                     .Where(MatchesSearch))
+        BundledProfiles.Clear();
+        CustomProfiles.Clear();
+        EmbeddedProjectProfiles.Clear();
+        MissingProfiles.Clear();
+        RejectedProfileFiles.Clear();
+
+        foreach (var entry in catalogService.Current.Entries.Select(ProfileManagerEntryViewModel.FromCatalogEntry))
+        {
+            if (!MatchesSearch(entry)) continue;
+
             ProfileEntries.Add(entry);
+            switch (entry.SourceKind)
+            {
+                case ProfileSourceKind.Bundled:
+                    BundledProfiles.Add(entry);
+                    break;
+                case ProfileSourceKind.LocalCustom:
+                    CustomProfiles.Add(entry);
+                    break;
+                case ProfileSourceKind.EmbeddedProject:
+                    EmbeddedProjectProfiles.Add(entry);
+                    break;
+            }
+        }
 
         foreach (var missing in MissingProjectProfileNames()
                      .Select(ProfileManagerEntryViewModel.Missing)
                      .Where(MatchesSearch))
+        {
             ProfileEntries.Add(missing);
+            MissingProfiles.Add(missing);
+        }
+
+        foreach (var diagnostic in catalogService.LastDiscoveryDiagnostics)
+            RejectedProfileFiles.Add(diagnostic);
 
         SelectedProfile = ProfileEntries.FirstOrDefault(entry => ProfileNamesEqual(entry.Name, selectedName))
                           ?? ProfileEntries.FirstOrDefault();

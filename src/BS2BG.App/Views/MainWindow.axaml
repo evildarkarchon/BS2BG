@@ -284,7 +284,7 @@
               <Grid Grid.Column="0"
                     RowDefinitions="Auto,Auto,*,Auto,*">
                 <Grid Grid.Row="0"
-                      ColumnDefinitions="Auto,180,Auto,Auto,*"
+                      ColumnDefinitions="Auto,180,Auto,Auto,Auto,*"
                       RowDefinitions="Auto"
                       Margin="0,0,0,8">
                   <TextBlock Grid.Column="0"
@@ -301,16 +301,22 @@
                             Content="Omit Redundant Sliders"
                             automation:AutomationProperties.Name="Omit redundant sliders"
                             IsChecked="{Binding Templates.OmitRedundantSliders}" />
+                  <Button x:Name="ManageProfilesButton"
+                           Grid.Column="3"
+                           Margin="16,0,0,0"
+                           Content="Manage Profiles"
+                           automation:AutomationProperties.Name="Manage Profiles"
+                           Command="{Binding Templates.ManageProfilesCommand}" />
                   <Button x:Name="GenerateTemplatesButton"
-                          Grid.Column="3"
-                          Margin="16,0,0,0"
-                          Content="Generate Templates"
-                          automation:AutomationProperties.Name="Generate templates"
-                          Command="{Binding Templates.GenerateTemplatesCommand}" />
+                           Grid.Column="4"
+                           Margin="8,0,0,0"
+                           Content="Generate Templates"
+                           automation:AutomationProperties.Name="Generate templates"
+                           Command="{Binding Templates.GenerateTemplatesCommand}" />
                   <Button x:Name="CopyGeneratedTemplatesButton"
-                          Grid.Column="4"
+                          Grid.Column="5"
                           Margin="8,0,0,0"
-                          HorizontalAlignment="Left"
+                          HorizontalAlignment="Right"
                           Content="Copy"
                           automation:AutomationProperties.Name="Copy generated templates"
                           Command="{Binding Templates.CopyGeneratedTemplatesCommand}" />
@@ -1373,6 +1379,289 @@
               </Grid>
             </Grid>
           </Grid>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Profiles"
+               DataContext="{Binding Profiles}">
+        <Grid x:DataType="vm:ProfileManagerViewModel"
+              ColumnDefinitions="280,4,*"
+              Margin="16">
+          <Border Grid.Column="0"
+                  Padding="16"
+                  Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                  BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                  BorderThickness="1">
+            <Grid RowDefinitions="Auto,Auto,*">
+              <StackPanel Grid.Row="0"
+                          Spacing="8">
+                <TextBlock Text="Profile Manager"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+                <TextBox x:Name="ProfileManagerSearchBox"
+                         automation:AutomationProperties.Name="Search profiles"
+                         Text="{Binding SearchText}"
+                         PlaceholderText="Search profiles" />
+                <Grid ColumnDefinitions="*,*">
+                  <Button x:Name="ImportProfileButton"
+                          Grid.Column="0"
+                          Content="Import Profile"
+                          automation:AutomationProperties.Name="Import Profile"
+                          Command="{Binding ImportProfileCommand}" />
+                  <Button x:Name="CreateBlankProfileButton"
+                          Grid.Column="1"
+                          Margin="8,0,0,0"
+                          Content="Create Blank Profile"
+                          automation:AutomationProperties.Name="Create Blank Profile"
+                          Command="{Binding CreateBlankProfileCommand}" />
+                </Grid>
+              </StackPanel>
+
+              <TextBlock Grid.Row="1"
+                         Margin="0,16,0,8"
+                         Text="Profile sources"
+                         FontSize="16"
+                         FontWeight="SemiBold" />
+
+              <ScrollViewer Grid.Row="2"
+                            VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="16">
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="Bundled"
+                               FontWeight="SemiBold" />
+                    <ItemsControl ItemsSource="{Binding BundledProfiles}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ProfileManagerEntryViewModel">
+                          <Border Padding="8"
+                                  Margin="0,0,0,4"
+                                  BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                  BorderThickness="0,0,0,1">
+                            <Grid RowDefinitions="Auto,Auto">
+                              <TextBlock Grid.Row="0" Text="{Binding Name}" />
+                              <TextBlock Grid.Row="1"
+                                         Text="{Binding SourceLabel}"
+                                         FontSize="12" />
+                            </Grid>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="Custom"
+                               FontWeight="SemiBold" />
+                    <ItemsControl ItemsSource="{Binding CustomProfiles}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ProfileManagerEntryViewModel">
+                          <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                  BorderThickness="0,0,0,1"
+                                  Padding="0,8">
+                            <Grid RowDefinitions="Auto,Auto">
+                              <TextBlock Grid.Row="0" Text="{Binding Name}" />
+                              <TextBlock Grid.Row="1" Text="{Binding SourceLabel}" FontSize="12" />
+                            </Grid>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="Embedded in project"
+                               FontWeight="SemiBold" />
+                    <ItemsControl ItemsSource="{Binding EmbeddedProjectProfiles}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ProfileManagerEntryViewModel">
+                          <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                  BorderThickness="0,0,0,1"
+                                  Padding="0,8">
+                            <Grid RowDefinitions="Auto,Auto">
+                              <TextBlock Grid.Row="0" Text="{Binding Name}" />
+                              <TextBlock Grid.Row="1" Text="{Binding SourceLabel}" FontSize="12" />
+                            </Grid>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="Missing references"
+                               FontWeight="SemiBold" />
+                    <ItemsControl x:Name="MissingProfileReferencesList"
+                                  ItemsSource="{Binding MissingProfiles}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ProfileManagerEntryViewModel">
+                          <Border Padding="8"
+                                  Background="{DynamicResource BS2BGInfoBackgroundBrush}"
+                                  BorderBrush="{DynamicResource BS2BGInfoBorderBrush}"
+                                  BorderThickness="1">
+                            <Grid RowDefinitions="Auto,Auto">
+                              <TextBlock Grid.Row="0" Text="{Binding Name}" />
+                              <TextBlock Grid.Row="1" Text="{Binding SourceLabel}" FontSize="12" />
+                            </Grid>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="Rejected profile files"
+                               FontWeight="SemiBold" />
+                    <ItemsControl x:Name="RejectedProfileFilesList"
+                                  ItemsSource="{Binding RejectedProfileFiles}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ProfileValidationDiagnostic">
+                          <Grid RowDefinitions="Auto,Auto"
+                                Margin="0,0,0,8">
+                            <TextBlock Grid.Row="0" Text="{Binding Severity}" FontSize="12" />
+                            <TextBlock Grid.Row="1" Text="{Binding Message}" TextWrapping="Wrap" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </StackPanel>
+              </ScrollViewer>
+            </Grid>
+          </Border>
+
+          <GridSplitter Grid.Column="1"
+                        ResizeDirection="Columns" />
+
+          <Border Grid.Column="2"
+                  Margin="16,0,0,0"
+                  Padding="16"
+                  Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                  BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                  BorderThickness="1">
+            <Grid RowDefinitions="Auto,Auto,*">
+              <Grid Grid.Row="0"
+                    ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+                <StackPanel Grid.Column="0"
+                            Spacing="4">
+                  <TextBlock Text="Profile Manager"
+                             FontSize="18"
+                             FontWeight="SemiBold" />
+                  <TextBlock Text="Bundled — read-only / Custom — editable / Embedded in project / Missing — using fallback"
+                             TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Margin="8,0,0,0"
+                        Content="Copy as Custom Profile"
+                        automation:AutomationProperties.Name="Copy as Custom Profile"
+                        Command="{Binding CopyBundledProfileCommand}" />
+                <Button Grid.Column="2"
+                        Margin="8,0,0,0"
+                        Content="Export Profile JSON"
+                        automation:AutomationProperties.Name="Export Profile JSON"
+                        Command="{Binding ExportProfileCommand}" />
+                <Button Grid.Column="3"
+                        Margin="8,0,0,0"
+                        Content="Validate Profile"
+                        automation:AutomationProperties.Name="Validate Profile"
+                        Command="{Binding ValidateProfileCommand}" />
+                <Button Grid.Column="4"
+                        Margin="8,0,0,0"
+                        Content="Save Profile"
+                        automation:AutomationProperties.Name="Save Profile"
+                        Command="{Binding SaveProfileCommand}" />
+              </Grid>
+
+              <TextBlock Grid.Row="1"
+                         Margin="0,16,0,16"
+                         Text="{Binding StatusMessage}"
+                         TextWrapping="Wrap" />
+
+              <ContentControl Grid.Row="2"
+                              Content="{Binding Editor}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate x:DataType="vm:ProfileEditorViewModel">
+                    <Grid x:DataType="vm:ProfileEditorViewModel"
+                          RowDefinitions="Auto,Auto,Auto,Auto,*">
+                      <Grid Grid.Row="0"
+                            ColumnDefinitions="*,*"
+                            Margin="0,0,0,16">
+                        <TextBox Grid.Column="0"
+                                 automation:AutomationProperties.Name="Profile display name"
+                                 Text="{Binding Name}"
+                                 PlaceholderText="Profile display name" />
+                        <TextBox Grid.Column="1"
+                                 Margin="8,0,0,0"
+                                 automation:AutomationProperties.Name="Profile game metadata"
+                                 Text="{Binding Game}"
+                                 PlaceholderText="Game metadata" />
+                      </Grid>
+                      <TextBlock Grid.Row="1"
+                                 Text="Blank profiles are allowed. Add defaults, multipliers, and inverted sliders when you are ready."
+                                 TextWrapping="Wrap"
+                                 Margin="0,0,0,16" />
+                      <TextBox Grid.Row="2"
+                               automation:AutomationProperties.Name="Filter profile sliders"
+                               Text="{Binding SearchText}"
+                               PlaceholderText="Filter sliders"
+                               Margin="0,0,0,16" />
+                      <ItemsControl Grid.Row="3"
+                                    ItemsSource="{Binding ValidationRows}"
+                                    Margin="0,0,0,16">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:ProfileEditorStatusRowViewModel">
+                            <Grid ColumnDefinitions="Auto,*"
+                                  Margin="0,0,0,8">
+                              <TextBlock Grid.Column="0" Text="{Binding Severity}" FontSize="12" FontWeight="SemiBold" />
+                              <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" Margin="8,0,0,0" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <ScrollViewer Grid.Row="4"
+                                    VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="16">
+                          <TextBlock Text="Metadata" FontSize="16" FontWeight="SemiBold" />
+                          <TextBlock Text="Defaults" FontSize="16" FontWeight="SemiBold" />
+                          <ItemsControl ItemsSource="{Binding VisibleDefaultRows}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:ProfileDefaultRowViewModel">
+                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+                                  <TextBlock Grid.Column="0" Text="{Binding Slider}" />
+                                  <TextBox Grid.Column="1" Width="64" Text="{Binding ValueSmall}" automation:AutomationProperties.Name="Default small value" />
+                                  <TextBox Grid.Column="2" Width="64" Margin="8,0,0,0" Text="{Binding ValueBig}" automation:AutomationProperties.Name="Default big value" />
+                                </Grid>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <TextBlock Text="Multipliers" FontSize="16" FontWeight="SemiBold" />
+                          <ItemsControl ItemsSource="{Binding MultiplierRows}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:ProfileMultiplierRowViewModel">
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                                  <TextBlock Grid.Column="0" Text="{Binding Slider}" />
+                                  <TextBox Grid.Column="1" Width="64" Text="{Binding Value}" automation:AutomationProperties.Name="Multiplier value" />
+                                </Grid>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <TextBlock Text="Inverted Sliders" FontSize="16" FontWeight="SemiBold" />
+                          <ItemsControl ItemsSource="{Binding InvertedRows}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:ProfileInvertedRowViewModel">
+                                <CheckBox Content="{Binding Slider}"
+                                          IsChecked="{Binding IsInverted}"
+                                          automation:AutomationProperties.Name="Inverted slider" />
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <TextBlock Text="Validation" FontSize="16" FontWeight="SemiBold" />
+                        </StackPanel>
+                      </ScrollViewer>
+                    </Grid>
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </Grid>
+          </Border>
         </Grid>
       </TabItem>
     </TabControl>
