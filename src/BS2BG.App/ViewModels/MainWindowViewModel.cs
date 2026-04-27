@@ -248,10 +248,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     private void SaveThemePreference(ThemePreference theme)
     {
+        var latestPreferences = preferencesService.Load();
         currentPreferences = new UserPreferences
         {
             Theme = theme,
-            OmitRedundantSliders = preferencesService.Load().OmitRedundantSliders
+            OmitRedundantSliders = latestPreferences.OmitRedundantSliders,
+            ProjectFolder = latestPreferences.ProjectFolder,
+            BodyGenExportFolder = latestPreferences.BodyGenExportFolder,
+            BosJsonExportFolder = latestPreferences.BosJsonExportFolder
         };
         if (!preferencesService.Save(currentPreferences)) StatusMessage = "Saving preferences failed.";
     }

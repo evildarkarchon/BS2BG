@@ -488,7 +488,10 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         currentPreferences = new UserPreferences
         {
             Theme = currentPreferences.Theme,
-            OmitRedundantSliders = OmitRedundantSliders
+            OmitRedundantSliders = OmitRedundantSliders,
+            ProjectFolder = currentPreferences.ProjectFolder,
+            BodyGenExportFolder = currentPreferences.BodyGenExportFolder,
+            BosJsonExportFolder = currentPreferences.BosJsonExportFolder
         };
         if (!preferencesService.Save(currentPreferences))
             StatusMessage = "This workflow preference could not be saved. BS2BG will continue using defaults for this session.";

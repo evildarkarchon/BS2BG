@@ -225,6 +225,7 @@ public sealed class MainWindowViewModelTests
         });
         var backend = new CapturingFileDialogBackend();
         backend.RegisterFolder(initialProjectFolder);
+        backend.RegisterFolder(selectedProjectFolder);
         backend.OpenProjectResult = openedProjectPath;
         backend.SaveProjectResult = savedProjectPath;
         var dialogs = new WindowFileDialogService(preferences, backend);

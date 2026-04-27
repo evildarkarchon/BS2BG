@@ -231,7 +231,10 @@ public sealed class TemplatesViewModelTests
         var preferences = new CapturingUserPreferencesService(new UserPreferences
         {
             Theme = ThemePreference.Dark,
-            OmitRedundantSliders = false
+            OmitRedundantSliders = false,
+            ProjectFolder = @"C:\Projects",
+            BodyGenExportFolder = @"D:\BodyGen",
+            BosJsonExportFolder = @"E:\BoS"
         });
         var viewModel = CreateViewModel(project: project, preferences: preferences);
 
@@ -240,7 +243,10 @@ public sealed class TemplatesViewModelTests
         preferences.Saved.Should().BeEquivalentTo(new UserPreferences
         {
             Theme = ThemePreference.Dark,
-            OmitRedundantSliders = true
+            OmitRedundantSliders = true,
+            ProjectFolder = @"C:\Projects",
+            BodyGenExportFolder = @"D:\BodyGen",
+            BosJsonExportFolder = @"E:\BoS"
         });
         new ProjectFileService().SaveToString(project).Should().NotContain(nameof(UserPreferences.OmitRedundantSliders));
     }

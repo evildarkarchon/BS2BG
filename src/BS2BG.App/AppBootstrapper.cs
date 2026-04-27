@@ -55,7 +55,8 @@ public static class AppBootstrapper
         services.AddSingleton<WindowNoPresetNotificationService>();
         services.AddSingleton<INoPresetNotificationService>(provider =>
             provider.GetRequiredService<WindowNoPresetNotificationService>());
-        services.AddSingleton<WindowFileDialogService>();
+        services.AddSingleton(provider =>
+            new WindowFileDialogService(provider.GetRequiredService<IUserPreferencesService>()));
         services.AddSingleton<IFileDialogService>(provider =>
             provider.GetRequiredService<WindowFileDialogService>());
         services.AddSingleton<WindowAppDialogService>();
