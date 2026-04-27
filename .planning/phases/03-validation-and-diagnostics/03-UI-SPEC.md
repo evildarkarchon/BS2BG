@@ -35,13 +35,13 @@ Declared values (must be multiples of 4):
 |-------|-------|-------|
 | xs | 4px | GridSplitter tracks, table row separators, compact text-to-control offsets |
 | sm | 8px | Button groups, popup inner gaps, severity badge padding, row-to-detail spacing |
-| md | 16px | Default Diagnostics panel padding, empty-state padding, report section spacing |
+| md | 16px | Default Diagnostics panel padding, side-pane/content inset, empty-state padding, report section spacing |
 | lg | 24px | Empty-state outer margin, major column gap before detail panes |
 | xl | 32px | Reserved for wide summary-card groups if the Diagnostics tab uses cards |
-| 2xl | 48px | Reserved for large centered empty-state vertical breathing room |
+| 2xl | 48px | Minimum pointer target for confirmation/action buttons; reserved for large centered empty-state vertical breathing room |
 | 3xl | 64px | Reserved for page-level separation only; avoid inside dense desktop tables |
 
-Exceptions: existing shell-compatible 12px side-pane/content inset may be used only when the Diagnostics tab aligns with adjacent `Templates`/`Morphs` panes; 44px minimum pointer target for confirmation/action buttons; 240px preview/filter popups and 4px splitter columns may match existing `MainWindow.axaml` patterns.
+No spacing-token exceptions are allowed for Phase 3; use only `4, 8, 16, 24, 32, 48, 64`. Layout dimensions that are not spacing tokens: preview/filter popups may use 240px width when matching existing `MainWindow.axaml` patterns.
 
 ---
 
@@ -54,7 +54,7 @@ Exceptions: existing shell-compatible 12px side-pane/content inset may be used o
 | Heading | 16px | 600 | 1.2 |
 | Display | 18px | 600 | 1.2 |
 
-**Typography rules:** use exactly these weights: regular `400` and semibold `600`. Use 12px labels for severity chips, count badges, and secondary metadata; use 14px body for finding titles/details; use 16px semibold for panel headings; use 18px semibold only for tab-level headings and empty-state headings. Generated text snippets and file-output samples use `Consolas` at 13px as an existing code-preview exception.
+**Typography rules:** use exactly these weights: regular `400` and semibold `600`. Use 12px labels for severity chips, count badges, and secondary metadata; use 14px body for finding titles/details; use 16px semibold for panel headings; use 18px semibold only for tab-level headings and empty-state headings. Generated text snippets and file-output samples use `Consolas` at 14px so snippets remain on the declared 12/14/16/18 scale.
 
 ---
 
@@ -81,7 +81,7 @@ Accent reserved for: `Run Diagnostics`, selected Diagnostics tab/finding state, 
 | Empty state heading | No diagnostics yet |
 | Empty state body | Run diagnostics to review project readiness, profile details, import previews, and export risk before writing files. |
 | Error state | Diagnostics could not be refreshed. Review the message below, keep your project open, and try again after fixing the reported input or file access problem. |
-| Destructive confirmation | None in the Diagnostics report. Risk confirmation uses non-destructive overwrite copy: `Overwrite existing output files?` Body: `BS2BG will write the files listed below. Existing targets may be replaced; if a write fails, the result ledger will show what was written, restored, skipped, or left untouched.` Primary: `Export Anyway`; secondary: `Cancel`. |
+| Destructive confirmation | None in the Diagnostics report. Risk confirmation uses non-destructive overwrite copy: `Overwrite existing output files?` Body: `BS2BG will write the files listed below. Existing targets may be replaced; if a write fails, the result ledger will show what was written, restored, skipped, or left untouched.` Primary: `Export Anyway`; secondary: `Keep Existing Files`. |
 
 Additional required copy:
 
@@ -120,6 +120,7 @@ Additional required copy:
 
 - Add `Diagnostics` as a first-class workspace tab, not a modal-only report and not a text-only dump.
 - Default tab content is a two-pane or three-pane layout: summary/filter rail, grouped finding list, and selected-finding detail/drilldown. Use `GridSplitter` when panes are resizable.
+- The summary/filter rail with blocker/caution counts is the first visual anchor; selected finding detail is secondary.
 - Findings are read-only. Phase 3 may navigate/select related presets, targets, NPCs, or output areas, but must not auto-fix project data.
 - Provide `Run Diagnostics` and `Copy Report` as visible actions in the tab header. `Run Diagnostics` refreshes the report; `Copy Report` copies a plain-text report with grouped findings and outcome ledgers.
 - Group findings by: `Project`, `Profiles`, `Templates`, `Morphs/NPCs`, `Import`, and `Export`. Every row still shows `Blocker`, `Caution`, or `Info`.
