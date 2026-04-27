@@ -193,4 +193,205 @@ public sealed class ProfileDefinitionServiceTests
         ProfileDefinitionEquality.DefinitionallyEquals(left, right).Should().BeTrue();
         ProfileDefinitionEquality.DefinitionallyEquals(left, caseChangedSlider).Should().BeFalse();
     }
+
+    [Fact]
+    public void ValidateProfileJson_ReturnsInvalidJsonDiagnosticForMalformedJson()
+    {
+        var service = new ProfileDefinitionService();
+
+        var result = service.ValidateProfileJson(
+            "{ not valid json }",
+            ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
+
+        result.IsValid.Should().BeFalse();
+        result.Profile.Should().BeNull();
+        result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Code == "InvalidJson");
+    }
+
+    [Fact]
+    public void ValidateProfileJson_RejectsNonnumericTableValues()
+    {
+        var service = new ProfileDefinitionService();
+
+        var result = service.ValidateProfileJson(
+            """
+            {
+              "Name": "Bad Numbers",
+              "Defaults": {
+                "Breasts": { "valueSmall": "low", "valueBig": 1 }
+              },
+              "Multipliers": {
+                "Waist": "high"
+              },
+              "Inverted": []
+            }
+            """,
+            ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
+
+        result.IsValid.Should().BeFalse();
+        result.Diagnostics.Should().Contain(diagnostic => diagnostic.Code == "InvalidNumber" && diagnostic.Table == "Defaults");
+        result.Diagnostics.Should().Contain(diagnostic => diagnostic.Code == "InvalidNumber" && diagnostic.Table == "Multipliers");
+    }
+
+    [Fact]
+    public void ValidateProfileJson_UsesInternalNameInsteadOfFileName()
+    {
+        var service = new ProfileDefinitionService();
+
+        var result = service.ValidateProfileJson(
+            """
+            {
+              "Name": "Internal Identity",
+              "Defaults": {},
+              "Multipliers": {},
+              "Inverted": []
+            }
+            """,
+            ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom, "Different File Name.json"));
+
+        result.IsValid.Should().BeTrue();
+        result.Profile!.Name.Should().Be("Internal Identity");
+    }
+
+    [Fact]
+    public void ValidateProfileJson_RejectsUnsupportedVersion()
+    {
+        var service = new ProfileDefinitionService();
+
+        var result = service.ValidateProfileJson(
+            """
+            {
+              "Version": 2,
+              "Name": "Future Profile",
+              "Defaults": {},
+              "Multipliers": {},
+              "Inverted": []
+            }
+            """,
+            ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
+
+        result.IsValid.Should().BeFalse();
+        result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Code == "UnsupportedVersion");
+    }
+
+    [Fact]
+    public void ExportProfileJson_RoundTripsStableProfile()
+    {
+        var service = new ProfileDefinitionService();
+        var profile = new CustomProfileDefinition(
+            "Community CBBE",
+            "Skyrim",
+            new SliderProfile(
+                new[] { new SliderDefault("Breasts", 0.25f, 0.75f) },
+                new[] { new SliderMultiplier("Waist", 2.75f) },
+                new[] { "InvertA" }),
+            ProfileSourceKind.LocalCustom,
+            "community.json");
+
+        var firstExport = service.ExportProfileJson(profile);
+        var roundTrip = service.ValidateProfileJson(
+            firstExport,
+            ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
+        var secondExport = service.ExportProfileJson(roundTrip.Profile!);
+
+        roundTrip.IsValid.Should().BeTrue();
+        secondExport.Should().Be(firstExport);
+        firstExport.Should().StartWith("{\n  \"Version\": 1,\n  \"Name\": \"Community CBBE\"");
+        firstExport.Should().NotEndWith("\n");
+    }
+
+    [Fact]
+    public void ExportProfileJson_SortsTableKeysDeterministically()
+    {
+        var service = new ProfileDefinitionService();
+        var profile = new CustomProfileDefinition(
+            "Sorted",
+            string.Empty,
+            new SliderProfile(
+                new[]
+                {
+                    new SliderDefault("zeta", 0f, 1f),
+                    new SliderDefault("Alpha", 0.5f, -0.5f),
+                },
+                new[]
+                {
+                    new SliderMultiplier("zeta", 2f),
+                    new SliderMultiplier("Alpha", 1f),
+                },
+                new[] { "zeta", "Alpha" }),
+            ProfileSourceKind.LocalCustom,
+            null);
+
+        var json = service.ExportProfileJson(profile);
+
+        json.IndexOf("\"Alpha\"", StringComparison.Ordinal).Should().BeLessThan(json.IndexOf("\"zeta\"", StringComparison.Ordinal));
+        json.IndexOf("\"Alpha\": 1", StringComparison.Ordinal).Should().BeLessThan(json.IndexOf("\"zeta\": 2", StringComparison.Ordinal));
+        json.IndexOf("\"Alpha\"\n", StringComparison.Ordinal).Should().BeLessThan(json.LastIndexOf("\"zeta\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ValidateProfileJson_RejectsDuplicateJsonObjectProperties()
+    {
+        var service = new ProfileDefinitionService();
+
+        var result = service.ValidateProfileJson(
+            """
+            {
+              "Name": "Duplicate Json Properties",
+              "Defaults": {},
+              "Defaults": {},
+              "Multipliers": {},
+              "Inverted": []
+            }
+            """,
+            ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
+
+        result.IsValid.Should().BeFalse();
+        result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Code == "DuplicateProperty" && diagnostic.Table == null);
+    }
+
+    [Fact]
+    public void ValidateProfileJson_RejectsNonFiniteNumbers()
+    {
+        var service = new ProfileDefinitionService();
+
+        var result = service.ValidateProfileJson(
+            """
+            {
+              "Name": "Nonfinite",
+              "Defaults": {
+                "Breasts": { "valueSmall": 1e999, "valueBig": 1 }
+              },
+              "Multipliers": {
+                "Waist": -1e999
+              },
+              "Inverted": []
+            }
+            """,
+            ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
+
+        result.IsValid.Should().BeFalse();
+        result.Diagnostics.Should().Contain(diagnostic => diagnostic.Code == "NonFiniteNumber" && diagnostic.Table == "Defaults");
+        result.Diagnostics.Should().Contain(diagnostic => diagnostic.Code == "NonFiniteNumber" && diagnostic.Table == "Multipliers");
+    }
+
+    [Fact]
+    public void ValidateProfileJson_DefaultsMissingVersionToOne()
+    {
+        var service = new ProfileDefinitionService();
+
+        var result = service.ValidateProfileJson(
+            """
+            {
+              "Name": "Missing Version",
+              "Defaults": {},
+              "Multipliers": {},
+              "Inverted": []
+            }
+            """,
+            ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.LocalCustom));
+
+        result.IsValid.Should().BeTrue();
+        service.ExportProfileJson(result.Profile!).Should().StartWith("{\n  \"Version\": 1,");
+    }
 }
