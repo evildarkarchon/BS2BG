@@ -275,6 +275,53 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task WindowFileDialogServiceIgnoresInvalidProjectFolderHintAndStillSavesSelectionFolder()
+    {
+        using var directory = new TemporaryDirectory();
+        var selectedProjectFolder = directory.CreateDirectory("selected-projects");
+        var openedProjectPath = Path.Combine(selectedProjectFolder, "opened.jbs2bg");
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            ProjectFolder = Path.Combine(directory.Path, "missing-project-folder")
+        });
+        var backend = new CapturingFileDialogBackend
+        {
+            OpenProjectResult = openedProjectPath
+        };
+        var dialogs = new WindowFileDialogService(preferences, backend);
+
+        var openPath = await dialogs.PickOpenProjectFileAsync(TestContext.Current.CancellationToken);
+
+        openPath.Should().Be(openedProjectPath);
+        backend.LastOpenProjectSuggestedStartFolder.Should().BeNull();
+        preferences.SavedPreferences.Should().NotBeNull();
+        preferences.SavedPreferences!.ProjectFolder.Should().Be(selectedProjectFolder);
+    }
+
+    [Fact]
+    public async Task WindowFileDialogServicePreferenceSaveFailureDoesNotBlockProjectOrExportPickerResults()
+    {
+        using var directory = new TemporaryDirectory();
+        var selectedProjectFolder = directory.CreateDirectory("selected-projects");
+        var selectedExportFolder = directory.CreateDirectory("selected-bodygen");
+        var openedProjectPath = Path.Combine(selectedProjectFolder, "opened.jbs2bg");
+        var preferences = new FailingUserPreferencesService(new UserPreferences());
+        var backend = new CapturingFileDialogBackend
+        {
+            OpenProjectResult = openedProjectPath,
+            FolderPickerResult = selectedExportFolder
+        };
+        var dialogs = new WindowFileDialogService(preferences, backend);
+
+        var openPath = await dialogs.PickOpenProjectFileAsync(TestContext.Current.CancellationToken);
+        var exportFolder = await dialogs.PickBodyGenExportFolderAsync(TestContext.Current.CancellationToken);
+
+        openPath.Should().Be(openedProjectPath);
+        exportFolder.Should().Be(selectedExportFolder);
+        preferences.SaveAttempts.Should().Be(2);
+    }
+
+    [Fact]
     public async Task ExportBosJsonSnapshotsPresetsBeforeBackgroundWrite()
     {
         using var directory = new TemporaryDirectory();
@@ -841,6 +888,19 @@ public sealed class MainWindowViewModelTests
             SavedPreferences = preferences;
             current = preferences;
             return true;
+        }
+    }
+
+    private sealed class FailingUserPreferencesService(UserPreferences initialPreferences) : IUserPreferencesService
+    {
+        public int SaveAttempts { get; private set; }
+
+        public UserPreferences Load() => initialPreferences;
+
+        public bool Save(UserPreferences preferences)
+        {
+            SaveAttempts++;
+            return false;
         }
     }
 

@@ -143,6 +143,43 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void ChecklistFiltersApplyImmediatelyWhileFreeTextSearchWaitsForDebounce()
+    {
+        using var scheduler = new EventLoopScheduler();
+        var project = CreateProjectWithPresets();
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var serana = CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(serana);
+        project.MorphedNpcs.Add(valerica);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(), filterScheduler: scheduler);
+
+        viewModel.SearchText = "Valerica";
+        viewModel.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Serana", "Valerica");
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Mod, new[] { "Skyrim.esm" });
+
+        viewModel.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Serana");
+        SpinWait.SpinUntil(() => viewModel.VisibleNpcs.Count == 0, TimeSpan.FromSeconds(3)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ImportedNpcDatabaseFreeTextFilterProjectsVisibleNpcDatabaseAfterDebounce()
+    {
+        using var scheduler = new EventLoopScheduler();
+        var viewModel = CreateViewModel(CreateProjectWithPresets(), new QueueRandomAssignmentProvider(), filterScheduler: scheduler);
+        viewModel.NpcDatabase.Add(CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94"));
+        viewModel.NpcDatabase.Add(CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C"));
+
+        viewModel.NpcDatabaseSearchText = "DLC1Valerica";
+
+        viewModel.VisibleNpcDatabase.Select(npc => npc.Name).Should().Equal("Lydia", "Valerica");
+        SpinWait.SpinUntil(() => viewModel.VisibleNpcDatabase.Count == 1, TimeSpan.FromSeconds(3)).Should().BeTrue();
+        viewModel.VisibleNpcDatabase.Should().ContainSingle().Which.Name.Should().Be("Valerica");
+    }
+
+    [Fact]
     public void ClearVisibleNpcsClearsSelectedNpcWhenSelectionIsRemoved()
     {
         var project = CreateProjectWithPresets();
@@ -354,6 +391,26 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void DestructiveAllScopeClearNpcRowsRequiresConfirmationAndCancellationLeavesRowsUntouched()
+    {
+        var project = CreateProjectWithPresets();
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var valerica = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(valerica);
+        var dialog = new CapturingAppDialogService { ConfirmBulkOperationResult = false };
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(), dialogService: dialog);
+        viewModel.SelectedNpcBulkScope = NpcBulkScope.All;
+
+        viewModel.ClearVisibleNpcsCommand.Execute().Subscribe();
+
+        dialog.BulkConfirmationMessages.Should().ContainSingle()
+            .Which.Should().Be("This will remove every NPC, including rows hidden by filters. You can undo this action. Continue?");
+        project.MorphedNpcs.Should().Equal(lydia, valerica);
+        viewModel.VisibleNpcs.Should().Equal(lydia, valerica);
+    }
+
+    [Fact]
     public void ScopedClearAssignmentsUndoUsesPresetNameSnapshotsAndRecordsOneStep()
     {
         var project = CreateProjectWithPresets();
@@ -376,6 +433,54 @@ public sealed class MorphsViewModelTests
 
         lydia.SliderPresets.Should().BeEmpty();
         hidden.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
+        undoRedo.Undo().Should().BeFalse();
+    }
+
+    [Fact]
+    public void CustomTargetAssignmentUndoRedoUsesPresetNameSnapshots()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets.Single(preset => preset.Name == "Alpha");
+        var target = new CustomMorphTarget("All|Female");
+        project.CustomMorphTargets.Add(target);
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(), undoRedo: undoRedo);
+        viewModel.SelectedCustomTarget = target;
+        viewModel.SelectedAvailablePreset = alpha;
+
+        viewModel.AddSelectedPresetToTarget().Should().BeTrue();
+        alpha.Name = "Renamed Before Undo";
+
+        undoRedo.Undo().Should().BeTrue();
+        target.SliderPresets.Should().BeEmpty();
+
+        undoRedo.Redo().Should().BeTrue();
+        target.SliderPresets.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RepeatedScopedBulkOperationsRespectBoundedUndoPruning()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets.Single(preset => preset.Name == "Alpha");
+        var beta = project.SliderPresets.Single(preset => preset.Name == "Beta");
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var serana = CreateNpc("Skyrim.esm", "Serana", "DLC1Serana", "NordRaceVampire", "02002B74");
+        lydia.AddSliderPreset(alpha);
+        serana.AddSliderPreset(beta);
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(serana);
+        var undoRedo = new UndoRedoService(historyLimit: 1);
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(), undoRedo: undoRedo);
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Name, new[] { "Lydia" });
+        viewModel.ClearAssignmentsCommand.Execute().Subscribe();
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Name, new[] { "Serana" });
+        viewModel.ClearAssignmentsCommand.Execute().Subscribe();
+
+        undoRedo.Undo().Should().BeTrue();
+        lydia.SliderPresets.Should().BeEmpty();
+        serana.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
         undoRedo.Undo().Should().BeFalse();
     }
 
@@ -654,6 +759,27 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public async Task NpcTextPickerIgnoresUnresolvableRememberedFolderHint()
+    {
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            NpcTextFolder = @"Z:\Missing\NPCs"
+        });
+        var backend = new CapturingNpcTextPickerBackend(new[] { @"D:\NPCs\actors.txt" })
+        {
+            ResolvedStartFolder = null
+        };
+        var picker = new WindowNpcTextFilePicker(preferences, backend);
+
+        var files = await picker.PickNpcTextFilesAsync(TestContext.Current.CancellationToken);
+
+        files.Should().Equal(@"D:\NPCs\actors.txt");
+        backend.RequestedPreferencePath.Should().Be(@"Z:\Missing\NPCs");
+        backend.RequestedStartFolder.Should().BeNull();
+        preferences.Saved.NpcTextFolder.Should().Be(@"D:\NPCs");
+    }
+
+    [Fact]
     public void UserPreferencesJsonDoesNotPersistNpcSearchOrFilterState()
     {
         var preferences = new UserPreferences
@@ -839,6 +965,8 @@ public sealed class MorphsViewModelTests
 
         public string? RequestedStartFolder { get; private set; }
 
+        public string? RequestedPreferencePath { get; private set; }
+
         public string? ResolvedStartFolder { get; init; }
 
         public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(
@@ -849,8 +977,11 @@ public sealed class MorphsViewModelTests
             return Task.FromResult(files);
         }
 
-        public Task<string?> ResolveStartFolderAsync(string? path, CancellationToken cancellationToken) =>
-            Task.FromResult(ResolvedStartFolder);
+        public Task<string?> ResolveStartFolderAsync(string? path, CancellationToken cancellationToken)
+        {
+            RequestedPreferencePath = path;
+            return Task.FromResult(ResolvedStartFolder);
+        }
     }
 
     private sealed class TemporaryDirectory : IDisposable

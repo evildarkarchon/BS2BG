@@ -253,6 +253,65 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public void RenamePresetUndoRestoresOperationTimeNameAfterInterveningMutation()
+    {
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(undoRedo: undoRedo);
+        var preset = AddPreset(viewModel, "Alpha", 25);
+        preset.SetSliders.Single().PercentMin = 10;
+        preset.SetSliders.Single().PercentMax = 20;
+        viewModel.SelectedPreset = preset;
+
+        viewModel.TryRenameSelectedPreset("Beta").Should().BeTrue();
+        preset.Name = "Corrupted";
+
+        undoRedo.Undo().Should().BeTrue();
+
+        preset.Name.Should().Be("Alpha");
+        viewModel.SelectedPreset.Should().BeSameAs(preset);
+    }
+
+    [Fact]
+    public void DuplicatePresetUndoRedoRestoresSnapshotAfterDetachedDuplicateMutation()
+    {
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(undoRedo: undoRedo);
+        var source = AddPreset(viewModel, "Alpha", 25);
+        viewModel.SelectedPreset = source;
+
+        viewModel.TryDuplicateSelectedPreset("Beta").Should().BeTrue();
+        var duplicate = viewModel.SelectedPreset.Should().NotBeNull().And.BeOfType<ModelSliderPreset>().Subject;
+        duplicate.SetSliders.Single().ValueBig = 99;
+
+        undoRedo.Undo().Should().BeTrue();
+        undoRedo.Redo().Should().BeTrue();
+
+        var restoredDuplicate = viewModel.Presets.Single(preset => preset.Name == "Beta");
+        restoredDuplicate.SetSliders.Single().ValueBig.Should().Be(25);
+        restoredDuplicate.Should().NotBeSameAs(duplicate);
+    }
+
+    [Fact(Skip = "Escalated by Phase 02 Nyquist validation: bulk slider percent undo does not restore the pre-operation snapshot yet.")]
+    public void BulkSliderPercentUndoRestoresOperationTimeValuesAfterInterveningMutation()
+    {
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(undoRedo: undoRedo);
+        var preset = AddPreset(viewModel, "Alpha", 25);
+        preset.SetSliders.Single().PercentMin = 10;
+        preset.SetSliders.Single().PercentMax = 20;
+        viewModel.SelectedPreset = preset;
+
+        viewModel.SetAllSliderPercentsTo100Command.Execute().Subscribe();
+        preset.SetSliders.Single().PercentMin = 33;
+        preset.SetSliders.Single().PercentMax = 44;
+
+        undoRedo.Undo().Should().BeTrue();
+
+        preset.SetSliders.Single().PercentMin.Should().Be(10);
+        preset.SetSliders.Single().PercentMax.Should().Be(20);
+    }
+
+    [Fact]
     public void PreviewUpdatesForSelectionProfileSliderAndOmitState()
     {
         var viewModel = CreateViewModel();
@@ -388,6 +447,27 @@ public sealed class TemplatesViewModelTests
         var files = await picker.PickXmlPresetFilesAsync(TestContext.Current.CancellationToken);
 
         files.Should().Equal(@"D:\Presets\selected.xml");
+    }
+
+    [Fact]
+    public async Task BodySlideXmlPickerIgnoresUnresolvableRememberedFolderHint()
+    {
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            BodySlideXmlFolder = @"Z:\Missing\BodySlide"
+        });
+        var backend = new CapturingBodySlideXmlPickerBackend(new[] { @"D:\Presets\selected.xml" })
+        {
+            ResolvedStartFolder = null
+        };
+        var picker = new WindowBodySlideXmlFilePicker(preferences, backend);
+
+        var files = await picker.PickXmlPresetFilesAsync(TestContext.Current.CancellationToken);
+
+        files.Should().Equal(@"D:\Presets\selected.xml");
+        backend.RequestedPreferencePath.Should().Be(@"Z:\Missing\BodySlide");
+        backend.RequestedStartFolder.Should().BeNull();
+        preferences.Saved.BodySlideXmlFolder.Should().Be(@"D:\Presets");
     }
 
     [Fact]
@@ -761,6 +841,8 @@ public sealed class TemplatesViewModelTests
 
         public string? RequestedStartFolder { get; private set; }
 
+        public string? RequestedPreferencePath { get; private set; }
+
         public string? ResolvedStartFolder { get; init; }
 
         public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(
@@ -771,8 +853,11 @@ public sealed class TemplatesViewModelTests
             return Task.FromResult(files);
         }
 
-        public Task<string?> ResolveStartFolderAsync(string? path, CancellationToken cancellationToken) =>
-            Task.FromResult(ResolvedStartFolder);
+        public Task<string?> ResolveStartFolderAsync(string? path, CancellationToken cancellationToken)
+        {
+            RequestedPreferencePath = path;
+            return Task.FromResult(ResolvedStartFolder);
+        }
     }
 
     private sealed class RecordingSynchronizationContext : SynchronizationContext

@@ -105,6 +105,22 @@ public sealed class M6UxAppShellTests
     }
 
     [AvaloniaFact]
+    public void NpcColumnFilterPopupsAreAutomationNamedAndLightDismissable()
+    {
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow(viewModel);
+        window.ApplyTemplate();
+
+        AssertLightDismissableFilter(window, "NpcModFilter", "Filter NPCs by mod");
+        AssertLightDismissableFilter(window, "NpcNameFilter", "Filter NPCs by name");
+        AssertLightDismissableFilter(window, "NpcEditorIdFilter", "Filter NPCs by editor ID");
+        AssertLightDismissableFilter(window, "NpcFormIdFilter", "Filter NPCs by form ID");
+        AssertLightDismissableFilter(window, "NpcRaceFilter", "Filter NPCs by race");
+        AssertLightDismissableFilter(window, "NpcAssignmentStateFilter", "Filter NPCs by assignment state");
+        AssertLightDismissableFilter(window, "NpcPresetFilter", "Filter NPCs by presets");
+    }
+
+    [AvaloniaFact]
     public void NpcColumnFilterPopupsApplyNonRaceChecklistSelections()
     {
         var viewModel = new MainWindowViewModel();
@@ -218,6 +234,14 @@ public sealed class M6UxAppShellTests
             .PlaceholderText.Should().Be(placeholder);
         window.FindControl<Button>(prefix + "ClearButton").Should().BeAssignableTo<Button>().Which
             .Content.Should().Be("Clear");
+    }
+
+    private static void AssertLightDismissableFilter(MainWindow window, string prefix, string automationName)
+    {
+        window.FindControl<Button>(prefix + "Button").Should().BeAssignableTo<Button>().Which
+            .GetValue(Avalonia.Automation.AutomationProperties.NameProperty).Should().Be(automationName);
+        window.FindControl<Popup>(prefix + "Popup").Should().BeAssignableTo<Popup>().Which
+            .IsLightDismissEnabled.Should().BeTrue();
     }
 
     private static Npc CreateNpc(string name, string race) => new(name)

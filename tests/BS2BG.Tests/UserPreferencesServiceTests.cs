@@ -54,6 +54,45 @@ public sealed class UserPreferencesServiceTests
     }
 
     [Fact]
+    public void LoadKeepsLegacyPreferenceFilesCompatibleWithImportFolderDefaults()
+    {
+        using var directory = new TemporaryDirectory();
+        var preferencesPath = directory.WriteText(
+            "user-preferences.json",
+            """
+            {
+              "Theme": 1,
+              "OmitRedundantSliders": true
+            }
+            """);
+
+        var loaded = new UserPreferencesService(preferencesPath).Load();
+
+        loaded.Theme.Should().Be(ThemePreference.Light);
+        loaded.OmitRedundantSliders.Should().BeTrue();
+        loaded.BodySlideXmlFolder.Should().BeNull();
+        loaded.NpcTextFolder.Should().BeNull();
+    }
+
+    [Fact]
+    public void SaveRoundTripsBodySlideXmlAndNpcTextImportFoldersIndependently()
+    {
+        using var directory = new TemporaryDirectory();
+        var preferencesPath = Path.Combine(directory.Path, "user-preferences.json");
+
+        new UserPreferencesService(preferencesPath).Save(new UserPreferences
+        {
+            BodySlideXmlFolder = @"C:\BodySlide\Presets",
+            NpcTextFolder = @"D:\NPC Imports"
+        }).Should().BeTrue();
+
+        var loaded = new UserPreferencesService(preferencesPath).Load();
+
+        loaded.BodySlideXmlFolder.Should().Be(@"C:\BodySlide\Presets");
+        loaded.NpcTextFolder.Should().Be(@"D:\NPC Imports");
+    }
+
+    [Fact]
     public void SaveWritesThemeAndWorkflowPreferences()
     {
         using var directory = new TemporaryDirectory();
