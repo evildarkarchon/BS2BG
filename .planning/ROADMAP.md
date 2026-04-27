@@ -96,7 +96,15 @@ Plans:
   3. User can save projects that reference custom profiles while preserving legacy compatibility fields for older `.jbs2bg` consumers.
   4. User can resolve missing custom profile references through clear diagnostics rather than silent fallback.
   5. User can bundle or copy project-specific profiles when sharing a project with another machine.
-**Plans**: TBD
+**Plans**: 7 plans
+Plans:
+- [ ] 04-01-PLAN.md — Create Core custom profile validation and JSON export contracts.
+- [ ] 04-02-PLAN.md — Add AppData custom profile storage and source-tagged catalog composition.
+- [ ] 04-03-PLAN.md — Embed referenced custom profile definitions in `.jbs2bg` projects while preserving legacy fields.
+- [ ] 04-04-PLAN.md — Add read-only missing-profile recovery diagnostics and exact-match resolution checks.
+- [ ] 04-05-PLAN.md — Build ReactiveUI profile manager/editor workflows for import, copy, edit, validate, save, export, and delete.
+- [ ] 04-06-PLAN.md — Integrate explicit embedded-profile conflict handling and undo-aware recovery/remap actions.
+- [ ] 04-07-PLAN.md — Wire the first-class Profiles workspace UI with compiled bindings and visual verification.
 **UI hint**: yes
 
 ### Phase 5: Automation, Sharing, and Release Trust

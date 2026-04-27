@@ -17,20 +17,20 @@ created: 2026-04-27
 
 | Property | Value |
 |----------|-------|
-| **Framework** | xUnit v3 3.2.2 + FluentAssertions 8.9.0 + Avalonia.Headless.XUnit 12.0.1 |
+| **Framework** | xUnit v3 + FluentAssertions + Avalonia.Headless.XUnit |
 | **Config file** | `tests/BS2BG.Tests/BS2BG.Tests.csproj` |
-| **Quick run command** | `dotnet test --filter FullyQualifiedName~ProfileDefinitionServiceTests` |
+| **Quick run command** | `dotnet test --filter FullyQualifiedName~Profile` |
 | **Full suite command** | `dotnet test` |
-| **Estimated runtime** | focused tests < 60 seconds; full suite project-dependent |
+| **Estimated runtime** | focused filters under 60 seconds; full suite project-standard |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run the focused command for the touched test class, e.g. `dotnet test --filter FullyQualifiedName~ProfileDefinitionServiceTests`.
-- **After every plan wave:** Run `dotnet test --filter "FullyQualifiedName~Profile|FullyQualifiedName~ProjectFileService|FullyQualifiedName~TemplatesViewModel|FullyQualifiedName~DiagnosticsViewModel"`.
-- **Before `/gsd-verify-work`:** `dotnet test` must be green.
-- **Max feedback latency:** < 60 seconds for focused test feedback.
+- **After every task commit:** Run the focused command named in that task's `<automated>` verification.
+- **After every plan wave:** Run `dotnet test --filter "FullyQualifiedName~Profile|FullyQualifiedName~ProjectFileService|FullyQualifiedName~TemplatesViewModel|FullyQualifiedName~DiagnosticsViewModel|FullyQualifiedName~MainWindow"`.
+- **Before `/gsd-verify-work`:** Full `dotnet test` must be green.
+- **Max feedback latency:** one focused test class per task.
 
 ---
 
@@ -38,12 +38,19 @@ created: 2026-04-27
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 04-01-01 | 01 | 1 | EXT-01, EXT-02 | T-04-01 | Malformed, duplicate, ambiguous, or nonnumeric profile JSON is rejected before catalog inclusion while blank finite profiles remain valid. | unit | `dotnet test --filter FullyQualifiedName~ProfileDefinitionServiceTests` | ❌ W0 | ⬜ pending |
-| 04-02-01 | 02 | 1 | EXT-01 | T-04-02 | User-local custom profile writes are atomic and cannot overwrite bundled profile files. | unit/service | `dotnet test --filter FullyQualifiedName~UserProfileStoreTests` | ❌ W0 | ⬜ pending |
-| 04-03-01 | 03 | 2 | EXT-01, EXT-02 | T-04-03 | Catalog composition rejects case-insensitive duplicate profile names across bundled and custom profiles. | unit | `dotnet test --filter "FullyQualifiedName~TemplateProfileCatalogFactoryTests|FullyQualifiedName~ProfileDefinitionServiceTests"` | existing + ❌ W0 | ⬜ pending |
-| 04-04-01 | 04 | 2 | EXT-03, EXT-05 | T-04-04 | Project save embeds only referenced custom profiles and preserves legacy `SliderPresets`, `CustomMorphTargets`, `MorphedNPCs`, `isUUNP`, and `Profile` fields. | unit/integration | `dotnet test --filter FullyQualifiedName~ProjectFileServiceCustomProfileTests` | ❌ W0 | ⬜ pending |
-| 04-05-01 | 05 | 3 | EXT-04 | T-04-05 | Missing custom profile references remain non-blocking but visible, and exact display-name imports resolve unresolved references. | unit/ViewModel | `dotnet test --filter "FullyQualifiedName~ProfileRecoveryDiagnosticsServiceTests|FullyQualifiedName~TemplatesViewModel"` | existing + ❌ W0 | ⬜ pending |
-| 04-06-01 | 06 | 3 | EXT-01, EXT-02, EXT-05 | T-04-06 | Profile manager/editor commands validate before save/import/export and expose conflict choices without silent replacement. | ViewModel/headless UI | `dotnet test --filter "FullyQualifiedName~ProfileManagerViewModelTests|FullyQualifiedName~ProfileEditorViewModelTests"` | ❌ W0 | ⬜ pending |
+| 04-01-01 | 01 | 1 | EXT-01/EXT-02 | T-04-01-01 | malformed/ambiguous profile JSON rejected before catalog inclusion | unit | `dotnet test --filter FullyQualifiedName~ProfileDefinitionServiceTests` | ❌ W0 | ⬜ pending |
+| 04-01-02 | 01 | 1 | EXT-01/EXT-02 | T-04-01-02 | duplicate names cannot shadow bundled/custom profiles | unit | `dotnet test --filter FullyQualifiedName~ProfileDefinitionServiceTests` | ❌ W0 | ⬜ pending |
+| 04-02-01 | 02 | 2 | EXT-01 | T-04-02-02 | catalog rejects case-insensitive duplicate names | unit | `dotnet test --filter FullyQualifiedName~TemplateProfileCatalogFactoryTests` | ✅ existing extended | ⬜ pending |
+| 04-02-02 | 02 | 2 | EXT-01 | T-04-02-01/T-04-02-03 | user profile store validates and writes atomically | unit | `dotnet test --filter FullyQualifiedName~UserProfileStoreTests` | ❌ W0 | ⬜ pending |
+| 04-03-01 | 03 | 2 | EXT-03/EXT-05 | T-04-03-03 | optional project section preserves legacy fields | unit | `dotnet test --filter FullyQualifiedName~ProjectFileServiceCustomProfileTests` | ❌ W0 | ⬜ pending |
+| 04-03-02 | 03 | 2 | EXT-03/EXT-05 | T-04-03-02 | only referenced custom profiles are embedded | unit | `dotnet test --filter "FullyQualifiedName~ProjectFileServiceCustomProfileTests|FullyQualifiedName~ProjectFileServiceTests"` | ❌ W0 | ⬜ pending |
+| 04-04-01 | 04 | 2 | EXT-04 | T-04-04-01 | missing custom profiles are visible neutral diagnostics | unit | `dotnet test --filter FullyQualifiedName~ProfileRecoveryDiagnosticsServiceTests` | ❌ W0 | ⬜ pending |
+| 04-04-02 | 04 | 2 | EXT-04 | T-04-04-02 | recovery identity ignores filenames and matches internal display name only | unit | `dotnet test --filter FullyQualifiedName~ProfileRecoveryDiagnosticsServiceTests` | ❌ W0 | ⬜ pending |
+| 04-05-01 | 05 | 3 | EXT-01/EXT-02 | T-04-05-01/T-04-05-02 | bundled profiles are read-only; imports validate before write | ViewModel unit | `dotnet test --filter FullyQualifiedName~ProfileManagerViewModelTests` | ❌ W0 | ⬜ pending |
+| 04-05-02 | 05 | 3 | EXT-01/EXT-02 | T-04-05-03 | save is validation-gated and uses profile store | ViewModel unit | `dotnet test --filter FullyQualifiedName~ProfileEditorViewModelTests` | ❌ W0 | ⬜ pending |
+| 04-06-01 | 06 | 3 | EXT-03/EXT-04/EXT-05 | T-04-06-01 | embedded/local conflicts prompt explicit choice | ViewModel unit | `dotnet test --filter FullyQualifiedName~MainWindowViewModelProfileRecoveryTests` | ❌ W0 | ⬜ pending |
+| 04-06-03 | 06 | 3 | EXT-04 | T-04-06-02/T-04-06-03 | recovery remap is explicit and undo-aware | ViewModel unit | `dotnet test --filter "FullyQualifiedName~DiagnosticsViewModelTests|FullyQualifiedName~TemplatesViewModelTests"` | ✅ existing extended | ⬜ pending |
+| 04-07-02 | 07 | 4 | EXT-01/EXT-02/EXT-04/EXT-05 | T-04-07-01/T-04-07-02 | Profiles UI is source-aware and compiled-bound | headless UI | `dotnet test --filter FullyQualifiedName~MainWindowHeadlessTests` | ✅ existing extended | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -51,11 +58,12 @@ created: 2026-04-27
 
 ## Wave 0 Requirements
 
-- [ ] `tests/BS2BG.Tests/ProfileDefinitionServiceTests.cs` — covers EXT-01/EXT-02 parse, validation, duplicate names, blank profile, broad finite floats, and export round-trip rules.
-- [ ] `tests/BS2BG.Tests/UserProfileStoreTests.cs` — covers local AppData profile folder behavior, atomic writes, discovery, sanitized filenames, and bundled-file protection.
-- [ ] `tests/BS2BG.Tests/ProjectFileServiceCustomProfileTests.cs` — covers EXT-03/EXT-05 optional embedded `CustomProfiles` section and legacy field preservation.
-- [ ] `tests/BS2BG.Tests/ProfileRecoveryDiagnosticsServiceTests.cs` — covers EXT-04 exact-match recovery, conflict detection, and neutral unresolved state.
-- [ ] `tests/BS2BG.Tests/ProfileManagerViewModelTests.cs` and/or `tests/BS2BG.Tests/ProfileEditorViewModelTests.cs` — covers App profile management and validation-gated commands if new ViewModels are created.
+- [ ] `tests/BS2BG.Tests/ProfileDefinitionServiceTests.cs` — covers EXT-01/EXT-02 parse/validate/export rules.
+- [ ] `tests/BS2BG.Tests/UserProfileStoreTests.cs` — covers AppData store, atomic write, discovery, and duplicate filename conventions.
+- [ ] `tests/BS2BG.Tests/ProjectFileServiceCustomProfileTests.cs` — covers EXT-03/EXT-05 embedded section and legacy fields.
+- [ ] `tests/BS2BG.Tests/ProfileRecoveryDiagnosticsServiceTests.cs` — covers EXT-04 exact-match recovery and neutral unresolved state.
+- [ ] `tests/BS2BG.Tests/ProfileManagerViewModelTests.cs` and `tests/BS2BG.Tests/ProfileEditorViewModelTests.cs` — covers App authoring workflows.
+- [ ] `tests/BS2BG.Tests/MainWindowViewModelProfileRecoveryTests.cs` — covers embedded conflict decisions and project-open recovery.
 
 ---
 
@@ -63,17 +71,17 @@ created: 2026-04-27
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| Profile manager/editor UI is discoverable, compiled-bound, and presents import/copy/export/edit/recovery actions with neutral wording. | EXT-01, EXT-02, EXT-04, EXT-05 | Visual layout and interaction affordance verification needs human review in the desktop UI. | Run `dotnet run --project src/BS2BG.App/BS2BG.App.csproj`, open the profile-management surface, verify bundled profiles are read-only, custom profiles expose edit/export actions, malformed imports show validation diagnostics, and unresolved profile recovery actions are visible without blocking generation. |
+| Profiles workspace visual layout and copy | EXT-01/EXT-02/EXT-04/EXT-05 | Avalonia visual density, source-label clarity, and neutral copy require human confirmation | Complete Plan 07 checkpoint steps after automated headless tests pass. |
 
 ---
 
 ## Validation Sign-Off
 
-- [x] All tasks have `<automated>` verify or Wave 0 dependencies
-- [x] Sampling continuity: no 3 consecutive tasks without automated verify
-- [x] Wave 0 covers all MISSING references
-- [x] No watch-mode flags
-- [x] Focused feedback latency target < 60 seconds
+- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
+- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
+- [ ] Wave 0 covers all MISSING references
+- [ ] No watch-mode flags
+- [ ] Focused feedback commands under 60 seconds
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
