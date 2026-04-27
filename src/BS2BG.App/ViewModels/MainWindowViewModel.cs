@@ -258,6 +258,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             Theme = theme,
             OmitRedundantSliders = latestPreferences.OmitRedundantSliders,
             ProjectFolder = latestPreferences.ProjectFolder,
+            BodySlideXmlFolder = latestPreferences.BodySlideXmlFolder,
+            NpcTextFolder = latestPreferences.NpcTextFolder,
             BodyGenExportFolder = latestPreferences.BodyGenExportFolder,
             BosJsonExportFolder = latestPreferences.BosJsonExportFolder
         };

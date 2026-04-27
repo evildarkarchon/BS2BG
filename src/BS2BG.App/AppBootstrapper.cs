@@ -39,10 +39,12 @@ public static class AppBootstrapper
         services.AddSingleton<IRandomAssignmentProvider, RandomAssignmentProvider>();
         services.AddSingleton<MorphAssignmentService>();
         services.AddSingleton(_ => TemplateProfileCatalogFactory.CreateDefault());
-        services.AddSingleton<WindowBodySlideXmlFilePicker>();
+        services.AddSingleton(provider =>
+            new WindowBodySlideXmlFilePicker(provider.GetRequiredService<IUserPreferencesService>()));
         services.AddSingleton<IBodySlideXmlFilePicker>(provider =>
             provider.GetRequiredService<WindowBodySlideXmlFilePicker>());
-        services.AddSingleton<WindowNpcTextFilePicker>();
+        services.AddSingleton(provider =>
+            new WindowNpcTextFilePicker(provider.GetRequiredService<IUserPreferencesService>()));
         services.AddSingleton<INpcTextFilePicker>(provider =>
             provider.GetRequiredService<WindowNpcTextFilePicker>());
         services.AddSingleton<WindowClipboardService>();

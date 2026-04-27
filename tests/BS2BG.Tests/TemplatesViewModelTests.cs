@@ -303,6 +303,7 @@ public sealed class TemplatesViewModelTests
             Theme = ThemePreference.Dark,
             OmitRedundantSliders = false,
             ProjectFolder = @"C:\Projects",
+            BodySlideXmlFolder = @"C:\BodySlide",
             BodyGenExportFolder = @"D:\BodyGen",
             BosJsonExportFolder = @"E:\BoS"
         });
@@ -315,10 +316,44 @@ public sealed class TemplatesViewModelTests
             Theme = ThemePreference.Dark,
             OmitRedundantSliders = true,
             ProjectFolder = @"C:\Projects",
+            BodySlideXmlFolder = @"C:\BodySlide",
             BodyGenExportFolder = @"D:\BodyGen",
             BosJsonExportFolder = @"E:\BoS"
         });
         new ProjectFileService().SaveToString(project).Should().NotContain(nameof(UserPreferences.OmitRedundantSliders));
+    }
+
+    [Fact]
+    public async Task BodySlideXmlPickerUsesAndUpdatesRememberedFolder()
+    {
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            BodySlideXmlFolder = @"C:\BodySlide\Old"
+        });
+        var backend = new CapturingBodySlideXmlPickerBackend(new[] { @"D:\Presets\selected.xml" })
+        {
+            ResolvedStartFolder = @"C:\BodySlide\Old"
+        };
+        var picker = new WindowBodySlideXmlFilePicker(preferences, backend);
+
+        var files = await picker.PickXmlPresetFilesAsync(TestContext.Current.CancellationToken);
+
+        files.Should().Equal(@"D:\Presets\selected.xml");
+        backend.RequestedStartFolder.Should().Be(@"C:\BodySlide\Old");
+        preferences.Saved.BodySlideXmlFolder.Should().Be(@"D:\Presets");
+    }
+
+    [Fact]
+    public async Task BodySlideXmlPickerContinuesWhenPreferenceSaveFails()
+    {
+        var backend = new CapturingBodySlideXmlPickerBackend(new[] { @"D:\Presets\selected.xml" });
+        var picker = new WindowBodySlideXmlFilePicker(
+            new FailingUserPreferencesService(new UserPreferences()),
+            backend);
+
+        var files = await picker.PickXmlPresetFilesAsync(TestContext.Current.CancellationToken);
+
+        files.Should().Equal(@"D:\Presets\selected.xml");
     }
 
     [Fact]
@@ -681,6 +716,29 @@ public sealed class TemplatesViewModelTests
         public UserPreferences Load() => preferences;
 
         public bool Save(UserPreferences preferences) => false;
+    }
+
+    private sealed class CapturingBodySlideXmlPickerBackend(IReadOnlyList<string> files)
+        : IBodySlideXmlPickerBackend
+    {
+        private readonly IReadOnlyList<string> files = files;
+
+        public bool CanOpen => true;
+
+        public string? RequestedStartFolder { get; private set; }
+
+        public string? ResolvedStartFolder { get; init; }
+
+        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(
+            string? suggestedStartFolder,
+            CancellationToken cancellationToken)
+        {
+            RequestedStartFolder = suggestedStartFolder;
+            return Task.FromResult(files);
+        }
+
+        public Task<string?> ResolveStartFolderAsync(string? path, CancellationToken cancellationToken) =>
+            Task.FromResult(ResolvedStartFolder);
     }
 
     private sealed class RecordingSynchronizationContext : SynchronizationContext
