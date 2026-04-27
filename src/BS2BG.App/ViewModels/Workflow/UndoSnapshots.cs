@@ -228,3 +228,38 @@ public sealed record NpcAssignmentSnapshot(
         CustomTargetValueSnapshot.AddResolvedAssignments(npc, AssignedPresetNames, availablePresets);
     }
 }
+
+/// <summary>
+/// Captures one target's assigned preset names and the identity needed to resolve it during replay.
+/// NPC targets use stable row IDs; custom targets use their unique target name.
+/// </summary>
+public sealed record MorphTargetAssignmentSnapshot(
+    Guid? NpcRowId,
+    string TargetName,
+    IReadOnlyList<string> AssignedPresetNames)
+{
+    /// <summary>
+    /// Creates an assignment snapshot for a target at operation time.
+    /// </summary>
+    public static MorphTargetAssignmentSnapshot Create(MorphTargetBase target, Guid? npcRowId = null)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        return new MorphTargetAssignmentSnapshot(
+            npcRowId,
+            target.Name,
+            target.SliderPresets.Select(preset => preset.Name).ToArray());
+    }
+
+    /// <summary>
+    /// Applies captured assignment names to the resolved current target.
+    /// </summary>
+    public void ApplyTo(MorphTargetBase target, IEnumerable<SliderPreset> availablePresets)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(availablePresets);
+
+        target.ClearSliderPresets();
+        CustomTargetValueSnapshot.AddResolvedAssignments(target, AssignedPresetNames, availablePresets);
+    }
+}

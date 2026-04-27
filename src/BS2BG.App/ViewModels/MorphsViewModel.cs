@@ -1565,53 +1565,70 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     [SuppressMessage("Performance", "CA1822:Mark members as static",
         Justification = "Kept as instance helper alongside assignment record helpers.")]
-    private SliderPreset[] CaptureAssignments(MorphTargetBase? target) =>
-        target?.SliderPresets.ToArray() ?? Array.Empty<SliderPreset>();
+    private MorphTargetAssignmentSnapshot? CaptureAssignments(MorphTargetBase? target) =>
+        target is null ? null : MorphTargetAssignmentSnapshot.Create(target, TryGetTargetRowId(target));
 
     [SuppressMessage("Performance", "CA1822:Mark members as static",
         Justification = "Kept as instance helper alongside assignment record helpers.")]
-    private Dictionary<MorphTargetBase, SliderPreset[]> CaptureAssignments(IEnumerable<MorphTargetBase> targets) =>
-        targets.ToDictionary(target => target, target => target.SliderPresets.ToArray());
+    private MorphTargetAssignmentSnapshot[] CaptureAssignments(IEnumerable<MorphTargetBase> targets) =>
+        targets.Select(target => MorphTargetAssignmentSnapshot.Create(target, TryGetTargetRowId(target))).ToArray();
 
     private void RecordAssignmentChange(
         string name,
         MorphTargetBase? target,
-        SliderPreset[] before)
+        MorphTargetAssignmentSnapshot? before)
     {
-        if (target is null) return;
+        if (target is null || before is null) return;
 
         var after = CaptureAssignments(target);
-        undoRedo.Record(
-            name,
-            () => RestoreAssignments(target, before),
-            () => RestoreAssignments(target, after));
-    }
-
-    private void RecordAssignmentChange(
-        string name,
-        Dictionary<MorphTargetBase, SliderPreset[]> before)
-    {
-        var after = CaptureAssignments(before.Keys);
         undoRedo.Record(
             name,
             () => RestoreAssignments(before),
             () => RestoreAssignments(after));
     }
 
-    private void RestoreAssignments(Dictionary<MorphTargetBase, SliderPreset[]> snapshot)
+    private void RecordAssignmentChange(
+        string name,
+        MorphTargetAssignmentSnapshot[] before)
     {
-        foreach (var item in snapshot) RestoreAssignments(item.Key, item.Value);
+        var after = CaptureAssignments(before.Select(ResolveAssignmentTarget).OfType<MorphTargetBase>());
+        undoRedo.Record(
+            name,
+            () => RestoreAssignments(before),
+            () => RestoreAssignments(after));
     }
 
-    private void RestoreAssignments(MorphTargetBase? target, IEnumerable<SliderPreset> presets)
+    private void RestoreAssignments(IEnumerable<MorphTargetAssignmentSnapshot> snapshot)
     {
+        foreach (var item in snapshot) RestoreAssignments(item);
+    }
+
+    private void RestoreAssignments(MorphTargetAssignmentSnapshot? snapshot)
+    {
+        if (snapshot is null) return;
+
+        var target = ResolveAssignmentTarget(snapshot);
         if (target is null) return;
 
-        target.ClearSliderPresets();
-        foreach (var preset in presets) target.AddSliderPreset(preset);
+        snapshot.ApplyTo(target, Presets);
 
         RaiseSelectedTargetChanged();
         RefreshVisibleNpcs();
+    }
+
+    private Guid? TryGetTargetRowId(MorphTargetBase target)
+    {
+        if (target is Npc npc && TryGetNpcRowId(npc, out var rowId)) return rowId;
+
+        return null;
+    }
+
+    private MorphTargetBase? ResolveAssignmentTarget(MorphTargetAssignmentSnapshot snapshot)
+    {
+        if (snapshot.NpcRowId is { } rowId) return FindNpcByRowId(rowId);
+
+        return CustomTargets.FirstOrDefault(target =>
+            string.Equals(target.Name, snapshot.TargetName, StringComparison.Ordinal));
     }
 
     private void RestoreCustomTargets(
