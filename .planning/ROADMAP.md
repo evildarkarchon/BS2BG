@@ -82,7 +82,7 @@ Plans:
 - [x] 03-04-PLAN.md — Expose project/profile diagnostics through a ReactiveUI Diagnostics ViewModel and copyable report.
 - [x] 03-05-PLAN.md — Integrate optional no-mutation NPC import preview and distinct assignment-effect summaries.
 - [x] 03-06-PLAN.md — Wire export preview and overwrite-risk confirmation into shell export workflows.
-- [ ] 03-07-PLAN.md — Surface save/export outcome ledgers in failure messages without save preview friction.
+- [x] 03-07-PLAN.md — Surface save/export outcome ledgers in failure messages without save preview friction.
 - [ ] 03-08-PLAN.md — Add the first-class compiled-bound Diagnostics tab and visual verification checkpoint.
 **UI hint**: yes
 
