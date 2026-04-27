@@ -1,4 +1,5 @@
 using System.Reactive.Threading.Tasks;
+using BS2BG.App;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.Core.Diagnostics;
@@ -21,6 +22,9 @@ public sealed class DiagnosticsViewModelTests
         var preset = new ModelSliderPreset("Community", "Saved profile");
         preset.AddSetSlider(new ModelSetSlider("UnknownSlider") { ValueSmall = 0, ValueBig = 50 });
         project.SliderPresets.Add(preset);
+        var target = new CustomMorphTarget("All|Female");
+        target.AddSliderPreset(new ModelSliderPreset("Missing"));
+        project.CustomMorphTargets.Add(target);
         project.MarkClean();
         var changeVersion = project.ChangeVersion;
         var viewModel = CreateViewModel(project);
@@ -31,8 +35,8 @@ public sealed class DiagnosticsViewModelTests
         project.ChangeVersion.Should().Be(changeVersion);
         viewModel.Areas.Should().ContainInOrder("Project", "Profiles", "Templates", "Morphs/NPCs", "Export");
         viewModel.Findings.Select(finding => finding.SeverityLabel).Should().Contain(new[] { "Blocker", "Info" });
-        viewModel.Findings.Should().OnlyContain(finding =>
-            finding.SeverityLabel is "Blocker" or "Caution" or "Info");
+        viewModel.Findings.Select(finding => finding.SeverityLabel)
+            .Should().OnlyContain(label => new[] { "Blocker", "Caution", "Info" }.Contains(label));
         viewModel.BlockerCount.Should().BeGreaterThan(0);
         viewModel.InfoCount.Should().BeGreaterThan(0);
         viewModel.CautionCount.Should().Be(0);
@@ -49,7 +53,7 @@ public sealed class DiagnosticsViewModelTests
 
         await viewModel.RefreshDiagnosticsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
-        var selected = viewModel.Findings.Should().Contain(finding => finding.Area == "Profiles").Subject.First();
+        var selected = viewModel.Findings.First(finding => finding.Area == "Profiles");
         viewModel.SelectedFinding = selected;
 
         viewModel.SelectedDetailText.Should().Contain(selected.Detail);

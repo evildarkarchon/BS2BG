@@ -1,6 +1,7 @@
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
+using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
@@ -32,6 +33,8 @@ public static class AppBootstrapper
         services.AddSingleton<ProjectFileService>();
         services.AddSingleton<TemplateGenerationService>();
         services.AddSingleton<MorphGenerationService>();
+        services.AddSingleton<ProjectValidationService>();
+        services.AddSingleton<ProfileDiagnosticsService>();
         services.AddSingleton<BodyGenIniExportWriter>();
         services.AddSingleton<BosJsonExportWriter>();
         services.AddSingleton<UndoRedoService>();
@@ -66,6 +69,7 @@ public static class AppBootstrapper
             provider.GetRequiredService<WindowAppDialogService>());
         services.AddSingleton<TemplatesViewModel>();
         services.AddSingleton<MorphsViewModel>();
+        services.AddSingleton<DiagnosticsViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddTransient<MainWindow>();
     }
