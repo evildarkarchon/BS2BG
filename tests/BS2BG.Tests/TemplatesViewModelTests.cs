@@ -324,6 +324,40 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public void ChangingOmitRedundantSlidersPreservesLatestFolderPreferences()
+    {
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            Theme = ThemePreference.Dark,
+            OmitRedundantSliders = false
+        });
+        var viewModel = CreateViewModel(preferences: preferences);
+        preferences.Saved = new UserPreferences
+        {
+            Theme = ThemePreference.Light,
+            OmitRedundantSliders = false,
+            ProjectFolder = @"C:\Projects\Updated",
+            BodySlideXmlFolder = @"C:\BodySlide\Updated",
+            NpcTextFolder = @"C:\Npcs\Updated",
+            BodyGenExportFolder = @"D:\BodyGen\Updated",
+            BosJsonExportFolder = @"E:\BoS\Updated"
+        };
+
+        viewModel.OmitRedundantSliders = true;
+
+        preferences.Saved.Should().BeEquivalentTo(new UserPreferences
+        {
+            Theme = ThemePreference.Light,
+            OmitRedundantSliders = true,
+            ProjectFolder = @"C:\Projects\Updated",
+            BodySlideXmlFolder = @"C:\BodySlide\Updated",
+            NpcTextFolder = @"C:\Npcs\Updated",
+            BodyGenExportFolder = @"D:\BodyGen\Updated",
+            BosJsonExportFolder = @"E:\BoS\Updated"
+        });
+    }
+
+    [Fact]
     public async Task BodySlideXmlPickerUsesAndUpdatesRememberedFolder()
     {
         var preferences = new CapturingUserPreferencesService(new UserPreferences
@@ -696,7 +730,7 @@ public sealed class TemplatesViewModelTests
     {
         public int LoadCount { get; private set; }
 
-        public UserPreferences Saved { get; private set; } = initial;
+        public UserPreferences Saved { get; set; } = initial;
 
         public UserPreferences Load()
         {
