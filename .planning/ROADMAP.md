@@ -116,7 +116,7 @@ Plans:
 - [x] 04-09-PLAN.md — Close profile row selection, copy-as-custom, and Game metadata export gaps.
 - [x] 04-11-PLAN.md — Close GUI project-save embedding and conflict rename validation gaps.
 **Wave 8 (gap closure; blocked on 04-09 editor/selection fixes)**
-- [ ] 04-10-PLAN.md — Complete profile editor table add/remove controls and live row validation.
+- [x] 04-10-PLAN.md — Complete profile editor table add/remove controls and live row validation.
 Cross-cutting constraints: custom profile identity is internal display-name based; bundled profiles stay read-only; unresolved/missing profile behavior remains neutral and non-blocking; all profile mutations use explicit user actions and validation before catalog inclusion.
 **UI hint**: yes
 
