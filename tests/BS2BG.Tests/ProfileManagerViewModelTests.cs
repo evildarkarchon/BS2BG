@@ -3,6 +3,7 @@ using BS2BG.App.ViewModels;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
+using System.Reactive.Threading.Tasks;
 using System.Text.Json;
 using System.Windows.Input;
 using Xunit;
@@ -157,6 +158,41 @@ public sealed class ProfileManagerViewModelTests
         vm.StatusMessage.Should().Be("Project copy is active for 'Embedded Body'.");
     }
 
+    /// <summary>
+    /// Verifies standalone profile JSON export is available for custom and embedded rows but not bundled or missing rows.
+    /// </summary>
+    [Fact]
+    public async Task ExportProfileJsonIsEnabledOnlyForCustomAndEmbeddedProfiles()
+    {
+        using var directory = new TemporaryDirectory();
+        var exportPath = Path.Combine(directory.DirectoryPath, "exported.json");
+        var dialog = new StubProfileManagementDialogService { ExportPath = exportPath };
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Preset") { ProfileName = "Missing Body" });
+        var catalog = new TemplateProfileCatalog(new[]
+        {
+            new ProfileCatalogEntry("Bundled Body", new TemplateProfile("Bundled Body", CreateSliderProfile()), ProfileSourceKind.Bundled, null, false),
+            new ProfileCatalogEntry("Custom Body", new TemplateProfile("Custom Body", CreateSliderProfile()), ProfileSourceKind.LocalCustom, "custom.json", true),
+            new ProfileCatalogEntry("Embedded Body", new TemplateProfile("Embedded Body", CreateSliderProfile()), ProfileSourceKind.EmbeddedProject, null, false)
+        });
+        var vm = CreateManager(catalog, project, dialog: dialog);
+
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Bundled Body");
+        ((ICommand)vm.ExportProfileCommand).CanExecute(null).Should().BeFalse();
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Missing Body");
+        ((ICommand)vm.ExportProfileCommand).CanExecute(null).Should().BeFalse();
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Custom Body");
+        ((ICommand)vm.ExportProfileCommand).CanExecute(null).Should().BeTrue();
+
+        await vm.ExportProfileCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        File.ReadAllText(exportPath).Should().Contain("\"Name\": \"Custom Body\"");
+        vm.StatusMessage.Should().Be("Profile JSON exported.");
+
+        vm.SelectedProfile = vm.ProfileEntries.Single(entry => entry.Name == "Embedded Body");
+        ((ICommand)vm.ExportProfileCommand).CanExecute(null).Should().BeTrue();
+    }
+
     private static ProfileManagerViewModel CreateManager(
         TemplateProfileCatalog catalog,
         ProjectModel? project = null,
@@ -185,6 +221,8 @@ public sealed class ProfileManagerViewModelTests
 
         public IReadOnlyList<string> ImportFiles { get; init; } = [];
 
+        public string? ExportPath { get; init; }
+
         public int ConfirmDeleteReferencedProfileCalls { get; private set; }
 
         public int ConfirmDiscardUnsavedEditsCalls { get; private set; }
@@ -195,7 +233,7 @@ public sealed class ProfileManagerViewModelTests
             Task.FromResult(ImportFiles);
 
         public Task<string?> PickProfileExportPathAsync(string suggestedFileName, CancellationToken cancellationToken) =>
-            Task.FromResult<string?>(null);
+            Task.FromResult(ExportPath);
 
         public Task<bool> ConfirmDeleteProfileAsync(string profileName, CancellationToken cancellationToken) =>
             Task.FromResult(ConfirmDeleteProfileResult);
@@ -298,7 +336,9 @@ public sealed class ProfileManagerViewModelTests
 
     private sealed class TemporaryDirectory : IDisposable
     {
-        private readonly string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        private readonly string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+
+        public string DirectoryPath => path;
 
         public TemporaryDirectory() => Directory.CreateDirectory(path);
 
@@ -306,7 +346,7 @@ public sealed class ProfileManagerViewModelTests
 
         public string WriteJson(string fileName, string json)
         {
-            var filePath = Path.Combine(path, fileName);
+            var filePath = System.IO.Path.Combine(path, fileName);
             File.WriteAllText(filePath, json);
             return filePath;
         }

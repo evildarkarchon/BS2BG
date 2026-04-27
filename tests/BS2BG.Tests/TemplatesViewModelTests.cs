@@ -622,6 +622,31 @@ public sealed class TemplatesViewModelTests
     }
 
     [Fact]
+    public void RecoveryRemapRecordsUndoAndRestoresMissingProfileFallback()
+    {
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(undoRedo: undoRedo);
+        var preset = new ModelSliderPreset("Community", "Missing Body");
+        preset.AddSetSlider(new ModelSetSlider("Scale") { ValueSmall = 0, ValueBig = 50 });
+        viewModel.Presets.Add(preset);
+        viewModel.SelectedPreset = preset;
+        viewModel.IsProfileFallbackInformationVisible.Should().BeTrue();
+
+        viewModel.RemapProfileReferences("Missing Body", ProjectProfileMapping.SkyrimUunp).Should().BeTrue();
+
+        preset.ProfileName.Should().Be(ProjectProfileMapping.SkyrimUunp);
+        viewModel.IsProfileFallbackInformationVisible.Should().BeFalse();
+        viewModel.PreviewTemplateText.Should().Be("Community=Scale@1.5");
+
+        undoRedo.Undo().Should().BeTrue();
+
+        preset.ProfileName.Should().Be("Missing Body");
+        viewModel.SelectedProfileName.Should().BeEmpty();
+        viewModel.IsProfileFallbackInformationVisible.Should().BeTrue();
+        viewModel.ProfileFallbackInformationText.Should().Contain("Missing Body");
+    }
+
+    [Fact]
     public void SelectingDifferentPresetDoesNotMarkCleanProjectDirty()
     {
         var project = new ProjectModel();
