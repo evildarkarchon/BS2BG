@@ -118,7 +118,7 @@ Plans:
 **Wave 8 (gap closure; blocked on 04-09 editor/selection fixes)**
 - [x] 04-10-PLAN.md — Complete profile editor table add/remove controls and live row validation.
 **Wave 9 (gap closure; blocked on Wave 8 verification)**
-- [ ] 04-12-PLAN.md — Close manager save gating, selection rollback, dirty refresh preservation, and profile JSON I/O failure gaps.
+- [x] 04-12-PLAN.md — Close manager save gating, selection rollback, dirty refresh preservation, and profile JSON I/O failure gaps.
 - [ ] 04-13-PLAN.md — Apply profile editor slider filtering consistently to Defaults, Multipliers, and Inverted tables.
 Cross-cutting constraints: custom profile identity is internal display-name based; bundled profiles stay read-only; unresolved/missing profile behavior remains neutral and non-blocking; all profile mutations use explicit user actions and validation before catalog inclusion.
 **UI hint**: yes
