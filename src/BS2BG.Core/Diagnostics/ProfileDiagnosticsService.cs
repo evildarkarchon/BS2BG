@@ -90,9 +90,10 @@ public sealed class ProfileDiagnosticsService
             findings.Add(new DiagnosticFinding(
                 DiagnosticSeverity.Info,
                 "Profiles",
-                "Saved profile uses Info fallback",
-                "Saved profile '" + savedProfileName + "' is not bundled; calculation fallback profile '"
-                + calculationFallbackProfileName + "' is used for profile diagnostics.",
+                "Profile fallback detail",
+                "Saved profile: " + savedProfileName + "; calculation fallback: "
+                + calculationFallbackProfileName
+                + ". This is informational and does not block generation or export.",
                 savedProfileName));
 
         var summary = new ProfileDiagnosticsSummary(

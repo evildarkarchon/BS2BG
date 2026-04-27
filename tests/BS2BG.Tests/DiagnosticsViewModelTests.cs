@@ -66,6 +66,24 @@ public sealed class DiagnosticsViewModelTests
     }
 
     [Fact]
+    public async Task RefreshDiagnosticsShowsSingleProfileFallbackFinding()
+    {
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new ModelSliderPreset("Community", "Saved profile"));
+        var viewModel = CreateViewModel(project);
+
+        await viewModel.RefreshDiagnosticsCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        var fallback = viewModel.Findings
+            .Where(finding => finding.Area == "Profiles" && finding.Title == "Profile fallback detail")
+            .ToArray();
+        fallback.Should().ContainSingle();
+        fallback[0].Detail.Should().Be(
+            "Saved profile: Saved profile; calculation fallback: Measured. This is informational and does not block generation or export.");
+        viewModel.InfoCount.Should().Be(viewModel.Findings.Count(finding => finding.Severity == DiagnosticSeverity.Info));
+    }
+
+    [Fact]
     public void AppBootstrapperRegistersDiagnosticsServicesAndViewModel()
     {
         using var provider = AppBootstrapper.CreateServiceProvider();

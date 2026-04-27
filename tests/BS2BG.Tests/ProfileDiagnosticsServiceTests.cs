@@ -43,14 +43,14 @@ public sealed class ProfileDiagnosticsServiceTests
 
         var report = new ProfileDiagnosticsService().Analyze(project, CreateCatalog());
         var findingText = string.Join(" ", report.Findings.Select(finding =>
-            finding.Title + " " + finding.Detail + " " + finding.ActionHint));
+            finding.Severity + " " + finding.Title + " " + finding.Detail + " " + finding.ActionHint));
 
         report.Summary.HasNeutralFallback.Should().BeTrue();
         report.Summary.SavedProfileNames.Should().Contain("Saved profile");
         report.Summary.CalculationFallbackProfileName.Should().Be("Measured");
         report.Findings.Should().Contain(finding =>
             finding.Severity == DiagnosticSeverity.Info
-            && finding.Title.Contains("Saved profile")
+            && finding.Title == "Profile fallback detail"
             && finding.Detail.Contains("calculation fallback")
             && finding.Detail.Contains("Measured"));
         findingText.Should().Contain("Saved profile");
