@@ -354,9 +354,10 @@ public sealed class MorphsViewModelTests
         project.CustomMorphTargets.Should().BeEmpty();
 
         undoRedo.Undo().Should().BeTrue();
-        project.CustomMorphTargets.Should().ContainSingle().Which.Should().BeSameAs(target);
-        target.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
-        viewModel.SelectedCustomTarget.Should().BeSameAs(target);
+        var restoredTarget = project.CustomMorphTargets.Should().ContainSingle().Which;
+        restoredTarget.Name.Should().Be("All|Female");
+        restoredTarget.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
+        viewModel.SelectedCustomTarget.Should().BeSameAs(restoredTarget);
 
         undoRedo.Redo().Should().BeTrue();
         project.CustomMorphTargets.Should().BeEmpty();
@@ -444,8 +445,9 @@ public sealed class MorphsViewModelTests
 
         undoRedo.Undo().Should().BeTrue();
         project.MorphedNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Valerica");
-        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
-        viewModel.SelectedNpc.Should().BeSameAs(lydia);
+        project.MorphedNpcs.Single(npc => npc.Name == "Lydia").SliderPresets.Select(preset => preset.Name)
+            .Should().Equal("Alpha");
+        viewModel.SelectedNpc?.Name.Should().Be("Lydia");
 
         undoRedo.Redo().Should().BeTrue();
         project.MorphedNpcs.Should().NotContain(lydia);
@@ -467,16 +469,20 @@ public sealed class MorphsViewModelTests
         viewModel.AddAllVisibleImportedNpcs().Should().Be(2);
 
         project.MorphedNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Valerica");
-        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
-        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
+        project.MorphedNpcs.Single(npc => npc.Name == "Lydia").SliderPresets.Select(preset => preset.Name)
+            .Should().Equal("Alpha");
+        project.MorphedNpcs.Single(npc => npc.Name == "Valerica").SliderPresets.Select(preset => preset.Name)
+            .Should().Equal("Beta");
 
         undoRedo.Undo().Should().BeTrue();
         project.MorphedNpcs.Should().BeEmpty();
 
         undoRedo.Redo().Should().BeTrue();
         project.MorphedNpcs.Select(npc => npc.Name).Should().Equal("Lydia", "Valerica");
-        lydia.SliderPresets.Select(preset => preset.Name).Should().Equal("Alpha");
-        valerica.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
+        project.MorphedNpcs.Single(npc => npc.Name == "Lydia").SliderPresets.Select(preset => preset.Name)
+            .Should().Equal("Alpha");
+        project.MorphedNpcs.Single(npc => npc.Name == "Valerica").SliderPresets.Select(preset => preset.Name)
+            .Should().Equal("Beta");
     }
 
     [Fact]

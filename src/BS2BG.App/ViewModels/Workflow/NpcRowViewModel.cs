@@ -13,10 +13,10 @@ public sealed class NpcRowViewModel
     /// </summary>
     /// <param name="npc">The mutable Core NPC model represented by this UI row.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="npc" /> is null.</exception>
-    public NpcRowViewModel(Npc npc)
+    public NpcRowViewModel(Npc npc, Guid? rowId = null)
     {
         Npc = npc ?? throw new ArgumentNullException(nameof(npc));
-        RowId = Guid.NewGuid();
+        RowId = rowId ?? Guid.NewGuid();
     }
 
     /// <summary>

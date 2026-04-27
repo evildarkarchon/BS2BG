@@ -111,3 +111,120 @@ public sealed record PresetValueSnapshot(
         foreach (var slider in MissingDefaultSetSliders) preset.MissingDefaultSetSliders.Add(slider.ToSetSlider());
     }
 }
+
+/// <summary>
+/// Captures a custom morph target by value, including collection position and assigned preset names.
+/// Replay creates a fresh target so detached target mutations cannot corrupt undo state.
+/// </summary>
+public sealed record CustomTargetValueSnapshot(
+    int Index,
+    string Name,
+    IReadOnlyList<string> AssignedPresetNames)
+{
+    /// <summary>
+    /// Creates a value snapshot from the current custom target values and collection index.
+    /// </summary>
+    public static CustomTargetValueSnapshot Create(CustomMorphTarget target, int index)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        return new CustomTargetValueSnapshot(
+            index,
+            target.Name,
+            target.SliderPresets.Select(preset => preset.Name).ToArray());
+    }
+
+    /// <summary>
+    /// Recreates the target and resolves captured assignment names against the current preset collection.
+    /// Missing presets are skipped because replay must not resurrect deleted preset rows.
+    /// </summary>
+    public CustomMorphTarget ToTarget(IEnumerable<SliderPreset> availablePresets)
+    {
+        ArgumentNullException.ThrowIfNull(availablePresets);
+
+        var target = new CustomMorphTarget(Name);
+        AddResolvedAssignments(target, AssignedPresetNames, availablePresets);
+        return target;
+    }
+
+    internal static void AddResolvedAssignments(
+        MorphTargetBase target,
+        IEnumerable<string> presetNames,
+        IEnumerable<SliderPreset> availablePresets)
+    {
+        var presetsByName = availablePresets
+            .GroupBy(preset => preset.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        foreach (var presetName in presetNames)
+            if (presetsByName.TryGetValue(presetName, out var preset))
+                target.AddSliderPreset(preset);
+    }
+}
+
+/// <summary>
+/// Captures an NPC row by stable UI row ID plus scalar values and assigned preset names.
+/// Undo/redo can resolve the current row by ID or recreate it when the row has been removed.
+/// </summary>
+public sealed record NpcAssignmentSnapshot(
+    Guid RowId,
+    int Index,
+    string Mod,
+    string Name,
+    string EditorId,
+    string Race,
+    string FormId,
+    IReadOnlyList<string> AssignedPresetNames)
+{
+    /// <summary>
+    /// Creates a value snapshot from the current NPC values, stable row ID, and collection index.
+    /// </summary>
+    public static NpcAssignmentSnapshot Create(Npc npc, Guid rowId, int index)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+
+        return new NpcAssignmentSnapshot(
+            rowId,
+            index,
+            npc.Mod,
+            npc.Name,
+            npc.EditorId,
+            npc.Race,
+            npc.FormId,
+            npc.SliderPresets.Select(preset => preset.Name).ToArray());
+    }
+
+    /// <summary>
+    /// Recreates an NPC with captured field values and assignments resolved by current preset names.
+    /// </summary>
+    public Npc ToNpc(IEnumerable<SliderPreset> availablePresets)
+    {
+        ArgumentNullException.ThrowIfNull(availablePresets);
+
+        var npc = new Npc(Name)
+        {
+            Mod = Mod,
+            EditorId = EditorId,
+            Race = Race,
+            FormId = FormId
+        };
+        CustomTargetValueSnapshot.AddResolvedAssignments(npc, AssignedPresetNames, availablePresets);
+        return npc;
+    }
+
+    /// <summary>
+    /// Restores captured scalar values and assignment names onto an existing row when replay resolves it by ID.
+    /// </summary>
+    public void ApplyTo(Npc npc, IEnumerable<SliderPreset> availablePresets)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        ArgumentNullException.ThrowIfNull(availablePresets);
+
+        npc.Mod = Mod;
+        npc.Name = Name;
+        npc.EditorId = EditorId;
+        npc.Race = Race;
+        npc.FormId = FormId;
+        npc.ClearSliderPresets();
+        CustomTargetValueSnapshot.AddResolvedAssignments(npc, AssignedPresetNames, availablePresets);
+    }
+}

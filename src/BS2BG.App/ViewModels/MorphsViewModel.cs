@@ -588,8 +588,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var current = SelectedCustomTarget;
         if (current is null) return false;
 
-        var index = CustomTargets.IndexOf(current);
-        var assignments = current.SliderPresets.ToArray();
+        var snapshot = CustomTargetValueSnapshot.Create(current, CustomTargets.IndexOf(current));
         if (!assignmentService.RemoveCustomTarget(project, current)) return false;
 
         SelectedCustomTarget = CustomTargets.FirstOrDefault();
@@ -598,16 +597,20 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             "Remove custom target",
             () =>
             {
-                foreach (var preset in assignments) current.AddSliderPreset(preset);
-
-                CustomTargets.Insert(Math.Min(index, CustomTargets.Count), current);
+                var restored = snapshot.ToTarget(Presets);
+                CustomTargets.Insert(Math.Min(snapshot.Index, CustomTargets.Count), restored);
                 project.SortCustomMorphTargets();
-                SelectedCustomTarget = current;
+                SelectedCustomTarget = restored;
             },
             () =>
             {
-                current.ClearSliderPresets();
-                CustomTargets.Remove(current);
+                var currentTarget = FindCustomTarget(snapshot);
+                if (currentTarget is not null)
+                {
+                    currentTarget.ClearSliderPresets();
+                    CustomTargets.Remove(currentTarget);
+                }
+
                 SelectedCustomTarget = CustomTargets.FirstOrDefault();
             });
         return true;
@@ -616,15 +619,17 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     public void ClearCustomTargets()
     {
         var snapshot = CustomTargets
-            .Select((target, index) => new CustomTargetSnapshot(target, index, CaptureAssignments(target)))
+            .Select((target, index) => CustomTargetValueSnapshot.Create(target, index))
             .ToArray();
-        var selectedTarget = SelectedCustomTarget;
+        var selectedTargetSnapshot = SelectedCustomTarget is null
+            ? null
+            : CustomTargetValueSnapshot.Create(SelectedCustomTarget, CustomTargets.IndexOf(SelectedCustomTarget));
 
         ApplyClearCustomTargets();
         if (snapshot.Length > 0)
             undoRedo.Record(
                 "Clear custom targets",
-                () => RestoreCustomTargets(snapshot, selectedTarget),
+                () => RestoreCustomTargets(snapshot, selectedTargetSnapshot),
                 ApplyClearCustomTargets);
     }
 
@@ -710,18 +715,15 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             SelectedNpc = SelectedImportedNpc;
             StatusMessage = "Added NPC.";
             RefreshVisibleNpcs();
+            var snapshot = CreateNpcSnapshot(npc);
             undoRedo.Record(
                 "Add NPC",
                 () =>
                 {
-                    project.MorphedNpcs.Remove(npc);
+                    ApplyRemoveNpcs(new[] { snapshot });
                     SelectedNpc = Npcs.FirstOrDefault();
                 },
-                () =>
-                {
-                    project.MorphedNpcs.Add(npc);
-                    SelectedNpc = npc;
-                });
+                () => RestoreRemovedNpcs(new[] { snapshot }, null));
         }
         else if (SelectedImportedNpc is not null)
         {
@@ -738,7 +740,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var added = assignmentService.AddNpcsToMorphs(project, VisibleNpcDatabase.ToArray(), AssignRandomOnAdd);
         var addedSnapshots = Npcs
             .Except(before)
-            .Select(npc => new NpcRemovalSnapshot(npc, Npcs.IndexOf(npc), CaptureAssignments(npc)))
+            .Select(CreateNpcSnapshot)
             .ToArray();
         StatusMessage = "Added " + added.ToString(CultureInfo.InvariantCulture)
                                  + " NPC" + (added == 1 ? "." : "s.");
@@ -764,8 +766,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         if (npc is null) return false;
 
         var removedNpc = npc;
-        var index = Npcs.IndexOf(removedNpc);
-        var assignments = CaptureAssignments(removedNpc);
+        var snapshot = CreateNpcSnapshot(removedNpc);
         var removed = assignmentService.RemoveNpc(project, removedNpc);
         if (removed)
         {
@@ -774,16 +775,10 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             RefreshVisibleNpcs();
             undoRedo.Record(
                 "Remove NPC",
+                () => RestoreRemovedNpcs(new[] { snapshot }, null),
                 () =>
                 {
-                    RestoreAssignments(removedNpc, assignments);
-                    Npcs.Insert(Math.Min(index, Npcs.Count), removedNpc);
-                    SelectedNpc = removedNpc;
-                },
-                () =>
-                {
-                    removedNpc.ClearSliderPresets();
-                    Npcs.Remove(removedNpc);
+                    ApplyRemoveNpcs(new[] { snapshot });
                     SelectedNpc = Npcs.FirstOrDefault();
                 });
         }
@@ -794,7 +789,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     public int ClearVisibleNpcs()
     {
         var snapshot = VisibleNpcs
-            .Select(npc => new NpcRemovalSnapshot(npc, Npcs.IndexOf(npc), CaptureAssignments(npc)))
+            .Select(CreateNpcSnapshot)
             .ToArray();
         var selectedNpc = SelectedNpc;
         var removed = ApplyRemoveNpcs(snapshot);
@@ -1148,7 +1143,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     {
         var targets = ResolveNpcTargets(scope).ToArray();
         var snapshot = targets
-            .Select(npc => new NpcRemovalSnapshot(npc, Npcs.IndexOf(npc), CaptureAssignments(npc)))
+            .Select(CreateNpcSnapshot)
             .ToArray();
         var selectedNpc = SelectedNpc;
         var removed = ApplyRemoveNpcs(snapshot);
@@ -1620,33 +1615,33 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     }
 
     private void RestoreCustomTargets(
-        IEnumerable<CustomTargetSnapshot> snapshot,
-        CustomMorphTarget? selectedTarget)
+        IEnumerable<CustomTargetValueSnapshot> snapshot,
+        CustomTargetValueSnapshot? selectedTarget)
     {
         CustomTargets.Clear();
         foreach (var item in snapshot.OrderBy(item => item.Index))
         {
-            item.Target.ClearSliderPresets();
-            foreach (var preset in item.Assignments) item.Target.AddSliderPreset(preset);
-
-            CustomTargets.Insert(Math.Min(item.Index, CustomTargets.Count), item.Target);
+            CustomTargets.Insert(Math.Min(item.Index, CustomTargets.Count), item.ToTarget(Presets));
         }
 
-        SelectedCustomTarget = selectedTarget is not null && CustomTargets.Contains(selectedTarget)
-            ? selectedTarget
+        SelectedCustomTarget = selectedTarget is not null
+            ? FindCustomTarget(selectedTarget)
             : CustomTargets.FirstOrDefault();
         RaiseSelectedTargetChanged();
     }
 
-    private int ApplyRemoveNpcs(IEnumerable<NpcRemovalSnapshot> snapshot)
+    private int ApplyRemoveNpcs(IEnumerable<NpcAssignmentSnapshot> snapshot)
     {
         var items = snapshot.ToArray();
         var resetSelectedNpc = SelectedNpc is not null
-                               && items.Any(item => ReferenceEquals(item.Npc, SelectedNpc));
+                               && items.Any(item => TryGetNpcRowId(SelectedNpc, out var rowId) && item.RowId == rowId);
         var removed = 0;
         foreach (var item in items)
-            if (assignmentService.RemoveNpc(project, item.Npc))
+        {
+            var current = FindNpcByRowId(item.RowId);
+            if (current is not null && assignmentService.RemoveNpc(project, current))
                 removed++;
+        }
 
         RefreshVisibleNpcs();
         if (resetSelectedNpc) SelectedNpc = VisibleNpcs.FirstOrDefault();
@@ -1654,15 +1649,21 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     }
 
     private void RestoreRemovedNpcs(
-        IEnumerable<NpcRemovalSnapshot> snapshot,
+        IEnumerable<NpcAssignmentSnapshot> snapshot,
         Npc? selectedNpc)
     {
         foreach (var item in snapshot.OrderBy(item => item.Index))
         {
-            item.Npc.ClearSliderPresets();
-            foreach (var preset in item.Assignments) item.Npc.AddSliderPreset(preset);
+            var current = FindNpcByRowId(item.RowId);
+            if (current is not null)
+            {
+                item.ApplyTo(current, Presets);
+                continue;
+            }
 
-            if (!Npcs.Contains(item.Npc)) Npcs.Insert(Math.Min(item.Index, Npcs.Count), item.Npc);
+            var restored = item.ToNpc(Presets);
+            Npcs.Insert(Math.Min(item.Index, Npcs.Count), restored);
+            ReplaceNpcRow(restored, item.RowId);
         }
 
         RefreshVisibleNpcs();
@@ -1670,6 +1671,45 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             ? selectedNpc
             : VisibleNpcs.FirstOrDefault();
         RaiseSelectedTargetChanged();
+    }
+
+    private CustomMorphTarget? FindCustomTarget(CustomTargetValueSnapshot snapshot) =>
+        CustomTargets.FirstOrDefault(target => string.Equals(target.Name, snapshot.Name, StringComparison.Ordinal));
+
+    private NpcAssignmentSnapshot CreateNpcSnapshot(Npc npc)
+    {
+        if (!TryGetNpcRowId(npc, out var rowId))
+            throw new InvalidOperationException("NPC row identity was not available for undo snapshot.");
+
+        return NpcAssignmentSnapshot.Create(npc, rowId, Npcs.IndexOf(npc));
+    }
+
+    private bool TryGetNpcRowId(Npc npc, out Guid rowId)
+    {
+        if (npcRowsByNpc.TryGetValue(npc, out var row))
+        {
+            rowId = row.RowId;
+            return true;
+        }
+
+        rowId = Guid.Empty;
+        return false;
+    }
+
+    private Npc? FindNpcByRowId(Guid rowId) =>
+        npcRowsByNpc.Values.FirstOrDefault(row => row.RowId == rowId)?.Npc;
+
+    /// <summary>
+    /// Replaces the auto-created row wrapper after restoring an NPC so future undo/redo resolves the original row ID.
+    /// Collection insertion triggers the normal sync first; this method corrects that generated identity immediately after.
+    /// </summary>
+    private void ReplaceNpcRow(Npc npc, Guid rowId)
+    {
+        if (npcRowsByNpc.TryGetValue(npc, out var existingRow)) npcRowSource.Remove(existingRow.RowId);
+
+        var row = new NpcRowViewModel(npc, rowId);
+        npcRowsByNpc[npc] = row;
+        npcRowSource.AddOrUpdate(row);
     }
 
     private IObservable<SliderPreset[]> SelectedTargetPresetsObservable() =>
@@ -1716,30 +1756,6 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     {
         return string.Equals(left.Mod, right.Mod, StringComparison.OrdinalIgnoreCase)
                && string.Equals(left.EditorId, right.EditorId, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private sealed class CustomTargetSnapshot(
-        CustomMorphTarget target,
-        int index,
-        IReadOnlyList<SliderPreset> assignments)
-    {
-        public CustomMorphTarget Target { get; } = target;
-
-        public int Index { get; } = index;
-
-        public IReadOnlyList<SliderPreset> Assignments { get; } = assignments;
-    }
-
-    private sealed class NpcRemovalSnapshot(
-        Npc npc,
-        int index,
-        IReadOnlyList<SliderPreset> assignments)
-    {
-        public Npc Npc { get; } = npc;
-
-        public int Index { get; } = index;
-
-        public IReadOnlyList<SliderPreset> Assignments { get; } = assignments;
     }
 
     private sealed class EmptyNpcTextFilePicker : INpcTextFilePicker
