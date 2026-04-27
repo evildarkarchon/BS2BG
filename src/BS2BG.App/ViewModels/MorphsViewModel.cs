@@ -8,24 +8,16 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using BS2BG.App.Services;
+using BS2BG.App.ViewModels.Workflow;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
+using DynamicData;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 
 namespace BS2BG.App.ViewModels;
-
-public enum NpcFilterColumn
-{
-    Name,
-    Mod,
-    Race,
-    EditorId,
-    FormId,
-    Presets
-}
 
 public enum PresetCountWarningState
 {
@@ -43,10 +35,15 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly INpcImageLookupService imageLookupService;
     private readonly IImageViewService imageViewService;
     private readonly MorphGenerationService morphGenerationService;
+    private readonly NpcFilterState npcDatabaseFilterState = new();
+    private readonly Dictionary<Npc, NpcRowViewModel> npcDatabaseRowsByNpc = new(ReferenceEqualityComparer.Instance);
+    private readonly SourceCache<NpcRowViewModel, Guid> npcDatabaseRowSource = new(row => row.RowId);
     private readonly INoPresetNotificationService noPresetNotificationService;
-    private readonly Dictionary<NpcFilterColumn, HashSet<string>> npcColumnAllowedValues = new();
     private readonly Dictionary<NpcFilterColumn, string> npcColumnSearchText = new();
+    private readonly NpcFilterState npcFilterState = new();
     private readonly Dictionary<Npc, int> npcPropertySubscriptions = new();
+    private readonly Dictionary<Npc, NpcRowViewModel> npcRowsByNpc = new(ReferenceEqualityComparer.Instance);
+    private readonly SourceCache<NpcRowViewModel, Guid> npcRowSource = new(row => row.RowId);
     private readonly INpcTextFilePicker npcTextFilePicker;
     private readonly NpcTextParser npcTextParser;
     private readonly ProjectModel project;
@@ -119,6 +116,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         project.CustomMorphTargets.CollectionChanged += OnCustomTargetsChanged;
         project.SliderPresets.CollectionChanged += OnPresetsChanged;
         NpcDatabase.CollectionChanged += OnNpcDatabaseChanged;
+        SyncRowsFromCollection(Npcs, npcRowsByNpc, npcRowSource);
+        SyncRowsFromCollection(NpcDatabase, npcDatabaseRowsByNpc, npcDatabaseRowSource);
         RefreshNpcSubscriptions();
         RefreshVisibleNpcs();
         RefreshVisibleNpcDatabase();
@@ -400,7 +399,12 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public IReadOnlyList<string> NpcRaceColumnValues => GetNpcColumnValues(NpcFilterColumn.Race);
 
-    public void Dispose() => disposables.Dispose();
+    public void Dispose()
+    {
+        disposables.Dispose();
+        npcRowSource.Dispose();
+        npcDatabaseRowSource.Dispose();
+    }
 
     public void LinkExternalBusy(IObservable<bool> source)
     {
@@ -786,9 +790,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         var selected = values?.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()
                        ?? Array.Empty<string>();
         if (selected.Length == 0)
-            npcColumnAllowedValues.Remove(column);
+            npcFilterState.ClearAllowedValues(column);
         else
-            npcColumnAllowedValues[column] = new HashSet<string>(selected, StringComparer.OrdinalIgnoreCase);
+            npcFilterState.SetAllowedValues(column, selected);
 
         RefreshVisibleNpcs();
     }
@@ -809,13 +813,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     public IReadOnlyList<string> GetNpcColumnValues(NpcFilterColumn column)
     {
         npcColumnSearchText.TryGetValue(column, out var filter);
-        return Npcs
-            .Select(npc => GetNpcColumnValue(npc, column))
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        return npcFilterState.GetAvailableValues(GetRowsForNpcs(Npcs, npcRowsByNpc), column)
             .Where(value => string.IsNullOrWhiteSpace(filter)
                             || value.Contains(filter, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -925,69 +925,38 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     private void RefreshVisibleNpcs()
     {
-        RefreshFilteredCollection(Npcs, VisibleNpcs, SearchText);
+        npcFilterState.PendingGlobalSearchText = SearchText;
+        npcFilterState.ApplyPendingGlobalSearchText();
+        RefreshFilteredCollection(Npcs, npcRowsByNpc, npcFilterState, VisibleNpcs);
         this.RaisePropertyChanged(nameof(NpcCountBadgeText));
         this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
     }
 
     private void RefreshVisibleNpcDatabase()
     {
-        RefreshFilteredCollection(NpcDatabase, VisibleNpcDatabase, NpcDatabaseSearchText);
+        npcDatabaseFilterState.PendingGlobalSearchText = NpcDatabaseSearchText;
+        npcDatabaseFilterState.ApplyPendingGlobalSearchText();
+        RefreshFilteredCollection(NpcDatabase, npcDatabaseRowsByNpc, npcDatabaseFilterState, VisibleNpcDatabase);
         this.RaisePropertyChanged(nameof(NpcDatabaseCountBadgeText));
     }
 
-    private void RefreshFilteredCollection(
+    private static void RefreshFilteredCollection(
         IEnumerable<Npc> source,
-        ObservableCollection<Npc> target,
-        string filterText)
+        Dictionary<Npc, NpcRowViewModel> rowsByNpc,
+        NpcFilterState filterState,
+        ObservableCollection<Npc> target)
     {
+        var predicate = filterState.CreatePredicate();
         target.Clear();
-        foreach (var npc in source.Where(npc => MatchesFilter(npc, filterText))) target.Add(npc);
+        foreach (var npc in source)
+            if (rowsByNpc.TryGetValue(npc, out var row) && predicate(row))
+                target.Add(npc);
     }
-
-    private bool MatchesFilter(Npc npc, string filterText)
-    {
-        if (!MatchesColumnFilters(npc)) return false;
-
-        if (string.IsNullOrWhiteSpace(filterText)) return true;
-
-        return Contains(npc.Name, filterText)
-               || Contains(npc.Mod, filterText)
-               || Contains(npc.Race, filterText)
-               || Contains(npc.EditorId, filterText)
-               || Contains(npc.FormId, filterText)
-               || Contains(npc.SliderPresetsText, filterText);
-    }
-
-    private bool MatchesColumnFilters(Npc npc)
-    {
-        foreach (var filter in npcColumnAllowedValues)
-            if (!filter.Value.Contains(GetNpcColumnValue(npc, filter.Key)))
-                return false;
-
-        return true;
-    }
-
-    private static string GetNpcColumnValue(Npc npc, NpcFilterColumn column)
-    {
-        return column switch
-        {
-            NpcFilterColumn.Name => npc.Name,
-            NpcFilterColumn.Mod => npc.Mod,
-            NpcFilterColumn.Race => npc.Race,
-            NpcFilterColumn.EditorId => npc.EditorId,
-            NpcFilterColumn.FormId => npc.FormId,
-            NpcFilterColumn.Presets => npc.SliderPresetsText,
-            _ => string.Empty
-        };
-    }
-
-    private static bool Contains(string value, string filterText) =>
-        value.Contains(filterText, StringComparison.OrdinalIgnoreCase);
 
     private void OnNpcsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
         UpdateNpcSubscriptions(args);
+        SyncRowsFromCollection(Npcs, npcRowsByNpc, npcRowSource);
         RefreshVisibleNpcs();
     }
 
@@ -1001,8 +970,54 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     {
     }
 
-    private void OnNpcDatabaseChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
+    private void OnNpcDatabaseChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        SyncRowsFromCollection(NpcDatabase, npcDatabaseRowsByNpc, npcDatabaseRowSource);
         RefreshVisibleNpcDatabase();
+    }
+
+    /// <summary>
+    /// Reconciles the keyed UI row cache with a mutable NPC collection without replacing wrappers for retained NPC objects.
+    /// Stable wrappers keep generated row IDs independent from mutable display/export fields.
+    /// </summary>
+    /// <param name="source">The current NPC collection snapshot.</param>
+    /// <param name="rowsByNpc">The sidecar map from Core NPC models to App-layer row wrappers.</param>
+    /// <param name="rowSource">The DynamicData source cache keyed by generated row ID.</param>
+    private static void SyncRowsFromCollection(
+        IEnumerable<Npc> source,
+        Dictionary<Npc, NpcRowViewModel> rowsByNpc,
+        SourceCache<NpcRowViewModel, Guid> rowSource)
+    {
+        var currentNpcs = source.ToHashSet();
+        var removedRows = rowsByNpc
+            .Where(pair => !currentNpcs.Contains(pair.Key))
+            .Select(pair => pair.Value)
+            .ToArray();
+
+        foreach (var row in removedRows)
+        {
+            rowsByNpc.Remove(row.Npc);
+            rowSource.Remove(row.RowId);
+        }
+
+        foreach (var npc in currentNpcs)
+        {
+            if (rowsByNpc.ContainsKey(npc)) continue;
+
+            var row = new NpcRowViewModel(npc);
+            rowsByNpc.Add(npc, row);
+            rowSource.AddOrUpdate(row);
+        }
+    }
+
+    private static IEnumerable<NpcRowViewModel> GetRowsForNpcs(
+        IEnumerable<Npc> npcs,
+        Dictionary<Npc, NpcRowViewModel> rowsByNpc)
+    {
+        foreach (var npc in npcs)
+            if (rowsByNpc.TryGetValue(npc, out var row))
+                yield return row;
+    }
 
     private void UpdateNpcSubscriptions(NotifyCollectionChangedEventArgs args)
     {

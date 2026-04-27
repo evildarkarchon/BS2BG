@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
+using BS2BG.App.ViewModels.Workflow;
 using BS2BG.Core.Models;
 
 namespace BS2BG.App.Views;
