@@ -86,15 +86,8 @@ public sealed class ProfileDiagnosticsService
             }
         }
 
-        foreach (var savedProfileName in savedProfileNames)
-            findings.Add(new DiagnosticFinding(
-                DiagnosticSeverity.Info,
-                "Profiles",
-                "Profile fallback detail",
-                "Saved profile: " + savedProfileName + "; calculation fallback: "
-                + calculationFallbackProfileName
-                + ". This is informational and does not block generation or export.",
-                savedProfileName));
+        foreach (var recoveryDiagnostic in new ProfileRecoveryDiagnosticsService().Analyze(project, catalog))
+            findings.Add(ToFinding(recoveryDiagnostic));
 
         var summary = new ProfileDiagnosticsSummary(
             presets.Length,
@@ -123,6 +116,19 @@ public sealed class ProfileDiagnosticsService
     private static void AddName(ISet<string> names, string name)
     {
         if (!string.IsNullOrWhiteSpace(name)) names.Add(name);
+    }
+
+    private static DiagnosticFinding ToFinding(ProfileRecoveryDiagnostic diagnostic)
+    {
+        return new DiagnosticFinding(
+            diagnostic.Severity,
+            "Profiles",
+            "Missing custom profile recovery",
+            diagnostic.Detail,
+            diagnostic.MissingProfileName,
+            "Available recovery actions: " + string.Join(", ", diagnostic.Actions),
+            diagnostic.Code,
+            diagnostic.Category);
     }
 }
 

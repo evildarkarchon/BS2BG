@@ -106,7 +106,7 @@ public sealed class ProfileRecoveryDiagnosticsService
     private static string CreateDetail(string missingProfileName, string fallbackProfileName, bool hasEmbeddedCopy)
     {
         var detail = "Project references custom profile '" + missingProfileName
-            + "', but it is not active in the current profile catalog. BS2BG can continue with visible fallback calculation until you resolve it; fallback calculation uses '"
+            + "', but it is not active in the current profile catalog. BS2BG can continue with visible fallback calculation until you resolve it; calculation fallback uses '"
             + fallbackProfileName + "'.";
 
         if (hasEmbeddedCopy)

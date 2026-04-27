@@ -35,7 +35,6 @@ public sealed class ProjectValidationService
         };
 
         AddTemplateFindings(project, findings);
-        AddProfileFindings(project, profileCatalog, findings);
         AddMorphTargetFindings(project, findings);
         AddExportFindings(project, findings);
 
@@ -64,26 +63,6 @@ public sealed class ProjectValidationService
                     "Template and morph output require every preset to have a stable name.",
                     preset.Name,
                     "Rename the preset before export."));
-    }
-
-    private static void AddProfileFindings(
-        ProjectModel project,
-        TemplateProfileCatalog profileCatalog,
-        List<DiagnosticFinding> findings)
-    {
-        foreach (var group in project.SliderPresets
-                     .Where(preset => !string.IsNullOrWhiteSpace(preset.ProfileName)
-                                      && !profileCatalog.ContainsProfile(preset.ProfileName))
-                     .GroupBy(preset => preset.ProfileName, StringComparer.OrdinalIgnoreCase))
-        {
-            findings.Add(new DiagnosticFinding(
-                DiagnosticSeverity.Info,
-                ProfilesArea,
-                "Unbundled saved profile",
-                "Saved profile '" + group.Key + "' is not bundled. Calculations use fallback profile '"
-                + profileCatalog.GetProfile(group.Key).Name + "' for " + group.Count() + " preset(s).",
-                group.Key));
-        }
     }
 
     private static void AddMorphTargetFindings(ProjectModel project, List<DiagnosticFinding> findings)

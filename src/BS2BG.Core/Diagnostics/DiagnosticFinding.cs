@@ -14,13 +14,17 @@ public sealed class DiagnosticFinding
     /// <param name="detail">Specific read-only detail explaining the finding.</param>
     /// <param name="targetKey">Optional preset, target, NPC, or output key that the App layer can navigate to.</param>
     /// <param name="actionHint">Optional guidance text; diagnostics never perform auto-fix actions.</param>
+    /// <param name="code">Optional stable machine-readable diagnostic code for mechanical deduplication.</param>
+    /// <param name="category">Optional stable diagnostic category for grouping related findings.</param>
     public DiagnosticFinding(
         DiagnosticSeverity severity,
         string area,
         string title,
         string detail,
         string? targetKey = null,
-        string? actionHint = null)
+        string? actionHint = null,
+        string? code = null,
+        string? category = null)
     {
         Severity = severity;
         Area = area ?? throw new ArgumentNullException(nameof(area));
@@ -28,6 +32,8 @@ public sealed class DiagnosticFinding
         Detail = detail ?? throw new ArgumentNullException(nameof(detail));
         TargetKey = targetKey;
         ActionHint = actionHint;
+        Code = code;
+        Category = category;
     }
 
     public DiagnosticSeverity Severity { get; }
@@ -41,4 +47,8 @@ public sealed class DiagnosticFinding
     public string? TargetKey { get; }
 
     public string? ActionHint { get; }
+
+    public string? Code { get; }
+
+    public string? Category { get; }
 }
