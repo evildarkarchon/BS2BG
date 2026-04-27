@@ -35,6 +35,7 @@ public static class AppBootstrapper
         services.AddSingleton<MorphGenerationService>();
         services.AddSingleton<ProjectValidationService>();
         services.AddSingleton<ProfileDiagnosticsService>();
+        services.AddSingleton<DiagnosticsReportFormatter>();
         services.AddSingleton<BodyGenIniExportWriter>();
         services.AddSingleton<BosJsonExportWriter>();
         services.AddSingleton<UndoRedoService>();

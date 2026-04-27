@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using BS2BG.App.Services;
 using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
@@ -27,6 +28,8 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
     private readonly ProfileDiagnosticsService profileDiagnosticsService;
     private readonly ProjectModel project;
     private readonly ProjectValidationService projectValidationService;
+    private readonly IClipboardService clipboardService;
+    private readonly DiagnosticsReportFormatter reportFormatter;
 
     [ObservableAsProperty] private bool _hasNavigationIntent;
     [ObservableAsProperty] private bool _isBusy;
@@ -54,7 +57,9 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
             new ProjectModel(),
             CreateDesignTimeProfileCatalog(),
             new ProjectValidationService(),
-            new ProfileDiagnosticsService())
+            new ProfileDiagnosticsService(),
+            new EmptyClipboardService(),
+            new DiagnosticsReportFormatter())
     {
     }
 
@@ -65,7 +70,9 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
         ProjectModel project,
         TemplateProfileCatalog profileCatalog,
         ProjectValidationService projectValidationService,
-        ProfileDiagnosticsService profileDiagnosticsService)
+        ProfileDiagnosticsService profileDiagnosticsService,
+        IClipboardService? clipboardService = null,
+        DiagnosticsReportFormatter? reportFormatter = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.profileCatalog = profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog));
@@ -73,6 +80,8 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
                                         ?? throw new ArgumentNullException(nameof(projectValidationService));
         this.profileDiagnosticsService = profileDiagnosticsService
                                          ?? throw new ArgumentNullException(nameof(profileDiagnosticsService));
+        this.clipboardService = clipboardService ?? new EmptyClipboardService();
+        this.reportFormatter = reportFormatter ?? new DiagnosticsReportFormatter();
 
         foreach (var area in AreaOrder) Areas.Add(area);
 
@@ -80,9 +89,14 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
         RefreshDiagnosticsCommand = ReactiveCommand.CreateFromTask(
             (CancellationToken cancellationToken) => RefreshDiagnosticsAsync(cancellationToken),
             canRefresh);
+        CopyReportCommand = ReactiveCommand.CreateFromTask(
+            (CancellationToken cancellationToken) => CopyReportAsync(cancellationToken),
+            canRefresh);
 
         disposables.Add(RefreshDiagnosticsCommand.ThrownExceptions
             .Subscribe(ex => StatusMessage = "Diagnostics could not be refreshed: " + FormatExceptionMessage(ex)));
+        disposables.Add(CopyReportCommand.ThrownExceptions
+            .Subscribe(ex => StatusMessage = "Diagnostics report copy failed: " + FormatExceptionMessage(ex)));
 
         _isBusyHelper = RefreshDiagnosticsCommand.IsExecuting.ToProperty(this, x => x.IsBusy, initialValue: false);
         _selectedDetailTextHelper = this.WhenAnyValue(x => x.SelectedFinding)
@@ -104,6 +118,8 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
 
     public ReactiveCommand<Unit, Unit> RefreshDiagnosticsCommand { get; }
 
+    public ReactiveCommand<Unit, Unit> CopyReportCommand { get; }
+
     public void Dispose() => disposables.Dispose();
 
     /// <summary>
@@ -118,6 +134,7 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
         var profileReport = profileDiagnosticsService.Analyze(project, profileCatalog);
         var findings = projectReport.Findings
             .Concat(profileReport.Findings)
+            .Concat(CreateProfileFallbackFindings(profileReport.Summary))
             .Select(finding => new DiagnosticFindingViewModel(finding))
             .OrderBy(finding => AreaSortIndex(finding.Area))
             .ThenBy(finding => SeveritySortIndex(finding.Severity))
@@ -141,6 +158,30 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
         StatusMessage = "Diagnostics refreshed.";
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Copies the current diagnostics report to the clipboard without changing project data.
+    /// </summary>
+    public async Task CopyReportAsync(CancellationToken cancellationToken = default)
+    {
+        var report = reportFormatter.Format(Findings, DateTimeOffset.Now);
+        await clipboardService.SetTextAsync(report, cancellationToken);
+        StatusMessage = "Diagnostics report copied to clipboard.";
+    }
+
+    private static IEnumerable<DiagnosticFinding> CreateProfileFallbackFindings(ProfileDiagnosticsSummary summary)
+    {
+        if (!summary.HasNeutralFallback) return Array.Empty<DiagnosticFinding>();
+
+        return summary.SavedProfileNames.Select(savedProfileName => new DiagnosticFinding(
+            DiagnosticSeverity.Info,
+            "Profiles",
+            "Profile fallback detail",
+            "Saved profile: " + savedProfileName + "; calculation fallback: "
+            + summary.CalculationFallbackProfileName
+            + ". This is informational and does not block generation or export.",
+            savedProfileName));
     }
 
     private static string FormatSelectedDetail(DiagnosticFindingViewModel? finding)
@@ -195,5 +236,10 @@ public sealed partial class DiagnosticsViewModel : ReactiveObject, IDisposable
                     Array.Empty<BS2BG.Core.Formatting.SliderMultiplier>(),
                     Array.Empty<string>()))
         });
+    }
+
+    private sealed class EmptyClipboardService : IClipboardService
+    {
+        public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
