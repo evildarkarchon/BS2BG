@@ -116,6 +116,28 @@ public sealed class M6UxAppShellTests
     }
 
     [AvaloniaFact]
+    public void ActiveNpcFiltersShowBadgesAndFilteredEmptyCopy()
+    {
+        var viewModel = new MainWindowViewModel();
+        viewModel.Morphs.Npcs.Add(CreateNpc("Lydia", "NordRace", "Skyrim.esm", "LydiaEditor", "000A2C8E"));
+        var window = new MainWindow(viewModel);
+        window.ApplyTemplate();
+        var raceValuesList = window.FindControl<ListBox>("NpcRaceFilterValuesListBox").Should().BeAssignableTo<ListBox>()
+            .Which;
+
+        raceValuesList.SelectedItems!.Add("NoMatchingRace");
+
+        window.FindControl<TextBlock>("NpcRaceFilterBadge").Should().BeAssignableTo<TextBlock>().Which
+            .Text.Should().Be("Race: 1 selected");
+        window.FindControl<TextBlock>("NpcFilteredEmptyHeading").Should().BeAssignableTo<TextBlock>().Which
+            .Text.Should().Be("No NPCs match the current filters");
+        window.FindControl<TextBlock>("NpcFilteredEmptyBody").Should().BeAssignableTo<TextBlock>().Which.Text.Should()
+            .Be("Clear one or more filters to show hidden NPCs, or change the bulk scope before running an action.");
+        window.FindControl<Border>("NpcFilteredEmptyState").Should().BeAssignableTo<Border>().Which.IsVisible.Should()
+            .BeTrue();
+    }
+
+    [AvaloniaFact]
     public void MainWindowRoutesM6ShortcutsAndDropZones()
     {
         using var provider = AppBootstrapper.CreateServiceProvider();
