@@ -208,6 +208,70 @@ public sealed class ProfileEditorViewModelTests
     }
 
     /// <summary>
+    /// Verifies search filtering applies consistently to Defaults, Multipliers, and Inverted tables.
+    /// </summary>
+    [Fact]
+    public void SearchTextFiltersMultiplierAndInvertedVisibleRows()
+    {
+        var vm = ProfileEditorViewModel.FromProfile(
+            "Searchable",
+            string.Empty,
+            new SliderProfile(
+                [new SliderDefault("Breasts", 0f, 1f), new SliderDefault("Waist", 0f, 1f)],
+                [new SliderMultiplier("Scale", 1f), new SliderMultiplier("Arms", 1.5f)],
+                ["Legs", "Belly"]),
+            ProfileSourceKind.LocalCustom,
+            null,
+            new ProfileDefinitionService(),
+            [],
+            new StubUserProfileStore());
+
+        vm.SearchText = "ar";
+
+        vm.VisibleDefaultRows.Should().BeEmpty();
+        vm.VisibleMultiplierRows.Should().ContainSingle(row => row.Slider == "Arms");
+        vm.VisibleInvertedRows.Should().BeEmpty();
+
+        vm.SearchText = "leg";
+
+        vm.VisibleDefaultRows.Should().BeEmpty();
+        vm.VisibleMultiplierRows.Should().BeEmpty();
+        vm.VisibleInvertedRows.Should().ContainSingle(row => row.Slider == "Legs");
+        vm.DefaultRows.Should().HaveCount(2);
+        vm.MultiplierRows.Should().HaveCount(2);
+        vm.InvertedRows.Should().HaveCount(2);
+    }
+
+    /// <summary>
+    /// Verifies saving with a filter active uses full source row collections instead of visible projections.
+    /// </summary>
+    [Fact]
+    public void SavingWithFilterActivePreservesAllSourceTables()
+    {
+        var store = new StubUserProfileStore();
+        var vm = ProfileEditorViewModel.FromProfile(
+            "Filtered Save",
+            string.Empty,
+            new SliderProfile(
+                [new SliderDefault("Breasts", 0f, 1f), new SliderDefault("Waist", 0f, 1f)],
+                [new SliderMultiplier("Scale", 1f), new SliderMultiplier("Arms", 1.5f)],
+                ["Legs", "Belly"]),
+            ProfileSourceKind.LocalCustom,
+            null,
+            new ProfileDefinitionService(),
+            [],
+            store);
+
+        vm.SearchText = "ar";
+        vm.SaveProfileCommand.Execute().Subscribe();
+
+        store.SavedProfiles.Should().ContainSingle();
+        store.SavedProfiles[0].SliderProfile.Defaults.Should().HaveCount(2);
+        store.SavedProfiles[0].SliderProfile.Multipliers.Should().HaveCount(2);
+        store.SavedProfiles[0].SliderProfile.InvertedNames.Should().HaveCount(2);
+    }
+
+    /// <summary>
     /// Verifies store failures keep the unsaved editor buffer intact and report the UI-SPEC failure copy.
     /// </summary>
     [Fact]
