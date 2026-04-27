@@ -1052,14 +1052,21 @@ public sealed class MainWindowViewModelTests
         var parser = new BodySlideXmlParser();
         var templateGeneration = new TemplateGenerationService();
         profileCatalog ??= CreateProfileCatalogWithDefault();
-        profileCatalogService ??= new TemplateProfileCatalogService(profileCatalog);
-        var templates = new TemplatesViewModel(
-            project,
-            parser,
-            templateGeneration,
-            profileCatalogService,
-            new EmptyBodySlideXmlFilePicker(),
-            new EmptyClipboardService());
+        var templates = profileCatalogService is null
+            ? new TemplatesViewModel(
+                project,
+                parser,
+                templateGeneration,
+                profileCatalog,
+                new EmptyBodySlideXmlFilePicker(),
+                new EmptyClipboardService())
+            : new TemplatesViewModel(
+                project,
+                parser,
+                templateGeneration,
+                profileCatalogService,
+                new EmptyBodySlideXmlFilePicker(),
+                new EmptyClipboardService());
         var morphs = new MorphsViewModel(
             project,
             new NpcTextParser(),
@@ -1068,18 +1075,31 @@ public sealed class MainWindowViewModelTests
             npcTextFilePicker ?? new EmptyNpcTextFilePicker(),
             new EmptyClipboardService());
 
-        return new MainWindowViewModel(
-            project,
-            projectFileService ?? new ProjectFileService(),
-            templateGeneration,
-            new MorphGenerationService(),
-            profileCatalogService,
-            new BodyGenIniExportWriter(),
-            bosJsonExportWriter ?? new BosJsonExportWriter(templateGeneration),
-            fileDialogs,
-            dialogs ?? new FakeAppDialogService(),
-            templates,
-            morphs);
+        return profileCatalogService is null
+            ? new MainWindowViewModel(
+                project,
+                projectFileService ?? new ProjectFileService(),
+                templateGeneration,
+                new MorphGenerationService(),
+                profileCatalog,
+                new BodyGenIniExportWriter(),
+                bosJsonExportWriter ?? new BosJsonExportWriter(templateGeneration),
+                fileDialogs,
+                dialogs ?? new FakeAppDialogService(),
+                templates,
+                morphs)
+            : new MainWindowViewModel(
+                project,
+                projectFileService ?? new ProjectFileService(),
+                templateGeneration,
+                new MorphGenerationService(),
+                profileCatalogService,
+                new BodyGenIniExportWriter(),
+                bosJsonExportWriter ?? new BosJsonExportWriter(templateGeneration),
+                fileDialogs,
+                dialogs ?? new FakeAppDialogService(),
+                templates,
+                morphs);
     }
 
     private static TemplateProfileCatalog CreateProfileCatalogWithDefault(params string[] defaultSliders)

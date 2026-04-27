@@ -891,7 +891,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         {
             ClearFileOperationLedger();
             var versionAtSnapshot = project.ChangeVersion;
-            var snapshot = projectFileService.SaveToString(project);
+            var snapshot = projectFileService.SaveToString(project, BuildProjectSaveContext());
             await Task.Run(() => projectFileService.WriteAtomic(snapshot, path), cancellationToken);
             CurrentProjectPath = path;
             if (project.ChangeVersion == versionAtSnapshot)
@@ -909,6 +909,22 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         {
             ReportFileOperationFailure("Saving jBS2BG file", exception);
         }
+    }
+
+    /// <summary>
+    /// Captures runtime custom profiles available to the GUI save path so Core can embed only project-referenced definitions.
+    /// </summary>
+    /// <returns>A case-insensitive save context containing local custom profiles and active project-scoped profile overlays.</returns>
+    private ProjectSaveContext BuildProjectSaveContext()
+    {
+        var availableProfiles = new Dictionary<string, CustomProfileDefinition>(StringComparer.OrdinalIgnoreCase);
+        foreach (var profile in profileCatalogService.LocalCustomProfiles)
+            availableProfiles[profile.Name] = profile;
+
+        foreach (var profile in profileCatalogService.ProjectProfiles)
+            availableProfiles[profile.Name] = profile;
+
+        return new ProjectSaveContext(availableProfiles);
     }
 
     private void ClearFileOperationLedger()

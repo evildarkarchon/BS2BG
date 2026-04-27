@@ -73,7 +73,7 @@ public sealed class ProjectFileServiceCustomProfileTests
               "CustomMorphTargets": {},
               "MorphedNPCs": {}
             }
-            """.Replace("\n", Environment.NewLine, StringComparison.Ordinal));
+            """.ReplaceLineEndings());
     }
 
     [Fact]
