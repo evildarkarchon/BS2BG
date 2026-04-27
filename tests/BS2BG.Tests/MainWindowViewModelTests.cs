@@ -210,6 +210,71 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task WindowFileDialogServiceUsesProjectFolderForProjectOpenAndSave()
+    {
+        using var directory = new TemporaryDirectory();
+        var initialProjectFolder = directory.CreateDirectory("projects");
+        var selectedProjectFolder = directory.CreateDirectory("selected-projects");
+        var openedProjectPath = Path.Combine(selectedProjectFolder, "opened.jbs2bg");
+        var savedProjectPath = Path.Combine(selectedProjectFolder, "saved.jbs2bg");
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            ProjectFolder = initialProjectFolder,
+            BodyGenExportFolder = directory.CreateDirectory("bodygen"),
+            BosJsonExportFolder = directory.CreateDirectory("bos")
+        });
+        var backend = new CapturingFileDialogBackend();
+        backend.RegisterFolder(initialProjectFolder);
+        backend.RegisterFolder(selectedProjectFolder);
+        backend.OpenProjectResult = openedProjectPath;
+        backend.SaveProjectResult = savedProjectPath;
+        var dialogs = new WindowFileDialogService(preferences, backend);
+
+        var openPath = await dialogs.PickOpenProjectFileAsync(TestContext.Current.CancellationToken);
+        var savePath = await dialogs.PickSaveProjectFileAsync(null, TestContext.Current.CancellationToken);
+
+        openPath.Should().Be(openedProjectPath);
+        savePath.Should().Be(savedProjectPath);
+        backend.LastOpenProjectSuggestedStartFolder.Should().Be(initialProjectFolder);
+        backend.LastSaveProjectSuggestedStartFolder.Should().Be(selectedProjectFolder);
+        preferences.SavedPreferences.Should().NotBeNull();
+        preferences.SavedPreferences!.ProjectFolder.Should().Be(selectedProjectFolder);
+        preferences.SavedPreferences.BodyGenExportFolder.Should().Be(directory.GetDirectoryPath("bodygen"));
+        preferences.SavedPreferences.BosJsonExportFolder.Should().Be(directory.GetDirectoryPath("bos"));
+    }
+
+    [Fact]
+    public async Task WindowFileDialogServiceUsesIndependentExportFolderChannelsAndIgnoresInvalidHints()
+    {
+        using var directory = new TemporaryDirectory();
+        var bodyGenStart = directory.CreateDirectory("bodygen-start");
+        var bodyGenSelected = directory.CreateDirectory("bodygen-selected");
+        var bosSelected = directory.CreateDirectory("bos-selected");
+        var preferences = new CapturingUserPreferencesService(new UserPreferences
+        {
+            ProjectFolder = directory.CreateDirectory("projects"),
+            BodyGenExportFolder = bodyGenStart,
+            BosJsonExportFolder = Path.Combine(directory.Path, "missing-bos")
+        });
+        var backend = new CapturingFileDialogBackend();
+        backend.RegisterFolder(bodyGenStart);
+        var dialogs = new WindowFileDialogService(preferences, backend);
+
+        backend.FolderPickerResult = bodyGenSelected;
+        var bodyGenFolder = await dialogs.PickBodyGenExportFolderAsync(TestContext.Current.CancellationToken);
+        backend.FolderPickerResult = bosSelected;
+        var bosFolder = await dialogs.PickBosJsonExportFolderAsync(TestContext.Current.CancellationToken);
+
+        bodyGenFolder.Should().Be(bodyGenSelected);
+        bosFolder.Should().Be(bosSelected);
+        backend.FolderSuggestedStartFolders.Should().Equal(bodyGenStart, null);
+        preferences.SavedPreferences.Should().NotBeNull();
+        preferences.SavedPreferences!.ProjectFolder.Should().Be(directory.GetDirectoryPath("projects"));
+        preferences.SavedPreferences.BodyGenExportFolder.Should().Be(bodyGenSelected);
+        preferences.SavedPreferences.BosJsonExportFolder.Should().Be(bosSelected);
+    }
+
+    [Fact]
     public async Task ExportBosJsonSnapshotsPresetsBeforeBackgroundWrite()
     {
         using var directory = new TemporaryDirectory();
@@ -763,6 +828,74 @@ public sealed class MainWindowViewModelTests
             Task.FromResult(BosJsonExportFolder);
     }
 
+    private sealed class CapturingUserPreferencesService(UserPreferences initialPreferences) : IUserPreferencesService
+    {
+        private UserPreferences current = initialPreferences;
+
+        public UserPreferences? SavedPreferences { get; private set; }
+
+        public UserPreferences Load() => current;
+
+        public bool Save(UserPreferences preferences)
+        {
+            SavedPreferences = preferences;
+            current = preferences;
+            return true;
+        }
+    }
+
+    private sealed class CapturingFileDialogBackend : IFileDialogBackend
+    {
+        private readonly HashSet<string> validFolders = new(StringComparer.OrdinalIgnoreCase);
+
+        public bool CanOpen => true;
+
+        public bool CanSave => true;
+
+        public bool CanPickFolder => true;
+
+        public string? OpenProjectResult { get; set; }
+
+        public string? SaveProjectResult { get; set; }
+
+        public string? FolderPickerResult { get; set; }
+
+        public string? LastOpenProjectSuggestedStartFolder { get; private set; }
+
+        public string? LastSaveProjectSuggestedStartFolder { get; private set; }
+
+        public List<string?> FolderSuggestedStartFolders { get; } = new();
+
+        public void RegisterFolder(string path) => validFolders.Add(path);
+
+        public Task<string?> PickOpenProjectFileAsync(string? suggestedStartFolder, CancellationToken cancellationToken)
+        {
+            LastOpenProjectSuggestedStartFolder = suggestedStartFolder;
+            return Task.FromResult(OpenProjectResult);
+        }
+
+        public Task<string?> PickSaveProjectFileAsync(
+            string? currentPath,
+            string? suggestedStartFolder,
+            CancellationToken cancellationToken)
+        {
+            LastSaveProjectSuggestedStartFolder = suggestedStartFolder;
+            return Task.FromResult(SaveProjectResult);
+        }
+
+        public Task<string?> PickFolderAsync(
+            string title,
+            string? suggestedStartFolder,
+            CancellationToken cancellationToken)
+        {
+            FolderSuggestedStartFolders.Add(suggestedStartFolder);
+            return Task.FromResult(FolderPickerResult);
+        }
+
+        public Task<string?> ResolveStartFolderAsync(string? path, CancellationToken cancellationToken) =>
+            Task.FromResult(!string.IsNullOrWhiteSpace(path) && validFolders.Contains(path) ? path : null);
+    }
+
     private sealed class FakeAppDialogService : IAppDialogService
     {
         public bool ConfirmDiscardResult { get; set; } = true;
@@ -863,5 +996,14 @@ public sealed class MainWindowViewModelTests
             File.WriteAllText(filePath, text);
             return filePath;
         }
+
+        public string CreateDirectory(string name)
+        {
+            var directoryPath = GetDirectoryPath(name);
+            Directory.CreateDirectory(directoryPath);
+            return directoryPath;
+        }
+
+        public string GetDirectoryPath(string name) => System.IO.Path.Combine(Path, name);
     }
 }

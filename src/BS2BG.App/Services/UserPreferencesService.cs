@@ -17,6 +17,12 @@ public sealed class UserPreferences
     public ThemePreference Theme { get; set; } = ThemePreference.System;
 
     public bool OmitRedundantSliders { get; set; }
+
+    public string? ProjectFolder { get; set; }
+
+    public string? BodyGenExportFolder { get; set; }
+
+    public string? BosJsonExportFolder { get; set; }
 }
 
 public interface IUserPreferencesService
