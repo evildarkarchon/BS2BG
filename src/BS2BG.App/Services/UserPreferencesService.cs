@@ -20,6 +20,8 @@ public sealed class UserPreferences
 
     public string? ProjectFolder { get; set; }
 
+    public string? BodySlideXmlFolder { get; set; }
+
     public string? BodyGenExportFolder { get; set; }
 
     public string? BosJsonExportFolder { get; set; }
