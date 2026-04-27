@@ -73,7 +73,7 @@ public sealed class ProjectFileServiceCustomProfileTests
               "CustomMorphTargets": {},
               "MorphedNPCs": {}
             }
-            """);
+            """.Replace("\n", Environment.NewLine, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public sealed class ProjectFileServiceCustomProfileTests
               "CustomProfiles": [
                 {
                   "Version": 1,
-                  "Name": "CBBE",
+                  "Name": "Skyrim CBBE",
                   "Game": "Skyrim",
                   "Defaults": {},
                   "Multipliers": {},

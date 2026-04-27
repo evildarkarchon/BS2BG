@@ -3,10 +3,32 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 
 namespace BS2BG.Core.Serialization;
+
+/// <summary>
+/// Project load result that preserves recoverable diagnostics for optional embedded project sections.
+/// </summary>
+/// <param name="Project">Loaded project data, including legacy fields even when optional embedded data is invalid.</param>
+/// <param name="Diagnostics">Recoverable diagnostics emitted while hydrating optional embedded custom profiles.</param>
+public sealed record ProjectLoadResult(ProjectModel Project, IReadOnlyList<ProjectLoadDiagnostic> Diagnostics);
+
+/// <summary>
+/// Stable diagnostic emitted while opening a project file with optional embedded profile data.
+/// </summary>
+/// <param name="Code">Machine-readable diagnostic code.</param>
+/// <param name="Message">Human-readable diagnostic message.</param>
+/// <param name="ProfileName">Optional embedded profile name associated with the issue.</param>
+public sealed record ProjectLoadDiagnostic(string Code, string Message, string? ProfileName);
+
+/// <summary>
+/// Save-time profile resolver used to embed referenced local custom profiles that are not already project-owned.
+/// </summary>
+/// <param name="AvailableCustomProfilesByName">Case-insensitive custom profile definitions available from the runtime catalog or store.</param>
+public sealed record ProjectSaveContext(IReadOnlyDictionary<string, CustomProfileDefinition> AvailableCustomProfilesByName);
 
 [SuppressMessage("Performance", "CA1822:Mark members as static",
     Justification = "Project file I/O is exposed as an injectable service surface.")]
@@ -36,9 +58,22 @@ public class ProjectFileService
     {
         if (json is null) throw new ArgumentNullException(nameof(json));
 
+        return LoadWithDiagnosticsFromString(json).Project;
+    }
+
+    /// <summary>
+    /// Loads project JSON and reports recoverable diagnostics for optional embedded custom profile data without blocking legacy project fields.
+    /// </summary>
+    /// <param name="json">Project JSON text.</param>
+    /// <returns>The loaded project plus diagnostics for invalid or conflicting embedded profiles.</returns>
+    public ProjectLoadResult LoadWithDiagnosticsFromString(string json)
+    {
+        if (json is null) throw new ArgumentNullException(nameof(json));
+
         var dto = JsonSerializer.Deserialize<ProjectFileDto>(json, JsonOptions)
                   ?? new ProjectFileDto();
         var project = new ProjectModel();
+        var diagnostics = new List<ProjectLoadDiagnostic>();
 
         foreach (var (presetName, presetDto) in Enumerate(dto.SliderPresets))
             project.SliderPresets.Add(ToModel(presetName, presetDto));
@@ -53,8 +88,11 @@ public class ProjectFileService
         foreach (var (npcName, npcDto) in Enumerate(dto.MorphedNpCs))
             project.MorphedNpcs.Add(ToModel(npcName, npcDto, project));
 
+        foreach (var profile in LoadEmbeddedProfiles(dto.CustomProfiles, diagnostics))
+            project.CustomProfiles.Add(profile);
+
         project.MarkClean();
-        return project;
+        return new ProjectLoadResult(project, diagnostics);
     }
 
     public void Save(ProjectModel project, string path)
@@ -82,7 +120,20 @@ public class ProjectFileService
     {
         if (project is null) throw new ArgumentNullException(nameof(project));
 
-        return JsonSerializer.Serialize(ToDto(project), JsonOptions);
+        return SaveToString(project, null);
+    }
+
+    /// <summary>
+    /// Serializes a project and optionally embeds only referenced non-bundled custom profile definitions available at save time.
+    /// </summary>
+    /// <param name="project">Project model to serialize.</param>
+    /// <param name="saveContext">Optional resolver for referenced local custom profiles not already stored on the project.</param>
+    /// <returns>Indented project JSON with legacy root fields kept first and optional CustomProfiles omitted when empty.</returns>
+    public string SaveToString(ProjectModel project, ProjectSaveContext? saveContext)
+    {
+        if (project is null) throw new ArgumentNullException(nameof(project));
+
+        return JsonSerializer.Serialize(ToDto(project, saveContext), JsonOptions);
     }
 
     private static SliderPreset ToModel(string presetName, SliderPresetDto? dto)
@@ -139,7 +190,7 @@ public class ProjectFileService
         }
     }
 
-    private static ProjectFileDto ToDto(ProjectModel project)
+    private static ProjectFileDto ToDto(ProjectModel project, ProjectSaveContext? saveContext)
     {
         return new ProjectFileDto
         {
@@ -150,9 +201,69 @@ public class ProjectFileService
                 .OrderBy(target => target.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(target => target.Name, ToDto, StringComparer.Ordinal),
             MorphedNpCs = new NamedNpcObjectList(project.MorphedNpcs
-                .Select(npc => new NamedNpcObject(npc.Name, ToDto(npc))))
+                .Select(npc => new NamedNpcObject(npc.Name, ToDto(npc)))),
+            CustomProfiles = ToEmbeddedProfileDtos(project, saveContext),
         };
     }
+
+    private static List<JsonElement>? ToEmbeddedProfileDtos(ProjectModel project, ProjectSaveContext? saveContext)
+    {
+        var referencedNames = project.SliderPresets
+            .Select(preset => preset.ProfileName)
+            .Where(name => !IsBundledProfileName(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (referencedNames.Count == 0) return null;
+
+        var projectProfiles = project.CustomProfiles
+            .Where(profile => !IsBundledProfileName(profile.Name) && profile.SourceKind != ProfileSourceKind.Bundled)
+            .ToDictionary(profile => profile.Name, StringComparer.OrdinalIgnoreCase);
+        var resolved = new List<CustomProfileDefinition>();
+        foreach (var name in referencedNames)
+        {
+            if (projectProfiles.TryGetValue(name, out var projectProfile))
+            {
+                resolved.Add(projectProfile);
+                continue;
+            }
+
+            if (saveContext?.AvailableCustomProfilesByName.TryGetValue(name, out var contextProfile) == true
+                && !IsBundledProfileName(contextProfile.Name)
+                && contextProfile.SourceKind != ProfileSourceKind.Bundled)
+            {
+                resolved.Add(contextProfile);
+            }
+        }
+
+        if (resolved.Count == 0) return null;
+
+        return resolved
+            .OrderBy(profile => profile.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(ToEmbeddedProfileElement)
+            .ToList();
+    }
+
+    private static JsonElement ToEmbeddedProfileElement(CustomProfileDefinition profile) =>
+        JsonSerializer.SerializeToElement(ToEmbeddedProfileDto(profile), JsonOptions);
+
+    private static EmbeddedProfileDto ToEmbeddedProfileDto(CustomProfileDefinition profile) =>
+        new()
+        {
+            Version = 1,
+            Name = profile.Name,
+            Game = profile.Game,
+            Defaults = profile.SliderProfile.Defaults
+                .OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(value => value.Name, ToDto, StringComparer.Ordinal),
+            Multipliers = profile.SliderProfile.Multipliers
+                .OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(value => value.Name, value => value.Value, StringComparer.Ordinal),
+            Inverted = profile.SliderProfile.InvertedNames
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+        };
+
+    private static EmbeddedDefaultDto ToDto(Formatting.SliderDefault value) =>
+        new() { ValueSmall = value.ValueSmall, ValueBig = value.ValueBig };
 
     private static SliderPresetDto ToDto(SliderPreset preset)
     {
@@ -216,6 +327,69 @@ public class ProjectFileService
         Dictionary<string, TValue>? values) =>
         values ?? Enumerable.Empty<KeyValuePair<string, TValue>>();
 
+    private static IReadOnlyList<CustomProfileDefinition> LoadEmbeddedProfiles(
+        IEnumerable<JsonElement>? profileDtos,
+        List<ProjectLoadDiagnostic> diagnostics)
+    {
+        var service = new ProfileDefinitionService();
+        var profiles = new List<CustomProfileDefinition>();
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var profileDto in profileDtos ?? Enumerable.Empty<JsonElement>())
+        {
+            var result = service.ValidateProfileJson(
+                profileDto.GetRawText(),
+                ProfileValidationContext.ForImport(Array.Empty<string>(), ProfileSourceKind.EmbeddedProject));
+            if (!result.IsValid || result.Profile is null)
+            {
+                diagnostics.Add(new ProjectLoadDiagnostic(
+                    "EmbeddedProfileInvalid",
+                    "Embedded custom profile is malformed and was not added to the project profile overlay.",
+                    TryReadEmbeddedProfileName(profileDto)));
+                continue;
+            }
+
+            var profile = result.Profile;
+            if (IsBundledProfileName(profile.Name))
+            {
+                diagnostics.Add(new ProjectLoadDiagnostic(
+                    "EmbeddedProfileBundledNameCollision",
+                    $"Embedded custom profile '{profile.Name}' collides with a bundled profile name and was ignored.",
+                    profile.Name));
+                continue;
+            }
+
+            if (!seenNames.Add(profile.Name))
+            {
+                diagnostics.Add(new ProjectLoadDiagnostic(
+                    "EmbeddedProfileDuplicateName",
+                    $"Embedded custom profile '{profile.Name}' duplicates another embedded profile and was ignored.",
+                    profile.Name));
+                continue;
+            }
+
+            profiles.Add(profile);
+        }
+
+        return profiles;
+    }
+
+    private static string? TryReadEmbeddedProfileName(JsonElement profileElement)
+    {
+        if (profileElement.ValueKind == JsonValueKind.Object
+            && profileElement.TryGetProperty("Name", out var nameElement)
+            && nameElement.ValueKind == JsonValueKind.String)
+        {
+            return nameElement.GetString();
+        }
+
+        return null;
+    }
+
+    private static bool IsBundledProfileName(string? name) =>
+        string.Equals(name, ProjectProfileMapping.SkyrimCbbe, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, ProjectProfileMapping.SkyrimUunp, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, ProjectProfileMapping.Fallout4Cbbe, StringComparison.OrdinalIgnoreCase);
+
     private static IEnumerable<KeyValuePair<string, NpcDto?>> Enumerate(NamedNpcObjectList? values)
     {
         if (values is null) yield break;
@@ -236,6 +410,50 @@ public class ProjectFileService
         [JsonPropertyName("MorphedNPCs")]
         [JsonPropertyOrder(2)]
         public NamedNpcObjectList? MorphedNpCs { get; set; }
+
+        [JsonPropertyName("CustomProfiles")]
+        [JsonPropertyOrder(3)]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        // CustomProfiles is appended after legacy root fields so older readers can ignore it without field-order churn.
+        public List<JsonElement>? CustomProfiles { get; set; }
+    }
+
+    private sealed class EmbeddedProfileDto
+    {
+        [JsonPropertyName("Version")]
+        [JsonPropertyOrder(0)]
+        public int? Version { get; set; }
+
+        [JsonPropertyName("Name")]
+        [JsonPropertyOrder(1)]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("Game")]
+        [JsonPropertyOrder(2)]
+        public string? Game { get; set; }
+
+        [JsonPropertyName("Defaults")]
+        [JsonPropertyOrder(3)]
+        public Dictionary<string, EmbeddedDefaultDto>? Defaults { get; set; }
+
+        [JsonPropertyName("Multipliers")]
+        [JsonPropertyOrder(4)]
+        public Dictionary<string, float>? Multipliers { get; set; }
+
+        [JsonPropertyName("Inverted")]
+        [JsonPropertyOrder(5)]
+        public List<string>? Inverted { get; set; }
+    }
+
+    private sealed class EmbeddedDefaultDto
+    {
+        [JsonPropertyName("valueSmall")]
+        [JsonPropertyOrder(0)]
+        public float? ValueSmall { get; set; }
+
+        [JsonPropertyName("valueBig")]
+        [JsonPropertyOrder(1)]
+        public float? ValueBig { get; set; }
     }
 
     private sealed class SliderPresetDto
