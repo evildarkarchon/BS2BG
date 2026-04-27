@@ -166,6 +166,50 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ExportBodyGenInisDoesNotConfirmRoutineCreateNewExport()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var target = new CustomMorphTarget("All|Female");
+        target.AddSliderPreset(project.SliderPresets[0]);
+        project.CustomMorphTargets.Add(target);
+        var confirmations = new FakeAppDialogService();
+        var viewModel = CreateViewModel(
+            project,
+            new FakeFileDialogService { BodyGenExportFolder = directory.Path },
+            confirmations);
+
+        await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
+
+        confirmations.ConfirmExportOverwriteCallCount.Should().Be(0);
+        File.Exists(Path.Combine(directory.Path, "templates.ini")).Should().BeTrue();
+        File.Exists(Path.Combine(directory.Path, "morphs.ini")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExportBodyGenInisConfirmsOverwriteRiskBeforeWriting()
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "templates.ini"), "keep me");
+        var project = CreateProjectWithPreset("Alpha");
+        var target = new CustomMorphTarget("All|Female");
+        target.AddSliderPreset(project.SliderPresets[0]);
+        project.CustomMorphTargets.Add(target);
+        var confirmations = new FakeAppDialogService { ConfirmExportOverwriteResult = false };
+        var viewModel = CreateViewModel(
+            project,
+            new FakeFileDialogService { BodyGenExportFolder = directory.Path },
+            confirmations);
+
+        await viewModel.ExportBodyGenInisAsync(TestContext.Current.CancellationToken);
+
+        confirmations.ConfirmExportOverwriteCallCount.Should().Be(1);
+        File.ReadAllText(Path.Combine(directory.Path, "templates.ini")).Should().Be("keep me");
+        File.Exists(Path.Combine(directory.Path, "morphs.ini")).Should().BeFalse();
+        viewModel.StatusMessage.Should().Be("Export cancelled; existing files kept.");
+    }
+
+    [Fact]
     public async Task ExportBodyGenInisReportsEmptyOutputWithoutWritingFiles()
     {
         using var directory = new TemporaryDirectory();
@@ -207,6 +251,25 @@ public sealed class MainWindowViewModelTests
         var file = Path.Combine(directory.Path, "Preset_One.json");
         File.Exists(file).Should().BeTrue();
         File.ReadAllText(file).Should().Contain("\"bodyname\": \"Preset:One\"");
+    }
+
+    [Fact]
+    public async Task ExportBosJsonConfirmsOverwriteRiskBeforeWriting()
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "Preset_One.json"), "keep me");
+        var project = CreateProjectWithPreset("Preset:One");
+        var confirmations = new FakeAppDialogService { ConfirmExportOverwriteResult = true };
+        var viewModel = CreateViewModel(
+            project,
+            new FakeFileDialogService { BosJsonExportFolder = directory.Path },
+            confirmations);
+
+        await viewModel.ExportBosJsonAsync(TestContext.Current.CancellationToken);
+
+        confirmations.ConfirmExportOverwriteCallCount.Should().Be(1);
+        File.ReadAllText(Path.Combine(directory.Path, "Preset_One.json"))
+            .Should().Contain("\"bodyname\": \"Preset:One\"");
     }
 
     [Fact]
@@ -1005,7 +1068,11 @@ public sealed class MainWindowViewModelTests
     {
         public bool ConfirmDiscardResult { get; set; } = true;
 
+        public bool ConfirmExportOverwriteResult { get; set; } = true;
+
         public int ConfirmDiscardCallCount { get; private set; }
+
+        public int ConfirmExportOverwriteCallCount { get; private set; }
 
         public int AboutCallCount { get; private set; }
 
@@ -1020,6 +1087,14 @@ public sealed class MainWindowViewModelTests
             string message,
             CancellationToken cancellationToken) =>
             Task.FromResult(true);
+
+        public Task<bool> ConfirmExportOverwriteAsync(
+            object preview,
+            CancellationToken cancellationToken)
+        {
+            ConfirmExportOverwriteCallCount++;
+            return Task.FromResult(ConfirmExportOverwriteResult);
+        }
 
         public void ShowAbout() => AboutCallCount++;
     }
