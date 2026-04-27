@@ -291,7 +291,7 @@ public sealed class TemplatesViewModelTests
         restoredDuplicate.Should().NotBeSameAs(duplicate);
     }
 
-    [Fact(Skip = "Escalated by Phase 02 Nyquist validation: bulk slider percent undo does not restore the pre-operation snapshot yet.")]
+    [Fact]
     public void BulkSliderPercentUndoRestoresOperationTimeValuesAfterInterveningMutation()
     {
         var undoRedo = new UndoRedoService();
