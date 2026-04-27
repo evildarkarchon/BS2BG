@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can see neutral unresolved-profile fallback information when a saved project references an unbundled profile, while Phase 1 avoids profile inference, mismatch warnings, and in-app Fallout 4 experimental labels per D-05 through D-10.
   4. User can generate templates, morphs, and BoS JSON with bundled-profile behavior protected by profile-specific tests.
   Context override: Phase 1 CONTEXT.md D-05 through D-08 intentionally narrow the original warning/experimental wording to neutral fallback information plus release documentation; modal warnings, mismatch heuristics, and in-app FO4 experimental labels remain out of scope.
-**Plans**: 7 plans
+**Plans**: 8 plans
 Plans:
 - [x] 01-01-PLAN.md — Add distinct bundled Fallout 4 CBBE profile data and catalog wiring.
 - [x] 01-02-PLAN.md — Preserve legacy/unbundled profile semantics and expose detectable fallback.
@@ -103,13 +103,15 @@ Plans:
 **Wave 2 (blocked on Wave 1 completion)**
 - [ ] 04-02-PLAN.md — Add AppData custom profile storage and source-tagged catalog composition.
 - [ ] 04-03-PLAN.md — Embed referenced custom profile definitions in `.jbs2bg` projects while preserving legacy fields.
-**Wave 3 (blocked on Wave 2 completion for 04-04 via 04-03; 04-05 can run after 04-02)**
+**Wave 3 (blocked on Wave 2 completion; 04-04 also depends on 04-02 for local catalog semantics)**
 - [ ] 04-04-PLAN.md — Add read-only missing-profile recovery diagnostics and exact-match resolution checks.
 - [ ] 04-05-PLAN.md — Build ReactiveUI profile manager/editor workflows for import, copy, edit, validate, save, export, and delete.
-**Wave 4 (blocked on Wave 3 recovery diagnostics)**
-- [ ] 04-06-PLAN.md — Integrate explicit embedded-profile conflict handling and undo-aware recovery/remap actions.
-**Wave 5 (blocked on Wave 4 integration)**
-- [ ] 04-07-PLAN.md — Wire the first-class Profiles workspace UI with compiled bindings and visual verification.
+**Wave 4 (blocked on Wave 3 recovery diagnostics and catalog/project contracts)**
+- [ ] 04-06-PLAN.md — Integrate explicit embedded-profile project-open conflict transactions and overlay reset.
+**Wave 5 (blocked on Wave 4 conflict transaction and Profile Manager workflows)**
+- [ ] 04-07-PLAN.md — Expose explicit diagnostics/profile recovery actions, undo-aware remaps, selected JSON export, and OpenSpec deltas.
+**Wave 6 (blocked on Wave 5 recovery/action contracts)**
+- [ ] 04-08-PLAN.md — Wire the first-class Profiles workspace UI with compiled bindings and visual verification.
 Cross-cutting constraints: custom profile identity is internal display-name based; bundled profiles stay read-only; unresolved/missing profile behavior remains neutral and non-blocking; all profile mutations use explicit user actions and validation before catalog inclusion.
 **UI hint**: yes
 
