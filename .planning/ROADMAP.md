@@ -107,7 +107,7 @@ Plans:
 - [x] 04-04-PLAN.md — Add read-only missing-profile recovery diagnostics and exact-match resolution checks.
 - [x] 04-05-PLAN.md — Build ReactiveUI profile manager/editor workflows for import, copy, edit, validate, save, export, and delete.
 **Wave 4 (blocked on Wave 3 recovery diagnostics and catalog/project contracts)**
-- [ ] 04-06-PLAN.md — Integrate explicit embedded-profile project-open conflict transactions and overlay reset.
+- [x] 04-06-PLAN.md — Integrate explicit embedded-profile project-open conflict transactions and overlay reset.
 **Wave 5 (blocked on Wave 4 conflict transaction and Profile Manager workflows)**
 - [ ] 04-07-PLAN.md — Expose explicit diagnostics/profile recovery actions, undo-aware remaps, selected JSON export, and OpenSpec deltas.
 **Wave 6 (blocked on Wave 5 recovery/action contracts)**

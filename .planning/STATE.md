@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-profile-extensibility-and-controlled-customization-05-PLAN.md
-last_updated: "2026-04-27T08:57:33.908Z"
+stopped_at: Completed 04-profile-extensibility-and-controlled-customization-06-PLAN.md
+last_updated: "2026-04-27T09:06:53.602Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 32
-  completed_plans: 29
-  percent: 91
+  completed_plans: 30
+  percent: 94
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 04 (profile-extensibility-and-controlled-customization) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
 Last activity: 2026-04-27
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -78,6 +78,7 @@ Progress: [█████████░] 91%
 | Phase 04-profile-extensibility-and-controlled-customization P03 | 22 min | 2 tasks | 6 files |
 | Phase 04-profile-extensibility-and-controlled-customization P04 | 5 min | 3 tasks | 7 files |
 | Phase 04-profile-extensibility-and-controlled-customization P05 | 6 min | 3 tasks | 7 files |
+| Phase 04-profile-extensibility-and-controlled-customization P06 | 6 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,9 @@ Recent decisions affecting current work:
 - [Phase 04-profile-extensibility-and-controlled-customization]: Profile manager owns one editor instance per single-shell workspace session and prompts before discarding unsaved editor buffers. — Preserves unsaved custom-profile edits across selection changes until explicit discard.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Profile editor validation is performed from in-memory row state instead of JSON serialization round-trips. — Keeps large profile table editing responsive while Core JSON validation remains the import/export boundary.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Referenced custom profile deletion preserves preset ProfileName values so recovery diagnostics reappear. — Avoids silent remapping and keeps fallback state visible.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Project-open conflict prompts collect all decisions before any local profile save, project replacement, or new project overlay mutation. — Prevents silent trust-state mutation and supports rollback on cancellation or store write failure.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Use Project Copy creates an active project-scoped overlay for the opened project; Keep Local and Replace Local remove conflicting embedded overlay entries. — Keeps project data explicit while ensuring active generation uses the user's selected trust source.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Rename Project Copy marks the opened project dirty after MarkClean without adding an undo entry. — Project open clears prior undo history, but renamed profile references must remain visible as unsaved project changes.
 
 ### Pending Todos
 
@@ -128,6 +132,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27T08:57:33.902Z
-Stopped at: Completed 04-profile-extensibility-and-controlled-customization-05-PLAN.md
+Last session: 2026-04-27T09:06:35.465Z
+Stopped at: Completed 04-profile-extensibility-and-controlled-customization-06-PLAN.md
 Resume file: None
