@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Reactive.Concurrency;
 using System.Text.Json;
 using System.Windows.Input;
+using BS2BG.App;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.App.ViewModels.Workflow;
@@ -10,6 +11,7 @@ using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using WorkflowNpcFilterColumn = BS2BG.App.ViewModels.Workflow.NpcFilterColumn;
 
@@ -78,6 +80,43 @@ public sealed class MorphsViewModelTests
         var npc = viewModel.NpcDatabase.Should().ContainSingle().Which;
         npc.Name.Should().Be("Lydia");
         viewModel.StatusMessage.Should().Be("Imported 1 NPC. 1 issue was skipped.");
+    }
+
+    [Fact]
+    public async Task PreviewNpcImportCommandPopulatesRowsWithoutMutatingProjectOrUndoHistory()
+    {
+        using var directory = new TemporaryDirectory();
+        var npcFile = directory.WriteText(
+            "npcs.txt",
+            "Skyrim.esm|Lydia|HousecarlWhiterun|NordRace|000A2C94");
+        var project = CreateProjectWithPresets();
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(
+            project,
+            new QueueRandomAssignmentProvider(),
+            new StaticNpcTextFilePicker(new[] { npcFile }),
+            undoRedo: undoRedo);
+        var originalVersion = project.ChangeVersion;
+
+        await viewModel.PreviewNpcImportCommand.Execute();
+
+        viewModel.NpcDatabase.Count.Should().Be(0);
+        viewModel.VisibleNpcDatabase.Count.Should().Be(0);
+        viewModel.Npcs.Count.Should().Be(0);
+        project.IsDirty.Should().BeFalse();
+        project.ChangeVersion.Should().Be(originalVersion);
+        undoRedo.CanUndo.Should().BeFalse();
+        viewModel.NpcImportPreviewRows.Should().ContainSingle();
+        viewModel.NpcImportPreviewSummary.Should().Contain("1 row to add");
+        viewModel.HasNpcImportPreview.Should().BeTrue();
+    }
+
+    [Fact]
+    public void AppBootstrapperRegistersNpcImportPreviewService()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        provider.GetRequiredService<NpcImportPreviewService>().Should().NotBeNull();
     }
 
     [Fact]
