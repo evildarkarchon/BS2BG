@@ -1051,6 +1051,11 @@ public sealed class MorphsViewModelTests
             CancellationToken cancellationToken) =>
             Task.FromResult(true);
 
+        public Task<ProfileConflictDecision?> PromptProfileConflictAsync(
+            ProfileConflictRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<ProfileConflictDecision?>(null);
+
         public void ShowAbout()
         {
         }

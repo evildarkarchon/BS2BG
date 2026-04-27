@@ -59,6 +59,28 @@ public sealed class WindowAppDialogService : IAppDialogService
         return await window.ShowDialog<bool>(owner);
     }
 
+    /// <summary>
+    /// Shows the embedded/local profile conflict prompt and returns the selected one-conflict decision.
+    /// </summary>
+    /// <param name="request">Conflict identity and source summaries to present.</param>
+    /// <param name="cancellationToken">Cancels the dialog and returns <see langword="null" />.</param>
+    /// <returns>The selected conflict decision, or <see langword="null" /> if the user cancels.</returns>
+    public async Task<ProfileConflictDecision?> PromptProfileConflictAsync(
+        ProfileConflictRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (owner is null) return null;
+
+        var window = CreateProfileConflictWindow(request);
+        using var registration = cancellationToken.Register(() => Dispatcher.UIThread.Post(() =>
+        {
+            if (window.IsVisible) window.Close(null);
+        }));
+        return await window.ShowDialog<ProfileConflictDecision?>(owner);
+    }
+
     public void ShowAbout()
     {
         var window = CreateAboutWindow();
@@ -218,6 +240,81 @@ public sealed class WindowAppDialogService : IAppDialogService
         cancelButton.Click += (_, _) => window.Close(false);
         return window;
     }
+
+    private static Window CreateProfileConflictWindow(ProfileConflictRequest request)
+    {
+        const string title = "Profile conflict found";
+        var renameBox = new TextBox
+        {
+            PlaceholderText = "Unique project profile name",
+            Width = 240,
+            Text = request.ProfileName + " (Project Copy)"
+        };
+        var useProjectButton = CreateDecisionButton("Use Project Copy", 160);
+        var replaceLocalButton = CreateDecisionButton("Replace Local Profile", 170);
+        var renameProjectButton = CreateDecisionButton("Rename Project Copy", 170);
+        var keepLocalButton = CreateDecisionButton("Keep Local Profile", 160);
+        var cancelButton = CreateDecisionButton("Cancel", 100);
+        var window = new Window
+        {
+            Title = title,
+            Width = 640,
+            Height = 420,
+            MinWidth = 640,
+            MinHeight = 420,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(16),
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock { Text = title, FontSize = 18, FontWeight = FontWeight.SemiBold },
+                    new TextBlock
+                    {
+                        Text = $"The project contains profile {request.ProfileName} and a local custom profile with the same display name. Choose which profile data to use; BS2BG will not choose silently.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    new TextBlock { Text = "Local: " + request.LocalSummary, TextWrapping = TextWrapping.Wrap },
+                    new TextBlock { Text = "Project: " + request.EmbeddedSummary, TextWrapping = TextWrapping.Wrap },
+                    new TextBlock
+                    {
+                        Text = "Replace local profile? The embedded or imported profile has the same display name as a local custom profile. Replacing updates your local profile file; choose rename or keep local if you are unsure.",
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = Brushes.Red
+                    },
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 8,
+                        Children = { new TextBlock { Text = "Rename to:", VerticalAlignment = VerticalAlignment.Center }, renameBox }
+                    },
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { useProjectButton, replaceLocalButton, renameProjectButton, keepLocalButton, cancelButton }
+                    }
+                }
+            }
+        };
+
+        useProjectButton.Click += (_, _) => window.Close(new ProfileConflictDecision(ProfileConflictResolution.UseProjectCopy, null));
+        replaceLocalButton.Click += (_, _) => window.Close(new ProfileConflictDecision(ProfileConflictResolution.ReplaceLocalProfile, null));
+        renameProjectButton.Click += (_, _) => window.Close(new ProfileConflictDecision(ProfileConflictResolution.RenameProjectCopy, renameBox.Text));
+        keepLocalButton.Click += (_, _) => window.Close(new ProfileConflictDecision(ProfileConflictResolution.KeepLocalProfile, null));
+        cancelButton.Click += (_, _) => window.Close(null);
+        return window;
+    }
+
+    private static Button CreateDecisionButton(string content, double width) => new()
+    {
+        Content = content,
+        Width = width,
+        HorizontalContentAlignment = HorizontalAlignment.Center
+    };
 
     private static Window CreateExportOverwriteWindow(ExportPreviewResult preview)
     {

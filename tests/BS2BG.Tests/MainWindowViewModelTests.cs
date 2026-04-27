@@ -1214,6 +1214,11 @@ public sealed class MainWindowViewModelTests
             return Task.FromResult(ConfirmExportOverwriteResult);
         }
 
+        public Task<ProfileConflictDecision?> PromptProfileConflictAsync(
+            ProfileConflictRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<ProfileConflictDecision?>(null);
+
         public void ShowAbout() => AboutCallCount++;
     }
 
