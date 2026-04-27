@@ -1,5 +1,6 @@
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text.Json;
 using BS2BG.App.Services;
 using Xunit;
 
@@ -7,6 +8,53 @@ namespace BS2BG.Tests;
 
 public sealed class UserPreferencesServiceTests
 {
+    [Fact]
+    public void LoadKeepsThemeOnlyPreferenceFilesCompatibleWithWorkflowDefaults()
+    {
+        using var directory = new TemporaryDirectory();
+        var preferencesPath = directory.WriteText(
+            "user-preferences.json",
+            """
+            {
+              "Theme": "Dark"
+            }
+            """);
+
+        var loaded = new UserPreferencesService(preferencesPath).Load();
+
+        loaded.Theme.Should().Be(ThemePreference.Dark);
+        loaded.OmitRedundantSliders.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SaveWritesThemeAndWorkflowPreferences()
+    {
+        using var directory = new TemporaryDirectory();
+        var preferencesPath = Path.Combine(directory.Path, "user-preferences.json");
+
+        var saved = new UserPreferencesService(preferencesPath).Save(new UserPreferences
+        {
+            Theme = ThemePreference.Light,
+            OmitRedundantSliders = true
+        });
+
+        saved.Should().BeTrue();
+        using var document = JsonDocument.Parse(File.ReadAllText(preferencesPath));
+        document.RootElement.GetProperty(nameof(UserPreferences.Theme)).GetString().Should().Be("Light");
+        document.RootElement.GetProperty(nameof(UserPreferences.OmitRedundantSliders)).GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public void LoadReturnsDefaultsWhenPreferenceFileIsMissingOrCorrupt()
+    {
+        using var directory = new TemporaryDirectory();
+        var missingPath = Path.Combine(directory.Path, "missing.json");
+        var corruptPath = directory.WriteText("corrupt.json", "{ not json");
+
+        new UserPreferencesService(missingPath).Load().Should().BeEquivalentTo(new UserPreferences());
+        new UserPreferencesService(corruptPath).Load().Should().BeEquivalentTo(new UserPreferences());
+    }
+
     [Fact]
     public void LoadReturnsDefaultsWhenPreferenceFileCannotBeRead()
     {
@@ -36,6 +84,7 @@ public sealed class UserPreferencesServiceTests
             var loaded = new UserPreferencesService(preferencesPath).Load();
 
             loaded.Theme.Should().Be(ThemePreference.System);
+            loaded.OmitRedundantSliders.Should().BeFalse();
         }
         finally
         {
@@ -53,7 +102,7 @@ public sealed class UserPreferencesServiceTests
         Directory.CreateDirectory(preferencesPath);
 
         var saved = new UserPreferencesService(preferencesPath)
-            .Save(new UserPreferences { Theme = ThemePreference.Dark });
+            .Save(new UserPreferences { Theme = ThemePreference.Dark, OmitRedundantSliders = true });
 
         saved.Should().BeFalse();
     }
