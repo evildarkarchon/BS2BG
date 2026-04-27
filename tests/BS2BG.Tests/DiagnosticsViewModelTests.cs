@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Threading.Tasks;
 using BS2BG.App;
 using BS2BG.App.Services;
@@ -13,6 +14,8 @@ using ModelSliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
+[SuppressMessage("Performance", "CA1861:Avoid constant arrays as arguments",
+    Justification = "Small expected label lists keep diagnostics ViewModel assertions readable.")]
 public sealed class DiagnosticsViewModelTests
 {
     [Fact]
