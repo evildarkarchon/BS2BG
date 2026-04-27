@@ -12,6 +12,7 @@ using BS2BG.Core.Export;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
+using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 using BS2BG.Core.Serialization;
@@ -51,6 +52,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
     [Reactive] private string _globalSearchText = string.Empty;
     [Reactive(SetModifier = AccessModifier.Private)] private bool _hasExportPreview;
+    [Reactive(SetModifier = AccessModifier.Private)] private bool _hasFileOperationLedger;
     [ObservableAsProperty] private bool _isAnyBusy;
 
     [Reactive(SetModifier = AccessModifier.Private)]
@@ -308,6 +310,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<ExportPreviewViewModel> ExportPreviewFiles { get; } = new();
 
+    public ObservableCollection<FileOperationLedgerViewModel> LastFileOperationLedger { get; } = new();
+
     public IReadOnlyList<ThemePreference> ThemePreferences { get; } = Enum.GetValues<ThemePreference>();
 
     public ReactiveCommand<Unit, Unit> NewProjectCommand { get; }
@@ -493,6 +497,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
         try
         {
+            ClearFileOperationLedger();
             var preview = exportPreviewService.PreviewBodyGen(
                 directoryPath,
                 Templates.GeneratedTemplateText,
@@ -513,7 +518,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception exception)
         {
-            StatusMessage = "Exporting Templates and Morphs INI failed: " + FormatExceptionMessage(exception);
+            ReportFileOperationFailure("Exporting Templates and Morphs INI", exception);
         }
     }
 
@@ -567,6 +572,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
         try
         {
+            ClearFileOperationLedger();
             var preview = exportPreviewService.PreviewBosJson(directoryPath, snapshot, profileCatalog);
             ApplyExportPreview("BoS JSON", preview);
             if (RequiresExportConfirmation(preview)
@@ -583,7 +589,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception exception)
         {
-            StatusMessage = "Exporting BoS JSON files failed: " + FormatExceptionMessage(exception);
+            ReportFileOperationFailure("Exporting BoS JSON files", exception);
         }
     }
 
@@ -640,6 +646,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         path = EnsureProjectExtension(path);
         try
         {
+            ClearFileOperationLedger();
             var versionAtSnapshot = project.ChangeVersion;
             var snapshot = projectFileService.SaveToString(project);
             await Task.Run(() => projectFileService.WriteAtomic(snapshot, path), cancellationToken);
@@ -657,8 +664,57 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception exception)
         {
-            StatusMessage = "Saving jBS2BG file failed: " + FormatExceptionMessage(exception);
+            ReportFileOperationFailure("Saving jBS2BG file", exception);
         }
+    }
+
+    private void ClearFileOperationLedger()
+    {
+        LastFileOperationLedger.Clear();
+        HasFileOperationLedger = false;
+    }
+
+    /// <summary>
+    /// Formats an atomic save/export failure into UI status copy and binding-ready ledger rows.
+    /// </summary>
+    private void ReportFileOperationFailure(string operation, Exception exception)
+    {
+        LastFileOperationLedger.Clear();
+        var atomicException = FindAtomicWriteException(exception);
+        if (atomicException is null)
+        {
+            HasFileOperationLedger = false;
+            StatusMessage = operation + " failed: " + FormatExceptionMessage(exception);
+            return;
+        }
+
+        foreach (var entry in atomicException.Entries)
+            LastFileOperationLedger.Add(new FileOperationLedgerViewModel(entry));
+
+        HasFileOperationLedger = LastFileOperationLedger.Count > 0;
+        var outcomes = LastFileOperationLedger.Count == 0
+            ? "No file outcome rows were available."
+            : "Outcomes: " + string.Join(
+                "; ",
+                LastFileOperationLedger.Select(row => row.OutcomeLabel + " - " + row.Path));
+        StatusMessage = "File operation incomplete: " + operation + " did not finish. "
+            + "Review which files were written, restored, skipped, or left untouched, "
+            + "then retry after fixing the file access problem. "
+            + outcomes + ". Original error: " + FormatExceptionMessage(atomicException.InnerException ?? atomicException);
+    }
+
+    private static AtomicWriteException? FindAtomicWriteException(Exception exception)
+    {
+        if (exception is AtomicWriteException atomicWriteException) return atomicWriteException;
+
+        if (exception is AggregateException aggregateException)
+            foreach (var inner in aggregateException.InnerExceptions)
+            {
+                var found = FindAtomicWriteException(inner);
+                if (found is not null) return found;
+            }
+
+        return exception.InnerException is null ? null : FindAtomicWriteException(exception.InnerException);
     }
 
     private void ApplyExportPreview(string kind, ExportPreviewResult preview)
