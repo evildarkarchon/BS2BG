@@ -312,6 +312,32 @@ public sealed class MorphsViewModelTests
     }
 
     [Fact]
+    public void ScopedClearAssignmentsUndoUsesPresetNameSnapshotsAndRecordsOneStep()
+    {
+        var project = CreateProjectWithPresets();
+        var alpha = project.SliderPresets.Single(preset => preset.Name == "Alpha");
+        var beta = project.SliderPresets.Single(preset => preset.Name == "Beta");
+        var lydia = CreateNpc("Skyrim.esm", "Lydia", "HousecarlWhiterun", "NordRace", "000A2C94");
+        var hidden = CreateNpc("Dawnguard.esm", "Valerica", "DLC1Valerica", "NordRaceVampire", "02002B6C");
+        lydia.AddSliderPreset(alpha);
+        hidden.AddSliderPreset(beta);
+        project.MorphedNpcs.Add(lydia);
+        project.MorphedNpcs.Add(hidden);
+        var undoRedo = new UndoRedoService();
+        var viewModel = CreateViewModel(project, new QueueRandomAssignmentProvider(), undoRedo: undoRedo);
+
+        viewModel.SetNpcColumnAllowedValues(WorkflowNpcFilterColumn.Mod, new[] { "Skyrim.esm" });
+        viewModel.ClearAssignmentsCommand.Execute().Subscribe();
+        alpha.Name = "Gamma";
+
+        undoRedo.Undo().Should().BeTrue();
+
+        lydia.SliderPresets.Should().BeEmpty();
+        hidden.SliderPresets.Select(preset => preset.Name).Should().Equal("Beta");
+        undoRedo.Undo().Should().BeFalse();
+    }
+
+    [Fact]
     public void LargeNpcSearchIsDebouncedBeforeVisibleRowsRefresh()
     {
         using var scheduler = new EventLoopScheduler();
