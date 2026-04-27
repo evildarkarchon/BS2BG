@@ -85,6 +85,37 @@ public sealed class M6UxAppShellTests
     }
 
     [AvaloniaFact]
+    public void NpcColumnFilterPopupsExposeRequiredSearchAndClearControls()
+    {
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow(viewModel);
+        window.ApplyTemplate();
+
+        AssertFilterPopup(window, "NpcModFilter", "Search mods");
+        AssertFilterPopup(window, "NpcNameFilter", "Search names");
+        AssertFilterPopup(window, "NpcEditorIdFilter", "Search editor IDs");
+        AssertFilterPopup(window, "NpcFormIdFilter", "Search form IDs");
+        AssertFilterPopup(window, "NpcRaceFilter", "Search races");
+        AssertFilterPopup(window, "NpcAssignmentStateFilter", "Search assignment states");
+        AssertFilterPopup(window, "NpcPresetFilter", "Search presets");
+    }
+
+    [AvaloniaFact]
+    public void NpcColumnFilterPopupsApplyNonRaceChecklistSelections()
+    {
+        var viewModel = new MainWindowViewModel();
+        viewModel.Morphs.Npcs.Add(CreateNpc("Lydia", "NordRace", "Skyrim.esm", "LydiaEditor", "000A2C8E"));
+        viewModel.Morphs.Npcs.Add(CreateNpc("Piper", "HumanRace", "Fallout4.esm", "PiperEditor", "00002F1F"));
+        var window = new MainWindow(viewModel);
+        window.ApplyTemplate();
+        var modValuesList = window.FindControl<ListBox>("NpcModFilterValuesListBox").Should().BeAssignableTo<ListBox>().Which;
+
+        modValuesList.SelectedItems!.Add("Fallout4.esm");
+
+        viewModel.Morphs.VisibleNpcs.Select(npc => npc.Name).Should().Equal("Piper");
+    }
+
+    [AvaloniaFact]
     public void MainWindowRoutesM6ShortcutsAndDropZones()
     {
         using var provider = AppBootstrapper.CreateServiceProvider();
@@ -128,9 +159,25 @@ public sealed class M6UxAppShellTests
         viewModel.CommandPaletteSearchText.Should().BeEmpty();
     }
 
+    private static void AssertFilterPopup(MainWindow window, string prefix, string placeholder)
+    {
+        window.FindControl<Button>(prefix + "Button").Should().NotBeNull();
+        window.FindControl<Popup>(prefix + "Popup").Should().NotBeNull();
+        window.FindControl<ListBox>(prefix + "ValuesListBox").Should().NotBeNull();
+        window.FindControl<TextBox>(prefix + "SearchBox").Should().BeAssignableTo<TextBox>().Which
+            .PlaceholderText.Should().Be(placeholder);
+        window.FindControl<Button>(prefix + "ClearButton").Should().BeAssignableTo<Button>().Which
+            .Content.Should().Be("Clear");
+    }
+
     private static Npc CreateNpc(string name, string race) => new(name)
     {
         Mod = "Skyrim.esm", EditorId = name + "Editor", Race = race, FormId = "00000001"
+    };
+
+    private static Npc CreateNpc(string name, string race, string mod, string editorId, string formId) => new(name)
+    {
+        Mod = mod, EditorId = editorId, Race = race, FormId = formId
     };
 
     private static CustomMorphTarget CreateTargetWithPresetCount(string name, int presetCount)
