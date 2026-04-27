@@ -30,6 +30,7 @@ public static class AppBootstrapper
         services.AddSingleton<ProjectModel>();
         services.AddSingleton<BodySlideXmlParser>();
         services.AddSingleton<NpcTextParser>();
+        services.AddSingleton<NpcImportPreviewService>();
         services.AddSingleton<ProjectFileService>();
         services.AddSingleton<TemplateGenerationService>();
         services.AddSingleton<MorphGenerationService>();

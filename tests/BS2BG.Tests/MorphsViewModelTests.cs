@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reactive.Concurrency;
+using System.Reactive.Threading.Tasks;
 using System.Text.Json;
 using System.Windows.Input;
 using BS2BG.App;
@@ -90,6 +91,7 @@ public sealed class MorphsViewModelTests
             "npcs.txt",
             "Skyrim.esm|Lydia|HousecarlWhiterun|NordRace|000A2C94");
         var project = CreateProjectWithPresets();
+        project.MarkClean();
         var undoRedo = new UndoRedoService();
         var viewModel = CreateViewModel(
             project,
@@ -98,7 +100,7 @@ public sealed class MorphsViewModelTests
             undoRedo: undoRedo);
         var originalVersion = project.ChangeVersion;
 
-        await viewModel.PreviewNpcImportCommand.Execute();
+        await viewModel.PreviewNpcImportCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         viewModel.NpcDatabase.Count.Should().Be(0);
         viewModel.VisibleNpcDatabase.Count.Should().Be(0);

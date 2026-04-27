@@ -46,6 +46,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly Dictionary<Npc, int> npcPropertySubscriptions = new();
     private readonly Dictionary<Npc, NpcRowViewModel> npcRowsByNpc = new(ReferenceEqualityComparer.Instance);
     private readonly SourceCache<NpcRowViewModel, Guid> npcRowSource = new(row => row.RowId);
+    private readonly NpcImportPreviewService npcImportPreviewService;
     private readonly INpcTextFilePicker npcTextFilePicker;
     private readonly NpcTextParser npcTextParser;
     private readonly ProjectModel project;
@@ -67,7 +68,12 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     [Reactive] private bool _isNpcNameFilterOpen;
     [Reactive] private bool _isNpcPresetFilterOpen;
     [Reactive] private bool _isNpcRaceFilterOpen;
+    [Reactive(SetModifier = AccessModifier.Private)] private bool _hasNpcImportPreview;
     [Reactive] private string _npcDatabaseSearchText = string.Empty;
+
+    [Reactive(SetModifier = AccessModifier.Private)]
+    private string _npcImportPreviewSummary = NpcImportPreviewEmptyState;
+
     [Reactive] private string _searchText = string.Empty;
     [Reactive] private SliderPreset? _selectedAssignedPreset;
     [Reactive] private SliderPreset? _selectedAvailablePreset;
@@ -86,6 +92,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     private MorphTargetBase? subscribedTarget;
 
+    public const string NpcImportPreviewEmptyState =
+        "Choose one or more NPC text files to preview rows, duplicates, invalid lines, and encoding fallback before importing.";
+
     public MorphsViewModel()
         : this(
             new ProjectModel(),
@@ -96,7 +105,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             new EmptyClipboardService(),
             new NpcImageLookupService(),
             new NullImageViewService(),
-            new NullNoPresetNotificationService())
+            new NullNoPresetNotificationService(),
+            npcImportPreviewService: new NpcImportPreviewService(new NpcTextParser()))
     {
     }
 
@@ -112,7 +122,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         INoPresetNotificationService? noPresetNotificationService = null,
         UndoRedoService? undoRedo = null,
         IScheduler? filterScheduler = null,
-        IAppDialogService? dialogService = null)
+        IAppDialogService? dialogService = null,
+        NpcImportPreviewService? npcImportPreviewService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.npcTextParser = npcTextParser ?? throw new ArgumentNullException(nameof(npcTextParser));
@@ -127,6 +138,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         this.undoRedo = undoRedo ?? new UndoRedoService();
         this.filterScheduler = filterScheduler ?? CurrentThreadScheduler.Instance;
         this.dialogService = dialogService ?? new NullAppDialogService();
+        this.npcImportPreviewService = npcImportPreviewService ?? new NpcImportPreviewService(this.npcTextParser);
 
         project.MorphedNpcs.CollectionChanged += OnNpcsChanged;
         project.CustomMorphTargets.CollectionChanged += OnCustomTargetsChanged;
@@ -217,6 +229,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         ImportNpcsCommand = ReactiveCommand.CreateFromTask(
             ImportNpcsAsync,
             canAddCustomTarget);
+        PreviewNpcImportCommand = ReactiveCommand.CreateFromTask(
+            PreviewNpcImportAsync,
+            canAddCustomTarget);
         AddCustomTargetCommand = ReactiveCommand.Create(
             () => { AddCustomTarget(); },
             canAddCustomTarget);
@@ -287,11 +302,15 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
         disposables.Add(ImportNpcsCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Import NPCs", ex)));
+        disposables.Add(PreviewNpcImportCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Preview NPC import", ex)));
         disposables.Add(CopyGeneratedMorphsCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Copy generated morphs", ex)));
 
-        _isBusyHelper = ImportNpcsCommand.IsExecuting.CombineLatest(CopyGeneratedMorphsCommand.IsExecuting,
-                (importing, copying) => importing || copying)
+        _isBusyHelper = ImportNpcsCommand.IsExecuting.CombineLatest(
+                PreviewNpcImportCommand.IsExecuting,
+                CopyGeneratedMorphsCommand.IsExecuting,
+                (importing, previewing, copying) => importing || previewing || copying)
             .ToProperty(this, x => x.IsBusy, initialValue: false);
 
         disposables.Add(this.WhenAnyValue(x => x.SelectedCustomTarget)
@@ -344,10 +363,14 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<Npc> SelectedNpcs { get; } = new();
 
+    public ObservableCollection<NpcImportPreviewViewModel> NpcImportPreviewRows { get; } = new();
+
     public IReadOnlyList<NpcBulkScope> NpcBulkScopes { get; } =
         [NpcBulkScope.All, NpcBulkScope.Visible, NpcBulkScope.Selected, NpcBulkScope.VisibleEmpty];
 
     public ReactiveCommand<Unit, Unit> ImportNpcsCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> PreviewNpcImportCommand { get; }
 
     public ReactiveCommand<Unit, Unit> AddCustomTargetCommand { get; }
 
@@ -551,6 +574,35 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         ValidationMessage = string.Empty;
         StatusMessage = string.Empty;
         await ImportNpcFilesCoreAsync(files, "No NPC files dropped.", cancellationToken);
+    }
+
+    /// <summary>
+    /// Parses user-selected NPC text files into preview rows without mutating the NPC database, morph targets, dirty state, or undo history.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token supplied by ReactiveCommand while preview parsing is in progress.</param>
+    public async Task PreviewNpcImportAsync(CancellationToken cancellationToken = default)
+    {
+        ValidationMessage = string.Empty;
+        StatusMessage = string.Empty;
+
+        var files = await npcTextFilePicker.PickNpcTextFilesAsync(cancellationToken);
+        if (files.Count == 0)
+        {
+            ClearNpcImportPreview();
+            StatusMessage = "No NPC files selected for preview.";
+            return;
+        }
+
+        var results = new List<NpcImportPreviewResult>();
+        foreach (var file in files)
+        {
+            var result = await Task.Run(
+                () => npcImportPreviewService.PreviewFile(file, NpcDatabase),
+                cancellationToken);
+            results.Add(result);
+        }
+
+        PopulateNpcImportPreview(results);
     }
 
     public bool AddCustomTarget()
@@ -1072,6 +1124,64 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         }
 
         StatusMessage = FormatImportStatus(importedCount, diagnosticCount, fallbackCount);
+    }
+
+    private void PopulateNpcImportPreview(IReadOnlyList<NpcImportPreviewResult> results)
+    {
+        NpcImportPreviewRows.Clear();
+        foreach (var result in results)
+        {
+            foreach (var npc in result.RowsToAdd)
+                NpcImportPreviewRows.Add(NpcImportPreviewViewModel.ForRowToAdd(result.SourcePath, npc));
+
+            foreach (var npc in result.ExistingDuplicates)
+                NpcImportPreviewRows.Add(NpcImportPreviewViewModel.ForExistingDuplicate(result.SourcePath, npc));
+
+            foreach (var diagnostic in result.Diagnostics)
+                NpcImportPreviewRows.Add(NpcImportPreviewViewModel.ForDiagnostic(result.SourcePath, diagnostic));
+
+            if (result.UsedFallbackEncoding)
+                NpcImportPreviewRows.Add(
+                    NpcImportPreviewViewModel.ForFallbackEncoding(result.SourcePath, result.EncodingName));
+        }
+
+        HasNpcImportPreview = NpcImportPreviewRows.Count > 0;
+        NpcImportPreviewSummary = FormatNpcImportPreviewSummary(results);
+        StatusMessage = NpcImportPreviewSummary;
+    }
+
+    private void ClearNpcImportPreview()
+    {
+        NpcImportPreviewRows.Clear();
+        HasNpcImportPreview = false;
+        NpcImportPreviewSummary = NpcImportPreviewEmptyState;
+    }
+
+    private static string FormatNpcImportPreviewSummary(IReadOnlyList<NpcImportPreviewResult> results)
+    {
+        var rowsToAdd = results.Sum(result => result.RowsToAddCount);
+        var duplicates = results.Sum(result => result.ExistingDuplicateCount);
+        var diagnostics = results.Sum(result => result.DiagnosticCount);
+        var fallback = results.Count(result => result.UsedFallbackEncoding);
+
+        var summary = "Previewed " + results.Count.ToString(CultureInfo.InvariantCulture)
+                                  + " NPC file" + (results.Count == 1 ? string.Empty : "s")
+                                  + ": " + rowsToAdd.ToString(CultureInfo.InvariantCulture)
+                                  + " row" + (rowsToAdd == 1 ? string.Empty : "s") + " to add";
+
+        if (duplicates > 0)
+            summary += ", " + duplicates.ToString(CultureInfo.InvariantCulture)
+                          + " existing duplicate" + (duplicates == 1 ? string.Empty : "s");
+
+        if (diagnostics > 0)
+            summary += ", " + diagnostics.ToString(CultureInfo.InvariantCulture)
+                          + " issue" + (diagnostics == 1 ? string.Empty : "s") + " skipped";
+
+        if (fallback > 0)
+            summary += ", " + fallback.ToString(CultureInfo.InvariantCulture)
+                          + " file" + (fallback == 1 ? string.Empty : "s") + " used fallback decoding";
+
+        return summary + ". Import preview does not assign presets.";
     }
 
     private int FillEmptyFromSelectedPreset()
