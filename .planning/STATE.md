@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-profile-extensibility-and-controlled-customization-03-PLAN.md
-last_updated: "2026-04-27T08:41:57.353Z"
+stopped_at: Completed 04-profile-extensibility-and-controlled-customization-04-PLAN.md
+last_updated: "2026-04-27T08:49:01.574Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 32
-  completed_plans: 27
-  percent: 84
+  completed_plans: 28
+  percent: 88
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 04 (profile-extensibility-and-controlled-customization) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-04-27
 
-Progress: [████████░░] 84%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Progress: [████████░░] 84%
 | Phase 04-profile-extensibility-and-controlled-customization P01 | 4 min | 2 tasks | 4 files |
 | Phase 04-profile-extensibility-and-controlled-customization P02 | 7 min | 3 tasks | 10 files |
 | Phase 04-profile-extensibility-and-controlled-customization P03 | 22 min | 2 tasks | 6 files |
+| Phase 04-profile-extensibility-and-controlled-customization P04 | 5 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -91,38 +92,15 @@ Recent decisions affecting current work:
 - [Phase 01-profile-correctness-and-trust]: Keep GetProfile fallback and expose ContainsProfile detection — Plan 02 preserves non-blocking generation while enabling Plan 03 neutral unresolved-profile UI.
 - [Phase 01-profile-correctness-and-trust]: Unbundled saved profile names stay on the selected preset while selector math resolves to bundled fallback profiles. — Preserves project round-trip compatibility while making fallback generation semantics visible.
 - [Phase 01-profile-correctness-and-trust]: Unresolved profile feedback remains neutral ViewModel information without warning, mismatch, or experimental language. — Matches Phase 1 context decisions D-05 through D-08 and keeps custom body-mod sliders non-blocking.
-- [Phase 01-profile-correctness-and-trust]: Keep unresolved-profile feedback neutral in the Templates workflow and reserve Fallout 4 CBBE calibration context for release documentation. — Satisfies PROF-05 while honoring D-06/D-08 constraints against in-app Fallout 4 experimental labels or mismatch warnings.
 - [Phase 01-profile-correctness-and-trust]: Keep fallback selector blank for unbundled saved profiles until explicit bundled adoption. — Preserves round-trip profile names while making displayed fallback adoption possible through normal selector selection.
-- [Phase 01-profile-correctness-and-trust]: Centralize unresolved-profile math through GetSelectedCalculationProfile. — Preview, BoS JSON, missing-default rows, and inspector rows use fallback calculation without mutating saved profile state.
-- [Phase 01-profile-correctness-and-trust]: Profile-specific BoS JSON coverage uses root bundled profile files directly — Asserts distinguishing substrings instead of rebasing sacred golden fixtures.
-- [Phase 01-profile-correctness-and-trust]: Morph generation remains explicitly profile-independent — Tests assert profile-name changes do not alter morph lines.
-- [Phase 01-profile-correctness-and-trust]: Treat D-05 through D-08 as the accepted override for Phase 1 warning/experimental wording. — ROADMAP and REQUIREMENTS now require neutral fallback information plus release-facing FO4 calibration context instead of warning UX.
-- [Phase 01-profile-correctness-and-trust]: Keep PROF-03 neutral and non-blocking. — Unbundled/custom profile handling remains informational without inference, mismatch warnings, or generation/export blocking.
 - [Phase 03-validation-and-diagnostics]: Keep project/profile diagnostics read-only and Core-only so App diagnostics presentation can reuse them without mutating ProjectModel state. — Preserves Phase 3 read-only diagnostics boundary.
-- [Phase 03-validation-and-diagnostics]: Expose profile multiplier and inversion tables from SliderProfile for diagnostics rather than re-parsing profile JSON or duplicating formatter logic. — Allows DIAG-02 counts to use the loaded profile tables without changing formatter output semantics.
-- [Phase 03-validation-and-diagnostics]: Use existing NpcImportDiagnostic entries for within-file duplicate rows so direct import keeps skip behavior while preview can explain skipped rows. — Duplicate rows are parser diagnostics and direct imports already consume parser diagnostics.
-- [Phase 03-validation-and-diagnostics]: Keep existing database/project duplicate classification in NpcImportPreviewService rather than changing parser policy or App mutation paths. — Existing-state duplicate classification is preview-specific and must remain read-only until callers commit imports.
-- [Phase ?]: [Phase 03-validation-and-diagnostics]: Keep export preview read-only by duplicating writer filename rules instead of calling writer Write methods.
-- [Phase ?]: [Phase 03-validation-and-diagnostics]: Preserve existing setup/temp-write exception compatibility while adding outcome ledgers for commit and rollback failures.
-- [Phase 03-validation-and-diagnostics]: Keep Diagnostics ViewModel refresh and copy read-only by consuming Core diagnostic services without mutating ProjectModel state. — Preserves Phase 3 diagnostics boundary and satisfies T-03-04-01.
-- [Phase 03-validation-and-diagnostics]: Format copied diagnostics as grouped plain text from display ViewModels, including profile fallback details, while excluding auto-fix actions. — Keeps report output UI-ready and compliant with D-04 no auto-fix scope.
-- [Phase 03-validation-and-diagnostics]: Keep NPC import preview optional and no-mutation; direct import remains available through the existing ImportNpcsCommand path.
-- [Phase 03-validation-and-diagnostics]: Commit previewed NPC rows through the existing AddNpcsToDatabase duplicate policy and keep preset assignment as a separate Morphs action.
-- [Phase 03-validation-and-diagnostics]: Expose assignment effect summaries from scoped command results instead of changing assignment algorithms or random-provider behavior.
-- [Phase 03-validation-and-diagnostics]: Keep export preview state in MainWindowViewModel as read-only App-layer presentation over Core ExportPreviewService. — Supports DIAG-04 shell export preview without changing Core writer behavior.
-- [Phase 03-validation-and-diagnostics]: Require overwrite confirmation for existing target files while allowing routine create-new BodyGen exports to proceed without confirmation friction. — Matches UI-SPEC risk copy and plan must-have create-new flow.
-- [Phase 03-validation-and-diagnostics]: Route project saves through AtomicFileWriter.WriteAtomicBatch so save commit failures expose the same ledger shape as pair/batch exports without adding save preview friction. — Preserves no-preview save UX while using the existing ledger-producing atomic writer path.
-- [Phase 03-validation-and-diagnostics]: Keep file operation ledger presentation in the App ViewModel layer using binding-ready rows while Core continues to own atomic write outcomes. — Allows UI-SPEC labels without changing Core enums or writer behavior.
 - [Phase 03-validation-and-diagnostics]: Treat Diagnostics as a first-class workspace beside Templates and Morphs rather than a modal or text-only report. — Satisfies the Phase 3 UI-SPEC and keeps validation visible in the main workflow.
-- [Phase 03-validation-and-diagnostics]: Keep preview, import, export, and ledger actions visibly distinct in the Diagnostics tab. — Preserves the read-only diagnostics boundary while making mutation/export affordances explicit.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Custom profile identity uses only the internal Name property; file path remains source metadata. — Prevents filenames from becoming profile identity and satisfies Phase 4 D-12.
-- [Phase 04-profile-extensibility-and-controlled-customization]: Profile definition equality normalizes display names/table order while preserving exact game metadata, slider-name casing, and float values. — Gives downstream embedded/local conflict handling an explicit normalized comparison contract.
-- [Phase 04-profile-extensibility-and-controlled-customization]: Custom profile export normalizes indented System.Text.Json output to LF for byte-stable sharing on Windows. — Utf8JsonWriter indentation follows environment newlines, while custom profile exports need deterministic bytes.
-- [Phase 04-profile-extensibility-and-controlled-customization]: Custom profile discovery failures remain non-fatal diagnostics while bundled profile startup remains available.
-- [Phase 04-profile-extensibility-and-controlled-customization]: Runtime profile catalog refresh is owned by a SemaphoreSlim-serialized App service observed by existing ViewModels.
-- [Phase 04-profile-extensibility-and-controlled-customization]: Embedded project profile overlays may override local custom entries for the active project but cannot shadow bundled names.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Embedded project profiles are dirty-tracked project-owned definitions and optional CustomProfiles serialization embeds only referenced non-bundled definitions. — Preserves legacy project shape while enabling project sharing with custom profile data.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Invalid, duplicate, or bundled-name embedded profiles produce ProjectLoadResult diagnostics while legacy project data still loads. — Keeps project open non-blocking across the untrusted shared-project JSON boundary.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Missing custom profile references are represented by one recovery-coded informational finding instead of separate generic unbundled and fallback rows. — Prevents duplicate profile findings in the Diagnostics workspace.
+- [Phase 04-profile-extensibility-and-controlled-customization]: Imported profile recovery identity uses only CustomProfileDefinition.Name with OrdinalIgnoreCase; FilePath remains source metadata only. — Satisfies D-12 and prevents filename masquerading.
+- [Phase 04-profile-extensibility-and-controlled-customization]: ProjectValidationService no longer emits generic unbundled-profile rows; ProfileDiagnosticsService owns recovery-aware profile fallback findings. — Keeps recovery deduplication mechanical through Code/Category.
 
 ### Pending Todos
 
@@ -146,6 +124,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27T08:41:57.347Z
-Stopped at: Completed 04-profile-extensibility-and-controlled-customization-03-PLAN.md
+Last session: 2026-04-27T08:48:47.260Z
+Stopped at: Completed 04-profile-extensibility-and-controlled-customization-04-PLAN.md
 Resume file: None
