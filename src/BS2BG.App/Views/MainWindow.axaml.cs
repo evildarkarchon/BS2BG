@@ -74,9 +74,7 @@ public partial class MainWindow : Window
     {
         if (ViewModel is null || sender is not ListBox listBox) return;
 
-        ViewModel.Morphs.SelectedNpcs.Clear();
-        foreach (var item in listBox.SelectedItems?.OfType<Npc>() ?? Enumerable.Empty<Npc>())
-            ViewModel.Morphs.SelectedNpcs.Add(item);
+        ViewModel.Morphs.UpdateVisibleNpcSelection(listBox.SelectedItems?.OfType<Npc>() ?? Enumerable.Empty<Npc>());
     }
 
     private void OnNpcRaceFilterSelectionChanged(object? sender, SelectionChangedEventArgs args)

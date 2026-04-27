@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
@@ -47,6 +48,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly INpcTextFilePicker npcTextFilePicker;
     private readonly NpcTextParser npcTextParser;
     private readonly ProjectModel project;
+    private readonly HashSet<Guid> selectedNpcRowIds = new();
+    private readonly IScheduler filterScheduler;
+    private bool syncingSelectedNpcs;
     private readonly UndoRedoService undoRedo;
 
     [Reactive] private bool _assignRandomOnAdd;
@@ -98,7 +102,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         INpcImageLookupService? imageLookupService = null,
         IImageViewService? imageViewService = null,
         INoPresetNotificationService? noPresetNotificationService = null,
-        UndoRedoService? undoRedo = null)
+        UndoRedoService? undoRedo = null,
+        IScheduler? filterScheduler = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.npcTextParser = npcTextParser ?? throw new ArgumentNullException(nameof(npcTextParser));
@@ -111,11 +116,14 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         this.imageViewService = imageViewService ?? new NullImageViewService();
         this.noPresetNotificationService = noPresetNotificationService ?? new NullNoPresetNotificationService();
         this.undoRedo = undoRedo ?? new UndoRedoService();
+        this.filterScheduler = filterScheduler ?? CurrentThreadScheduler.Instance;
 
         project.MorphedNpcs.CollectionChanged += OnNpcsChanged;
         project.CustomMorphTargets.CollectionChanged += OnCustomTargetsChanged;
         project.SliderPresets.CollectionChanged += OnPresetsChanged;
         NpcDatabase.CollectionChanged += OnNpcDatabaseChanged;
+        SelectedNpcs.CollectionChanged += OnSelectedNpcsChanged;
+        disposables.Add(Disposable.Create(() => SelectedNpcs.CollectionChanged -= OnSelectedNpcsChanged));
         SyncRowsFromCollection(Npcs, npcRowsByNpc, npcRowSource);
         SyncRowsFromCollection(NpcDatabase, npcDatabaseRowsByNpc, npcDatabaseRowSource);
         RefreshNpcSubscriptions();
@@ -282,10 +290,14 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             .Subscribe(_ => RefreshTargetNameValidation()));
         disposables.Add(this.WhenAnyValue(x => x.SearchText)
             .Skip(1)
-            .Subscribe(_ => RefreshVisibleNpcs()));
+            .Do(text => npcFilterState.PendingGlobalSearchText = text)
+            .Throttle(TimeSpan.FromMilliseconds(200), this.filterScheduler)
+            .Subscribe(_ => ApplyPendingNpcSearchText()));
         disposables.Add(this.WhenAnyValue(x => x.NpcDatabaseSearchText)
             .Skip(1)
-            .Subscribe(_ => RefreshVisibleNpcDatabase()));
+            .Do(text => npcDatabaseFilterState.PendingGlobalSearchText = text)
+            .Throttle(TimeSpan.FromMilliseconds(200), this.filterScheduler)
+            .Subscribe(_ => ApplyPendingNpcDatabaseSearchText()));
     }
 
     public ObservableCollection<SliderPreset> Presets => project.SliderPresets;
@@ -797,6 +809,40 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         RefreshVisibleNpcs();
     }
 
+    /// <summary>
+    /// Reconciles visible ListBox selection changes with stable hidden-row selection.
+    /// Hidden selected rows are re-applied from row IDs because Avalonia selection events only report currently visible items after filtering.
+    /// </summary>
+    /// <param name="selectedVisibleNpcs">The NPCs currently selected in the visible filtered list.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="selectedVisibleNpcs" /> is null.</exception>
+    public void UpdateVisibleNpcSelection(IEnumerable<Npc> selectedVisibleNpcs)
+    {
+        ArgumentNullException.ThrowIfNull(selectedVisibleNpcs);
+
+        var visibleSelection = selectedVisibleNpcs.ToArray();
+        var hiddenSelection = SelectedNpcs
+            .Where(npc => !VisibleNpcs.Contains(npc))
+            .ToArray();
+        var nextSelection = visibleSelection
+            .Concat(hiddenSelection)
+            .Distinct()
+            .ToArray();
+
+        syncingSelectedNpcs = true;
+        try
+        {
+            SelectedNpcs.Clear();
+            foreach (var npc in nextSelection) SelectedNpcs.Add(npc);
+        }
+        finally
+        {
+            syncingSelectedNpcs = false;
+        }
+
+        RebuildSelectedNpcRowIds();
+        UpdateHiddenSelectionStatus();
+    }
+
     public void SetNpcColumnSearchText(NpcFilterColumn column, string value)
     {
         var normalized = value ?? string.Empty;
@@ -925,20 +971,35 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     private void RefreshVisibleNpcs()
     {
-        npcFilterState.PendingGlobalSearchText = SearchText;
-        npcFilterState.ApplyPendingGlobalSearchText();
+        RefreshVisibleNpcs(false);
+    }
+
+    private void RefreshVisibleNpcs(bool applyPendingSearchText)
+    {
+        if (applyPendingSearchText) npcFilterState.ApplyPendingGlobalSearchText();
+
         RefreshFilteredCollection(Npcs, npcRowsByNpc, npcFilterState, VisibleNpcs);
         this.RaisePropertyChanged(nameof(NpcCountBadgeText));
         this.RaisePropertyChanged(nameof(NpcRaceColumnValues));
+        UpdateHiddenSelectionStatus();
     }
 
     private void RefreshVisibleNpcDatabase()
     {
-        npcDatabaseFilterState.PendingGlobalSearchText = NpcDatabaseSearchText;
-        npcDatabaseFilterState.ApplyPendingGlobalSearchText();
+        RefreshVisibleNpcDatabase(false);
+    }
+
+    private void RefreshVisibleNpcDatabase(bool applyPendingSearchText)
+    {
+        if (applyPendingSearchText) npcDatabaseFilterState.ApplyPendingGlobalSearchText();
+
         RefreshFilteredCollection(NpcDatabase, npcDatabaseRowsByNpc, npcDatabaseFilterState, VisibleNpcDatabase);
         this.RaisePropertyChanged(nameof(NpcDatabaseCountBadgeText));
     }
+
+    private void ApplyPendingNpcSearchText() => RefreshVisibleNpcs(true);
+
+    private void ApplyPendingNpcDatabaseSearchText() => RefreshVisibleNpcDatabase(true);
 
     private static void RefreshFilteredCollection(
         IEnumerable<Npc> source,
@@ -957,6 +1018,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     {
         UpdateNpcSubscriptions(args);
         SyncRowsFromCollection(Npcs, npcRowsByNpc, npcRowSource);
+        PruneSelectedNpcRowIds();
         RefreshVisibleNpcs();
     }
 
@@ -974,6 +1036,48 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     {
         SyncRowsFromCollection(NpcDatabase, npcDatabaseRowsByNpc, npcDatabaseRowSource);
         RefreshVisibleNpcDatabase();
+    }
+
+    private void OnSelectedNpcsChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        if (syncingSelectedNpcs) return;
+
+        RebuildSelectedNpcRowIds();
+        UpdateHiddenSelectionStatus();
+    }
+
+    private void RebuildSelectedNpcRowIds()
+    {
+        selectedNpcRowIds.Clear();
+        foreach (var npc in SelectedNpcs)
+            if (npcRowsByNpc.TryGetValue(npc, out var row))
+                selectedNpcRowIds.Add(row.RowId);
+    }
+
+    private void PruneSelectedNpcRowIds()
+    {
+        selectedNpcRowIds.IntersectWith(npcRowsByNpc.Values.Select(row => row.RowId));
+    }
+
+    private int HiddenSelectedNpcCount()
+    {
+        var visibleRows = VisibleNpcs
+            .Select(npc => npcRowsByNpc.TryGetValue(npc, out var row) ? row.RowId : Guid.Empty)
+            .Where(rowId => rowId != Guid.Empty)
+            .ToHashSet();
+
+        return selectedNpcRowIds.Count(rowId => !visibleRows.Contains(rowId));
+    }
+
+    private void UpdateHiddenSelectionStatus()
+    {
+        var hiddenSelected = HiddenSelectedNpcCount();
+        if (hiddenSelected == 0) return;
+
+        StatusMessage = VisibleNpcs.Count.ToString(CultureInfo.InvariantCulture)
+                        + " visible, " + selectedNpcRowIds.Count.ToString(CultureInfo.InvariantCulture)
+                        + " selected (" + hiddenSelected.ToString(CultureInfo.InvariantCulture)
+                        + " hidden by filters)";
     }
 
     /// <summary>
