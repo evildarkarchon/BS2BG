@@ -12,17 +12,29 @@ public sealed class SliderProfile
         IEnumerable<string> invertedNames)
     {
         Defaults = defaults?.ToArray() ?? throw new ArgumentNullException(nameof(defaults));
+        Multipliers = (multipliers ?? throw new ArgumentNullException(nameof(multipliers))).ToArray();
+        InvertedNames = (invertedNames ?? throw new ArgumentNullException(nameof(invertedNames))).ToArray();
         defaultsByName = Defaults.ToDictionary(
             value => value.Name,
             StringComparer.OrdinalIgnoreCase);
-        multipliersByName = (multipliers ?? throw new ArgumentNullException(nameof(multipliers)))
+        multipliersByName = Multipliers
             .ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase);
         this.invertedNames = new HashSet<string>(
-            invertedNames ?? throw new ArgumentNullException(nameof(invertedNames)),
+            InvertedNames,
             StringComparer.OrdinalIgnoreCase);
     }
 
     public IReadOnlyList<SliderDefault> Defaults { get; }
+
+    /// <summary>
+    /// Gets profile multiplier table entries so diagnostics can report profile behavior without re-parsing JSON.
+    /// </summary>
+    public IReadOnlyList<SliderMultiplier> Multipliers { get; }
+
+    /// <summary>
+    /// Gets profile inverted slider names so diagnostics can report profile behavior without changing formatter semantics.
+    /// </summary>
+    public IReadOnlyList<string> InvertedNames { get; }
 
     public int GetDefaultSmall(string sliderName)
     {
