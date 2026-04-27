@@ -67,13 +67,18 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
             .Select(entry => entry?.SourceKind == ProfileSourceKind.Bundled);
         var selectedIsCustom = this.WhenAnyValue(x => x.SelectedProfile)
             .Select(entry => entry?.SourceKind == ProfileSourceKind.LocalCustom);
+        var selectedCanExport = this.WhenAnyValue(x => x.SelectedProfile)
+            .Select(entry => entry is not null
+                             && !entry.IsMissing
+                             && (entry.SourceKind == ProfileSourceKind.LocalCustom
+                                 || entry.SourceKind == ProfileSourceKind.EmbeddedProject));
 
         ImportProfileCommand = ReactiveCommand.CreateFromTask(ImportProfilesAsync);
         CreateBlankProfileCommand = ReactiveCommand.Create(CreateBlankProfile);
         CopyBundledProfileCommand = ReactiveCommand.Create(CopyBundledProfile, selectedIsBundled);
         ValidateProfileCommand = ReactiveCommand.Create(() => Editor.ValidateProfile(), hasSelection);
         SaveProfileCommand = ReactiveCommand.CreateFromTask(SaveSelectedProfileAsync, selectedIsCustom);
-        ExportProfileCommand = ReactiveCommand.CreateFromTask(ExportSelectedProfileAsync, selectedIsCustom);
+        ExportProfileCommand = ReactiveCommand.CreateFromTask(ExportSelectedProfileAsync, selectedCanExport);
         DeleteCustomProfileCommand = ReactiveCommand.CreateFromTask(DeleteSelectedCustomProfileAsync, selectedIsCustom);
 
         _isBusyHelper = Observable.CombineLatest(
@@ -327,10 +332,18 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         await Task.CompletedTask;
     }
 
-    private async Task ExportSelectedProfileAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Exports the selected local custom or project-embedded profile as standalone deterministic profile JSON.
+    /// Bundled and missing fallback rows are intentionally excluded from this sharing workflow.
+    /// </summary>
+    public async Task ExportSelectedProfileAsync(CancellationToken cancellationToken)
     {
         var entry = SelectedProfile;
-        if (entry is null) return;
+        if (entry is null
+            || entry.IsMissing
+            || (entry.SourceKind != ProfileSourceKind.LocalCustom
+                && entry.SourceKind != ProfileSourceKind.EmbeddedProject))
+            return;
 
         var path = await dialogService.PickProfileExportPathAsync(entry.Name + ".json", cancellationToken);
         if (string.IsNullOrWhiteSpace(path)) return;

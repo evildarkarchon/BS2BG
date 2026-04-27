@@ -369,6 +369,33 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Remaps all presets that reference a missing profile to an installed catalog profile and records one undoable recovery operation.
+    /// Undo restores the unresolved profile names so fallback diagnostics and neutral fallback copy reappear.
+    /// </summary>
+    public bool RemapProfileReferences(string missingProfileName, string installedProfileName)
+    {
+        if (string.IsNullOrWhiteSpace(missingProfileName)
+            || string.IsNullOrWhiteSpace(installedProfileName)
+            || !CurrentCatalog.ContainsProfile(installedProfileName))
+            return false;
+
+        var resolvedProfileName = CurrentCatalog.GetProfile(installedProfileName).Name;
+        var affected = Presets
+            .Where(preset => string.Equals(preset.ProfileName, missingProfileName, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (affected.Length == 0) return false;
+
+        var before = affected.Select(PresetValueSnapshot.Create).ToArray();
+        ApplyProfileReferenceRemap(affected, resolvedProfileName);
+        var after = affected.Select(PresetValueSnapshot.Create).ToArray();
+        undoRedo.Record(
+            "Remap profile references",
+            () => RestorePresetReferenceSnapshots(before),
+            () => RestorePresetReferenceSnapshots(after));
+        return true;
+    }
+
     public void ClearPresets()
     {
         var snapshot = CapturePresetAssignmentSnapshot();
@@ -505,6 +532,38 @@ public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
         SelectedPreset = preset;
         ValidationMessage = string.Empty;
         RefreshPreview();
+    }
+
+    private void ApplyProfileReferenceRemap(IEnumerable<SliderPreset> presets, string profileName)
+    {
+        foreach (var preset in presets) preset.ProfileName = profileName;
+
+        SetSelectedProfileNameFromPreset(SelectedPreset?.ProfileName);
+        RefreshSelectedPresetMissingDefaults(GetSelectedCalculationProfile().Name);
+        RefreshProfileFallbackInformation();
+        RebuildSetSliderRows();
+        RefreshSetSliderRowPreviews();
+        RefreshPreview();
+        RefreshSelectedBosJson();
+        GeneratedTemplateText = string.Empty;
+    }
+
+    private void RestorePresetReferenceSnapshots(IEnumerable<PresetValueSnapshot> snapshots)
+    {
+        foreach (var snapshot in snapshots)
+        {
+            var preset = project.FindSliderPreset(snapshot.Name);
+            if (preset is not null) snapshot.ApplyTo(preset);
+        }
+
+        SetSelectedProfileNameFromPreset(SelectedPreset?.ProfileName);
+        RefreshSelectedPresetMissingDefaults(GetSelectedCalculationProfile().Name);
+        RefreshProfileFallbackInformation();
+        RebuildSetSliderRows();
+        RefreshSetSliderRowPreviews();
+        RefreshPreview();
+        RefreshSelectedBosJson();
+        GeneratedTemplateText = string.Empty;
     }
 
     private void ReportCommandFailure(string action, Exception exception) =>
