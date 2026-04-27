@@ -910,6 +910,12 @@ public sealed class MainWindowViewModelTests
             return Task.FromResult(ConfirmDiscardResult);
         }
 
+        public Task<bool> ConfirmBulkOperationAsync(
+            string title,
+            string message,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
         public void ShowAbout() => AboutCallCount++;
     }
 

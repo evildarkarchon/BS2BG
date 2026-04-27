@@ -143,6 +143,27 @@ public sealed class M6UxAppShellTests
     }
 
     [AvaloniaFact]
+    public void MorphsBulkActionsExposeScopeSelectorAndVisibleEmptyCta()
+    {
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow(viewModel);
+        window.ApplyTemplate();
+
+        var scopeLabel = window.FindControl<TextBlock>("NpcBulkScopeLabel").Should().BeAssignableTo<TextBlock>().Which;
+        var scopeSelector = window.FindControl<ComboBox>("NpcBulkScopeComboBox").Should().BeAssignableTo<ComboBox>().Which;
+        var fillButton = window.FindControl<Button>("FillEmptyNpcsButton").Should().BeAssignableTo<Button>().Which;
+
+        scopeLabel.Text.Should().Be("Scope");
+        scopeSelector.ItemsSource.Should().BeSameAs(viewModel.Morphs.NpcBulkScopes);
+        scopeSelector.SelectedItem.Should().Be(NpcBulkScope.All);
+        scopeSelector.GetValue(Avalonia.Automation.AutomationProperties.NameProperty).Should().Be("Scope");
+        viewModel.Morphs.NpcBulkScopes.Select(scope => scope.ToDisplayName())
+            .Should().Equal("All", "Visible", "Selected", "Visible Empty");
+        fillButton.Content.Should().Be("Fill Visible Empty");
+        fillButton.GetValue(Avalonia.Automation.AutomationProperties.NameProperty).Should().Be("Fill Visible Empty");
+    }
+
+    [AvaloniaFact]
     public void MainWindowRoutesM6ShortcutsAndDropZones()
     {
         using var provider = AppBootstrapper.CreateServiceProvider();
