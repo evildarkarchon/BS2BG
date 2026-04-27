@@ -65,9 +65,12 @@ public partial class MainWindow : Window
     {
         if (ViewModel is null || sender is not TabControl tabControl) return;
 
-        ViewModel.ActiveWorkspace = tabControl.SelectedIndex == 0
-            ? AppWorkspace.Templates
-            : AppWorkspace.Morphs;
+        ViewModel.ActiveWorkspace = tabControl.SelectedIndex switch
+        {
+            0 => AppWorkspace.Templates,
+            1 => AppWorkspace.Morphs,
+            _ => AppWorkspace.Diagnostics
+        };
     }
 
     private void OnNpcSelectionChanged(object? sender, SelectionChangedEventArgs args)
