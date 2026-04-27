@@ -311,13 +311,15 @@ public sealed class ProfileManagerEntryViewModel
         SliderProfile sliderProfile,
         ProfileSourceKind sourceKind,
         string? filePath,
-        bool isEditable)
+        bool isEditable,
+        bool isMissing = false)
     {
         Name = name;
         SliderProfile = sliderProfile;
         SourceKind = sourceKind;
         FilePath = filePath;
         IsEditable = isEditable;
+        IsMissing = isMissing;
     }
 
     public string Name { get; }
@@ -325,8 +327,10 @@ public sealed class ProfileManagerEntryViewModel
     public ProfileSourceKind SourceKind { get; }
     public string? FilePath { get; }
     public bool IsEditable { get; }
+    public bool IsMissing { get; }
     public string SourceLabel => SourceKind switch
     {
+        _ when IsMissing => "Missing — using fallback",
         ProfileSourceKind.Bundled => "Bundled — read-only",
         ProfileSourceKind.LocalCustom => "Custom — editable",
         ProfileSourceKind.EmbeddedProject => "Embedded in project",
@@ -337,7 +341,7 @@ public sealed class ProfileManagerEntryViewModel
         new(entry.Name, entry.TemplateProfile.SliderProfile, entry.SourceKind, entry.FilePath, entry.IsEditable);
 
     public static ProfileManagerEntryViewModel Missing(string name) =>
-        new(name, new SliderProfile([], [], []), ProfileSourceKind.EmbeddedProject, null, false);
+        new(name, new SliderProfile([], [], []), ProfileSourceKind.EmbeddedProject, null, false, true);
 
     public CustomProfileDefinition ToCustomProfileDefinition() =>
         new(Name, string.Empty, SliderProfile, SourceKind, FilePath);

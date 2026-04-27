@@ -86,6 +86,22 @@ public sealed class ProfileManagerViewModelTests
         project.SliderPresets[0].ProfileName.Should().Be("Custom Body");
     }
 
+    /// <summary>
+    /// Verifies unresolved project profile names get a neutral missing-source label in the manager rail.
+    /// </summary>
+    [Fact]
+    public void MissingProjectProfileRowsUseFallbackSourceLabel()
+    {
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Preset") { ProfileName = "Missing Body" });
+        var vm = CreateManager(new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile("Bundled Body", CreateSliderProfile())
+        }), project);
+
+        vm.ProfileEntries.Single(entry => entry.Name == "Missing Body").SourceLabel.Should().Be("Missing — using fallback");
+    }
+
     private static ProfileManagerViewModel CreateManager(
         TemplateProfileCatalog catalog,
         ProjectModel? project = null,
