@@ -52,12 +52,73 @@ public enum ProfileValidationSeverity
 /// <param name="SliderProfile">Generation-facing slider tables.</param>
 /// <param name="SourceKind">Trust domain for the profile definition.</param>
 /// <param name="FilePath">Optional source file path for local profile workflows.</param>
-public sealed record CustomProfileDefinition(
-    string Name,
-    string Game,
-    SliderProfile SliderProfile,
-    ProfileSourceKind SourceKind,
-    string? FilePath);
+public sealed class CustomProfileDefinition : ProjectModelNode
+{
+    private string name;
+    private string game;
+    private SliderProfile sliderProfile;
+    private ProfileSourceKind sourceKind;
+    private string? filePath;
+
+    /// <summary>
+    /// Initializes a custom profile definition with editable project-owned metadata and immutable slider tables.
+    /// </summary>
+    /// <param name="name">Internal display name used as profile identity; filenames are not identity.</param>
+    /// <param name="game">Optional game-style metadata such as Skyrim or Fallout4.</param>
+    /// <param name="sliderProfile">Generation-facing slider tables.</param>
+    /// <param name="sourceKind">Trust domain for the profile definition.</param>
+    /// <param name="filePath">Optional source file path for local profile workflows.</param>
+    public CustomProfileDefinition(
+        string name,
+        string game,
+        SliderProfile sliderProfile,
+        ProfileSourceKind sourceKind,
+        string? filePath)
+    {
+        this.name = name ?? throw new ArgumentNullException(nameof(name));
+        this.game = game ?? string.Empty;
+        this.sliderProfile = sliderProfile ?? throw new ArgumentNullException(nameof(sliderProfile));
+        this.sourceKind = sourceKind;
+        this.filePath = filePath;
+    }
+
+    public string Name
+    {
+        get => name;
+        set => SetProperty(ref name, value ?? throw new ArgumentNullException(nameof(value)));
+    }
+
+    public string Game
+    {
+        get => game;
+        set => SetProperty(ref game, value ?? string.Empty);
+    }
+
+    public SliderProfile SliderProfile
+    {
+        get => sliderProfile;
+        set => SetProperty(ref sliderProfile, value ?? throw new ArgumentNullException(nameof(value)));
+    }
+
+    public ProfileSourceKind SourceKind
+    {
+        get => sourceKind;
+        set => SetProperty(ref sourceKind, value);
+    }
+
+    public string? FilePath
+    {
+        get => filePath;
+        set => SetProperty(ref filePath, value);
+    }
+
+    /// <summary>
+    /// Creates a detached copy so project snapshots do not share dirty-tracked profile instances.
+    /// </summary>
+    /// <returns>A custom profile definition with the same generation tables and source metadata.</returns>
+    public CustomProfileDefinition Clone() =>
+        new(Name, Game, SliderProfile, SourceKind, FilePath);
+}
 
 /// <summary>
 /// Validation diagnostic emitted while parsing custom profile JSON before catalog inclusion.

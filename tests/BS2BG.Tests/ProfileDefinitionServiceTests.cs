@@ -178,9 +178,10 @@ public sealed class ProfileDefinitionServiceTests
                 new[] { "invertb", "InvertA" }),
             ProfileSourceKind.EmbeddedProject,
             "right.json");
-        var caseChangedSlider = right with
-        {
-            SliderProfile = new SliderProfile(
+        var caseChangedSlider = new CustomProfileDefinition(
+            right.Name,
+            right.Game,
+            new SliderProfile(
                 new[]
                 {
                     new SliderDefault("waist", 1f, -1f),
@@ -188,7 +189,8 @@ public sealed class ProfileDefinitionServiceTests
                 },
                 right.SliderProfile.Multipliers,
                 right.SliderProfile.InvertedNames),
-        };
+            right.SourceKind,
+            right.FilePath);
 
         ProfileDefinitionEquality.DefinitionallyEquals(left, right).Should().BeTrue();
         ProfileDefinitionEquality.DefinitionallyEquals(left, caseChangedSlider).Should().BeFalse();

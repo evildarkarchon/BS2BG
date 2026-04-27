@@ -10,6 +10,7 @@ public sealed class ProjectModel : ProjectModelNode
         AttachCollection(SliderPresets);
         AttachCollection(CustomMorphTargets);
         AttachCollection(MorphedNpcs);
+        AttachCollection(CustomProfiles);
     }
 
     public ObservableCollection<SliderPreset> SliderPresets { get; } = new();
@@ -17,6 +18,8 @@ public sealed class ProjectModel : ProjectModelNode
     public ObservableCollection<CustomMorphTarget> CustomMorphTargets { get; } = new();
 
     public ObservableCollection<Npc> MorphedNpcs { get; } = new();
+
+    public ObservableCollection<CustomProfileDefinition> CustomProfiles { get; } = new();
 
     public bool IsDirty { get; private set; }
 
@@ -51,6 +54,7 @@ public sealed class ProjectModel : ProjectModelNode
         SliderPresets.Clear();
         CustomMorphTargets.Clear();
         MorphedNpcs.Clear();
+        CustomProfiles.Clear();
 
         var presetMap = new Dictionary<string, SliderPreset>(StringComparer.OrdinalIgnoreCase);
         foreach (var preset in source.SliderPresets)
@@ -76,6 +80,9 @@ public sealed class ProjectModel : ProjectModelNode
             CopyPresetAssignments(npc, clone, presetMap);
             MorphedNpcs.Add(clone);
         }
+
+        foreach (var profile in source.CustomProfiles)
+            CustomProfiles.Add(profile.Clone());
 
         MarkClean();
     }
@@ -218,6 +225,7 @@ public sealed class ProjectModel : ProjectModelNode
         {
             SliderPreset preset => preset.Name,
             MorphTargetBase target => target.Name,
+            CustomProfileDefinition profile => profile.Name,
             _ => string.Empty
         };
     }

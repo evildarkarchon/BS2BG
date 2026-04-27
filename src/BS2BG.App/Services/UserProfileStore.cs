@@ -154,7 +154,12 @@ public sealed class UserProfileStore : IUserProfileStore
         {
             Directory.CreateDirectory(profileDirectory);
             var targetPath = ChooseSavePath(profile);
-            var localProfile = profile with { SourceKind = ProfileSourceKind.LocalCustom, FilePath = targetPath };
+            var localProfile = new CustomProfileDefinition(
+                profile.Name,
+                profile.Game,
+                profile.SliderProfile,
+                ProfileSourceKind.LocalCustom,
+                targetPath);
             AtomicFileWriter.WriteAtomic(targetPath, profileDefinitionService.ExportProfileJson(localProfile), Utf8NoBom);
             return new UserProfileSaveResult(true, targetPath, Array.Empty<ProfileValidationDiagnostic>());
         }
