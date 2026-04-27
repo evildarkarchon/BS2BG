@@ -210,6 +210,51 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task PreviewBodyGenExportPopulatesCreateSummaryWithoutWritingFiles()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Alpha");
+        var target = new CustomMorphTarget("All|Female");
+        target.AddSliderPreset(project.SliderPresets[0]);
+        project.CustomMorphTargets.Add(target);
+        var dialogs = new FakeFileDialogService { BodyGenExportFolder = directory.Path };
+        var viewModel = CreateViewModel(project, dialogs);
+
+        await viewModel.PreviewBodyGenExportCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        viewModel.HasExportPreview.Should().BeTrue();
+        viewModel.ExportPreviewSummary.Should()
+            .Be("New files will be created at the paths below. No overwrite confirmation is required.");
+        viewModel.ExportPreviewFiles.Select(file => (file.Kind, file.TargetPath, file.EffectLabel, file.IsOverwrite))
+            .Should().Equal(
+                ("BodyGen", Path.Combine(directory.Path, "templates.ini"), "Create", false),
+                ("BodyGen", Path.Combine(directory.Path, "morphs.ini"), "Create", false));
+        viewModel.ExportPreviewFiles.SelectMany(file => file.SnippetLines).Should().Contain("All|Female=Alpha");
+        File.Exists(Path.Combine(directory.Path, "templates.ini")).Should().BeFalse();
+        File.Exists(Path.Combine(directory.Path, "morphs.ini")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PreviewBosJsonExportPopulatesPathsWithoutWritingFiles()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithPreset("Preset:One");
+        var dialogs = new FakeFileDialogService { BosJsonExportFolder = directory.Path };
+        var viewModel = CreateViewModel(project, dialogs);
+
+        await viewModel.PreviewBosJsonExportCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        viewModel.HasExportPreview.Should().BeTrue();
+        viewModel.ExportPreviewFiles.Should().ContainSingle(file =>
+            file.Kind == "BoS JSON"
+            && file.TargetPath == Path.Combine(directory.Path, "Preset_One.json")
+            && file.EffectLabel == "Create"
+            && !file.IsOverwrite
+            && file.SnippetLines.Any(line => line.Contains("\"bodyname\": \"Preset:One\"", StringComparison.Ordinal)));
+        File.Exists(Path.Combine(directory.Path, "Preset_One.json")).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task WindowFileDialogServiceUsesProjectFolderForProjectOpenAndSave()
     {
         using var directory = new TemporaryDirectory();
