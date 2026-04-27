@@ -64,7 +64,7 @@ public sealed class NpcTextParser
     {
         var npcs = new List<Npc>();
         var diagnostics = new List<NpcImportDiagnostic>();
-        var seen = new HashSet<NpcKey>();
+        var seen = new Dictionary<NpcKey, string>();
         var normalizedText = text.Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n');
         var lines = normalizedText.Split('\n');
@@ -92,7 +92,16 @@ public sealed class NpcTextParser
             if (name.Length == 0) name = "Unnamed (" + editorId + ")";
 
             var key = new NpcKey(mod, editorId);
-            if (!seen.Add(key)) continue;
+            var displayKey = mod + "|" + editorId;
+            if (seen.TryGetValue(key, out var existingKey))
+            {
+                diagnostics.Add(new NpcImportDiagnostic(
+                    lineNumber,
+                    "Duplicate NPC row skipped for " + existingKey + "."));
+                continue;
+            }
+
+            seen.Add(key, displayKey);
 
             npcs.Add(new Npc(name) { Mod = mod, EditorId = editorId, Race = race, FormId = formId });
         }
