@@ -146,6 +146,48 @@ public sealed class ProfileEditorViewModelTests
     }
 
     /// <summary>
+    /// Verifies row property edits immediately refresh validation and save availability without manual validation commands.
+    /// </summary>
+    [Fact]
+    public void RowPropertyEditsRefreshValidationAndSaveAvailabilityAutomatically()
+    {
+        var vm = ProfileEditorViewModel.FromProfile(
+            "Live Rows",
+            "SkyrimSE",
+            new SliderProfile(
+                [new SliderDefault("Existing Default", 0f, 1f)],
+                [new SliderMultiplier("Existing Multiplier", 1f)],
+                ["Existing Inverted"]),
+            ProfileSourceKind.LocalCustom,
+            null,
+            new ProfileDefinitionService(),
+            [],
+            new StubUserProfileStore());
+
+        vm.IsValid.Should().BeTrue();
+        ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeTrue();
+
+        vm.DefaultRows[0].ValueSmall = "not a number";
+
+        vm.IsValid.Should().BeFalse();
+        ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeFalse();
+        vm.ValidationRows.Should().Contain(row => row.Text == "Defaults value for Existing Default must be a number. Broad finite values are allowed; malformed values are not.");
+
+        vm.DefaultRows[0].ValueSmall = "0.25";
+
+        vm.IsValid.Should().BeTrue();
+        ((ICommand)vm.SaveProfileCommand).CanExecute(null).Should().BeTrue();
+
+        ExecuteCommand(vm.AddMultiplierCommand);
+        var removed = vm.MultiplierRows.Last();
+        ExecuteCommand(vm.RemoveMultiplierCommand, removed);
+        removed.Value = "not a number";
+
+        vm.IsValid.Should().BeTrue();
+        vm.ValidationRows.Should().NotContain(row => row.Text.Contains("not a number", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Verifies row search changes only the visible projection and not the saved candidate data.
     /// </summary>
     [Fact]

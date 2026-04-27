@@ -61,4 +61,25 @@ public sealed class MainWindowHeadlessTests
         window.FindControl<ListBox>("EmbeddedProjectProfilesList").Should().NotBeNull();
         window.FindControl<ListBox>("MissingProfileReferencesList").Should().NotBeNull();
     }
+
+    [AvaloniaFact]
+    public void ProfilesWorkspaceEditorExposesTableAuthoringButtons()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+        var window = provider.GetRequiredService<MainWindow>();
+        window.ApplyTemplate();
+
+        var buttonAutomationNames = window.GetLogicalDescendants()
+            .OfType<Button>()
+            .Select(AutomationProperties.GetName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToArray();
+
+        buttonAutomationNames.Should().Contain("Add default slider");
+        buttonAutomationNames.Should().Contain("Remove default slider");
+        buttonAutomationNames.Should().Contain("Add multiplier slider");
+        buttonAutomationNames.Should().Contain("Remove multiplier slider");
+        buttonAutomationNames.Should().Contain("Add inverted slider");
+        buttonAutomationNames.Should().Contain("Remove inverted slider");
+    }
 }
