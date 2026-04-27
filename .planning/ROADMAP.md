@@ -102,7 +102,7 @@ Plans:
 - [x] 04-01-PLAN.md — Create Core custom profile validation and JSON export contracts.
 **Wave 2 (blocked on Wave 1 completion)**
 - [x] 04-02-PLAN.md — Add AppData custom profile storage and source-tagged catalog composition.
-- [ ] 04-03-PLAN.md — Embed referenced custom profile definitions in `.jbs2bg` projects while preserving legacy fields.
+- [x] 04-03-PLAN.md — Embed referenced custom profile definitions in `.jbs2bg` projects while preserving legacy fields.
 **Wave 3 (blocked on Wave 2 completion; 04-04 also depends on 04-02 for local catalog semantics)**
 - [ ] 04-04-PLAN.md — Add read-only missing-profile recovery diagnostics and exact-match resolution checks.
 - [ ] 04-05-PLAN.md — Build ReactiveUI profile manager/editor workflows for import, copy, edit, validate, save, export, and delete.
@@ -138,5 +138,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Profile Correctness and Trust | 7/7 | Complete   | 2026-04-26 |
 | 2. Workflow Persistence, Filtering, and Undo Hardening | 0/TBD | Not started | - |
 | 3. Validation and Diagnostics | 8/8 | Complete | 2026-04-27 |
-| 4. Profile Extensibility and Controlled Customization | 0/TBD | Not started | - |
+| 4. Profile Extensibility and Controlled Customization | 3/8 | In Progress | - |
 | 5. Automation, Sharing, and Release Trust | 0/TBD | Not started | - |
