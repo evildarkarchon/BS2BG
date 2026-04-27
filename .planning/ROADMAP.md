@@ -61,7 +61,7 @@ Plans:
 - [x] 02-06-PLAN.md — Expose full checklist filtering in the Avalonia Morphs UI.
 - [x] 02-07-PLAN.md — Add explicit scoped NPC bulk operations and scope selector UI.
 - [x] 02-08-PLAN.md — Bound undo history and harden template/profile undo snapshots.
-- [ ] 02-09-PLAN.md — Harden morph/NPC undo snapshots and scoped bulk undo behavior.
+- [x] 02-09-PLAN.md — Harden morph/NPC undo snapshots and scoped bulk undo behavior.
 **UI hint**: yes
 
 ### Phase 3: Validation and Diagnostics
