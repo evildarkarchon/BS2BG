@@ -51,6 +51,20 @@ public sealed class ProfileRecoveryDiagnosticsService
     public const string ProfileRecoveryCategory = "ProfileRecovery";
 
     /// <summary>
+    /// Reports whether an imported profile can explicitly resolve a missing reference by internal display-name identity only.
+    /// </summary>
+    /// <param name="missingProfileName">Saved project profile name that is absent from the active catalog.</param>
+    /// <param name="importedProfile">Validated profile definition being considered for recovery.</param>
+    /// <returns><see langword="true"/> when <paramref name="importedProfile"/> has the same internal name ignoring case.</returns>
+    public static bool CanResolveMissingReference(string missingProfileName, CustomProfileDefinition importedProfile)
+    {
+        if (missingProfileName is null) throw new ArgumentNullException(nameof(missingProfileName));
+        if (importedProfile is null) throw new ArgumentNullException(nameof(importedProfile));
+
+        return string.Equals(missingProfileName, importedProfile.Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Analyzes project preset profile names against the active catalog and embedded project profile copies.
     /// </summary>
     /// <param name="project">Project whose saved preset profile names should be inspected.</param>
