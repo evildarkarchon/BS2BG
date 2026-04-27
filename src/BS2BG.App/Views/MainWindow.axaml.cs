@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
+using BS2BG.App.ViewModels.Workflow;
 using BS2BG.Core.Models;
 
 namespace BS2BG.App.Views;
@@ -73,9 +74,7 @@ public partial class MainWindow : Window
     {
         if (ViewModel is null || sender is not ListBox listBox) return;
 
-        ViewModel.Morphs.SelectedNpcs.Clear();
-        foreach (var item in listBox.SelectedItems?.OfType<Npc>() ?? Enumerable.Empty<Npc>())
-            ViewModel.Morphs.SelectedNpcs.Add(item);
+        ViewModel.Morphs.UpdateVisibleNpcSelection(listBox.SelectedItems?.OfType<Npc>() ?? Enumerable.Empty<Npc>());
     }
 
     private void OnNpcRaceFilterSelectionChanged(object? sender, SelectionChangedEventArgs args)

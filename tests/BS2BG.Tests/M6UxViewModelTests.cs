@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
+using BS2BG.App.ViewModels.Workflow;
 using BS2BG.Core.Export;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
