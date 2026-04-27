@@ -78,7 +78,7 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Create Core project/profile diagnostics services and tests.
 - [x] 03-02-PLAN.md — Add read-only NPC import preview classification and duplicate diagnostics.
-- [ ] 03-03-PLAN.md — Add export preview and atomic outcome ledger Core contracts.
+- [x] 03-03-PLAN.md — Add export preview and atomic outcome ledger Core contracts.
 - [ ] 03-04-PLAN.md — Expose project/profile diagnostics through a ReactiveUI Diagnostics ViewModel and copyable report.
 - [ ] 03-05-PLAN.md — Integrate optional no-mutation NPC import preview and distinct assignment-effect summaries.
 - [ ] 03-06-PLAN.md — Wire export preview and overwrite-risk confirmation into shell export workflows.
