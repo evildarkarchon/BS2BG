@@ -29,6 +29,18 @@ public sealed class AppShellTests
         viewModel.Should().NotBeNull();
     }
 
+    [Fact]
+    public void ServiceProviderResolvesRootViewModelWithDiagnosticsWorkspace()
+    {
+        using var provider = AppBootstrapper.CreateServiceProvider();
+
+        var viewModel = provider.GetRequiredService<MainWindowViewModel>();
+
+        viewModel.Diagnostics.Should().BeSameAs(provider.GetRequiredService<DiagnosticsViewModel>());
+        viewModel.ActiveWorkspace = AppWorkspace.Diagnostics;
+        viewModel.ActiveWorkspace.Should().Be(AppWorkspace.Diagnostics);
+    }
+
     [AvaloniaFact]
     public void ServiceProviderResolvesMainWindowWithPrdShellSettings()
     {

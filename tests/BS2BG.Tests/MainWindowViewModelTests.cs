@@ -518,6 +518,24 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void GlobalSearchDoesNotRouteDiagnosticsTextToTemplatesOrMorphs()
+    {
+        var viewModel = CreateViewModel(new ProjectModel(), new FakeFileDialogService());
+        viewModel.ActiveWorkspace = AppWorkspace.Templates;
+        viewModel.GlobalSearchText = "preset search";
+        viewModel.Templates.SearchText.Should().Be("preset search");
+        viewModel.ActiveWorkspace = AppWorkspace.Morphs;
+        viewModel.GlobalSearchText = "npc search";
+        viewModel.Morphs.SearchText.Should().Be("npc search");
+
+        viewModel.ActiveWorkspace = AppWorkspace.Diagnostics;
+        viewModel.GlobalSearchText = "diagnostics search";
+
+        viewModel.Templates.SearchText.Should().BeEmpty();
+        viewModel.Morphs.SearchText.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task HandleDroppedFilesCommandIsDisabledWhileShellSaveIsBusy()
     {
         using var directory = new TemporaryDirectory();
