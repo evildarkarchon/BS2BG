@@ -38,7 +38,7 @@ public sealed class M7ReleasePolishTests
                      ("GeneratedTemplatesTextBox", "Generated templates"),
                      ("CustomTargetNameInputBox", "Custom target name"), ("ImportNpcsButton", "Import NPCs"),
                      ("ImportedNpcSearchBox", "Search imported NPCs"), ("NpcSearchBox", "Search NPCs"),
-                     ("FillEmptyNpcsButton", "Fill empty NPC assignments"), ("NpcListBox", "Individual NPCs"),
+                      ("FillEmptyNpcsButton", "Fill Visible Empty"), ("NpcListBox", "Individual NPCs"),
                      ("SelectedNpcAssignButton", "Assign preset to selected NPCs"),
                      ("ViewImageButton", "View selected NPC image"),
                      ("AvailablePresetsListBox", "Available presets"),
