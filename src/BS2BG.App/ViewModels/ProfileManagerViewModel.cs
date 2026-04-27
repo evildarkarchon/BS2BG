@@ -68,6 +68,10 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
             .Select(entry => entry?.SourceKind == ProfileSourceKind.Bundled);
         var selectedIsCustom = this.WhenAnyValue(x => x.SelectedProfile)
             .Select(entry => entry?.SourceKind == ProfileSourceKind.LocalCustom);
+        var canSaveActiveEditor = this.WhenAnyValue(
+            x => x.Editor.IsValid,
+            x => x.SelectedProfile,
+            CanSaveActiveEditor);
         var selectedCanExport = this.WhenAnyValue(x => x.SelectedProfile)
             .Select(entry => entry is not null
                              && !entry.IsMissing
@@ -78,7 +82,7 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         CreateBlankProfileCommand = ReactiveCommand.Create(CreateBlankProfile);
         CopyBundledProfileCommand = ReactiveCommand.Create(CopyBundledProfile, selectedIsBundled);
         ValidateProfileCommand = ReactiveCommand.Create(() => Editor.ValidateProfile(), hasSelection);
-        SaveProfileCommand = ReactiveCommand.CreateFromTask(SaveSelectedProfileAsync, selectedIsCustom);
+        SaveProfileCommand = ReactiveCommand.CreateFromTask(SaveSelectedProfileAsync, canSaveActiveEditor);
         ExportProfileCommand = ReactiveCommand.CreateFromTask(ExportSelectedProfileAsync, selectedCanExport);
         DeleteCustomProfileCommand = ReactiveCommand.CreateFromTask(DeleteSelectedCustomProfileAsync, selectedIsCustom);
 
@@ -333,7 +337,10 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
     private async Task SaveSelectedProfileAsync(CancellationToken cancellationToken)
     {
-        var profile = Editor.BuildProfile(ProfileSourceKind.LocalCustom, SelectedProfile?.FilePath);
+        var filePath = SelectedProfile?.SourceKind == ProfileSourceKind.LocalCustom
+            ? SelectedProfile.FilePath
+            : null;
+        var profile = Editor.BuildProfile(ProfileSourceKind.LocalCustom, filePath);
         if (!Editor.IsValid || profile is null) return;
 
         var result = store.SaveProfile(profile);
@@ -347,6 +354,21 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         }
 
         await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Returns whether the active editor can be saved as a local custom profile without relying on the transient selected source row.
+    /// New and copied candidates intentionally have no selected row until the first successful save.
+    /// </summary>
+    private bool CanSaveActiveEditor(bool editorIsValid, ProfileManagerEntryViewModel? selectedProfile)
+    {
+        if (!editorIsValid) return false;
+        if (selectedProfile is not null && selectedProfile.SourceKind != ProfileSourceKind.LocalCustom) return false;
+
+        var filePath = selectedProfile?.SourceKind == ProfileSourceKind.LocalCustom
+            ? selectedProfile.FilePath
+            : null;
+        return Editor.BuildProfile(ProfileSourceKind.LocalCustom, filePath) is not null;
     }
 
     /// <summary>
