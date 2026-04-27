@@ -488,7 +488,7 @@ public sealed class TemplatesViewModelTests
             picker ?? new BlockingFilePicker(Array.Empty<string>()),
             clipboard ?? new CapturingClipboardService(),
             undoRedo,
-            preferences);
+            preferences ?? new CapturingUserPreferencesService(new UserPreferences()));
     }
 
     private static TemplateProfileCatalog CreateCatalog()
