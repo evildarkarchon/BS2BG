@@ -175,7 +175,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             profileCatalogService,
             new EmptyUserProfileStore(),
             new ProfileDefinitionService(),
-            new NullProfileManagementDialogService());
+            new NullProfileManagementDialogService(),
+            Templates);
         currentPreferences = this.preferencesService.Load();
         _selectedThemePreference = currentPreferences.Theme;
         ThemePreferenceApplier.Apply(_selectedThemePreference);
@@ -1249,6 +1250,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             Task.FromResult<IReadOnlyList<string>>([]);
 
         public Task<string?> PickProfileExportPathAsync(string suggestedFileName, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
+
+        public Task<string?> PickInstalledProfileForRemapAsync(
+            string missingProfileName,
+            IReadOnlyList<string> installedProfileNames,
+            CancellationToken cancellationToken) =>
             Task.FromResult<string?>(null);
 
         public Task<bool> ConfirmDeleteProfileAsync(string profileName, CancellationToken cancellationToken) =>

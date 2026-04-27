@@ -71,7 +71,7 @@ public sealed class ProfileEditorViewModelTests
         vm.ValidateProfileCommand.Execute().Subscribe();
 
         vm.IsValid.Should().BeFalse();
-        vm.ValidationRows.Should().Contain(row => row.Text.Contains("Defaults contains duplicate slider", StringComparison.Ordinal));
+        vm.ValidationRows.Should().Contain(row => row.Text.Contains("Defaults contains a blank slider name", StringComparison.Ordinal));
     }
 
     /// <summary>

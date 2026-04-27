@@ -206,7 +206,7 @@ public class ProjectFileService
         };
     }
 
-    private static List<JsonElement>? ToEmbeddedProfileDtos(ProjectModel project, ProjectSaveContext? saveContext)
+    private static JsonElement? ToEmbeddedProfileDtos(ProjectModel project, ProjectSaveContext? saveContext)
     {
         var referencedNames = project.SliderPresets
             .Select(preset => preset.ProfileName)
@@ -236,10 +236,11 @@ public class ProjectFileService
 
         if (resolved.Count == 0) return null;
 
-        return resolved
+        var profiles = resolved
             .OrderBy(profile => profile.Name, StringComparer.OrdinalIgnoreCase)
             .Select(ToEmbeddedProfileElement)
             .ToList();
+        return JsonSerializer.SerializeToElement(profiles, JsonOptions);
     }
 
     private static JsonElement ToEmbeddedProfileElement(CustomProfileDefinition profile) =>
@@ -328,12 +329,23 @@ public class ProjectFileService
         values ?? Enumerable.Empty<KeyValuePair<string, TValue>>();
 
     private static List<CustomProfileDefinition> LoadEmbeddedProfiles(
-        IEnumerable<JsonElement>? profileDtos,
+        JsonElement? profileDtos,
         List<ProjectLoadDiagnostic> diagnostics)
     {
         var profiles = new List<CustomProfileDefinition>();
+        if (profileDtos is null) return profiles;
+
+        if (profileDtos.Value.ValueKind != JsonValueKind.Array)
+        {
+            diagnostics.Add(new ProjectLoadDiagnostic(
+                "EmbeddedProfileSectionInvalid",
+                "CustomProfiles must be an array; embedded profiles were ignored.",
+                null));
+            return profiles;
+        }
+
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var profileDto in profileDtos ?? Enumerable.Empty<JsonElement>())
+        foreach (var profileDto in profileDtos.Value.EnumerateArray())
         {
             var result = ProfileDefinitionService.ValidateProfileJson(
                 profileDto.GetRawText(),
@@ -414,7 +426,7 @@ public class ProjectFileService
         [JsonPropertyOrder(3)]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         // CustomProfiles is appended after legacy root fields so older readers can ignore it without field-order churn.
-        public List<JsonElement>? CustomProfiles { get; set; }
+        public JsonElement? CustomProfiles { get; set; }
     }
 
     private sealed class EmbeddedProfileDto

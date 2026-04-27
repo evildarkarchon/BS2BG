@@ -23,6 +23,7 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
     private readonly IProfileManagementDialogService dialogService;
     private readonly CompositeDisposable disposables = new();
     private readonly ProfileDefinitionService profileDefinitionService;
+    private readonly IProfileReferenceRemapper? profileReferenceRemapper;
     private readonly ProjectModel project;
     private readonly IUserProfileStore store;
     private ProfileManagerEntryViewModel? committedSelectedProfile;
@@ -55,13 +56,15 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
         ITemplateProfileCatalogService catalogService,
         IUserProfileStore store,
         ProfileDefinitionService profileDefinitionService,
-        IProfileManagementDialogService dialogService)
+        IProfileManagementDialogService dialogService,
+        IProfileReferenceRemapper? profileReferenceRemapper = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.catalogService = catalogService ?? throw new ArgumentNullException(nameof(catalogService));
         this.store = store ?? throw new ArgumentNullException(nameof(store));
         this.profileDefinitionService = profileDefinitionService ?? throw new ArgumentNullException(nameof(profileDefinitionService));
         this.dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
+        this.profileReferenceRemapper = profileReferenceRemapper;
         _editor = ProfileEditorViewModel.Empty(profileDefinitionService, catalogService.Current.ProfileNames);
 
         var hasSelection = this.WhenAnyValue(x => x.SelectedProfile).Select(entry => entry is not null);
@@ -278,10 +281,36 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
                 ImportMatchingProfileForMissingReferenceAsync(missingProfileName, cancellationToken),
             ProfileRecoveryActionKind.UseProjectEmbeddedCopy =>
                 Task.FromResult(UseProjectCopyForMissingReference(missingProfileName)),
+            ProfileRecoveryActionKind.RemapToInstalledProfile =>
+                RemapMissingProfileToInstalledProfileAsync(missingProfileName, cancellationToken),
             ProfileRecoveryActionKind.KeepUnresolvedForNow =>
                 Task.FromResult(KeepMissingReferenceUnresolvedAndReturnHandled(missingProfileName)),
             _ => Task.FromResult(false)
         };
+
+    /// <summary>
+    /// Prompts for an installed catalog profile and delegates preset mutation to the templates workspace so recovery remains undoable.
+    /// </summary>
+    /// <param name="missingProfileName">Saved profile name currently absent from the runtime catalog.</param>
+    /// <param name="cancellationToken">Cancels the selection prompt.</param>
+    /// <returns><see langword="true" /> when at least one project preset was remapped.</returns>
+    private async Task<bool> RemapMissingProfileToInstalledProfileAsync(
+        string missingProfileName,
+        CancellationToken cancellationToken)
+    {
+        var installedProfileName = await dialogService.PickInstalledProfileForRemapAsync(
+            missingProfileName,
+            catalogService.Current.ProfileNames,
+            cancellationToken);
+        if (string.IsNullOrWhiteSpace(installedProfileName) || profileReferenceRemapper is null) return false;
+
+        var remapped = profileReferenceRemapper.RemapProfileReferences(missingProfileName, installedProfileName);
+        if (!remapped) return false;
+
+        RefreshProfileEntries();
+        StatusMessage = "Remapped presets from '" + missingProfileName + "' to '" + installedProfileName + "'.";
+        return true;
+    }
 
     private bool KeepMissingReferenceUnresolvedAndReturnHandled(string missingProfileName)
     {
@@ -293,6 +322,7 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
     {
         var files = await dialogService.PickProfileImportFilesAsync(cancellationToken);
         var importedAny = false;
+        var acceptedNames = catalogService.Current.ProfileNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
             string json;
@@ -313,7 +343,7 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
             var validation = ProfileDefinitionService.ValidateProfileJson(
                 json,
-                ProfileValidationContext.ForImport(catalogService.Current.ProfileNames, ProfileSourceKind.LocalCustom, file));
+                ProfileValidationContext.ForImport(acceptedNames, ProfileSourceKind.LocalCustom, file));
             if (!validation.IsValid || validation.Profile is null)
             {
                 StatusMessage = validation.Diagnostics.Count > 0
@@ -324,7 +354,11 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
 
             var saved = store.SaveProfile(validation.Profile);
             StatusMessage = saved.Succeeded ? "Profile imported." : FormatDiagnostics(saved.Diagnostics);
-            importedAny |= saved.Succeeded;
+            if (saved.Succeeded)
+            {
+                acceptedNames.Add(validation.Profile.Name);
+                importedAny = true;
+            }
         }
 
         if (importedAny) catalogService.Refresh();
@@ -557,10 +591,25 @@ public sealed partial class ProfileManagerViewModel : ReactiveObject, IDisposabl
     {
         public Task<IReadOnlyList<string>> PickProfileImportFilesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>([]);
         public Task<string?> PickProfileExportPathAsync(string suggestedFileName, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+        public Task<string?> PickInstalledProfileForRemapAsync(string missingProfileName, IReadOnlyList<string> installedProfileNames, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
         public Task<bool> ConfirmDeleteProfileAsync(string profileName, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> ConfirmDeleteReferencedProfileAsync(string profileName, int affectedPresetCount, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> ConfirmDiscardUnsavedEditsAsync(CancellationToken cancellationToken) => Task.FromResult(true);
     }
+}
+
+/// <summary>
+/// App-layer boundary for undoable preset profile-reference remaps owned by the templates workspace.
+/// </summary>
+public interface IProfileReferenceRemapper
+{
+    /// <summary>
+    /// Remaps every preset that references a missing profile to an installed catalog profile.
+    /// </summary>
+    /// <param name="missingProfileName">Saved unresolved profile name to replace.</param>
+    /// <param name="installedProfileName">Installed profile name that should receive the presets.</param>
+    /// <returns><see langword="true" /> when one or more presets were remapped.</returns>
+    bool RemapProfileReferences(string missingProfileName, string installedProfileName);
 }
 
 /// <summary>

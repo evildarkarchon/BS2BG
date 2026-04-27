@@ -1,5 +1,6 @@
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
+using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
@@ -209,6 +210,33 @@ public sealed class ProfileManagerViewModelTests
         catalogService.Current.ContainsProfile("Embedded Body").Should().BeTrue();
         store.SavedProfiles.Should().BeEmpty();
         vm.StatusMessage.Should().Be("Project copy is active for 'Embedded Body'.");
+    }
+
+    /// <summary>
+    /// Verifies the advertised remap recovery action delegates to the undoable templates remapper after choosing an installed profile.
+    /// </summary>
+    [Fact]
+    public async Task RecoveryRemapActionPromptsForInstalledProfileAndDelegatesReferenceRemap()
+    {
+        var dialog = new StubProfileManagementDialogService { RemapProfileName = "Bundled Body" };
+        var remapper = new StubProfileReferenceRemapper { RemapResult = true };
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Preset") { ProfileName = "Missing Body" });
+        var vm = CreateManager(new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile("Bundled Body", CreateSliderProfile())
+        }), project, dialog: dialog, remapper: remapper);
+
+        var handled = await vm.ExecuteRecoveryActionAsync(
+            ProfileRecoveryActionKind.RemapToInstalledProfile,
+            "Missing Body",
+            TestContext.Current.CancellationToken);
+
+        handled.Should().BeTrue();
+        dialog.LastRemapMissingProfileName.Should().Be("Missing Body");
+        dialog.LastRemapInstalledProfileNames.Should().Equal("Bundled Body");
+        remapper.Requests.Should().ContainSingle().Which.Should().Be(("Missing Body", "Bundled Body"));
+        vm.StatusMessage.Should().Be("Remapped presets from 'Missing Body' to 'Bundled Body'.");
     }
 
     /// <summary>
@@ -469,6 +497,30 @@ public sealed class ProfileManagerViewModelTests
     }
 
     /// <summary>
+    /// Verifies one import batch rejects duplicate internal names before a later file can overwrite an earlier saved profile.
+    /// </summary>
+    [Fact]
+    public async Task ImportProfileBatchRejectsDuplicateNamesAfterEarlierBatchSave()
+    {
+        using var directory = new TemporaryDirectory();
+        var first = directory.WriteJson("first.json", CreateProfileJson("Imported Body"));
+        var second = directory.WriteJson("second.json", CreateProfileJson("Imported Body"));
+        var dialog = new StubProfileManagementDialogService { ImportFiles = [first, second] };
+        var store = new StubUserProfileStore();
+        var catalogService = new StubTemplateProfileCatalogService(new TemplateProfileCatalog(new[]
+        {
+            new TemplateProfile("Bundled Body", CreateSliderProfile())
+        }));
+        var vm = CreateManager(catalogService.Current, store: store, dialog: dialog, catalogService: catalogService);
+
+        await vm.ImportProfileCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        store.SavedProfiles.Should().ContainSingle(profile => profile.Name == "Imported Body");
+        vm.StatusMessage.Should().Be("Profile name 'Imported Body' conflicts with an existing profile.");
+        catalogService.RefreshCalls.Should().Be(1);
+    }
+
+    /// <summary>
     /// Verifies missing-reference recovery import read failures preserve the missing row for a later retry.
     /// </summary>
     [Fact]
@@ -524,13 +576,15 @@ public sealed class ProfileManagerViewModelTests
         ProjectModel? project = null,
         IUserProfileStore? store = null,
         IProfileManagementDialogService? dialog = null,
-        ITemplateProfileCatalogService? catalogService = null) =>
+        ITemplateProfileCatalogService? catalogService = null,
+        IProfileReferenceRemapper? remapper = null) =>
         new(
             project ?? new ProjectModel(),
             catalogService ?? new StubTemplateProfileCatalogService(catalog),
             store ?? new StubUserProfileStore(),
             new ProfileDefinitionService(),
-            dialog ?? new StubProfileManagementDialogService());
+            dialog ?? new StubProfileManagementDialogService(),
+            remapper);
 
     private static SliderProfile CreateSliderProfile() => new(
         [new SliderDefault("Slider", 0f, 1f)],
@@ -549,17 +603,33 @@ public sealed class ProfileManagerViewModelTests
 
         public string? ExportPath { get; init; }
 
+        public string? RemapProfileName { get; init; }
+
         public int ConfirmDeleteReferencedProfileCalls { get; private set; }
 
         public int ConfirmDiscardUnsavedEditsCalls { get; private set; }
 
         public int LastAffectedPresetCount { get; private set; }
 
+        public string? LastRemapMissingProfileName { get; private set; }
+
+        public IReadOnlyList<string> LastRemapInstalledProfileNames { get; private set; } = [];
+
         public Task<IReadOnlyList<string>> PickProfileImportFilesAsync(CancellationToken cancellationToken) =>
             Task.FromResult(ImportFiles);
 
         public Task<string?> PickProfileExportPathAsync(string suggestedFileName, CancellationToken cancellationToken) =>
             Task.FromResult(ExportPath);
+
+        public Task<string?> PickInstalledProfileForRemapAsync(
+            string missingProfileName,
+            IReadOnlyList<string> installedProfileNames,
+            CancellationToken cancellationToken)
+        {
+            LastRemapMissingProfileName = missingProfileName;
+            LastRemapInstalledProfileNames = installedProfileNames;
+            return Task.FromResult(RemapProfileName);
+        }
 
         public Task<bool> ConfirmDeleteProfileAsync(string profileName, CancellationToken cancellationToken) =>
             Task.FromResult(ConfirmDeleteProfileResult);
@@ -575,6 +645,19 @@ public sealed class ProfileManagerViewModelTests
         {
             ConfirmDiscardUnsavedEditsCalls++;
             return Task.FromResult(ConfirmDiscardUnsavedEditsResult);
+        }
+    }
+
+    private sealed class StubProfileReferenceRemapper : IProfileReferenceRemapper
+    {
+        public bool RemapResult { get; init; }
+
+        public List<(string MissingProfileName, string InstalledProfileName)> Requests { get; } = [];
+
+        public bool RemapProfileReferences(string missingProfileName, string installedProfileName)
+        {
+            Requests.Add((missingProfileName, installedProfileName));
+            return RemapResult;
         }
     }
 

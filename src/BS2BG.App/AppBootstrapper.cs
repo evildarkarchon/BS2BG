@@ -80,6 +80,8 @@ public static class AppBootstrapper
         services.AddSingleton<INavigationService>(provider =>
             provider.GetRequiredService<NavigationService>());
         services.AddSingleton<TemplatesViewModel>();
+        services.AddSingleton<IProfileReferenceRemapper>(provider =>
+            provider.GetRequiredService<TemplatesViewModel>());
         services.AddSingleton<MorphsViewModel>();
         services.AddSingleton<DiagnosticsViewModel>();
         services.AddSingleton<ProfileManagerViewModel>();

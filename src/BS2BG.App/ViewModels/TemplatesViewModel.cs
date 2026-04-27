@@ -19,7 +19,7 @@ using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.App.ViewModels;
 
-public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable
+public sealed partial class TemplatesViewModel : ReactiveObject, IDisposable, IProfileReferenceRemapper
 {
     private readonly IClipboardService clipboardService;
     private readonly CompositeDisposable disposables = new();

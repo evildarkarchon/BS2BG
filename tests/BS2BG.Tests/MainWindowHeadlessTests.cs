@@ -31,6 +31,11 @@ public sealed class MainWindowHeadlessTests
             .Should().Be("Import Profile");
         window.FindControl<Button>("ManageProfilesButton")?.Command.Should()
             .BeSameAs(window.ViewModel?.Templates.ManageProfilesCommand);
+
+        window.GetLogicalDescendants()
+            .OfType<Button>()
+            .Select(AutomationProperties.GetName)
+            .Should().Contain("Delete Custom Profile");
     }
 
     [AvaloniaFact]

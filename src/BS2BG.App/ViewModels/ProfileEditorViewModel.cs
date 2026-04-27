@@ -438,7 +438,7 @@ public sealed partial class ProfileEditorViewModel : ReactiveObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(slider))
         {
-            diagnostics.Add(Blocker("BlankSliderName", $"{table} contains duplicate slider {slider}. Each slider name can appear once per table.", table, slider));
+            diagnostics.Add(Blocker("BlankSliderName", $"{table} contains a blank slider name. Each slider name can appear once per table.", table, slider));
             return false;
         }
 

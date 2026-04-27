@@ -1554,7 +1554,7 @@
                   BorderThickness="1">
             <Grid RowDefinitions="Auto,Auto,*">
               <Grid Grid.Row="0"
-                    ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+                    ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
                 <StackPanel Grid.Column="0"
                             Spacing="4">
                   <TextBlock Text="Profile Manager"
@@ -1575,10 +1575,15 @@
                         Command="{Binding ExportProfileCommand}" />
                 <Button Grid.Column="3"
                         Margin="8,0,0,0"
+                        Content="Delete Custom Profile"
+                        automation:AutomationProperties.Name="Delete Custom Profile"
+                        Command="{Binding DeleteCustomProfileCommand}" />
+                <Button Grid.Column="4"
+                        Margin="8,0,0,0"
                         Content="Validate Profile"
                         automation:AutomationProperties.Name="Validate Profile"
                         Command="{Binding ValidateProfileCommand}" />
-                <Button Grid.Column="4"
+                <Button Grid.Column="5"
                         Margin="8,0,0,0"
                         Content="Save Profile"
                         automation:AutomationProperties.Name="Save Profile"

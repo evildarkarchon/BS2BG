@@ -181,6 +181,35 @@ public sealed class ProjectFileServiceCustomProfileTests
         result.Project.SliderPresets.Should().ContainSingle().Which.ProfileName.Should().Be("Broken Body");
     }
 
+    /// <summary>
+    /// Verifies a malformed optional CustomProfiles section produces diagnostics without blocking legacy project fields.
+    /// </summary>
+    [Fact]
+    public void LoadWithDiagnosticsReportsMalformedCustomProfilesSectionAndKeepsLegacyProjectData()
+    {
+        var service = new ProjectFileService();
+
+        var result = service.LoadWithDiagnosticsFromString(
+            """
+            {
+              "SliderPresets": {
+                "Alpha": {
+                  "isUUNP": true,
+                  "Profile": "Broken Body",
+                  "SetSliders": []
+                }
+              },
+              "CustomMorphTargets": {},
+              "MorphedNPCs": {},
+              "CustomProfiles": { "Name": "Not An Array" }
+            }
+            """);
+
+        result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Code == "EmbeddedProfileSectionInvalid");
+        result.Project.CustomProfiles.Should().BeEmpty();
+        result.Project.SliderPresets.Should().ContainSingle().Which.ProfileName.Should().Be("Broken Body");
+    }
+
     [Fact]
     public void LoadWithDiagnosticsReportsBundledNameCollisionAndDuplicateEmbeddedName()
     {

@@ -14,6 +14,18 @@ public interface IProfileManagementDialogService
 
     Task<string?> PickProfileExportPathAsync(string suggestedFileName, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Prompts for an installed profile to receive presets that currently reference an unresolved profile name.
+    /// </summary>
+    /// <param name="missingProfileName">Profile name saved in the project but absent from the active catalog.</param>
+    /// <param name="installedProfileNames">Installed catalog profile names available as remap targets.</param>
+    /// <param name="cancellationToken">Cancels the dialog and returns <see langword="null" />.</param>
+    /// <returns>The chosen installed profile name, or <see langword="null" /> when no remap should occur.</returns>
+    Task<string?> PickInstalledProfileForRemapAsync(
+        string missingProfileName,
+        IReadOnlyList<string> installedProfileNames,
+        CancellationToken cancellationToken);
+
     Task<bool> ConfirmDeleteProfileAsync(string profileName, CancellationToken cancellationToken);
 
     Task<bool> ConfirmDeleteReferencedProfileAsync(string profileName, int affectedPresetCount, CancellationToken cancellationToken);
@@ -69,6 +81,60 @@ public sealed class ProfileManagementDialogService : IProfileManagementDialogSer
         cancellationToken.ThrowIfCancellationRequested();
 
         return file?.Path.IsFile == true ? file.Path.LocalPath : null;
+    }
+
+    public async Task<string?> PickInstalledProfileForRemapAsync(
+        string missingProfileName,
+        IReadOnlyList<string> installedProfileNames,
+        CancellationToken cancellationToken)
+    {
+        if (owner is null || installedProfileNames.Count == 0) return null;
+
+        var list = new ListBox
+        {
+            ItemsSource = installedProfileNames,
+            SelectedIndex = 0,
+            MinHeight = 160
+        };
+        var remapButton = new Button { Content = "Remap Profile", Width = 140, HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center };
+        var cancelButton = new Button { Content = "Cancel", Width = 140, HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center };
+        var window = new Window
+        {
+            Title = "Remap Missing Profile",
+            Width = 460,
+            Height = 360,
+            MinWidth = 460,
+            MinHeight = 360,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new StackPanel
+            {
+                Margin = new Avalonia.Thickness(16),
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock { Text = "Remap Missing Profile", FontSize = 16, FontWeight = Avalonia.Media.FontWeight.SemiBold },
+                    new TextBlock { Text = $"Choose an installed profile for presets that reference '{missingProfileName}'.", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                    list,
+                    new StackPanel
+                    {
+                        Orientation = Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { remapButton, cancelButton }
+                    }
+                }
+            }
+        };
+
+        remapButton.Click += (_, _) => window.Close(list.SelectedItem as string);
+        cancelButton.Click += (_, _) => window.Close(null);
+        using var registration = cancellationToken.Register(() => Dispatcher.UIThread.Post(() =>
+        {
+            if (window.IsVisible) window.Close(null);
+        }));
+
+        return await window.ShowDialog<string?>(owner);
     }
 
     public Task<bool> ConfirmDeleteProfileAsync(string profileName, CancellationToken cancellationToken) =>
