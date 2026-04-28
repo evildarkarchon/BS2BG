@@ -294,6 +294,7 @@ Copy-RequiredFile -Source (Join-Path $repoRoot 'docs\release\CREDITS.md') -Desti
 Copy-RequiredFile -Source (Join-Path $repoRoot "docs\release\RELEASE-NOTES-v$Version.md") -Destination (Join-Path $packageDir 'RELEASE-NOTES.md')
 Copy-RequiredFile -Source (Join-Path $repoRoot 'docs\release\UNSIGNED-BUILD.md') -Destination (Join-Path $packageDir 'UNSIGNED-BUILD.md')
 Copy-RequiredFile -Source (Join-Path $repoRoot 'docs\release\QA-CHECKLIST.md') -Destination (Join-Path $packageDir 'QA-CHECKLIST.md')
+Copy-RequiredFile -Source (Join-Path $repoRoot 'docs\release\BODYGEN-BODYSLIDE-BOS-SETUP.md') -Destination (Join-Path $packageDir 'BODYGEN-BODYSLIDE-BOS-SETUP.md')
 
 $signingInfoPath = Join-Path $packageDir 'SIGNING-INFO.txt'
 Invoke-OptionalSigning -ExecutablePaths @(
@@ -310,6 +311,7 @@ foreach ($requiredFile in @(
         'README.md',
         'UNSIGNED-BUILD.md',
         'QA-CHECKLIST.md',
+        'BODYGEN-BODYSLIDE-BOS-SETUP.md',
         'SIGNING-INFO.txt')) {
     Assert-RequiredPackageFile -RelativePath $requiredFile
 }
