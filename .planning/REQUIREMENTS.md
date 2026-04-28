@@ -43,7 +43,7 @@ Accepted Phase 1 override: ROADMAP/requirement wording that previously mentioned
 
 ### Automation and Release Trust
 
-- [ ] **AUTO-01**: User can run a headless CLI generation path that uses the same Core services and output semantics as the GUI.
+- [x] **AUTO-01**: User can run a headless CLI generation path that uses the same Core services and output semantics as the GUI.
 - [ ] **AUTO-02**: User can create a portable project bundle containing the `.jbs2bg` file, generated outputs, profile JSON copies, and a validation report without private local paths.
 - [ ] **AUTO-03**: User can apply deterministic assignment strategy presets through seams that remain testable and do not bypass existing random-provider abstractions.
 - [x] **AUTO-04**: User can verify downloaded release artifacts through checksums, signing information when available, and release-package assertions.
@@ -106,7 +106,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXT-03 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | EXT-04 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | EXT-05 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
-| AUTO-01 | Phase 6: Compose Custom Profiles in Headless Generation | Pending |
+| AUTO-01 | Phase 6: Compose Custom Profiles in Headless Generation | Complete |
 | AUTO-02 | Phase 7: Replay Saved Strategies in Automation Outputs | Pending |
 | AUTO-03 | Phase 7: Replay Saved Strategies in Automation Outputs | Pending |
 | AUTO-04 | Phase 5: Automation, Sharing, and Release Trust | Complete |

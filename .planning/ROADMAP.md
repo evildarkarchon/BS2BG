@@ -166,7 +166,7 @@ Cross-cutting constraints: CLI and bundle automation reuse Core generation/expor
   3. Regression tests prove a project with an embedded custom profile does not silently fall back to bundled profile semantics in CLI generation.
 **Plans**: 1 plan
 Plans:
-- [ ] 06-01-PLAN.md — Compose request-scoped custom profile catalogs for headless generation.
+- [x] 06-01-PLAN.md — Compose request-scoped custom profile catalogs for headless generation.
 **UI hint**: no
 
 ### Phase 7: Replay Saved Strategies in Automation Outputs
