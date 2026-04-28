@@ -519,6 +519,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             Templates.SelectedPreset = project.SliderPresets.FirstOrDefault();
             Morphs.SelectedCustomTarget = project.CustomMorphTargets.FirstOrDefault();
             Morphs.SelectedNpc = project.MorphedNpcs.FirstOrDefault();
+            Morphs.ApplyProjectLoadDiagnostics(loadedResult.Diagnostics);
             undoRedo.Clear();
             project.MarkClean();
             if (conflictResult.MarkDirtyAfterOpen) project.MarkDirty();

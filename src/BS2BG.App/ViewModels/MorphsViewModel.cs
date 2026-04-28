@@ -15,6 +15,7 @@ using BS2BG.Core.Generation;
 using BS2BG.Core.Import;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
+using BS2BG.Core.Serialization;
 using DynamicData;
 using DynamicData.Binding;
 using ReactiveUI;
@@ -32,6 +33,7 @@ public enum PresetCountWarningState
 public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 {
     private readonly MorphAssignmentService assignmentService;
+    private readonly AssignmentStrategyService assignmentStrategyService;
     private readonly IClipboardService clipboardService;
     private readonly CompositeDisposable disposables = new();
     private readonly IAppDialogService dialogService;
@@ -55,6 +57,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly NpcTextParser npcTextParser;
     private readonly ProjectModel project;
     private readonly HashSet<Guid> selectedNpcRowIds = new();
+    private readonly BehaviorSubject<Unit> strategyValidationChanged = new(Unit.Default);
+    private readonly Dictionary<AssignmentStrategyRuleRowViewModel, PropertyChangedEventHandler> strategyRuleSubscriptions = new();
     private readonly ObservableCollectionExtended<Npc> visibleNpcDatabase = new();
     private readonly ObservableCollectionExtended<Npc> visibleNpcs = new();
     private readonly IScheduler filterScheduler;
@@ -62,6 +66,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     private readonly UndoRedoService undoRedo;
 
     [Reactive] private bool _assignRandomOnAdd;
+    [Reactive] private string _invalidLoadedStrategyMessage = string.Empty;
 
     [Reactive(SetModifier = AccessModifier.Private)]
     private string _generatedMorphsText = string.Empty;
@@ -88,6 +93,10 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     [Reactive] private Npc? _selectedImportedNpc;
     [Reactive] private Npc? _selectedNpc;
     [Reactive] private NpcBulkScope _selectedNpcBulkScope = NpcBulkScope.All;
+    [Reactive] private AssignmentStrategyKind _selectedAssignmentStrategyKind = AssignmentStrategyKind.SeededRandom;
+    [Reactive] private string _strategySeedText = string.Empty;
+    [Reactive] private string _strategySummaryText = string.Empty;
+    [Reactive] private string _strategyValidationMessage = string.Empty;
 
     [Reactive(SetModifier = AccessModifier.Private)]
     private string _statusMessage = string.Empty;
@@ -104,16 +113,17 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public MorphsViewModel()
         : this(
-            new ProjectModel(),
-            new NpcTextParser(),
-            new MorphAssignmentService(new RandomAssignmentProvider()),
-            new MorphGenerationService(),
+             new ProjectModel(),
+             new NpcTextParser(),
+             new MorphAssignmentService(new RandomAssignmentProvider()),
+             new MorphGenerationService(),
             new EmptyNpcTextFilePicker(),
             new EmptyClipboardService(),
             new NpcImageLookupService(),
-            new NullImageViewService(),
-            new NullNoPresetNotificationService(),
-            npcImportPreviewService: new NpcImportPreviewService(new NpcTextParser()))
+             new NullImageViewService(),
+             new NullNoPresetNotificationService(),
+             npcImportPreviewService: new NpcImportPreviewService(new NpcTextParser()),
+             assignmentStrategyService: new AssignmentStrategyService(new RandomAssignmentProvider()))
     {
     }
 
@@ -130,11 +140,13 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         UndoRedoService? undoRedo = null,
         IScheduler? filterScheduler = null,
         IAppDialogService? dialogService = null,
-        NpcImportPreviewService? npcImportPreviewService = null)
+        NpcImportPreviewService? npcImportPreviewService = null,
+        AssignmentStrategyService? assignmentStrategyService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.npcTextParser = npcTextParser ?? throw new ArgumentNullException(nameof(npcTextParser));
         this.assignmentService = assignmentService ?? throw new ArgumentNullException(nameof(assignmentService));
+        this.assignmentStrategyService = assignmentStrategyService ?? new AssignmentStrategyService(new RandomAssignmentProvider());
         this.morphGenerationService = morphGenerationService
                                       ?? throw new ArgumentNullException(nameof(morphGenerationService));
         this.npcTextFilePicker = npcTextFilePicker ?? throw new ArgumentNullException(nameof(npcTextFilePicker));
@@ -152,9 +164,12 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         project.SliderPresets.CollectionChanged += OnPresetsChanged;
         NpcDatabase.CollectionChanged += OnNpcDatabaseChanged;
         SelectedNpcs.CollectionChanged += OnSelectedNpcsChanged;
+        StrategyRules.CollectionChanged += OnStrategyRulesChanged;
         disposables.Add(Disposable.Create(() => SelectedNpcs.CollectionChanged -= OnSelectedNpcsChanged));
+        disposables.Add(Disposable.Create(() => StrategyRules.CollectionChanged -= OnStrategyRulesChanged));
         disposables.Add(npcFilterPredicate);
         disposables.Add(npcDatabaseFilterPredicate);
+        disposables.Add(strategyValidationChanged);
         disposables.Add(npcRowSource);
         disposables.Add(npcDatabaseRowSource);
         disposables.Add(ConnectFilteredCollection(npcRowSource, npcFilterPredicate, visibleNpcs));
@@ -240,6 +255,19 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
                 (npc, imported) => (npc ?? imported) is not null);
         var canImportPreviewedNpcs = Gate(this.WhenAnyValue(x => x.HasNpcImportPreview)
             .Select(_ => NpcImportPreviewRows.Any(row => row.CanImport)));
+        var strategyValidationObservable = Observable.Merge(
+                this.WhenAnyValue(x => x.SelectedAssignmentStrategyKind).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.StrategySeedText).Select(_ => Unit.Default),
+                strategyValidationChanged,
+                npcsChanged.Select(_ => Unit.Default),
+                presetsChanged.Select(_ => Unit.Default))
+            .Do(_ => UpdateStrategyPresentation());
+        var canSaveStrategyConfiguration = Gate(strategyValidationObservable
+            .Select(_ => CanSaveStrategyConfiguration())
+            .StartWith(CanSaveStrategyConfiguration()));
+        var canApplyStrategy = Gate(strategyValidationObservable
+            .Select(_ => CanApplyStrategy())
+            .StartWith(CanApplyStrategy()));
 
         ImportNpcsCommand = ReactiveCommand.CreateFromTask(
             ImportNpcsAsync,
@@ -317,6 +345,15 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         ViewSelectedNpcImageCommand = ReactiveCommand.Create(
             ViewSelectedNpcImage,
             canViewSelectedNpcImage);
+        SaveStrategyConfigurationCommand = ReactiveCommand.Create(
+            SaveStrategyConfiguration,
+            canSaveStrategyConfiguration);
+        ApplyStrategyCommand = ReactiveCommand.Create(
+            ApplyStrategy,
+            canApplyStrategy);
+        AddStrategyRuleCommand = ReactiveCommand.Create(
+            AddStrategyRule,
+            Gate(Observable.Return(true)));
 
         disposables.Add(ImportNpcsCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Import NPCs", ex)));
@@ -326,6 +363,10 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             .Subscribe(ex => ReportCommandFailure("Import previewed NPCs", ex)));
         disposables.Add(CopyGeneratedMorphsCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Copy generated morphs", ex)));
+        disposables.Add(SaveStrategyConfigurationCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Save Strategy", ex)));
+        disposables.Add(ApplyStrategyCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Apply Strategy", ex)));
 
         _isBusyHelper = ImportNpcsCommand.IsExecuting.CombineLatest(
                 PreviewNpcImportCommand.IsExecuting,
@@ -365,6 +406,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
             .Do(text => npcDatabaseFilterState.PendingGlobalSearchText = text)
             .Throttle(TimeSpan.FromMilliseconds(200), this.filterScheduler)
             .Subscribe(_ => ApplyPendingNpcDatabaseSearchText()));
+
+        HydrateStrategyEditor(project.AssignmentStrategy);
+        UpdateStrategyPresentation();
     }
 
     public ObservableCollection<SliderPreset> Presets => project.SliderPresets;
@@ -385,8 +429,19 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<NpcImportPreviewViewModel> NpcImportPreviewRows { get; } = new();
 
+    public ObservableCollection<AssignmentStrategyRuleRowViewModel> StrategyRules { get; } = new();
+
     public IReadOnlyList<NpcBulkScope> NpcBulkScopes { get; } =
         [NpcBulkScope.All, NpcBulkScope.Visible, NpcBulkScope.Selected, NpcBulkScope.VisibleEmpty];
+
+    public IReadOnlyList<AssignmentStrategyKind> StrategyKinds { get; } =
+    [
+        AssignmentStrategyKind.SeededRandom,
+        AssignmentStrategyKind.RoundRobin,
+        AssignmentStrategyKind.Weighted,
+        AssignmentStrategyKind.RaceFilters,
+        AssignmentStrategyKind.GroupsBuckets
+    ];
 
     public ReactiveCommand<Unit, Unit> ImportNpcsCommand { get; }
 
@@ -447,6 +502,12 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> CopyGeneratedMorphsCommand { get; }
 
     public ReactiveCommand<Unit, Unit> ViewSelectedNpcImageCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> SaveStrategyConfigurationCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> ApplyStrategyCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> AddStrategyRuleCommand { get; }
 
     public MorphTargetBase? SelectedTarget => (MorphTargetBase?)SelectedCustomTarget ?? SelectedNpc;
 
@@ -567,6 +628,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     public void Dispose()
     {
+        foreach (var row in strategyRuleSubscriptions.Keys.ToArray()) UnsubscribeStrategyRule(row);
         disposables.Dispose();
         npcRowSource.Dispose();
         npcDatabaseRowSource.Dispose();
@@ -1236,6 +1298,316 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         return summary + ". Import preview does not assign presets.";
     }
 
+    /// <summary>
+    /// Hydrates recoverable assignment-strategy diagnostics from project load into editable rows.
+    /// Structurally unreadable strategy JSON has no safe row data, so only the panel message is shown.
+    /// </summary>
+    /// <param name="diagnostics">Project load diagnostics from the project-file boundary.</param>
+    public void ApplyProjectLoadDiagnostics(IReadOnlyList<ProjectLoadDiagnostic> diagnostics)
+    {
+        var strategyDiagnostic = diagnostics?.FirstOrDefault(diagnostic =>
+            diagnostic.Code.StartsWith("AssignmentStrategy", StringComparison.OrdinalIgnoreCase));
+        if (strategyDiagnostic is null)
+        {
+            InvalidLoadedStrategyMessage = string.Empty;
+            return;
+        }
+
+        InvalidLoadedStrategyMessage = strategyDiagnostic.Message;
+        if (strategyDiagnostic.SalvageableAssignmentStrategy is not null)
+            HydrateStrategyEditor(strategyDiagnostic.SalvageableAssignmentStrategy);
+
+        RefreshStrategyValidation();
+    }
+
+    /// <summary>
+    /// Refreshes row and panel validation after strategy row edits or project collection changes.
+    /// </summary>
+    public void RefreshStrategyValidation()
+    {
+        _ = TryBuildStrategyFromEditor(out _, out var message, validateRows: true);
+        StrategyValidationMessage = message;
+        strategyValidationChanged.OnNext(Unit.Default);
+    }
+
+    /// <summary>
+    /// Saves only the strategy configuration into the project and records a configuration undo operation.
+    /// </summary>
+    public void SaveStrategyConfiguration()
+    {
+        if (!TryBuildStrategyFromEditor(out var strategy, out var message, validateRows: true) || strategy is null)
+        {
+            StrategyValidationMessage = message;
+            return;
+        }
+
+        var before = CloneStrategy(project.AssignmentStrategy);
+        project.AssignmentStrategy = strategy;
+        InvalidLoadedStrategyMessage = string.Empty;
+        StrategyValidationMessage = string.Empty;
+        StatusMessage = "Saved in project; reproducible in CLI and bundles.";
+        undoRedo.Record(
+            "Save assignment strategy",
+            () => RestoreStrategyConfiguration(before),
+            () => RestoreStrategyConfiguration(strategy));
+        UpdateStrategyPresentation();
+        strategyValidationChanged.OnNext(Unit.Default);
+    }
+
+    /// <summary>
+    /// Applies the edited assignment strategy to every morphed NPC in the project, intentionally ignoring visible filters.
+    /// Phase 2 bulk actions can target visible rows, but strategy replay must use the full project scope for GUI/CLI/bundle reproducibility.
+    /// </summary>
+    public void ApplyStrategy()
+    {
+        if (!TryBuildStrategyFromEditor(out var strategy, out var message, validateRows: true) || strategy is null)
+        {
+            StrategyValidationMessage = message;
+            return;
+        }
+
+        var beforeAssignments = CaptureAssignments(Npcs.Cast<MorphTargetBase>());
+        var beforeStrategy = CloneStrategy(project.AssignmentStrategy);
+        project.AssignmentStrategy = strategy;
+        InvalidLoadedStrategyMessage = string.Empty;
+        var result = assignmentStrategyService.Apply(project, strategy, project.MorphedNpcs);
+        var afterAssignments = CaptureAssignments(Npcs.Cast<MorphTargetBase>());
+        var afterStrategy = CloneStrategy(project.AssignmentStrategy);
+
+        RaiseSelectedTargetChanged();
+        RefreshVisibleNpcs();
+        if (result.BlockedNpcs.Count > 0)
+        {
+            StrategyValidationMessage = "No eligible preset after strategy rules: "
+                                        + string.Join(", ", result.BlockedNpcs.Select(blocked => blocked.Npc.Name));
+            StatusMessage = StrategyValidationMessage;
+        }
+        else
+        {
+            StrategyValidationMessage = string.Empty;
+            StatusMessage = "Applied strategy to " + result.AssignedCount.ToString(CultureInfo.InvariantCulture)
+                                            + " NPC" + (result.AssignedCount == 1 ? "." : "s.")
+                                            + " Saved in project; reproducible in CLI and bundles.";
+        }
+
+        undoRedo.Record(
+            "Apply assignment strategy",
+            () =>
+            {
+                RestoreStrategyConfiguration(beforeStrategy);
+                RestoreAssignments(beforeAssignments);
+            },
+            () =>
+            {
+                RestoreStrategyConfiguration(afterStrategy);
+                RestoreAssignments(afterAssignments);
+            });
+    }
+
+    /// <summary>
+    /// Adds a blank editable strategy rule row so text-first weighted, race-filter, and bucket strategies can be configured without changing the persisted schema.
+    /// </summary>
+    public void AddStrategyRule()
+    {
+        StrategyRules.Add(new AssignmentStrategyRuleRowViewModel());
+        StatusMessage = "Added strategy rule.";
+    }
+
+    private bool CanSaveStrategyConfiguration() =>
+        TryBuildStrategyFromEditor(out _, out _, validateRows: true);
+
+    private bool CanApplyStrategy() =>
+        Npcs.Count > 0
+        && Presets.Count > 0
+        && string.IsNullOrWhiteSpace(InvalidLoadedStrategyMessage)
+        && TryBuildStrategyFromEditor(out _, out _, validateRows: true);
+
+    private void HydrateStrategyEditor(AssignmentStrategyDefinition? strategy)
+    {
+        if (strategy is null)
+        {
+            SelectedAssignmentStrategyKind = AssignmentStrategyKind.SeededRandom;
+            StrategySeedText = string.Empty;
+            StrategyRules.Clear();
+            return;
+        }
+
+        SelectedAssignmentStrategyKind = strategy.Kind;
+        StrategySeedText = strategy.Seed?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        StrategyRules.Clear();
+        foreach (var rule in strategy.Rules) StrategyRules.Add(AssignmentStrategyRuleRowViewModel.FromRule(rule));
+    }
+
+    private void UpdateStrategyPresentation()
+    {
+        _ = TryBuildStrategyFromEditor(out _, out var validation, validateRows: true);
+        StrategyValidationMessage = validation;
+        StrategySummaryText = "Saved in project; reproducible in CLI and bundles. Strategy apply affects all "
+                              + Npcs.Count.ToString(CultureInfo.InvariantCulture)
+                              + " NPC rows in the full project for deterministic replay; visible filters do not limit Apply Strategy.";
+    }
+
+    private bool TryBuildStrategyFromEditor(
+        out AssignmentStrategyDefinition? strategy,
+        out string validationMessage,
+        bool validateRows)
+    {
+        strategy = null;
+        validationMessage = string.Empty;
+        if (!TryParseStrategySeed(out var seed, out validationMessage)) return false;
+
+        var rows = StrategyRules.ToArray();
+        var rowMessages = validateRows ? ValidateStrategyRows(rows).ToArray() : Array.Empty<string>();
+        if (rowMessages.Length > 0)
+        {
+            validationMessage = string.Join(" ", rowMessages.Distinct(StringComparer.Ordinal));
+            return false;
+        }
+
+        var rules = rows.Select(row => row.ToRule()).ToArray();
+        strategy = new AssignmentStrategyDefinition(
+            AssignmentStrategyDefinition.CurrentSchemaVersion,
+            SelectedAssignmentStrategyKind,
+            seed,
+            rules);
+        validationMessage = ValidateStrategyShape(strategy) ?? string.Empty;
+        return string.IsNullOrWhiteSpace(validationMessage);
+    }
+
+    private bool TryParseStrategySeed(out int? seed, out string validationMessage)
+    {
+        seed = null;
+        validationMessage = string.Empty;
+        if (string.IsNullOrWhiteSpace(StrategySeedText)) return true;
+
+        if (int.TryParse(StrategySeedText.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+        {
+            seed = parsed;
+            return true;
+        }
+
+        validationMessage = "Seed must be a whole number.";
+        return false;
+    }
+
+    private IEnumerable<string> ValidateStrategyRows(IReadOnlyList<AssignmentStrategyRuleRowViewModel> rows)
+    {
+        var presetNames = Presets.Select(preset => preset.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ruleNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var bucketNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows) row.ValidationMessage = string.Empty;
+
+        foreach (var row in rows)
+        {
+            var messages = new List<string>();
+            var rowPresetNames = row.ParsePresetNames();
+            foreach (var presetName in rowPresetNames.Where(name => !presetNames.Contains(name)))
+                messages.Add("Unknown preset '" + presetName + "'.");
+
+            if (row.Weight < 0 || row.Weight > 1000 || double.IsNaN(row.Weight) || double.IsInfinity(row.Weight))
+                messages.Add("Weight must be between 0 and 1000.");
+            else if (SelectedAssignmentStrategyKind == AssignmentStrategyKind.Weighted && row.Weight <= 0)
+                messages.Add("Weight must be greater than 0 for weighted strategies.");
+
+            var normalizedName = row.Name.Trim();
+            if (normalizedName.Length > 0 && !ruleNames.Add(normalizedName))
+                messages.Add("Rule name '" + normalizedName + "' is duplicated.");
+
+            if (SelectedAssignmentStrategyKind is AssignmentStrategyKind.Weighted
+                or AssignmentStrategyKind.RaceFilters
+                or AssignmentStrategyKind.GroupsBuckets
+                && rowPresetNames.Count == 0)
+                messages.Add("At least one preset token is required.");
+
+            if (SelectedAssignmentStrategyKind == AssignmentStrategyKind.RaceFilters
+                && row.ParseRaceFilters().Count == 0)
+                messages.Add("At least one imported race token is required.");
+
+            var bucket = row.BucketName.Trim();
+            if (SelectedAssignmentStrategyKind == AssignmentStrategyKind.GroupsBuckets)
+            {
+                if (bucket.Length == 0)
+                    messages.Add("Bucket name is required.");
+                else if (bucketNames.TryGetValue(bucket, out var firstBucketName))
+                    messages.Add("Bucket name '" + firstBucketName + "' is duplicated.");
+                else
+                    bucketNames[bucket] = bucket;
+            }
+
+            row.ValidationMessage = string.Join(" ", messages);
+            foreach (var message in messages) yield return message;
+        }
+    }
+
+    private static string? ValidateStrategyShape(AssignmentStrategyDefinition strategy)
+    {
+        return strategy.Kind switch
+        {
+            AssignmentStrategyKind.Weighted when strategy.Rules.Count == 0 =>
+                "Weighted strategy requires at least one rule.",
+            AssignmentStrategyKind.Weighted when strategy.Rules.All(rule => rule.Weight <= 0) =>
+                "Weighted strategy requires at least one positive weight.",
+            AssignmentStrategyKind.RaceFilters when strategy.Rules.Count == 0 =>
+                "Race filters strategy requires at least one rule.",
+            AssignmentStrategyKind.GroupsBuckets when strategy.Rules.Count == 0 =>
+                "Groups / buckets strategy requires at least one rule.",
+            _ => null
+        };
+    }
+
+    private void RestoreStrategyConfiguration(AssignmentStrategyDefinition? strategy)
+    {
+        project.AssignmentStrategy = CloneStrategy(strategy);
+        HydrateStrategyEditor(project.AssignmentStrategy);
+        InvalidLoadedStrategyMessage = string.Empty;
+        UpdateStrategyPresentation();
+    }
+
+    private static AssignmentStrategyDefinition? CloneStrategy(AssignmentStrategyDefinition? strategy)
+    {
+        if (strategy is null) return null;
+
+        return strategy with
+        {
+            Rules = strategy.Rules.Select(rule => rule with
+            {
+                PresetNames = rule.PresetNames.ToArray(),
+                RaceFilters = rule.RaceFilters.ToArray()
+            }).ToArray()
+        };
+    }
+
+    private void OnStrategyRulesChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        if (args.OldItems is not null)
+            foreach (AssignmentStrategyRuleRowViewModel row in args.OldItems)
+                UnsubscribeStrategyRule(row);
+
+        if (args.NewItems is not null)
+            foreach (AssignmentStrategyRuleRowViewModel row in args.NewItems)
+                SubscribeStrategyRule(row);
+
+        RefreshStrategyValidation();
+    }
+
+    private void SubscribeStrategyRule(AssignmentStrategyRuleRowViewModel row)
+    {
+        PropertyChangedEventHandler handler = (_, args) =>
+        {
+            if (args.PropertyName != nameof(AssignmentStrategyRuleRowViewModel.ValidationMessage))
+                RefreshStrategyValidation();
+        };
+        row.PropertyChanged += handler;
+        strategyRuleSubscriptions[row] = handler;
+    }
+
+    private void UnsubscribeStrategyRule(AssignmentStrategyRuleRowViewModel row)
+    {
+        if (!strategyRuleSubscriptions.Remove(row, out var handler)) return;
+
+        row.PropertyChanged -= handler;
+    }
+
     private int FillEmptyFromSelectedPreset()
     {
         var candidates = SelectedAvailablePreset is null
@@ -1468,6 +1840,7 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
 
     private void OnPresetsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
+        RefreshStrategyValidation();
     }
 
     private void OnNpcDatabaseChanged(object? sender, NotifyCollectionChangedEventArgs args)

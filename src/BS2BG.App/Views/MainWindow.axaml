@@ -9,6 +9,7 @@
         xmlns:workflow="using:BS2BG.App.ViewModels.Workflow"
         xmlns:diag="using:BS2BG.Core.Diagnostics"
         xmlns:models="using:BS2BG.Core.Models"
+        xmlns:morphs="using:BS2BG.Core.Morphs"
         xmlns:sys="using:System"
         x:Class="BS2BG.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -42,6 +43,7 @@
 
   <Window.Resources>
     <services:NpcBulkScopeDisplayConverter x:Key="NpcBulkScopeDisplayConverter" />
+    <services:AssignmentStrategyKindDisplayConverter x:Key="AssignmentStrategyKindDisplayConverter" />
   </Window.Resources>
 
   <Grid Background="{DynamicResource BS2BGWindowBackgroundBrush}"
@@ -214,7 +216,7 @@
               ColumnDefinitions="280,4,*">
           <Border Grid.Column="0"
                   Padding="4,8,12,4">
-            <Grid RowDefinitions="Auto,Auto,*">
+            <Grid RowDefinitions="Auto,Auto,Auto,*">
               <StackPanel Grid.Row="0" Spacing="8">
                 <Button x:Name="ImportPresetsButton"
                         Content="Add BodySlide XML Presets"
@@ -895,7 +897,153 @@
                 </Popup>
               </Grid>
 
-              <Grid Grid.Row="2">
+              <Border Grid.Row="2"
+                      Padding="8"
+                      Margin="0,0,0,8"
+                      Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                      BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                      BorderThickness="1"
+                      automation:AutomationProperties.Name="Assignment strategy editor">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*"
+                      ColumnDefinitions="Auto,180,Auto,120,Auto,Auto,Auto">
+                  <TextBlock Grid.Row="0"
+                             Grid.Column="0"
+                             Grid.ColumnSpan="7"
+                             Text="Strategy"
+                             FontWeight="SemiBold"
+                             Margin="0,0,0,8" />
+                  <ComboBox x:Name="AssignmentStrategyKindComboBox"
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            automation:AutomationProperties.Name="Assignment strategy type"
+                            ItemsSource="{Binding Morphs.StrategyKinds}"
+                            SelectedItem="{Binding Morphs.SelectedAssignmentStrategyKind}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="morphs:AssignmentStrategyKind">
+                        <TextBlock Text="{Binding ., Converter={StaticResource AssignmentStrategyKindDisplayConverter}}" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <TextBlock Grid.Row="1"
+                             Grid.Column="2"
+                             Text="Seed"
+                             VerticalAlignment="Center"
+                             Margin="16,0,8,0" />
+                  <TextBox x:Name="AssignmentStrategySeedTextBox"
+                           Grid.Row="1"
+                           Grid.Column="3"
+                           automation:AutomationProperties.Name="Seed"
+                           Text="{Binding Morphs.StrategySeedText}"
+                           PlaceholderText="Seed" />
+                  <Button x:Name="SaveStrategyButton"
+                          Grid.Row="1"
+                          Grid.Column="4"
+                          Margin="16,0,0,0"
+                          Content="Save Strategy"
+                          automation:AutomationProperties.Name="Save Strategy"
+                          Command="{Binding Morphs.SaveStrategyConfigurationCommand}" />
+                  <Button x:Name="ApplyStrategyButton"
+                          Grid.Row="1"
+                          Grid.Column="5"
+                          Margin="8,0,0,0"
+                          Content="Apply Strategy"
+                          automation:AutomationProperties.Name="Apply Strategy"
+                          Command="{Binding Morphs.ApplyStrategyCommand}" />
+                  <Button x:Name="AddStrategyRuleButton"
+                          Grid.Row="1"
+                          Grid.Column="6"
+                          Margin="8,0,0,0"
+                          Content="Add Rule"
+                          automation:AutomationProperties.Name="Add Strategy Rule"
+                          Command="{Binding Morphs.AddStrategyRuleCommand}" />
+                  <TextBlock Grid.Row="2"
+                             Grid.Column="0"
+                             Grid.ColumnSpan="7"
+                             Text="Available strategies: Seeded random, Round-robin, Weighted, Race filters, Groups / buckets. Same project, strategy, eligible rows, and seed produce the same assignments. Saved in project; reproducible in CLI and bundles. Apply Strategy affects all NPC rows in the project for deterministic replay."
+                             TextWrapping="Wrap"
+                             Margin="0,8,0,0" />
+                  <TextBlock Grid.Row="3"
+                             Grid.Column="0"
+                             Grid.ColumnSpan="7"
+                             Text="Matches imported NPC Race text only; no game-data lookup. Use comma-separated preset/race tokens; PresetNames and RaceFilters trim spaces and remove duplicates. No eligible preset after strategy rules is shown as text."
+                             TextWrapping="Wrap"
+                             Opacity="0.72"
+                             Margin="0,4,0,0" />
+                  <TextBlock Grid.Row="4"
+                             Grid.Column="0"
+                             Grid.ColumnSpan="7"
+                             Text="{Binding Morphs.StrategySummaryText}"
+                             TextWrapping="Wrap"
+                             Margin="0,4,0,0" />
+                  <StackPanel Grid.Row="5"
+                              Grid.Column="0"
+                              Grid.ColumnSpan="7"
+                              Spacing="6"
+                              Margin="0,8,0,0">
+                    <TextBlock Text="{Binding Morphs.InvalidLoadedStrategyMessage}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}" />
+                    <TextBlock Text="{Binding Morphs.StrategyValidationMessage}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}" />
+                    <ItemsControl x:Name="AssignmentStrategyRuleRows"
+                                  ItemsSource="{Binding Morphs.StrategyRules}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AssignmentStrategyRuleRowViewModel">
+                          <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                  BorderThickness="0,1,0,0"
+                                  Padding="0,6,0,0"
+                                  Margin="0,2,0,0">
+                            <Grid RowDefinitions="Auto,Auto"
+                                  ColumnDefinitions="120,*,*,100,140">
+                              <TextBox Grid.Row="0"
+                                       Grid.Column="0"
+                                       Margin="0,0,8,0"
+                                       automation:AutomationProperties.Name="Strategy rule name"
+                                       Text="{Binding Name}"
+                                       PlaceholderText="Rule name" />
+                              <TextBox Grid.Row="0"
+                                       Grid.Column="1"
+                                       Margin="0,0,8,0"
+                                       automation:AutomationProperties.Name="PresetNames comma-separated tokens"
+                                       Text="{Binding PresetNamesText}"
+                                       PlaceholderText="PresetNames" />
+                              <TextBox Grid.Row="0"
+                                       Grid.Column="2"
+                                       Margin="0,0,8,0"
+                                       automation:AutomationProperties.Name="RaceFilters comma-separated tokens"
+                                       Text="{Binding RaceFiltersText}"
+                                       PlaceholderText="RaceFilters" />
+                              <NumericUpDown Grid.Row="0"
+                                             Grid.Column="3"
+                                             Margin="0,0,8,0"
+                                             Minimum="0"
+                                             Maximum="1000"
+                                             automation:AutomationProperties.Name="Weight"
+                                             Value="{Binding Weight}" />
+                              <TextBox Grid.Row="0"
+                                       Grid.Column="4"
+                                       automation:AutomationProperties.Name="BucketName"
+                                       Text="{Binding BucketName}"
+                                       PlaceholderText="BucketName" />
+                              <TextBlock Grid.Row="1"
+                                         Grid.Column="0"
+                                         Grid.ColumnSpan="5"
+                                         Text="{Binding ValidationMessage}"
+                                         TextWrapping="Wrap"
+                                         Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}"
+                                         Margin="0,4,0,0" />
+                            </Grid>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Grid>
+              </Border>
+
+              <Grid Grid.Row="3">
                 <ListBox x:Name="NpcListBox"
                          SelectionMode="Multiple"
                          Focusable="True"

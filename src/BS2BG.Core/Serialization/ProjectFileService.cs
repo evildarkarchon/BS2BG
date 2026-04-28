@@ -23,7 +23,12 @@ public sealed record ProjectLoadResult(ProjectModel Project, IReadOnlyList<Proje
 /// <param name="Code">Machine-readable diagnostic code.</param>
 /// <param name="Message">Human-readable diagnostic message.</param>
 /// <param name="ProfileName">Optional embedded profile name associated with the issue.</param>
-public sealed record ProjectLoadDiagnostic(string Code, string Message, string? ProfileName);
+/// <param name="SalvageableAssignmentStrategy">Optional invalid strategy data that the App can hydrate for user repair.</param>
+public sealed record ProjectLoadDiagnostic(
+    string Code,
+    string Message,
+    string? ProfileName,
+    AssignmentStrategyDefinition? SalvageableAssignmentStrategy = null);
 
 /// <summary>
 /// Save-time profile resolver used to embed referenced local custom profiles that are not already project-owned.
@@ -372,15 +377,6 @@ public class ProjectFileService
 
         var schemaVersion = ReadInt(strategyElement.Value, "schemaVersion", "SchemaVersion")
                             ?? AssignmentStrategyDefinition.CurrentSchemaVersion;
-        if (schemaVersion != AssignmentStrategyDefinition.CurrentSchemaVersion)
-        {
-            diagnostics.Add(new ProjectLoadDiagnostic(
-                "AssignmentStrategyUnsupportedSchemaVersion",
-                $"Assignment strategy schemaVersion {schemaVersion} is not supported and was ignored.",
-                null));
-            return null;
-        }
-
         if (!Enum.TryParse(ReadString(strategyElement.Value, "kind", "Kind"), true, out AssignmentStrategyKind kind))
             kind = AssignmentStrategyKind.SeededRandom;
 
@@ -389,13 +385,24 @@ public class ProjectFileService
             kind,
             ReadInt(strategyElement.Value, "seed", "Seed"),
             ReadAssignmentStrategyRules(strategyElement.Value));
+        if (schemaVersion != AssignmentStrategyDefinition.CurrentSchemaVersion)
+        {
+            diagnostics.Add(new ProjectLoadDiagnostic(
+                "AssignmentStrategyUnsupportedSchemaVersion",
+                $"Assignment strategy schemaVersion {schemaVersion} is not supported and was ignored.",
+                null,
+                strategy));
+            return null;
+        }
+
         var validationMessage = ValidateAssignmentStrategy(strategy);
         if (validationMessage is null) return strategy;
 
         diagnostics.Add(new ProjectLoadDiagnostic(
             "AssignmentStrategyInvalid",
             validationMessage,
-            null));
+            null,
+            strategy));
         return null;
     }
 
