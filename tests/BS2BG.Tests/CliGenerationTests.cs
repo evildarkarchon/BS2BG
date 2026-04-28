@@ -16,15 +16,15 @@ using ModelSetSlider = BS2BG.Core.Models.SetSlider;
 
 namespace BS2BG.Tests;
 
-[CollectionDefinition(ConsoleCaptureCollectionName)]
-public sealed class ConsoleCaptureCollection : ICollectionFixture<ConsoleCaptureFixture>
+[CollectionDefinition(ConsoleCaptureDefinition.ConsoleCaptureCollectionName)]
+public sealed class ConsoleCaptureDefinition : ICollectionFixture<ConsoleCaptureFixture>
 {
     public const string ConsoleCaptureCollectionName = "Console capture";
 }
 
 public sealed class ConsoleCaptureFixture;
 
-[Collection(ConsoleCaptureCollection.ConsoleCaptureCollectionName)]
+[Collection(ConsoleCaptureDefinition.ConsoleCaptureCollectionName)]
 public sealed class CliGenerationTests
 {
     private static readonly string[] ExpectedCliPublishEntryNames = ["BS2BG.Cli", "BS2BG.Cli.exe", "BS2BG.Cli.dll"];

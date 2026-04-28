@@ -1,26 +1,29 @@
 ---
 phase: 02-workflow-persistence-filtering-and-undo-hardening
 verified: 2026-04-27T02:20:09Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 overrides_applied: 0
 human_verification:
   - test: "Exercise the Morphs tab filter popups and scope selector in the real Avalonia UI."
     expected: "All seven NPC filters are discoverable, accessible, dismissible, show active badges, and the filtered-empty state communicates that filters hid rows rather than data being lost."
     why_human: "Visual layout, tab order, popup behavior, and accessibility affordances cannot be fully proven from source and headless tests."
+    status: "waived by maintainer on 2026-04-28"
   - test: "Use a large real-world NPC/preset dataset in the running app and type/search/filter repeatedly."
     expected: "Free-text search is debounced and the UI remains responsive without noticeable freezes or unbounded delays."
     why_human: "Automated tests prove debounce semantics and a smoke path, but perceived UI responsiveness with real data needs manual confirmation."
+    status: "waived by maintainer on 2026-04-28"
   - test: "Perform restart workflows against the packaged app/user profile location."
     expected: "Omit Redundant Sliders and the five remembered folder channels survive process restart and invalid remembered paths remain non-blocking hints."
     why_human: "Source and unit tests verify persistence logic, but end-to-end OS storage location behavior is environment-dependent."
+    status: "waived by maintainer on 2026-04-28"
 ---
 
 # Phase 2: Workflow Persistence, Filtering, and Undo Hardening Verification Report
 
 **Phase Goal:** Users can work safely across restarts and large NPC/preset datasets without hidden-row mutations, lost preferences, or corrupted undo state.
 **Verified:** 2026-04-27T02:20:09Z
-**Status:** human_needed
+**Status:** passed
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
@@ -104,7 +107,7 @@ No orphaned Phase 2 requirement IDs were found: WORK-01 through WORK-05 are all 
 
 No blocker TODO/placeholder/stub implementations were found in Phase 2 source paths.
 
-### Human Verification Required
+### Human Verification Waived
 
 #### 1. Morphs UI filter and scope interaction
 
@@ -112,11 +115,15 @@ No blocker TODO/placeholder/stub implementations were found in Phase 2 source pa
 **Expected:** All seven filters are discoverable and accessible; active badges and filtered-empty text appear; the scope selector labels are `All`, `Visible`, `Selected`, and `Visible Empty`; hidden rows are not implied to be deleted.
 **Why human:** Visual layout, keyboard flow, and popup affordances are not fully proven by source/headless tests.
 
+**Waiver:** Maintainer waived this manual check on 2026-04-28.
+
 #### 2. Large real-world dataset responsiveness
 
 **Test:** Import a large NPC text file and many presets, then rapidly type in global search and apply checklist filters.
 **Expected:** Search waits for debounce, filtering/import does not visibly freeze the app, and undo history pruning status appears if the limit is exceeded.
 **Why human:** Perceived UI responsiveness and real-world dataset size cannot be fully validated by unit tests.
+
+**Waiver:** Maintainer waived this manual check on 2026-04-28.
 
 #### 3. Restart persistence in packaged/runtime environment
 
@@ -124,9 +131,11 @@ No blocker TODO/placeholder/stub implementations were found in Phase 2 source pa
 **Expected:** Valid remembered channels are reused independently; invalid paths are ignored as hints; workflows continue.
 **Why human:** OS storage-provider behavior and actual user-profile persistence are environment-dependent.
 
+**Waiver:** Maintainer waived this manual check on 2026-04-28.
+
 ### Gaps Summary
 
-No automated blocker gaps were found. The phase goal is implemented in source and covered by tests, but the UI/large-dataset/restart experience requires human verification before marking the phase fully passed.
+No automated blocker gaps were found. The phase goal is implemented in source and covered by tests. The remaining UI/large-dataset/restart manual checks were waived by the maintainer, so the phase is fully passed for milestone close.
 
 ---
 

@@ -15,6 +15,8 @@ namespace BS2BG.Tests;
 
 public sealed class MorphsViewModelStrategyTests
 {
+    private static readonly string[] NordRaceFilter = { "NordRace" };
+
     [Fact]
     public async Task SavingStrategyConfigurationUpdatesProjectAndMarksDirty()
     {
@@ -116,7 +118,7 @@ public sealed class MorphsViewModelStrategyTests
     {
         var project = CreateProjectWithPresetsAndNpcs();
         var viewModel = CreateViewModel(project, new SequenceRandomAssignmentProvider());
-        viewModel.SetNpcColumnAllowedValues(BS2BG.App.ViewModels.Workflow.NpcFilterColumn.Race, new[] { "NordRace" });
+        viewModel.SetNpcColumnAllowedValues(BS2BG.App.ViewModels.Workflow.NpcFilterColumn.Race, NordRaceFilter);
         viewModel.VisibleNpcs.Should().ContainSingle();
 
         viewModel.StrategySummaryText.Should().Contain("2 NPC rows in the full project");

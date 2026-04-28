@@ -14,6 +14,10 @@ public sealed class AssignmentStrategyServiceTests
 {
     private static readonly string[] PresetA = { "PresetA" };
     private static readonly string[] PresetAAndPresetB = { "PresetA", "PresetB" };
+    private static readonly string[] PresetB = { "PresetB" };
+    private static readonly string[] PresetBAndPresetC = { "PresetB", "PresetC" };
+    private static readonly string[] PresetAAndUnknownPreset = { "PresetA", "UnknownPreset" };
+    private static readonly string[] MissingPreset = { "MissingPreset" };
     private static readonly string[] NordRaceUpper = { "NordRace" };
     private static readonly string[] NordRaceLower = { "nordrace" };
 
@@ -273,7 +277,7 @@ public sealed class AssignmentStrategyServiceTests
             null,
             new[]
             {
-                new AssignmentStrategyRule("Beta Any", new[] { "PresetB", "PresetC" }, Array.Empty<string>(), 2.0, null),
+                new AssignmentStrategyRule("Beta Any", PresetBAndPresetC, Array.Empty<string>(), 2.0, null),
                 new AssignmentStrategyRule("Alpha Nord", PresetA, NordRaceUpper, 1.0, null)
             });
 
@@ -312,8 +316,8 @@ public sealed class AssignmentStrategyServiceTests
             null,
             new[]
             {
-                new AssignmentStrategyRule("Any Creature", new[] { "PresetB" }, Array.Empty<string>(), 1.0, "Creature"),
-                new AssignmentStrategyRule("Nord Heroes", new[] { "PresetA", "UnknownPreset" }, NordRaceUpper, 1.0, "Heroes")
+                new AssignmentStrategyRule("Any Creature", PresetB, Array.Empty<string>(), 1.0, "Creature"),
+                new AssignmentStrategyRule("Nord Heroes", PresetAAndUnknownPreset, NordRaceUpper, 1.0, "Heroes")
             });
 
         var result = service.Apply(project, strategy);
@@ -330,7 +334,7 @@ public sealed class AssignmentStrategyServiceTests
             1,
             AssignmentStrategyKind.GroupsBuckets,
             null,
-            new[] { new AssignmentStrategyRule("Unknown", new[] { "MissingPreset" }, Array.Empty<string>(), 1.0, "Any") });
+            new[] { new AssignmentStrategyRule("Unknown", MissingPreset, Array.Empty<string>(), 1.0, "Any") });
 
         var result = AssignmentStrategyService.Apply(project, strategy);
 
@@ -387,7 +391,7 @@ public sealed class AssignmentStrategyServiceTests
             1,
             AssignmentStrategyKind.GroupsBuckets,
             null,
-            new[] { new AssignmentStrategyRule("Unknown", new[] { "MissingPreset" }, Array.Empty<string>(), 1.0, "Any") });
+            new[] { new AssignmentStrategyRule("Unknown", MissingPreset, Array.Empty<string>(), 1.0, "Any") });
 
         var finding = ProjectValidationService.Validate(project, CreateCatalog()).Findings
             .First(value => value.Title == "No eligible preset after strategy rules");

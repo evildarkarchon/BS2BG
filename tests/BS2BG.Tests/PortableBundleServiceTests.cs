@@ -21,10 +21,14 @@ using SliderProfile = BS2BG.Core.Formatting.SliderProfile;
 
 namespace BS2BG.Tests;
 
-[Collection(ConsoleCaptureCollection.ConsoleCaptureCollectionName)]
+[Collection(ConsoleCaptureDefinition.ConsoleCaptureCollectionName)]
 public sealed class PortableBundleServiceTests
 {
     private static readonly DateTimeOffset FixedCreatedUtc = new(2026, 4, 28, 3, 0, 0, TimeSpan.Zero);
+    private static readonly string[] ExamplePrivateRoots = { @"C:\Users\Example" };
+    private static readonly string[] NoPrivatePathLeaks = { "No private path leaks detected." };
+    private static readonly string[] ValidationReportEntries = { "reports/validation.txt" };
+    private static readonly string[] BreastsSliderNames = { "Breasts" };
     private static readonly object ConsoleLock = new();
     private static readonly string[] PresetAName = ["PresetA"];
     private static readonly string[] PresetBName = ["PresetB"];
@@ -255,7 +259,7 @@ public sealed class PortableBundleServiceTests
             Overwrite: true,
             FixedCreatedUtc,
             saveContext,
-            new[] { @"C:\Users\Example" });
+            ExamplePrivateRoots);
 
         request.Project.Should().BeSameAs(project);
         request.BundlePath.Should().Be("bundle.zip");
@@ -305,11 +309,11 @@ public sealed class PortableBundleServiceTests
             new[] { new BundleManifestEntry("reports/validation.txt", "report", new string('b', 64)) },
             "{\"schemaVersion\":1}",
             report,
-            new[] { "No private path leaks detected." });
+            NoPrivatePathLeaks);
         var result = new PortableProjectBundleResult(
             PortableProjectBundleOutcome.Success,
             "bundle.zip",
-            new[] { "reports/validation.txt" },
+            ValidationReportEntries,
             preview.ManifestJson,
             report,
             Array.Empty<string>());
@@ -389,7 +393,7 @@ public sealed class PortableBundleServiceTests
         using var directory = new TemporaryDirectory();
         var bundlePath = Path.Combine(directory.Path, "share.zip");
         File.WriteAllText(bundlePath, "original bundle");
-        var service = CreateServiceWithCommitter(new ThrowingBundleCommitter());
+        var service = CreateServiceWithCommitter();
 
         var result = service.Create(CreateRequest(CreateProjectWithAssignedPreset(), bundlePath, OutputIntent.BodyGen, overwrite: true));
 
@@ -761,7 +765,7 @@ public sealed class PortableBundleServiceTests
         CreateBundledOnlyCatalog(),
         new DiagnosticReportTextFormatter());
 
-    private static PortableProjectBundleService CreateServiceWithCommitter(ThrowingBundleCommitter committer) => new(
+    private static PortableProjectBundleService CreateServiceWithCommitter() => new(
         new ProjectFileService(),
         new TemplateGenerationService(),
         new MorphGenerationService(),
@@ -771,7 +775,7 @@ public sealed class PortableBundleServiceTests
         CreateCatalog(),
         new DiagnosticReportTextFormatter(),
         tempRoot: null,
-        bundleCommitter: committer.Commit);
+        bundleCommitter: ThrowingBundleCommitter.Commit);
 
     private static HeadlessGenerationService CreateHeadlessService() => new(
         new ProjectFileService(),
@@ -1042,7 +1046,7 @@ public sealed class PortableBundleServiceTests
     private static SliderProfile CreateCommunitySliderProfile() => new(
         new[] { new SliderDefault("Breasts", 0.8f, 0.1f) },
         new[] { new SliderMultiplier("Breasts", 1.5f) },
-        new[] { "Breasts" });
+        BreastsSliderNames);
 
     private static SliderProfile CreateEmbeddedSliderProfile() => new(
         new[] { new SliderDefault("Breasts", 0.05f, 0.9f) },
@@ -1101,9 +1105,9 @@ public sealed class PortableBundleServiceTests
 
     private sealed record ExpectedOutputPaths(string TemplatesPath, string BosJsonPath);
 
-    private sealed class ThrowingBundleCommitter
+    private static class ThrowingBundleCommitter
     {
-        public void Commit(string tempPath, string finalPath)
+        public static void Commit(string tempPath, string finalPath)
         {
             File.Exists(tempPath).Should().BeTrue();
             finalPath.Should().EndWith("share.zip");

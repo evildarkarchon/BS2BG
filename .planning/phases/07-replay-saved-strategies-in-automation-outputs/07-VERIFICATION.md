@@ -101,8 +101,8 @@ No orphaned Phase 7 requirement IDs were found: `.planning/REQUIREMENTS.md` maps
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| `src/BS2BG.Core/Bundling/PortableProjectBundleService.cs` | 380-383 | BoS-only saved-strategy bundle report says `No saved assignment strategy` because no replay occurred | ⚠️ Warning | Matches advisory `07-REVIEW.md` WR-01. This is misleading for BoS-only bundles with saved strategies, but BoS-only intentionally does not generate morph output or replay; it does not invalidate the Phase 7 morph-generation replay goal. |
-| `src/BS2BG.Core/Automation/HeadlessGenerationService.cs` / `src/BS2BG.Core/Bundling/PortableProjectBundleService.cs` | 66-71 / 209-218 | Replay-blocked outcomes return a validation report produced by normal validation rather than structured replay blocker findings | ⚠️ Warning | Matches advisory `07-REVIEW.md` WR-02. CLI text and bundle `ReplayReportText` do include actionable blocked-NPC details, satisfying D-09; structured validation-report enrichment would improve API consumers but is not required for the phase goal. |
+| `src/BS2BG.Core/Bundling/PortableProjectBundleService.cs` | 385-388 | BoS-only saved-strategy replay report distinguishes saved-strategy skip from no saved strategy | ✓ Closed | `BundleBosJsonIntentReportsSavedStrategySkippedAndNoSavedStrategyDoesNotWriteReplayReport` asserts the saved-strategy skip message and no-strategy message separately. |
+| `src/BS2BG.Core/Automation/AssignmentStrategyReplayContracts.cs` | 31-55 | Replay-blocked outcomes create structured validation findings | ✓ Closed | `BundleBlockedReplayReturnsValidationBlockedReportWithoutZipOrPathLeaks` asserts `ASSIGNMENT_REPLAY_BLOCKED` validation findings with blocked-NPC detail. |
 | `src/BS2BG.Core/Bundling/BundlePathScrubber.cs` | 53 | Word `placeholder` in XML doc text | ℹ️ Info | Documentation describes privacy redaction placeholder text; not a stub. |
 | `src/BS2BG.Core/Morphs/MorphAssignmentService.cs` | 22 | `target = null!` | ℹ️ Info | Nullable out-parameter initialization before validation; not a stub or user-visible output. |
 

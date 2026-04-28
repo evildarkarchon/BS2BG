@@ -11,6 +11,8 @@ namespace BS2BG.Tests;
 
 internal static class TestProfiles
 {
+    private static readonly string[] BreastsSliderNames = { "Breasts" };
+
     internal static ProjectModel CreateProjectUsingProfile(string profileName)
     {
         var project = new ProjectModel();
@@ -53,7 +55,7 @@ internal static class TestProfiles
     internal static SliderProfile CreateCommunitySliderProfile() => new(
         new[] { new SliderDefault("Breasts", 0.8f, 0.1f) },
         new[] { new SliderMultiplier("Breasts", 1.5f) },
-        new[] { "Breasts" });
+        BreastsSliderNames);
 
     internal static SliderProfile CreateEmbeddedSliderProfile() => new(
         new[] { new SliderDefault("Breasts", 0.05f, 0.9f) },

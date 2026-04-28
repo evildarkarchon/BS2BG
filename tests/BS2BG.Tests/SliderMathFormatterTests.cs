@@ -201,6 +201,42 @@ public sealed class SliderMathFormatterTests
         fallout4CbbeJson.Should().Contain("\"lowvalue12\": 1");
     }
 
+    [Fact]
+    public void BosJsonUsesUunpInversionAndDefaultInjectionTables()
+    {
+        var profile = LoadRootProfile("settings_UUNP.json");
+        var preset = new SliderPreset(
+            "StandardUUNP",
+            new[]
+            {
+                new SetSlider("Breasts") { ValueSmall = 40, ValueBig = 80 },
+                new SetSlider("Butt") { ValueSmall = 60, ValueBig = 60 },
+                new SetSlider("ShoulderWidth") { ValueSmall = 50, ValueBig = 50 }
+            });
+
+        var actual = NormalizeNewlines(SliderMathFormatter.FormatBosJson(preset, profile));
+
+        actual.Should().Be("{\n" +
+                           "  \"string\": {\n" +
+                           "    \"bodyname\": \"StandardUUNP\",\n" +
+                           "    \"slidername1\": \"Breasts\",\n" +
+                           "    \"slidername2\": \"Butt\",\n" +
+                           "    \"slidername3\": \"ShoulderWidth\"\n" +
+                           "  },\n" +
+                           "  \"int\": {\n" +
+                           "    \"slidersnumber\": 3\n" +
+                           "  },\n" +
+                           "  \"float\": {\n" +
+                           "    \"highvalue1\": 0.2,\n" +
+                           "    \"highvalue2\": 0.4,\n" +
+                           "    \"highvalue3\": 0.5,\n" +
+                           "    \"lowvalue1\": 0.6,\n" +
+                           "    \"lowvalue2\": 0.4,\n" +
+                           "    \"lowvalue3\": 0.5\n" +
+                           "  }\n" +
+                           "}");
+    }
+
     private static string FormatTemplates(IEnumerable<SliderPreset> presets, SliderProfile profile, bool omitRedundant)
     {
         var lines = presets

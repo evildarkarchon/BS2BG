@@ -1,7 +1,7 @@
 ---
 phase: 01-profile-correctness-and-trust
 verified: 2026-04-26T14:12:00Z
-status: human_needed
+status: passed
 score: 13/13 must-haves verified
 overrides_applied: 0
 re_verification:
@@ -17,13 +17,14 @@ human_verification:
   - test: "Visual fallback panel placement and theme readability"
     expected: "When a selected preset has an unbundled saved profile, the neutral information panel appears directly below the Templates profile toolbar, uses information styling rather than warning styling, and remains readable in light and dark themes."
     why_human: "Headless tests and AXAML checks verify wiring/resources, but final visual appearance/readability requires a running Avalonia UI."
+    status: "waived by maintainer on 2026-04-28"
 ---
 
 # Phase 1: Profile Correctness and Trust Verification Report
 
 **Phase Goal:** Users can generate output with explicit, profile-specific semantics, neutral unresolved-profile fallback information, and release-facing Fallout 4 profile confidence context.  
 **Verified:** 2026-04-26T14:12:00Z  
-**Status:** human_needed  
+**Status:** passed  
 **Re-verification:** Yes — after gap-closure plans 01-05, 01-06, and 01-07
 
 ## Goal Achievement
@@ -112,10 +113,10 @@ No orphaned Phase 1 requirement IDs were found. PROF-01 through PROF-05 are all 
 
 | File | Line | Pattern | Severity | Impact |
 |---|---:|---|---|---|
-| `tests/BS2BG.Tests/SliderMathFormatterTests.cs` | 192-198 | UUNP BoS JSON assertion is weaker than ideal | ⚠️ Warning | Non-blocking advisory from `01-REVIEW.md`: production profile lookup is wired and the suite still covers the phase goal, but UUNP test precision could be improved later. |
-| `tests/BS2BG.Tests/ExportWriterTests.cs` | 46 | CA1861 analyzer warning | ℹ️ Info | Existing warning in test code; does not affect correctness or test pass status. |
+| `tests/BS2BG.Tests/SliderMathFormatterTests.cs` | 204-241 | UUNP BoS JSON direct profile assertion added | ✓ Closed | Follow-up coverage now asserts exact `settings_UUNP.json` inversion/default-injection output without rebasing sacred golden fixtures. |
+| Test project build | — | Analyzer warnings | ✓ Closed | Follow-up `dotnet build BS2BG.sln --nologo --verbosity quiet` completed with 0 warnings and 0 errors. |
 
-### Human Verification Required
+### Human Verification Waived
 
 ### 1. Visual fallback panel placement and theme readability
 
@@ -123,9 +124,11 @@ No orphaned Phase 1 requirement IDs were found. PROF-01 through PROF-05 are all 
 **Expected:** The neutral fallback panel appears directly below the Templates profile toolbar, uses information styling rather than warning styling, and remains readable.  
 **Why human:** Automated checks verify AXAML placement, bindings, and resources, but not final rendered visual quality.
 
+**Waiver:** Maintainer waived this manual check on 2026-04-28 after automated wiring and resource checks were accepted as sufficient for milestone close.
+
 ### Gaps Summary
 
-No blocking gaps remain. Plans 01-05, 01-06, and 01-07 close the three prior verification gaps: explicit fallback-profile adoption now works, profile-specific BoS JSON/export/morph coverage exists, and ROADMAP/REQUIREMENTS now reflect the accepted neutral-fallback scope instead of prohibited warning UX. Automated must-haves are verified; only final visual UI confirmation remains.
+No blocking gaps remain. Plans 01-05, 01-06, and 01-07 close the three prior verification gaps: explicit fallback-profile adoption now works, profile-specific BoS JSON/export/morph coverage exists, and ROADMAP/REQUIREMENTS now reflect the accepted neutral-fallback scope instead of prohibited warning UX. Automated must-haves are verified, and the remaining manual visual confirmation was waived by the maintainer.
 
 ---
 
