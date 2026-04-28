@@ -1,7 +1,7 @@
 ---
 phase: 5
 reviewers: [gemini, claude, codex]
-reviewed_at: 2026-04-27T18:41:49.5762484-07:00
+reviewed_at: 2026-04-27T22:18:00.9291905-07:00
 plans_reviewed:
   - 05-01-PLAN.md
   - 05-02-PLAN.md
@@ -12,148 +12,571 @@ plans_reviewed:
   - 05-07-PLAN.md
   - 05-08-PLAN.md
   - 05-09-PLAN.md
+  - 05-10-PLAN.md
 ---
 
 # Cross-AI Plan Review - Phase 5
 
 ## Gemini Review
 
-### Summary
+# Phase 5 Plan Review: Automation, Sharing, and Release Trust
 
-Gemini assessed Phase 5 as strongly aligned with Java parity, Core portability, and byte-identical output constraints. The review especially approved the dedicated CLI over shared Core services, pinned deterministic assignment replay, privacy-first bundle design, and checksum/signing release posture.
+I have reviewed the 10 implementation plans for Phase 5. The plans are of high quality, strictly adhere to the project's architectural constraints (especially the byte-parity and Core portability requirements), and proactively address the critical trust gaps identified in the advisory review.
 
-### Strengths
+## Summary
+Phase 5 effectively transitions BS2BG from a GUI-only tool to a robust automation platform. The strategy for headless generation and bundling is well-grounded in service reuse, ensuring that CLI output will never drift from GUI behavior. The inclusion of deterministic assignment strategies with a pinned PRNG (Mulberry32) is a standout design choice that ensures "Seed Replay" works across different machines and runtimes—a requirement for modder collaboration. The final gap-closure plan (05-10) is essential, as it solves the data-loss risk during bundle overwrite and the custom-profile drift issue, making the "Portable Bundle" feature truly production-ready.
 
-- Architectural separation is strong: Core owns semantics, while CLI and App compose workflows.
-- Seeded determinism through `DeterministicAssignmentRandomProvider` is a strong fit for repeatable mod-list assignment behavior.
-- Bundle privacy is well represented through `BundlePathScrubber` and a manifest schema that avoids local path disclosure.
-- Release trust tests use `ReleaseSmoke` gating to preserve a fast development loop while still allowing package-level verification.
-- Packaged docs correctly preserve the no-plugin-editing boundary and unsigned-build trust posture.
+## Strengths
+*   **Writer Reuse (D-02):** By orchestrating `BodyGenIniExportWriter` and `BosJsonExportWriter` rather than reimplementing them, the plans guarantee byte-identical parity across GUI, CLI, and Bundles.
+*   **Deterministic PRNG (D-16):** Implementing a pinned Mulberry32 algorithm instead of relying on `System.Random(seed)` (which varies by .NET version) is a sophisticated solution for cross-platform reproducibility.
+*   **Privacy-First Bundling (D-09):** The central `BundlePathScrubber` and the requirement to scan manifest/report strings for drive roots and usernames provide a strong security posture for shareable support artifacts.
+*   **Atomic Zip Replacement (CR-01):** The move to write a temp zip and then use `File.Replace` / `File.Move` ensures that a failed bundle creation never leaves the user with a deleted or corrupt previous archive.
+*   **Request-Scoped Catalog (CR-02):** Correctly identifying that bundles must use a temporary catalog including embedded/local custom profiles solves a subtle but critical correctness bug where generated output could have used incorrect fallback sliders.
+*   **Stable Automation Contract (WR-01):** Defining a fixed exit code map (0-4) and wrapping exceptions ensures the CLI is script-friendly and doesn't leak implementation details (stack traces) to users.
 
-### Concerns
+## Concerns
+*   **Staging Performance (LOW):** Plan 06 stages bundle outputs to a temp directory before zipping. While correct for parity, very large project datasets (thousands of BoS JSON files) might see I/O overhead. Given the typical modder dataset size, this is acceptable for a desktop utility.
+*   **Weighted Rounding Complexity (LOW):** Plan 04 rounds weights to two decimal units. While documented, users might be surprised if a very small weight (e.g., 0.001) quantizes to zero and blocks an NPC. The "No eligible preset" diagnostic mitigates this risk.
+*   **CLI Dependency Management (LOW):** Plan 01 adds `System.CommandLine`. The plan correctly pins the stable version (2.0.7) to avoid the API churn seen in the 3.0.0-previews.
 
-- MEDIUM: `BosJsonExportPlanner` could drift from `BosJsonExportWriter` if filename sanitization or deduplication logic is duplicated instead of writer-owned or writer-consumed.
-- LOW: Moving profile lookup to `AppContext.BaseDirectory` is correct for portable CLI use, but App/local-development asset resolution needs test coverage during any catalog factory migration.
-- LOW: Bundle temp staging cleanup handles managed failures with `try/finally`, but abrupt process termination can still leave temp directories.
+## Suggestions
+*   **CLI Verbose Flag:** Consider adding a `--verbose` flag to the `generate` and `bundle` commands in Plan 01/02. While the current plan prints the outcome ledger on failure, a verbose flag could allow users to see `Info` and `Caution` diagnostics even during successful runs.
+*   **Bundle Metadata:** In Plan 06, consider adding the `BS2BG.App.exe` version to the `manifest.json`. This would help support staff identify if a bundle was generated by an outdated version of the tool when reviewing `reports/validation.txt`.
+*   **Zip Directory Cleanup:** In Plan 10, ensure the `.` prefix for the temp zip file name is handled correctly across different filesystems (UNC paths vs. drive roots). The plan to use `Path.GetFullPath` first is a good safeguard.
 
-### Suggestions
+## Risk Assessment
+**Overall Risk: LOW**
 
-- Refactor `BosJsonExportWriter` to consume `BosJsonExportPlanner`, or otherwise keep the planner mechanically tied to writer behavior.
-- Make overwrite-refusal CLI messages name the exact bypass flag, such as `--overwrite`.
-- Consider a future `Verify Bundle` CLI command that validates `manifest.json` and `SHA256SUMS.txt` after sharing.
+The plans are highly prescriptive and include TDD gates for every critical behavior. The most complex logic (deterministic assignment) is isolated in Core and protected by exact-sequence tests. The UI work follows established ReactiveUI patterns. By placing the gap-closure plan (05-10) at the end of the wave, the project ensures that the most dangerous failure modes (data loss and incorrect output bytes) are verified and fixed before the phase is marked complete.
 
-### Risk Assessment
+**The implementation is ready to proceed.**
 
-Overall risk: LOW. Gemini found the plan set disciplined, grounded in existing codebase patterns, and protected by incremental tests around established .NET APIs and project services.
 
-## Claude Review
+---
 
-### Summary
+## the agent Review
 
-Claude found the nine-plan sequence well structured and noted that earlier review feedback appears incorporated. The main residual risks are contract gaps in bundle serialization, weighted-strategy edge cases, and invalid strategy repair UX.
+# Cross-AI Plan Review: Phase 5 — Automation, Sharing, and Release Trust
 
-### Strengths
+## Overall Assessment
 
-- Wave ordering is sound: foundations precede generation, strategy execution, bundle, release, and UI integration.
-- Single-source semantics are enforced by staging bundle outputs through real `BodyGenIniExportWriter` and `BosJsonExportWriter` bytes.
-- Privacy modeling is concrete: drive roots, UNC paths, backslashes, filenames, and usernames are addressed in path scrubbing.
-- Deterministic replay is specified with a pinned PRNG, stable ordering, reference vectors, and tests that reject `new Random(seed)`.
-- CLI tests avoid shelling out by invoking `Program.Main` in process under serialized console capture.
-- Release trust keeps signing optional and heavyweight release tests gated.
+This is a well-structured 10-plan phase with strong adherence to the locked CONTEXT decisions (D-01 through D-20). Plans 01–09 have been executed and verified, with one critical gap-closure plan (05-10) still pending. The plans show iterative refinement — `<review_hardening>` blocks demonstrate that prior peer reviews were absorbed. The biggest concerns are concentrated in 05-10 itself, which carries the load of closing release-blocking trust gaps that the original plans missed.
 
-### Concerns
+---
 
-- HIGH: Plan 06 depends on a possibly nonexistent `ProjectFileService` string serialization API. Add an explicit acceptance criterion or split out a small prerequisite task for `SerializeToString(ProjectModel, ProjectSaveContext?)` if needed.
-- HIGH: Plan 04 does not define behavior when all matching weighted rules quantize to zero units after race filtering. Block that NPC per D-15 rather than falling back.
-- HIGH: Plan 05 says invalid loaded strategies disable Apply until repaired, but it does not define how salvageable invalid rows hydrate into editable UI state.
-- MEDIUM: Plan 02 should state that `--intent all` overwrite preflight checks all selected outputs before any write, and overwrite refusal means no writes occurred.
-- MEDIUM: Plan 05 should add a test proving an active Morphs filter does not limit strategy application, since apply intentionally affects all `MorphedNpcs`.
-- MEDIUM: Plan 06 should pin `ZipArchiveEntry.LastWriteTime` if preview and create outputs are expected to remain deterministic in tests.
-- MEDIUM: Plan 08 should avoid SignTool password leakage through PowerShell command-line logging or transcripts.
-- MEDIUM: Plan 07 should choose `AutomationExitCode` or reuse `HeadlessGenerationExitCode` explicitly instead of deferring the enum decision to implementation.
+## Per-Plan Reviews
 
-### Suggestions
+### Plan 05-01: CLI Foundation and Headless Contracts
 
-- Add a Plan 06 task or acceptance criterion for the Core project serialization-to-string API before wiring `PortableProjectBundleService`.
-- Add a weighted-strategy test for all matching rules rounding to zero units.
-- Hydrate invalid loaded strategy rows as editable `AssignmentStrategyRuleRowViewModel` instances with per-row validation messages.
-- Add a full-project apply test with an active filter hiding most NPC rows.
-- Pin bundle zip entry timestamps to a deterministic value such as request `CreatedUtc` or Unix epoch.
-- Commit to a generalized `AutomationExitCode` rename in Plan 07 if bundle/release CLI paths will share the same exit surface.
-- Invoke SignTool through a safe argument-array pattern and never write password values, full command lines, or full certificate paths to logs or metadata.
-- Add packaged-doc guidance that race filters match imported NPC race text exactly.
+**Summary**: Solid scaffolding plan. Creates `BS2BG.Cli` as a dedicated executable with System.CommandLine 2.0.7, defines typed Core contracts (`OutputIntent`, `AutomationExitCode`, `HeadlessGenerationRequest`).
 
-### Risk Assessment
+**Strengths**:
+- Forward-thinking: includes `--omit-redundant-sliders` in Task 1 to avoid contract churn in Plan 02
+- Asset-copy contract for both build and publish outputs catches a real packaging risk
+- Solution registration verified via `dotnet sln list`, not just `File.Exists`
 
-Overall risk: MEDIUM. Claude found the architecture sound, but identified a few plan-contract ambiguities that should be resolved before execution.
+**Concerns**:
+- **LOW**: Exit-code enum was renamed mid-phase (`HeadlessGenerationExitCode` → `AutomationExitCode`) per 05-07 — this churn could have been avoided by naming it `AutomationExitCode` here from the start.
+
+**Risk**: LOW
+
+---
+
+### Plan 05-02: Headless Generation Service
+
+**Summary**: Implements validation-first orchestration with overwrite preflight via writer-owned planner. Strong byte-parity preservation.
+
+**Strengths**:
+- `BosJsonExportPlanner` extracted as sibling to writer — prevents filename-sanitization drift between preflight and write
+- In-process `Program.Main` testing under serialized console-capture collection (good xUnit hygiene)
+- Install-relative catalog factory moved to Core preserves Core/App boundary
+- `OutputIntent.All` correctly preflights every selected target before any write
+
+**Concerns**:
+- **MEDIUM**: Partial-failure semantics for `OutputIntent.All` (BodyGen succeeds, BoS fails) leave BodyGen artifacts in place and return `IoFailure`. This is documented but is a sharp edge — automation scripts may not realize partial state exists.
+- **LOW**: Exit-code mapping table in plan body duplicates contracts from Plan 01; risk of drift if either changes.
+
+**Suggestions**:
+- Consider documenting partial-failure recovery guidance in the CLI `--help` text or release docs.
+
+**Risk**: LOW–MEDIUM
+
+---
+
+### Plan 05-03: Assignment Strategy Persistence
+
+**Summary**: Adds `AssignmentStrategyDefinition` with composable rules and backward-compatible serialization.
+
+**Strengths**:
+- `SchemaVersion: 1` field with explicit forward-version rejection via diagnostics
+- Composable rule shape (single rule can carry RaceFilters + Weight + BucketName) avoids combinatorial enum explosion
+- Inspects existing DTO `JsonPropertyOrder` before assigning a new value — avoided collision with Phase 4 `CustomProfiles`
+- `ReplaceWith`/clone preservation of strategy state explicitly tested
+
+**Concerns**:
+- **LOW**: `AssignmentStrategyKind.GroupsBuckets` semantics with empty `RaceFilters` (matches any race) is an asymmetry vs. `RaceFilters` kind (requires non-empty). Documented but could surprise users.
+
+**Risk**: LOW
+
+---
+
+### Plan 05-04: Deterministic Strategy Execution
+
+**Summary**: Implements seeded random, round-robin, weighted, race-filter, group/bucket algorithms with shared `ComputeEligibility` and pinned PRNG.
+
+**Strengths**:
+- **Excellent**: Pinned Mulberry32 PRNG with reference vectors (seeds 0/1/123) — `System.Random(seed)` is not portable across .NET versions, this catches a subtle determinism bug before it ships
+- Single `ComputeEligibility` source for both `Apply` and diagnostics prevents divergence
+- Weighted quantization (`Math.Round(weight * 100, AwayFromZero)`) is documented with edge case (`0.005 → 1 unit`)
+- Strategy diagnostics scoped to `Caution` so unrelated exports aren't blocked
+
+**Concerns**:
+- **LOW**: Round-robin always restarts at index 0 per `Apply` call — explicitly documented but worth noting in user-facing docs since it differs from typical "round-robin queue" mental models.
+- **LOW**: Weighted-with-all-zero-units after race narrowing blocks the NPC. Correct per D-15, but could be confusing diagnostically without explicit "weights collapsed to zero" wording.
+
+**Risk**: LOW
+
+---
+
+### Plan 05-05: Strategy UI in Morphs Workspace
+
+**Summary**: ReactiveUI strategy editor with full-project apply scope, undo for both config and apply, salvageable invalid-strategy row hydration.
+
+**Strengths**:
+- `AssignmentStrategyRuleRowViewModel` decomposition prevents MorphsViewModel bloat
+- Full-project (not visible-scope) apply documented with XML doc comment — good defense against Phase 2 filter-scope confusion
+- Salvageable invalid rows hydrated for repair UX rather than discarded
+- Undo restores both assignments AND prior strategy config — important for D-13 reproducibility
+
+**Concerns**:
+- **MEDIUM**: Comma-separated text fields for `PresetNames`/`RaceFilters` is a deliberate Phase 5 choice but creates UX friction — typo in preset name silently disables Apply. Users will hit this. Mitigated by validation messages but not eliminated.
+- **LOW**: `Weight` numeric range `0..1000` is arbitrary; users with finer-grained weights (1/10000) would silently quantize.
+
+**Suggestions**:
+- Consider an autocomplete dropdown for preset name tokens in v2 (out of scope here).
+
+**Risk**: LOW–MEDIUM
+
+---
+
+### Plan 05-06: Portable Bundle Service ⚠️
+
+**Summary**: Core zip bundle with structured layout, manifest, checksums, path scrubber.
+
+**Strengths**:
+- Stages outputs through real `BodyGenIniExportWriter`/`BosJsonExportWriter` then zips exact bytes — correctly avoids "writer-equivalent" duplication
+- `PortableProjectBundleOutcome` enum models expected failures explicitly (not exception-based)
+- Pinned `CreatedUtc` on every `ZipArchiveEntry.LastWriteTime` for deterministic test assertions
+- Core `DiagnosticReportTextFormatter` extracted from App-only formatter to preserve Core/App boundary
+
+**Concerns**:
+- 🛑 **HIGH (acknowledged in 05-10)**: Plan implementation deletes the existing bundle before writing replacement. Data-loss risk if write fails. **05-10 closes this gap** but it should have been caught at plan-review time. The plan's language "Refuse existing BundlePath unless Overwrite true" doesn't specify atomic replacement semantics.
+- 🛑 **HIGH (acknowledged in 05-10)**: Plan uses constructor-injected `profileCatalog` for both validation AND generation. Bundle includes referenced custom profile JSON in `profiles/` but generated INI/JSON bytes don't use those profiles — silent correctness bug. **05-10 closes this gap** but again should have been caught.
+- **MEDIUM**: `BundlePathScrubber.IsPrivatePathLeak` accepts false positives for literal `C:` text. Documented but could create noisy privacy findings on legitimate manifests.
+
+**Suggestions** (for future similar plans):
+- When introducing file-overwrite operations, always specify "atomic replace via temp + File.Replace/File.Move" in the action text, not "refuse existing unless overwrite."
+- When introducing a service that takes a catalog/registry, explicitly state whether the catalog is request-scoped or singleton-scoped, and tie tests to the lifetime decision.
+
+**Risk**: HIGH (mitigated by 05-10)
+
+---
+
+### Plan 05-07: Bundle CLI + GUI Wiring ⚠️
+
+**Summary**: Wires `bundle` command into CLI and adds preview/create commands to GUI.
+
+**Strengths**:
+- CLI maps `PortableProjectBundleOutcome` → `AutomationExitCode` explicitly (Success=0, ValidationBlocked/MissingProfile=2, OverwriteRefused=3, IoFailure=4)
+- Preview uses Core `Preview` API (no temp zip creation/deletion) — preserves preview-before-write semantics
+- Unsaved/dirty project handling spelled out (`unsaved-project.jbs2bg` filename fallback)
+
+**Concerns**:
+- 🛑 **HIGH (acknowledged in 05-10)**: Plan delegates project loading directly to `ProjectFileService.Load(projectPath)` in CLI bundle command without exception wrapping. Missing project / malformed JSON / missing profile assets escape as unhandled exceptions, bypassing the documented exit-code contract. **05-10 closes this gap.**
+- **MEDIUM**: App-level `PortableProjectBundleService` registered with `ITemplateProfileCatalogService.Current` snapshot at startup creates a stale-catalog bug. **05-10 also addresses this.**
+
+**Suggestions**:
+- The plan should have included a "wrap expected failures into `AutomationExitCode`" task by symmetry with `HeadlessGenerationService.Run` (which already does this in Plan 02).
+
+**Risk**: HIGH (mitigated by 05-10)
+
+---
+
+### Plan 05-08: Release Trust Automation
+
+**Summary**: Extends `package-release.ps1` for signed/unsigned paths, packages CLI exe, adds `ReleaseTrustTests` with `ReleaseSmoke` trait gating.
+
+**Strengths**:
+- Excellent: `[Trait("Category", "ReleaseSmoke")]` gates the slow publish/package tests so default `dotnet test` stays fast
+- Signing is opt-in (cert subject OR cert path triggers it), not switch-based — cleaner than `-SkipSigning`
+- Explicitly forbids logging cert passwords to `SIGNING-INFO.txt` or stdout
+- Preflight check that current packaging behavior may emit backslash zip entries before asserting forward-slash — pragmatic
+
+**Concerns**:
+- **LOW**: SignTool detection is purely "is on PATH or configured"; doesn't verify cert is non-expired or trusted root. Probably out of scope for Phase 5.
+- **LOW**: `CertificatePasswordEnvVar` pattern requires user to set env var; no explicit warning that env-var values may be visible in process listings on shared machines.
+
+**Risk**: LOW
+
+---
+
+### Plan 05-09: Packaged Setup Docs
+
+**Summary**: Adds `BODYGEN-BODYSLIDE-BOS-SETUP.md`, packaging copy step, docs assertions.
+
+**Strengths**:
+- `Last verified: YYYY-MM-DD` regex pattern (not hardcoded date) prevents stale docs from passing tests
+- Negative UI check uses anchored patterns (`MenuItem` + `Setup`, `SetupWizard`) instead of free-text `setup` search — robust against false positives
+- QA-CHECKLIST update ensures verification date is refreshed each release
+
+**Concerns**:
+- **LOW**: Negative UI assertion is a brittle contract — a future plan that legitimately needs a "setup" menu item (e.g., out-of-scope user setup wizard) will have to explicitly remove this guard.
+
+**Risk**: LOW
+
+---
+
+### Plan 05-10: Bundle Trust Gap Closure 🔍 **PRIMARY FOCUS**
+
+**Summary**: Closes three release-blocking gaps from `05-VERIFICATION.md`: atomic bundle replacement, request-scoped custom-profile catalog, CLI bundle exception-to-exit-code mapping.
+
+**Strengths**:
+- Each task maps to a specific verification gap with explicit `<must_haves>` truths
+- Task 1 (regression tests) precedes implementation — TDD discipline preserved
+- Custom-profile generation test correctly compares against `TemplateGenerationService.GenerateTemplates(presets, requestScopedCatalog, false)` rather than hardcoded strings — keeps parity contract intact
+- `File.Replace`/`File.Move` final-commit pattern is correct (Windows atomic semantics)
+- Task 3 explicitly forbids stack traces / exception type names / private root paths in stderr — good operator UX
+- App composition fix preserves singleton service while routing custom profiles through `BuildProjectSaveContext()` at preview/create time
+
+**Concerns**:
+- **MEDIUM**: Task 1 Test 1 (overwrite preservation) requires "forcing replacement failure" — unclear which mechanism. The most reliable simulation is making the destination directory read-only mid-write, but that has cross-platform/permission flakiness. Plan should specify a deterministic injection mechanism (e.g., a directory at the temp-path location, or an injectable file-system seam).
+- **MEDIUM**: Task 2's request-scoped catalog construction iterates `ResolveReferencedCustomProfiles(project, saveContext)` but the existing `PortableProjectBundleService` already calls this in `AddProfileEntries` and `FindMissingReferencedCustomProfiles`. Risk of triple-iteration over same data; could centralize into a single `ResolveBundleProfileSet()` helper to keep semantics consistent.
+- **MEDIUM**: Task 3 changes App registration semantics. The plan offers two options ("singleton with BuildProjectSaveContext supplying profiles" OR "fresh service per preview/create"). Leaving the choice to the executor risks inconsistency with test expectations. Should pick one and lock it in the action text.
+- **LOW**: `AppBootstrapper.cs:45-52` lambda registration mentioned in verification report uses `provider.GetRequiredService<ITemplateProfileCatalogService>().Current` at first-resolve time. Since `PortableProjectBundleService` is singleton, this snapshot persists. If the executor picks "keep singleton, supply profiles via SaveContext," the constructor-injected `profileCatalog` is still stale for *bundled* profile content — but that's acceptable since bundled profiles don't change at runtime. Worth a one-line comment in the action explaining why bundled-only stale snapshot is OK.
+- **LOW**: Test 4 stderr assertion forbids `System.IO`, `System.Text.Json`, `Exception`, ` at ` — robust but a future framework version might inject diagnostic text into `Console.Error` from elsewhere. Brittle to xUnit/runtime upgrades.
+
+**Suggestions**:
+1. **Specify failure injection mechanism** in Task 1: e.g., "create a directory at the temp filename path so `File.Create` throws `UnauthorizedAccessException`" or introduce a minimal `IBundleZipWriter` seam for fault injection.
+2. **Lock the registration approach** in Task 3 to one option (recommend: keep singleton, route custom profiles through `BuildProjectSaveContext()` since `MainWindowViewModel` already owns project+catalog state).
+3. **Centralize profile resolution** into a single `ResolveBundleProfileSet()` method used by validation, generation, and `profiles/` zip entries to guarantee they agree.
+4. **Add an integration test** asserting that bundled `templates.ini` bytes for a custom-profile project differ from bundled-only-catalog output — currently tests assert equality with the *correct* request-scoped catalog, but a regression test for "would have been wrong before fix" provides explicit inversion coverage.
+
+**Risk**: MEDIUM
+
+---
+
+## Cross-Cutting Observations
+
+### Strengths Across Plans
+- Consistent threat-model blocks (STRIDE) per plan
+- `<read_first>` mandates concrete files, not vague "review the codebase"
+- `<acceptance_criteria>` use grep-friendly literal strings, making automated verification reliable
+- TDD RED/GREEN structure preserved throughout
+- Dependency wave numbering is correct (Wave 1 has no inter-deps; later waves declared explicitly)
+
+### Concerns Across Plans
+- **MEDIUM**: Three release-blocking bugs (CR-01, CR-02, WR-01) escaped Plan 06/07 review. The pattern: any plan introducing **filesystem mutation** or **service composition with cached state** needs a checklist item: (a) atomic replacement semantics, (b) catalog/state lifetime explicitly stated, (c) exception-to-result-code mapping for service entry points.
+- **LOW**: Plans 05/07 both contain checkpoint:human-verify gates which work fine for sequential execution but may not be obvious to executors using `--auto`/yolo mode. The gate behavior under autonomous mode should be specified per-phase config.
+
+### Dependency Graph Sanity
+- Wave 1 (01, 03) → Wave 2 (02 needs 01; 04 needs 03) → Wave 3 (05/06/08) → Wave 4 (07/09) → Wave 5 (10): correct
+- 05-08 in Wave 3 depends on 05-01/02 (Waves 1/2): valid
+- 05-10 depends on 05-06/07 (Waves 3/4): valid
+
+---
+
+## Overall Risk Assessment
+
+**MEDIUM** — driven entirely by Plan 05-10's gap-closure scope.
+
+**Justification**:
+- Plans 01-09 are completed and verified; their risks are now historical (mitigated by 05-10).
+- Plan 05-10 is well-scoped and addresses the right gaps, but has medium-severity ambiguities in failure-injection mechanism (Task 1) and registration-strategy choice (Task 3) that could lead to the executor making divergent decisions or producing flaky tests.
+- Phase goal achievability: **YES** once 05-10 ships. Without 05-10, AUTO-02 cannot be considered trusted (per verification report).
+
+---
+
+## Recommended Pre-Execution Actions for Plan 05-10
+
+1. Pin Task 1 failure-injection mechanism to a specific deterministic technique (directory-at-temp-path is the cleanest cross-platform option since temp filenames use `Guid.NewGuid().ToString("N")` — collision is impossible in production but can be forced in test).
+2. Choose one App registration approach for Task 3 and update acceptance criteria to grep for that specific pattern.
+3. Add an explicit `ResolveBundleProfileSet()` extraction to Task 2 so profile resolution is single-sourced across `profiles/` entries, validation, and generation.
+4. Consider a Task 4 that documents partial-failure recovery for bundle creation (analogous to the BodyGen-succeeds-BoS-fails ledger from Plan 02) — currently bundle has no equivalent ledger story.
+
+
+---
 
 ## Codex Review
 
-### Summary
+**Overall Summary**
 
-Codex assessed the plan set as requirement-traceable and aligned with Core-first boundaries, privacy, and optional signing. The overall risk was MEDIUM because assignment strategy, bundle, and release surfaces are complex enough that unresolved contract details could cause implementation churn.
+The Phase 5 plan set is strong: it is unusually explicit about dependency ordering, output-parity boundaries, test seams, failure mapping, and privacy/security requirements. The best parts are the repeated insistence on Core-service reuse, install-relative profile loading, writer-owned output planning, deterministic assignment semantics, and actual zip/package inspection. Main risks are scope density, UI complexity in 05-05/05-07, and several brittle source-text or “test the implementation shape” assertions that may slow execution or create false failures. The plans do appear capable of achieving AUTO-01 through AUTO-05 if executed carefully.
 
-### Strengths
+## 05-01 — CLI Foundation
 
-- `05-01` correctly creates a dedicated CLI, pins `System.CommandLine`, keeps App dependencies out, and checks profile asset copying.
-- `05-02` strongly reuses project loading, validation, generation services, and existing writers.
-- `05-03` provides a backward-compatible optional `.jbs2bg` strategy shape and preserves imported-race matching boundaries.
-- `05-04` has excellent deterministic PRNG, exact-sequence tests, shared eligibility, and no-silent-fallback requirements.
-- `05-05` preserves ReactiveUI conventions, undo/dirty state, and explicit full-project apply scope.
-- `05-06` has a solid privacy/security posture with normalized zip entries, exact writer bytes, referenced-only profiles, temp cleanup, and blocker behavior.
-- `05-07` correctly makes bundle preview first-class across CLI and GUI.
-- `05-08` handles signing optionality, checksum trust, CLI packaging, secret redaction, and gated release smoke tests.
-- `05-09` keeps setup guidance in packaged docs only and avoids in-app wizard creep.
+**Strengths**
+- Correctly creates a dedicated `BS2BG.Cli` project rather than adding a headless Avalonia mode.
+- Establishes typed contracts and shared exit codes early.
+- Copies required profile assets beside the CLI output/publish artifacts, which matches prior install-relative profile-loading lessons.
+- Guards against accidental App/Avalonia references.
 
-### Concerns
+**Concerns**
+- **MEDIUM:** “Require explicit omit-redundant-sliders choice” conflicts with the proposed `bool default false`; decide whether it is required or optional.
+- **MEDIUM:** Tests that inspect publish output may be slower and more brittle than needed for a foundation plan.
+- **LOW:** Source-text assertions on `Program.cs` are useful, but should not become the main proof of behavior.
 
-- LOW: `--omit-redundant-sliders` has a default `false`, so the plan should clarify whether it must be explicitly supplied or merely available.
-- MEDIUM: `BosJsonExportPlanner` likely touches sacred writer behavior, and `--intent all` partial-failure semantics are nuanced.
-- MEDIUM: Persisted assignment strategy has no explicit schema/version field, despite being collaborator-replayed automation data.
-- HIGH: `GroupsBuckets` semantics conflict between Plan 03 and Plan 04. Plan 03 does not require `RaceFilters` for group/bucket rules, while Plan 04 says bucket rules match only when `RaceFilters` contains `Npc.Race`.
-- MEDIUM: Invalid loaded strategy diagnostics need a concrete flow from `ProjectLoadResult` into `MorphsViewModel`.
-- MEDIUM: Bundle contracts define preview/result types but not an explicit outcome type for validation blockers, overwrite refusal, missing profiles, or I/O failures.
-- MEDIUM: Plan 07 depends on Plan 06 failure statuses; align them before implementation.
-- LOW: Fast default tests mostly assert release script/docs unless `ReleaseSmoke` is run somewhere.
-- LOW: `Last verified: 2026-04-27` in Plan 09 will be stale if implemented on a later date unless intentionally tied to the research date.
+**Suggestions**
+- Make `--omit-redundant-sliders` explicitly optional but documented, unless the user must always choose it.
+- Keep publish-layout tests focused and possibly trait-gated if they materially slow normal CLI tests.
+- Add one parser-level test that verifies intent parsing fails for invalid values, not just that valid labels exist.
 
-### Suggestions
+**Risk Assessment: LOW-MEDIUM**
 
-- Resolve `GroupsBuckets` empty-race-filter behavior before implementing Plans 03 and 04.
-- Add a `PortableProjectBundleOutcome` or status enum so expected bundle failures are not modeled only as exceptions.
-- Add `schemaVersion: 1` to persisted strategy data, or define version-tolerant loading now.
-- Keep `BosJsonExportWriter` changes minimal and protected by BoS/export golden tests.
-- Document the exact `ReleaseSmoke` command and make it part of the release gate.
-- Use the actual verification date for packaged docs, or document why the research date is used.
+The plan is well-scoped, but publish/build asset checks and System.CommandLine parse behavior can be a little finicky.
 
-### Risk Assessment
+## 05-02 — Headless Generation
 
-Overall risk: MEDIUM. Codex found the architecture and traceability strong but recommended resolving a few cross-plan contracts before coding.
+**Strengths**
+- Strongly preserves Core generation/export reuse.
+- Correctly introduces writer-owned BoS output planning to avoid filename drift.
+- Validation-first and overwrite preflight behavior are well specified.
+- Install-relative catalog lookup is aligned with prior repo fixes.
+
+**Concerns**
+- **HIGH:** Touching `BosJsonExportWriter.cs` is risky because it is sacred and byte-sensitive.
+- **MEDIUM:** Partial-failure ledger behavior may be hard to test without artificial writer failure seams.
+- **MEDIUM:** `ProjectValidationService` composition may require adapting static vs instance patterns in current code.
+- **LOW:** Mapping malformed JSON to `UsageError` is reasonable, but “missing profile asset = UsageError” could be argued as `IoFailure`; consistency matters more than the exact code.
+
+**Suggestions**
+- Prefer adding `BosJsonExportPlanner` without modifying `BosJsonExportWriter` if possible; if modification is needed, run existing BoS export/golden tests.
+- Add an injectable or test-only failing writer seam rather than relying on filesystem tricks for partial failure.
+- Document the exit-code map in CLI help or release docs.
+
+**Risk Assessment: MEDIUM**
+
+The behavior is right, but it crosses byte-sensitive export territory and needs disciplined tests.
+
+## 05-03 — Strategy Persistence
+
+**Strengths**
+- Good schema discipline with `schemaVersion = 1`.
+- Handles legacy null strategy cleanly.
+- Defines composable rule data instead of painting the model into a corner.
+- Race matching is properly constrained to imported `Npc.Race`.
+
+**Concerns**
+- **MEDIUM:** “Salvageable invalid snapshot” support may complicate `ProjectFileService` more than this plan needs.
+- **MEDIUM:** Dirty tracking, clone, and `ReplaceWith` preservation can be easy to miss, especially with nested strategy rule collections.
+- **LOW:** Optional field ordering tests can become brittle if they assert too much raw JSON shape.
+
+**Suggestions**
+- Split validation into a small `AssignmentStrategyValidator` if `ProjectFileService` starts absorbing too much policy.
+- Prefer semantic JSON assertions for ordering-sensitive fields unless exact root ordering is already a repo contract.
+- Add a test that saving a loaded legacy project without edits does not introduce `AssignmentStrategy`.
+
+**Risk Assessment: MEDIUM**
+
+The design is sound, but persistence plus repair diagnostics could grow beyond the plan if not kept tight.
+
+## 05-04 — Strategy Execution
+
+**Strengths**
+- Excellent deterministic algorithm spec.
+- Correctly rejects `System.Random(seed)` for persisted replay.
+- Shared `ComputeEligibility` prevents diagnostic/apply drift.
+- No-eligible behavior correctly blocks assignment without falling back.
+
+**Concerns**
+- **MEDIUM:** Mulberry32 with `NextIndex(exclusiveMax)` needs a clearly defined range mapping; naive modulo can introduce minor bias.
+- **MEDIUM:** Sorting by NPC fields plus original index is good, but the original index must be captured before sorting and consistently defined.
+- **MEDIUM:** Weighted semantics are detailed enough to be testable, but the half-up quantization rule may surprise users if not surfaced later in UI/docs.
+- **LOW:** Diagnostic addition to `ProjectValidationService` should not create service-cycle dependencies.
+
+**Suggestions**
+- Add reference-vector tests for both raw PRNG output and `NextIndex`.
+- Document that deterministic replay is stable for this application, not cryptographic randomness.
+- Add tests for blank/null race strings and duplicate preset names in strategy rules.
+
+**Risk Assessment: MEDIUM**
+
+Algorithmic determinism is achievable, but exact ordering and PRNG behavior need tight tests.
+
+## 05-05 — Strategy UI
+
+**Strengths**
+- Clear ReactiveUI/Avalonia conventions.
+- Explicitly resolves the visible-filter vs full-project assignment ambiguity.
+- Strong undo requirements for both config and assignment mutation.
+- Good repair UX requirement for salvageable invalid strategies.
+
+**Concerns**
+- **HIGH:** This is the densest and riskiest plan. It combines UI, validation, undo, persistence, repair, and command behavior.
+- **MEDIUM:** Textbox-based comma token editing is pragmatic, but validation/error copy can get noisy.
+- **MEDIUM:** “Strategy edit/save changes themselves must be undoable” may conflict with existing dirty/undo mental model if other project settings are not undoable.
+- **LOW:** Human checkpoint is useful, but autonomous is false; ensure execution tooling treats it as a real pause.
+
+**Suggestions**
+- Consider splitting ViewModel and AXAML into two implementation passes if execution becomes unstable.
+- Keep rule-row validation pure/testable so UI tests do not carry all validation coverage.
+- Add one headless UI test that verifies compiled bindings instantiate the new panel.
+
+**Risk Assessment: HIGH**
+
+The plan is valuable but has the most moving parts and the highest chance of needing iteration.
+
+## 05-06 — Bundle Service
+
+**Strengths**
+- Excellent privacy and zip-path threat modeling.
+- Correctly stages outputs through existing writers and zips exact bytes.
+- Good manifest/checksum shape with deterministic timestamps.
+- Handles referenced-only custom profiles and missing profile blockers.
+
+**Concerns**
+- **MEDIUM:** Path-leak scanning can false-positive on legitimate text like `C:` in documentation or diagnostics.
+- **MEDIUM:** `PrivateRoots` scrubbing must cover project/import/export/profile roots without erasing useful source filenames.
+- **MEDIUM:** Adding `ProjectFileService.SerializeToString` may affect serialization contract; test legacy behavior.
+- **LOW:** Fixed zip timestamps are good, but byte-identical zip output is not required; avoid over-investing.
+
+**Suggestions**
+- Centralize privacy checks so CLI, GUI preview, bundle reports, and tests use the same rules.
+- Add specific tests for UNC paths and Windows drive-root strings.
+- Make `PortableProjectBundleOutcome` part of both preview and create from the start.
+
+**Risk Assessment: MEDIUM**
+
+The design directly addresses the main risks; implementation will be careful but straightforward.
+
+## 05-07 — Bundle CLI/GUI Wiring
+
+**Strengths**
+- Reuses the Core bundle service in both CLI and GUI.
+- Preview-first GUI path is the right trust pattern.
+- Handles unsaved/dirty project state explicitly.
+- Good outcome-to-exit-code mapping.
+
+**Concerns**
+- **MEDIUM:** Renaming `HeadlessGenerationExitCode` to `AutomationExitCode` in this later plan may create churn across prior tests and summaries.
+- **MEDIUM:** GUI bundle preview in `MainWindowViewModel` may grow a large shell ViewModel further.
+- **MEDIUM:** Correct `ProjectSaveContext` construction is critical for custom profile inclusion.
+- **LOW:** “File menu item or clearly labeled shell action” is flexible, but visual placement should be anchored by the UI spec.
+
+**Suggestions**
+- Rename to `AutomationExitCode` earlier in 05-01 if bundle sharing is already expected.
+- Add a test where GUI preview includes an embedded custom profile from the current in-memory project.
+- Keep file-dialog changes narrowly scoped to zip save picking.
+
+**Risk Assessment: MEDIUM**
+
+The plan is coherent, with moderate integration risk around current project state and profile context.
+
+## 05-08 — Release Trust
+
+**Strengths**
+- Treats signing as optional and checksum verification as mandatory.
+- Includes the CLI in packaging, which is necessary for AUTO-01 to be real.
+- Good secret-redaction requirements.
+- Separates fast tests from heavy `ReleaseSmoke`.
+
+**Concerns**
+- **MEDIUM:** PowerShell signing logic can become complex quickly, especially with cert store vs PFX paths.
+- **MEDIUM:** Normalizing zip entries may require replacing `Compress-Archive`; that can be more invasive than expected.
+- **LOW:** Source-text assertions for script behavior are acceptable but should be paired with smoke tests when feasible.
+
+**Suggestions**
+- Define signing modes explicitly: unsigned, cert subject, PFX path.
+- Keep password handling env-var only; never accept raw password string parameters if avoidable.
+- Add script parameter validation tests for mutually incompatible signing options.
+
+**Risk Assessment: MEDIUM**
+
+Trust goals are right. Complexity is mostly in PowerShell edge cases and packaging smoke runtime.
+
+## 05-09 — Packaged Setup Docs
+
+**Strengths**
+- Correctly keeps setup guidance out of the app.
+- Tests the no-plugin-editing boundary.
+- Adds package inclusion checks.
+- Avoids hardcoding the research date.
+
+**Concerns**
+- **LOW:** Negative UI scans can be brittle if they look for generic setup wording.
+- **LOW:** Docs can become stale unless QA checklist enforcement is real.
+
+**Suggestions**
+- Keep negative UI checks anchored to specific wizard/menu symbols, as planned.
+- Include “generated files first, then user places them” language prominently.
+- Add checksum verification cross-link to release trust docs.
+
+**Risk Assessment: LOW**
+
+This is low-risk and well bounded.
+
+## 05-10 — Gap Closure
+
+**Strengths**
+- Addresses important real trust gaps: atomic bundle replacement, custom-profile generation catalog, stable CLI failure mapping.
+- Uses same-directory temp plus `File.Replace`/`File.Move`, which is the right pattern for overwrite safety.
+- Correctly ensures bundle outputs are generated with referenced custom profiles, not just bundled defaults.
+- Avoids touching sacred writers and formatters.
+
+**Concerns**
+- **HIGH:** This plan indicates earlier plans knowingly leave release-blocking gaps. That is okay as gap closure, but Phase 5 should not be considered complete before it lands.
+- **MEDIUM:** `File.Replace` behavior differs if the destination is not a normal file or across filesystems; tests should cover directory-as-target and read-only target where practical.
+- **MEDIUM:** Request-scoped catalog construction must preserve bundled profile ordering and fallback behavior.
+- **LOW:** Stderr redaction should avoid full local paths while still giving enough troubleshooting context.
+
+**Suggestions**
+- Pull the `AutomationExitCode` rename and expected CLI exception mapping earlier if possible.
+- Add one test where local and embedded profiles have the same name and the intended precedence is asserted.
+- Add cleanup tests for temp zip files after failed final commit.
+
+**Risk Assessment: MEDIUM-HIGH**
+
+The fixes are essential and technically sound, but they touch final trust guarantees for AUTO-02.
+
+## Cross-Plan Concerns
+
+- **HIGH:** 05-05 is likely too large for one execution pass. It may be safer to split into ViewModel/core integration, then AXAML/headless visual verification.
+- **MEDIUM:** Several tests assert source text or file contents by grep. Use these sparingly; behavior tests should carry the main proof.
+- **MEDIUM:** Exit-code naming should stabilize earlier. `AutomationExitCode` is the better name once both `generate` and `bundle` exist.
+- **MEDIUM:** Profile asset loading must remain install-relative and fail-fast. Avoid any regression to parent-directory probing or empty-profile fallback.
+- **LOW:** The roadmap/progress pasted above has some stale phase table entries, but the plan set itself is internally consistent.
+
+## Final Risk Assessment
+
+**Overall risk: MEDIUM**
+
+The plans are complete and directionally correct. The risk is not architectural confusion; it is execution complexity. The phase crosses CLI, Core generation, serialization, deterministic algorithms, Avalonia UI, zip creation, release packaging, docs, and PowerShell signing. The critical safeguards are already present in the plans: no generation forks, writer-owned planning, install-relative profile assets, explicit overwrite gates, request-scoped custom-profile catalogs, and actual package/bundle inspection. Keep implementation incremental and resist expanding UI or release-signing behavior beyond the locked decisions.
+
+
+
+
+---
 
 ## Consensus Summary
 
-The reviewers agree that Phase 5 is well planned and largely ready for execution. The strongest shared signal is that the plan protects the project's core trust boundary by keeping generation, validation, export formatting, bundle output bytes, and deterministic assignment behavior in Core rather than creating CLI/App-specific logic. The actionable feedback is concentrated in a small set of plan-contract clarifications before implementation.
+All three reviewers agree Phase 5 is structurally strong, with clear dependency ordering, strong Core-service reuse, deterministic automation decisions, privacy-aware bundle design, and test-first acceptance criteria. The shared conclusion is that the phase is viable, but release trust depends on executing 05-10-PLAN.md before Phase 5 is considered complete.
 
 ### Agreed Strengths
 
-- Core-first architecture is the right boundary: CLI and GUI should orchestrate existing Core services instead of duplicating generation/export semantics.
-- Deterministic assignment design is strong, especially the pinned PRNG, exact-sequence tests, stable ordering, and explicit rejection of `System.Random(seed)` for persisted replay.
-- Bundle privacy and safety are treated as first-class requirements through path scrubbing, normalized relative zip entries, exact writer-byte packaging, and referenced-profile scoping.
-- Release trust is pragmatic: optional signing, checksum-backed unsigned builds, secret redaction, required package assertions, and `ReleaseSmoke` gating avoid making SignTool mandatory.
-- Wave ordering is generally sound and keeps high-risk work behind prerequisite contracts and tests.
+- Writer/service reuse is the strongest architectural control: reviewers specifically praised reusing existing BodyGen/BoS writers, writer-owned output planning, and avoiding generation forks.
+- Determinism is well covered by pinned strategy semantics, especially the Mulberry32 PRNG decision and explicit assignment-ordering tests.
+- Bundle privacy and release trust are treated as first-class requirements through path scrubbing, manifest/checksum verification, fixed zip metadata, and CLI exit-code contracts.
+- The planning set is unusually actionable: plans contain concrete file targets, TDD sequencing, acceptance criteria, and dependency waves.
 
 ### Agreed Concerns
 
-- `BosJsonExportPlanner` must not drift from `BosJsonExportWriter`. Planner extraction should be mechanical, writer-owned or writer-consumed, and protected by existing BoS/export tests in addition to CLI tests.
-- Assignment strategy edge cases need tighter contracts before execution: zero-unit weighted matches after race narrowing, `GroupsBuckets` behavior when `RaceFilters` is empty, invalid loaded strategy repair UX, and whether strategy persistence needs a schema/version field.
-- Bundle service failure/result contracts need to be explicit enough for CLI/GUI mapping: validation blockers, overwrite refusal, missing profiles, I/O failures, temp cleanup, and any required `ProjectFileService` serialization-to-string API should not be discovered ad hoc during implementation.
-- `--intent all` and bundle writes need clear preflight semantics: overwrite checks for all selected targets should happen before any writes when refusal is expected, and partial failure ledgers should clearly state what was written or left untouched.
-- Release signing implementation should prevent secret leakage beyond normal logging: avoid printing password values or full certificate paths, and use safe process invocation patterns for SignTool.
+- 05-10-PLAN.md is mandatory for AUTO-02 trust. Reviewers independently called out atomic overwrite safety, request-scoped custom-profile generation, and stable CLI bundle failure mapping as release-blocking until closed.
+- The atomic overwrite tests need a deterministic failure-injection approach. Claude and Codex both warned that filesystem-permission tricks can become flaky and that final-commit edge cases such as directory targets, read-only targets, and temp cleanup should be covered where practical.
+- Request-scoped custom-profile resolution needs to be single-sourced and lifetime-explicit. Reviewers flagged possible divergence between validation, generation, profiles/ zip entries, and App service registration if the executor leaves catalog lifetime ambiguous.
+- CLI failure contracts need stable user-facing behavior. Reviewers agreed exception wrapping, exit-code mapping, and redacted stderr are important; several also suggested documenting partial or failed-write recovery behavior.
+- Execution complexity remains the primary risk. Codex and Claude both called out dense UI/release-integration plans and brittle grep/source-text assertions as places where behavior tests should carry the main proof.
 
 ### Divergent Views
 
-- Overall risk differed: Gemini rated the plan set LOW risk, while Claude and Codex rated it MEDIUM due to contract ambiguities in strategy, bundle, and release surfaces.
-- Zip determinism was weighted differently: Claude recommended pinning `ZipArchiveEntry.LastWriteTime`, while Gemini treated temp/staging issues as low operational risk.
-- Codex uniquely emphasized adding `schemaVersion: 1` to persisted assignment strategy data.
-- Claude uniquely recommended committing to a generalized `AutomationExitCode` rename rather than leaving the bundle exit-code enum decision to execution.
-- Gemini uniquely suggested a future `Verify Bundle` CLI command; useful but not required for Phase 5 acceptance.
+- Gemini assessed the overall plan risk as LOW, while Claude assessed MEDIUM and Codex assessed MEDIUM because they weighted execution complexity and the still-pending gap closure more heavily.
+- Gemini viewed the plan set as ready to proceed with only minor suggestions, while Claude recommended clarifying 05-10 before execution, especially failure injection, App registration strategy, and profile-resolution centralization.
+- Codex raised broader historical concerns in earlier plans (05-05 UI density, sacred BosJsonExportWriter touch risk, System.CommandLine/publish-test brittleness), while Gemini focused mostly on the current gap-closure readiness.
