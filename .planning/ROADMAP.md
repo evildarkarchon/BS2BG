@@ -146,8 +146,8 @@ Plans:
 - [x] 05-06-PLAN.md — Create Core portable project bundle zip service with path-scrubbed manifests and reports.
 - [x] 05-08-PLAN.md — Extend release trust automation for signed/unsigned checksum-backed packages and packaged CLI distribution.
 **Wave 4 (blocked on Wave 3 UI/bundle/release surfaces)**
-- [ ] 05-07-PLAN.md — Wire portable bundle creation into CLI and GUI preview/write workflows.
-- [ ] 05-09-PLAN.md — Add packaged BodyGen/BodySlide/BoS setup and troubleshooting guidance.
+- [x] 05-07-PLAN.md — Wire portable bundle creation into CLI and GUI preview/write workflows.
+- [x] 05-09-PLAN.md — Add packaged BodyGen/BodySlide/BoS setup and troubleshooting guidance.
 Cross-cutting constraints: CLI and bundle automation reuse Core generation/export paths only; deterministic assignment uses a pinned provider-compatible PRNG; bundle/release artifacts avoid private absolute paths; signing is optional when SHA-256 verification artifacts and unsigned docs are present.
 **UI hint**: yes
 
