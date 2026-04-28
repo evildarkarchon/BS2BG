@@ -9,6 +9,7 @@ using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
+using BS2BG.Core.Morphs;
 using BS2BG.Core.Serialization;
 using System.Reactive.Threading.Tasks;
 using System.Reactive.Linq;
@@ -25,6 +26,12 @@ public sealed class PortableBundleServiceTests
 {
     private static readonly DateTimeOffset FixedCreatedUtc = new(2026, 4, 28, 3, 0, 0, TimeSpan.Zero);
     private static readonly object ConsoleLock = new();
+    private static readonly string[] PresetAName = ["PresetA"];
+    private static readonly string[] PresetBName = ["PresetB"];
+    private static readonly string[] PresetCName = ["PresetC"];
+    private static readonly string[] NordRaceName = ["NordRace"];
+    private static readonly string[] MrHandyRaceName = ["MrHandyRace"];
+    private static readonly string[] BretonRaceName = ["BretonRace"];
 
     [Fact]
     public void BundleCommandRequiresProjectBundleAndIntentOptions()
@@ -485,6 +492,171 @@ public sealed class PortableBundleServiceTests
     }
 
     [Fact]
+    public void BundleBodyGenReplaysSavedAssignmentStrategyPreservesProjectEntryAndCallerState()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy());
+        var originalAssignments = SnapshotNpcAssignments(project);
+        var originalStrategy = project.AssignmentStrategy;
+        var originalDirty = project.IsDirty;
+        var originalChangeVersion = project.ChangeVersion;
+        var bundlePath = Path.Combine(directory.Path, "replayed.zip");
+
+        var result = CreateService().Create(CreateRequest(project, bundlePath, OutputIntent.BodyGen, overwrite: false));
+
+        result.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+        GetReplayReportText(result).Should().Contain("Assignment strategy replayed: RaceFilters; assigned NPCs: 3; blocked NPCs: 0.");
+        using var archive = ZipFile.OpenRead(bundlePath);
+        var morphs = ReadEntryText(archive, "outputs/bodygen/morphs.ini");
+        morphs.Should().Contain("Skyrim.esm|1=PresetA");
+        morphs.Should().Contain("Fallout4.esm|2=PresetB");
+        morphs.Should().Contain("Skyrim.esm|3=PresetC");
+        morphs.Should().NotContain("StalePreset");
+
+        var bundledProject = new ProjectFileService().LoadFromString(ReadEntryText(archive, "project/project.jbs2bg"));
+        bundledProject.AssignmentStrategy.Should().NotBeNull();
+        bundledProject.AssignmentStrategy!.Kind.Should().Be(AssignmentStrategyKind.RaceFilters);
+        SnapshotNpcAssignments(bundledProject).Should().Equal(originalAssignments);
+        SnapshotNpcAssignments(project).Should().Equal(originalAssignments);
+        project.AssignmentStrategy.Should().BeSameAs(originalStrategy);
+        project.IsDirty.Should().Be(originalDirty);
+        project.ChangeVersion.Should().Be(originalChangeVersion);
+    }
+
+    [Fact]
+    public void BundleSeededReplayIsRepeatableMatchesCliMorphsAndPreservesNonAssignmentOutputs()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateStaleAssignmentStrategyProject(
+            new AssignmentStrategyDefinition(1, AssignmentStrategyKind.SeededRandom, 123, Array.Empty<AssignmentStrategyRule>()),
+            includeStalePreset: false);
+        var sourceStateProject = CreateStaleAssignmentStrategyProject(null, includeStalePreset: false);
+        var firstBundlePath = Path.Combine(directory.Path, "first.zip");
+        var secondBundlePath = Path.Combine(directory.Path, "second.zip");
+        var cliProjectPath = SaveProject(directory.Path, project);
+        var cliOutputDirectory = Path.Combine(directory.Path, "cli");
+        var sourceExpected = WriteExpectedOutputs(directory.Path, "source-expected", sourceStateProject, CreateCatalog());
+
+        var first = CreateService().Create(CreateRequest(project, firstBundlePath, OutputIntent.All, overwrite: false));
+        var second = CreateService().Create(CreateRequest(project, secondBundlePath, OutputIntent.All, overwrite: false));
+        var cli = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            cliProjectPath,
+            cliOutputDirectory,
+            OutputIntent.BodyGen,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        first.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+        second.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+        cli.ExitCode.Should().Be(AutomationExitCode.Success);
+        using var firstArchive = ZipFile.OpenRead(firstBundlePath);
+        using var secondArchive = ZipFile.OpenRead(secondBundlePath);
+        ReadEntryBytes(secondArchive, "outputs/bodygen/morphs.ini")
+            .Should().Equal(ReadEntryBytes(firstArchive, "outputs/bodygen/morphs.ini"));
+        ReadEntryBytes(firstArchive, "outputs/bodygen/morphs.ini")
+            .Should().Equal(File.ReadAllBytes(Path.Combine(cliOutputDirectory, "morphs.ini")));
+        ReadEntryBytes(firstArchive, "outputs/bodygen/templates.ini").Should().Equal(File.ReadAllBytes(sourceExpected.TemplatesPath));
+        ReadEntryBytes(firstArchive, "outputs/bos/PresetA.json").Should().Equal(File.ReadAllBytes(sourceExpected.BosJsonPath));
+    }
+
+    [Fact]
+    public void BundleBosJsonIntentAndNoSavedAssignmentStrategyDoNotReplayOrWriteReplayReport()
+    {
+        using var directory = new TemporaryDirectory();
+        var bosProject = CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy());
+        var noStrategyProject = CreateStaleAssignmentStrategyProject(null);
+        var bosBundlePath = Path.Combine(directory.Path, "bos.zip");
+        var noStrategyBundlePath = Path.Combine(directory.Path, "no-strategy.zip");
+
+        var bos = CreateService().Create(CreateRequest(bosProject, bosBundlePath, OutputIntent.BosJson, overwrite: false));
+        var noStrategy = CreateService().Create(CreateRequest(noStrategyProject, noStrategyBundlePath, OutputIntent.BodyGen, overwrite: false));
+
+        bos.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+        noStrategy.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+        GetReplayReportText(bos).Should().Be("No saved assignment strategy; generated from existing project assignments.");
+        GetReplayReportText(noStrategy).Should().Be("No saved assignment strategy; generated from existing project assignments.");
+        SnapshotNpcAssignments(bosProject).Should().Contain(row => row.Contains("StalePreset", StringComparison.Ordinal));
+        using var bosArchive = ZipFile.OpenRead(bosBundlePath);
+        bosArchive.GetEntry("outputs/bodygen/morphs.ini").Should().BeNull();
+        bosArchive.GetEntry("reports/replay.txt").Should().BeNull();
+        using var noStrategyArchive = ZipFile.OpenRead(noStrategyBundlePath);
+        noStrategyArchive.GetEntry("reports/replay.txt").Should().BeNull();
+        ReadEntryText(noStrategyArchive, "outputs/bodygen/morphs.ini").Should().Contain("StalePreset");
+    }
+
+    [Fact]
+    public void BundleBlockedReplayReturnsValidationBlockedReportWithoutZipOrPathLeaks()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateStaleAssignmentStrategyProject(CreateNordOnlyBlockingStrategy());
+        var bundlePath = Path.Combine(directory.Path, "blocked.zip");
+
+        var result = CreateService().Create(CreateRequest(project, bundlePath, OutputIntent.All, overwrite: false));
+
+        result.Outcome.Should().Be(PortableProjectBundleOutcome.ValidationBlocked);
+        File.Exists(bundlePath).Should().BeFalse();
+        result.Entries.Should().BeEmpty();
+        result.ManifestJson.Should().BeEmpty();
+        var report = GetReplayReportText(result);
+        report.Should().Contain("Assignment strategy replay blocked.");
+        report.Should().Contain("Codsworth");
+        report.Should().Contain("Fallout4.esm");
+        report.Should().Contain("CodsworthEditor");
+        report.Should().Contain("FormId=2");
+        report.Should().Contain("MrHandyRace");
+        report.Should().Contain("No eligible preset after strategy rules");
+        report.Should().NotContain(directory.Path);
+        report.Should().NotContain(bundlePath);
+        result.PrivacyFindings.Should().ContainSingle("No private path leaks detected.");
+    }
+
+    [Fact]
+    public void PreviewReportsReplayOutcomeWithoutWritingZip()
+    {
+        using var directory = new TemporaryDirectory();
+        var successPath = Path.Combine(directory.Path, "preview-success.zip");
+        var blockedPath = Path.Combine(directory.Path, "preview-blocked.zip");
+        var noStrategyPath = Path.Combine(directory.Path, "preview-no-strategy.zip");
+
+        var success = CreateService().Preview(CreateRequest(CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy()), successPath, OutputIntent.BodyGen, overwrite: false));
+        var blocked = CreateService().Preview(CreateRequest(CreateStaleAssignmentStrategyProject(CreateNordOnlyBlockingStrategy()), blockedPath, OutputIntent.BodyGen, overwrite: false));
+        var noStrategy = CreateService().Preview(CreateRequest(CreateStaleAssignmentStrategyProject(null), noStrategyPath, OutputIntent.BodyGen, overwrite: false));
+
+        success.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+        GetReplayReportText(success).Should().Contain("Assignment strategy replayed: RaceFilters; assigned NPCs: 3; blocked NPCs: 0.");
+        success.Entries.Should().Contain(entry => entry.Path == "reports/replay.txt");
+        blocked.Outcome.Should().Be(PortableProjectBundleOutcome.ValidationBlocked);
+        GetReplayReportText(blocked).Should().Contain("Codsworth").And.NotContain(blockedPath);
+        noStrategy.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+        GetReplayReportText(noStrategy).Should().Be("No saved assignment strategy; generated from existing project assignments.");
+        noStrategy.Entries.Should().NotContain(entry => entry.Path == "reports/replay.txt");
+        File.Exists(successPath).Should().BeFalse();
+        File.Exists(blockedPath).Should().BeFalse();
+        File.Exists(noStrategyPath).Should().BeFalse();
+    }
+
+    [Fact]
+    public void SuccessfulReplayAddsReportEntryAndManifestChecksum()
+    {
+        using var directory = new TemporaryDirectory();
+        var bundlePath = Path.Combine(directory.Path, "manifest.zip");
+        var result = CreateService().Create(CreateRequest(CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy()), bundlePath, OutputIntent.BodyGen, overwrite: false));
+
+        result.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+        result.Entries.Should().Contain("reports/replay.txt");
+        using var archive = ZipFile.OpenRead(bundlePath);
+        ReadEntryText(archive, "reports/replay.txt").Should().Be("Assignment strategy replayed: RaceFilters; assigned NPCs: 3; blocked NPCs: 0.");
+        var manifest = ReadEntryText(archive, "manifest.json");
+        manifest.Should().Contain("\"path\": \"reports/replay.txt\"");
+        manifest.Should().Contain("\"kind\": \"report\"");
+        using var document = JsonDocument.Parse(manifest);
+        var replayEntry = document.RootElement.GetProperty("entries")
+            .EnumerateArray()
+            .Single(entry => entry.GetProperty("path").GetString() == "reports/replay.txt");
+        replayEntry.GetProperty("sha256").GetString().Should().MatchRegex("^[0-9a-f]{64}$");
+    }
+
+    [Fact]
     public void BundleProfileEntriesUseReferencedDeduplicatedProfilesAndSkipBundledNameCollisions()
     {
         using var directory = new TemporaryDirectory();
@@ -592,6 +764,16 @@ public sealed class PortableBundleServiceTests
         new DiagnosticReportTextFormatter(),
         tempRoot: null,
         bundleCommitter: committer.Commit);
+
+    private static HeadlessGenerationService CreateHeadlessService() => new(
+        new ProjectFileService(),
+        new TemplateGenerationService(),
+        new MorphGenerationService(),
+        new BodyGenIniExportWriter(),
+        new BosJsonExportWriter(new TemplateGenerationService()),
+        new BosJsonExportPlanner(),
+        new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
+        CreateCatalog());
 
     private static MainWindowViewModel CreateBundleViewModel(ProjectModel project)
     {
@@ -739,6 +921,75 @@ public sealed class PortableBundleServiceTests
         return project;
     }
 
+    private static ProjectModel CreateStaleAssignmentStrategyProject(
+        AssignmentStrategyDefinition? strategy,
+        bool includeStalePreset = true)
+    {
+        var project = new ProjectModel { AssignmentStrategy = strategy };
+        var presetA = CreatePreset("PresetA", 10);
+        var presetB = CreatePreset("PresetB", 20);
+        var presetC = CreatePreset("PresetC", 30);
+        var stalePreset = includeStalePreset ? CreatePreset("StalePreset", 40) : presetC;
+        project.SliderPresets.Add(presetA);
+        project.SliderPresets.Add(presetB);
+        project.SliderPresets.Add(presetC);
+        if (includeStalePreset) project.SliderPresets.Add(stalePreset);
+
+        AddStaleNpc(project, "Aela", "Skyrim.esm", "AelaEditor", "000001", "NordRace", stalePreset);
+        AddStaleNpc(project, "Codsworth", "Fallout4.esm", "CodsworthEditor", "000002", "MrHandyRace", stalePreset);
+        AddStaleNpc(project, "Danica", "Skyrim.esm", "DanicaEditor", "000003", "BretonRace", stalePreset);
+        return project;
+    }
+
+    private static SliderPreset CreatePreset(string name, int breastsValue)
+    {
+        var preset = new SliderPreset(name);
+        preset.AddSetSlider(new ModelSetSlider("Breasts") { ValueSmall = breastsValue, ValueBig = breastsValue + 1 });
+        return preset;
+    }
+
+    private static void AddStaleNpc(
+        ProjectModel project,
+        string name,
+        string mod,
+        string editorId,
+        string formId,
+        string race,
+        SliderPreset stalePreset)
+    {
+        var npc = new Npc(name)
+        {
+            Mod = mod,
+            EditorId = editorId,
+            FormId = formId,
+            Race = race,
+        };
+        npc.AddSliderPreset(stalePreset);
+        project.MorphedNpcs.Add(npc);
+    }
+
+    private static AssignmentStrategyDefinition CreateRaceFilterStrategy() => new(
+        1,
+        AssignmentStrategyKind.RaceFilters,
+        null,
+        new[]
+        {
+            new AssignmentStrategyRule("Nords", PresetAName, NordRaceName, 1.0, null),
+            new AssignmentStrategyRule("Robots", PresetBName, MrHandyRaceName, 1.0, null),
+            new AssignmentStrategyRule("Bretons", PresetCName, BretonRaceName, 1.0, null),
+        });
+
+    private static AssignmentStrategyDefinition CreateNordOnlyBlockingStrategy() => new(
+        1,
+        AssignmentStrategyKind.RaceFilters,
+        null,
+        new[] { new AssignmentStrategyRule("Nords", PresetAName, NordRaceName, 1.0, null) });
+
+    private static string[] SnapshotNpcAssignments(ProjectModel project) => project.MorphedNpcs
+        .OrderBy(npc => npc.Name, StringComparer.Ordinal)
+        .Select(npc => npc.Name + "=" + string.Join("|", npc.SliderPresets.Select(preset => preset.Name)))
+        .ToArray();
+
     private static ProjectModel CreateProjectWithEmbeddedAndLocalProfiles()
     {
         var project = CreateProjectWithAssignedPreset();
@@ -801,7 +1052,16 @@ public sealed class PortableBundleServiceTests
         new BosJsonExportWriter(new TemplateGenerationService()).Write(bosDirectory, project.SliderPresets, catalog);
         return new ExpectedOutputPaths(
             Path.Combine(bodyGenDirectory, "templates.ini"),
-            Path.Combine(bosDirectory, "Alpha.json"));
+            Directory.GetFiles(bosDirectory, "*.json", SearchOption.TopDirectoryOnly)
+                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .First());
+    }
+
+    private static string GetReplayReportText(object contract)
+    {
+        var property = contract.GetType().GetProperty("ReplayReportText");
+        property.Should().NotBeNull("portable bundle preview/result contracts must expose replay status explicitly");
+        return (string?)property!.GetValue(contract) ?? string.Empty;
     }
 
     private static string ReadEntryText(ZipArchive archive, string name) =>
