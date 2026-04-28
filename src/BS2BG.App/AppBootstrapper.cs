@@ -1,6 +1,7 @@
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
+using BS2BG.Core.Automation;
 using BS2BG.Core.Bundling;
 using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
@@ -42,6 +43,7 @@ public static class AppBootstrapper
         services.AddSingleton<DiagnosticReportTextFormatter>();
         services.AddSingleton<BodyGenIniExportWriter>();
         services.AddSingleton<BosJsonExportWriter>();
+        services.AddSingleton<AssignmentStrategyReplayService>();
         // The singleton keeps only the bundled/base catalog; local and project custom profiles flow per request
         // through MainWindowViewModel.BuildProjectSaveContext so bundle output cannot capture a stale snapshot.
         services.AddSingleton(provider => new PortableProjectBundleService(
@@ -50,6 +52,7 @@ public static class AppBootstrapper
             provider.GetRequiredService<MorphGenerationService>(),
             provider.GetRequiredService<BodyGenIniExportWriter>(),
             provider.GetRequiredService<BosJsonExportWriter>(),
+            provider.GetRequiredService<AssignmentStrategyReplayService>(),
             provider.GetRequiredService<ITemplateProfileCatalogService>().Current,
             provider.GetRequiredService<DiagnosticReportTextFormatter>()));
         services.AddSingleton<UndoRedoService>();

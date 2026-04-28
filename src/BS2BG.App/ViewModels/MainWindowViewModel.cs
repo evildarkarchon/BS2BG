@@ -181,6 +181,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             morphGenerationService,
             bodyGenIniExportWriter,
             bosJsonExportWriter,
+            new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
             profileCatalogService.Current,
             new DiagnosticReportTextFormatter());
         this.undoRedo = undoRedo ?? new UndoRedoService();
@@ -998,7 +999,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             "Portable bundle preview",
             preview.Outcome,
             sourceProjectFileName,
-            preview.PrivacyFindings);
+            preview.PrivacyFindings,
+            preview.ReplayReportText);
     }
 
     private void ApplyBundleResult(PortableProjectBundleResult result, string sourceProjectFileName)
@@ -1010,14 +1012,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             "Portable bundle result",
             result.Outcome,
             sourceProjectFileName,
-            result.PrivacyFindings);
+            result.PrivacyFindings,
+            result.ReplayReportText);
     }
 
     private string BuildBundleSummary(
         string heading,
         PortableProjectBundleOutcome outcome,
         string sourceProjectFileName,
-        IReadOnlyList<string> privacyFindings)
+        IReadOnlyList<string> privacyFindings,
+        string replayReportText)
     {
         var privacyStatus = privacyFindings.Any(finding => finding.Contains("leak", StringComparison.OrdinalIgnoreCase)
                                                            && !finding.Contains("No private", StringComparison.OrdinalIgnoreCase))
@@ -1029,6 +1033,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
                + ". Profile copy scope: Referenced custom profiles only. "
                + privacyStatus
                + ". Outcome: " + outcome + "."
+               + (string.IsNullOrWhiteSpace(replayReportText) ? string.Empty : " " + replayReportText)
                + dirtyState;
     }
 

@@ -741,6 +741,7 @@ public sealed class PortableBundleServiceTests
         new MorphGenerationService(),
         new BodyGenIniExportWriter(),
         new BosJsonExportWriter(new TemplateGenerationService()),
+        new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
         CreateCatalog(),
         new DiagnosticReportTextFormatter(),
         tempRoot);
@@ -751,6 +752,7 @@ public sealed class PortableBundleServiceTests
         new MorphGenerationService(),
         new BodyGenIniExportWriter(),
         new BosJsonExportWriter(new TemplateGenerationService()),
+        new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
         CreateBundledOnlyCatalog(),
         new DiagnosticReportTextFormatter());
 
@@ -760,6 +762,7 @@ public sealed class PortableBundleServiceTests
         new MorphGenerationService(),
         new BodyGenIniExportWriter(),
         new BosJsonExportWriter(new TemplateGenerationService()),
+        new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
         CreateCatalog(),
         new DiagnosticReportTextFormatter(),
         tempRoot: null,

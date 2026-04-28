@@ -210,6 +210,7 @@ public static class Program
             new MorphGenerationService(),
             new BodyGenIniExportWriter(),
             new BosJsonExportWriter(templateGenerationService),
+            new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
             catalog,
             new DiagnosticReportTextFormatter());
 
@@ -335,6 +336,10 @@ public static class Program
 
         foreach (var finding in result.PrivacyFindings.Count > 0 ? result.PrivacyFindings : preview.PrivacyFindings)
             writer.WriteLine(finding);
+        var replayReportText = string.IsNullOrWhiteSpace(result.ReplayReportText)
+            ? preview.ReplayReportText
+            : result.ReplayReportText;
+        if (!string.IsNullOrWhiteSpace(replayReportText)) writer.WriteLine(replayReportText);
     }
 
     private static void WriteValidationSummary(TextWriter writer, ProjectValidationReport report)

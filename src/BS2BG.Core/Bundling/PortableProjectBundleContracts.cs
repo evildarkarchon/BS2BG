@@ -54,7 +54,13 @@ public sealed record PortableProjectBundlePreview(
     IReadOnlyList<BundleManifestEntry> Entries,
     string ManifestJson,
     ProjectValidationReport ValidationReport,
-    IReadOnlyList<string> PrivacyFindings);
+    IReadOnlyList<string> PrivacyFindings)
+{
+    /// <summary>
+    /// Gets concise saved-assignment replay status for preview/report surfaces without overloading privacy findings.
+    /// </summary>
+    public string ReplayReportText { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// Describes the result of attempting to create a portable project bundle zip.
@@ -71,7 +77,13 @@ public sealed record PortableProjectBundleResult(
     IReadOnlyList<string> Entries,
     string ManifestJson,
     ProjectValidationReport ValidationReport,
-    IReadOnlyList<string> PrivacyFindings);
+    IReadOnlyList<string> PrivacyFindings)
+{
+    /// <summary>
+    /// Gets concise saved-assignment replay status for callers and CLI output without changing positional construction.
+    /// </summary>
+    public string ReplayReportText { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// Root manifest schema for Phase 5 portable bundle archives.
