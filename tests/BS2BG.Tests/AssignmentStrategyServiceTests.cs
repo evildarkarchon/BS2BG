@@ -184,4 +184,113 @@ public sealed class AssignmentStrategyServiceTests
         result.Diagnostics.Should().Contain(diagnostic => diagnostic.Code == expectedCode
                                                          && diagnostic.Message.Contains("assignment strategy", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void SeededRandomReplaysSameNpcPresetSequenceForSameInputs()
+    {
+        var first = CreateStrategyProject();
+        var second = CreateStrategyProject();
+        var strategy = new AssignmentStrategyDefinition(1, AssignmentStrategyKind.SeededRandom, 123, Array.Empty<AssignmentStrategyRule>());
+
+        var firstResult = AssignmentStrategyService.Apply(first, strategy);
+        var secondResult = AssignmentStrategyService.Apply(second, strategy);
+
+        firstResult.AssignedCount.Should().Be(3);
+        secondResult.AssignedCount.Should().Be(3);
+        AssignmentSnapshot(first).Should().Equal("Aela=PresetA", "Codsworth=PresetC", "Danica=PresetC");
+        AssignmentSnapshot(second).Should().Equal(AssignmentSnapshot(first));
+    }
+
+    [Fact]
+    public void RoundRobinAssignsPresetsInStableProjectPresetOrder()
+    {
+        var project = CreateStrategyProject();
+        var strategy = new AssignmentStrategyDefinition(1, AssignmentStrategyKind.RoundRobin, null, Array.Empty<AssignmentStrategyRule>());
+
+        var result = AssignmentStrategyService.Apply(project, strategy);
+
+        result.AssignedCount.Should().Be(3);
+        AssignmentSnapshot(project).Should().Equal("Aela=PresetA", "Codsworth=PresetB", "Danica=PresetC");
+    }
+
+    [Fact]
+    public void ComputeEligibilityReportsSameBlockedNpcListUsedByApply()
+    {
+        var project = CreateStrategyProject();
+        var strategy = new AssignmentStrategyDefinition(
+            1,
+            AssignmentStrategyKind.RaceFilters,
+            null,
+            new[] { new AssignmentStrategyRule("Nords", new[] { "PresetA" }, new[] { "NordRace" }, 1.0, null) });
+
+        var eligibility = AssignmentStrategyService.ComputeEligibility(project, strategy, project.MorphedNpcs);
+        var result = AssignmentStrategyService.Apply(project, strategy);
+
+        eligibility.BlockedNpcs.Select(blocked => blocked.Npc.Name)
+            .Should().Equal(result.BlockedNpcs.Select(blocked => blocked.Npc.Name));
+        result.BlockedNpcs.Select(blocked => blocked.Npc.Name).Should().Equal("Codsworth", "Danica");
+        project.MorphedNpcs.Single(npc => npc.Name == "Codsworth").SliderPresets.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SeededStrategyCodeUsesProviderSeamWithoutSystemRandomSeedReplay()
+    {
+        var provider = new SequenceRandomAssignmentProvider(2, 1, 0);
+        var project = CreateStrategyProject();
+        var service = new AssignmentStrategyService(provider);
+        var strategy = new AssignmentStrategyDefinition(1, AssignmentStrategyKind.SeededRandom, null, Array.Empty<AssignmentStrategyRule>());
+
+        service.Apply(project, strategy);
+
+        AssignmentSnapshot(project).Should().Equal("Aela=PresetC", "Codsworth=PresetB", "Danica=PresetA");
+        File.ReadAllText(Path.Combine("src", "BS2BG.Core", "Morphs", "AssignmentStrategyService.cs"))
+            .Should().NotContain("new Random(seed)");
+    }
+
+    [Theory]
+    [MemberData(nameof(DeterministicProviderVectors))]
+    public void DeterministicAssignmentRandomProviderHasPinnedReferenceVectors(int seed, int[] expected)
+    {
+        var provider = new DeterministicAssignmentRandomProvider(seed);
+
+        Enumerable.Range(0, expected.Length)
+            .Select(_ => provider.NextIndex(1000))
+            .Should().Equal(expected.AsEnumerable());
+    }
+
+    public static IEnumerable<object[]> DeterministicProviderVectors()
+    {
+        yield return new object[] { 0, new[] { 738, 247, 56, 444, 716 } };
+        yield return new object[] { 1, new[] { 67, 833, 787, 821, 403 } };
+        yield return new object[] { 123, new[] { 976, 775, 934, 63, 641 } };
+    }
+
+    private static ProjectModel CreateStrategyProject()
+    {
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("PresetA"));
+        project.SliderPresets.Add(new SliderPreset("PresetB"));
+        project.SliderPresets.Add(new SliderPreset("PresetC"));
+        project.MorphedNpcs.Add(new Npc("Danica") { Mod = "Skyrim.esm", EditorId = "Danica", FormId = "000003", Race = "BretonRace" });
+        project.MorphedNpcs.Add(new Npc("Aela") { Mod = "Skyrim.esm", EditorId = "Aela", FormId = "000001", Race = "NordRace" });
+        project.MorphedNpcs.Add(new Npc("Codsworth") { Mod = "Fallout4.esm", EditorId = "Codsworth", FormId = "000002", Race = "MrHandyRace" });
+        return project;
+    }
+
+    private static string[] AssignmentSnapshot(ProjectModel project) => project.MorphedNpcs
+        .OrderBy(npc => npc.Name, StringComparer.OrdinalIgnoreCase)
+        .Select(npc => npc.Name + "=" + npc.SliderPresetsText)
+        .ToArray();
+
+    private sealed class SequenceRandomAssignmentProvider(params int[] values) : IRandomAssignmentProvider
+    {
+        private int index;
+
+        public int NextIndex(int exclusiveMax)
+        {
+            exclusiveMax.Should().BePositive();
+            var value = values[index++ % values.Length];
+            return value % exclusiveMax;
+        }
+    }
 }
