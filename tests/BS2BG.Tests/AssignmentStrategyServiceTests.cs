@@ -1,8 +1,12 @@
+using BS2BG.Core.Diagnostics;
+using BS2BG.Core.Formatting;
+using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 using BS2BG.Core.Serialization;
 using FluentAssertions;
 using Xunit;
+using ModelSliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
@@ -117,7 +121,7 @@ public sealed class AssignmentStrategyServiceTests
                     new AssignmentStrategyRule("Nord Warriors", PresetAAndPresetB, NordRaceUpper, 3.25, "Warriors")
                 })
         };
-        project.SliderPresets.Add(new SliderPreset("PresetA"));
+        project.SliderPresets.Add(new ModelSliderPreset("PresetA"));
 
         var saved = service.SaveToString(project);
         var loaded = service.LoadFromString(saved);
@@ -353,6 +357,76 @@ public sealed class AssignmentStrategyServiceTests
         AssignmentSnapshot(project).Should().Equal("Aela=", "Codsworth=", "Danica=");
     }
 
+    [Fact]
+    public void StrategyNoEligibleDiagnosticIsNonBlockingForPlainValidation()
+    {
+        var project = CreateStrategyProject();
+        project.AssignmentStrategy = new AssignmentStrategyDefinition(
+            1,
+            AssignmentStrategyKind.RaceFilters,
+            null,
+            new[] { new AssignmentStrategyRule("Only Nords", PresetA, NordRaceUpper, 1.0, null) });
+        project.MarkClean();
+
+        var report = ProjectValidationService.Validate(project, CreateCatalog());
+
+        report.Findings.Should().Contain(finding =>
+            finding.Severity == DiagnosticSeverity.Caution
+            && finding.Area == "Morphs/NPCs"
+            && finding.Title == "No eligible preset after strategy rules"
+            && finding.Detail.Contains("race filters, weights, or groups", StringComparison.OrdinalIgnoreCase));
+        report.Findings.Where(finding => finding.Title == "No eligible preset after strategy rules")
+            .Should().OnlyContain(finding => finding.Severity != DiagnosticSeverity.Blocker);
+    }
+
+    [Fact]
+    public void NoEligibleDiagnosticTextNamesNpcAndAdjustmentAction()
+    {
+        var project = CreateStrategyProject();
+        project.AssignmentStrategy = new AssignmentStrategyDefinition(
+            1,
+            AssignmentStrategyKind.GroupsBuckets,
+            null,
+            new[] { new AssignmentStrategyRule("Unknown", new[] { "MissingPreset" }, Array.Empty<string>(), 1.0, "Any") });
+
+        var finding = ProjectValidationService.Validate(project, CreateCatalog()).Findings
+            .First(value => value.Title == "No eligible preset after strategy rules");
+
+        finding.Detail.Should().Contain(finding.TargetKey);
+        finding.Detail.Should().Contain("No eligible preset after strategy rules");
+        finding.ActionHint.Should().Be("Adjust race filters, weights, or groups before applying assignments.");
+    }
+
+    [Fact]
+    public void NullAssignmentStrategyKeepsExistingValidationFindingsUnchanged()
+    {
+        var project = CreateStrategyProject();
+        project.AssignmentStrategy = null;
+
+        var report = ProjectValidationService.Validate(project, CreateCatalog());
+
+        report.Findings.Should().NotContain(finding => finding.Title == "No eligible preset after strategy rules");
+    }
+
+    [Fact]
+    public void StrategyDiagnosticBlockedNpcListMatchesApplyBlockedNpcList()
+    {
+        var project = CreateStrategyProject();
+        var strategy = new AssignmentStrategyDefinition(
+            1,
+            AssignmentStrategyKind.RaceFilters,
+            null,
+            new[] { new AssignmentStrategyRule("Only Nords", PresetA, NordRaceUpper, 1.0, null) });
+        project.AssignmentStrategy = strategy;
+
+        var report = ProjectValidationService.Validate(project, CreateCatalog());
+        var result = AssignmentStrategyService.Apply(project, strategy);
+
+        report.Findings.Where(finding => finding.Title == "No eligible preset after strategy rules")
+            .Select(finding => finding.TargetKey)
+            .Should().Equal(result.BlockedNpcs.Select(blocked => blocked.Npc.Name));
+    }
+
     public static IEnumerable<object[]> DeterministicProviderVectors()
     {
         yield return new object[] { 0, new[] { 738, 247, 56, 444, 716 } };
@@ -363,13 +437,23 @@ public sealed class AssignmentStrategyServiceTests
     private static ProjectModel CreateStrategyProject()
     {
         var project = new ProjectModel();
-        project.SliderPresets.Add(new SliderPreset("PresetA"));
-        project.SliderPresets.Add(new SliderPreset("PresetB"));
-        project.SliderPresets.Add(new SliderPreset("PresetC"));
+        project.SliderPresets.Add(new ModelSliderPreset("PresetA"));
+        project.SliderPresets.Add(new ModelSliderPreset("PresetB"));
+        project.SliderPresets.Add(new ModelSliderPreset("PresetC"));
         project.MorphedNpcs.Add(new Npc("Danica") { Mod = "Skyrim.esm", EditorId = "Danica", FormId = "000003", Race = "BretonRace" });
         project.MorphedNpcs.Add(new Npc("Aela") { Mod = "Skyrim.esm", EditorId = "Aela", FormId = "000001", Race = "NordRace" });
         project.MorphedNpcs.Add(new Npc("Codsworth") { Mod = "Fallout4.esm", EditorId = "Codsworth", FormId = "000002", Race = "MrHandyRace" });
         return project;
+    }
+
+    private static TemplateProfileCatalog CreateCatalog()
+    {
+        var profile = new SliderProfile(
+            new[] { new SliderDefault("Known", 0f, 1f) },
+            Array.Empty<SliderMultiplier>(),
+            Array.Empty<string>());
+
+        return new TemplateProfileCatalog(new[] { new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, profile) });
     }
 
     private static string[] AssignmentSnapshot(ProjectModel project) => project.MorphedNpcs
