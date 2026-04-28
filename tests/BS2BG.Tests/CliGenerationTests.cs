@@ -6,6 +6,7 @@ using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
+using BS2BG.Core.Morphs;
 using BS2BG.Core.Serialization;
 using Xunit;
 using SliderDefault = BS2BG.Core.Formatting.SliderDefault;
@@ -27,6 +28,12 @@ public sealed class ConsoleCaptureFixture;
 public sealed class CliGenerationTests
 {
     private static readonly string[] ExpectedCliPublishEntryNames = ["BS2BG.Cli", "BS2BG.Cli.exe", "BS2BG.Cli.dll"];
+    private static readonly string[] PresetAName = ["PresetA"];
+    private static readonly string[] PresetBName = ["PresetB"];
+    private static readonly string[] PresetCName = ["PresetC"];
+    private static readonly string[] NordRaceName = ["NordRace"];
+    private static readonly string[] MrHandyRaceName = ["MrHandyRace"];
+    private static readonly string[] BretonRaceName = ["BretonRace"];
     private static readonly object ConsoleLock = new();
 
     [Fact]
@@ -180,6 +187,206 @@ public sealed class CliGenerationTests
             Path.Combine(outputDirectory, "morphs.ini"));
         File.ReadAllText(Path.Combine(outputDirectory, "templates.ini")).Should().Contain("Alpha=Breasts@");
         File.ReadAllText(Path.Combine(outputDirectory, "morphs.ini")).Should().Be("All|Female=Alpha");
+    }
+
+    [Fact]
+    public void HeadlessGenerationServiceReplaysSavedAssignmentStrategyForBodyGenBeforeWritingMorphsIni()
+    {
+        using var directory = new TemporaryDirectory();
+        var projectPath = SaveProject(directory.Path, CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy()));
+        var outputDirectory = Path.Combine(directory.Path, "out");
+
+        var result = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            outputDirectory,
+            OutputIntent.BodyGen,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        result.ExitCode.Should().Be(AutomationExitCode.Success);
+        var morphs = File.ReadAllText(Path.Combine(outputDirectory, "morphs.ini"));
+        morphs.Should().Contain("Skyrim.esm|1=PresetA");
+        morphs.Should().Contain("Fallout4.esm|2=PresetB");
+        morphs.Should().Contain("Skyrim.esm|3=PresetC");
+        morphs.Should().NotContain("StalePreset");
+    }
+
+    [Fact]
+    public void HeadlessGenerationServiceReplaysSeededStrategyDeterministicallyAcrossBodyGenRuns()
+    {
+        using var directory = new TemporaryDirectory();
+        var projectPath = SaveProject(directory.Path, CreateStaleAssignmentStrategyProject(
+            new AssignmentStrategyDefinition(1, AssignmentStrategyKind.SeededRandom, 123, Array.Empty<AssignmentStrategyRule>()),
+            includeStalePreset: false));
+        var firstOutputDirectory = Path.Combine(directory.Path, "first");
+        var secondOutputDirectory = Path.Combine(directory.Path, "second");
+
+        var first = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            firstOutputDirectory,
+            OutputIntent.BodyGen,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+        var second = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            secondOutputDirectory,
+            OutputIntent.BodyGen,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        first.ExitCode.Should().Be(AutomationExitCode.Success);
+        second.ExitCode.Should().Be(AutomationExitCode.Success);
+        File.ReadAllBytes(Path.Combine(secondOutputDirectory, "morphs.ini"))
+            .Should().Equal(File.ReadAllBytes(Path.Combine(firstOutputDirectory, "morphs.ini")));
+        File.ReadAllText(Path.Combine(firstOutputDirectory, "morphs.ini")).Should().Be(
+            "Fallout4.esm|2=PresetA\r\nSkyrim.esm|1=PresetB\r\nSkyrim.esm|3=PresetB");
+    }
+
+    [Fact]
+    public void HeadlessGenerationServiceAllIntentReplaysMorphsOnlyAndPreservesTemplatesAndBosJsonBytes()
+    {
+        using var directory = new TemporaryDirectory();
+        var replayProject = CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy());
+        var sourceStateProject = CreateStaleAssignmentStrategyProject(null);
+        var replayProjectPath = SaveProject(directory.Path, replayProject);
+        var sourceProjectPath = SaveProject(directory.Path, sourceStateProject);
+        var replayOutputDirectory = Path.Combine(directory.Path, "replay");
+        var sourceOutputDirectory = Path.Combine(directory.Path, "source");
+
+        var replayResult = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            replayProjectPath,
+            replayOutputDirectory,
+            OutputIntent.All,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+        var sourceResult = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            sourceProjectPath,
+            sourceOutputDirectory,
+            OutputIntent.All,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        replayResult.ExitCode.Should().Be(AutomationExitCode.Success);
+        sourceResult.ExitCode.Should().Be(AutomationExitCode.Success);
+        File.Exists(Path.Combine(replayOutputDirectory, "templates.ini")).Should().BeTrue();
+        File.Exists(Path.Combine(replayOutputDirectory, "morphs.ini")).Should().BeTrue();
+        File.Exists(Path.Combine(replayOutputDirectory, "PresetA.json")).Should().BeTrue();
+        File.ReadAllBytes(Path.Combine(replayOutputDirectory, "templates.ini"))
+            .Should().Equal(File.ReadAllBytes(Path.Combine(sourceOutputDirectory, "templates.ini")));
+        File.ReadAllBytes(Path.Combine(replayOutputDirectory, "PresetA.json"))
+            .Should().Equal(File.ReadAllBytes(Path.Combine(sourceOutputDirectory, "PresetA.json")));
+        File.ReadAllText(Path.Combine(replayOutputDirectory, "morphs.ini")).Should().NotContain("StalePreset");
+    }
+
+    [Fact]
+    public void HeadlessGenerationServiceBosJsonIntentDoesNotReplayOrWriteMorphsIni()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy());
+        var projectPath = SaveProject(directory.Path, project);
+        var outputDirectory = Path.Combine(directory.Path, "out");
+
+        var result = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            outputDirectory,
+            OutputIntent.BosJson,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        result.ExitCode.Should().Be(AutomationExitCode.Success);
+        File.Exists(Path.Combine(outputDirectory, "morphs.ini")).Should().BeFalse();
+        File.Exists(Path.Combine(outputDirectory, "PresetA.json")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HeadlessGenerationServiceWithoutSavedStrategyUsesExistingAssignmentsForMorphsIni()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateStaleAssignmentStrategyProject(null);
+        var projectPath = SaveProject(directory.Path, project);
+        var outputDirectory = Path.Combine(directory.Path, "out");
+
+        var result = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            outputDirectory,
+            OutputIntent.BodyGen,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        result.ExitCode.Should().Be(AutomationExitCode.Success);
+        File.ReadAllText(Path.Combine(outputDirectory, "morphs.ini")).Should().Contain("StalePreset");
+    }
+
+    [Fact]
+    public void HeadlessGenerationServiceBlockedReplayReturnsValidationBlockedBeforeAllIntentCreatesFiles()
+    {
+        using var directory = new TemporaryDirectory();
+        var projectPath = SaveProject(directory.Path, CreateStaleAssignmentStrategyProject(CreateNordOnlyBlockingStrategy()));
+        var outputDirectory = Path.Combine(directory.Path, "out");
+
+        var result = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            outputDirectory,
+            OutputIntent.All,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        result.ExitCode.Should().Be(AutomationExitCode.ValidationBlocked);
+        result.Message.Should().Contain("Codsworth");
+        result.Message.Should().Contain("Fallout4.esm");
+        result.Message.Should().Contain("CodsworthEditor");
+        result.Message.Should().Contain("000002");
+        result.Message.Should().Contain("MrHandyRace");
+        result.Message.Should().Contain("No eligible preset after strategy rules");
+        result.Message.Should().NotContain(nameof(HeadlessGenerationRequest.ProjectPath));
+        result.Message.Should().NotContain(projectPath);
+        result.Message.Should().NotContain(outputDirectory);
+        File.Exists(Path.Combine(outputDirectory, "templates.ini")).Should().BeFalse();
+        File.Exists(Path.Combine(outputDirectory, "morphs.ini")).Should().BeFalse();
+        File.Exists(Path.Combine(outputDirectory, "PresetA.json")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HeadlessGenerationServiceValidatesAssignmentsAfterReplayReplacesStaleInvalidPresetReference()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy());
+        project.MorphedNpcs.First(npc => npc.Name == "Aela").AddSliderPreset(new SliderPreset("MissingPreset"));
+        var projectPath = SaveProject(directory.Path, project);
+        var outputDirectory = Path.Combine(directory.Path, "out");
+
+        var result = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            outputDirectory,
+            OutputIntent.BodyGen,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        result.ExitCode.Should().Be(AutomationExitCode.Success);
+        File.ReadAllText(Path.Combine(outputDirectory, "morphs.ini")).Should().Contain("Skyrim.esm|1=PresetA");
+    }
+
+    [Fact]
+    public void HeadlessGenerationServiceReplaysBeforeOverwritePreflightAndStillRefusesExistingTargets()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy());
+        project.MorphedNpcs.First(npc => npc.Name == "Aela").AddSliderPreset(new SliderPreset("MissingPreset"));
+        var projectPath = SaveProject(directory.Path, project);
+        var outputDirectory = Path.Combine(directory.Path, "out");
+        Directory.CreateDirectory(outputDirectory);
+        File.WriteAllText(Path.Combine(outputDirectory, "templates.ini"), "old");
+
+        var result = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            outputDirectory,
+            OutputIntent.BodyGen,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        result.ExitCode.Should().Be(AutomationExitCode.OverwriteRefused);
+        result.Message.Should().Contain("Target files already exist");
+        File.Exists(Path.Combine(outputDirectory, "morphs.ini")).Should().BeFalse();
     }
 
     [Fact]
@@ -370,6 +577,26 @@ public sealed class CliGenerationTests
         File.Exists(Path.Combine(outputDirectory, "templates.ini")).Should().BeTrue();
         File.Exists(Path.Combine(outputDirectory, "morphs.ini")).Should().BeTrue();
         File.Exists(Path.Combine(outputDirectory, "Alpha.json")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ProgramMainGenerateBodyGenPrintsReplaySummaryOnStdout()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy()));
+        var outputDirectory = Path.Combine(directory.Path, "out");
+
+        var result = InvokeProgramMain(
+            "generate",
+            "--project", projectPath,
+            "--output", outputDirectory,
+            "--intent", "bodygen");
+
+        result.ExitCode.Should().Be(0, result.StandardError);
+        result.StandardOutput.Should().Contain("Assignment strategy replayed: RaceFilters; assigned NPCs: 3; blocked NPCs: 0.");
+        result.StandardOutput.Should().Contain("Generation completed successfully.");
+        result.StandardError.Should().BeEmpty();
     }
 
     [Fact]
@@ -613,6 +840,70 @@ public sealed class CliGenerationTests
         new BosJsonExportWriter(new TemplateGenerationService()),
         new BosJsonExportPlanner(),
         CreateCatalog());
+
+    private static ProjectModel CreateStaleAssignmentStrategyProject(
+        AssignmentStrategyDefinition? strategy,
+        bool includeStalePreset = true)
+    {
+        var project = new ProjectModel { AssignmentStrategy = strategy };
+        var presetA = CreatePreset("PresetA", 10);
+        var presetB = CreatePreset("PresetB", 20);
+        var presetC = CreatePreset("PresetC", 30);
+        var stalePreset = includeStalePreset ? CreatePreset("StalePreset", 40) : presetC;
+        project.SliderPresets.Add(presetA);
+        project.SliderPresets.Add(presetB);
+        project.SliderPresets.Add(presetC);
+        if (includeStalePreset) project.SliderPresets.Add(stalePreset);
+
+        AddStaleNpc(project, "Aela", "Skyrim.esm", "AelaEditor", "000001", "NordRace", stalePreset);
+        AddStaleNpc(project, "Codsworth", "Fallout4.esm", "CodsworthEditor", "000002", "MrHandyRace", stalePreset);
+        AddStaleNpc(project, "Danica", "Skyrim.esm", "DanicaEditor", "000003", "BretonRace", stalePreset);
+        return project;
+    }
+
+    private static SliderPreset CreatePreset(string name, int breastsValue)
+    {
+        var preset = new SliderPreset(name);
+        preset.AddSetSlider(new ModelSetSlider("Breasts") { ValueSmall = breastsValue, ValueBig = breastsValue + 1 });
+        return preset;
+    }
+
+    private static void AddStaleNpc(
+        ProjectModel project,
+        string name,
+        string mod,
+        string editorId,
+        string formId,
+        string race,
+        SliderPreset stalePreset)
+    {
+        var npc = new Npc(name)
+        {
+            Mod = mod,
+            EditorId = editorId,
+            FormId = formId,
+            Race = race,
+        };
+        npc.AddSliderPreset(stalePreset);
+        project.MorphedNpcs.Add(npc);
+    }
+
+    private static AssignmentStrategyDefinition CreateRaceFilterStrategy() => new(
+        1,
+        AssignmentStrategyKind.RaceFilters,
+        null,
+        new[]
+        {
+            new AssignmentStrategyRule("Nords", PresetAName, NordRaceName, 1.0, null),
+            new AssignmentStrategyRule("Robots", PresetBName, MrHandyRaceName, 1.0, null),
+            new AssignmentStrategyRule("Bretons", PresetCName, BretonRaceName, 1.0, null),
+        });
+
+    private static AssignmentStrategyDefinition CreateNordOnlyBlockingStrategy() => new(
+        1,
+        AssignmentStrategyKind.RaceFilters,
+        null,
+        new[] { new AssignmentStrategyRule("Nords", PresetAName, NordRaceName, 1.0, null) });
 
     private static TemplateProfileCatalog CreateCatalog() => new(new[]
     {
