@@ -68,7 +68,7 @@ public sealed class HeadlessGenerationService(
                 AutomationExitCode.ValidationBlocked,
                 FormatReplayBlockedMessage(replayResult),
                 Array.Empty<string>(),
-                ProjectValidationService.Validate(replayResult.Project, requestProfileCatalog));
+                AssignmentStrategyReplayDiagnostics.CreateBlockedValidationReport(replayResult));
 
         var generationProject = replayResult.Project;
         var validationReport = ProjectValidationService.Validate(generationProject, requestProfileCatalog);

@@ -607,6 +607,11 @@ public sealed class PortableBundleServiceTests
         report.Should().Contain("No eligible preset after strategy rules");
         report.Should().NotContain(directory.Path);
         report.Should().NotContain(bundlePath);
+        result.ValidationReport.BlockerCount.Should().BeGreaterThan(0);
+        result.ValidationReport.Findings.Should().Contain(finding =>
+            finding.Code == "ASSIGNMENT_REPLAY_BLOCKED"
+            && finding.Detail.Contains("Codsworth", StringComparison.Ordinal)
+            && finding.Detail.Contains("No eligible preset after strategy rules", StringComparison.Ordinal));
         result.PrivacyFindings.Should().ContainSingle("No private path leaks detected.");
     }
 

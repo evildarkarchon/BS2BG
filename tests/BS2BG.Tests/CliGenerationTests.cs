@@ -341,6 +341,12 @@ public sealed class CliGenerationTests
         result.Message.Should().NotContain(nameof(HeadlessGenerationRequest.ProjectPath));
         result.Message.Should().NotContain(projectPath);
         result.Message.Should().NotContain(outputDirectory);
+        result.ValidationReport.Should().NotBeNull();
+        result.ValidationReport!.BlockerCount.Should().BeGreaterThan(0);
+        result.ValidationReport.Findings.Should().Contain(finding =>
+            finding.Code == "ASSIGNMENT_REPLAY_BLOCKED"
+            && finding.Detail.Contains("Codsworth", StringComparison.Ordinal)
+            && finding.Detail.Contains("No eligible preset after strategy rules", StringComparison.Ordinal));
         File.Exists(Path.Combine(outputDirectory, "templates.ini")).Should().BeFalse();
         File.Exists(Path.Combine(outputDirectory, "morphs.ini")).Should().BeFalse();
         File.Exists(Path.Combine(outputDirectory, "PresetA.json")).Should().BeFalse();

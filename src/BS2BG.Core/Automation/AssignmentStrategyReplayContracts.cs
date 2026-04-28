@@ -1,3 +1,4 @@
+using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
 
@@ -25,4 +26,31 @@ public sealed record AssignmentStrategyReplayResult(
     /// Gets whether replay found fatal blocked NPC rows that make the working project unsafe for output generation.
     /// </summary>
     public bool IsBlocked => BlockedNpcs.Count > 0;
+}
+
+/// <summary>
+/// Converts assignment-strategy replay failures into the validation contract consumed by headless automation surfaces.
+/// </summary>
+internal static class AssignmentStrategyReplayDiagnostics
+{
+    /// <summary>
+    /// Creates blocker diagnostics for replay results that could not safely produce BodyGen output.
+    /// </summary>
+    /// <param name="replayResult">Replay result containing one or more blocked NPC rows.</param>
+    /// <returns>A validation report whose blockers represent each replay-blocked NPC.</returns>
+    public static ProjectValidationReport CreateBlockedValidationReport(AssignmentStrategyReplayResult replayResult)
+    {
+        if (replayResult is null) throw new ArgumentNullException(nameof(replayResult));
+
+        return new ProjectValidationReport(replayResult.BlockedNpcs.Select(blocked =>
+            new DiagnosticFinding(
+                DiagnosticSeverity.Blocker,
+                "Assignment strategy replay",
+                "NPC has no eligible preset",
+                "NPC '" + blocked.Npc.Name + "' cannot be assigned: " + blocked.Reason,
+                targetKey: blocked.Npc.Name,
+                actionHint: "Adjust saved assignment strategy rules or add an eligible preset for this NPC.",
+                code: "ASSIGNMENT_REPLAY_BLOCKED",
+                category: "Automation")));
+    }
 }

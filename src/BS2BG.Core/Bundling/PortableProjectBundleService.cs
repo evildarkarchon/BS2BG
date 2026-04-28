@@ -208,7 +208,7 @@ public sealed class PortableProjectBundleService
         var replayReportText = FormatReplayReport(replayResult, request, request.PrivateRoots);
         if (replayResult.IsBlocked)
         {
-            var blockedValidationReport = ProjectValidationService.Validate(request.Project, requestProfileCatalog);
+            var blockedValidationReport = AssignmentStrategyReplayDiagnostics.CreateBlockedValidationReport(replayResult);
             return BlockedPlan(
                 PortableProjectBundleOutcome.ValidationBlocked,
                 createdUtc,
