@@ -44,7 +44,7 @@ Accepted Phase 1 override: ROADMAP/requirement wording that previously mentioned
 ### Automation and Release Trust
 
 - [x] **AUTO-01**: User can run a headless CLI generation path that uses the same Core services and output semantics as the GUI.
-- [ ] **AUTO-02**: User can create a portable project bundle containing the `.jbs2bg` file, generated outputs, profile JSON copies, and a validation report without private local paths.
+- [x] **AUTO-02**: User can create a portable project bundle containing the `.jbs2bg` file, generated outputs, profile JSON copies, and a validation report without private local paths.
 - [x] **AUTO-03**: User can apply deterministic assignment strategy presets through seams that remain testable and do not bypass existing random-provider abstractions.
 - [x] **AUTO-04**: User can verify downloaded release artifacts through checksums, signing information when available, and release-package assertions.
 - [x] **AUTO-05**: User can access setup and troubleshooting guidance for BodyGen, BodySlide, BoS, and common output-location mistakes without BS2BG editing external game plugins.
@@ -107,7 +107,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXT-04 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | EXT-05 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | AUTO-01 | Phase 6: Compose Custom Profiles in Headless Generation | Complete |
-| AUTO-02 | Phase 7: Replay Saved Strategies in Automation Outputs | Pending |
+| AUTO-02 | Phase 7: Replay Saved Strategies in Automation Outputs | Complete |
 | AUTO-03 | Phase 7: Replay Saved Strategies in Automation Outputs | Complete |
 | AUTO-04 | Phase 5: Automation, Sharing, and Release Trust | Complete |
 | AUTO-05 | Phase 5: Automation, Sharing, and Release Trust | Complete |
@@ -115,10 +115,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 **Coverage:**
 - v1 requirements: 25 total
 - Mapped to phases: 25
-- Complete after audit adjustment: 23
-- Pending gap closure: 2
+- Complete after audit adjustment: 25
+- Pending gap closure: 0
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-26*
-*Last updated: 2026-04-27 after v1.0 milestone audit gap-phase planning*
+*Last updated: 2026-04-28 after Phase 7 completion*

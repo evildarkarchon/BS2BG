@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Profile Extensibility and Controlled Customization** - Users can manage custom local profiles without corrupting bundled profiles or legacy projects.
 - [x] **Phase 5: Automation, Sharing, and Release Trust** - Users can automate generation, bundle projects, and verify portable releases through trusted paths. (completed 2026-04-28)
 - [x] **Phase 6: Compose Custom Profiles in Headless Generation** - Projects that reference embedded or custom profiles generate through the CLI with the same request-scoped profile catalog semantics as GUI and bundle workflows. (completed 2026-04-28)
-- [ ] **Phase 7: Replay Saved Strategies in Automation Outputs** - CLI and portable bundle outputs replay saved deterministic assignment strategies before morph generation so automation is reproducible from project data.
+- [x] **Phase 7: Replay Saved Strategies in Automation Outputs** - CLI and portable bundle outputs replay saved deterministic assignment strategies before morph generation so automation is reproducible from project data. (completed 2026-04-28)
 
 ## Phase Details
 
@@ -186,7 +186,7 @@ Plans:
 **Wave 2 (blocked on Wave 1 completion)**
 - [x] 07-02-PLAN.md — Replay saved strategies in CLI/headless BodyGen generation before output writes.
 **Wave 3 (blocked on Wave 2 completion)**
-- [ ] 07-03-PLAN.md — Replay saved strategies in portable bundle BodyGen outputs while preserving source project state.
+- [x] 07-03-PLAN.md — Replay saved strategies in portable bundle BodyGen outputs while preserving source project state.
 Cross-cutting constraints: BodyGen/all automation replays saved strategies automatically; BoS-only automation does not replay; blocked replay fails before writing files or zip entries; request-scoped replay state must not rewrite the bundled source project entry; seeded strategy replay must remain deterministic through the existing provider path; replay summaries must have explicit CLI and bundle result/report surfaces.
 **UI hint**: no
 
@@ -203,4 +203,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Profile Extensibility and Controlled Customization | 8/8 | Complete | 2026-04-27 |
 | 5. Automation, Sharing, and Release Trust | 10/10 | Complete | 2026-04-28 |
 | 6. Compose Custom Profiles in Headless Generation | 1/1 | Complete | 2026-04-28 |
-| 7. Replay Saved Strategies in Automation Outputs | 2/3 | In Progress | - |
+| 7. Replay Saved Strategies in Automation Outputs | 3/3 | Complete | 2026-04-28 |
