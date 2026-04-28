@@ -122,7 +122,7 @@ public static class Program
             }
             catch (Exception exception) when (IsProjectLoadException(exception))
             {
-                WriteProjectLoadFailure(exception);
+                WriteProjectLoadFailure(GetProjectLoadFailureMessage(exception));
                 return (int)AutomationExitCode.UsageError;
             }
 
@@ -240,22 +240,31 @@ public static class Program
         exception is IOException or UnauthorizedAccessException
         || exception.InnerException is not null && IsExpectedBundleIoException(exception.InnerException);
 
-    private static void WriteProjectLoadFailure(Exception exception)
+    /// <summary>
+    /// Converts expected project-load failures to path-free user-facing text for automation stderr.
+    /// </summary>
+    private static string GetProjectLoadFailureMessage(Exception exception)
     {
-        Console.Error.WriteLine("Could not load project: " + ScrubExceptionMessage(exception.Message));
+        if (exception is FileNotFoundException or DirectoryNotFoundException)
+            return "The project file was not found.";
+
+        if (exception is JsonException or InvalidDataException)
+            return "The project file is not valid BS2BG project JSON.";
+
+        if (exception.InnerException is not null)
+            return GetProjectLoadFailureMessage(exception.InnerException);
+
+        return "The project file could not be read.";
+    }
+
+    private static void WriteProjectLoadFailure(string message)
+    {
+        Console.Error.WriteLine("Could not load project: " + message);
     }
 
     private static void WriteBundleIoFailure()
     {
         Console.Error.WriteLine("Bundle creation failed due to a file I/O error.");
-    }
-
-    private static string ScrubExceptionMessage(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message)) return "The project file could not be read.";
-
-        var firstLine = message.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        return string.IsNullOrWhiteSpace(firstLine) ? "The project file could not be read." : firstLine;
     }
 
     /// <summary>

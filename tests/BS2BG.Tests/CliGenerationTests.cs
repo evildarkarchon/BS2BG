@@ -419,15 +419,18 @@ public sealed class CliGenerationTests
     {
         using var directory = new TemporaryDirectory();
         CopyProfileAssetsToTestAssemblyDirectory();
+        var missingProjectPath = Path.Combine(directory.Path, "missing.jbs2bg");
 
         var result = InvokeProgramMain(
             "bundle",
-            "--project", Path.Combine(directory.Path, "missing.jbs2bg"),
+            "--project", missingProjectPath,
             "--bundle", Path.Combine(directory.Path, "share.zip"),
             "--intent", "all");
 
         result.ExitCode.Should().Be((int)AutomationExitCode.UsageError);
         result.StandardError.Should().StartWith("Could not load project:");
+        result.StandardError.Should().NotContain(directory.Path);
+        result.StandardError.Should().NotContain(missingProjectPath);
         AssertNoImplementationStackTrace(result.StandardError);
     }
 
