@@ -351,6 +351,9 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
         ApplyStrategyCommand = ReactiveCommand.Create(
             ApplyStrategy,
             canApplyStrategy);
+        AddStrategyRuleCommand = ReactiveCommand.Create(
+            AddStrategyRule,
+            Gate(Observable.Return(true)));
 
         disposables.Add(ImportNpcsCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Import NPCs", ex)));
@@ -503,6 +506,8 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> SaveStrategyConfigurationCommand { get; }
 
     public ReactiveCommand<Unit, Unit> ApplyStrategyCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> AddStrategyRuleCommand { get; }
 
     public MorphTargetBase? SelectedTarget => (MorphTargetBase?)SelectedCustomTarget ?? SelectedNpc;
 
@@ -1397,6 +1402,15 @@ public sealed partial class MorphsViewModel : ReactiveObject, IDisposable
                 RestoreStrategyConfiguration(afterStrategy);
                 RestoreAssignments(afterAssignments);
             });
+    }
+
+    /// <summary>
+    /// Adds a blank editable strategy rule row so text-first weighted, race-filter, and bucket strategies can be configured without changing the persisted schema.
+    /// </summary>
+    public void AddStrategyRule()
+    {
+        StrategyRules.Add(new AssignmentStrategyRuleRowViewModel());
+        StatusMessage = "Added strategy rule.";
     }
 
     private bool CanSaveStrategyConfiguration() =>

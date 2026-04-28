@@ -178,6 +178,27 @@ public sealed class MorphsViewModelStrategyTests
         provider.GetRequiredService<AssignmentStrategyService>().Should().NotBeNull();
     }
 
+    [Fact]
+    public void MainWindowContainsCompiledBoundAccessibleStrategyPanel()
+    {
+        var axaml = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "BS2BG.App", "Views", "MainWindow.axaml"));
+
+        axaml.Should().Contain("Apply Strategy");
+        axaml.Should().Contain("Save Strategy");
+        axaml.Should().Contain("Seeded random");
+        axaml.Should().Contain("Round-robin");
+        axaml.Should().Contain("Weighted");
+        axaml.Should().Contain("Race filters");
+        axaml.Should().Contain("Groups / buckets");
+        axaml.Should().Contain("comma-separated preset/race");
+        axaml.Should().Contain("all NPC rows in the project");
+        axaml.Should().Contain("InvalidLoadedStrategyMessage");
+        axaml.Should().Contain("AutomationProperties.Name=\"Apply Strategy\"");
+        axaml.Should().Contain("AutomationProperties.Name=\"Save Strategy\"");
+        axaml.Should().Contain("x:DataType=\"vm:AssignmentStrategyRuleRowViewModel\"");
+        axaml.Contains("setup wizard", StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+    }
+
     private static MorphsViewModel CreateViewModel(
         ProjectModel project,
         IRandomAssignmentProvider randomProvider,
@@ -202,6 +223,15 @@ public sealed class MorphsViewModelStrategyTests
         project.MorphedNpcs.Add(new Npc("Lydia") { Mod = "Skyrim.esm", EditorId = "HousecarlWhiterun", Race = "NordRace", FormId = "000A2C94" });
         project.MorphedNpcs.Add(new Npc("Serana") { Mod = "Dawnguard.esm", EditorId = "DLC1Serana", Race = "NordRaceVampire", FormId = "02002B74" });
         return project;
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = AppContext.BaseDirectory;
+        while (directory is not null && !File.Exists(Path.Combine(directory, "BS2BG.sln")))
+            directory = Directory.GetParent(directory)?.FullName;
+
+        return directory ?? throw new DirectoryNotFoundException("Could not locate repository root.");
     }
 
     private sealed class SequenceRandomAssignmentProvider(params int[] values) : IRandomAssignmentProvider
