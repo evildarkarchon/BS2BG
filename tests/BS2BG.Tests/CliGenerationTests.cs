@@ -219,6 +219,26 @@ public sealed class CliGenerationTests
     }
 
     [Fact]
+    public void HeadlessGenerationServiceBlocksUnresolvedCustomProfileBeforeCreatingOutputs()
+    {
+        using var directory = new TemporaryDirectory();
+        var projectPath = SaveProject(directory.Path, TestProfiles.CreateProjectUsingProfile("Missing Body"));
+        var outputDirectory = Path.Combine(directory.Path, "out");
+
+        var result = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            outputDirectory,
+            OutputIntent.All,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        result.ExitCode.Should().Be(AutomationExitCode.ValidationBlocked);
+        result.Message.Should().Contain("referenced custom profiles could not be resolved");
+        result.Message.Should().Contain("Missing Body");
+        Directory.Exists(outputDirectory).Should().BeFalse("unresolved custom profiles must block before output writes");
+    }
+
+    [Fact]
     public void HeadlessGenerationServiceWritesBosJsonThroughCoreWriterAndPlannerNames()
     {
         using var directory = new TemporaryDirectory();
@@ -386,6 +406,25 @@ public sealed class CliGenerationTests
         File.ReadAllBytes(Path.Combine(outputDirectory, "templates.ini")).Should().Equal(File.ReadAllBytes(expected.TemplatesPath));
         File.ReadAllBytes(Path.Combine(outputDirectory, "Alpha.json")).Should().Equal(File.ReadAllBytes(expected.BosJsonPath));
         File.ReadAllText(Path.Combine(outputDirectory, "templates.ini")).Should().NotBe(bundledOnly);
+    }
+
+    [Fact]
+    public void ProgramMainGenerateAllBlocksUnresolvedCustomProfileWithoutStackTrace()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, TestProfiles.CreateProjectUsingProfile("Missing Body"));
+
+        var result = InvokeProgramMain(
+            "generate",
+            "--project", projectPath,
+            "--output", Path.Combine(directory.Path, "out"),
+            "--intent", "all");
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.ValidationBlocked);
+        result.StandardError.Should().Contain("referenced custom profiles could not be resolved");
+        result.StandardError.Should().Contain("Missing Body");
+        AssertNoImplementationStackTrace(result.StandardError);
     }
 
     [Fact]

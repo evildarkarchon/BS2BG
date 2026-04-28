@@ -67,6 +67,15 @@ public sealed class HeadlessGenerationService(
                 Array.Empty<string>(),
                 validationReport);
 
+        var missingProfiles = FindMissingReferencedCustomProfiles(project, requestProfileCatalog).ToArray();
+        if (missingProfiles.Length > 0)
+            return new HeadlessGenerationResult(
+                AutomationExitCode.ValidationBlocked,
+                "Generation blocked because referenced custom profiles could not be resolved from embedded project data: "
+                + string.Join(", ", missingProfiles),
+                Array.Empty<string>(),
+                validationReport);
+
         var plannedTargets = PlanTargets(request, project).ToArray();
         if (!request.Overwrite)
         {
@@ -132,6 +141,20 @@ public sealed class HeadlessGenerationService(
             foreach (var path in bosJsonExportPlanner.Plan(request.OutputDirectory, project.SliderPresets))
                 yield return path;
     }
+
+    /// <summary>
+    /// Finds non-bundled preset profile references that the request catalog cannot resolve before fallback generation can occur.
+    /// </summary>
+    /// <param name="project">Loaded project containing the profile references to check.</param>
+    /// <param name="requestProfileCatalog">Catalog composed for this request after project load.</param>
+    /// <returns>Distinct missing profile names ordered deterministically for stable CLI messages.</returns>
+    private static IEnumerable<string> FindMissingReferencedCustomProfiles(
+        ProjectModel project,
+        TemplateProfileCatalog requestProfileCatalog) => project.SliderPresets
+            .Select(preset => preset.ProfileName)
+            .Where(name => !requestProfileCatalog.ContainsProfile(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
 
     private static bool IncludesBodyGen(OutputIntent intent) => intent is OutputIntent.BodyGen or OutputIntent.All;
 
