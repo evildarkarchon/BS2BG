@@ -4,7 +4,7 @@
 
 BS2BG is a C# / Avalonia desktop utility for Skyrim SE and Fallout 4 modders that converts BodySlide preset XML into BodyGen `templates.ini`, `morphs.ini`, and BodyTypes of Skyrim JSON exports. It is a port and modernization of the Java/JavaFX `jBS2BG` v1.1.2 tool by Totiman / asdasfa, preserving file-format compatibility while improving maintainability, workflow clarity, and release packaging.
 
-The current codebase has implemented the M0-M7 porting milestones plus GSD Phases 1-3: core import/generation/export, project serialization, Avalonia UI, template and morph workflows, undo/redo, NPC import and assignment, release packaging, profile correctness, workflow preference persistence, NPC filtering, scoped bulk operations, undo hardening, diagnostics, import previews, export previews, and atomic write outcome reporting. Future work continues through scoped GSD/OpenSpec phases, with byte-identical output parity and modder trust as the primary constraints.
+The current codebase has implemented the M0-M7 porting milestones plus GSD Phases 1-5: core import/generation/export, project serialization, Avalonia UI, template and morph workflows, undo/redo, NPC import and assignment, release packaging, profile correctness, workflow preference persistence, NPC filtering, scoped bulk operations, undo hardening, diagnostics, import/export previews, custom profile management, CLI automation, portable bundle creation, deterministic assignment strategies, and release trust packaging. Future work continues through scoped GSD/OpenSpec phases, with byte-identical output parity and modder trust as the primary constraints.
 
 ## Core Value
 
@@ -28,6 +28,7 @@ Modders can reliably convert existing BodySlide presets into BodyGen and BoS out
 - ✓ Template, profile, morph, NPC, and scoped bulk undo paths use bounded history and value snapshots to avoid mutable live-state corruption — Phase 2
 - ✓ Diagnostics, import preview, export preview, overwrite/batch-risk confirmation, and atomic write outcome reporting are validated — Phase 3
 - ✓ Custom profile creation, validation, local storage, project embedding, recovery diagnostics, profile sharing, and Profiles workspace editing/filtering are validated — Phase 4
+- ✓ CLI generation, portable project bundles, deterministic assignment strategies, checksum-backed release artifacts, and packaged setup guidance are validated — Phase 5
 
 ### Active
 
@@ -91,4 +92,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-27 after Phase 4 completion*
+*Last updated: 2026-04-28 after Phase 5 completion*
