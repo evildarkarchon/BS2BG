@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using BS2BG.Core.Diagnostics;
 using Xunit;
 
 namespace BS2BG.Tests;
@@ -88,6 +89,50 @@ public sealed class CliGenerationTests
         {
             if (Directory.Exists(publishDirectory)) Directory.Delete(publishDirectory, recursive: true);
         }
+    }
+
+    [Fact]
+    public void CoreHeadlessGenerationContractsExposeStableAutomationEnums()
+    {
+        var coreAssembly = typeof(ProjectValidationReport).Assembly;
+        var outputIntentType = coreAssembly.GetType("BS2BG.Core.Automation.OutputIntent", throwOnError: false);
+        outputIntentType.Should().NotBeNull();
+        Enum.GetNames(outputIntentType!).Should().Equal("BodyGen", "BosJson", "All");
+
+        var exitCodeType = coreAssembly.GetType("BS2BG.Core.Automation.HeadlessGenerationExitCode", throwOnError: false);
+        exitCodeType.Should().NotBeNull();
+        Enum.GetValues(exitCodeType!).Cast<int>().Should().Equal(0, 1, 2, 3, 4);
+        Enum.GetNames(exitCodeType!).Should().Equal("Success", "UsageError", "ValidationBlocked", "OverwriteRefused", "IoFailure");
+    }
+
+    [Fact]
+    public void HeadlessGenerationRequestCarriesOmitRedundantSlidersPreference()
+    {
+        var requestType = typeof(ProjectValidationReport).Assembly.GetType(
+            "BS2BG.Core.Automation.HeadlessGenerationRequest",
+            throwOnError: false);
+        requestType.Should().NotBeNull();
+
+        requestType!.GetProperty("ProjectPath")?.PropertyType.Should().Be(typeof(string));
+        requestType.GetProperty("OutputDirectory")?.PropertyType.Should().Be(typeof(string));
+        requestType.GetProperty("Overwrite")?.PropertyType.Should().Be(typeof(bool));
+        requestType.GetProperty("OmitRedundantSliders")?.PropertyType.Should().Be(typeof(bool));
+    }
+
+    [Fact]
+    public void ProgramMapsIntentTextIntoTypedCoreRequestWithoutDirectOutputWrites()
+    {
+        var repoRoot = FindRepoRoot();
+        var programText = File.ReadAllText(Path.Combine(repoRoot, "src", "BS2BG.Cli", "Program.cs"));
+
+        programText.Should().Contain("HeadlessGenerationRequest");
+        programText.Should().Contain("OutputIntent.BodyGen");
+        programText.Should().Contain("OutputIntent.BosJson");
+        programText.Should().Contain("OutputIntent.All");
+        programText.Should().Contain("omitRedundantSlidersOption");
+        programText.Should().NotContain("File.WriteAllText");
+        programText.Should().NotContain("templates.ini");
+        programText.Should().NotContain("morphs.ini");
     }
 
     private static void AssertProfileAssetsExist(string directory)
