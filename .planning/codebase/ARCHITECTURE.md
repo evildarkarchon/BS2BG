@@ -1,37 +1,37 @@
-<!-- refreshed: 2026-04-26 -->
+<!-- refreshed: 2026-04-28 -->
 # Architecture
 
-**Analysis Date:** 2026-04-26
+**Analysis Date:** 2026-04-28
 
 ## System Overview
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                 Avalonia Desktop Shell                       │
-│  `src/BS2BG.App/Program.cs` → `App.axaml.cs` → `Views/`      │
-├──────────────────┬──────────────────┬───────────────────────┤
-│   Templates UI   │    Morphs UI     │   Shell Commands       │
-│ `Views/Main...`  │ `Views/Main...`  │ `MainWindowViewModel`  │
-└────────┬─────────┴────────┬─────────┴──────────┬────────────┘
-         │                  │                     │
-         ▼                  ▼                     ▼
+│                    Presentation / Entry Points               │
+├──────────────────────┬──────────────────┬───────────────────┤
+│   Avalonia Desktop   │  Automation CLI  │   Tests / Specs    │
+│ `src/BS2BG.App/`     │ `src/BS2BG.Cli/` │ `tests/BS2BG.Tests`│
+└──────────┬───────────┴────────┬─────────┴─────────┬─────────┘
+           │                    │                   │
+           ▼                    ▼                   ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              ReactiveUI ViewModel Orchestration              │
-│ `src/BS2BG.App/ViewModels/TemplatesViewModel.cs`             │
-│ `src/BS2BG.App/ViewModels/MorphsViewModel.cs`                │
-│ `src/BS2BG.App/ViewModels/MainWindowViewModel.cs`            │
-└────────┬──────────────────┬─────────────────────┬────────────┘
-         │                  │                     │
-         ▼                  ▼                     ▼
+│                 Application Orchestration Layer              │
+│ `src/BS2BG.App/ViewModels/` + `src/BS2BG.App/Services/`      │
+│ `src/BS2BG.Core/Automation/` + `src/BS2BG.Core/Bundling/`    │
+└───────────────────────────────┬─────────────────────────────┘
+                                │
+                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│             Core Domain, Import, Generation, Export          │
-│ `src/BS2BG.Core/Models/` `Import/` `Generation/` `Export/`   │
-└────────┬──────────────────┬─────────────────────┬────────────┘
-         │                  │                     │
-         ▼                  ▼                     ▼
+│                         Core Domain                          │
+│ `src/BS2BG.Core/Models/`, `Generation/`, `Morphs/`,          │
+│ `Import/`, `Export/`, `Diagnostics/`, `Serialization/`       │
+└───────────────────────────────┬─────────────────────────────┘
+                                │
+                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│       Filesystem Artifacts and Reference Data                │
-│ `settings.json`, `settings_UUNP.json`, `.jbs2bg`, INI, JSON  │
+│                  Files, Bundled Data, External Artifacts      │
+│ `settings*.json`, `.jbs2bg`, BodySlide XML, NPC text,        │
+│ `templates.ini`, `morphs.ini`, BoS JSON, portable bundle zip │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,235 +39,302 @@
 
 | Component | Responsibility | File |
 |-----------|----------------|------|
-| Avalonia startup | Creates the desktop app, registers ReactiveUI/Microsoft DI, and starts classic desktop lifetime. | `src/BS2BG.App/Program.cs` |
-| Application lifetime | Resolves the main window from the service provider. | `src/BS2BG.App/App.axaml.cs` |
-| Dependency composition | Registers shared project model, Core services, App services, ViewModels, and `MainWindow`. | `src/BS2BG.App/AppBootstrapper.cs` |
-| Main window view | Hosts menus, search, command palette, Templates tab, Morphs tab, drag/drop, and small UI event bridges. | `src/BS2BG.App/Views/MainWindow.axaml`, `src/BS2BG.App/Views/MainWindow.axaml.cs` |
-| Shell ViewModel | Owns project file lifecycle, export commands, busy aggregation, title/status, theme preference, undo/redo, global search, and command palette. | `src/BS2BG.App/ViewModels/MainWindowViewModel.cs` |
-| Templates ViewModel | Owns BodySlide XML import, preset collection editing, profile selection, slider inspector rows, template preview/generation, and BoS JSON preview copy. | `src/BS2BG.App/ViewModels/TemplatesViewModel.cs` |
-| Morphs ViewModel | Owns NPC import, NPC database filtering, custom morph targets, preset assignments, random fill/clear operations, image lookup/viewing, and morph text generation. | `src/BS2BG.App/ViewModels/MorphsViewModel.cs` |
-| Project model | Central mutable aggregate for slider presets, custom morph targets, morphed NPCs, dirty state, and change version. | `src/BS2BG.Core/Models/ProjectModel.cs` |
-| Import services | Convert BodySlide XML and NPC text into Core models plus diagnostics. | `src/BS2BG.Core/Import/BodySlideXmlParser.cs`, `src/BS2BG.Core/Import/NpcTextParser.cs` |
-| Generation services | Convert model aggregates into `templates.ini`, BoS JSON preview text, and `morphs.ini` text. | `src/BS2BG.Core/Generation/TemplateGenerationService.cs`, `src/BS2BG.Core/Generation/MorphGenerationService.cs` |
-| Formatting pipeline | Applies defaults, inversion, multipliers, rounding, float formatting, and BoS JSON layout. | `src/BS2BG.Core/Formatting/SliderMathFormatter.cs`, `src/BS2BG.Core/Formatting/JavaFloatFormatting.cs` |
-| Export writers | Persist BodyGen INI files and BoS JSON files using atomic writes. | `src/BS2BG.Core/Export/BodyGenIniExportWriter.cs`, `src/BS2BG.Core/Export/BosJsonExportWriter.cs`, `src/BS2BG.Core/IO/AtomicFileWriter.cs` |
-| Project serialization | Loads/saves `.jbs2bg` project JSON and resolves saved preset references. | `src/BS2BG.Core/Serialization/ProjectFileService.cs` |
-| Tests | Verify Core parity, App ViewModels, services, Avalonia shell behavior, and release packaging. | `tests/BS2BG.Tests/` |
+| Desktop app host | Creates the Avalonia app, detects platform support, wires ReactiveUI and DI, and starts the classic desktop lifetime. | `src/BS2BG.App/Program.cs` |
+| App bootstrapper | Registers the single-window object graph and keeps Core services injectable behind App interfaces. | `src/BS2BG.App/AppBootstrapper.cs` |
+| Main window view | Defines the shell, tabs, menus, command palette, bindings, and view-only event forwarding. | `src/BS2BG.App/Views/MainWindow.axaml`, `src/BS2BG.App/Views/MainWindow.axaml.cs` |
+| Root ViewModel | Coordinates project file commands, global busy state, export previews, bundle creation, workspace navigation, and child ViewModels. | `src/BS2BG.App/ViewModels/MainWindowViewModel.cs` |
+| Templates workspace | Imports BodySlide XML presets, edits slider/profile state, previews templates and BoS JSON, and exposes preset commands. | `src/BS2BG.App/ViewModels/TemplatesViewModel.cs` |
+| Morphs workspace | Imports NPC text, manages custom targets and NPC preset assignment, applies assignment strategies, and generates `morphs.ini` previews. | `src/BS2BG.App/ViewModels/MorphsViewModel.cs` |
+| Diagnostics workspace | Presents validation and recovery findings from Core diagnostics services. | `src/BS2BG.App/ViewModels/DiagnosticsViewModel.cs` |
+| Profile management workspace | Manages bundled, local, and project custom profile definitions. | `src/BS2BG.App/ViewModels/ProfileManagerViewModel.cs`, `src/BS2BG.App/ViewModels/ProfileEditorViewModel.cs` |
+| Shared project state | Owns mutable presets, custom morph targets, NPCs, custom profiles, assignment strategy, dirty state, and change version. | `src/BS2BG.Core/Models/ProjectModel.cs` |
+| XML import | Parses BodySlide XML files/strings into domain presets with diagnostics. | `src/BS2BG.Core/Import/BodySlideXmlParser.cs` |
+| NPC import | Parses pipe-delimited NPC text into `Npc` rows and diagnostics. | `src/BS2BG.Core/Import/NpcTextParser.cs` |
+| Template generation | Converts model presets to formatter presets and produces Java-parity `templates.ini` / BoS JSON text. | `src/BS2BG.Core/Generation/TemplateGenerationService.cs` |
+| Morph generation | Produces morph assignment lines from custom targets and NPC rows. | `src/BS2BG.Core/Generation/MorphGenerationService.cs` |
+| Slider formatting | Performs Java-compatible slider math, missing-default injection, profile lookup application, and float formatting. | `src/BS2BG.Core/Formatting/SliderMathFormatter.cs`, `src/BS2BG.Core/Formatting/JavaFloatFormatting.cs` |
+| Export writers | Write BodyGen INIs and BoS JSON through atomic file operations and fixed line-ending rules. | `src/BS2BG.Core/Export/BodyGenIniExportWriter.cs`, `src/BS2BG.Core/Export/BosJsonExportWriter.cs` |
+| Project serialization | Loads/saves `.jbs2bg` JSON and embeds project-scoped custom profile/assignment strategy state. | `src/BS2BG.Core/Serialization/ProjectFileService.cs` |
+| Validation | Produces non-mutating findings for UI, CLI, and bundle reports. | `src/BS2BG.Core/Diagnostics/ProjectValidationService.cs` |
+| Headless automation | Runs project load, strategy replay, validation, generation, overwrite preflight, and export for CLI callers. | `src/BS2BG.Core/Automation/HeadlessGenerationService.cs` |
+| Portable bundling | Builds path-scrubbed bundle previews and zip contents from saved project, validation reports, generated outputs, and manifests. | `src/BS2BG.Core/Bundling/PortableProjectBundleService.cs` |
+| CLI host | Parses `generate` and `bundle` commands and composes Core-only services without depending on Avalonia. | `src/BS2BG.Cli/Program.cs` |
+| Test suite | Verifies Core, App ViewModels, CLI automation, release packaging, and Avalonia headless behavior. | `tests/BS2BG.Tests/` |
 
 ## Pattern Overview
 
-**Overall:** MVVM desktop shell over a pure Core domain/service layer, with explicit dependency injection and service adapters for UI/platform boundaries.
+**Overall:** Layered desktop architecture with a pure Core domain, MVVM presentation, DI composition, and Core-owned headless automation.
 
 **Key Characteristics:**
-- Keep portable conversion logic in `src/BS2BG.Core/`; do not reference Avalonia, ReactiveUI, or App services from Core.
-- Use `ProjectModel` as the in-memory aggregate shared by `MainWindowViewModel`, `TemplatesViewModel`, and `MorphsViewModel`.
-- Use ReactiveUI `ReactiveObject`, `[Reactive]`, `[ObservableAsProperty]`, `ReactiveCommand`, and observable `canExecute` gates in ViewModels.
-- Keep filesystem/UI interactions behind App service interfaces such as `IFileDialogService`, `IBodySlideXmlFilePicker`, `INpcTextFilePicker`, `IClipboardService`, `IImageViewService`, and `IAppDialogService` in `src/BS2BG.App/Services/`.
-- Write outputs through Core writers and `AtomicFileWriter`; do not write export files directly from ViewModels.
+- Keep `src/BS2BG.Core/` independent from Avalonia, ReactiveUI, and platform UI services; App and CLI both consume Core through project references.
+- Keep mutable workflow state in a shared `ProjectModel` singleton registered in `src/BS2BG.App/AppBootstrapper.cs`; ViewModels mutate the project through Core services and command handlers.
+- Use ReactiveUI SourceGenerators in ViewModels (`[Reactive]`, `[ObservableAsProperty]`, `ReactiveCommand`) and compiled AXAML bindings (`x:DataType`) in `src/BS2BG.App/Views/MainWindow.axaml`.
+- Use injectable service seams for file dialogs, clipboard, image viewing, preferences, profile stores, random assignment, serialization, generation, export, and bundle creation.
+- Preserve Java reference output parity in `src/BS2BG.Core/Formatting/`, `src/BS2BG.Core/Generation/`, and `src/BS2BG.Core/Export/`; golden-file tests in `tests/BS2BG.Tests/` are the safety net.
 
 ## Layers
 
-**Presentation Layer:**
-- Purpose: Define Avalonia UI, compiled bindings, keyboard shortcuts, tab layout, and minimal UI event forwarding.
-- Location: `src/BS2BG.App/Views/`, `src/BS2BG.App/App.axaml`, `src/BS2BG.App/Themes/`
-- Contains: AXAML views, `MainWindow` code-behind, theme resources.
-- Depends on: `BS2BG.App.ViewModels`, Avalonia controls, service adapter attach hooks.
-- Used by: Avalonia lifetime in `src/BS2BG.App/App.axaml.cs`.
+**Desktop Presentation:**
+- Purpose: Render the single-window Avalonia UI and convert view-only events into ViewModel calls.
+- Location: `src/BS2BG.App/Views/`, `src/BS2BG.App/Themes/`, `src/BS2BG.App/App.axaml`, `src/BS2BG.App/Program.cs`
+- Contains: AXAML, window code-behind, theme resources, desktop lifetime setup.
+- Depends on: `src/BS2BG.App/ViewModels/`, Avalonia packages, ReactiveUI Avalonia setup.
+- Used by: End users running `src/BS2BG.App/BS2BG.App.csproj`.
 
-**Application/ViewModel Layer:**
-- Purpose: Coordinate user workflows, command gating, UI state, validation messages, undo/redo recording, and calls into Core services.
-- Location: `src/BS2BG.App/ViewModels/`
-- Contains: `MainWindowViewModel`, `TemplatesViewModel`, `MorphsViewModel`, inspector row ViewModels, observable helpers.
-- Depends on: Core models/services, App service interfaces, ReactiveUI.
-- Used by: `src/BS2BG.App/Views/MainWindow.axaml` compiled bindings and code-behind.
+**App MVVM Orchestration:**
+- Purpose: Own UI commands, busy/can-execute state, child workspace coordination, undo/redo, preferences, file dialog choices, and Core service calls.
+- Location: `src/BS2BG.App/ViewModels/`, `src/BS2BG.App/ViewModels/Workflow/`
+- Contains: `MainWindowViewModel`, workspace ViewModels, row/preview ViewModels, filter state, undo snapshots.
+- Depends on: `src/BS2BG.App/Services/`, `src/BS2BG.Core/Models/`, `src/BS2BG.Core/Generation/`, `src/BS2BG.Core/Morphs/`, `src/BS2BG.Core/Diagnostics/`, `ReactiveUI`.
+- Used by: `src/BS2BG.App/Views/MainWindow.axaml` through compiled bindings and code-behind event glue.
 
-**Platform Adapter Layer:**
-- Purpose: Isolate Avalonia storage provider, clipboard, dialog, image viewing, notification, profile catalog creation, and user preferences.
+**App Platform Services:**
+- Purpose: Isolate Avalonia/platform dependencies behind interfaces so ViewModels remain testable.
 - Location: `src/BS2BG.App/Services/`
-- Contains: `Window*` concrete services plus `I*` interfaces and null/empty test/design-time implementations in the same files.
-- Depends on: Avalonia for window-bound implementations; Core for profile/data concepts.
-- Used by: ViewModels via interfaces and `MainWindow` via `Attach(TopLevel)` for window-owned services.
+- Contains: file pickers, dialogs, clipboard, image lookup/viewing, navigation, profile catalog service, user preferences, display converters.
+- Depends on: Avalonia where platform-bound (`WindowFileDialogService`, `WindowClipboardService`), Core profile/serialization models where domain-bound.
+- Used by: `src/BS2BG.App/AppBootstrapper.cs`, `src/BS2BG.App/ViewModels/*.cs`, tests using null/empty service implementations.
 
-**Core Domain Layer:**
-- Purpose: Represent project state and domain concepts independently of UI/platform runtime.
+**Core Domain Models:**
+- Purpose: Represent BS2BG project state and emit dirty/change notifications without UI dependencies.
 - Location: `src/BS2BG.Core/Models/`
-- Contains: `ProjectModel`, `SliderPreset`, `SetSlider`, `MorphTargetBase`, `CustomMorphTarget`, `Npc`, profile mapping.
-- Depends on: .NET base class libraries only.
-- Used by: Core services, App ViewModels, tests.
+- Contains: `ProjectModel`, `SliderPreset`, `SetSlider`, `Npc`, `CustomMorphTarget`, `MorphTargetBase`, custom profile definitions.
+- Depends on: `System.Collections.ObjectModel`, Core morph contracts.
+- Used by: all Core services, App ViewModels, CLI automation, and tests.
 
-**Core Import/Generation/Export Layer:**
-- Purpose: Convert between external file formats and domain models/output text.
-- Location: `src/BS2BG.Core/Import/`, `src/BS2BG.Core/Generation/`, `src/BS2BG.Core/Formatting/`, `src/BS2BG.Core/Export/`, `src/BS2BG.Core/Serialization/`, `src/BS2BG.Core/IO/`
-- Contains: parsers, generation services, formatter functions, project JSON service, atomic writers.
-- Depends on: Core models, `System.Text.Json`, `XDocument`, filesystem APIs.
-- Used by: ViewModels and export workflows.
+**Core Import / Serialization / Persistence:**
+- Purpose: Convert external BodySlide XML, NPC text, and project JSON into domain objects and back.
+- Location: `src/BS2BG.Core/Import/`, `src/BS2BG.Core/Serialization/`, `src/BS2BG.Core/IO/`
+- Contains: `BodySlideXmlParser`, `NpcTextParser`, `ProjectFileService`, `AtomicFileWriter`, ledger/result contracts.
+- Depends on: `System.Xml.Linq`, `System.Text.Json`, filesystem APIs.
+- Used by: Templates/Morphs import commands, project save/open commands, CLI generation, portable bundle creation.
 
-**Test Layer:**
-- Purpose: Validate byte-identical Java parity, ViewModel workflows, service adapters, UI shell behavior, and release scripts.
-- Location: `tests/BS2BG.Tests/`, `tests/fixtures/`
-- Contains: xUnit v3 tests, Avalonia headless test bootstrapping, golden expected outputs.
-- Depends on: `BS2BG.App`, `BS2BG.Core`, FluentAssertions, Avalonia Headless.
-- Used by: `dotnet test` and release confidence checks.
+**Core Generation / Formatting / Export:**
+- Purpose: Produce Java-parity output text and write it safely to disk.
+- Location: `src/BS2BG.Core/Generation/`, `src/BS2BG.Core/Formatting/`, `src/BS2BG.Core/Export/`
+- Contains: `TemplateGenerationService`, `MorphGenerationService`, profile catalog/factory services, `SliderMathFormatter`, `JavaFloatFormatting`, INI/JSON export writers.
+- Depends on: Core models and profile data loaded from `settings.json`, `settings_UUNP.json`, `settings_FO4_CBBE.json`.
+- Used by: App previews/exports, CLI generation, portable bundles, golden-file tests.
+
+**Core Morph Assignment:**
+- Purpose: Manage preset assignment to custom targets and NPCs, including deterministic strategy replay for automation.
+- Location: `src/BS2BG.Core/Morphs/`
+- Contains: `MorphAssignmentService`, `AssignmentStrategyService`, replay contracts/service, random provider abstractions.
+- Depends on: Core models.
+- Used by: `MorphsViewModel`, `HeadlessGenerationService`, `PortableProjectBundleService`, assignment strategy tests.
+
+**Core Diagnostics / Automation / Bundling:**
+- Purpose: Provide non-UI validation, preview, CLI generation, replay reports, portable bundle manifests, and privacy-scrubbed reports.
+- Location: `src/BS2BG.Core/Diagnostics/`, `src/BS2BG.Core/Automation/`, `src/BS2BG.Core/Bundling/`
+- Contains: `ProjectValidationService`, `ExportPreviewService`, `HeadlessGenerationService`, `PortableProjectBundleService`, bundle contracts/scrubber.
+- Depends on: Core generation/export/serialization/morph services.
+- Used by: App diagnostics/export previews/bundles and `src/BS2BG.Cli/Program.cs`.
+
+**CLI Entry Layer:**
+- Purpose: Expose automation surfaces for scripts without Avalonia.
+- Location: `src/BS2BG.Cli/`
+- Contains: `Program.cs`, `BS2BG.Cli.csproj`.
+- Depends on: `System.CommandLine` and `src/BS2BG.Core/BS2BG.Core.csproj` only.
+- Used by: release automation, CLI tests, headless workflows.
+
+**Reference and Planning Assets:**
+- Purpose: Preserve Java behavior and process context without participating in the C# build.
+- Location: `src/com/asdasfa/jbs2bg/`, `src/jfx-8u60-b08/`, `openspec/`, `.planning/`
+- Contains: Java jBS2BG reference, OpenJFX source snapshot, OpenSpec specs/changes, GSD planning docs.
+- Depends on: Not part of `BS2BG.sln` except as human/reference context.
+- Used by: implementation planning, parity checks, and porting cross-checks.
 
 ## Data Flow
 
-### Primary Request Path
+### Primary Desktop Import → Template Preview Path
 
-1. Application starts at `Program.Main` and `BuildAvaloniaApp` (`src/BS2BG.App/Program.cs:9`, `src/BS2BG.App/Program.cs:12`).
-2. ReactiveUI/Microsoft DI are registered with `AppBootstrapper.ConfigureServices` (`src/BS2BG.App/Program.cs:18`, `src/BS2BG.App/AppBootstrapper.cs:27`).
-3. `App.OnFrameworkInitializationCompleted` resolves `MainWindow` from DI (`src/BS2BG.App/App.axaml.cs:13`, `src/BS2BG.App/App.axaml.cs:16`).
-4. `MainWindow` sets `DataContext`, title, dimensions, and attaches window-backed services (`src/BS2BG.App/Views/MainWindow.axaml.cs:29`, `src/BS2BG.App/Views/MainWindow.axaml.cs:52`).
-5. `MainWindow.axaml` binds menus, keyboard shortcuts, tabs, buttons, lists, and status fields to `MainWindowViewModel` and child ViewModels (`src/BS2BG.App/Views/MainWindow.axaml:13`, `src/BS2BG.App/Views/MainWindow.axaml:198`).
+1. User chooses BodySlide XML through `Templates.ImportPresetsCommand` (`src/BS2BG.App/ViewModels/TemplatesViewModel.cs:153`).
+2. `TemplatesViewModel` uses `IBodySlideXmlFilePicker` and `BodySlideXmlParser.ParseFiles` to parse XML into `SliderPreset` objects (`src/BS2BG.Core/Import/BodySlideXmlParser.cs:29`).
+3. Parsed presets are added to `ProjectModel.SliderPresets`, which marks dirty and updates change version (`src/BS2BG.Core/Models/ProjectModel.cs:17`, `src/BS2BG.Core/Models/ProjectModel.cs:163`).
+4. `TemplatesViewModel` refreshes visible preset rows, inspector rows, profile selection, and template/BoS previews from the current `TemplateProfileCatalog` (`src/BS2BG.App/ViewModels/TemplatesViewModel.cs:198`).
+5. `TemplateGenerationService.PreviewTemplate` maps model presets into formatter presets and calls `SliderMathFormatter.FormatTemplateLine` (`src/BS2BG.Core/Generation/TemplateGenerationService.cs:14`).
 
-### BodySlide Template Import and Generation Flow
+### Desktop Export BodyGen INIs Path
 
-1. User invokes import via button, drag/drop, or command; the command is bound to `Templates.ImportPresetsCommand` (`src/BS2BG.App/Views/MainWindow.axaml:212`, `src/BS2BG.App/ViewModels/TemplatesViewModel.cs:115`).
-2. `TemplatesViewModel.ImportPresetsAsync` requests XML paths through `IBodySlideXmlFilePicker` (`src/BS2BG.App/ViewModels/TemplatesViewModel.cs:227`).
-3. `BodySlideXmlParser.ParseFiles` loads each XML file and parses `SliderPresets`/`Preset`/`SetSlider` elements into `SliderPreset`/`SetSlider` models (`src/BS2BG.Core/Import/BodySlideXmlParser.cs:29`, `src/BS2BG.Core/Import/BodySlideXmlParser.cs:62`).
-4. `TemplatesViewModel` adds/edits presets in the shared `ProjectModel.SliderPresets` collection and records undo/redo operations around mutations (`src/BS2BG.App/ViewModels/TemplatesViewModel.cs:176`, `src/BS2BG.App/ViewModels/TemplatesViewModel.cs:255`).
-5. `TemplateGenerationService.GenerateTemplates` sorts presets and formats each preset through `SliderMathFormatter.FormatTemplateLine` (`src/BS2BG.Core/Generation/TemplateGenerationService.cs:26`, `src/BS2BG.Core/Formatting/SliderMathFormatter.cs:8`).
-6. `SliderMathFormatter` injects missing default sliders, applies inversion/multipliers/rounding, and returns `templates.ini` lines (`src/BS2BG.Core/Formatting/SliderMathFormatter.cs:96`, `src/BS2BG.Core/Formatting/SliderMathFormatter.cs:44`).
+1. User invokes `ExportBodyGenInisCommand` from menu/key binding in `MainWindow.axaml` (`src/BS2BG.App/Views/MainWindow.axaml:82`).
+2. `MainWindowViewModel` gates the command on project content and global busy state (`src/BS2BG.App/ViewModels/MainWindowViewModel.cs:236`).
+3. Template text is generated by `TemplateGenerationService.GenerateTemplates` with profiles from the current catalog (`src/BS2BG.Core/Generation/TemplateGenerationService.cs:26`).
+4. Morph text is generated by `MorphGenerationService.GenerateMorphs(ProjectModel)` (`src/BS2BG.Core/Generation/MorphGenerationService.cs:12`).
+5. `BodyGenIniExportWriter.Write` creates the output directory, normalizes CRLF, and writes `templates.ini` plus `morphs.ini` atomically (`src/BS2BG.Core/Export/BodyGenIniExportWriter.cs:13`).
+6. `AtomicFileWriter.WriteAtomicPair` delegates to the batch writer with rollback ledger support (`src/BS2BG.Core/IO/AtomicFileWriter.cs:32`).
 
-### Morph Assignment and Export Flow
+### Desktop NPC Import → Morph Assignment Path
 
-1. User imports NPC rows through `MorphsViewModel.ImportNpcsCommand` or manages custom targets from the Morphs tab (`src/BS2BG.App/ViewModels/MorphsViewModel.cs:191`, `src/BS2BG.App/ViewModels/MorphsViewModel.cs:194`).
-2. `NpcTextParser.ParseFile` reads bytes, detects BOM/UTF-8/fallback encoding, and parses `Mod|Name|EditorID|Race|FormID` rows into `Npc` models (`src/BS2BG.Core/Import/NpcTextParser.cs:18`, `src/BS2BG.Core/Import/NpcTextParser.cs:60`).
-3. `MorphAssignmentService` validates custom target names, adds targets/NPCs, and assigns random presets through `IRandomAssignmentProvider` (`src/BS2BG.Core/Morphs/MorphAssignmentService.cs:14`, `src/BS2BG.Core/Morphs/MorphAssignmentService.cs:163`).
-4. `MorphGenerationService.GenerateMorphs` converts custom targets and NPCs to BodyGen morph lines (`src/BS2BG.Core/Generation/MorphGenerationService.cs:12`, `src/BS2BG.Core/Generation/MorphGenerationService.cs:30`).
-5. `BodyGenIniExportWriter.Write` writes `templates.ini` and `morphs.ini` as an atomic pair with CRLF normalization (`src/BS2BG.Core/Export/BodyGenIniExportWriter.cs:13`, `src/BS2BG.Core/Export/BodyGenIniExportWriter.cs:21`).
+1. User previews/imports NPC text through `MorphsViewModel` commands and the `INpcTextFilePicker` service (`src/BS2BG.App/ViewModels/MorphsViewModel.cs:55`, `src/BS2BG.App/Services/WindowNpcTextFilePicker.cs`).
+2. `NpcImportPreviewService` and `NpcTextParser` convert pipe-delimited rows into `Npc` objects plus diagnostics (`src/BS2BG.Core/Import/NpcImportPreviewService.cs`, `src/BS2BG.Core/Import/NpcTextParser.cs`).
+3. `MorphsViewModel` adds selected NPCs to `ProjectModel.MorphedNpcs` through `MorphAssignmentService.AddNpcToMorphs` (`src/BS2BG.Core/Morphs/MorphAssignmentService.cs:89`).
+4. Preset assignment commands call `MorphAssignmentService` or `AssignmentStrategyService`, mutating `MorphTargetBase.SliderPresets` collections (`src/BS2BG.Core/Morphs/MorphAssignmentService.cs:52`).
+5. `MorphGenerationService.GenerateMorphs` reads `CustomMorphTargets` and `MorphedNpcs` and returns output text plus targets without presets (`src/BS2BG.Core/Generation/MorphGenerationService.cs:19`).
 
-### Project Save/Load Flow
+### Project Save/Open Path
 
-1. `MainWindowViewModel` owns `OpenProjectCommand`, `SaveProjectCommand`, and `SaveProjectAsCommand` (`src/BS2BG.App/ViewModels/MainWindowViewModel.cs:155`, `src/BS2BG.App/ViewModels/MainWindowViewModel.cs:157`).
-2. `IFileDialogService` selects `.jbs2bg` files/folders through a window-attached storage provider (`src/BS2BG.App/Services/WindowFileDialogService.cs:11`, `src/BS2BG.App/Services/WindowFileDialogService.cs:25`).
-3. `ProjectFileService.Load` deserializes project JSON DTOs into a fresh `ProjectModel` and resolves saved preset references (`src/BS2BG.Core/Serialization/ProjectFileService.cs:28`, `src/BS2BG.Core/Serialization/ProjectFileService.cs:127`).
-4. `ProjectModel.ReplaceWith` clones loaded state into the singleton project and marks it clean (`src/BS2BG.Core/Models/ProjectModel.cs:47`, `src/BS2BG.Core/Models/ProjectModel.cs:80`).
-5. `ProjectFileService.Save` serializes the project and writes atomically (`src/BS2BG.Core/Serialization/ProjectFileService.cs:60`, `src/BS2BG.Core/Serialization/ProjectFileService.cs:69`).
+1. `MainWindowViewModel` exposes new/open/save/save-as commands (`src/BS2BG.App/ViewModels/MainWindowViewModel.cs:242`).
+2. File locations come from `IFileDialogService` and persisted folders in `UserPreferencesService` (`src/BS2BG.App/Services/WindowFileDialogService.cs`, `src/BS2BG.App/Services/UserPreferencesService.cs:15`).
+3. Save calls `ProjectFileService.SaveToString` / `Save` to serialize presets, custom targets, NPCs, embedded profiles, and assignment strategy (`src/BS2BG.Core/Serialization/ProjectFileService.cs:106`).
+4. Load calls `ProjectFileService.LoadWithDiagnosticsFromString` then `ProjectModel.ReplaceWith` so the singleton project instance stays stable for existing ViewModel bindings (`src/BS2BG.Core/Serialization/ProjectFileService.cs:75`, `src/BS2BG.Core/Models/ProjectModel.cs:65`).
+5. Recoverable load diagnostics flow to profile recovery/diagnostics UI (`src/BS2BG.Core/Serialization/ProjectFileService.cs:18`).
+
+### CLI Generate Path
+
+1. CLI starts at `Program.Main` and parses `generate --project --output --intent` (`src/BS2BG.Cli/Program.cs:19`, `src/BS2BG.Cli/Program.cs:55`).
+2. `Program.CreateGenerationService` composes Core services only: project file, template/morph generation, INI/JSON writers, planner, replay, and bundled profile catalog (`src/BS2BG.Cli/Program.cs:180`).
+3. `HeadlessGenerationService.Run` loads the project file and builds a request-scoped profile catalog (`src/BS2BG.Core/Automation/HeadlessGenerationService.cs:39`).
+4. Assignment strategy replay occurs before BodyGen output when requested (`src/BS2BG.Core/Automation/HeadlessGenerationService.cs:64`).
+5. `ProjectValidationService.Validate` blocks invalid projects before writing (`src/BS2BG.Core/Automation/HeadlessGenerationService.cs:74`).
+6. Writers emit `templates.ini`, `morphs.ini`, and/or BoS JSON with overwrite preflight and atomic write ledger reporting (`src/BS2BG.Core/Automation/HeadlessGenerationService.cs:91`).
+
+### Portable Bundle Path
+
+1. Desktop and CLI callers create `PortableProjectBundleRequest` with project, destination path, output intent, overwrite flag, save context, and privacy roots (`src/BS2BG.Core/Bundling/PortableProjectBundleContracts.cs`).
+2. `PortableProjectBundleService.Preview` calls `BuildPlan` without creating a zip (`src/BS2BG.Core/Bundling/PortableProjectBundleService.cs:95`).
+3. `BuildPlan` composes request-scoped profiles, replays assignment strategy, validates, embeds project JSON, reports, profiles, generated output, manifest, and checksums (`src/BS2BG.Core/Bundling/PortableProjectBundleService.cs:203`).
+4. `Create` writes a temp zip then commits it to the final bundle path only after all entries are created (`src/BS2BG.Core/Bundling/PortableProjectBundleService.cs:116`).
 
 **State Management:**
-- Primary app state is a singleton `ProjectModel` registered in DI (`src/BS2BG.App/AppBootstrapper.cs:29`).
-- Dirty state is event-driven: collections and child `ProjectModelNode` changes call `ProjectModel.MarkDirty` (`src/BS2BG.Core/Models/ProjectModel.cs:127`, `src/BS2BG.Core/Models/ProjectModel.cs:139`).
-- ViewModel state is ReactiveUI property-driven; busy and derived shell title use `Observable.CombineLatest` and `ToProperty` (`src/BS2BG.App/ViewModels/MainWindowViewModel.cs:177`, `src/BS2BG.App/ViewModels/MainWindowViewModel.cs:218`).
-- Undo/redo stores closures for each ViewModel mutation and guards replay with `UndoRedoService.IsReplaying` (`src/BS2BG.App/Services/UndoRedoService.cs:16`, `src/BS2BG.App/Services/UndoRedoService.cs:56`).
+- `ProjectModel` is the canonical mutable state container (`src/BS2BG.Core/Models/ProjectModel.cs`).
+- App registers `ProjectModel` as a singleton and shares it across `MainWindowViewModel`, `TemplatesViewModel`, `MorphsViewModel`, diagnostics, and profiles (`src/BS2BG.App/AppBootstrapper.cs:32`).
+- ViewModels expose derived state through ReactiveUI properties and commands; collection changes are bridged via `CollectionChangedObservable` (`src/BS2BG.App/ViewModels/CollectionChangedObservable.cs`).
+- Undo/redo snapshots live in App, not Core, through `UndoRedoService` and `ViewModels/Workflow/UndoSnapshots.cs` (`src/BS2BG.App/Services/UndoRedoService.cs`, `src/BS2BG.App/ViewModels/Workflow/UndoSnapshots.cs`).
 
 ## Key Abstractions
 
-**Project aggregate:**
-- Purpose: Shared mutable root for all current project data and dirty/change events.
-- Examples: `src/BS2BG.Core/Models/ProjectModel.cs`, `src/BS2BG.Core/Models/ProjectModelNode.cs`
-- Pattern: Observable aggregate root with child subscriptions.
+**ProjectModel:**
+- Purpose: Root aggregate for every project workflow and dirty-state tracking.
+- Examples: `src/BS2BG.Core/Models/ProjectModel.cs`, `tests/BS2BG.Tests/ProjectFileServiceTests.cs`
+- Pattern: Observable aggregate root with child subscription tracking and explicit `ReplaceWith` for stable singleton identity.
 
-**Domain model nodes:**
-- Purpose: Represent presets, sliders, morph targets, custom targets, and NPCs with change notification.
-- Examples: `src/BS2BG.Core/Models/SliderPreset.cs`, `src/BS2BG.Core/Models/SetSlider.cs`, `src/BS2BG.Core/Models/MorphTargetBase.cs`, `src/BS2BG.Core/Models/Npc.cs`
-- Pattern: Mutable domain objects owned by `ProjectModel` collections.
+**ProjectModelNode:**
+- Purpose: Base change-notification node for models whose mutations must mark the project dirty.
+- Examples: `src/BS2BG.Core/Models/ProjectModelNode.cs`, `src/BS2BG.Core/Models/SliderPreset.cs`, `src/BS2BG.Core/Models/Npc.cs`
+- Pattern: Parent aggregate listens to child `Changed` events rather than ViewModels manually marking dirty for every field.
 
-**Profile catalog:**
-- Purpose: Map project profile names to slider defaults, multipliers, and inverted sliders.
-- Examples: `src/BS2BG.Core/Generation/TemplateProfileCatalog.cs`, `src/BS2BG.Core/Generation/TemplateProfile.cs`, `src/BS2BG.App/Services/TemplateProfileCatalogFactory.cs`
-- Pattern: Immutable catalog loaded from `settings.json` and `settings_UUNP.json` during DI composition.
+**TemplateProfileCatalog / TemplateProfile:**
+- Purpose: Resolve bundled, local, and project profile slider defaults/multipliers/inversions for generation.
+- Examples: `src/BS2BG.Core/Generation/TemplateProfileCatalog.cs`, `src/BS2BG.Core/Generation/TemplateProfileCatalogFactory.cs`, `src/BS2BG.App/Services/TemplateProfileCatalogService.cs`
+- Pattern: Catalog service owns the current profile set; request-scoped composer adds embedded project profiles for automation and bundling.
 
-**Formatter service boundary:**
-- Purpose: Keep UI-facing model types separate from formatting-specific records used by parity logic.
-- Examples: `src/BS2BG.Core/Generation/TemplateGenerationService.cs`, `src/BS2BG.Core/Formatting/SliderMathFormatter.cs`
-- Pattern: Generation service maps domain models to formatting models, then delegates pure formatting.
-
-**Platform service interfaces:**
-- Purpose: Make dialogs, clipboard, file picking, image display, and notifications replaceable in tests and design-time constructors.
-- Examples: `src/BS2BG.App/Services/IFileDialogService.cs`, `src/BS2BG.App/Services/IBodySlideXmlFilePicker.cs`, `src/BS2BG.App/Services/IClipboardService.cs`, `src/BS2BG.App/Services/IImageViewService.cs`
-- Pattern: Interface + `Window*` Avalonia implementation + null/empty implementation for tests/design-time.
-
-**Reactive commands:**
-- Purpose: Expose user actions with cancellation, busy state, thrown exception streams, and observable can-execute logic.
+**Reactive ViewModels:**
+- Purpose: Keep UI state, commands, and derived properties testable without Avalonia controls.
 - Examples: `src/BS2BG.App/ViewModels/MainWindowViewModel.cs`, `src/BS2BG.App/ViewModels/TemplatesViewModel.cs`, `src/BS2BG.App/ViewModels/MorphsViewModel.cs`
-- Pattern: `ReactiveCommand.Create*` with `WhenAnyValue`/`CombineLatest` gates.
+- Pattern: `ReactiveObject` + SourceGenerator attributes + `ReactiveCommand.Create*` / `CreateFromTask` with observable `canExecute`.
+
+**Platform Service Interfaces:**
+- Purpose: Keep file dialogs, clipboard, image viewing, dialogs, preferences, and navigation replaceable in tests.
+- Examples: `src/BS2BG.App/Services/IFileDialogService.cs`, `src/BS2BG.App/Services/IClipboardService.cs`, `src/BS2BG.App/Services/NavigationService.cs`
+- Pattern: App-specific adapters are registered in DI, while tests pass null/empty implementations.
+
+**Import Result and Diagnostic Records:**
+- Purpose: Return partial successes with human-readable diagnostics instead of throwing for recoverable user input errors.
+- Examples: `src/BS2BG.Core/Import/BodySlideXmlImportResult.cs`, `src/BS2BG.Core/Import/NpcImportResult.cs`, `src/BS2BG.Core/Serialization/ProjectFileService.cs`
+- Pattern: Immutable result records containing parsed objects plus diagnostic collections.
+
+**AtomicFileWriter:**
+- Purpose: Make project save/export/batch writes safer and report partial outcomes.
+- Examples: `src/BS2BG.Core/IO/AtomicFileWriter.cs`, `src/BS2BG.Core/IO/AtomicWriteException.cs`, `src/BS2BG.Core/IO/WriteOutcomeLedger.cs`
+- Pattern: temp-file commit with rollback and ledger snapshots for UI/CLI reporting.
+
+**Assignment Strategy Contracts:**
+- Purpose: Persist and replay NPC assignment strategies deterministically for UI, CLI, and bundle workflows.
+- Examples: `src/BS2BG.Core/Morphs/AssignmentStrategyContracts.cs`, `src/BS2BG.Core/Automation/AssignmentStrategyReplayService.cs`
+- Pattern: contract records plus replay service that can clone project state before applying assignments.
 
 ## Entry Points
 
-**Desktop executable:**
+**Avalonia desktop app:**
 - Location: `src/BS2BG.App/Program.cs`
-- Triggers: OS process startup.
-- Responsibilities: Configure Avalonia platform, Inter font, ReactiveUI view registration, Microsoft DI resolver, trace logging, and desktop lifetime.
+- Triggers: `dotnet run --project src/BS2BG.App/BS2BG.App.csproj`, published desktop executable.
+- Responsibilities: Build `AppBuilder`, register ReactiveUI/DI, and start desktop lifetime.
 
-**Application lifetime:**
+**Avalonia application lifetime:**
 - Location: `src/BS2BG.App/App.axaml.cs`
 - Triggers: Avalonia framework initialization.
-- Responsibilities: Resolve and show `MainWindow`.
+- Responsibilities: Load AXAML and resolve `MainWindow` from `AppBootstrapper.Services`.
 
-**Main UI:**
+**Main window shell:**
 - Location: `src/BS2BG.App/Views/MainWindow.axaml`, `src/BS2BG.App/Views/MainWindow.axaml.cs`
-- Triggers: DI-resolved window construction and user input.
-- Responsibilities: Bind ViewModel commands/properties, forward selection/drag/drop events, attach window services.
+- Triggers: DI transient construction and user events.
+- Responsibilities: Bind menus/tabs/forms to `MainWindowViewModel`, attach window-bound services, forward view-only multi-selection, drag/drop, tab, and command-palette events.
 
-**Core import entry points:**
-- Location: `src/BS2BG.Core/Import/BodySlideXmlParser.cs`, `src/BS2BG.Core/Import/NpcTextParser.cs`
-- Triggers: ViewModel import commands and tests.
-- Responsibilities: Parse external input into models and diagnostics.
+**CLI:**
+- Location: `src/BS2BG.Cli/Program.cs`
+- Triggers: `bs2bg generate ...` and `bs2bg bundle ...` invocations.
+- Responsibilities: Parse arguments, compose Core services, call automation/bundle services, map outcomes to stable exit codes.
 
-**Core export entry points:**
-- Location: `src/BS2BG.Core/Export/BodyGenIniExportWriter.cs`, `src/BS2BG.Core/Export/BosJsonExportWriter.cs`
-- Triggers: shell export commands and tests.
-- Responsibilities: Create output directories, normalize file content, sanitize JSON filenames, and write atomically.
+**Core service tests:**
+- Location: `tests/BS2BG.Tests/`
+- Triggers: `dotnet test`.
+- Responsibilities: Assert Java parity, ViewModel behavior, CLI behavior, diagnostics, serialization, bundling, and release packaging rules.
 
-**Project serialization entry point:**
-- Location: `src/BS2BG.Core/Serialization/ProjectFileService.cs`
-- Triggers: open/save shell commands and tests.
-- Responsibilities: Translate project models to/from `.jbs2bg` JSON.
+**Java reference context:**
+- Location: `src/com/asdasfa/jbs2bg/`
+- Triggers: Human/agent inspection and fixture regeneration tooling.
+- Responsibilities: Authoritative behavior source for porting; not compiled by `BS2BG.sln`.
 
 ## Architectural Constraints
 
-- **Threading:** UI startup uses `[STAThread]` and classic Avalonia desktop lifetime (`src/BS2BG.App/Program.cs:9`). ViewModel command state is ReactiveUI observable-driven; avoid direct dispatcher calls in ViewModels. Code-behind uses `Dispatcher.UIThread.Post` only for the command palette selection deferral (`src/BS2BG.App/Views/MainWindow.axaml.cs:101`).
-- **Global state:** `AppBootstrapper` holds a static `IServiceProvider` cache (`src/BS2BG.App/AppBootstrapper.cs:16`). `ProjectModel` is registered as a singleton and is intentionally shared across ViewModels (`src/BS2BG.App/AppBootstrapper.cs:29`). `NpcTextParser` registers code pages in a static constructor (`src/BS2BG.Core/Import/NpcTextParser.cs:16`).
-- **Circular imports:** No C# project circular dependency exists: `BS2BG.App` references `BS2BG.Core`; `BS2BG.Core` has no project reference back to App (`src/BS2BG.App/BS2BG.App.csproj:21`, `src/BS2BG.Core/BS2BG.Core.csproj`).
-- **UI boundary:** `src/BS2BG.Core/` must stay platform-independent. Add Avalonia integrations only under `src/BS2BG.App/Services/` or `src/BS2BG.App/Views/`.
-- **Compiled bindings:** `src/BS2BG.App/BS2BG.App.csproj` enables compiled bindings by default; every new AXAML root/DataTemplate must declare `x:DataType` following `src/BS2BG.App/Views/MainWindow.axaml:11` and `src/BS2BG.App/Views/MainWindow.axaml:183`.
-- **Golden output parity:** `SliderMathFormatter`, `JavaFloatFormatting`, and export writers are byte-sensitive. Preserve line endings and float formatting in `src/BS2BG.Core/Formatting/SliderMathFormatter.cs`, `src/BS2BG.Core/Formatting/JavaFloatFormatting.cs`, `src/BS2BG.Core/Export/BodyGenIniExportWriter.cs`, and `src/BS2BG.Core/Export/BosJsonExportWriter.cs`.
+- **Threading:** Avalonia desktop uses a single UI thread (`[STAThread]` in `src/BS2BG.App/Program.cs:9`). ViewModels use ReactiveUI observables/commands for busy state; platform theme application is one of the few places that touches `Dispatcher.UIThread` (`src/BS2BG.App/Services/UserPreferencesService.cs:114`).
+- **Global state:** `AppBootstrapper` holds a static `IServiceProvider` (`src/BS2BG.App/AppBootstrapper.cs:19`) and registers singleton `ProjectModel`, ViewModels, services, and Core services (`src/BS2BG.App/AppBootstrapper.cs:32`). Use this only for app composition; tests should construct services explicitly where possible.
+- **Core dependency boundary:** `src/BS2BG.Core/BS2BG.Core.csproj` targets `netstandard2.1` and must not reference Avalonia, ReactiveUI, App services, or CLI code. App and CLI reference Core (`src/BS2BG.App/BS2BG.App.csproj:23`, `src/BS2BG.Cli/BS2BG.Cli.csproj:17`).
+- **CLI boundary:** `src/BS2BG.Cli/Program.cs` composes Core-only services and must not reference `BS2BG.App`; this keeps headless automation viable.
+- **Output parity:** `src/BS2BG.Core/Formatting/JavaFloatFormatting.cs`, `src/BS2BG.Core/Formatting/SliderMathFormatter.cs`, `src/BS2BG.Core/Export/BodyGenIniExportWriter.cs`, and `src/BS2BG.Core/Export/BosJsonExportWriter.cs` encode byte-sensitive Java parity rules. Treat these as sacred implementation points.
+- **Compiled bindings:** Root AXAML and every data template must declare `x:DataType`; `src/BS2BG.App/BS2BG.App.csproj:7` enables compiled bindings by default and `src/BS2BG.App/Views/MainWindow.axaml:15` demonstrates the root pattern.
+- **ReactiveUI conventions:** ViewModels inherit `ReactiveObject`, use `[Reactive]` and `[ObservableAsProperty]`, and expose `ReactiveCommand` instances; do not reintroduce retired custom relay commands.
+- **Circular imports:** No project-level circular references are present: App → Core, CLI → Core, Tests → App/CLI/Core. Within App, code-behind can call ViewModel methods for view-only glue, but ViewModels should not know Avalonia controls.
+- **Generated directories:** `bin/` and `obj/` under `src/BS2BG.*` and `tests/BS2BG.Tests/` are build output directories and are not architecture sources.
 
 ## Anti-Patterns
 
-### Putting UI dependencies in Core
+### Putting Domain Logic in Avalonia Code-Behind
 
-**What happens:** Core parsers, formatters, model classes, or export writers reference Avalonia, ReactiveUI, dialogs, clipboard, or windows.
-**Why it's wrong:** `src/BS2BG.Core/BS2BG.Core.csproj` targets `netstandard2.1` and is the portable parity layer; UI references would break portability and test isolation.
-**Do this instead:** Add UI/platform code in `src/BS2BG.App/Services/` behind an interface and inject it through `src/BS2BG.App/AppBootstrapper.cs`.
+**What happens:** Code-behind in `src/BS2BG.App/Views/MainWindow.axaml.cs` exists for control-specific glue such as multi-selection filter forwarding and drag/drop forwarding.
+**Why it's wrong:** Adding import, generation, serialization, or assignment rules here bypasses ViewModel tests and couples Core behavior to Avalonia controls.
+**Do this instead:** Put workflow logic in `src/BS2BG.App/ViewModels/*.cs` and domain logic in `src/BS2BG.Core/*`; keep code-behind like `ApplyNpcColumnFilterSelection` (`src/BS2BG.App/Views/MainWindow.axaml.cs:109`) limited to view-owned control state.
 
-### Writing files directly from ViewModels
+### Letting Core Depend on App or Avalonia
 
-**What happens:** A ViewModel calls `File.WriteAllText`, creates export files, or serializes JSON directly.
-**Why it's wrong:** Atomic write semantics and format normalization live in Core writers; bypassing them risks partial writes and byte parity failures.
-**Do this instead:** Use `ProjectFileService` for `.jbs2bg`, `BodyGenIniExportWriter` for INI pairs, and `BosJsonExportWriter` for BoS JSON (`src/BS2BG.Core/Serialization/ProjectFileService.cs`, `src/BS2BG.Core/Export/BodyGenIniExportWriter.cs`, `src/BS2BG.Core/Export/BosJsonExportWriter.cs`).
+**What happens:** Core services are consumed by both App and CLI; adding UI interfaces or Avalonia types to Core would force CLI and tests to load UI dependencies.
+**Why it's wrong:** It breaks the clean automation path in `src/BS2BG.Cli/Program.cs` and violates the `netstandard2.1` portability boundary in `src/BS2BG.Core/BS2BG.Core.csproj`.
+**Do this instead:** Add Core abstractions only for domain/I/O behavior under `src/BS2BG.Core/`; add Avalonia implementations behind App service interfaces under `src/BS2BG.App/Services/`.
 
-### Mutating project data without undo/dirty awareness
+### Recreating Profile Catalogs Without Request Context
 
-**What happens:** UI workflow code directly changes `ProjectModel` child collections/properties without recording undo/redo or considering replay.
-**Why it's wrong:** User-facing edits need undo/redo and dirty state consistency across `MainWindowViewModel`, `TemplatesViewModel`, and `MorphsViewModel`.
-**Do this instead:** Follow existing mutation methods that call domain services and `UndoRedoService.Record`, such as preset rename in `src/BS2BG.App/ViewModels/TemplatesViewModel.cs:246` and assignment operations in `src/BS2BG.App/ViewModels/MorphsViewModel.cs`.
+**What happens:** Generation and bundle output can silently miss project/local custom profiles if code uses only the bundled catalog.
+**Why it's wrong:** Saved projects can reference custom profiles embedded in `.jbs2bg`; automation must resolve them for correct output.
+**Do this instead:** Use `RequestScopedProfileCatalogComposer.BuildForProject` in automation/bundle flows (`src/BS2BG.Core/Automation/HeadlessGenerationService.cs:64`, `src/BS2BG.Core/Bundling/PortableProjectBundleService.cs:206`) and `ITemplateProfileCatalogService.Current` in App workflows (`src/BS2BG.App/Services/TemplateProfileCatalogService.cs`).
 
-### Reintroducing non-ReactiveUI command infrastructure
+### Direct File Writes for Multi-Artifact Outputs
 
-**What happens:** New ViewModels use custom relay commands, manual `INotifyPropertyChanged` setters, or `Func<bool>` can-execute callbacks.
-**Why it's wrong:** Current architecture centralizes ViewModel state in ReactiveUI commands/properties and tests initialize ReactiveUI scheduler services.
-**Do this instead:** Use `ReactiveObject`, `[Reactive]`, `[ObservableAsProperty]`, and `ReactiveCommand.Create*` as in `src/BS2BG.App/ViewModels/MainWindowViewModel.cs:27` and `src/BS2BG.App/ViewModels/TemplatesViewModel.cs:115`.
+**What happens:** Direct `File.WriteAllText` calls for project, INI, JSON, or bundle output bypass rollback and ledger reporting.
+**Why it's wrong:** BodyGen export writes multiple artifacts; partial writes must be reported and, when possible, rolled back.
+**Do this instead:** Use `ProjectFileService.WriteAtomic` (`src/BS2BG.Core/Serialization/ProjectFileService.cs:118`), `BodyGenIniExportWriter.Write` (`src/BS2BG.Core/Export/BodyGenIniExportWriter.cs:13`), `BosJsonExportWriter.Write` (`src/BS2BG.Core/Export/BosJsonExportWriter.cs`), or `PortableProjectBundleService.Create` (`src/BS2BG.Core/Bundling/PortableProjectBundleService.cs:116`).
 
 ## Error Handling
 
-**Strategy:** Core import services return result objects with diagnostics for recoverable input problems; ViewModels subscribe to `ReactiveCommand.ThrownExceptions` for unexpected command failures; export/serialization services throw for filesystem and programming errors.
+**Strategy:** Expected user/input/I/O errors return typed results, diagnostics, validation reports, booleans, or CLI exit codes; unexpected programmer errors still use argument validation and exceptions.
 
 **Patterns:**
-- Catch expected XML/file read failures in `BodySlideXmlParser.ParseFile` and return `BodySlideXmlImportDiagnostic` (`src/BS2BG.Core/Import/BodySlideXmlParser.cs:17`).
-- Catch expected NPC read failures and return `NpcImportDiagnostic` (`src/BS2BG.Core/Import/NpcTextParser.cs:22`).
-- Subscribe command exception streams and convert them to status/dialog messages in ViewModels (`src/BS2BG.App/ViewModels/MainWindowViewModel.cs:203`, `src/BS2BG.App/ViewModels/TemplatesViewModel.cs:148`, `src/BS2BG.App/ViewModels/MorphsViewModel.cs:253`).
-- Throw `ArgumentNullException`/`ArgumentException` for invalid service inputs (`src/BS2BG.Core/IO/AtomicFileWriter.cs:7`, `src/BS2BG.Core/Serialization/ProjectFileService.cs:28`).
-- Roll back partially committed atomic batches or raise an aggregate rollback error (`src/BS2BG.Core/IO/AtomicFileWriter.cs:94`, `src/BS2BG.Core/IO/AtomicFileWriter.cs:133`).
+- Parser services return result objects with diagnostics for recoverable malformed input (`src/BS2BG.Core/Import/BodySlideXmlParser.cs:21`, `src/BS2BG.Core/Import/NpcTextParser.cs`).
+- Validation is non-mutating and severity-coded (`src/BS2BG.Core/Diagnostics/ProjectValidationService.cs:24`).
+- CLI generation maps usage, validation, overwrite, and I/O outcomes to stable `AutomationExitCode` values (`src/BS2BG.Core/Automation/HeadlessGenerationContracts.cs`, `src/BS2BG.Cli/Program.cs:156`).
+- Atomic write failures carry `FileWriteLedgerEntry` snapshots through `AtomicWriteException` (`src/BS2BG.Core/IO/AtomicWriteException.cs`).
+- App ViewModels subscribe to `ReactiveCommand.ThrownExceptions` and set status messages rather than crashing the shell (`src/BS2BG.App/ViewModels/TemplatesViewModel.cs:189`).
+- Preferences tolerate unreadable/corrupt files by returning defaults (`src/BS2BG.App/Services/UserPreferencesService.cs:54`).
 
 ## Cross-Cutting Concerns
 
-**Logging:** Avalonia startup logs to trace via `.LogToTrace()` in `src/BS2BG.App/Program.cs:21`. No application-wide structured logging framework is present.
-
-**Validation:** Model/service validation is local and explicit: preset names in `src/BS2BG.Core/Models/SliderPreset.cs:205`, custom target names in `src/BS2BG.Core/Morphs/MorphAssignmentService.cs:181`, parser diagnostics in `src/BS2BG.Core/Import/`, and ViewModel validation messages in `src/BS2BG.App/ViewModels/`.
-
-**Authentication:** Not applicable. The app is an offline desktop utility and no authentication provider is present.
+**Logging:** No central logging abstraction is present. Avalonia startup calls `.LogToTrace()` in `src/BS2BG.App/Program.cs:21`; CLI writes user-facing success/failure output to stdout/stderr in `src/BS2BG.Cli/Program.cs:296`.
+**Validation:** Use `ProjectValidationService.Validate` for project health and export readiness (`src/BS2BG.Core/Diagnostics/ProjectValidationService.cs`); use parser/import diagnostics for malformed external files (`src/BS2BG.Core/Import/`).
+**Authentication:** Not applicable; BS2BG is a local desktop/CLI utility with no detected network authentication surface.
+**Preferences:** Persist user preferences under `%APPDATA%\jBS2BG\user-preferences.json` through `UserPreferencesService` (`src/BS2BG.App/Services/UserPreferencesService.cs:46`).
+**Profiles:** Bundled profile JSON files at repo root are linked into App/CLI output (`src/BS2BG.App/BS2BG.App.csproj:31`, `src/BS2BG.Cli/BS2BG.Cli.csproj:21`); custom profiles flow through `src/BS2BG.App/Services/UserProfileStore.cs` and project save context.
+**Release and packaging:** Release scripts and docs live under `tools/release/` and `docs/release/`; release trust tests live in `tests/BS2BG.Tests/ReleaseTrustTests.cs` and `tests/BS2BG.Tests/ReleasePackagingScriptTests.cs`.
+**Porting reference:** Use the project `java-ref` skill and files under `src/com/asdasfa/jbs2bg/` before changing Java-parity behavior.
 
 ---
 
-*Architecture analysis: 2026-04-26*
+*Architecture analysis: 2026-04-28*
