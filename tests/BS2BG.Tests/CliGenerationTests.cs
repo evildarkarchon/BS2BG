@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using BS2BG.Core.Diagnostics;
+using BS2BG.Core.Automation;
 using Xunit;
 
 namespace BS2BG.Tests;
@@ -94,29 +94,28 @@ public sealed class CliGenerationTests
     [Fact]
     public void CoreHeadlessGenerationContractsExposeStableAutomationEnums()
     {
-        var coreAssembly = typeof(ProjectValidationReport).Assembly;
-        var outputIntentType = coreAssembly.GetType("BS2BG.Core.Automation.OutputIntent", throwOnError: false);
-        outputIntentType.Should().NotBeNull();
-        Enum.GetNames(outputIntentType!).Should().Equal("BodyGen", "BosJson", "All");
+        Enum.GetNames<OutputIntent>().Should().Equal("BodyGen", "BosJson", "All");
 
-        var exitCodeType = coreAssembly.GetType("BS2BG.Core.Automation.HeadlessGenerationExitCode", throwOnError: false);
-        exitCodeType.Should().NotBeNull();
-        Enum.GetValues(exitCodeType!).Cast<int>().Should().Equal(0, 1, 2, 3, 4);
-        Enum.GetNames(exitCodeType!).Should().Equal("Success", "UsageError", "ValidationBlocked", "OverwriteRefused", "IoFailure");
+        Enum.GetValues<HeadlessGenerationExitCode>().Cast<int>().Should().Equal(0, 1, 2, 3, 4);
+        Enum.GetNames<HeadlessGenerationExitCode>().Should()
+            .Equal("Success", "UsageError", "ValidationBlocked", "OverwriteRefused", "IoFailure");
     }
 
     [Fact]
     public void HeadlessGenerationRequestCarriesOmitRedundantSlidersPreference()
     {
-        var requestType = typeof(ProjectValidationReport).Assembly.GetType(
-            "BS2BG.Core.Automation.HeadlessGenerationRequest",
-            throwOnError: false);
-        requestType.Should().NotBeNull();
+        var request = new HeadlessGenerationRequest(
+            "project.jbs2bg",
+            "out",
+            OutputIntent.All,
+            Overwrite: true,
+            OmitRedundantSliders: true);
 
-        requestType!.GetProperty("ProjectPath")?.PropertyType.Should().Be(typeof(string));
-        requestType.GetProperty("OutputDirectory")?.PropertyType.Should().Be(typeof(string));
-        requestType.GetProperty("Overwrite")?.PropertyType.Should().Be(typeof(bool));
-        requestType.GetProperty("OmitRedundantSliders")?.PropertyType.Should().Be(typeof(bool));
+        request.ProjectPath.Should().Be("project.jbs2bg");
+        request.OutputDirectory.Should().Be("out");
+        request.Intent.Should().Be(OutputIntent.All);
+        request.Overwrite.Should().BeTrue();
+        request.OmitRedundantSliders.Should().BeTrue();
     }
 
     [Fact]

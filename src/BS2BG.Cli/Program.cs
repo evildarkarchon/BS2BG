@@ -1,4 +1,5 @@
 using System.CommandLine;
+using BS2BG.Core.Automation;
 
 namespace BS2BG.Cli;
 
@@ -52,10 +53,31 @@ internal static class Program
             omitRedundantSlidersOption,
         };
 
-        generateCommand.SetAction(_ => 0);
+        generateCommand.SetAction(parseResult =>
+        {
+            _ = new HeadlessGenerationRequest(
+                parseResult.GetValue(projectOption)!.FullName,
+                parseResult.GetValue(outputOption)!.FullName,
+                ParseOutputIntent(parseResult.GetValue(intentOption)),
+                parseResult.GetValue(overwriteOption),
+                parseResult.GetValue(omitRedundantSlidersOption));
+
+            return (int)HeadlessGenerationExitCode.Success;
+        });
 
         var rootCommand = new RootCommand("bs2bg automation CLI");
         rootCommand.Subcommands.Add(generateCommand);
         return rootCommand;
     }
+
+    /// <summary>
+    /// Converts the parser-constrained intent token into the Core automation enum used by downstream services.
+    /// </summary>
+    private static OutputIntent ParseOutputIntent(string? intent) => intent switch
+    {
+        "bodygen" => OutputIntent.BodyGen,
+        "bos" => OutputIntent.BosJson,
+        "all" => OutputIntent.All,
+        _ => OutputIntent.All,
+    };
 }
