@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using BS2BG.Cli;
 using BS2BG.Core.Automation;
 using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
@@ -26,6 +27,7 @@ public sealed class ConsoleCaptureFixture;
 public sealed class CliGenerationTests
 {
     private static readonly string[] ExpectedCliPublishEntryNames = ["BS2BG.Cli", "BS2BG.Cli.exe", "BS2BG.Cli.dll"];
+    private static readonly object ConsoleLock = new();
 
     [Fact]
     public void CliProjectIsRegisteredAsDedicatedSolutionExecutable()
@@ -291,6 +293,118 @@ public sealed class CliGenerationTests
         programText.Should().NotContain("morphs.ini");
     }
 
+    [Fact]
+    public void ProgramMainGenerateAllInvokesServiceInProcessAndPrintsWrittenFiles()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, CreateProjectWithAssignedPreset());
+        var outputDirectory = Path.Combine(directory.Path, "out");
+
+        var result = InvokeProgramMain(
+            "generate",
+            "--project", projectPath,
+            "--output", outputDirectory,
+            "--intent", "all");
+
+        result.ExitCode.Should().Be(0, result.StandardError);
+        result.StandardOutput.Should().Contain(Path.Combine(outputDirectory, "templates.ini"));
+        result.StandardOutput.Should().Contain(Path.Combine(outputDirectory, "morphs.ini"));
+        result.StandardOutput.Should().Contain(Path.Combine(outputDirectory, "Alpha.json"));
+        File.Exists(Path.Combine(outputDirectory, "templates.ini")).Should().BeTrue();
+        File.Exists(Path.Combine(outputDirectory, "morphs.ini")).Should().BeTrue();
+        File.Exists(Path.Combine(outputDirectory, "Alpha.json")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ProgramMainPrintsValidationBlockersToStderrAndReturnsTwo()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, new ProjectModel());
+
+        var result = InvokeProgramMain(
+            "generate",
+            "--project", projectPath,
+            "--output", Path.Combine(directory.Path, "out"),
+            "--intent", "all");
+
+        result.ExitCode.Should().Be(2);
+        result.StandardError.Should().Contain("Blocker");
+        result.StandardError.Should().Contain("No presets available");
+        result.StandardOutput.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ProgramMainPrintsOverwriteRefusalToStderrAndReturnsThree()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, CreateProjectWithAssignedPreset());
+        var outputDirectory = Path.Combine(directory.Path, "out");
+        Directory.CreateDirectory(outputDirectory);
+        File.WriteAllText(Path.Combine(outputDirectory, "templates.ini"), "old");
+
+        var result = InvokeProgramMain(
+            "generate",
+            "--project", projectPath,
+            "--output", outputDirectory,
+            "--intent", "bodygen");
+
+        result.ExitCode.Should().Be(3);
+        result.StandardError.Should().Contain("Target files already exist. Enable overwrite to replace them.");
+    }
+
+    [Fact]
+    public void ProgramMainUsesInstallRelativeCoreCatalogWhenCurrentDirectoryDiffers()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, CreateProjectWithAssignedPreset());
+        var outputDirectory = Path.Combine(directory.Path, "out");
+        var originalCurrentDirectory = Directory.GetCurrentDirectory();
+
+        try
+        {
+            Directory.SetCurrentDirectory(directory.Path);
+            var result = InvokeProgramMain(
+                "generate",
+                "--project", projectPath,
+                "--output", outputDirectory,
+                "--intent", "bodygen");
+
+            result.ExitCode.Should().Be(0, result.StandardError);
+            File.Exists(Path.Combine(outputDirectory, "templates.ini")).Should().BeTrue();
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalCurrentDirectory);
+        }
+    }
+
+    [Fact]
+    public void ProgramMainForwardsOmitRedundantSlidersPreference()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var project = new ProjectModel();
+        var preset = new SliderPreset("Alpha");
+        preset.AddSetSlider(new ModelSetSlider("Breasts") { ValueSmall = 0, ValueBig = 100 });
+        project.SliderPresets.Add(preset);
+        var projectPath = SaveProject(directory.Path, project);
+        var outputDirectory = Path.Combine(directory.Path, "out");
+
+        var result = InvokeProgramMain(
+            "generate",
+            "--project", projectPath,
+            "--output", outputDirectory,
+            "--intent", "bodygen",
+            "--omit-redundant-sliders");
+
+        result.ExitCode.Should().Be(0, result.StandardError);
+        File.ReadAllText(Path.Combine(outputDirectory, "templates.ini")).Should().Be("Alpha=");
+    }
+
     private static HeadlessGenerationService CreateHeadlessService() => new(
         new ProjectFileService(),
         new TemplateGenerationService(),
@@ -327,6 +441,41 @@ public sealed class CliGenerationTests
         var path = Path.Combine(directory, "project-" + Guid.NewGuid().ToString("N") + ".jbs2bg");
         new ProjectFileService().Save(project, path);
         return path;
+    }
+
+    private static ProcessResult InvokeProgramMain(params string[] args)
+    {
+        lock (ConsoleLock)
+        {
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            using var standardOutput = new StringWriter();
+            using var standardError = new StringWriter();
+            try
+            {
+                Console.SetOut(standardOutput);
+                Console.SetError(standardError);
+                var exitCode = Program.Main(args);
+                return new ProcessResult(exitCode, standardOutput.ToString(), standardError.ToString());
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
+        }
+    }
+
+    private static void CopyProfileAssetsToTestAssemblyDirectory()
+    {
+        var repoRoot = FindRepoRoot();
+        foreach (var fileName in new[] { "settings.json", "settings_UUNP.json", "settings_FO4_CBBE.json" })
+        {
+            File.Copy(
+                Path.Combine(repoRoot, fileName),
+                Path.Combine(AppContext.BaseDirectory, fileName),
+                overwrite: true);
+        }
     }
 
     private static void AssertProfileAssetsExist(string directory)
