@@ -51,7 +51,7 @@ public sealed class MorphsViewModelStrategyTests
 
         await viewModel.ApplyStrategyCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
-        project.MorphedNpcs.Select(npc => npc.SliderPresets.Single().Name).Should().Equal("Alpha", "Beta");
+        project.MorphedNpcs.Select(npc => npc.SliderPresets.Single().Name).Should().Equal("Beta", "Alpha");
         project.AssignmentStrategy!.Kind.Should().Be(AssignmentStrategyKind.RoundRobin);
         undoRedo.CanUndo.Should().BeTrue();
 
@@ -187,11 +187,11 @@ public sealed class MorphsViewModelStrategyTests
             project,
             new NpcTextParser(),
             new MorphAssignmentService(randomProvider),
-            new AssignmentStrategyService(randomProvider),
             new MorphGenerationService(),
             new EmptyNpcTextFilePicker(),
             new EmptyClipboardService(),
-            undoRedo: undoRedo);
+            undoRedo: undoRedo,
+            assignmentStrategyService: new AssignmentStrategyService(randomProvider));
     }
 
     private static ProjectModel CreateProjectWithPresetsAndNpcs()

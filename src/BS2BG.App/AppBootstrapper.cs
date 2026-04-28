@@ -48,6 +48,7 @@ public static class AppBootstrapper
         services.AddSingleton<ITemplateProfileCatalogService, TemplateProfileCatalogService>();
         services.AddSingleton<IRandomAssignmentProvider, RandomAssignmentProvider>();
         services.AddSingleton<MorphAssignmentService>();
+        services.AddSingleton<AssignmentStrategyService>();
         services.AddSingleton(provider =>
             new WindowBodySlideXmlFilePicker(provider.GetRequiredService<IUserPreferencesService>()));
         services.AddSingleton<IBodySlideXmlFilePicker>(provider =>
@@ -82,7 +83,20 @@ public static class AppBootstrapper
         services.AddSingleton<TemplatesViewModel>();
         services.AddSingleton<IProfileReferenceRemapper>(provider =>
             provider.GetRequiredService<TemplatesViewModel>());
-        services.AddSingleton<MorphsViewModel>();
+        services.AddSingleton(provider => new MorphsViewModel(
+            provider.GetRequiredService<ProjectModel>(),
+            provider.GetRequiredService<NpcTextParser>(),
+            provider.GetRequiredService<MorphAssignmentService>(),
+            provider.GetRequiredService<MorphGenerationService>(),
+            provider.GetRequiredService<INpcTextFilePicker>(),
+            provider.GetRequiredService<IClipboardService>(),
+            provider.GetRequiredService<INpcImageLookupService>(),
+            provider.GetRequiredService<IImageViewService>(),
+            provider.GetRequiredService<INoPresetNotificationService>(),
+            provider.GetRequiredService<UndoRedoService>(),
+            dialogService: provider.GetRequiredService<IAppDialogService>(),
+            npcImportPreviewService: provider.GetRequiredService<NpcImportPreviewService>(),
+            assignmentStrategyService: provider.GetRequiredService<AssignmentStrategyService>()));
         services.AddSingleton<DiagnosticsViewModel>();
         services.AddSingleton<ProfileManagerViewModel>();
         services.AddSingleton<IProfileRecoveryActionHandler>(provider =>
