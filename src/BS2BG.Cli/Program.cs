@@ -6,6 +6,7 @@ using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
+using BS2BG.Core.Morphs;
 using BS2BG.Core.Serialization;
 
 namespace BS2BG.Cli;
@@ -186,6 +187,7 @@ public static class Program
             new BodyGenIniExportWriter(),
             new BosJsonExportWriter(templateGenerationService),
             new BosJsonExportPlanner(),
+            new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
             new TemplateProfileCatalogFactory().Create());
     }
 

@@ -5,6 +5,7 @@ using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 using BS2BG.Core.Serialization;
+using BS2BG.Core.Morphs;
 
 namespace BS2BG.Core.Automation;
 
@@ -18,6 +19,7 @@ public sealed class HeadlessGenerationService(
     BodyGenIniExportWriter bodyGenIniExportWriter,
     BosJsonExportWriter bosJsonExportWriter,
     BosJsonExportPlanner bosJsonExportPlanner,
+    AssignmentStrategyReplayService replayService,
     TemplateProfileCatalog profileCatalog)
 {
     private readonly ProjectFileService projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
@@ -26,6 +28,7 @@ public sealed class HeadlessGenerationService(
     private readonly BodyGenIniExportWriter bodyGenIniExportWriter = bodyGenIniExportWriter ?? throw new ArgumentNullException(nameof(bodyGenIniExportWriter));
     private readonly BosJsonExportWriter bosJsonExportWriter = bosJsonExportWriter ?? throw new ArgumentNullException(nameof(bosJsonExportWriter));
     private readonly BosJsonExportPlanner bosJsonExportPlanner = bosJsonExportPlanner ?? throw new ArgumentNullException(nameof(bosJsonExportPlanner));
+    private readonly AssignmentStrategyReplayService replayService = replayService ?? throw new ArgumentNullException(nameof(replayService));
     private readonly RequestScopedProfileCatalogComposer profileCatalogComposer = new(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog)));
 
     /// <summary>
@@ -59,7 +62,16 @@ public sealed class HeadlessGenerationService(
         }
 
         var requestProfileCatalog = profileCatalogComposer.BuildForProject(project);
-        var validationReport = ProjectValidationService.Validate(project, requestProfileCatalog);
+        var replayResult = replayService.PrepareForBodyGen(project, request.Intent, cloneBeforeReplay: true);
+        if (replayResult.IsBlocked)
+            return new HeadlessGenerationResult(
+                AutomationExitCode.ValidationBlocked,
+                FormatReplayBlockedMessage(replayResult),
+                Array.Empty<string>(),
+                ProjectValidationService.Validate(replayResult.Project, requestProfileCatalog));
+
+        var generationProject = replayResult.Project;
+        var validationReport = ProjectValidationService.Validate(generationProject, requestProfileCatalog);
         if (validationReport.BlockerCount > 0)
             return new HeadlessGenerationResult(
                 AutomationExitCode.ValidationBlocked,
@@ -67,7 +79,7 @@ public sealed class HeadlessGenerationService(
                 Array.Empty<string>(),
                 validationReport);
 
-        var missingProfiles = FindMissingReferencedCustomProfiles(project, requestProfileCatalog).ToArray();
+        var missingProfiles = FindMissingReferencedCustomProfiles(generationProject, requestProfileCatalog).ToArray();
         if (missingProfiles.Length > 0)
             return new HeadlessGenerationResult(
                 AutomationExitCode.ValidationBlocked,
@@ -76,7 +88,7 @@ public sealed class HeadlessGenerationService(
                 Array.Empty<string>(),
                 validationReport);
 
-        var plannedTargets = PlanTargets(request, project).ToArray();
+        var plannedTargets = PlanTargets(request, generationProject).ToArray();
         if (!request.Overwrite)
         {
             var existingTargets = plannedTargets.Where(File.Exists).ToArray();
@@ -95,8 +107,8 @@ public sealed class HeadlessGenerationService(
         {
             if (IncludesBodyGen(request.Intent))
             {
-                var templates = templateGenerationService.GenerateTemplates(project.SliderPresets, requestProfileCatalog, request.OmitRedundantSliders);
-                var morphs = morphGenerationService.GenerateMorphs(project).Text;
+                var templates = templateGenerationService.GenerateTemplates(generationProject.SliderPresets, requestProfileCatalog, request.OmitRedundantSliders);
+                var morphs = morphGenerationService.GenerateMorphs(generationProject).Text;
                 var result = bodyGenIniExportWriter.Write(request.OutputDirectory, templates, morphs);
                 writtenFiles.Add(result.TemplatesPath);
                 writtenFiles.Add(result.MorphsPath);
@@ -106,7 +118,7 @@ public sealed class HeadlessGenerationService(
 
             if (IncludesBosJson(request.Intent))
             {
-                var result = bosJsonExportWriter.Write(request.OutputDirectory, project.SliderPresets, requestProfileCatalog);
+                var result = bosJsonExportWriter.Write(request.OutputDirectory, generationProject.SliderPresets, requestProfileCatalog);
                 writtenFiles.AddRange(result.FilePaths);
                 ledger.AddRange(result.FilePaths.Select(path => new FileWriteLedgerEntry(path, FileWriteOutcome.Written)));
             }
@@ -123,7 +135,7 @@ public sealed class HeadlessGenerationService(
 
         return new HeadlessGenerationResult(
             AutomationExitCode.Success,
-            "Generation completed successfully.",
+            CreateSuccessMessage(replayResult),
             writtenFiles,
             validationReport,
             ledger);
@@ -180,6 +192,48 @@ public sealed class HeadlessGenerationService(
     private static string FormatValidationMessage(ProjectValidationReport report) => string.Join(
         Environment.NewLine,
         report.Findings.Select(finding => finding.Severity + ": " + finding.Title + " - " + finding.Detail));
+
+    private static string CreateSuccessMessage(AssignmentStrategyReplayResult replayResult)
+    {
+        if (!replayResult.Replayed) return "Generation completed successfully.";
+
+        return FormatReplaySuccessMessage(replayResult) + Environment.NewLine + "Generation completed successfully.";
+    }
+
+    private static string FormatReplaySuccessMessage(AssignmentStrategyReplayResult replayResult)
+    {
+        var message = "Assignment strategy replayed: " + replayResult.StrategyKind
+                      + "; assigned NPCs: " + replayResult.AssignedCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                      + "; blocked NPCs: 0.";
+        if (!ReplayWasSeeded(replayResult))
+            message += " (unseeded strategy; assignments may vary between runs)";
+        return message;
+    }
+
+    private static bool ReplayWasSeeded(AssignmentStrategyReplayResult replayResult) =>
+        replayResult.Project.AssignmentStrategy?.Seed is not null;
+
+    private static string FormatReplayBlockedMessage(AssignmentStrategyReplayResult replayResult)
+    {
+        var lines = new List<string>
+        {
+            "Assignment strategy replay blocked BodyGen generation because one or more NPCs have no eligible preset."
+        };
+        foreach (var blocked in replayResult.BlockedNpcs)
+            lines.Add(FormatBlockedNpc(blocked));
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string FormatBlockedNpc(AssignmentStrategyBlockedNpc blocked)
+    {
+        var npc = blocked.Npc;
+        return "Blocked NPC: Mod=" + npc.Mod
+               + "; Name=" + npc.Name
+               + "; EditorId=" + npc.EditorId
+               + "; Race=" + npc.Race
+               + "; FormId=" + npc.FormId
+               + "; Reason=" + blocked.Reason;
+    }
 
     private static string CreateIoFailureMessage(OutputIntent intent, IReadOnlyList<string> writtenFiles, Exception exception)
     {

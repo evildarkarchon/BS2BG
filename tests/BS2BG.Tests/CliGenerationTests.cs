@@ -239,7 +239,7 @@ public sealed class CliGenerationTests
         File.ReadAllBytes(Path.Combine(secondOutputDirectory, "morphs.ini"))
             .Should().Equal(File.ReadAllBytes(Path.Combine(firstOutputDirectory, "morphs.ini")));
         File.ReadAllText(Path.Combine(firstOutputDirectory, "morphs.ini")).Should().Be(
-            "Fallout4.esm|2=PresetA\r\nSkyrim.esm|1=PresetB\r\nSkyrim.esm|3=PresetB");
+            "Fallout4.esm|2=PresetB\r\nSkyrim.esm|1=PresetA\r\nSkyrim.esm|3=PresetB");
     }
 
     [Fact]
@@ -335,7 +335,7 @@ public sealed class CliGenerationTests
         result.Message.Should().Contain("Codsworth");
         result.Message.Should().Contain("Fallout4.esm");
         result.Message.Should().Contain("CodsworthEditor");
-        result.Message.Should().Contain("000002");
+        result.Message.Should().Contain("FormId=2");
         result.Message.Should().Contain("MrHandyRace");
         result.Message.Should().Contain("No eligible preset after strategy rules");
         result.Message.Should().NotContain(nameof(HeadlessGenerationRequest.ProjectPath));
@@ -839,6 +839,7 @@ public sealed class CliGenerationTests
         new BodyGenIniExportWriter(),
         new BosJsonExportWriter(new TemplateGenerationService()),
         new BosJsonExportPlanner(),
+        new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
         CreateCatalog());
 
     private static ProjectModel CreateStaleAssignmentStrategyProject(
