@@ -61,7 +61,7 @@ public sealed class HeadlessGenerationService(
         var validationReport = ProjectValidationService.Validate(project, profileCatalog);
         if (validationReport.BlockerCount > 0)
             return new HeadlessGenerationResult(
-                HeadlessGenerationExitCode.ValidationBlocked,
+                AutomationExitCode.ValidationBlocked,
                 FormatValidationMessage(validationReport),
                 Array.Empty<string>(),
                 validationReport);
@@ -72,7 +72,7 @@ public sealed class HeadlessGenerationService(
             var existingTargets = plannedTargets.Where(File.Exists).ToArray();
             if (existingTargets.Length > 0)
                 return new HeadlessGenerationResult(
-                    HeadlessGenerationExitCode.OverwriteRefused,
+                    AutomationExitCode.OverwriteRefused,
                     "Target files already exist. Enable overwrite to replace them. " + string.Join(Environment.NewLine, existingTargets),
                     Array.Empty<string>(),
                     validationReport,
@@ -112,7 +112,7 @@ public sealed class HeadlessGenerationService(
         }
 
         return new HeadlessGenerationResult(
-            HeadlessGenerationExitCode.Success,
+            AutomationExitCode.Success,
             "Generation completed successfully.",
             writtenFiles,
             validationReport,
@@ -137,7 +137,7 @@ public sealed class HeadlessGenerationService(
     private static bool IncludesBosJson(OutputIntent intent) => intent is OutputIntent.BosJson or OutputIntent.All;
 
     private static HeadlessGenerationResult UsageError(string message) => new(
-        HeadlessGenerationExitCode.UsageError,
+        AutomationExitCode.UsageError,
         message,
         Array.Empty<string>(),
         null);
@@ -147,7 +147,7 @@ public sealed class HeadlessGenerationService(
         IReadOnlyList<string> writtenFiles,
         ProjectValidationReport validationReport,
         IReadOnlyList<FileWriteLedgerEntry> ledger) => new(
-        HeadlessGenerationExitCode.IoFailure,
+        AutomationExitCode.IoFailure,
         message,
         writtenFiles,
         validationReport,
