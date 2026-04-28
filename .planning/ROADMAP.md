@@ -179,9 +179,14 @@ Plans:
   2. CLI `generate` replays a saved strategy before writing morph output when the loaded project contains an assignment strategy.
   3. Portable bundle generation replays a saved strategy before adding generated BodyGen morph output to the bundle.
   4. Regression tests prove CLI and bundle outputs are reproducible from saved strategy data rather than only from already-mutated in-memory assignments.
-**Plans**: TBD
+**Plans**: 3 plans
 Plans:
-- [ ] Plan with `/gsd-plan-phase 7`
+**Wave 1**
+- [ ] 07-01-PLAN.md — Create the reusable Core saved-strategy replay seam and direct replay tests.
+**Wave 2 (blocked on Wave 1 completion)**
+- [ ] 07-02-PLAN.md — Replay saved strategies in CLI/headless BodyGen generation before output writes.
+- [ ] 07-03-PLAN.md — Replay saved strategies in portable bundle BodyGen outputs while preserving source project state.
+Cross-cutting constraints: BodyGen/all automation replays saved strategies automatically; BoS-only automation does not replay; blocked replay fails before writing files or zip entries; request-scoped replay state must not rewrite the bundled source project entry.
 **UI hint**: no
 
 ## Progress
