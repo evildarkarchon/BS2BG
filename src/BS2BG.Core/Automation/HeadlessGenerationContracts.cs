@@ -1,4 +1,5 @@
 using BS2BG.Core.Diagnostics;
+using BS2BG.Core.IO;
 
 namespace BS2BG.Core.Automation;
 
@@ -46,8 +47,14 @@ public sealed record HeadlessGenerationRequest(
 /// <param name="Message">Human-readable status or failure detail suitable for stdout/stderr.</param>
 /// <param name="WrittenFiles">Paths written by the completed generation request.</param>
 /// <param name="ValidationReport">Optional validation report when validation participated in the outcome.</param>
+/// <param name="WriteLedger">Per-file write outcomes when generation writes or partially fails.</param>
 public sealed record HeadlessGenerationResult(
     HeadlessGenerationExitCode ExitCode,
     string Message,
     IReadOnlyList<string> WrittenFiles,
-    ProjectValidationReport? ValidationReport);
+    ProjectValidationReport? ValidationReport,
+    IReadOnlyList<FileWriteLedgerEntry>? WriteLedger = null)
+{
+    public IReadOnlyList<FileWriteLedgerEntry> WriteLedger { get; init; } =
+        WriteLedger ?? Array.Empty<FileWriteLedgerEntry>();
+}

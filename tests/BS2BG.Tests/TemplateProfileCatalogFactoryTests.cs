@@ -5,6 +5,7 @@ using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using Xunit;
 using SliderPreset = BS2BG.Core.Models.SliderPreset;
+using TemplateProfileCatalogFactory = BS2BG.App.Services.TemplateProfileCatalogFactory;
 
 namespace BS2BG.Tests;
 
