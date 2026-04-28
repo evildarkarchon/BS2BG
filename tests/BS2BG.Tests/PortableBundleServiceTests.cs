@@ -354,6 +354,21 @@ public sealed class PortableBundleServiceTests
     }
 
     [Fact]
+    public void ExistingBundleBytesSurviveInjectedFinalCommitFailure()
+    {
+        using var directory = new TemporaryDirectory();
+        var bundlePath = Path.Combine(directory.Path, "share.zip");
+        File.WriteAllText(bundlePath, "original bundle");
+        var service = CreateServiceWithCommitter(new ThrowingBundleCommitter());
+
+        var result = service.Create(CreateRequest(CreateProjectWithAssignedPreset(), bundlePath, OutputIntent.BodyGen, overwrite: true));
+
+        result.Outcome.Should().Be(PortableProjectBundleOutcome.IoFailure);
+        File.ReadAllText(bundlePath).Should().Be("original bundle");
+        Directory.EnumerateFiles(directory.Path, ".share.zip.*.tmp").Should().BeEmpty();
+    }
+
+    [Fact]
     public void ValidationBlockerPreventsZipCreationAndReturnsReport()
     {
         using var directory = new TemporaryDirectory();
@@ -408,6 +423,45 @@ public sealed class PortableBundleServiceTests
     }
 
     [Fact]
+    public void BundleOutputBytesUseLocalCustomProfileFromRequestSaveContext()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectUsingProfile("Community Body");
+        var bundlePath = Path.Combine(directory.Path, "community.zip");
+        var requestScopedCatalog = CreateRequestScopedCatalog(CreateProfile("Community Body", ProfileSourceKind.LocalCustom, @"C:\Users\Example\Profiles\Community Body.json", CreateCommunitySliderProfile()));
+        var bundledOnlyCatalog = CreateBundledOnlyCatalog();
+
+        var expected = WriteExpectedOutputs(directory.Path, "community-expected", project, requestScopedCatalog);
+        var bundledOnly = new TemplateGenerationService().GenerateTemplates(project.SliderPresets, bundledOnlyCatalog, omitRedundantSliders: false);
+
+        CreateBundledOnlyService().Create(CreateRequest(project, bundlePath, OutputIntent.All, overwrite: false)).Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+
+        using var archive = ZipFile.OpenRead(bundlePath);
+        ReadEntryBytes(archive, "outputs/bodygen/templates.ini").Should().Equal(File.ReadAllBytes(expected.TemplatesPath));
+        ReadEntryBytes(archive, "outputs/bos/Alpha.json").Should().Equal(File.ReadAllBytes(expected.BosJsonPath));
+        ReadEntryText(archive, "outputs/bodygen/templates.ini").Should().NotBe(bundledOnly);
+    }
+
+    [Fact]
+    public void BundleOutputBytesUseEmbeddedCustomProfileFromProjectModel()
+    {
+        using var directory = new TemporaryDirectory();
+        var embedded = CreateProfile("Embedded Body", ProfileSourceKind.EmbeddedProject, null, CreateEmbeddedSliderProfile());
+        var project = CreateProjectUsingProfile("Embedded Body");
+        project.CustomProfiles.Add(embedded);
+        var bundlePath = Path.Combine(directory.Path, "embedded.zip");
+        var requestScopedCatalog = CreateRequestScopedCatalog(embedded);
+
+        var expected = WriteExpectedOutputs(directory.Path, "embedded-expected", project, requestScopedCatalog);
+
+        CreateBundledOnlyService().Create(CreateRequest(project, bundlePath, OutputIntent.All, overwrite: false)).Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+
+        using var archive = ZipFile.OpenRead(bundlePath);
+        ReadEntryBytes(archive, "outputs/bodygen/templates.ini").Should().Equal(File.ReadAllBytes(expected.TemplatesPath));
+        ReadEntryBytes(archive, "outputs/bos/Alpha.json").Should().Equal(File.ReadAllBytes(expected.BosJsonPath));
+    }
+
+    [Fact]
     public void TempStagingDirectoryIsRemovedOnSuccessAndFailure()
     {
         using var directory = new TemporaryDirectory();
@@ -449,6 +503,26 @@ public sealed class PortableBundleServiceTests
         CreateCatalog(),
         new DiagnosticReportTextFormatter(),
         tempRoot);
+
+    private static PortableProjectBundleService CreateBundledOnlyService() => new(
+        new ProjectFileService(),
+        new TemplateGenerationService(),
+        new MorphGenerationService(),
+        new BodyGenIniExportWriter(),
+        new BosJsonExportWriter(new TemplateGenerationService()),
+        CreateBundledOnlyCatalog(),
+        new DiagnosticReportTextFormatter());
+
+    private static PortableProjectBundleService CreateServiceWithCommitter(ThrowingBundleCommitter committer) => new(
+        new ProjectFileService(),
+        new TemplateGenerationService(),
+        new MorphGenerationService(),
+        new BodyGenIniExportWriter(),
+        new BosJsonExportWriter(new TemplateGenerationService()),
+        CreateCatalog(),
+        new DiagnosticReportTextFormatter(),
+        tempRoot: null,
+        bundleCommitter: committer.Commit);
 
     private static MainWindowViewModel CreateBundleViewModel(ProjectModel project)
     {
@@ -494,7 +568,7 @@ public sealed class PortableBundleServiceTests
         FixedCreatedUtc,
         new ProjectSaveContext(new Dictionary<string, CustomProfileDefinition>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Community Body"] = CreateProfile("Community Body", ProfileSourceKind.LocalCustom, @"C:\Users\Example\Profiles\Community Body.json"),
+            ["Community Body"] = CreateProfile("Community Body", ProfileSourceKind.LocalCustom, @"C:\Users\Example\Profiles\Community Body.json", CreateCommunitySliderProfile()),
             ["Unrelated Body"] = CreateProfile("Unrelated Body", ProfileSourceKind.LocalCustom, @"C:\Users\Example\Profiles\Unrelated Body.json"),
         }),
         new[] { @"C:\Users\Example", Path.GetDirectoryName(bundlePath)! });
@@ -566,6 +640,15 @@ public sealed class PortableBundleServiceTests
         return project;
     }
 
+    private static ProjectModel CreateProjectUsingProfile(string profileName)
+    {
+        var project = new ProjectModel();
+        var preset = new SliderPreset("Alpha", profileName);
+        preset.AddSetSlider(new ModelSetSlider("Breasts") { ValueSmall = 0, ValueBig = 100 });
+        project.SliderPresets.Add(preset);
+        return project;
+    }
+
     private static ProjectModel CreateProjectWithEmbeddedAndLocalProfiles()
     {
         var project = CreateProjectWithAssignedPreset();
@@ -583,13 +666,53 @@ public sealed class PortableBundleServiceTests
         new ProfileCatalogEntry("Embedded Body", new TemplateProfile("Embedded Body", CreateSliderProfile()), ProfileSourceKind.EmbeddedProject, null, false),
     });
 
+    private static TemplateProfileCatalog CreateBundledOnlyCatalog() => new(new[]
+    {
+        new ProfileCatalogEntry(ProjectProfileMapping.SkyrimCbbe, new TemplateProfile(ProjectProfileMapping.SkyrimCbbe, CreateSliderProfile()), ProfileSourceKind.Bundled, null, false),
+    });
+
+    private static TemplateProfileCatalog CreateRequestScopedCatalog(params CustomProfileDefinition[] profiles) => new(
+        CreateBundledOnlyCatalog().Entries.Concat(profiles.Select(profile => new ProfileCatalogEntry(
+            profile.Name,
+            new TemplateProfile(profile.Name, profile.SliderProfile),
+            profile.SourceKind,
+            profile.FilePath,
+            false))));
+
     private static CustomProfileDefinition CreateProfile(string name, ProfileSourceKind sourceKind, string? filePath) =>
         new(name, "Skyrim", CreateSliderProfile(), sourceKind, filePath);
+
+    private static CustomProfileDefinition CreateProfile(string name, ProfileSourceKind sourceKind, string? filePath, SliderProfile sliderProfile) =>
+        new(name, "Skyrim", sliderProfile, sourceKind, filePath);
 
     private static SliderProfile CreateSliderProfile() => new(
         new[] { new SliderDefault("Breasts", 0.2f, 1f) },
         Array.Empty<SliderMultiplier>(),
         Array.Empty<string>());
+
+    private static SliderProfile CreateCommunitySliderProfile() => new(
+        new[] { new SliderDefault("Breasts", 0.8f, 0.1f) },
+        new[] { new SliderMultiplier("Breasts", 1.5f) },
+        new[] { "Breasts" });
+
+    private static SliderProfile CreateEmbeddedSliderProfile() => new(
+        new[] { new SliderDefault("Breasts", 0.05f, 0.9f) },
+        new[] { new SliderMultiplier("Breasts", 0.5f) },
+        Array.Empty<string>());
+
+    private static ExpectedOutputPaths WriteExpectedOutputs(string directory, string childName, ProjectModel project, TemplateProfileCatalog catalog)
+    {
+        var expectedDirectory = Path.Combine(directory, childName);
+        var bodyGenDirectory = Path.Combine(expectedDirectory, "bodygen");
+        var bosDirectory = Path.Combine(expectedDirectory, "bos");
+        var templatesText = new TemplateGenerationService().GenerateTemplates(project.SliderPresets, catalog, false);
+        var morphsText = new MorphGenerationService().GenerateMorphs(project).Text;
+        new BodyGenIniExportWriter().Write(bodyGenDirectory, templatesText, morphsText);
+        new BosJsonExportWriter(new TemplateGenerationService()).Write(bosDirectory, project.SliderPresets, catalog);
+        return new ExpectedOutputPaths(
+            Path.Combine(bodyGenDirectory, "templates.ini"),
+            Path.Combine(bosDirectory, "Alpha.json"));
+    }
 
     private static string ReadEntryText(ZipArchive archive, string name) =>
         System.Text.Encoding.UTF8.GetString(ReadEntryBytes(archive, name));
@@ -617,6 +740,18 @@ public sealed class PortableBundleServiceTests
     }
 
     private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
+
+    private sealed record ExpectedOutputPaths(string TemplatesPath, string BosJsonPath);
+
+    private sealed class ThrowingBundleCommitter
+    {
+        public void Commit(string tempPath, string finalPath)
+        {
+            File.Exists(tempPath).Should().BeTrue();
+            finalPath.Should().EndWith("share.zip");
+            throw new IOException("forced commit failure");
+        }
+    }
 
     private sealed class FakeBundleFileDialogService : IFileDialogService
     {

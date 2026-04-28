@@ -414,6 +414,83 @@ public sealed class CliGenerationTests
             .BeLessThan(File.ReadAllText(Path.Combine(verboseOutputDirectory, "templates.ini")).Length);
     }
 
+    [Fact]
+    public void ProgramMainBundleMapsMissingProjectToUsageErrorWithoutStackTrace()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+
+        var result = InvokeProgramMain(
+            "bundle",
+            "--project", Path.Combine(directory.Path, "missing.jbs2bg"),
+            "--bundle", Path.Combine(directory.Path, "share.zip"),
+            "--intent", "all");
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.UsageError);
+        result.StandardError.Should().StartWith("Could not load project:");
+        AssertNoImplementationStackTrace(result.StandardError);
+    }
+
+    [Fact]
+    public void ProgramMainBundleMapsMalformedProjectJsonToUsageErrorWithoutStackTrace()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = Path.Combine(directory.Path, "malformed.jbs2bg");
+        File.WriteAllText(projectPath, "{ not json");
+
+        var result = InvokeProgramMain(
+            "bundle",
+            "--project", projectPath,
+            "--bundle", Path.Combine(directory.Path, "share.zip"),
+            "--intent", "all");
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.UsageError);
+        result.StandardError.Should().StartWith("Could not load project:");
+        AssertNoImplementationStackTrace(result.StandardError);
+    }
+
+    [Fact]
+    public void ProgramMainBundleMapsMissingBundledProfileAssetsToIoFailureWithoutStackTrace()
+    {
+        using var directory = new TemporaryDirectory();
+        var projectPath = SaveProject(directory.Path, CreateProjectWithAssignedPreset());
+
+        ProcessWithProfileAssetsTemporarilyMoved(() =>
+        {
+            var result = InvokeProgramMain(
+                "bundle",
+                "--project", projectPath,
+                "--bundle", Path.Combine(directory.Path, "share.zip"),
+                "--intent", "bodygen");
+
+            result.ExitCode.Should().Be((int)AutomationExitCode.IoFailure);
+            result.StandardError.Should().StartWith("Bundle creation failed due to a file I/O error.");
+            AssertNoImplementationStackTrace(result.StandardError);
+        });
+    }
+
+    [Fact]
+    public void ProgramMainBundleMapsDirectoryBundleTargetToIoFailureWithoutStackTrace()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, CreateProjectWithAssignedPreset());
+        var directoryAsBundleTarget = Path.Combine(directory.Path, "share.zip");
+        Directory.CreateDirectory(directoryAsBundleTarget);
+
+        var result = InvokeProgramMain(
+            "bundle",
+            "--project", projectPath,
+            "--bundle", directoryAsBundleTarget,
+            "--intent", "bodygen",
+            "--overwrite");
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.IoFailure);
+        result.StandardError.Should().StartWith("Bundle creation failed due to a file I/O error.");
+        AssertNoImplementationStackTrace(result.StandardError);
+    }
+
     private static HeadlessGenerationService CreateHeadlessService() => new(
         new ProjectFileService(),
         new TemplateGenerationService(),
@@ -492,6 +569,38 @@ public sealed class CliGenerationTests
         File.Exists(Path.Combine(directory, "settings.json")).Should().BeTrue();
         File.Exists(Path.Combine(directory, "settings_UUNP.json")).Should().BeTrue();
         File.Exists(Path.Combine(directory, "settings_FO4_CBBE.json")).Should().BeTrue();
+    }
+
+    private static void AssertNoImplementationStackTrace(string standardError)
+    {
+        standardError.Should().NotContain("System.IO");
+        standardError.Should().NotContain("System.Text.Json");
+        standardError.Should().NotContain("Exception");
+        standardError.Should().NotContain(" at ");
+    }
+
+    private static void ProcessWithProfileAssetsTemporarilyMoved(Action action)
+    {
+        var movedFiles = new List<(string Source, string Backup)>();
+        try
+        {
+            foreach (var fileName in new[] { "settings.json", "settings_UUNP.json", "settings_FO4_CBBE.json" })
+            {
+                var source = Path.Combine(AppContext.BaseDirectory, fileName);
+                if (!File.Exists(source)) continue;
+
+                var backup = source + "." + Guid.NewGuid().ToString("N") + ".bak";
+                File.Move(source, backup);
+                movedFiles.Add((source, backup));
+            }
+
+            action();
+        }
+        finally
+        {
+            foreach (var (source, backup) in movedFiles)
+                if (File.Exists(backup)) File.Move(backup, source, overwrite: true);
+        }
     }
 
     private static ProcessResult RunProcess(string workingDirectory, string fileName, string arguments)
