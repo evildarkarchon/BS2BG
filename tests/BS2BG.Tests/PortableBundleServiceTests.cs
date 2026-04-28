@@ -509,6 +509,28 @@ public sealed class PortableBundleServiceTests
     }
 
     [Fact]
+    public void BundleProfileEntriesDeduplicateSanitizedCustomProfileFileNames()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Alpha", "Body:A"));
+        project.SliderPresets.Add(new SliderPreset("Beta", "Body?A"));
+        project.CustomProfiles.Add(TestProfiles.CreateProfile("Body:A", ProfileSourceKind.EmbeddedProject));
+        project.CustomProfiles.Add(TestProfiles.CreateProfile("Body?A", ProfileSourceKind.EmbeddedProject));
+        var bundlePath = Path.Combine(directory.Path, "profiles.zip");
+
+        CreateBundledOnlyService().Create(CreateRequest(project, bundlePath, OutputIntent.BodyGen, overwrite: false))
+            .Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+
+        using var archive = ZipFile.OpenRead(bundlePath);
+        var profileEntries = archive.Entries
+            .Select(entry => entry.FullName)
+            .Where(name => name.StartsWith("profiles/", StringComparison.Ordinal))
+            .ToArray();
+        profileEntries.Should().Equal("profiles/Body_A (2).json", "profiles/Body_A.json");
+    }
+
+    [Fact]
     public void TempStagingDirectoryIsRemovedOnSuccessAndFailure()
     {
         using var directory = new TemporaryDirectory();

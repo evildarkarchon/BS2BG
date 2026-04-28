@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -280,11 +281,31 @@ public sealed class PortableProjectBundleService
 
     private static void AddProfileEntries(List<BundleContentEntry> entries, IEnumerable<CustomProfileDefinition> bundleProfiles)
     {
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var profile in bundleProfiles)
         {
-            var safeName = MakeSafeFileName(profile.Name) + ".json";
+            var safeName = GetUniqueProfileFileName(MakeSafeFileName(profile.Name), usedNames);
             entries.Add(Entry("profiles/" + safeName, "profile", Utf8NoBom.GetBytes(ProfileDefinitionService.ExportProfileJson(profile))));
         }
+    }
+
+    /// <summary>
+    /// Produces deterministic profile entry filenames when distinct profile names sanitize to the same archive path.
+    /// </summary>
+    /// <param name="stem">Sanitized filename stem without the JSON extension.</param>
+    /// <param name="usedNames">Case-insensitive set of profile filenames already reserved in this bundle.</param>
+    /// <returns>A unique JSON filename for the profile entry.</returns>
+    private static string GetUniqueProfileFileName(string stem, HashSet<string> usedNames)
+    {
+        var candidate = stem + ".json";
+        var suffix = 2;
+        while (!usedNames.Add(candidate))
+        {
+            candidate = stem + " (" + suffix.ToString(CultureInfo.InvariantCulture) + ").json";
+            suffix++;
+        }
+
+        return candidate;
     }
 
     private static IEnumerable<string> FindMissingReferencedCustomProfiles(
