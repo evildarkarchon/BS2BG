@@ -17,6 +17,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Validation and Diagnostics** - Users can inspect project health, import effects, and export consequences before committing risky changes.
 - [ ] **Phase 4: Profile Extensibility and Controlled Customization** - Users can manage custom local profiles without corrupting bundled profiles or legacy projects.
 - [x] **Phase 5: Automation, Sharing, and Release Trust** - Users can automate generation, bundle projects, and verify portable releases through trusted paths. (completed 2026-04-28)
+- [ ] **Phase 6: Compose Custom Profiles in Headless Generation** - Projects that reference embedded or custom profiles generate through the CLI with the same request-scoped profile catalog semantics as GUI and bundle workflows.
+- [ ] **Phase 7: Replay Saved Strategies in Automation Outputs** - CLI and portable bundle outputs replay saved deterministic assignment strategies before morph generation so automation is reproducible from project data.
 
 ## Phase Details
 
@@ -153,10 +155,39 @@ Plans:
 Cross-cutting constraints: CLI and bundle automation reuse Core generation/export paths only; deterministic assignment uses a pinned provider-compatible PRNG; bundle/release artifacts avoid private absolute paths; signing is optional when SHA-256 verification artifacts and unsigned docs are present.
 **UI hint**: yes
 
+### Phase 6: Compose Custom Profiles in Headless Generation
+**Goal**: Projects that reference embedded or custom profiles generate through the CLI with request-scoped catalog semantics matching GUI and portable bundle output.
+**Depends on**: Phase 5
+**Requirements**: AUTO-01
+**Gap Closure**: Closes the v1.0 milestone audit gap where CLI generation ignores embedded/custom project profiles because headless generation uses a bundled-only catalog. Affected satisfied requirements EXT-03, EXT-04, PROF-03, and PROF-04 remain covered by their original phases.
+**Success Criteria** (what must be TRUE):
+  1. Headless generation composes bundled profiles with the project's embedded/custom profile definitions before validation and generation.
+  2. CLI `generate` validates and generates template and BoS output using the same request-scoped catalog recipe as GUI and portable bundle paths.
+  3. Regression tests prove a project with an embedded custom profile does not silently fall back to bundled profile semantics in CLI generation.
+**Plans**: TBD
+Plans:
+- [ ] Plan with `/gsd-plan-phase 6`
+**UI hint**: no
+
+### Phase 7: Replay Saved Strategies in Automation Outputs
+**Goal**: CLI and portable bundle output generation replay saved deterministic assignment strategies before morph generation so automation is reproducible from project data.
+**Depends on**: Phase 5; planned after Phase 6 for milestone audit closure order
+**Requirements**: AUTO-02, AUTO-03
+**Gap Closure**: Closes the v1.0 milestone audit gap where `HeadlessGenerationService` and `PortableProjectBundleService` generate morphs from existing assignments without applying `ProjectModel.AssignmentStrategy`.
+**Success Criteria** (what must be TRUE):
+  1. A Core orchestration seam applies saved assignment strategies deterministically before automation morph generation without bypassing the existing random-provider abstraction.
+  2. CLI `generate` replays a saved strategy before writing morph output when the loaded project contains an assignment strategy.
+  3. Portable bundle generation replays a saved strategy before adding generated BodyGen morph output to the bundle.
+  4. Regression tests prove CLI and bundle outputs are reproducible from saved strategy data rather than only from already-mutated in-memory assignments.
+**Plans**: TBD
+Plans:
+- [ ] Plan with `/gsd-plan-phase 7`
+**UI hint**: no
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -165,3 +196,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 3. Validation and Diagnostics | 8/8 | Complete | 2026-04-27 |
 | 4. Profile Extensibility and Controlled Customization | 8/8 | Complete | 2026-04-27 |
 | 5. Automation, Sharing, and Release Trust | 10/10 | Complete | 2026-04-28 |
+| 6. Compose Custom Profiles in Headless Generation | 0/TBD | Not started | - |
+| 7. Replay Saved Strategies in Automation Outputs | 0/TBD | Not started | - |

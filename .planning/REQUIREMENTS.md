@@ -19,11 +19,11 @@ Accepted Phase 1 override: ROADMAP/requirement wording that previously mentioned
 
 ### Workflow Reliability
 
-- [ ] **WORK-01**: User can restart BS2BG and keep last-used folders and generation-affecting workflow preferences such as omit-redundant sliders.
-- [ ] **WORK-02**: User can filter NPC rows by mod, name, editor ID, form ID, race, assignment state, and preset-related values without losing stable NPC identity.
-- [ ] **WORK-03**: User can run bulk NPC operations with explicit all, visible, selected, and visible-empty scopes so filtered rows are not mutated accidentally.
-- [ ] **WORK-04**: User can undo and redo high-risk preset, target, NPC assignment, import, clear, and profile operations without mutable live-state corruption.
-- [ ] **WORK-05**: User can work with large real-world preset and NPC datasets without UI freezes or unbounded filter/import delays.
+- [x] **WORK-01**: User can restart BS2BG and keep last-used folders and generation-affecting workflow preferences such as omit-redundant sliders.
+- [x] **WORK-02**: User can filter NPC rows by mod, name, editor ID, form ID, race, assignment state, and preset-related values without losing stable NPC identity.
+- [x] **WORK-03**: User can run bulk NPC operations with explicit all, visible, selected, and visible-empty scopes so filtered rows are not mutated accidentally.
+- [x] **WORK-04**: User can undo and redo high-risk preset, target, NPC assignment, import, clear, and profile operations without mutable live-state corruption.
+- [x] **WORK-05**: User can work with large real-world preset and NPC datasets without UI freezes or unbounded filter/import delays.
 
 ### Validation and Diagnostics
 
@@ -43,11 +43,11 @@ Accepted Phase 1 override: ROADMAP/requirement wording that previously mentioned
 
 ### Automation and Release Trust
 
-- [x] **AUTO-01**: User can run a headless CLI generation path that uses the same Core services and output semantics as the GUI.
-- [x] **AUTO-02**: User can create a portable project bundle containing the `.jbs2bg` file, generated outputs, profile JSON copies, and a validation report without private local paths.
+- [ ] **AUTO-01**: User can run a headless CLI generation path that uses the same Core services and output semantics as the GUI.
+- [ ] **AUTO-02**: User can create a portable project bundle containing the `.jbs2bg` file, generated outputs, profile JSON copies, and a validation report without private local paths.
 - [ ] **AUTO-03**: User can apply deterministic assignment strategy presets through seams that remain testable and do not bypass existing random-provider abstractions.
-- [ ] **AUTO-04**: User can verify downloaded release artifacts through checksums, signing information when available, and release-package assertions.
-- [ ] **AUTO-05**: User can access setup and troubleshooting guidance for BodyGen, BodySlide, BoS, and common output-location mistakes without BS2BG editing external game plugins.
+- [x] **AUTO-04**: User can verify downloaded release artifacts through checksums, signing information when available, and release-package assertions.
+- [x] **AUTO-05**: User can access setup and troubleshooting guidance for BodyGen, BodySlide, BoS, and common output-location mistakes without BS2BG editing external game plugins.
 
 ## v2 Requirements
 
@@ -91,11 +91,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROF-03 | Phase 1: Profile Correctness and Trust | Complete |
 | PROF-04 | Phase 1: Profile Correctness and Trust | Complete |
 | PROF-05 | Phase 1: Profile Correctness and Trust | Complete |
-| WORK-01 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
-| WORK-02 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
-| WORK-03 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
-| WORK-04 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
-| WORK-05 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Pending |
+| WORK-01 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Complete |
+| WORK-02 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Complete |
+| WORK-03 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Complete |
+| WORK-04 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Complete |
+| WORK-05 | Phase 2: Workflow Persistence, Filtering, and Undo Hardening | Complete |
 | DIAG-01 | Phase 3: Validation and Diagnostics | Complete |
 | DIAG-02 | Phase 3: Validation and Diagnostics | Complete |
 | DIAG-03 | Phase 3: Validation and Diagnostics | Complete |
@@ -106,17 +106,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXT-03 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | EXT-04 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | EXT-05 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
-| AUTO-01 | Phase 5: Automation, Sharing, and Release Trust | Complete |
-| AUTO-02 | Phase 5: Automation, Sharing, and Release Trust | Complete |
-| AUTO-03 | Phase 5: Automation, Sharing, and Release Trust | Pending |
-| AUTO-04 | Phase 5: Automation, Sharing, and Release Trust | Pending |
-| AUTO-05 | Phase 5: Automation, Sharing, and Release Trust | Pending |
+| AUTO-01 | Phase 6: Compose Custom Profiles in Headless Generation | Pending |
+| AUTO-02 | Phase 7: Replay Saved Strategies in Automation Outputs | Pending |
+| AUTO-03 | Phase 7: Replay Saved Strategies in Automation Outputs | Pending |
+| AUTO-04 | Phase 5: Automation, Sharing, and Release Trust | Complete |
+| AUTO-05 | Phase 5: Automation, Sharing, and Release Trust | Complete |
 
 **Coverage:**
 - v1 requirements: 25 total
 - Mapped to phases: 25
+- Complete after audit adjustment: 22
+- Pending gap closure: 3
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-26*
-*Last updated: 2026-04-26 after roadmap creation*
+*Last updated: 2026-04-27 after v1.0 milestone audit gap-phase planning*
