@@ -133,7 +133,7 @@ Cross-cutting constraints: custom profile identity is internal display-name base
   3. User can apply deterministic assignment strategy presets through testable seams that do not bypass existing random-provider abstractions.
   4. User can verify downloaded release artifacts through checksums, signing information when available, and release-package assertions.
   5. User can access setup and troubleshooting guidance for BodyGen, BodySlide, BoS, and common output-location mistakes without BS2BG editing external game plugins.
-**Plans**: 9 plans
+**Plans**: 10 plans
 Plans:
 **Wave 1**
 - [x] 05-01-PLAN.md — Create dedicated CLI executable foundation and typed headless generation contracts.
@@ -148,6 +148,8 @@ Plans:
 **Wave 4 (blocked on Wave 3 UI/bundle/release surfaces)**
 - [x] 05-07-PLAN.md — Wire portable bundle creation into CLI and GUI preview/write workflows.
 - [x] 05-09-PLAN.md — Add packaged BodyGen/BodySlide/BoS setup and troubleshooting guidance.
+**Wave 5 (gap closure; blocked on Wave 4 verification)**
+- [ ] 05-10-PLAN.md — Close portable bundle overwrite safety, custom-profile generation catalog, and CLI failure-mapping gaps.
 Cross-cutting constraints: CLI and bundle automation reuse Core generation/export paths only; deterministic assignment uses a pinned provider-compatible PRNG; bundle/release artifacts avoid private absolute paths; signing is optional when SHA-256 verification artifacts and unsigned docs are present.
 **UI hint**: yes
 
