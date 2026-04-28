@@ -150,6 +150,24 @@ public sealed class MorphAssignmentService(IRandomAssignmentProvider randomAssig
         return cleared;
     }
 
+    /// <summary>
+    /// Applies a persisted assignment strategy through the same random-provider seam used by existing fill commands.
+    /// </summary>
+    /// <param name="project">Project whose NPC rows should receive strategy assignments.</param>
+    /// <param name="strategy">Persisted strategy configuration to execute.</param>
+    /// <param name="eligibleRows">Optional explicit NPC scope; defaults to all morphed NPC rows.</param>
+    /// <returns>Assignment count plus NPC rows blocked because no eligible preset remained after strategy rules.</returns>
+    public AssignmentStrategyResult ApplyStrategy(
+        ProjectModel project,
+        AssignmentStrategyDefinition strategy,
+        IReadOnlyList<Npc>? eligibleRows = null)
+    {
+        if (project is null) throw new ArgumentNullException(nameof(project));
+        if (strategy is null) throw new ArgumentNullException(nameof(strategy));
+
+        return new AssignmentStrategyService(randomAssignmentProvider).Apply(project, strategy, eligibleRows);
+    }
+
     public bool RemoveNpc(ProjectModel project, Npc? npc)
     {
         if (project is null) throw new ArgumentNullException(nameof(project));

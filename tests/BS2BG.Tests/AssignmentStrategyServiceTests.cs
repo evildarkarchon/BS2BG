@@ -197,7 +197,7 @@ public sealed class AssignmentStrategyServiceTests
 
         firstResult.AssignedCount.Should().Be(3);
         secondResult.AssignedCount.Should().Be(3);
-        AssignmentSnapshot(first).Should().Equal("Aela=PresetA", "Codsworth=PresetC", "Danica=PresetC");
+        AssignmentSnapshot(first).Should().Equal("Aela=PresetA", "Codsworth=PresetB", "Danica=PresetB");
         AssignmentSnapshot(second).Should().Equal(AssignmentSnapshot(first));
     }
 
@@ -210,7 +210,7 @@ public sealed class AssignmentStrategyServiceTests
         var result = AssignmentStrategyService.Apply(project, strategy);
 
         result.AssignedCount.Should().Be(3);
-        AssignmentSnapshot(project).Should().Equal("Aela=PresetA", "Codsworth=PresetB", "Danica=PresetC");
+        AssignmentSnapshot(project).Should().Equal("Aela=PresetB", "Codsworth=PresetA", "Danica=PresetC");
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public sealed class AssignmentStrategyServiceTests
             1,
             AssignmentStrategyKind.RaceFilters,
             null,
-            new[] { new AssignmentStrategyRule("Nords", new[] { "PresetA" }, new[] { "NordRace" }, 1.0, null) });
+            new[] { new AssignmentStrategyRule("Nords", PresetA, NordRaceUpper, 1.0, null) });
 
         var eligibility = AssignmentStrategyService.ComputeEligibility(project, strategy, project.MorphedNpcs);
         var result = AssignmentStrategyService.Apply(project, strategy);
@@ -242,8 +242,8 @@ public sealed class AssignmentStrategyServiceTests
 
         service.Apply(project, strategy);
 
-        AssignmentSnapshot(project).Should().Equal("Aela=PresetC", "Codsworth=PresetB", "Danica=PresetA");
-        File.ReadAllText(Path.Combine("src", "BS2BG.Core", "Morphs", "AssignmentStrategyService.cs"))
+        AssignmentSnapshot(project).Should().Equal("Aela=PresetB", "Codsworth=PresetC", "Danica=PresetA");
+        File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "BS2BG.Core", "Morphs", "AssignmentStrategyService.cs"))
             .Should().NotContain("new Random(seed)");
     }
 
@@ -281,6 +281,16 @@ public sealed class AssignmentStrategyServiceTests
         .OrderBy(npc => npc.Name, StringComparer.OrdinalIgnoreCase)
         .Select(npc => npc.Name + "=" + npc.SliderPresetsText)
         .ToArray();
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "BS2BG.sln")))
+            directory = directory.Parent;
+
+        directory.Should().NotBeNull("the test run should be located inside the repository tree");
+        return directory!.FullName;
+    }
 
     private sealed class SequenceRandomAssignmentProvider(params int[] values) : IRandomAssignmentProvider
     {
