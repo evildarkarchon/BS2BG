@@ -1,6 +1,7 @@
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels;
 using BS2BG.App.Views;
+using BS2BG.Core.Bundling;
 using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
@@ -38,8 +39,17 @@ public static class AppBootstrapper
         services.AddSingleton<ProjectValidationService>();
         services.AddSingleton<ProfileDiagnosticsService>();
         services.AddSingleton<DiagnosticsReportFormatter>();
+        services.AddSingleton<DiagnosticReportTextFormatter>();
         services.AddSingleton<BodyGenIniExportWriter>();
         services.AddSingleton<BosJsonExportWriter>();
+        services.AddSingleton(provider => new PortableProjectBundleService(
+            provider.GetRequiredService<ProjectFileService>(),
+            provider.GetRequiredService<TemplateGenerationService>(),
+            provider.GetRequiredService<MorphGenerationService>(),
+            provider.GetRequiredService<BodyGenIniExportWriter>(),
+            provider.GetRequiredService<BosJsonExportWriter>(),
+            provider.GetRequiredService<ITemplateProfileCatalogService>().Current,
+            provider.GetRequiredService<DiagnosticReportTextFormatter>()));
         services.AddSingleton<UndoRedoService>();
         services.AddSingleton<IUserPreferencesService, UserPreferencesService>();
         services.AddSingleton<IUserProfileStore, UserProfileStore>();

@@ -84,6 +84,11 @@
                   automation:AutomationProperties.Name="Export BodyGen INIs"
                   automation:AutomationProperties.AcceleratorKey="Ctrl+X"
                   Command="{Binding ExportBodyGenInisCommand}" />
+        <Separator />
+        <MenuItem x:Name="CreatePortableBundleMenuItem"
+                  Header="Create Portable Bundle"
+                  automation:AutomationProperties.Name="Create Portable Bundle"
+                  Command="{Binding CreatePortableBundleCommand}" />
       </MenuItem>
       <MenuItem Header="Edit">
         <MenuItem x:Name="UndoMenuItem"
@@ -1462,12 +1467,85 @@
               <Grid Grid.Row="2"
                     ColumnDefinitions="*,Auto,Auto">
                 <StackPanel Grid.Column="0"
-                            Spacing="4">
+                             Spacing="4">
                   <TextBlock Text="{Binding ExportPreviewSummary}"
                              TextWrapping="Wrap" />
+                  <Border Padding="8"
+                          Margin="0,8,0,0"
+                          Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                          BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                          BorderThickness="1"
+                          automation:AutomationProperties.Name="Portable bundle preview">
+                    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                          ColumnDefinitions="*,Auto,Auto,Auto">
+                      <StackPanel Grid.Row="0"
+                                  Grid.Column="0"
+                                  Grid.ColumnSpan="4"
+                                  Spacing="4">
+                        <TextBlock Text="Portable bundle preview"
+                                   FontSize="16"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Bundle reports use relative paths and source filenames only."
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="Referenced custom profiles only"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="Target files already exist. Enable overwrite to replace them."
+                                   TextWrapping="Wrap" />
+                      </StackPanel>
+                      <ComboBox Grid.Row="1"
+                                Grid.Column="0"
+                                Margin="0,8,8,0"
+                                automation:AutomationProperties.Name="Bundle output intent"
+                                ItemsSource="{Binding BundleOutputIntents}"
+                                SelectedItem="{Binding BundleOutputIntent}" />
+                      <CheckBox Grid.Row="1"
+                                Grid.Column="1"
+                                Margin="8,8,0,0"
+                                Content="Overwrite existing zip"
+                                automation:AutomationProperties.Name="Allow portable bundle overwrite"
+                                IsChecked="{Binding BundleOverwriteAllowed}" />
+                      <Button Grid.Row="1"
+                              Grid.Column="2"
+                              Margin="8,8,0,0"
+                              Content="Preview Bundle"
+                              automation:AutomationProperties.Name="Preview Portable Bundle"
+                              Command="{Binding PreviewPortableBundleCommand}" />
+                      <Button Grid.Row="1"
+                              Grid.Column="3"
+                              Margin="8,8,0,0"
+                              Content="Create Portable Bundle"
+                              automation:AutomationProperties.Name="Create Portable Bundle"
+                              Command="{Binding CreatePortableBundleCommand}" />
+                      <TextBlock Grid.Row="2"
+                                 Grid.Column="0"
+                                 Grid.ColumnSpan="4"
+                                 Margin="0,8,0,0"
+                                 Text="{Binding BundlePreviewSummary}"
+                                 TextWrapping="Wrap" />
+                      <TextBlock Grid.Row="3"
+                                 Grid.Column="0"
+                                 Grid.ColumnSpan="4"
+                                 Margin="0,8,0,0"
+                                 Text="No absolute paths in manifest/report"
+                                 TextWrapping="Wrap" />
+                      <ItemsControl Grid.Row="4"
+                                    Grid.Column="0"
+                                    Grid.ColumnSpan="4"
+                                    Margin="0,8,0,0"
+                                    ItemsSource="{Binding BundlePreviewEntries}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="sys:String">
+                            <TextBlock Text="{Binding .}"
+                                       FontFamily="Consolas"
+                                       FontSize="12" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Grid>
+                  </Border>
                   <TextBlock Text="File operation incomplete"
-                             FontWeight="SemiBold"
-                             IsVisible="{Binding HasFileOperationLedger}" />
+                              FontWeight="SemiBold"
+                              IsVisible="{Binding HasFileOperationLedger}" />
                 </StackPanel>
                 <Button x:Name="PreviewExportButton"
                         Grid.Column="1"

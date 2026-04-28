@@ -366,6 +366,9 @@ public sealed class M6UxViewModelTests
 
         public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) =>
             Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveBundleFileAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
     }
 
     private sealed class ConfirmingAppDialogService : IAppDialogService

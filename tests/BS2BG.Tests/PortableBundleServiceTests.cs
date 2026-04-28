@@ -1,5 +1,8 @@
 using System.Text.Json;
 using System.IO.Compression;
+using BS2BG.App.Services;
+using BS2BG.App.ViewModels;
+using BS2BG.Cli;
 using BS2BG.Core.Automation;
 using BS2BG.Core.Bundling;
 using BS2BG.Core.Diagnostics;
@@ -7,6 +10,7 @@ using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using BS2BG.Core.Serialization;
+using System.Reactive.Threading.Tasks;
 using Xunit;
 using ModelSetSlider = BS2BG.Core.Models.SetSlider;
 using SliderDefault = BS2BG.Core.Formatting.SliderDefault;
@@ -18,6 +22,153 @@ namespace BS2BG.Tests;
 public sealed class PortableBundleServiceTests
 {
     private static readonly DateTimeOffset FixedCreatedUtc = new(2026, 4, 28, 3, 0, 0, TimeSpan.Zero);
+    private static readonly object ConsoleLock = new();
+
+    [Fact]
+    public void BundleCommandRequiresProjectBundleAndIntentOptions()
+    {
+        var result = InvokeProgramMain("bundle");
+        var combinedOutput = result.StandardOutput + result.StandardError;
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.UsageError);
+        combinedOutput.Should().Contain("Usage:");
+        combinedOutput.Should().Contain("--project");
+        combinedOutput.Should().Contain("--bundle");
+        combinedOutput.Should().Contain("--intent");
+        combinedOutput.Should().Contain("bodygen");
+        combinedOutput.Should().Contain("bos");
+        combinedOutput.Should().Contain("all");
+    }
+
+    [Fact]
+    public void ProgramMainBundleRefusesExistingZipWithoutOverwrite()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, CreateProjectWithAssignedPreset());
+        var bundlePath = Path.Combine(directory.Path, "share.zip");
+        File.WriteAllText(bundlePath, "original");
+
+        var result = InvokeProgramMain(
+            "bundle",
+            "--project", projectPath,
+            "--bundle", bundlePath,
+            "--intent", "bodygen");
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.OverwriteRefused);
+        result.StandardError.Should().Contain("Target files already exist. Enable overwrite to replace them.");
+        File.ReadAllText(bundlePath).Should().Be("original");
+    }
+
+    [Fact]
+    public void ProgramMainBundleCreatesZipAndPrintsPathAndEntryCount()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, CreateProjectWithAssignedPreset());
+        var bundlePath = Path.Combine(directory.Path, "share.zip");
+
+        var result = InvokeProgramMain(
+            "bundle",
+            "--project", projectPath,
+            "--bundle", bundlePath,
+            "--intent", "all");
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.Success);
+        result.StandardOutput.Should().Contain(bundlePath);
+        result.StandardOutput.Should().MatchRegex(@"entries:\s*\d+");
+        result.StandardError.Should().BeEmpty();
+        using var archive = ZipFile.OpenRead(bundlePath);
+        archive.Entries.Should().Contain(entry => entry.FullName == "manifest.json");
+    }
+
+    [Fact]
+    public void BundleOutcomesMapToSharedAutomationExitCodes()
+    {
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.Success).Should().Be(AutomationExitCode.Success);
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.ValidationBlocked).Should().Be(AutomationExitCode.ValidationBlocked);
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.MissingProfile).Should().Be(AutomationExitCode.ValidationBlocked);
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.OverwriteRefused).Should().Be(AutomationExitCode.OverwriteRefused);
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.IoFailure).Should().Be(AutomationExitCode.IoFailure);
+    }
+
+    [Fact]
+    public async Task PreviewPortableBundleCommandPopulatesLayoutWithoutWritingZip()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithAssignedPreset();
+        var bundlePath = Path.Combine(directory.Path, "preview.zip");
+        var viewModel = CreateBundleViewModel(project);
+        viewModel.BundleTargetPath = bundlePath;
+        viewModel.BundleOutputIntent = OutputIntent.All;
+
+        await viewModel.PreviewPortableBundleCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        viewModel.BundlePreviewSummary.Should().Contain("Portable bundle preview");
+        viewModel.BundlePreviewSummary.Should().Contain("Referenced custom profiles only");
+        viewModel.BundlePreviewSummary.Should().Contain("No absolute paths in manifest/report");
+        viewModel.BundlePreviewEntries.Should().Contain([
+            "project/",
+            "outputs/bodygen/",
+            "outputs/bos/",
+            "profiles/",
+            "reports/",
+            "manifest.json",
+            "SHA256SUMS.txt",
+        ]);
+        File.Exists(bundlePath).Should().BeFalse("preview must not create/delete a temporary zip");
+    }
+
+    [Fact]
+    public async Task CreatePortableBundleCommandRefusesExistingTargetWithoutExplicitOverwrite()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithAssignedPreset();
+        var bundlePath = Path.Combine(directory.Path, "existing.zip");
+        File.WriteAllText(bundlePath, "original");
+        var viewModel = CreateBundleViewModel(project);
+        viewModel.BundleTargetPath = bundlePath;
+        viewModel.BundleOutputIntent = OutputIntent.BodyGen;
+        viewModel.BundleOverwriteAllowed = false;
+
+        await viewModel.CreatePortableBundleCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        viewModel.StatusMessage.Should().Contain("Target files already exist. Enable overwrite to replace them.");
+        File.ReadAllText(bundlePath).Should().Be("original");
+    }
+
+    [Fact]
+    public void MainWindowExposesPortableBundlePreviewCopyAndAccessibleCreateAction()
+    {
+        var axaml = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "BS2BG.App", "Views", "MainWindow.axaml"));
+
+        axaml.Should().Contain("Portable bundle preview");
+        axaml.Should().Contain("Create Portable Bundle");
+        axaml.Should().Contain("Referenced custom profiles only");
+        axaml.Should().Contain("Bundle reports use relative paths and source filenames only.");
+        axaml.Should().Contain("Target files already exist. Enable overwrite to replace them.");
+        axaml.Should().Contain("AutomationProperties.Name=\"Create Portable Bundle\"");
+        axaml.Should().Contain("FontFamily=\"Consolas\"");
+        axaml.Should().Contain("FontSize=\"12\"");
+    }
+
+    [Fact]
+    public async Task UnsavedAndDirtyProjectPreviewUsesFilenameOnlyFallbackAndInMemoryState()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectWithAssignedPreset();
+        project.MarkDirty();
+        var viewModel = CreateBundleViewModel(project);
+        viewModel.BundleTargetPath = Path.Combine(directory.Path, "dirty.zip");
+        viewModel.BundleOutputIntent = OutputIntent.BodyGen;
+
+        await viewModel.PreviewPortableBundleCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        viewModel.BundlePreviewSummary.Should().Contain("unsaved-project.jbs2bg");
+        viewModel.BundlePreviewSummary.Should().Contain("current open project state");
+        viewModel.BundlePreviewSummary.Should().NotContain(directory.Path);
+        viewModel.BundlePreviewEntries.Should().Contain("outputs/bodygen/templates.ini");
+    }
 
     [Theory]
     [InlineData("project\\project.jbs2bg", "project/project.jbs2bg")]
@@ -299,6 +450,41 @@ public sealed class PortableBundleServiceTests
         new DiagnosticReportTextFormatter(),
         tempRoot);
 
+    private static MainWindowViewModel CreateBundleViewModel(ProjectModel project)
+    {
+        var templateGenerationService = new TemplateGenerationService();
+        var catalog = CreateCatalog();
+        return new MainWindowViewModel(
+            project,
+            new ProjectFileService(),
+            templateGenerationService,
+            new MorphGenerationService(),
+            catalog,
+            new BodyGenIniExportWriter(),
+            new BosJsonExportWriter(templateGenerationService),
+            new FakeBundleFileDialogService(),
+            new NullAppDialogService(),
+            CreateTemplatesViewModel(project, catalog),
+            CreateMorphsViewModel(project),
+            portableProjectBundleService: CreateService());
+    }
+
+    private static TemplatesViewModel CreateTemplatesViewModel(ProjectModel project, TemplateProfileCatalog catalog) => new(
+        project,
+        new BS2BG.Core.Import.BodySlideXmlParser(),
+        new TemplateGenerationService(),
+        catalog,
+        new EmptyBodySlideXmlFilePicker(),
+        new EmptyClipboardService());
+
+    private static MorphsViewModel CreateMorphsViewModel(ProjectModel project) => new(
+        project,
+        new BS2BG.Core.Import.NpcTextParser(),
+        new BS2BG.Core.Morphs.MorphAssignmentService(new BS2BG.Core.Morphs.RandomAssignmentProvider()),
+        new MorphGenerationService(),
+        new EmptyNpcTextFilePicker(),
+        new EmptyClipboardService());
+
     private static PortableProjectBundleRequest CreateRequest(ProjectModel project, string bundlePath, OutputIntent intent, bool overwrite) => new(
         project,
         bundlePath,
@@ -312,6 +498,61 @@ public sealed class PortableBundleServiceTests
             ["Unrelated Body"] = CreateProfile("Unrelated Body", ProfileSourceKind.LocalCustom, @"C:\Users\Example\Profiles\Unrelated Body.json"),
         }),
         new[] { @"C:\Users\Example", Path.GetDirectoryName(bundlePath)! });
+
+    private static string SaveProject(string directory, ProjectModel project)
+    {
+        var path = Path.Combine(directory, "project-" + Guid.NewGuid().ToString("N") + ".jbs2bg");
+        new ProjectFileService().Save(project, path);
+        return path;
+    }
+
+    private static ProcessResult InvokeProgramMain(params string[] args)
+    {
+        lock (ConsoleLock)
+        {
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            using var standardOutput = new StringWriter();
+            using var standardError = new StringWriter();
+            try
+            {
+                Console.SetOut(standardOutput);
+                Console.SetError(standardError);
+                var exitCode = Program.Main(args);
+                return new ProcessResult(exitCode, standardOutput.ToString(), standardError.ToString());
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
+        }
+    }
+
+    private static void CopyProfileAssetsToTestAssemblyDirectory()
+    {
+        var repoRoot = FindRepoRoot();
+        foreach (var fileName in new[] { "settings.json", "settings_UUNP.json", "settings_FO4_CBBE.json" })
+        {
+            File.Copy(
+                Path.Combine(repoRoot, fileName),
+                Path.Combine(AppContext.BaseDirectory, fileName),
+                overwrite: true);
+        }
+    }
+
+    private static string FindRepoRoot()
+    {
+        var directory = AppContext.BaseDirectory;
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory, "BS2BG.sln"))) return directory;
+
+            directory = Directory.GetParent(directory)?.FullName;
+        }
+
+        throw new DirectoryNotFoundException("Could not find repository root.");
+    }
 
     private static ProjectModel CreateProjectWithAssignedPreset()
     {
@@ -373,5 +614,52 @@ public sealed class PortableBundleServiceTests
         public string Path { get; }
 
         public void Dispose() => Directory.Delete(Path, true);
+    }
+
+    private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
+
+    private sealed class FakeBundleFileDialogService : IFileDialogService
+    {
+        public Task<string?> PickOpenProjectFileAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveProjectFileAsync(string? currentPath, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickBodyGenExportFolderAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveBundleFileAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+    }
+
+    private sealed class NullAppDialogService : IAppDialogService
+    {
+        public Task<bool> ConfirmDiscardChangesAsync(DiscardChangesAction action, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<bool> ConfirmBulkOperationAsync(string title, string message, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<bool> ConfirmExportOverwriteAsync(ExportPreviewResult preview, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<ProfileConflictDecision?> PromptProfileConflictAsync(ProfileConflictRequest request, CancellationToken cancellationToken) => Task.FromResult<ProfileConflictDecision?>(null);
+
+        public void ShowAbout()
+        {
+        }
+    }
+
+    private sealed class EmptyBodySlideXmlFilePicker : IBodySlideXmlFilePicker
+    {
+        public Task<IReadOnlyList<string>> PickXmlPresetFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+    }
+
+    private sealed class EmptyNpcTextFilePicker : INpcTextFilePicker
+    {
+        public Task<IReadOnlyList<string>> PickNpcTextFilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+    }
+
+    private sealed class EmptyClipboardService : IClipboardService
+    {
+        public Task SetTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

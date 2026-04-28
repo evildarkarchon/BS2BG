@@ -66,6 +66,20 @@ public sealed class WindowFileDialogService : IFileDialogService
             (preferences, folder) => preferences.BosJsonExportFolder = folder,
             cancellationToken);
 
+    public async Task<string?> PickSaveBundleFileAsync(CancellationToken cancellationToken)
+    {
+        if (!backend.CanSave) return null;
+
+        var preferences = preferencesService.Load();
+        var startFolder = await backend.ResolveStartFolderAsync(preferences.ProjectFolder, cancellationToken);
+        var path = await backend.PickSaveBundleFileAsync(startFolder, cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        SaveFolderPreference(preferences, path, (prefs, folder) => prefs.ProjectFolder = folder);
+        return path;
+    }
+
     public void Attach(TopLevel topLevel)
     {
         ArgumentNullException.ThrowIfNull(topLevel);
@@ -137,6 +151,11 @@ public interface IFileDialogBackend
         string? currentPath,
         string? suggestedStartFolder,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Opens a portable bundle save picker restricted to zip files and returns the selected local path.
+    /// </summary>
+    Task<string?> PickSaveBundleFileAsync(string? suggestedStartFolder, CancellationToken cancellationToken);
 
     /// <summary>
     /// Opens a single folder picker for an export workflow and returns the selected local folder path.
@@ -216,6 +235,27 @@ public sealed class AvaloniaFileDialogBackend : IFileDialogBackend
     }
 
     /// <inheritdoc />
+    public async Task<string?> PickSaveBundleFileAsync(
+        string? suggestedStartFolder,
+        CancellationToken cancellationToken)
+    {
+        if (owner is null) return null;
+
+        var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Create Portable Bundle",
+            SuggestedFileName = "bs2bg-portable-bundle.zip",
+            SuggestedStartLocation = await TryGetFolderAsync(suggestedStartFolder),
+            DefaultExtension = "zip",
+            FileTypeChoices = new[] { CreateBundleFileType() }
+        });
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return file?.Path.IsFile == true ? file.Path.LocalPath : null;
+    }
+
+    /// <inheritdoc />
     public async Task<string?> PickFolderAsync(
         string title,
         string? suggestedStartFolder,
@@ -266,6 +306,14 @@ public sealed class AvaloniaFileDialogBackend : IFileDialogBackend
         return new FilePickerFileType("jBS2BG project")
         {
             Patterns = ProjectPatterns, MimeTypes = new[] { "application/json" }
+        };
+    }
+
+    private static FilePickerFileType CreateBundleFileType()
+    {
+        return new FilePickerFileType("Portable bundle zip")
+        {
+            Patterns = new[] { "*.zip" }, MimeTypes = new[] { "application/zip" }
         };
     }
 }

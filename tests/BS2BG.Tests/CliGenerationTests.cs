@@ -117,8 +117,8 @@ public sealed class CliGenerationTests
     {
         Enum.GetNames<OutputIntent>().Should().Equal("BodyGen", "BosJson", "All");
 
-        Enum.GetValues<HeadlessGenerationExitCode>().Cast<int>().Should().Equal(0, 1, 2, 3, 4);
-        Enum.GetNames<HeadlessGenerationExitCode>().Should()
+        Enum.GetValues<AutomationExitCode>().Cast<int>().Should().Equal(0, 1, 2, 3, 4);
+        Enum.GetNames<AutomationExitCode>().Should()
             .Equal("Success", "UsageError", "ValidationBlocked", "OverwriteRefused", "IoFailure");
     }
 
@@ -154,7 +154,7 @@ public sealed class CliGenerationTests
             Overwrite: false,
             OmitRedundantSliders: false));
 
-        result.ExitCode.Should().Be(HeadlessGenerationExitCode.ValidationBlocked);
+        result.ExitCode.Should().Be(AutomationExitCode.ValidationBlocked);
         result.ValidationReport.Should().NotBeNull();
         result.Message.Should().Contain("No presets available");
         Directory.Exists(outputDirectory).Should().BeFalse("validation blockers must stop before any output directory writes");
@@ -174,7 +174,7 @@ public sealed class CliGenerationTests
             Overwrite: false,
             OmitRedundantSliders: false));
 
-        result.ExitCode.Should().Be(HeadlessGenerationExitCode.Success);
+        result.ExitCode.Should().Be(AutomationExitCode.Success);
         result.WrittenFiles.Should().BeEquivalentTo(
             Path.Combine(outputDirectory, "templates.ini"),
             Path.Combine(outputDirectory, "morphs.ini"));
@@ -199,7 +199,7 @@ public sealed class CliGenerationTests
             Overwrite: false,
             OmitRedundantSliders: false));
 
-        result.ExitCode.Should().Be(HeadlessGenerationExitCode.Success);
+        result.ExitCode.Should().Be(AutomationExitCode.Success);
         result.WrittenFiles.Should().Equal(
             Path.Combine(outputDirectory, "Preset_One.json"),
             Path.Combine(outputDirectory, "Preset_One (2).json"));
@@ -222,7 +222,7 @@ public sealed class CliGenerationTests
             Overwrite: false,
             OmitRedundantSliders: false));
 
-        result.ExitCode.Should().Be(HeadlessGenerationExitCode.OverwriteRefused);
+        result.ExitCode.Should().Be(AutomationExitCode.OverwriteRefused);
         result.Message.Should().Contain("Target files already exist. Enable overwrite to replace them.");
         File.ReadAllText(existingBos).Should().Be("ORIGINAL_BOS");
         File.Exists(Path.Combine(outputDirectory, "templates.ini")).Should().BeFalse();
@@ -245,7 +245,7 @@ public sealed class CliGenerationTests
             Overwrite: true,
             OmitRedundantSliders: false));
 
-        result.ExitCode.Should().Be(HeadlessGenerationExitCode.IoFailure);
+        result.ExitCode.Should().Be(AutomationExitCode.IoFailure);
         result.Message.Should().Contain("BodyGen artifacts remain present");
         File.Exists(Path.Combine(outputDirectory, "templates.ini")).Should().BeTrue();
         File.Exists(Path.Combine(outputDirectory, "morphs.ini")).Should().BeTrue();
@@ -268,13 +268,13 @@ public sealed class CliGenerationTests
         File.WriteAllText(Path.Combine(overwritePath, "templates.ini"), "old");
 
         service.Run(new HeadlessGenerationRequest(Path.Combine(directory.Path, "missing.jbs2bg"), directory.Path, OutputIntent.All, false, false))
-            .ExitCode.Should().Be(HeadlessGenerationExitCode.UsageError);
+            .ExitCode.Should().Be(AutomationExitCode.UsageError);
         service.Run(new HeadlessGenerationRequest(malformedPath, directory.Path, OutputIntent.All, false, false))
-            .ExitCode.Should().Be(HeadlessGenerationExitCode.UsageError);
+            .ExitCode.Should().Be(AutomationExitCode.UsageError);
         service.Run(new HeadlessGenerationRequest(projectPath, overwritePath, OutputIntent.BodyGen, false, false))
-            .ExitCode.Should().Be(HeadlessGenerationExitCode.OverwriteRefused);
+            .ExitCode.Should().Be(AutomationExitCode.OverwriteRefused);
         service.Run(new HeadlessGenerationRequest(projectPath, outputFilePath, OutputIntent.BodyGen, true, false))
-            .ExitCode.Should().Be(HeadlessGenerationExitCode.IoFailure);
+            .ExitCode.Should().Be(AutomationExitCode.IoFailure);
     }
 
     [Fact]

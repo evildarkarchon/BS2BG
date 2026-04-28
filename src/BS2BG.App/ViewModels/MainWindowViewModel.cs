@@ -7,6 +7,8 @@ using System.Reactive.Subjects;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels.Workflow;
+using BS2BG.Core.Automation;
+using BS2BG.Core.Bundling;
 using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
 using BS2BG.Core.Formatting;
@@ -38,6 +40,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly ExportPreviewService exportPreviewService;
     private readonly IFileDialogService fileDialogService;
     private readonly MorphGenerationService morphGenerationService;
+    private readonly PortableProjectBundleService portableProjectBundleService;
     private readonly IUserPreferencesService preferencesService;
     private readonly ITemplateProfileCatalogService profileCatalogService;
     private readonly ProjectModel project;
@@ -56,6 +59,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     [Reactive] private string _globalSearchText = string.Empty;
     [Reactive(SetModifier = AccessModifier.Private)] private bool _hasExportPreview;
     [Reactive(SetModifier = AccessModifier.Private)] private bool _hasFileOperationLedger;
+    [Reactive(SetModifier = AccessModifier.Private)] private string _bundlePreviewSummary = string.Empty;
+    [Reactive] private bool _bundleOverwriteAllowed;
+    [Reactive] private OutputIntent _bundleOutputIntent = OutputIntent.All;
+    [Reactive] private string? _bundleTargetPath;
     [ObservableAsProperty] private bool _isAnyBusy;
 
     [Reactive(SetModifier = AccessModifier.Private)]
@@ -110,7 +117,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         UndoRedoService? undoRedo = null,
         IUserPreferencesService? preferencesService = null,
         ExportPreviewService? exportPreviewService = null,
-        DiagnosticsViewModel? diagnostics = null)
+        DiagnosticsViewModel? diagnostics = null,
+        PortableProjectBundleService? portableProjectBundleService = null)
         : this(
             project,
             projectFileService,
@@ -128,7 +136,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             exportPreviewService,
             diagnostics,
             profiles: null,
-            navigationService: null)
+            navigationService: null,
+            portableProjectBundleService)
     {
     }
 
@@ -149,7 +158,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         ExportPreviewService? exportPreviewService = null,
         DiagnosticsViewModel? diagnostics = null,
         ProfileManagerViewModel? profiles = null,
-        INavigationService? navigationService = null)
+        INavigationService? navigationService = null,
+        PortableProjectBundleService? portableProjectBundleService = null)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
@@ -165,6 +175,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         this.fileDialogService = fileDialogService ?? throw new ArgumentNullException(nameof(fileDialogService));
         this.dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
         this.exportPreviewService = exportPreviewService ?? new ExportPreviewService(templateGenerationService);
+        this.portableProjectBundleService = portableProjectBundleService ?? new PortableProjectBundleService(
+            projectFileService,
+            templateGenerationService,
+            morphGenerationService,
+            bodyGenIniExportWriter,
+            bosJsonExportWriter,
+            profileCatalogService.Current,
+            new DiagnosticReportTextFormatter());
         this.undoRedo = undoRedo ?? new UndoRedoService();
         this.preferencesService = preferencesService ?? new UserPreferencesService();
         Templates = templates ?? throw new ArgumentNullException(nameof(templates));
@@ -228,6 +246,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         ExportBodyGenInisCommand = ReactiveCommand.CreateFromTask(ExportBodyGenInisAsync, canExportBodyGenInis);
         PreviewBosJsonExportCommand = ReactiveCommand.CreateFromTask(PreviewBosJsonExportAsync, canExportBosJson);
         PreviewBodyGenExportCommand = ReactiveCommand.CreateFromTask(PreviewBodyGenExportAsync, canExportBodyGenInis);
+        PreviewPortableBundleCommand = ReactiveCommand.CreateFromTask(PreviewPortableBundleAsync, notBusy);
+        CreatePortableBundleCommand = ReactiveCommand.CreateFromTask(CreatePortableBundleAsync, notBusy);
         HandleDroppedFilesCommand = ReactiveCommand.CreateFromTask<IReadOnlyList<string>, Unit>(
             async (paths, ct) =>
             {
@@ -244,7 +264,8 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             NewProjectCommand.IsExecuting, OpenProjectCommand.IsExecuting, SaveProjectCommand.IsExecuting,
             SaveProjectAsCommand.IsExecuting, ExportBosJsonCommand.IsExecuting,
             ExportBodyGenInisCommand.IsExecuting, PreviewBosJsonExportCommand.IsExecuting,
-            PreviewBodyGenExportCommand.IsExecuting, HandleDroppedFilesCommand.IsExecuting
+            PreviewBodyGenExportCommand.IsExecuting, PreviewPortableBundleCommand.IsExecuting,
+            CreatePortableBundleCommand.IsExecuting, HandleDroppedFilesCommand.IsExecuting
         };
 
         disposables.Add(Observable.CombineLatest(busySources)
@@ -296,6 +317,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             .Subscribe(ex => ReportCommandFailure("Preview BoS JSON export", ex)));
         disposables.Add(PreviewBodyGenExportCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Preview BodyGen export", ex)));
+        disposables.Add(PreviewPortableBundleCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Preview portable bundle", ex)));
+        disposables.Add(CreatePortableBundleCommand.ThrownExceptions
+            .Subscribe(ex => ReportCommandFailure("Create portable bundle", ex)));
         disposables.Add(HandleDroppedFilesCommand.ThrownExceptions
             .Subscribe(ex => ReportCommandFailure("Drop files", ex)));
 
@@ -376,6 +401,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<FileOperationLedgerViewModel> LastFileOperationLedger { get; } = new();
 
+    public ObservableCollection<string> BundlePreviewEntries { get; } = new();
+
+    public IReadOnlyList<OutputIntent> BundleOutputIntents { get; } = Enum.GetValues<OutputIntent>();
+
     public IReadOnlyList<ThemePreference> ThemePreferences { get; } = Enum.GetValues<ThemePreference>();
 
     private TemplateProfileCatalog CurrentCatalog => profileCatalogService.Current;
@@ -395,6 +424,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> PreviewBosJsonExportCommand { get; }
 
     public ReactiveCommand<Unit, Unit> PreviewBodyGenExportCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> PreviewPortableBundleCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> CreatePortableBundleCommand { get; }
 
     public ReactiveCommand<Unit, Unit> ShowAboutCommand { get; }
 
@@ -876,11 +909,148 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         StatusMessage = "BoS JSON export preview ready.";
     }
 
+    /// <summary>
+    /// Previews the portable bundle layout using current in-memory project state without writing the target zip.
+    /// </summary>
+    public Task PreviewPortableBundleAsync(CancellationToken cancellationToken = default)
+    {
+        var request = BuildPortableBundleRequest(BundleTargetPath ?? string.Empty);
+        var preview = portableProjectBundleService.Preview(request);
+        ApplyBundlePreview(preview, request.SourceProjectFileName);
+        StatusMessage = "Portable bundle preview ready.";
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Creates a portable bundle zip after requiring a target path and explicit overwrite opt-in for existing files.
+    /// </summary>
+    public async Task CreatePortableBundleAsync(CancellationToken cancellationToken = default)
+    {
+        var targetPath = BundleTargetPath;
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            targetPath = await fileDialogService.PickSaveBundleFileAsync(cancellationToken);
+            BundleTargetPath = targetPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            StatusMessage = "Portable bundle creation cancelled.";
+            return;
+        }
+
+        var request = BuildPortableBundleRequest(targetPath);
+        if (File.Exists(targetPath) && !BundleOverwriteAllowed)
+        {
+            var preview = portableProjectBundleService.Preview(request);
+            ApplyBundlePreview(preview, request.SourceProjectFileName);
+            StatusMessage = "Target files already exist. Enable overwrite to replace them.";
+            return;
+        }
+
+        var result = await Task.Run(() => portableProjectBundleService.Create(request), cancellationToken);
+        ApplyBundleResult(result, request.SourceProjectFileName);
+        StatusMessage = result.Outcome == PortableProjectBundleOutcome.Success
+            ? "Portable bundle created: " + Path.GetFileName(targetPath) + "."
+            : FormatBundleOutcome(result.Outcome);
+    }
+
     public void ShowAbout()
     {
         dialogService.ShowAbout();
         StatusMessage = "Opened About dialog.";
     }
+
+    /// <summary>
+    /// Builds a Core bundle request from the current GUI project state and filename-only project identity.
+    /// </summary>
+    private PortableProjectBundleRequest BuildPortableBundleRequest(string bundlePath)
+    {
+        var sourceProjectFileName = string.IsNullOrWhiteSpace(CurrentProjectPath)
+            ? "unsaved-project.jbs2bg"
+            : Path.GetFileName(CurrentProjectPath);
+        var privateRoots = new[]
+        {
+            string.IsNullOrWhiteSpace(CurrentProjectPath) ? null : Path.GetDirectoryName(Path.GetFullPath(CurrentProjectPath)),
+            string.IsNullOrWhiteSpace(bundlePath) ? null : Path.GetDirectoryName(Path.GetFullPath(bundlePath)),
+        }
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new PortableProjectBundleRequest(
+            project,
+            bundlePath,
+            sourceProjectFileName,
+            BundleOutputIntent,
+            BundleOverwriteAllowed,
+            CreatedUtc: null,
+            BuildProjectSaveContext(),
+            privateRoots);
+    }
+
+    private void ApplyBundlePreview(PortableProjectBundlePreview preview, string sourceProjectFileName)
+    {
+        BundlePreviewEntries.Clear();
+        foreach (var entry in BuildBundlePreviewRows(preview.Entries)) BundlePreviewEntries.Add(entry);
+        BundlePreviewSummary = BuildBundleSummary(
+            "Portable bundle preview",
+            preview.Outcome,
+            sourceProjectFileName,
+            preview.PrivacyFindings);
+    }
+
+    private void ApplyBundleResult(PortableProjectBundleResult result, string sourceProjectFileName)
+    {
+        BundlePreviewEntries.Clear();
+        foreach (var entry in BuildBundlePreviewRows(result.Entries.Select(path => new BundleManifestEntry(path, string.Empty, string.Empty))))
+            BundlePreviewEntries.Add(entry);
+        BundlePreviewSummary = BuildBundleSummary(
+            "Portable bundle result",
+            result.Outcome,
+            sourceProjectFileName,
+            result.PrivacyFindings);
+    }
+
+    private string BuildBundleSummary(
+        string heading,
+        PortableProjectBundleOutcome outcome,
+        string sourceProjectFileName,
+        IReadOnlyList<string> privacyFindings)
+    {
+        var privacyStatus = privacyFindings.Any(finding => finding.Contains("leak", StringComparison.OrdinalIgnoreCase)
+                                                           && !finding.Contains("No private", StringComparison.OrdinalIgnoreCase))
+            ? "No absolute paths in manifest/report (Path privacy check failed)"
+            : "No absolute paths in manifest/report";
+        var dirtyState = project.IsDirty ? " Uses current open project state." : string.Empty;
+        return heading + ": " + sourceProjectFileName
+               + ". Output intent: " + BundleOutputIntent
+               + ". Profile copy scope: Referenced custom profiles only. "
+               + privacyStatus
+               + ". Outcome: " + outcome + "."
+               + dirtyState;
+    }
+
+    private static IEnumerable<string> BuildBundlePreviewRows(IEnumerable<BundleManifestEntry> entries)
+    {
+        var paths = entries.Select(entry => entry.Path).ToHashSet(StringComparer.Ordinal);
+        foreach (var folder in new[] { "project/", "outputs/bodygen/", "outputs/bos/", "profiles/", "reports/" })
+            yield return folder;
+
+        foreach (var path in paths.OrderBy(path => path, StringComparer.Ordinal)) yield return path;
+        if (!paths.Contains("manifest.json")) yield return "manifest.json";
+        if (!paths.Contains("SHA256SUMS.txt")) yield return "SHA256SUMS.txt";
+    }
+
+    private static string FormatBundleOutcome(PortableProjectBundleOutcome outcome) => outcome switch
+    {
+        PortableProjectBundleOutcome.ValidationBlocked => "Portable bundle blocked by project validation.",
+        PortableProjectBundleOutcome.MissingProfile => "Portable bundle blocked by missing referenced custom profiles.",
+        PortableProjectBundleOutcome.OverwriteRefused => "Target files already exist. Enable overwrite to replace them.",
+        PortableProjectBundleOutcome.IoFailure => "Portable bundle creation failed due to a file I/O error.",
+        _ => "Portable bundle creation completed.",
+    };
 
     public void AcknowledgeGlobalSearchFocus() => ShouldFocusGlobalSearch = false;
 
@@ -1139,6 +1309,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         AddCommand("Export BodyGen INIs", "File", "Ctrl+X", ExportBodyGenInisCommand);
         AddCommand("Preview Templates as BoS JSON", "File", string.Empty, PreviewBosJsonExportCommand);
         AddCommand("Preview BodyGen INIs", "File", string.Empty, PreviewBodyGenExportCommand);
+        AddCommand("Create Portable Bundle", "File", string.Empty, CreatePortableBundleCommand);
         AddCommand("Undo", "Edit", "Ctrl+Z", UndoCommand);
         AddCommand("Redo", "Edit", "Ctrl+Y", RedoCommand);
         AddCommand("Import BodySlide XML Presets", "Templates", string.Empty, Templates.ImportPresetsCommand);
@@ -1229,6 +1400,9 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             Task.FromResult<string?>(null);
 
         public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveBundleFileAsync(CancellationToken cancellationToken) =>
             Task.FromResult<string?>(null);
     }
 

@@ -14,9 +14,9 @@ public enum OutputIntent
 }
 
 /// <summary>
-/// Stable process exit-code contract used by CLI automation and later Core generation services.
+/// Stable process exit-code contract shared by CLI automation commands and Core automation services.
 /// </summary>
-public enum HeadlessGenerationExitCode
+public enum AutomationExitCode
 {
     Success = 0,
     UsageError = 1,
@@ -49,7 +49,7 @@ public sealed record HeadlessGenerationRequest(
 /// <param name="ValidationReport">Optional validation report when validation participated in the outcome.</param>
 /// <param name="WriteLedger">Per-file write outcomes when generation writes or partially fails.</param>
 public sealed record HeadlessGenerationResult(
-    HeadlessGenerationExitCode ExitCode,
+    AutomationExitCode ExitCode,
     string Message,
     IReadOnlyList<string> WrittenFiles,
     ProjectValidationReport? ValidationReport,
