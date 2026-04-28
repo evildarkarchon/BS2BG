@@ -2,12 +2,14 @@ using System.Diagnostics;
 using BS2BG.Core.Automation;
 using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
-using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 using BS2BG.Core.Serialization;
 using Xunit;
+using SliderDefault = BS2BG.Core.Formatting.SliderDefault;
+using SliderMultiplier = BS2BG.Core.Formatting.SliderMultiplier;
+using SliderProfile = BS2BG.Core.Formatting.SliderProfile;
 using ModelSetSlider = BS2BG.Core.Models.SetSlider;
 
 namespace BS2BG.Tests;
