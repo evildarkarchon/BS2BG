@@ -258,6 +258,101 @@ public sealed class AssignmentStrategyServiceTests
             .Should().Equal(expected.AsEnumerable());
     }
 
+    [Fact]
+    public void WeightedStrategyUsesFixedTwoDecimalUnitsAndProviderDrawsForExactSequence()
+    {
+        var project = CreateStrategyProject();
+        var service = new AssignmentStrategyService(new SequenceRandomAssignmentProvider(150, 1, 10, 0, 199, 0));
+        var strategy = new AssignmentStrategyDefinition(
+            1,
+            AssignmentStrategyKind.Weighted,
+            null,
+            new[]
+            {
+                new AssignmentStrategyRule("Beta Any", new[] { "PresetB", "PresetC" }, Array.Empty<string>(), 2.0, null),
+                new AssignmentStrategyRule("Alpha Nord", PresetA, NordRaceUpper, 1.0, null)
+            });
+
+        var result = service.Apply(project, strategy);
+
+        result.BlockedNpcs.Should().BeEmpty();
+        AssignmentSnapshot(project).Should().Equal("Aela=PresetC", "Codsworth=PresetB", "Danica=PresetB");
+    }
+
+    [Fact]
+    public void RaceFiltersUseImportedNpcRaceOrdinalIgnoreCaseWithoutPluginLookup()
+    {
+        var project = CreateStrategyProject();
+        var strategy = new AssignmentStrategyDefinition(
+            1,
+            AssignmentStrategyKind.RaceFilters,
+            null,
+            new[] { new AssignmentStrategyRule("Nord Lower", PresetA, NordRaceLower, 1.0, null) });
+
+        var result = AssignmentStrategyService.Apply(project, strategy);
+
+        result.BlockedNpcs.Select(blocked => blocked.Npc.Name).Should().Equal("Codsworth", "Danica");
+        AssignmentSnapshot(project).Should().Contain("Aela=PresetA");
+        File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "BS2BG.Core", "Morphs", "AssignmentStrategyService.cs"))
+            .Should().NotContain("Plugin").And.NotContain("Game").And.NotContain("xEdit");
+    }
+
+    [Fact]
+    public void GroupsBucketsUseBucketNamesAndOptionalImportedRaceFiltersForEligibilityUnion()
+    {
+        var project = CreateStrategyProject();
+        var service = new AssignmentStrategyService(new SequenceRandomAssignmentProvider(1, 0, 0));
+        var strategy = new AssignmentStrategyDefinition(
+            1,
+            AssignmentStrategyKind.GroupsBuckets,
+            null,
+            new[]
+            {
+                new AssignmentStrategyRule("Any Creature", new[] { "PresetB" }, Array.Empty<string>(), 1.0, "Creature"),
+                new AssignmentStrategyRule("Nord Heroes", new[] { "PresetA", "UnknownPreset" }, NordRaceUpper, 1.0, "Heroes")
+            });
+
+        var result = service.Apply(project, strategy);
+
+        result.BlockedNpcs.Should().BeEmpty();
+        AssignmentSnapshot(project).Should().Equal("Aela=PresetB", "Codsworth=PresetB", "Danica=PresetB");
+    }
+
+    [Fact]
+    public void UnknownPresetNamesAreIgnoredAndBlockWhenNoKnownPresetRemains()
+    {
+        var project = CreateStrategyProject();
+        var strategy = new AssignmentStrategyDefinition(
+            1,
+            AssignmentStrategyKind.GroupsBuckets,
+            null,
+            new[] { new AssignmentStrategyRule("Unknown", new[] { "MissingPreset" }, Array.Empty<string>(), 1.0, "Any") });
+
+        var result = AssignmentStrategyService.Apply(project, strategy);
+
+        result.AssignedCount.Should().Be(0);
+        result.BlockedNpcs.Select(blocked => blocked.Npc.Name).Should().Equal("Codsworth", "Aela", "Danica");
+        project.MorphedNpcs.Should().OnlyContain(npc => npc.SliderPresets.Count == 0);
+    }
+
+    [Fact]
+    public void WeightedRulesThatQuantizeToZeroAfterRaceFilteringBlockWithoutFallback()
+    {
+        var project = CreateStrategyProject();
+        var strategy = new AssignmentStrategyDefinition(
+            1,
+            AssignmentStrategyKind.Weighted,
+            null,
+            new[] { new AssignmentStrategyRule("Tiny Nord", PresetA, NordRaceUpper, 0.004, null) });
+
+        var eligibility = AssignmentStrategyService.ComputeEligibility(project, strategy, project.MorphedNpcs);
+        var result = AssignmentStrategyService.Apply(project, strategy);
+
+        eligibility.BlockedNpcs.Select(blocked => blocked.Npc.Name).Should().Equal("Codsworth", "Aela", "Danica");
+        result.BlockedNpcs.Select(blocked => blocked.Npc.Name).Should().Equal("Codsworth", "Aela", "Danica");
+        AssignmentSnapshot(project).Should().Equal("Aela=", "Codsworth=", "Danica=");
+    }
+
     public static IEnumerable<object[]> DeterministicProviderVectors()
     {
         yield return new object[] { 0, new[] { 738, 247, 56, 444, 716 } };
