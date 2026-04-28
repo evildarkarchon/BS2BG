@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Text.Json;
 using BS2BG.Core.Automation;
 using BS2BG.Core.Bundling;
 using BS2BG.Core.Diagnostics;
@@ -112,11 +113,32 @@ public static class Program
             var intent = ParseOutputIntent(parseResult.GetValue(bundleIntentOption));
             var overwrite = parseResult.GetValue(bundleOverwriteOption);
 
-            var (service, request) = CreateBundleServiceAndRequest(projectPath, bundlePath, intent, overwrite);
-            var preview = service.Preview(request);
-            var result = service.Create(request);
-            WriteBundleResult(result, preview);
-            return (int)MapBundleOutcome(result.Outcome);
+            ProjectModel project;
+            var projectFileService = new ProjectFileService();
+            try
+            {
+                if (!File.Exists(projectPath)) throw new FileNotFoundException("Project file was not found.", projectPath);
+                project = projectFileService.Load(projectPath);
+            }
+            catch (Exception exception) when (IsProjectLoadException(exception))
+            {
+                WriteProjectLoadFailure(exception);
+                return (int)AutomationExitCode.UsageError;
+            }
+
+            try
+            {
+                var (service, request) = CreateBundleServiceAndRequest(projectFileService, project, projectPath, bundlePath, intent, overwrite);
+                var preview = service.Preview(request);
+                var result = service.Create(request);
+                WriteBundleResult(result, preview);
+                return (int)MapBundleOutcome(result.Outcome);
+            }
+            catch (Exception exception) when (IsExpectedBundleIoException(exception))
+            {
+                WriteBundleIoFailure();
+                return (int)AutomationExitCode.IoFailure;
+            }
         });
 
         var rootCommand = new RootCommand("bs2bg automation CLI");
@@ -171,13 +193,13 @@ public static class Program
     /// Loads a project and composes the Core bundle service plus request without referencing Avalonia or App services.
     /// </summary>
     private static (PortableProjectBundleService Service, PortableProjectBundleRequest Request) CreateBundleServiceAndRequest(
+        ProjectFileService projectFileService,
+        ProjectModel project,
         string projectPath,
         string bundlePath,
         OutputIntent intent,
         bool overwrite)
     {
-        var projectFileService = new ProjectFileService();
-        var project = projectFileService.Load(projectPath);
         var templateGenerationService = new TemplateGenerationService();
         var catalog = new TemplateProfileCatalogFactory().Create();
         var service = new PortableProjectBundleService(
@@ -208,6 +230,32 @@ public static class Program
             privateRoots);
 
         return (service, request);
+    }
+
+    private static bool IsProjectLoadException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or JsonException or InvalidDataException
+        || exception.InnerException is not null && IsProjectLoadException(exception.InnerException);
+
+    private static bool IsExpectedBundleIoException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException
+        || exception.InnerException is not null && IsExpectedBundleIoException(exception.InnerException);
+
+    private static void WriteProjectLoadFailure(Exception exception)
+    {
+        Console.Error.WriteLine("Could not load project: " + ScrubExceptionMessage(exception.Message));
+    }
+
+    private static void WriteBundleIoFailure()
+    {
+        Console.Error.WriteLine("Bundle creation failed due to a file I/O error.");
+    }
+
+    private static string ScrubExceptionMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return "The project file could not be read.";
+
+        var firstLine = message.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return string.IsNullOrWhiteSpace(firstLine) ? "The project file could not be read." : firstLine;
     }
 
     /// <summary>

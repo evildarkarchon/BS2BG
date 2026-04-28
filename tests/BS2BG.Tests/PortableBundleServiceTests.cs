@@ -11,6 +11,7 @@ using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using BS2BG.Core.Serialization;
 using System.Reactive.Threading.Tasks;
+using System.Reactive.Linq;
 using Xunit;
 using ModelSetSlider = BS2BG.Core.Models.SetSlider;
 using SliderDefault = BS2BG.Core.Formatting.SliderDefault;
@@ -168,6 +169,27 @@ public sealed class PortableBundleServiceTests
         viewModel.BundlePreviewSummary.Should().Contain("current open project state");
         viewModel.BundlePreviewSummary.Should().NotContain(directory.Path);
         viewModel.BundlePreviewEntries.Should().Contain("outputs/bodygen/templates.ini");
+    }
+
+    [Fact]
+    public async Task GuiBundleCreateUsesBuildProjectSaveContextProfilesForOutputGeneration()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = CreateProjectUsingProfile("Community Body");
+        var bundlePath = Path.Combine(directory.Path, "gui-community.zip");
+        var communityProfile = CreateProfile("Community Body", ProfileSourceKind.LocalCustom, @"C:\Users\Example\Profiles\Community Body.json", CreateCommunitySliderProfile());
+        var catalogService = new FixedCatalogService(CreateBundledOnlyCatalog(), new[] { communityProfile }, Array.Empty<CustomProfileDefinition>());
+        var viewModel = CreateBundleViewModel(project, catalogService, CreateBundledOnlyService());
+        viewModel.BundleTargetPath = bundlePath;
+        viewModel.BundleOutputIntent = OutputIntent.All;
+        var expected = WriteExpectedOutputs(directory.Path, "gui-community-expected", project, CreateRequestScopedCatalog(communityProfile));
+
+        await viewModel.CreatePortableBundleCommand.Execute().ToTask(TestContext.Current.CancellationToken);
+
+        viewModel.StatusMessage.Should().Contain("Portable bundle created");
+        using var archive = ZipFile.OpenRead(bundlePath);
+        ReadEntryBytes(archive, "outputs/bodygen/templates.ini").Should().Equal(File.ReadAllBytes(expected.TemplatesPath));
+        ReadEntryBytes(archive, "outputs/bos/Alpha.json").Should().Equal(File.ReadAllBytes(expected.BosJsonPath));
     }
 
     [Theory]
@@ -543,6 +565,27 @@ public sealed class PortableBundleServiceTests
             portableProjectBundleService: CreateService());
     }
 
+    private static MainWindowViewModel CreateBundleViewModel(
+        ProjectModel project,
+        ITemplateProfileCatalogService catalogService,
+        PortableProjectBundleService portableProjectBundleService)
+    {
+        var templateGenerationService = new TemplateGenerationService();
+        return new MainWindowViewModel(
+            project,
+            new ProjectFileService(),
+            templateGenerationService,
+            new MorphGenerationService(),
+            catalogService,
+            new BodyGenIniExportWriter(),
+            new BosJsonExportWriter(templateGenerationService),
+            new FakeBundleFileDialogService(),
+            new NullAppDialogService(),
+            CreateTemplatesViewModel(project, catalogService.Current),
+            CreateMorphsViewModel(project),
+            portableProjectBundleService: portableProjectBundleService);
+    }
+
     private static TemplatesViewModel CreateTemplatesViewModel(ProjectModel project, TemplateProfileCatalog catalog) => new(
         project,
         new BS2BG.Core.Import.BodySlideXmlParser(),
@@ -764,6 +807,38 @@ public sealed class PortableBundleServiceTests
         public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 
         public Task<string?> PickSaveBundleFileAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+    }
+
+    private sealed class FixedCatalogService : ITemplateProfileCatalogService
+    {
+        public FixedCatalogService(
+            TemplateProfileCatalog current,
+            IReadOnlyList<CustomProfileDefinition> localCustomProfiles,
+            IReadOnlyList<CustomProfileDefinition> projectProfiles)
+        {
+            Current = current;
+            LocalCustomProfiles = localCustomProfiles;
+            ProjectProfiles = projectProfiles;
+        }
+
+        public TemplateProfileCatalog Current { get; }
+
+        public IReadOnlyList<ProfileValidationDiagnostic> LastDiscoveryDiagnostics => Array.Empty<ProfileValidationDiagnostic>();
+
+        public IReadOnlyList<CustomProfileDefinition> LocalCustomProfiles { get; }
+
+        public IReadOnlyList<CustomProfileDefinition> ProjectProfiles { get; }
+
+        public IObservable<TemplateProfileCatalog> CatalogChanged => Observable.Empty<TemplateProfileCatalog>();
+
+        public TemplateProfileCatalog Refresh() => Current;
+
+        public TemplateProfileCatalog ClearProjectProfiles() => Current;
+
+        public TemplateProfileCatalog WithProjectProfiles(IEnumerable<CustomProfileDefinition> projectProfiles) => Current;
+
+        public UserProfileSaveResult SaveLocalProfile(CustomProfileDefinition profile) =>
+            new(true, null, Array.Empty<ProfileValidationDiagnostic>());
     }
 
     private sealed class NullAppDialogService : IAppDialogService
