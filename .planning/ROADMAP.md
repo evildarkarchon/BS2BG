@@ -164,9 +164,9 @@ Cross-cutting constraints: CLI and bundle automation reuse Core generation/expor
   1. Headless generation composes bundled profiles with the project's embedded/custom profile definitions before validation and generation.
   2. CLI `generate` validates and generates template and BoS output using the same request-scoped catalog recipe as GUI and portable bundle paths.
   3. Regression tests prove a project with an embedded custom profile does not silently fall back to bundled profile semantics in CLI generation.
-**Plans**: TBD
+**Plans**: 1 plan
 Plans:
-- [ ] Plan with `/gsd-plan-phase 6`
+- [ ] 06-01-PLAN.md — Compose request-scoped custom profile catalogs for headless generation.
 **UI hint**: no
 
 ### Phase 7: Replay Saved Strategies in Automation Outputs
@@ -196,5 +196,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Validation and Diagnostics | 8/8 | Complete | 2026-04-27 |
 | 4. Profile Extensibility and Controlled Customization | 8/8 | Complete | 2026-04-27 |
 | 5. Automation, Sharing, and Release Trust | 10/10 | Complete | 2026-04-28 |
-| 6. Compose Custom Profiles in Headless Generation | 0/TBD | Not started | - |
+| 6. Compose Custom Profiles in Headless Generation | 0/1 | Planned | - |
 | 7. Replay Saved Strategies in Automation Outputs | 0/TBD | Not started | - |
