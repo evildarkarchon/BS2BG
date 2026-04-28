@@ -11,5 +11,9 @@
     "nyquist_validation": true,
     "auto_advance": false,
     "_auto_chain_active": false
-  }
+  },
+  "features": {
+    "global_learnings": true
+  },
+  "context_window": 400000
 }
