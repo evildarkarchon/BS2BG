@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: milestone_complete
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-04-28T09:24:35.622Z"
+milestone_name: MVP
+status: completed
+stopped_at: v1.0 milestone archived; next step is /gsd-new-milestone
+last_updated: "2026-04-28T10:29:07.193Z"
 last_activity: 2026-04-28
 progress:
   total_phases: 7
-  completed_phases: 8
+  completed_phases: 7
   total_plans: 51
   completed_plans: 51
-  percent: 114
+  percent: 100
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** Modders can reliably convert existing BodySlide presets into BodyGen and BoS outputs that match the Java tool's behavior byte-for-byte where compatibility matters.
-**Current focus:** Phase 07 — replay-saved-strategies-in-automation-outputs
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 07
+Phase: Next milestone planning
 Plan: Not started
-Status: Milestone complete
+Status: v1.0 archived; awaiting fresh requirements
 Last activity: 2026-04-28
 
 Progress: [██████████] 100%
@@ -133,19 +133,22 @@ Recent decisions affecting current work:
 None yet.
 
 ### Blockers/Concerns
+
 - [Carry-forward]: FO4 calibration, Avalonia filtering, custom profile schema/version rules, and signing availability remain future-work concerns.
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close:
+Items acknowledged and carried forward from milestone close:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
 | Advanced Modding | Preset diff, FO4 calibration assistant, richer assignment strategies, cross-platform release parity | Deferred to v2 requirements unless explicitly pulled forward | Requirements definition |
 | Ecosystem Integrations | Automatic folder discovery and scrubbed support bundles | Deferred to v2 requirements unless explicitly pulled forward | Requirements definition |
+| UAT | Phase 01 `01-HUMAN-UAT.md` visual fallback panel scenario | Acknowledged as partial/waived during v1.0 close | 2026-04-28 milestone close |
+| UAT | Phase 02 `02-HUMAN-UAT.md` filter/scope, large dataset, and restart persistence scenarios | Acknowledged as partial/waived during v1.0 close | 2026-04-28 milestone close |
 
 ## Session Continuity
 
 Last session: 2026-04-28T09:24:27.227Z
-Stopped at: Completed 07-03-PLAN.md
+Stopped at: v1.0 milestone archived; next step is `/gsd-new-milestone`
 Resume file: None

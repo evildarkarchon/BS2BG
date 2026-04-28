@@ -10,6 +10,18 @@ The current codebase has implemented the M0-M7 porting milestones plus GSD Phase
 
 Modders can reliably convert existing BodySlide presets into BodyGen and BoS outputs that match the Java tool's behavior byte-for-byte where compatibility matters.
 
+## Current State
+
+v1.0 MVP shipped on 2026-04-28. The active v1 roadmap and requirements have been archived under `.planning/milestones/`, with all 25 v1 requirements satisfied and the milestone audit passed. Two manual UAT artifact groups from Phases 1 and 2 were acknowledged as deferred/waived at close; see `.planning/STATE.md` for the carried-forward record.
+
+The shipped application now includes the completed M0-M7 port plus GSD Phases 1-7: profile correctness, workflow persistence/filtering/undo hardening, diagnostics, custom profile management, CLI automation, portable bundles, release trust packaging, request-scoped custom profile catalogs, and saved assignment strategy replay for automation outputs.
+
+## Next Milestone Goals
+
+- Start a fresh requirements cycle with `/gsd-new-milestone` before adding new roadmap phases.
+- Keep Java parity, `.jbs2bg` compatibility, and byte-identical output behavior as non-negotiable constraints.
+- Use the archived v1 deferred items and v2 requirement candidates to decide whether the next milestone focuses on advanced modding features, ecosystem integrations, FO4 calibration, or cross-platform release confidence.
+
 ## Requirements
 
 ### Validated
@@ -75,6 +87,8 @@ The primary users are Skyrim SE and Fallout 4 modders who are comfortable with B
 | Treat Fallout 4 profile support as experimental until calibrated | FO4 slider defaults/inverts/multipliers lack an authoritative parity source | — Pending |
 | Use neutral unresolved-profile fallback UI in Phase 1 | Locked context decisions forbid warning banners, mismatch heuristics, and in-app FO4 experimental labels for this phase | ✓ Good |
 | Continue scoped future changes through GSD/OpenSpec workflows | Prevents broad regressions in a parity-sensitive tool | — Pending |
+| Archive v1.0 requirements and roadmap after audit pass | Keeps live planning context small while preserving the shipped milestone record | ✓ Good |
+| Carry waived Phase 1/2 UAT checks as deferred close items | Documents accepted manual-verification risk without blocking an audit-passed milestone | ✓ Good |
 
 ## Evolution
 
@@ -94,4 +108,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-28 after Phase 7 completion*
+*Last updated: 2026-04-28 after v1.0 milestone completion*
