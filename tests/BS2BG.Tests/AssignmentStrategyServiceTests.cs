@@ -7,6 +7,11 @@ namespace BS2BG.Tests;
 
 public sealed class AssignmentStrategyServiceTests
 {
+    private static readonly string[] PresetA = { "PresetA" };
+    private static readonly string[] PresetAAndPresetB = { "PresetA", "PresetB" };
+    private static readonly string[] NordRaceUpper = { "NordRace" };
+    private static readonly string[] NordRaceLower = { "nordrace" };
+
     [Fact]
     public void NewProjectStartsWithNoAssignmentStrategyForLegacyCompatibility()
     {
@@ -31,8 +36,8 @@ public sealed class AssignmentStrategyServiceTests
     {
         var rule = new AssignmentStrategyRule(
             "Nord Warriors",
-            new[] { "PresetA", "PresetB" },
-            new[] { "NordRace" },
+            PresetAAndPresetB,
+            NordRaceUpper,
             2.5,
             "Warriors");
         var strategy = new AssignmentStrategyDefinition(
@@ -53,8 +58,8 @@ public sealed class AssignmentStrategyServiceTests
         var npc = new Npc("Aela") { Race = "NordRace" };
         var rule = new AssignmentStrategyRule(
             "Any Case Race",
-            new[] { "PresetA" },
-            new[] { "nordrace" },
+            PresetA,
+            NordRaceLower,
             1.0,
             null);
 
@@ -67,7 +72,7 @@ public sealed class AssignmentStrategyServiceTests
         var npc = new Npc("Codsworth") { Race = "MrHandyRace" };
         var rule = new AssignmentStrategyRule(
             "Any Race Bucket",
-            new[] { "PresetA" },
+            PresetA,
             Array.Empty<string>(),
             1.0,
             "Companions");

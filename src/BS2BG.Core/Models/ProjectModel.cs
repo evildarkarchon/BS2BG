@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using BS2BG.Core.Morphs;
 
 namespace BS2BG.Core.Models;
 
@@ -20,6 +21,8 @@ public sealed class ProjectModel : ProjectModelNode
     public ObservableCollection<Npc> MorphedNpcs { get; } = new();
 
     public ObservableCollection<CustomProfileDefinition> CustomProfiles { get; } = new();
+
+    public AssignmentStrategyDefinition? AssignmentStrategy { get; set; }
 
     public bool IsDirty { get; private set; }
 
