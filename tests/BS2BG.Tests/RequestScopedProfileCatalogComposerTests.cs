@@ -47,6 +47,34 @@ public sealed class RequestScopedProfileCatalogComposerTests
     }
 
     [Fact]
+    public void BuildForProjectUsesFirstEligibleProjectDuplicateDefinitionCaseInsensitively()
+    {
+        var project = TestProfiles.CreateProjectUsingProfile("Community Body");
+        var firstProjectProfile = TestProfiles.CreateProfile(
+            "Community Body",
+            ProfileSourceKind.EmbeddedProject,
+            null,
+            TestProfiles.CreateEmbeddedSliderProfile());
+        var duplicateProjectProfile = TestProfiles.CreateProfile(
+            "community body",
+            ProfileSourceKind.EmbeddedProject,
+            null,
+            TestProfiles.CreateCommunitySliderProfile());
+        project.CustomProfiles.Add(firstProjectProfile);
+        project.CustomProfiles.Add(duplicateProjectProfile);
+        var composer = new RequestScopedProfileCatalogComposer(TestProfiles.CreateBundledOnlyCatalog());
+
+        var profiles = composer.ResolveReferencedCustomProfiles(project);
+        var catalog = composer.BuildForProject(project);
+
+        profiles.Should().ContainSingle().Which.Should().BeSameAs(firstProjectProfile);
+        catalog.Entries.Select(entry => entry.Name).Should().Equal(
+            ProjectProfileMapping.SkyrimCbbe,
+            "Community Body");
+        catalog.GetProfile("Community Body").SliderProfile.GetDefaultBig("Breasts").Should().Be(90);
+    }
+
+    [Fact]
     public void ResolveReferencedCustomProfilesPrefersProjectDefinitionOverSaveContextDuplicate()
     {
         var project = TestProfiles.CreateProjectUsingProfile("Community Body");
