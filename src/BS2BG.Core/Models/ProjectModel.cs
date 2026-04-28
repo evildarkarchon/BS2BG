@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using BS2BG.Core.Morphs;
 
 namespace BS2BG.Core.Models;
 
@@ -21,6 +22,19 @@ public sealed class ProjectModel : ProjectModelNode
 
     public ObservableCollection<CustomProfileDefinition> CustomProfiles { get; } = new();
 
+    public AssignmentStrategyDefinition? AssignmentStrategy
+    {
+        get => assignmentStrategy;
+        set
+        {
+            if (EqualityComparer<AssignmentStrategyDefinition?>.Default.Equals(assignmentStrategy, value)) return;
+
+            assignmentStrategy = value;
+            NotifyChanged();
+            OnAnyChange();
+        }
+    }
+
     public bool IsDirty { get; private set; }
 
     public int ChangeVersion { get; private set; }
@@ -28,6 +42,7 @@ public sealed class ProjectModel : ProjectModelNode
     public event EventHandler? DirtyStateChanged;
 
     private int suppressDirtyDepth;
+    private AssignmentStrategyDefinition? assignmentStrategy;
 
     public IDisposable SuppressDirtyTracking()
     {
@@ -83,6 +98,8 @@ public sealed class ProjectModel : ProjectModelNode
 
         foreach (var profile in source.CustomProfiles)
             CustomProfiles.Add(profile.Clone());
+
+        AssignmentStrategy = CloneAssignmentStrategy(source.AssignmentStrategy);
 
         MarkClean();
     }
@@ -254,6 +271,22 @@ public sealed class ProjectModel : ProjectModelNode
         foreach (var preset in source.SliderPresets)
             if (presetMap.TryGetValue(preset.Name, out var resolvedPreset))
                 target.AddSliderPreset(resolvedPreset);
+    }
+
+    private static AssignmentStrategyDefinition? CloneAssignmentStrategy(AssignmentStrategyDefinition? strategy)
+    {
+        if (strategy is null) return null;
+
+        return strategy with
+        {
+            Rules = strategy.Rules
+                .Select(rule => rule with
+                {
+                    PresetNames = rule.PresetNames.ToArray(),
+                    RaceFilters = rule.RaceFilters.ToArray()
+                })
+                .ToArray()
+        };
     }
 
     private sealed class SuppressionScope(ProjectModel owner) : IDisposable
