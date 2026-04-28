@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
+using BS2BG.Core.Morphs;
 
 namespace BS2BG.Core.Serialization;
 
@@ -90,6 +91,8 @@ public class ProjectFileService
 
         foreach (var profile in LoadEmbeddedProfiles(dto.CustomProfiles, diagnostics))
             project.CustomProfiles.Add(profile);
+
+        project.AssignmentStrategy = LoadAssignmentStrategy(dto.AssignmentStrategy, diagnostics);
 
         project.MarkClean();
         return new ProjectLoadResult(project, diagnostics);
@@ -203,6 +206,30 @@ public class ProjectFileService
             MorphedNpCs = new NamedNpcObjectList(project.MorphedNpcs
                 .Select(npc => new NamedNpcObject(npc.Name, ToDto(npc)))),
             CustomProfiles = ToEmbeddedProfileDtos(project, saveContext),
+            AssignmentStrategy = ToAssignmentStrategyElement(project.AssignmentStrategy),
+        };
+    }
+
+    private static JsonElement? ToAssignmentStrategyElement(AssignmentStrategyDefinition? strategy)
+    {
+        return strategy is null ? null : JsonSerializer.SerializeToElement(ToAssignmentStrategyDto(strategy), JsonOptions);
+    }
+
+    private static AssignmentStrategyDto ToAssignmentStrategyDto(AssignmentStrategyDefinition strategy)
+    {
+        return new AssignmentStrategyDto
+        {
+            SchemaVersion = strategy.SchemaVersion,
+            Kind = strategy.Kind.ToString(),
+            Seed = strategy.Seed,
+            Rules = strategy.Rules.Select(rule => new AssignmentStrategyRuleDto
+            {
+                Name = rule.Name,
+                PresetNames = rule.PresetNames.ToList(),
+                RaceFilters = rule.RaceFilters.ToList(),
+                Weight = rule.Weight,
+                BucketName = rule.BucketName
+            }).ToList()
         };
     }
 
@@ -328,6 +355,182 @@ public class ProjectFileService
         Dictionary<string, TValue>? values) =>
         values ?? Enumerable.Empty<KeyValuePair<string, TValue>>();
 
+    private static AssignmentStrategyDefinition? LoadAssignmentStrategy(
+        JsonElement? strategyElement,
+        List<ProjectLoadDiagnostic> diagnostics)
+    {
+        if (strategyElement is null) return null;
+
+        if (strategyElement.Value.ValueKind != JsonValueKind.Object)
+        {
+            diagnostics.Add(new ProjectLoadDiagnostic(
+                "AssignmentStrategyInvalid",
+                "Assignment strategy must be a JSON object and was ignored.",
+                null));
+            return null;
+        }
+
+        var schemaVersion = ReadInt(strategyElement.Value, "schemaVersion", "SchemaVersion")
+                            ?? AssignmentStrategyDefinition.CurrentSchemaVersion;
+        if (schemaVersion != AssignmentStrategyDefinition.CurrentSchemaVersion)
+        {
+            diagnostics.Add(new ProjectLoadDiagnostic(
+                "AssignmentStrategyUnsupportedSchemaVersion",
+                $"Assignment strategy schemaVersion {schemaVersion} is not supported and was ignored.",
+                null));
+            return null;
+        }
+
+        if (!Enum.TryParse(ReadString(strategyElement.Value, "kind", "Kind"), true, out AssignmentStrategyKind kind))
+            kind = AssignmentStrategyKind.SeededRandom;
+
+        var strategy = new AssignmentStrategyDefinition(
+            schemaVersion,
+            kind,
+            ReadInt(strategyElement.Value, "seed", "Seed"),
+            ReadAssignmentStrategyRules(strategyElement.Value));
+        var validationMessage = ValidateAssignmentStrategy(strategy);
+        if (validationMessage is null) return strategy;
+
+        diagnostics.Add(new ProjectLoadDiagnostic(
+            "AssignmentStrategyInvalid",
+            validationMessage,
+            null));
+        return null;
+    }
+
+    private static List<AssignmentStrategyRule> ReadAssignmentStrategyRules(JsonElement strategyElement)
+    {
+        if (!TryGetProperty(strategyElement, out var rulesElement, "rules", "Rules")
+            || rulesElement.ValueKind != JsonValueKind.Array)
+            return new List<AssignmentStrategyRule>();
+
+        var rules = new List<AssignmentStrategyRule>();
+        foreach (var ruleElement in rulesElement.EnumerateArray())
+        {
+            if (ruleElement.ValueKind != JsonValueKind.Object) continue;
+
+            rules.Add(new AssignmentStrategyRule(
+                ReadString(ruleElement, "name", "Name") ?? string.Empty,
+                ReadStringArray(ruleElement, "presetNames", "PresetNames"),
+                ReadStringArray(ruleElement, "raceFilters", "RaceFilters"),
+                ReadDouble(ruleElement, "weight", "Weight") ?? 1.0,
+                ReadString(ruleElement, "bucketName", "BucketName")));
+        }
+
+        return rules;
+    }
+
+    private static string? ValidateAssignmentStrategy(AssignmentStrategyDefinition strategy)
+    {
+        var namedRules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rule in strategy.Rules)
+        {
+            if (!double.IsFinite(rule.Weight) || rule.Weight < 0)
+                return "Assignment strategy rule weights must be finite and non-negative.";
+
+            if (!string.IsNullOrWhiteSpace(rule.Name) && !namedRules.Add(rule.Name))
+                return "Assignment strategy rule names must be unique when provided.";
+        }
+
+        return strategy.Kind switch
+        {
+            AssignmentStrategyKind.Weighted => ValidateWeightedStrategy(strategy),
+            AssignmentStrategyKind.RaceFilters => ValidateRaceFilterStrategy(strategy),
+            AssignmentStrategyKind.GroupsBuckets => ValidateGroupsBucketsStrategy(strategy),
+            _ => ValidateAssignableRules(strategy)
+        };
+    }
+
+    private static string? ValidateWeightedStrategy(AssignmentStrategyDefinition strategy)
+    {
+        if (strategy.Rules.Count == 0 || strategy.Rules.All(rule => rule.Weight <= 0))
+            return "Assignment strategy weighted rules require at least one positive weight.";
+
+        return ValidateAssignableRules(strategy);
+    }
+
+    private static string? ValidateRaceFilterStrategy(AssignmentStrategyDefinition strategy)
+    {
+        foreach (var rule in strategy.Rules)
+        {
+            if (rule.PresetNames.Count == 0)
+                return "Assignment strategy race-filter rules require at least one preset name.";
+
+            if (rule.RaceFilters.Count == 0)
+                return "Assignment strategy race-filter rules require at least one imported race filter.";
+        }
+
+        return null;
+    }
+
+    private static string? ValidateGroupsBucketsStrategy(AssignmentStrategyDefinition strategy)
+    {
+        foreach (var rule in strategy.Rules)
+        {
+            if (rule.PresetNames.Count == 0)
+                return "Assignment strategy group/bucket rules require at least one preset name.";
+
+            if (string.IsNullOrWhiteSpace(rule.BucketName))
+                return "Assignment strategy group/bucket rules require a bucket name.";
+        }
+
+        return null;
+    }
+
+    private static string? ValidateAssignableRules(AssignmentStrategyDefinition strategy)
+    {
+        foreach (var rule in strategy.Rules)
+            if (rule.PresetNames.Count == 0)
+                return "Assignment strategy rules that assign presets require at least one preset name.";
+
+        return null;
+    }
+
+    private static string[] ReadStringArray(JsonElement element, params string[] propertyNames)
+    {
+        if (!TryGetProperty(element, out var arrayElement, propertyNames)
+            || arrayElement.ValueKind != JsonValueKind.Array)
+            return Array.Empty<string>();
+
+        return arrayElement.EnumerateArray()
+            .Where(value => value.ValueKind == JsonValueKind.String)
+            .Select(value => value.GetString() ?? string.Empty)
+            .ToArray();
+    }
+
+    private static string? ReadString(JsonElement element, params string[] propertyNames)
+    {
+        return TryGetProperty(element, out var value, propertyNames) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+    }
+
+    private static int? ReadInt(JsonElement element, params string[] propertyNames)
+    {
+        return TryGetProperty(element, out var value, propertyNames) && value.ValueKind == JsonValueKind.Number
+               && value.TryGetInt32(out var result)
+            ? result
+            : null;
+    }
+
+    private static double? ReadDouble(JsonElement element, params string[] propertyNames)
+    {
+        return TryGetProperty(element, out var value, propertyNames) && value.ValueKind == JsonValueKind.Number
+            ? value.GetDouble()
+            : null;
+    }
+
+    private static bool TryGetProperty(JsonElement element, out JsonElement value, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+            if (element.TryGetProperty(propertyName, out value))
+                return true;
+
+        value = default;
+        return false;
+    }
+
     private static List<CustomProfileDefinition> LoadEmbeddedProfiles(
         JsonElement? profileDtos,
         List<ProjectLoadDiagnostic> diagnostics)
@@ -427,6 +630,55 @@ public class ProjectFileService
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         // CustomProfiles is appended after legacy root fields so older readers can ignore it without field-order churn.
         public JsonElement? CustomProfiles { get; set; }
+
+        [JsonPropertyName("AssignmentStrategy")]
+        [JsonPropertyOrder(4)]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public JsonElement? AssignmentStrategy { get; set; }
+    }
+
+    private sealed class AssignmentStrategyDto
+    {
+        [JsonPropertyName("schemaVersion")]
+        [JsonPropertyOrder(0)]
+        public int SchemaVersion { get; set; }
+
+        [JsonPropertyName("kind")]
+        [JsonPropertyOrder(1)]
+        public string? Kind { get; set; }
+
+        [JsonPropertyName("seed")]
+        [JsonPropertyOrder(2)]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? Seed { get; set; }
+
+        [JsonPropertyName("rules")]
+        [JsonPropertyOrder(3)]
+        public List<AssignmentStrategyRuleDto>? Rules { get; set; }
+    }
+
+    private sealed class AssignmentStrategyRuleDto
+    {
+        [JsonPropertyName("name")]
+        [JsonPropertyOrder(0)]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("presetNames")]
+        [JsonPropertyOrder(1)]
+        public List<string>? PresetNames { get; set; }
+
+        [JsonPropertyName("raceFilters")]
+        [JsonPropertyOrder(2)]
+        public List<string>? RaceFilters { get; set; }
+
+        [JsonPropertyName("weight")]
+        [JsonPropertyOrder(3)]
+        public double Weight { get; set; }
+
+        [JsonPropertyName("bucketName")]
+        [JsonPropertyOrder(4)]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? BucketName { get; set; }
     }
 
     private sealed class EmbeddedProfileDto
