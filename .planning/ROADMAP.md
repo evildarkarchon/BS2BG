@@ -139,8 +139,8 @@ Plans:
 - [x] 05-01-PLAN.md — Create dedicated CLI executable foundation and typed headless generation contracts.
 - [x] 05-03-PLAN.md — Persist full assignment strategy configuration in backward-compatible project files.
 **Wave 2 (blocked on Wave 1 completion)**
-- [ ] 05-02-PLAN.md — Implement validation-first headless generation through existing Core services and writers.
-- [ ] 05-04-PLAN.md — Implement deterministic assignment strategy execution and no-eligible diagnostics.
+- [x] 05-02-PLAN.md — Implement validation-first headless generation through existing Core services and writers.
+- [x] 05-04-PLAN.md — Implement deterministic assignment strategy execution and no-eligible diagnostics.
 **Wave 3 (blocked on Wave 2 generation/strategy foundations)**
 - [ ] 05-05-PLAN.md — Expose undoable assignment strategy configuration in the Morphs UI.
 - [ ] 05-06-PLAN.md — Create Core portable project bundle zip service with path-scrubbed manifests and reports.
