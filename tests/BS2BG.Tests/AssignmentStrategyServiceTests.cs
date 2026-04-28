@@ -276,7 +276,7 @@ public sealed class AssignmentStrategyServiceTests
         var result = service.Apply(project, strategy);
 
         result.BlockedNpcs.Should().BeEmpty();
-        AssignmentSnapshot(project).Should().Equal("Aela=PresetC", "Codsworth=PresetB", "Danica=PresetB");
+        AssignmentSnapshot(project).Should().Equal("Aela=PresetA", "Codsworth=PresetC", "Danica=PresetC");
     }
 
     [Fact]

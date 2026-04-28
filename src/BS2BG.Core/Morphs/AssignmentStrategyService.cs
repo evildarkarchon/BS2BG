@@ -85,9 +85,14 @@ public sealed class AssignmentStrategyService
         {
             if (entry.EligiblePresets.Count == 0) continue;
 
-            var preset = strategy.Kind == AssignmentStrategyKind.RoundRobin
-                ? entry.EligiblePresets[roundRobinIndex++ % entry.EligiblePresets.Count]
-                : entry.EligiblePresets[SafeNextIndex(randomAssignmentProvider, entry.EligiblePresets.Count)];
+            var preset = strategy.Kind switch
+            {
+                AssignmentStrategyKind.RoundRobin => entry.EligiblePresets[roundRobinIndex++ % entry.EligiblePresets.Count],
+                AssignmentStrategyKind.Weighted => SelectWeightedPreset(project, strategy, entry.Npc, randomAssignmentProvider),
+                _ => PickPreset(entry.EligiblePresets, randomAssignmentProvider)
+            };
+
+            if (preset is null) continue;
 
             entry.Npc.ClearSliderPresets();
             entry.Npc.AddSliderPreset(preset);
@@ -109,10 +114,91 @@ public sealed class AssignmentStrategyService
     {
         return strategy.Kind switch
         {
+            AssignmentStrategyKind.Weighted => ResolveWeightedPresetUnion(project, strategy.Rules, npc),
             AssignmentStrategyKind.RaceFilters => ResolveRulePresetUnion(project, strategy.Rules.Where(rule =>
                 rule.RaceFilters.Count > 0 && AssignmentStrategyRule.MatchesRace(rule, npc))),
+            AssignmentStrategyKind.GroupsBuckets => ResolveGroupsBucketsPresetUnion(project, strategy.Rules, npc),
             _ => project.SliderPresets.ToArray()
         };
+    }
+
+    private static SliderPreset? SelectWeightedPreset(
+        ProjectModel project,
+        AssignmentStrategyDefinition strategy,
+        Npc npc,
+        IRandomAssignmentProvider provider)
+    {
+        var weightedRules = GetWeightedRuleChoices(project, strategy.Rules, npc).ToArray();
+        var totalUnits = weightedRules.Sum(rule => rule.WeightUnits);
+        if (totalUnits <= 0) return null;
+
+        var draw = SafeNextIndex(provider, totalUnits);
+        var cumulative = 0;
+        foreach (var rule in weightedRules)
+        {
+            cumulative += rule.WeightUnits;
+            if (draw < cumulative)
+                return PickPreset(rule.Presets, provider);
+        }
+
+        return PickPreset(weightedRules[weightedRules.Length - 1].Presets, provider);
+    }
+
+    private static SliderPreset[] ResolveWeightedPresetUnion(
+        ProjectModel project,
+        IReadOnlyList<AssignmentStrategyRule> rules,
+        Npc npc)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var choice in GetWeightedRuleChoices(project, rules, npc))
+            foreach (var preset in choice.Presets)
+                names.Add(preset.Name);
+
+        return project.SliderPresets.Where(preset => names.Contains(preset.Name)).ToArray();
+    }
+
+    private static IEnumerable<WeightedRuleChoice> GetWeightedRuleChoices(
+        ProjectModel project,
+        IReadOnlyList<AssignmentStrategyRule> rules,
+        Npc npc)
+    {
+        return rules
+            .Select((rule, index) => new { Rule = rule, Index = index })
+            .Where(item => AssignmentStrategyRule.MatchesRace(item.Rule, npc))
+            .OrderBy(item => item.Rule.Name, StableComparer)
+            .ThenBy(item => item.Index)
+            .Select(item => new WeightedRuleChoice(
+                ResolveRulePresets(project, item.Rule),
+                ToWeightUnits(item.Rule.Weight)))
+            .Where(choice => choice.WeightUnits > 0 && choice.Presets.Length > 0);
+    }
+
+    private static int ToWeightUnits(double weight)
+    {
+        // Phase 5 stores weights as fixed two-decimal units. 0.005 intentionally rounds half-up to one unit;
+        // values below that threshold do not participate and can block an NPC after race narrowing.
+        if (double.IsNaN(weight) || double.IsInfinity(weight) || weight <= 0) return 0;
+        var units = Math.Round(weight * 100.0, MidpointRounding.AwayFromZero);
+        return units > int.MaxValue ? int.MaxValue : (int)units;
+    }
+
+    private static SliderPreset[] ResolveGroupsBucketsPresetUnion(
+        ProjectModel project,
+        IReadOnlyList<AssignmentStrategyRule> rules,
+        Npc npc)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in rules
+                     .Select((rule, index) => new { Rule = rule, Index = index })
+                     .Where(item => !string.IsNullOrWhiteSpace(item.Rule.BucketName)
+                                    && AssignmentStrategyRule.MatchesRace(item.Rule, npc))
+                     .OrderBy(item => item.Rule.BucketName, StableComparer)
+                     .ThenBy(item => item.Rule.Name, StableComparer)
+                     .ThenBy(item => item.Index))
+        foreach (var preset in ResolveRulePresets(project, item.Rule))
+            names.Add(preset.Name);
+
+        return project.SliderPresets.Where(preset => names.Contains(preset.Name)).ToArray();
     }
 
     private static SliderPreset[] ResolveRulePresetUnion(ProjectModel project, IEnumerable<AssignmentStrategyRule> rules)
@@ -124,6 +210,20 @@ public sealed class AssignmentStrategyService
 
         return project.SliderPresets.Where(preset => names.Contains(preset.Name)).ToArray();
     }
+
+    private static SliderPreset[] ResolveRulePresets(ProjectModel project, AssignmentStrategyRule rule)
+    {
+        var names = new HashSet<string>(rule.PresetNames, StringComparer.OrdinalIgnoreCase);
+        return project.SliderPresets.Where(preset => names.Contains(preset.Name)).ToArray();
+    }
+
+    private static SliderPreset? PickPreset(IReadOnlyList<SliderPreset> presets, IRandomAssignmentProvider provider) =>
+        presets.Count switch
+        {
+            0 => null,
+            1 => presets[0],
+            _ => presets[SafeNextIndex(provider, presets.Count)]
+        };
 
     private static IEnumerable<Npc> OrderEligibleRows(IReadOnlyList<Npc> eligibleRows) => eligibleRows
         .Select((npc, index) => new { Npc = npc, Index = index })
@@ -139,6 +239,8 @@ public sealed class AssignmentStrategyService
         var index = provider.NextIndex(count);
         return (uint)index < (uint)count ? index : 0;
     }
+
+    private sealed record WeightedRuleChoice(SliderPreset[] Presets, int WeightUnits);
 }
 
 /// <summary>
