@@ -20,6 +20,7 @@ using SliderProfile = BS2BG.Core.Formatting.SliderProfile;
 
 namespace BS2BG.Tests;
 
+[Collection(ConsoleCaptureCollection.ConsoleCaptureCollectionName)]
 public sealed class PortableBundleServiceTests
 {
     private static readonly DateTimeOffset FixedCreatedUtc = new(2026, 4, 28, 3, 0, 0, TimeSpan.Zero);

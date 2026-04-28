@@ -26,7 +26,7 @@ public sealed class HeadlessGenerationService(
     private readonly BodyGenIniExportWriter bodyGenIniExportWriter = bodyGenIniExportWriter ?? throw new ArgumentNullException(nameof(bodyGenIniExportWriter));
     private readonly BosJsonExportWriter bosJsonExportWriter = bosJsonExportWriter ?? throw new ArgumentNullException(nameof(bosJsonExportWriter));
     private readonly BosJsonExportPlanner bosJsonExportPlanner = bosJsonExportPlanner ?? throw new ArgumentNullException(nameof(bosJsonExportPlanner));
-    private readonly TemplateProfileCatalog profileCatalog = profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog));
+    private readonly RequestScopedProfileCatalogComposer profileCatalogComposer = new(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog)));
 
     /// <summary>
     /// Runs a complete headless generation request and returns a stable automation outcome without throwing expected user/input errors.
@@ -58,7 +58,8 @@ public sealed class HeadlessGenerationService(
             return UsageError("Project file could not be read: " + exception.Message);
         }
 
-        var validationReport = ProjectValidationService.Validate(project, profileCatalog);
+        var requestProfileCatalog = profileCatalogComposer.BuildForProject(project);
+        var validationReport = ProjectValidationService.Validate(project, requestProfileCatalog);
         if (validationReport.BlockerCount > 0)
             return new HeadlessGenerationResult(
                 AutomationExitCode.ValidationBlocked,
@@ -85,7 +86,7 @@ public sealed class HeadlessGenerationService(
         {
             if (IncludesBodyGen(request.Intent))
             {
-                var templates = templateGenerationService.GenerateTemplates(project.SliderPresets, profileCatalog, request.OmitRedundantSliders);
+                var templates = templateGenerationService.GenerateTemplates(project.SliderPresets, requestProfileCatalog, request.OmitRedundantSliders);
                 var morphs = morphGenerationService.GenerateMorphs(project).Text;
                 var result = bodyGenIniExportWriter.Write(request.OutputDirectory, templates, morphs);
                 writtenFiles.Add(result.TemplatesPath);
@@ -96,7 +97,7 @@ public sealed class HeadlessGenerationService(
 
             if (IncludesBosJson(request.Intent))
             {
-                var result = bosJsonExportWriter.Write(request.OutputDirectory, project.SliderPresets, profileCatalog);
+                var result = bosJsonExportWriter.Write(request.OutputDirectory, project.SliderPresets, requestProfileCatalog);
                 writtenFiles.AddRange(result.FilePaths);
                 ledger.AddRange(result.FilePaths.Select(path => new FileWriteLedgerEntry(path, FileWriteOutcome.Written)));
             }
