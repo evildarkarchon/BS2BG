@@ -4,12 +4,13 @@ using BS2BG.Core.Automation;
 using BS2BG.Core.Bundling;
 using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
-using BS2BG.Core.Formatting;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using BS2BG.Core.Serialization;
 using Xunit;
 using ModelSetSlider = BS2BG.Core.Models.SetSlider;
+using SliderDefault = BS2BG.Core.Formatting.SliderDefault;
+using SliderMultiplier = BS2BG.Core.Formatting.SliderMultiplier;
 using SliderProfile = BS2BG.Core.Formatting.SliderProfile;
 
 namespace BS2BG.Tests;
@@ -179,7 +180,7 @@ public sealed class PortableBundleServiceTests
         ]);
         names.Should().OnlyHaveUniqueItems();
         names.Should().NotContain("profiles/Unrelated Body.json");
-        archive.Entries.Should().OnlyContain(entry => entry.LastWriteTime == FixedCreatedUtc);
+        archive.Entries.Should().OnlyContain(entry => entry.LastWriteTime.UtcDateTime == FixedCreatedUtc.UtcDateTime);
         ReadEntryText(archive, "manifest.json").Should().Contain("\"bundleSourceProjectName\": \"source-project.jbs2bg\"");
         ReadEntryText(archive, "manifest.json").Should().NotContain(directory.Path);
         ReadEntryText(archive, "reports/validation.txt").Should().NotContain(directory.Path);
@@ -243,7 +244,7 @@ public sealed class PortableBundleServiceTests
         var expectedDirectory = Path.Combine(directory.Path, "expected");
         var expectedBosDirectory = Path.Combine(expectedDirectory, "bos");
         var templatesText = new TemplateGenerationService().GenerateTemplates(project.SliderPresets, CreateCatalog(), false);
-        var morphsText = new MorphGenerationService().GenerateMorphs(project).MorphsText;
+        var morphsText = new MorphGenerationService().GenerateMorphs(project).Text;
         new BodyGenIniExportWriter().Write(expectedDirectory, templatesText, morphsText);
         new BosJsonExportWriter(new TemplateGenerationService()).Write(expectedBosDirectory, project.SliderPresets, CreateCatalog());
 

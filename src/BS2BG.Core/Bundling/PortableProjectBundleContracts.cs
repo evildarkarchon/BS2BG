@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Encodings.Web;
 using System.Text.Json.Serialization;
 using BS2BG.Core.Automation;
 using BS2BG.Core.Diagnostics;
@@ -101,6 +102,7 @@ public static class PortableProjectBundleManifestSerializer
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
