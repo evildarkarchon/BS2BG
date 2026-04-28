@@ -142,9 +142,9 @@ Plans:
 - [x] 05-02-PLAN.md — Implement validation-first headless generation through existing Core services and writers.
 - [x] 05-04-PLAN.md — Implement deterministic assignment strategy execution and no-eligible diagnostics.
 **Wave 3 (blocked on Wave 2 generation/strategy foundations)**
-- [ ] 05-05-PLAN.md — Expose undoable assignment strategy configuration in the Morphs UI.
-- [ ] 05-06-PLAN.md — Create Core portable project bundle zip service with path-scrubbed manifests and reports.
-- [ ] 05-08-PLAN.md — Extend release trust automation for signed/unsigned checksum-backed packages and packaged CLI distribution.
+- [x] 05-05-PLAN.md — Expose undoable assignment strategy configuration in the Morphs UI.
+- [x] 05-06-PLAN.md — Create Core portable project bundle zip service with path-scrubbed manifests and reports.
+- [x] 05-08-PLAN.md — Extend release trust automation for signed/unsigned checksum-backed packages and packaged CLI distribution.
 **Wave 4 (blocked on Wave 3 UI/bundle/release surfaces)**
 - [ ] 05-07-PLAN.md — Wire portable bundle creation into CLI and GUI preview/write workflows.
 - [ ] 05-09-PLAN.md — Add packaged BodyGen/BodySlide/BoS setup and troubleshooting guidance.
