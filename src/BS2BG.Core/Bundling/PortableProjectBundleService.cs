@@ -28,6 +28,7 @@ public sealed class PortableProjectBundleService
     private readonly TemplateProfileCatalog profileCatalog;
     private readonly DiagnosticReportTextFormatter reportTextFormatter;
     private readonly string? tempRoot;
+    private readonly Action<string, string> bundleCommitter;
 
     /// <summary>
     /// Initializes a bundle service over existing Core services so bundle output cannot drift from project save/export behavior.
@@ -41,6 +42,33 @@ public sealed class PortableProjectBundleService
         TemplateProfileCatalog profileCatalog,
         DiagnosticReportTextFormatter reportTextFormatter,
         string? tempRoot = null)
+        : this(
+            projectFileService,
+            templateGenerationService,
+            morphGenerationService,
+            bodyGenIniExportWriter,
+            bosJsonExportWriter,
+            profileCatalog,
+            reportTextFormatter,
+            tempRoot,
+            CommitBundleFile)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a bundle service with a deterministic final-commit seam for overwrite-safety tests.
+    /// </summary>
+    /// <param name="bundleCommitter">Commits a fully written temp zip to the final bundle path.</param>
+    internal PortableProjectBundleService(
+        ProjectFileService projectFileService,
+        TemplateGenerationService templateGenerationService,
+        MorphGenerationService morphGenerationService,
+        BodyGenIniExportWriter bodyGenIniExportWriter,
+        BosJsonExportWriter bosJsonExportWriter,
+        TemplateProfileCatalog profileCatalog,
+        DiagnosticReportTextFormatter reportTextFormatter,
+        string? tempRoot,
+        Action<string, string> bundleCommitter)
     {
         this.projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
         this.templateGenerationService = templateGenerationService ?? throw new ArgumentNullException(nameof(templateGenerationService));
@@ -50,6 +78,7 @@ public sealed class PortableProjectBundleService
         this.profileCatalog = profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog));
         this.reportTextFormatter = reportTextFormatter ?? throw new ArgumentNullException(nameof(reportTextFormatter));
         this.tempRoot = tempRoot;
+        this.bundleCommitter = bundleCommitter ?? throw new ArgumentNullException(nameof(bundleCommitter));
     }
 
     /// <summary>
@@ -81,7 +110,7 @@ public sealed class PortableProjectBundleService
 
         if (File.Exists(request.BundlePath) && !request.Overwrite)
         {
-            var validationReport = ProjectValidationService.Validate(request.Project, profileCatalog);
+            var validationReport = ProjectValidationService.Validate(request.Project, BuildRequestProfileCatalog(request.Project, request.SaveContext));
             var reportText = reportTextFormatter.Format(validationReport, request.PrivateRoots);
             return new PortableProjectBundleResult(
                 PortableProjectBundleOutcome.OverwriteRefused,
@@ -104,24 +133,31 @@ public sealed class PortableProjectBundleService
                 plan.PrivacyFindings);
         }
 
+        var finalPath = Path.GetFullPath(request.BundlePath);
+        var parent = Path.GetDirectoryName(finalPath);
+        if (string.IsNullOrWhiteSpace(parent)) parent = Directory.GetCurrentDirectory();
+        var tempPath = Path.Combine(parent, "." + Path.GetFileName(finalPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+
         try
         {
-            var parent = Path.GetDirectoryName(Path.GetFullPath(request.BundlePath));
-            if (!string.IsNullOrWhiteSpace(parent)) Directory.CreateDirectory(parent);
-            if (File.Exists(request.BundlePath) && request.Overwrite) File.Delete(request.BundlePath);
+            Directory.CreateDirectory(parent);
 
-            using var zipStream = File.Create(request.BundlePath);
-            using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create);
-            var usedNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var entry in plan.Entries.OrderBy(entry => entry.Path, StringComparer.Ordinal))
+            using (var zipStream = File.Create(tempPath))
+            using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create))
             {
-                if (!usedNames.Add(entry.Path)) throw new InvalidOperationException("Duplicate bundle entry path: " + entry.Path);
+                var usedNames = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var entry in plan.Entries.OrderBy(entry => entry.Path, StringComparer.Ordinal))
+                {
+                    if (!usedNames.Add(entry.Path)) throw new InvalidOperationException("Duplicate bundle entry path: " + entry.Path);
 
-                var zipEntry = archive.CreateEntry(entry.Path, CompressionLevel.Optimal);
-                zipEntry.LastWriteTime = plan.CreatedUtc.ToLocalTime();
-                using var entryStream = zipEntry.Open();
-                entryStream.Write(entry.Bytes, 0, entry.Bytes.Length);
+                    var zipEntry = archive.CreateEntry(entry.Path, CompressionLevel.Optimal);
+                    zipEntry.LastWriteTime = plan.CreatedUtc.ToLocalTime();
+                    using var entryStream = zipEntry.Open();
+                    entryStream.Write(entry.Bytes, 0, entry.Bytes.Length);
+                }
             }
+
+            bundleCommitter(tempPath, finalPath);
 
             return new PortableProjectBundleResult(
                 PortableProjectBundleOutcome.Success,
@@ -133,7 +169,7 @@ public sealed class PortableProjectBundleService
         }
         catch (Exception)
         {
-            if (File.Exists(request.BundlePath)) TryDeleteFile(request.BundlePath);
+            if (File.Exists(tempPath)) TryDeleteFile(tempPath);
             return new PortableProjectBundleResult(
                 PortableProjectBundleOutcome.IoFailure,
                 request.BundlePath,
@@ -147,12 +183,14 @@ public sealed class PortableProjectBundleService
     private BundlePlan BuildPlan(PortableProjectBundleRequest request)
     {
         var createdUtc = (request.CreatedUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
-        var validationReport = ProjectValidationService.Validate(request.Project, profileCatalog);
+        var requestProfileCatalog = BuildRequestProfileCatalog(request.Project, request.SaveContext);
+        var validationReport = ProjectValidationService.Validate(request.Project, requestProfileCatalog);
         var reportText = reportTextFormatter.Format(validationReport, request.PrivateRoots);
         if (validationReport.BlockerCount > 0)
             return BlockedPlan(PortableProjectBundleOutcome.ValidationBlocked, createdUtc, validationReport, reportText, request.PrivateRoots);
 
-        var missingProfiles = FindMissingReferencedCustomProfiles(request.Project, request.SaveContext).ToArray();
+        var bundleProfiles = ResolveBundleProfileSet(request.Project, request.SaveContext).ToArray();
+        var missingProfiles = FindMissingReferencedCustomProfiles(request.Project, bundleProfiles).ToArray();
         if (missingProfiles.Length > 0)
         {
             var missingText = reportText + "\nMissing custom profiles: " + string.Join(", ", missingProfiles) + "\n";
@@ -168,8 +206,8 @@ public sealed class PortableProjectBundleService
                 Entry("reports/validation.txt", "report", Utf8NoBom.GetBytes(reportText)),
             };
 
-            AddProfileEntries(entries, request.Project, request.SaveContext);
-            AddGeneratedOutputEntries(entries, request, stagingDirectory);
+            AddProfileEntries(entries, bundleProfiles);
+            AddGeneratedOutputEntries(entries, request, stagingDirectory, requestProfileCatalog);
             RejectDuplicateEntries(entries.Select(entry => entry.Path));
 
             entries = entries.OrderBy(entry => entry.Path, StringComparer.Ordinal).ToList();
@@ -213,12 +251,16 @@ public sealed class PortableProjectBundleService
         }
     }
 
-    private void AddGeneratedOutputEntries(List<BundleContentEntry> entries, PortableProjectBundleRequest request, string stagingDirectory)
+    private void AddGeneratedOutputEntries(
+        List<BundleContentEntry> entries,
+        PortableProjectBundleRequest request,
+        string stagingDirectory,
+        TemplateProfileCatalog requestProfileCatalog)
     {
         if (request.Intent is OutputIntent.BodyGen or OutputIntent.All)
         {
             var bodyGenDirectory = Path.Combine(stagingDirectory, "bodygen");
-            var templatesText = templateGenerationService.GenerateTemplates(request.Project.SliderPresets, profileCatalog, omitRedundantSliders: false);
+            var templatesText = templateGenerationService.GenerateTemplates(request.Project.SliderPresets, requestProfileCatalog, omitRedundantSliders: false);
             var morphsText = morphGenerationService.GenerateMorphs(request.Project).Text;
             bodyGenIniExportWriter.Write(bodyGenDirectory, templatesText, morphsText);
             entries.Add(FileEntry("outputs/bodygen/templates.ini", "bodygen", Path.Combine(bodyGenDirectory, "templates.ini")));
@@ -228,24 +270,40 @@ public sealed class PortableProjectBundleService
         if (request.Intent is OutputIntent.BosJson or OutputIntent.All)
         {
             var bosDirectory = Path.Combine(stagingDirectory, "bos");
-            var result = bosJsonExportWriter.Write(bosDirectory, request.Project.SliderPresets, profileCatalog);
+            var result = bosJsonExportWriter.Write(bosDirectory, request.Project.SliderPresets, requestProfileCatalog);
             foreach (var filePath in result.FilePaths.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
                 entries.Add(FileEntry("outputs/bos/" + Path.GetFileName(filePath), "bos", filePath));
         }
     }
 
-    private static void AddProfileEntries(List<BundleContentEntry> entries, ProjectModel project, ProjectSaveContext? saveContext)
+    private static void AddProfileEntries(List<BundleContentEntry> entries, IEnumerable<CustomProfileDefinition> bundleProfiles)
     {
-        foreach (var profile in ResolveReferencedCustomProfiles(project, saveContext))
+        foreach (var profile in bundleProfiles)
         {
             var safeName = MakeSafeFileName(profile.Name) + ".json";
             entries.Add(Entry("profiles/" + safeName, "profile", Utf8NoBom.GetBytes(ProfileDefinitionService.ExportProfileJson(profile))));
         }
     }
 
-    private static IEnumerable<string> FindMissingReferencedCustomProfiles(ProjectModel project, ProjectSaveContext? saveContext)
+    private TemplateProfileCatalog BuildRequestProfileCatalog(ProjectModel project, ProjectSaveContext? saveContext)
     {
-        var resolved = ResolveReferencedCustomProfiles(project, saveContext)
+        var entries = profileCatalog.Entries
+            .Where(entry => entry.SourceKind == ProfileSourceKind.Bundled)
+            .Concat(ResolveBundleProfileSet(project, saveContext).Select(profile => new ProfileCatalogEntry(
+                profile.Name,
+                new TemplateProfile(profile.Name, profile.SliderProfile),
+                profile.SourceKind,
+                profile.FilePath,
+                false)));
+
+        return new TemplateProfileCatalog(entries);
+    }
+
+    private static IEnumerable<string> FindMissingReferencedCustomProfiles(
+        ProjectModel project,
+        IEnumerable<CustomProfileDefinition> bundleProfiles)
+    {
+        var resolved = bundleProfiles
             .Select(profile => profile.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -254,7 +312,7 @@ public sealed class PortableProjectBundleService
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static IEnumerable<CustomProfileDefinition> ResolveReferencedCustomProfiles(ProjectModel project, ProjectSaveContext? saveContext)
+    private static IEnumerable<CustomProfileDefinition> ResolveBundleProfileSet(ProjectModel project, ProjectSaveContext? saveContext)
     {
         var projectProfiles = project.CustomProfiles
             .Where(profile => !IsBundledProfileName(profile.Name) && profile.SourceKind != ProfileSourceKind.Bundled)
@@ -387,6 +445,14 @@ public sealed class PortableProjectBundleService
         {
             // Cleanup is best-effort so a secondary partial-zip deletion problem does not mask the primary bundle outcome.
         }
+    }
+
+    private static void CommitBundleFile(string tempPath, string finalPath)
+    {
+        if (File.Exists(finalPath))
+            File.Replace(tempPath, finalPath, destinationBackupFileName: null);
+        else
+            File.Move(tempPath, finalPath);
     }
 
     private sealed record BundleContentEntry(string Path, string Kind, byte[] Bytes);
