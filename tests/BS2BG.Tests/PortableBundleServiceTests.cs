@@ -484,6 +484,30 @@ public sealed class PortableBundleServiceTests
     }
 
     [Fact]
+    public void BundleProfileEntriesUseReferencedDeduplicatedProfilesAndSkipBundledNameCollisions()
+    {
+        using var directory = new TemporaryDirectory();
+        var project = new ProjectModel();
+        project.SliderPresets.Add(new SliderPreset("Beta", "Embedded Body"));
+        project.SliderPresets.Add(new SliderPreset("Alpha", "Community Body"));
+        project.SliderPresets.Add(new SliderPreset("Gamma", ProjectProfileMapping.SkyrimCbbe));
+        project.CustomProfiles.Add(TestProfiles.CreateProfile(ProjectProfileMapping.SkyrimCbbe, ProfileSourceKind.EmbeddedProject));
+        project.CustomProfiles.Add(TestProfiles.CreateProfile("Embedded Body", ProfileSourceKind.EmbeddedProject));
+        project.CustomProfiles.Add(TestProfiles.CreateProfile("Unrelated Body", ProfileSourceKind.EmbeddedProject));
+        var bundlePath = Path.Combine(directory.Path, "profiles.zip");
+
+        CreateBundledOnlyService().Create(CreateRequest(project, bundlePath, OutputIntent.BodyGen, overwrite: false))
+            .Outcome.Should().Be(PortableProjectBundleOutcome.Success);
+
+        using var archive = ZipFile.OpenRead(bundlePath);
+        var profileEntries = archive.Entries
+            .Select(entry => entry.FullName)
+            .Where(name => name.StartsWith("profiles/", StringComparison.Ordinal))
+            .ToArray();
+        profileEntries.Should().Equal("profiles/Community Body.json", "profiles/Embedded Body.json");
+    }
+
+    [Fact]
     public void TempStagingDirectoryIsRemovedOnSuccessAndFailure()
     {
         using var directory = new TemporaryDirectory();

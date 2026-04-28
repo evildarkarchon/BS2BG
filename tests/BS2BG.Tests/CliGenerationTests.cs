@@ -183,6 +183,42 @@ public sealed class CliGenerationTests
     }
 
     [Fact]
+    public void HeadlessGenerationServiceUsesEmbeddedCustomProfileFromProjectFile()
+    {
+        using var directory = new TemporaryDirectory();
+        var embedded = TestProfiles.CreateProfile(
+            "Embedded Body",
+            ProfileSourceKind.EmbeddedProject,
+            null,
+            TestProfiles.CreateEmbeddedSliderProfile());
+        var project = TestProfiles.CreateProjectUsingProfile("Embedded Body");
+        project.CustomProfiles.Add(embedded);
+        var projectPath = SaveProject(directory.Path, project);
+        var outputDirectory = Path.Combine(directory.Path, "out");
+        var expected = TestProfiles.WriteExpectedOutputs(
+            directory.Path,
+            "expected",
+            project,
+            TestProfiles.CreateRequestScopedCatalog(embedded));
+        var bundledOnly = new TemplateGenerationService().GenerateTemplates(
+            project.SliderPresets,
+            TestProfiles.CreateBundledOnlyCatalog(),
+            omitRedundantSliders: false);
+
+        var result = CreateHeadlessService().Run(new HeadlessGenerationRequest(
+            projectPath,
+            outputDirectory,
+            OutputIntent.All,
+            Overwrite: false,
+            OmitRedundantSliders: false));
+
+        result.ExitCode.Should().Be(AutomationExitCode.Success);
+        File.ReadAllBytes(Path.Combine(outputDirectory, "templates.ini")).Should().Equal(File.ReadAllBytes(expected.TemplatesPath));
+        File.ReadAllBytes(Path.Combine(outputDirectory, "Alpha.json")).Should().Equal(File.ReadAllBytes(expected.BosJsonPath));
+        File.ReadAllText(Path.Combine(outputDirectory, "templates.ini")).Should().NotBe(bundledOnly);
+    }
+
+    [Fact]
     public void HeadlessGenerationServiceWritesBosJsonThroughCoreWriterAndPlannerNames()
     {
         using var directory = new TemporaryDirectory();
@@ -314,6 +350,42 @@ public sealed class CliGenerationTests
         File.Exists(Path.Combine(outputDirectory, "templates.ini")).Should().BeTrue();
         File.Exists(Path.Combine(outputDirectory, "morphs.ini")).Should().BeTrue();
         File.Exists(Path.Combine(outputDirectory, "Alpha.json")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ProgramMainGenerateAllUsesEmbeddedCustomProfileFromSavedProject()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var embedded = TestProfiles.CreateProfile(
+            "Embedded Body",
+            ProfileSourceKind.EmbeddedProject,
+            null,
+            TestProfiles.CreateEmbeddedSliderProfile());
+        var project = TestProfiles.CreateProjectUsingProfile("Embedded Body");
+        project.CustomProfiles.Add(embedded);
+        var projectPath = SaveProject(directory.Path, project);
+        var outputDirectory = Path.Combine(directory.Path, "out");
+        var expected = TestProfiles.WriteExpectedOutputs(
+            directory.Path,
+            "expected-cli",
+            project,
+            TestProfiles.CreateRequestScopedCatalog(embedded));
+        var bundledOnly = new TemplateGenerationService().GenerateTemplates(
+            project.SliderPresets,
+            TestProfiles.CreateBundledOnlyCatalog(),
+            omitRedundantSliders: false);
+
+        var result = InvokeProgramMain(
+            "generate",
+            "--project", projectPath,
+            "--output", outputDirectory,
+            "--intent", "all");
+
+        result.ExitCode.Should().Be(0, result.StandardError);
+        File.ReadAllBytes(Path.Combine(outputDirectory, "templates.ini")).Should().Equal(File.ReadAllBytes(expected.TemplatesPath));
+        File.ReadAllBytes(Path.Combine(outputDirectory, "Alpha.json")).Should().Equal(File.ReadAllBytes(expected.BosJsonPath));
+        File.ReadAllText(Path.Combine(outputDirectory, "templates.ini")).Should().NotBe(bundledOnly);
     }
 
     [Fact]
