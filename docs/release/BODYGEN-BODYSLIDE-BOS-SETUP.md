@@ -1,6 +1,6 @@
-Last verified: 2026-04-28
-
 # BodyGen, BodySlide, and BodyTypes of Skyrim Setup
+
+Last verified: 2026-04-28
 
 This packaged guide explains how to use BS2BG outputs with common Skyrim SE and Fallout 4 modding layouts. BS2BG generates files and setup guidance; it does not edit game plugins.
 
