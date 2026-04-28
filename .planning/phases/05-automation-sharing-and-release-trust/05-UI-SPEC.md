@@ -56,7 +56,7 @@ Exceptions: existing resizable splitters remain 4px; existing compact table/list
 
 Rules:
 - Use only Regular (400) and SemiBold (600) for new Phase 5 UI.
-- Use `Consolas` at 13px for CLI command examples, checksums, manifest entries, and report snippets.
+- Use `Consolas` at 12px for CLI command examples, checksums, manifest entries, and report snippets.
 - Preserve existing `18px SemiBold` shell/workspace headings and `16px SemiBold` section headings.
 
 ---
@@ -115,6 +115,7 @@ Tone: factual, local/offline, trust-focused, and non-alarming. Use `Blocker`, `C
 
 ### Navigation and placement
 - Keep the existing top-level workspace model. Add Phase 5 GUI surfaces inside the existing shell; do not replace the `Templates`, `Morphs`, `Diagnostics`, or `Profiles` workflows.
+- Primary focal point: assignment strategy summary and `Apply Strategy` action in the `Morphs` workspace; bundle preview and `Create Portable Bundle` write action are secondary.
 - Assignment strategy configuration belongs in the `Morphs` workspace near NPC bulk assignment controls because it changes NPC assignment behavior.
 - Portable bundle creation belongs in the shell export/share workflow and may be exposed from the File menu or a clearly labeled bundle action; it must show a preview before writing the zip.
 - Setup/troubleshooting guidance remains packaged docs only for Phase 5. Do not add an in-app wizard or new Help-menu UI solely for BodyGen/BodySlide/BoS guidance.
@@ -137,7 +138,7 @@ Tone: factual, local/offline, trust-focused, and non-alarming. Use `Blocker`, `C
 
 ### CLI and release trust presentation
 - In-app CLI references should be copyable text snippets, not an interactive terminal.
-- CLI command examples use monospace 13px and avoid wrapping paths mid-token when possible.
+- CLI command examples use monospace 12px and avoid wrapping paths mid-token when possible.
 - Release verification states must be explicit text badges: `Signed`, `Unsigned`, `Checksum verified`, `Checksum mismatch`, `Signature unavailable`.
 - Unsigned is a caution state, not a blocker, when SHA-256 sidecars and unsigned verification docs are present.
 
