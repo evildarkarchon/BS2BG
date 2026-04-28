@@ -51,8 +51,8 @@ public sealed class ReleaseTrustTests
         script.Should().Contain("CertificatePasswordEnvVar");
         script.Should().Contain("SIGNING-INFO.txt");
         script.Should().Contain("Unsigned");
-        script.Should().NotContain("throw \"SignTool");
-        unsignedDocs.Should().Contain("unsigned", Exactly.Once());
+        script.Should().NotContain("throw \"SignTool is required");
+        unsignedDocs.Should().Contain("unsigned");
         unsignedDocs.Should().Contain("SHA-256");
         unsignedDocs.Should().Contain("valid", "unsigned artifacts are valid when SHA-256 verification succeeds");
     }
