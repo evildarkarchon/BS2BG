@@ -135,15 +135,20 @@ Cross-cutting constraints: custom profile identity is internal display-name base
   5. User can access setup and troubleshooting guidance for BodyGen, BodySlide, BoS, and common output-location mistakes without BS2BG editing external game plugins.
 **Plans**: 9 plans
 Plans:
+**Wave 1**
 - [ ] 05-01-PLAN.md — Create dedicated CLI executable foundation and typed headless generation contracts.
-- [ ] 05-02-PLAN.md — Implement validation-first headless generation through existing Core services and writers.
 - [ ] 05-03-PLAN.md — Persist full assignment strategy configuration in backward-compatible project files.
+**Wave 2 (blocked on Wave 1 completion)**
+- [ ] 05-02-PLAN.md — Implement validation-first headless generation through existing Core services and writers.
 - [ ] 05-04-PLAN.md — Implement deterministic assignment strategy execution and no-eligible diagnostics.
+**Wave 3 (blocked on Wave 2 generation/strategy foundations)**
 - [ ] 05-05-PLAN.md — Expose undoable assignment strategy configuration in the Morphs UI.
 - [ ] 05-06-PLAN.md — Create Core portable project bundle zip service with path-scrubbed manifests and reports.
-- [ ] 05-07-PLAN.md — Wire portable bundle creation into CLI and GUI preview/write workflows.
 - [ ] 05-08-PLAN.md — Extend release trust automation for signed/unsigned checksum-backed packages and packaged CLI distribution.
+**Wave 4 (blocked on Wave 3 UI/bundle/release surfaces)**
+- [ ] 05-07-PLAN.md — Wire portable bundle creation into CLI and GUI preview/write workflows.
 - [ ] 05-09-PLAN.md — Add packaged BodyGen/BodySlide/BoS setup and troubleshooting guidance.
+Cross-cutting constraints: CLI and bundle automation reuse Core generation/export paths only; deterministic assignment uses a pinned provider-compatible PRNG; bundle/release artifacts avoid private absolute paths; signing is optional when SHA-256 verification artifacts and unsigned docs are present.
 **UI hint**: yes
 
 ## Progress
