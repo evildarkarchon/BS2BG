@@ -1,127 +1,84 @@
 ---
 phase: 05-automation-sharing-and-release-trust
-reviewed: 2026-04-28T05:08:00Z
+reviewed: 2026-04-28T05:38:30Z
 depth: standard
-files_reviewed: 45
+advisory: true
+files_reviewed: 3
 files_reviewed_list:
-  - BS2BG.sln
-  - Directory.Packages.props
-  - docs/release/BODYGEN-BODYSLIDE-BOS-SETUP.md
-  - docs/release/QA-CHECKLIST.md
-  - docs/release/README.md
-  - docs/release/UNSIGNED-BUILD.md
-  - src/BS2BG.App/AppBootstrapper.cs
-  - src/BS2BG.App/Services/AssignmentStrategyKindDisplayConverter.cs
-  - src/BS2BG.App/Services/IFileDialogService.cs
-  - src/BS2BG.App/Services/WindowFileDialogService.cs
-  - src/BS2BG.App/ViewModels/AssignmentStrategyRuleRowViewModel.cs
-  - src/BS2BG.App/ViewModels/MainWindowViewModel.cs
-  - src/BS2BG.App/ViewModels/MorphsViewModel.cs
-  - src/BS2BG.App/Views/MainWindow.axaml
-  - src/BS2BG.Cli/BS2BG.Cli.csproj
   - src/BS2BG.Cli/Program.cs
-  - src/BS2BG.Core/Automation/HeadlessGenerationContracts.cs
-  - src/BS2BG.Core/Automation/HeadlessGenerationService.cs
-  - src/BS2BG.Core/Bundling/BundlePathScrubber.cs
-  - src/BS2BG.Core/Bundling/PortableProjectBundleContracts.cs
-  - src/BS2BG.Core/Bundling/PortableProjectBundleService.cs
-  - src/BS2BG.Core/Diagnostics/DiagnosticReportTextFormatter.cs
-  - src/BS2BG.Core/Diagnostics/ProjectValidationService.cs
-  - src/BS2BG.Core/Export/BosJsonExportPlanner.cs
-  - src/BS2BG.Core/Export/BosJsonExportWriter.cs
-  - src/BS2BG.Core/Generation/TemplateProfileCatalogFactory.cs
-  - src/BS2BG.Core/Models/ProjectModel.cs
-  - src/BS2BG.Core/Morphs/AssignmentStrategyContracts.cs
-  - src/BS2BG.Core/Morphs/AssignmentStrategyService.cs
-  - src/BS2BG.Core/Morphs/DeterministicAssignmentRandomProvider.cs
-  - src/BS2BG.Core/Morphs/MorphAssignmentService.cs
-  - src/BS2BG.Core/Serialization/ProjectFileService.cs
-  - tests/BS2BG.Tests/AssignmentStrategyServiceTests.cs
-  - tests/BS2BG.Tests/BS2BG.Tests.csproj
   - tests/BS2BG.Tests/CliGenerationTests.cs
-  - tests/BS2BG.Tests/M6UxViewModelTests.cs
-  - tests/BS2BG.Tests/MainWindowViewModelProfileRecoveryTests.cs
-  - tests/BS2BG.Tests/MainWindowViewModelTests.cs
-  - tests/BS2BG.Tests/MorphsViewModelStrategyTests.cs
-  - tests/BS2BG.Tests/PortableBundleServiceTests.cs
-  - tests/BS2BG.Tests/ReleaseDocsTests.cs
-  - tests/BS2BG.Tests/ReleaseTrustTests.cs
-  - tests/BS2BG.Tests/TemplateGenerationServiceTests.cs
-  - tests/BS2BG.Tests/TemplateProfileCatalogFactoryTests.cs
-  - tools/release/package-release.ps1
+  - .planning/phases/05-automation-sharing-and-release-trust/05-REVIEW.md
 findings:
-  critical: 2
-  warning: 1
+  critical: 0
+  warning: 0
   info: 0
-  total: 3
-status: issues_found
+  total: 0
+status: clean
 ---
 
-# Phase 05: Code Review Report
+# Phase 05: Advisory Code Review Report
 
-**Reviewed:** 2026-04-28T05:08:00Z
-**Depth:** standard
-**Files Reviewed:** 45
-**Status:** issues_found
+**Reviewed:** 2026-04-28T05:38:30Z  
+**Depth:** standard  
+**Files Reviewed:** 3  
+**Status:** clean
 
 ## Summary
 
-Reviewed the Phase 05 automation, bundling, strategy, release-trust, and documentation changes against the phase plans and requirements. The implementation has two release-blocking correctness/data-loss defects in portable bundle creation and one CLI robustness gap that should be fixed before trusting the new automation path.
+Re-ran the advisory status check for Phase 05 after commit `bf4373d4`, focusing on the prior CR-01 bundle missing-project privacy issue. The CLI now converts expected project-load exceptions to fixed, path-free messages before writing stderr, and the regression test asserts that neither the temporary directory nor the missing project path appears in the missing-project failure output.
 
-## Critical Issues
+No remaining issues were found in the reviewed scope. The prior CR-01 audit trail is preserved below and marked resolved.
 
-### CR-01: Existing bundle zip is deleted before replacement succeeds
+## Verification
 
-**File:** `src/BS2BG.Core/Bundling/PortableProjectBundleService.cs:107-114`
+- Reviewed `src/BS2BG.Cli/Program.cs`: `GetProjectLoadFailureMessage` maps `FileNotFoundException`/`DirectoryNotFoundException` to `The project file was not found.` without using `exception.Message` or `FileName`; malformed JSON and generic read failures are also normalized.
+- Reviewed `tests/BS2BG.Tests/CliGenerationTests.cs`: `ProgramMainBundleMapsMissingProjectToUsageErrorWithoutStackTrace` now asserts stderr does not contain `directory.Path` or `missingProjectPath`.
+- Ran `dotnet test "tests/BS2BG.Tests/BS2BG.Tests.csproj" --filter "FullyQualifiedName~CliGenerationTests.ProgramMainBundleMapsMissingProjectToUsageErrorWithoutStackTrace"` — passed.
 
-**Issue:** `Create` deletes an existing bundle when `Overwrite` is true and then creates the replacement directly at the final path. If `File.Create`, zip entry writes, disk space, antivirus locks, or any later archive operation fails, the catch block deletes the partial zip and returns `IoFailure`, but the user's previous bundle is already gone. This is a data-loss risk in the explicit overwrite path.
+## Resolved Findings
 
-**Fix:** Write the archive to a temp file in the destination directory, then atomically replace/move it only after the zip is fully closed and validated. Keep the old file until the final commit step succeeds.
+### CR-01: Existing bundle zip is deleted before replacement succeeds — RESOLVED
 
-```csharp
-var finalPath = Path.GetFullPath(request.BundlePath);
-var parent = Path.GetDirectoryName(finalPath)!;
-Directory.CreateDirectory(parent);
-var tempPath = Path.Combine(parent, "." + Path.GetFileName(finalPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
-try
-{
-    using (var zipStream = File.Create(tempPath))
-    using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create))
-    {
-        // write entries to tempPath
-    }
+**File:** `src/BS2BG.Core/Bundling/PortableProjectBundleService.cs`
 
-    if (File.Exists(finalPath))
-        File.Replace(tempPath, finalPath, destinationBackupFileName: null);
-    else
-        File.Move(tempPath, finalPath);
-}
-finally
-{
-    if (File.Exists(tempPath)) TryDeleteFile(tempPath);
-}
-```
+**Original Issue:** Earlier Phase 05 review found that overwrite mode deleted an existing bundle before the replacement archive was fully written, creating a data-loss risk if zip creation or final file creation failed.
 
-### CR-02: Bundle generation ignores embedded/local custom profiles when producing output bytes
+**Resolution:** Plan 05-10 now writes the replacement archive to a same-directory temp file and commits only after the archive is closed, using `File.Replace` or `File.Move`. Regression coverage injects a deterministic final-commit failure and verifies the previous bundle bytes remain intact.
 
-**File:** `src/BS2BG.Cli/Program.cs:181-190`, `src/BS2BG.App/AppBootstrapper.cs:45-52`, `src/BS2BG.Core/Bundling/PortableProjectBundleService.cs:28-29, 221-231`
+**Status:** Resolved in commit `214b7976`.
 
-**Issue:** `PortableProjectBundleService` captures a single `TemplateProfileCatalog` in its constructor and uses that catalog for validation/generation. The CLI constructs it from `new TemplateProfileCatalogFactory().Create()`, which contains only bundled profiles; the App registers the service with `ITemplateProfileCatalogService.Current` at startup, before later project-profile overlays or custom profile changes. However bundle creation separately resolves and includes referenced custom profiles in `profiles/`. For projects whose presets use those custom profiles, the bundled `templates.ini` and BoS JSON are generated through `profileCatalog.GetProfile(...)` fallback instead of the referenced custom profile. The zip can therefore include the correct profile JSON but incorrect generated outputs.
+### CR-02: Bundle generation ignores embedded/local custom profiles when producing output bytes — RESOLVED
 
-**Fix:** Make bundle planning build a request-scoped generation catalog that includes bundled profiles plus referenced embedded/project/local custom profiles from `request.Project.CustomProfiles` and `request.SaveContext`, and pass that catalog to validation, `GenerateTemplates`, and `BosJsonExportWriter`. In the App, avoid registering `PortableProjectBundleService` with a stale catalog snapshot; inject a catalog provider or construct the request-scoped catalog at preview/create time.
+**File:** `src/BS2BG.Core/Bundling/PortableProjectBundleService.cs`; `src/BS2BG.App/AppBootstrapper.cs`; `src/BS2BG.Cli/Program.cs`
 
-## Warnings
+**Original Issue:** Earlier Phase 05 review found that portable bundles could include referenced custom profile JSON files while generating `templates.ini` and BoS JSON through a stale or bundled-only profile catalog.
 
-### WR-01: CLI bundle command can throw unhandled exceptions instead of returning stable automation exit codes
+**Resolution:** Plan 05-10 now resolves the bundle profile set once per request and uses that request-scoped catalog for missing-profile validation, profile zip entries, template generation, and BoS JSON output. The App singleton registration documents that local/project custom profiles are supplied per request through `BuildProjectSaveContext()`.
 
-**File:** `src/BS2BG.Cli/Program.cs:115-118, 179-183`
+**Status:** Resolved in commits `214b7976` and `ddb51a22`.
 
-**Issue:** The `bundle` action calls `CreateBundleServiceAndRequest`, `Preview`, and `Create` without the expected user-input error handling used by `HeadlessGenerationService.Run`. Missing project files, malformed `.jbs2bg` JSON, unreadable files, or missing install-relative profile JSON can throw before a `PortableProjectBundleOutcome` is produced, bypassing the documented `0/2/3/4` automation contract and emitting an implementation exception path.
+### WR-01: CLI bundle command can throw unhandled exceptions instead of returning stable automation exit codes — RESOLVED
 
-**Fix:** Wrap project loading/service composition in the bundle command or move it behind a Core automation service that returns `AutomationExitCode.UsageError`, `ValidationBlocked`, `OverwriteRefused`, or `IoFailure` consistently.
+**File:** `src/BS2BG.Cli/Program.cs`; `tests/BS2BG.Tests/CliGenerationTests.cs`
+
+**Original Issue:** Earlier Phase 05 review found that bundle command setup could throw before a `PortableProjectBundleOutcome` was produced, bypassing the documented automation exit-code contract.
+
+**Resolution:** Plan 05-10 wraps expected project-load, malformed JSON, missing profile asset, and filesystem failures into stable `AutomationExitCode.UsageError` or `AutomationExitCode.IoFailure` responses with concise stderr. Follow-up commit `bf4373d4` also ensures missing-project stderr does not leak private local paths.
+
+**Status:** Resolved in commits `ddb51a22` and `bf4373d4`.
+
+### CR-01: CLI bundle missing-project errors leak private local paths — RESOLVED
+
+**File:** `src/BS2BG.Cli/Program.cs:120, 243-263`; `tests/BS2BG.Tests/CliGenerationTests.cs:417-435`
+
+**Original Issue:** The bundle command intentionally mapped missing projects to `AutomationExitCode.UsageError`, but it created `FileNotFoundException` with the full `projectPath` and then printed `exception.Message` verbatim through the project-load failure path. On .NET this message includes the missing file path (for example, `Could not find file 'C:\Users\...\project.jbs2bg'`). That path could land in CI or support logs, violating the Phase 05 trust requirement that bundle workflows avoid private local paths and the 05-10 threat-model goal of concise failure messages without private roots. The earlier tests asserted no stack trace/type names, but did not assert that the user path was absent.
+
+**Resolution:** `Program.cs` now writes only a generic message selected by exception type via `GetProjectLoadFailureMessage`, so the `FileNotFoundException.FileName` and raw exception text are not emitted for missing project files. The missing-project CLI regression test now checks both the temp directory and full missing project path are absent from stderr while preserving the usage-error exit code and no-stack-trace assertions.
+
+**Status:** Resolved in commit `bf4373d4`.
 
 ---
 
-_Reviewed: 2026-04-28T05:08:00Z_
-_Reviewer: the agent (gsd-code-reviewer)_
+_Reviewed: 2026-04-28T05:38:30Z_  
+_Reviewer: the agent (gsd-code-reviewer)_  
 _Depth: standard_
