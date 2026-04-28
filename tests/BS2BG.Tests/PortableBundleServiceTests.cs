@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.IO.Compression;
+using BS2BG.Cli;
 using BS2BG.Core.Automation;
 using BS2BG.Core.Bundling;
 using BS2BG.Core.Diagnostics;
@@ -18,6 +19,75 @@ namespace BS2BG.Tests;
 public sealed class PortableBundleServiceTests
 {
     private static readonly DateTimeOffset FixedCreatedUtc = new(2026, 4, 28, 3, 0, 0, TimeSpan.Zero);
+    private static readonly object ConsoleLock = new();
+
+    [Fact]
+    public void BundleCommandRequiresProjectBundleAndIntentOptions()
+    {
+        var result = InvokeProgramMain("bundle");
+        var combinedOutput = result.StandardOutput + result.StandardError;
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.UsageError);
+        combinedOutput.Should().Contain("Usage:");
+        combinedOutput.Should().Contain("--project");
+        combinedOutput.Should().Contain("--bundle");
+        combinedOutput.Should().Contain("--intent");
+        combinedOutput.Should().Contain("bodygen");
+        combinedOutput.Should().Contain("bos");
+        combinedOutput.Should().Contain("all");
+    }
+
+    [Fact]
+    public void ProgramMainBundleRefusesExistingZipWithoutOverwrite()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, CreateProjectWithAssignedPreset());
+        var bundlePath = Path.Combine(directory.Path, "share.zip");
+        File.WriteAllText(bundlePath, "original");
+
+        var result = InvokeProgramMain(
+            "bundle",
+            "--project", projectPath,
+            "--bundle", bundlePath,
+            "--intent", "bodygen");
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.OverwriteRefused);
+        result.StandardError.Should().Contain("Target files already exist. Enable overwrite to replace them.");
+        File.ReadAllText(bundlePath).Should().Be("original");
+    }
+
+    [Fact]
+    public void ProgramMainBundleCreatesZipAndPrintsPathAndEntryCount()
+    {
+        using var directory = new TemporaryDirectory();
+        CopyProfileAssetsToTestAssemblyDirectory();
+        var projectPath = SaveProject(directory.Path, CreateProjectWithAssignedPreset());
+        var bundlePath = Path.Combine(directory.Path, "share.zip");
+
+        var result = InvokeProgramMain(
+            "bundle",
+            "--project", projectPath,
+            "--bundle", bundlePath,
+            "--intent", "all");
+
+        result.ExitCode.Should().Be((int)AutomationExitCode.Success);
+        result.StandardOutput.Should().Contain(bundlePath);
+        result.StandardOutput.Should().MatchRegex(@"entries:\s*\d+");
+        result.StandardError.Should().BeEmpty();
+        using var archive = ZipFile.OpenRead(bundlePath);
+        archive.Entries.Should().Contain(entry => entry.FullName == "manifest.json");
+    }
+
+    [Fact]
+    public void BundleOutcomesMapToSharedAutomationExitCodes()
+    {
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.Success).Should().Be(AutomationExitCode.Success);
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.ValidationBlocked).Should().Be(AutomationExitCode.ValidationBlocked);
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.MissingProfile).Should().Be(AutomationExitCode.ValidationBlocked);
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.OverwriteRefused).Should().Be(AutomationExitCode.OverwriteRefused);
+        Program.MapBundleOutcome(PortableProjectBundleOutcome.IoFailure).Should().Be(AutomationExitCode.IoFailure);
+    }
 
     [Theory]
     [InlineData("project\\project.jbs2bg", "project/project.jbs2bg")]
@@ -313,6 +383,61 @@ public sealed class PortableBundleServiceTests
         }),
         new[] { @"C:\Users\Example", Path.GetDirectoryName(bundlePath)! });
 
+    private static string SaveProject(string directory, ProjectModel project)
+    {
+        var path = Path.Combine(directory, "project-" + Guid.NewGuid().ToString("N") + ".jbs2bg");
+        new ProjectFileService().Save(project, path);
+        return path;
+    }
+
+    private static ProcessResult InvokeProgramMain(params string[] args)
+    {
+        lock (ConsoleLock)
+        {
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            using var standardOutput = new StringWriter();
+            using var standardError = new StringWriter();
+            try
+            {
+                Console.SetOut(standardOutput);
+                Console.SetError(standardError);
+                var exitCode = Program.Main(args);
+                return new ProcessResult(exitCode, standardOutput.ToString(), standardError.ToString());
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
+        }
+    }
+
+    private static void CopyProfileAssetsToTestAssemblyDirectory()
+    {
+        var repoRoot = FindRepoRoot();
+        foreach (var fileName in new[] { "settings.json", "settings_UUNP.json", "settings_FO4_CBBE.json" })
+        {
+            File.Copy(
+                Path.Combine(repoRoot, fileName),
+                Path.Combine(AppContext.BaseDirectory, fileName),
+                overwrite: true);
+        }
+    }
+
+    private static string FindRepoRoot()
+    {
+        var directory = AppContext.BaseDirectory;
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory, "BS2BG.sln"))) return directory;
+
+            directory = Directory.GetParent(directory)?.FullName;
+        }
+
+        throw new DirectoryNotFoundException("Could not find repository root.");
+    }
+
     private static ProjectModel CreateProjectWithAssignedPreset()
     {
         var project = new ProjectModel();
@@ -374,4 +499,6 @@ public sealed class PortableBundleServiceTests
 
         public void Dispose() => Directory.Delete(Path, true);
     }
+
+    private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 }
