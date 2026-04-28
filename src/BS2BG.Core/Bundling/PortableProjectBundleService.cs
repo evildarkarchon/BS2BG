@@ -25,7 +25,7 @@ public sealed class PortableProjectBundleService
     private readonly MorphGenerationService morphGenerationService;
     private readonly BodyGenIniExportWriter bodyGenIniExportWriter;
     private readonly BosJsonExportWriter bosJsonExportWriter;
-    private readonly TemplateProfileCatalog profileCatalog;
+    private readonly RequestScopedProfileCatalogComposer profileCatalogComposer;
     private readonly DiagnosticReportTextFormatter reportTextFormatter;
     private readonly string? tempRoot;
     private readonly Action<string, string> bundleCommitter;
@@ -75,7 +75,7 @@ public sealed class PortableProjectBundleService
         this.morphGenerationService = morphGenerationService ?? throw new ArgumentNullException(nameof(morphGenerationService));
         this.bodyGenIniExportWriter = bodyGenIniExportWriter ?? throw new ArgumentNullException(nameof(bodyGenIniExportWriter));
         this.bosJsonExportWriter = bosJsonExportWriter ?? throw new ArgumentNullException(nameof(bosJsonExportWriter));
-        this.profileCatalog = profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog));
+        profileCatalogComposer = new RequestScopedProfileCatalogComposer(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog)));
         this.reportTextFormatter = reportTextFormatter ?? throw new ArgumentNullException(nameof(reportTextFormatter));
         this.tempRoot = tempRoot;
         this.bundleCommitter = bundleCommitter ?? throw new ArgumentNullException(nameof(bundleCommitter));
@@ -110,7 +110,9 @@ public sealed class PortableProjectBundleService
 
         if (File.Exists(request.BundlePath) && !request.Overwrite)
         {
-            var validationReport = ProjectValidationService.Validate(request.Project, BuildRequestProfileCatalog(request.Project, request.SaveContext));
+            var validationReport = ProjectValidationService.Validate(
+                request.Project,
+                profileCatalogComposer.BuildForProject(request.Project, request.SaveContext));
             var reportText = reportTextFormatter.Format(validationReport, request.PrivateRoots);
             return new PortableProjectBundleResult(
                 PortableProjectBundleOutcome.OverwriteRefused,
@@ -183,14 +185,14 @@ public sealed class PortableProjectBundleService
     private BundlePlan BuildPlan(PortableProjectBundleRequest request)
     {
         var createdUtc = (request.CreatedUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
-        var requestProfileCatalog = BuildRequestProfileCatalog(request.Project, request.SaveContext);
+        var requestProfileCatalog = profileCatalogComposer.BuildForProject(request.Project, request.SaveContext);
         var validationReport = ProjectValidationService.Validate(request.Project, requestProfileCatalog);
         var reportText = reportTextFormatter.Format(validationReport, request.PrivateRoots);
         if (validationReport.BlockerCount > 0)
             return BlockedPlan(PortableProjectBundleOutcome.ValidationBlocked, createdUtc, validationReport, reportText, request.PrivateRoots);
 
-        var bundleProfiles = ResolveBundleProfileSet(request.Project, request.SaveContext).ToArray();
-        var missingProfiles = FindMissingReferencedCustomProfiles(request.Project, bundleProfiles).ToArray();
+        var bundleProfiles = profileCatalogComposer.ResolveReferencedCustomProfiles(request.Project, request.SaveContext).ToArray();
+        var missingProfiles = FindMissingReferencedCustomProfiles(request.Project, requestProfileCatalog).ToArray();
         if (missingProfiles.Length > 0)
         {
             var missingText = reportText + "\nMissing custom profiles: " + string.Join(", ", missingProfiles) + "\n";
@@ -285,66 +287,13 @@ public sealed class PortableProjectBundleService
         }
     }
 
-    private TemplateProfileCatalog BuildRequestProfileCatalog(ProjectModel project, ProjectSaveContext? saveContext)
-    {
-        var entries = profileCatalog.Entries
-            .Where(entry => entry.SourceKind == ProfileSourceKind.Bundled)
-            .Concat(ResolveBundleProfileSet(project, saveContext).Select(profile => new ProfileCatalogEntry(
-                profile.Name,
-                new TemplateProfile(profile.Name, profile.SliderProfile),
-                profile.SourceKind,
-                profile.FilePath,
-                false)));
-
-        return new TemplateProfileCatalog(entries);
-    }
-
     private static IEnumerable<string> FindMissingReferencedCustomProfiles(
         ProjectModel project,
-        IEnumerable<CustomProfileDefinition> bundleProfiles)
-    {
-        var resolved = bundleProfiles
-            .Select(profile => profile.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        return ReferencedCustomProfileNames(project)
-            .Where(name => !resolved.Contains(name))
+        TemplateProfileCatalog requestProfileCatalog) => project.SliderPresets
+            .Select(preset => preset.ProfileName)
+            .Where(name => !requestProfileCatalog.ContainsProfile(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static IEnumerable<CustomProfileDefinition> ResolveBundleProfileSet(ProjectModel project, ProjectSaveContext? saveContext)
-    {
-        var projectProfiles = project.CustomProfiles
-            .Where(profile => !IsBundledProfileName(profile.Name) && profile.SourceKind != ProfileSourceKind.Bundled)
-            .ToDictionary(profile => profile.Name, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var name in ReferencedCustomProfileNames(project))
-        {
-            if (projectProfiles.TryGetValue(name, out var projectProfile))
-            {
-                yield return projectProfile;
-                continue;
-            }
-
-            if (saveContext?.AvailableCustomProfilesByName.TryGetValue(name, out var contextProfile) == true
-                && !IsBundledProfileName(contextProfile.Name)
-                && contextProfile.SourceKind != ProfileSourceKind.Bundled)
-            {
-                yield return contextProfile;
-            }
-        }
-    }
-
-    private static IEnumerable<string> ReferencedCustomProfileNames(ProjectModel project) => project.SliderPresets
-        .Select(preset => preset.ProfileName)
-        .Where(name => !IsBundledProfileName(name))
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
-
-    private static bool IsBundledProfileName(string? name) =>
-        string.Equals(name, ProjectProfileMapping.SkyrimCbbe, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, ProjectProfileMapping.SkyrimUunp, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, ProjectProfileMapping.Fallout4Cbbe, StringComparison.OrdinalIgnoreCase);
 
     private static BundlePlan BlockedPlan(
         PortableProjectBundleOutcome outcome,
