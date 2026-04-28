@@ -480,6 +480,8 @@ public sealed class MainWindowViewModelProfileRecoveryTests
         public Task<string?> PickBodyGenExportFolderAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 
         public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveBundleFileAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
     }
 
     private sealed class EmptyBodySlideXmlFilePicker : IBodySlideXmlFilePicker

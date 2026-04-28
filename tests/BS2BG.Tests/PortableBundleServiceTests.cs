@@ -10,6 +10,7 @@ using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
 using BS2BG.Core.Serialization;
+using System.Reactive.Threading.Tasks;
 using Xunit;
 using ModelSetSlider = BS2BG.Core.Models.SetSlider;
 using SliderDefault = BS2BG.Core.Formatting.SliderDefault;
@@ -101,7 +102,7 @@ public sealed class PortableBundleServiceTests
         viewModel.BundleTargetPath = bundlePath;
         viewModel.BundleOutputIntent = OutputIntent.All;
 
-        await viewModel.PreviewPortableBundleCommand.Execute();
+        await viewModel.PreviewPortableBundleCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         viewModel.BundlePreviewSummary.Should().Contain("Portable bundle preview");
         viewModel.BundlePreviewSummary.Should().Contain("Referenced custom profiles only");
@@ -130,7 +131,7 @@ public sealed class PortableBundleServiceTests
         viewModel.BundleOutputIntent = OutputIntent.BodyGen;
         viewModel.BundleOverwriteAllowed = false;
 
-        await viewModel.CreatePortableBundleCommand.Execute();
+        await viewModel.CreatePortableBundleCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         viewModel.StatusMessage.Should().Contain("Target files already exist. Enable overwrite to replace them.");
         File.ReadAllText(bundlePath).Should().Be("original");
@@ -161,7 +162,7 @@ public sealed class PortableBundleServiceTests
         viewModel.BundleTargetPath = Path.Combine(directory.Path, "dirty.zip");
         viewModel.BundleOutputIntent = OutputIntent.BodyGen;
 
-        await viewModel.PreviewPortableBundleCommand.Execute();
+        await viewModel.PreviewPortableBundleCommand.Execute().ToTask(TestContext.Current.CancellationToken);
 
         viewModel.BundlePreviewSummary.Should().Contain("unsaved-project.jbs2bg");
         viewModel.BundlePreviewSummary.Should().Contain("current open project state");

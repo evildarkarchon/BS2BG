@@ -1203,6 +1203,8 @@ public sealed class MainWindowViewModelTests
 
         public string? BosJsonExportFolder { get; set; }
 
+        public string? BundlePath { get; set; }
+
         public int OpenProjectCallCount { get; private set; }
 
         public Task<string?> PickOpenProjectFileAsync(CancellationToken cancellationToken)
@@ -1219,6 +1221,9 @@ public sealed class MainWindowViewModelTests
 
         public Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken) =>
             Task.FromResult(BosJsonExportFolder);
+
+        public Task<string?> PickSaveBundleFileAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(BundlePath);
     }
 
     private sealed class CapturingUserPreferencesService(UserPreferences initialPreferences) : IUserPreferencesService
@@ -1266,6 +1271,8 @@ public sealed class MainWindowViewModelTests
 
         public string? FolderPickerResult { get; set; }
 
+        public string? BundleSaveResult { get; set; }
+
         public string? LastOpenProjectSuggestedStartFolder { get; private set; }
 
         public string? LastSaveProjectSuggestedStartFolder { get; private set; }
@@ -1297,6 +1304,9 @@ public sealed class MainWindowViewModelTests
             FolderSuggestedStartFolders.Add(suggestedStartFolder);
             return Task.FromResult(FolderPickerResult);
         }
+
+        public Task<string?> PickSaveBundleFileAsync(string? suggestedStartFolder, CancellationToken cancellationToken) =>
+            Task.FromResult(BundleSaveResult);
 
         public Task<string?> ResolveStartFolderAsync(string? path, CancellationToken cancellationToken) =>
             Task.FromResult(!string.IsNullOrWhiteSpace(path) && validFolders.Contains(path) ? path : null);

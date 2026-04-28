@@ -9,4 +9,6 @@ public interface IFileDialogService
     Task<string?> PickBodyGenExportFolderAsync(CancellationToken cancellationToken);
 
     Task<string?> PickBosJsonExportFolderAsync(CancellationToken cancellationToken);
+
+    Task<string?> PickSaveBundleFileAsync(CancellationToken cancellationToken);
 }
