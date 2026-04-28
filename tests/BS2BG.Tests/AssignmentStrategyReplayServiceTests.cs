@@ -7,6 +7,11 @@ namespace BS2BG.Tests;
 
 public sealed class AssignmentStrategyReplayServiceTests
 {
+    private static readonly string[] NordRace = { "NordRace" };
+    private static readonly string[] MrHandyRace = { "MrHandyRace" };
+    private static readonly string[] PresetA = { "PresetA" };
+    private static readonly string[] PresetB = { "PresetB" };
+
     [Theory]
     [InlineData(OutputIntent.BodyGen)]
     [InlineData(OutputIntent.All)]
@@ -45,7 +50,7 @@ public sealed class AssignmentStrategyReplayServiceTests
         result.StrategyKind.Should().BeNull();
         result.AssignedCount.Should().Be(0);
         result.BlockedNpcs.Should().BeEmpty();
-        AssignmentSnapshot(result.Project).Should().Equal("Aela=StalePreset", "Codsworth=StalePreset", "Danica=StalePreset");
+        AssignmentSnapshot(result.Project).Should().Equal("Aela=PresetC", "Codsworth=PresetC", "Danica=PresetC");
     }
 
     [Fact]
@@ -74,8 +79,8 @@ public sealed class AssignmentStrategyReplayServiceTests
             null,
             new[]
             {
-                new AssignmentStrategyRule("Only Nords", new[] { "PresetA" }, new[] { "NordRace" }, 1.0, null),
-                new AssignmentStrategyRule("Only Robots", new[] { "PresetB" }, new[] { "MrHandyRace" }, 1.0, null)
+                new AssignmentStrategyRule("Only Nords", PresetA, NordRace, 1.0, null),
+                new AssignmentStrategyRule("Only Robots", PresetB, MrHandyRace, 1.0, null)
             });
 
         var result = CreateReplayService().PrepareForBodyGen(project, OutputIntent.BodyGen, cloneBeforeReplay: true);
@@ -88,8 +93,8 @@ public sealed class AssignmentStrategyReplayServiceTests
         blockedNpc.Name.Should().Be("Danica");
         blockedNpc.EditorId.Should().Be("Danica");
         blockedNpc.Race.Should().Be("BretonRace");
-        blockedNpc.FormId.Should().Be("000003");
-        AssignmentSnapshot(result.Project).Should().Equal("Aela=PresetA", "Codsworth=PresetB", "Danica=StalePreset");
+        blockedNpc.FormId.Should().Be("3");
+        AssignmentSnapshot(result.Project).Should().Equal("Aela=PresetA", "Codsworth=PresetB", "Danica=PresetC");
     }
 
     [Fact]
@@ -187,7 +192,7 @@ public sealed class AssignmentStrategyReplayServiceTests
         var result = CreateReplayService().MorphAssignmentService.ApplyStrategy(project, strategy, eligibleRows);
 
         result.AssignedCount.Should().Be(2);
-        AssignmentSnapshot(project).Should().Equal("Aela=PresetA", "Codsworth=StalePreset", "Danica=PresetB");
+        AssignmentSnapshot(project).Should().Equal("Aela=PresetB", "Codsworth=PresetC", "Danica=PresetA");
     }
 
     private static TestReplayServices CreateReplayService()
@@ -199,10 +204,9 @@ public sealed class AssignmentStrategyReplayServiceTests
     private static ProjectModel CreateProjectWithStaleAssignments()
     {
         var project = new ProjectModel();
-        var stale = new SliderPreset("StalePreset");
         project.SliderPresets.Add(new SliderPreset("PresetA"));
         project.SliderPresets.Add(new SliderPreset("PresetB"));
-        project.SliderPresets.Add(new SliderPreset("PresetC"));
+        var stale = new SliderPreset("PresetC");
         project.SliderPresets.Add(stale);
         project.MorphedNpcs.Add(CreateNpc("Danica", "Skyrim.esm", "Danica", "000003", "BretonRace", stale));
         project.MorphedNpcs.Add(CreateNpc("Aela", "Skyrim.esm", "Aela", "000001", "NordRace", stale));

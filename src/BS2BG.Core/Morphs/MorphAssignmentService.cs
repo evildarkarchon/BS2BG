@@ -165,7 +165,11 @@ public sealed class MorphAssignmentService(IRandomAssignmentProvider randomAssig
         if (project is null) throw new ArgumentNullException(nameof(project));
         if (strategy is null) throw new ArgumentNullException(nameof(strategy));
 
-        return new AssignmentStrategyService(randomAssignmentProvider).Apply(project, strategy, eligibleRows);
+        // Seeded strategies must use the deterministic provider directly so saved seeds reproduce identically across automation runs; unseeded calls keep the injected provider so tests can substitute their own draws.
+        var service = strategy.Seed.HasValue
+            ? new AssignmentStrategyService(new DeterministicAssignmentRandomProvider(strategy.Seed.Value))
+            : new AssignmentStrategyService(randomAssignmentProvider);
+        return service.Apply(project, strategy, eligibleRows);
     }
 
     public bool RemoveNpc(ProjectModel project, Npc? npc)
