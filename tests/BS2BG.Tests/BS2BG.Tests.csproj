@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BS2BG.App\BS2BG.App.csproj"/>
+    <ProjectReference Include="..\..\src\BS2BG.Cli\BS2BG.Cli.csproj"/>
     <ProjectReference Include="..\..\src\BS2BG.Core\BS2BG.Core.csproj"/>
   </ItemGroup>
 
