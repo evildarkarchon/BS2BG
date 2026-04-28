@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Validation and Diagnostics** - Users can inspect project health, import effects, and export consequences before committing risky changes.
 - [ ] **Phase 4: Profile Extensibility and Controlled Customization** - Users can manage custom local profiles without corrupting bundled profiles or legacy projects.
 - [x] **Phase 5: Automation, Sharing, and Release Trust** - Users can automate generation, bundle projects, and verify portable releases through trusted paths. (completed 2026-04-28)
-- [ ] **Phase 6: Compose Custom Profiles in Headless Generation** - Projects that reference embedded or custom profiles generate through the CLI with the same request-scoped profile catalog semantics as GUI and bundle workflows.
+- [x] **Phase 6: Compose Custom Profiles in Headless Generation** - Projects that reference embedded or custom profiles generate through the CLI with the same request-scoped profile catalog semantics as GUI and bundle workflows. (completed 2026-04-28)
 - [ ] **Phase 7: Replay Saved Strategies in Automation Outputs** - CLI and portable bundle outputs replay saved deterministic assignment strategies before morph generation so automation is reproducible from project data.
 
 ## Phase Details
@@ -196,5 +196,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Validation and Diagnostics | 8/8 | Complete | 2026-04-27 |
 | 4. Profile Extensibility and Controlled Customization | 8/8 | Complete | 2026-04-27 |
 | 5. Automation, Sharing, and Release Trust | 10/10 | Complete | 2026-04-28 |
-| 6. Compose Custom Profiles in Headless Generation | 0/1 | Planned | - |
+| 6. Compose Custom Profiles in Headless Generation | 1/1 | Complete | 2026-04-28 |
 | 7. Replay Saved Strategies in Automation Outputs | 0/TBD | Not started | - |
