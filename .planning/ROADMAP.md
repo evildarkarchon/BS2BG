@@ -142,7 +142,7 @@ Plans:
 - [ ] 05-05-PLAN.md — Expose undoable assignment strategy configuration in the Morphs UI.
 - [ ] 05-06-PLAN.md — Create Core portable project bundle zip service with path-scrubbed manifests and reports.
 - [ ] 05-07-PLAN.md — Wire portable bundle creation into CLI and GUI preview/write workflows.
-- [ ] 05-08-PLAN.md — Extend release trust automation for signed/unsigned checksum-backed packages.
+- [ ] 05-08-PLAN.md — Extend release trust automation for signed/unsigned checksum-backed packages and packaged CLI distribution.
 - [ ] 05-09-PLAN.md — Add packaged BodyGen/BodySlide/BoS setup and troubleshooting guidance.
 **UI hint**: yes
 
