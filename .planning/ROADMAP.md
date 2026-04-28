@@ -136,8 +136,8 @@ Cross-cutting constraints: custom profile identity is internal display-name base
 **Plans**: 9 plans
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md — Create dedicated CLI executable foundation and typed headless generation contracts.
-- [ ] 05-03-PLAN.md — Persist full assignment strategy configuration in backward-compatible project files.
+- [x] 05-01-PLAN.md — Create dedicated CLI executable foundation and typed headless generation contracts.
+- [x] 05-03-PLAN.md — Persist full assignment strategy configuration in backward-compatible project files.
 **Wave 2 (blocked on Wave 1 completion)**
 - [ ] 05-02-PLAN.md — Implement validation-first headless generation through existing Core services and writers.
 - [ ] 05-04-PLAN.md — Implement deterministic assignment strategy execution and no-eligible diagnostics.
