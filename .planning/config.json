@@ -15,5 +15,5 @@
   "features": {
     "global_learnings": true
   },
-  "context_window": 400000
+  "context_window": 1000000
 }

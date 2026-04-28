@@ -1,7 +1,7 @@
 ---
 phase: 7
 reviewers: [gemini, claude, codex]
-reviewed_at: 2026-04-28T01:44:21.5259936-07:00
+reviewed_at: 2026-04-28T01:58:08.7316634-07:00
 plans_reviewed: [07-01-PLAN.md, 07-02-PLAN.md, 07-03-PLAN.md]
 ---
 
@@ -9,283 +9,377 @@ plans_reviewed: [07-01-PLAN.md, 07-02-PLAN.md, 07-03-PLAN.md]
 
 ## Gemini Review
 
-# Cross-AI Plan Review: Phase 07 - Replay Saved Strategies in Automation Outputs
+This review evaluates the implementation plans for **Phase 7: Replay Saved Strategies in Automation Outputs**. These plans aim to ensure that CLI and portable bundle outputs are reproducible from saved project data by replaying deterministic assignment strategies before morph generation.
 
-I have completed a comprehensive review of plans **07-01**, **07-02**, and **07-03**. The proposed strategy is technically sound, architecturally consistent with recent Phase 6 patterns, and rigorously focused on the modder-trust constraints of the project.
+---
 
-## 1. Summary
-The plans provide a high-quality, surgical approach to closing the v1.0 milestone automation gap. By centralizing replay logic in a dedicated Core service (`AssignmentStrategyReplayService`) and enforcing request-scoped state isolation through cloning, the plans ensure that CLI and portable bundle outputs are reproducible from saved project data. The TDD strategy, particularly the requirement for "stale assignment" test fixtures, is excellent and ensures that the fix is empirically verified against the root cause (stale in-memory state).
+### **General Phase Assessment**
+The phase is exceptionally well-architected. It transforms the current "stale assignment" bug into a robust, "fail-fast" automation pipeline. By centralizing the replay logic into a dedicated Core service (`AssignmentStrategyReplayService`) and strictly separating the "source project" (for serialization) from the "working project" (for generation), the plans achieve high-confidence reproducibility. The plans also proactively incorporate feedback from previous AI reviews, particularly regarding seeded determinism and constructor ripple effects.
 
-## 2. Strengths
-- **Centralized Replay Logic**: Creating `AssignmentStrategyReplayService` as a reusable Core seam prevents logic drift between CLI and bundle services, ensuring consistent trigger (D-01) and blocking (D-06) behavior.
-- **Robust State Isolation**: The explicit use of `cloneBeforeReplay` in both automation services perfectly satisfies the constraint to preserve bundled project source data (D-04/D-05) while generating replayed outputs.
-- **High-Signal Diagnostics**: The plans effectively translate the "Visibility" decisions (D-08/D-09) into concise success summaries and actionable failure details, significantly improving the utility of automation for modders.
-- **Preservation of RNG Seams**: Reusing `MorphAssignmentService.ApplyStrategy` ensures that deterministic replay remains backed by the existing `DeterministicAssignmentRandomProvider` without bypassing the established random-provider abstraction.
-- **Strategic Validation**: Treating blocked strategy replays as fatal `ValidationBlocked` errors (Plan 02/03) instead of mere cautions aligns with a "fail-fast" automation philosophy that prioritizes output correctness over partial completion.
+---
 
-## 3. Concerns
-- **Performance (LOW)**: Cloning large projects (`ProjectModel.ReplaceWith`) for every automation request adds minor overhead. **Mitigation**: This is negligible compared to the I/O costs of file generation and zipping, and it is a necessary trade-off for the "single mental model" safety pattern established in research.
-- **BoS/BodyGen Project Divergence (LOW)**: In Plan 03, the mention of using the "original request project" for BoS while using "replayResult.Project" for BodyGen within the same bundle plan might lead to slight code complexity. **Mitigation**: Using `replayResult.Project` for *all* generated output entries within the bundle plan (regardless of intent) would likely be cleaner and safer, even if BoS output is unaffected by NPC assignments.
-- **Scrubbing Replay Details (LOW)**: Replay failure details (blocked NPC names/mods) must not accidentally leak private local paths. **Mitigation**: Plan 03 Task 2 explicitly mentions passing report text through the existing `BundlePathScrubber`, which handles this risk effectively.
+### **07-01-PLAN.md: Core Replay Seam**
 
-## 4. Suggestions
-- **ProjectModel.Clone()**: Consider adding a simple `Clone()` method to `ProjectModel` that wraps the `new ProjectModel() + ReplaceWith()` pattern to keep the orchestration code in the new services more concise.
-- **Shared Failure Formatter**: If the formatting of "Blocked NPC Details" (D-09) becomes non-trivial, consider adding a small helper to `DiagnosticReportTextFormatter` or the new replay service to ensure failure text is identical between CLI and Bundle reports.
-- **Integration Test Coverage**: Ensure that the "stale assignment" test fixtures in Task 1 of Plans 02 and 03 are sufficiently different from the "replayed" output to avoid "false green" results where the test passes simply because *any* assignment exists.
+#### **Summary**
+This foundational plan creates the reusable Core seam required for all automation paths. It focuses on isolating mutation via cloning and preserving the random-provider abstraction.
 
-## 5. Risk Assessment
-**Risk Level: LOW**
+#### **Strengths**
+*   **Encapsulation**: Centralizing the replay logic in `AssignmentStrategyReplayService` prevents divergence between CLI and bundle behavior.
+*   **RNG Integrity**: The update to `MorphAssignmentService.ApplyStrategy` ensures that saved seeded strategies honor the deterministic path while unseeded GUI draws still use the injected provider.
+*   **Dirty State Protection**: Explicit TDD cases for `IsDirty` and `ChangeVersion` guarantee that the source project remains pristine during automation.
 
-The architectural risk is minimal because the plans build upon proven Core services (`AssignmentStrategyService`) and established automation patterns from Phase 6 (`RequestScopedProfileCatalogComposer`). The most significant technical risk - accidentally mutating the source project - is directly addressed and mitigated by the mandatory cloning in the `AssignmentStrategyReplayService`. The TDD gate ensures that the primary behavioral goal (reproducibility) is verified before implementation is considered complete.
+#### **Concerns**
+*   **Performance (LOW)**: Cloning a `ProjectModel` with thousands of NPCs incurs allocation overhead. However, this is negligible compared to the I/O of bundle creation and is a necessary trade-off for state safety.
+*   **NPC Identity (LOW)**: Cloned NPC instances will have new memory references. The plan correctly mitigates this by identifying blocked NPCs via stable domain properties (`Mod`, `FormId`, etc.) instead of object references.
+
+#### **Suggestions**
+*   **ProjectModel.Clone()**: While `ReplaceWith` is effective, adding a surgical `ProjectModel.Clone()` extension or method would make the orchestration in Task 2 even cleaner.
+
+#### **Risk Assessment: LOW**
+The plan uses standard patterns, avoids byte-sensitive writers, and has a strong TDD gate.
+
+---
+
+### **07-02-PLAN.md: CLI/Headless Wiring**
+
+#### **Summary**
+This plan integrates the replay seam into the CLI. It ensures that `generate --intent bodygen/all` produces replayed output and blocks generation if any NPCs are ineligible for the saved strategy.
+
+#### **Strengths**
+*   **Correct Gate Ordering**: Replay occurs before overwrite preflight and file writes, ensuring no files (including BoS) are produced if BodyGen replay fails.
+*   **Visibility**: Updating `Program.cs` to surface the replay summary on stdout fulfills the requirement for concise success reporting without cluttering scripts.
+*   **Stale-Assignment Fixtures**: The requirement to use "intentionally wrong" assignments in tests is the most effective way to prove that replay is actually functioning.
+
+#### **Concerns**
+*   **Templates Parity (LOW)**: Since `templates.ini` does not depend on assignments, using a cloned project could technically introduce drift if the clone logic were broken. The plan mitigates this with a specific parity test.
+
+#### **Suggestions**
+*   **Exit Code Documentation**: Ensure the CLI `--help` or documentation reflects that `ValidationBlocked` (2) now covers assignment strategy failures.
+
+#### **Risk Assessment: LOW**
+The wiring is surgical and the dependency on the Plan 01 seam is clearly defined.
+
+---
+
+### **07-03-PLAN.md: Bundle Wiring**
+
+#### **Summary**
+This plan wires replay into the portable bundle service. It is the most complex of the three, requiring updates to both the Core bundling logic and the GUI's dependency injection.
+
+#### **Strengths**
+*   **Semantic Preservation**: Generating `outputs/bodygen/morphs.ini` from replayed state while keeping `project/project.jbs2bg` as the original source state perfectly balances reproducibility with project integrity.
+*   **Consistent Generation Source**: Refactoring `AddGeneratedOutputEntries` to use the same `outputProject` for all writers (BodyGen and BoS) eliminates the risk of "dual-project" drift identified in earlier reviews.
+*   **Reporting Contract**: Adding `ReplayReportText` to the bundle result and a dedicated `reports/replay.txt` in the zip ensures the replay outcome is persistent and discoverable.
+
+#### **Concerns**
+*   **Constructor Ripple Effects (MEDIUM)**: This plan modifies constructors used by the CLI, the GUI (`AppBootstrapper`), and three different test factories. Failure to update any of these will cause compilation or runtime DI errors. **Mitigation**: Task 2 explicitly enumerates these sites.
+*   **Privacy Scrubbing (LOW)**: Failure details include NPC names. While usually public mod data, the plan correctly ensures these go through the `BundlePathScrubber` just in case.
+
+#### **Suggestions**
+*   **Test Semantic Preservation**: The plan's suggestion to parse the bundled `.jbs2bg` back through `ProjectFileService.Load` to verify assignments is much stronger than a "string contains" check; ensure this is prioritized in the implementation.
+
+#### **Risk Assessment: MEDIUM**
+The risk is slightly elevated due to the breadth of the constructor changes (App/CLI/Tests), but the logic itself is sound and the verification plan is robust.
+
+---
+
+### **Final Verdict**
+**APPROVED.** The plans are high-quality, technically precise, and directly address the core value of "modder trust" by ensuring automation is deterministic and verifiable. Proceed with Wave 1.
 
 ---
 
 ## the agent Review
 
-# Phase 7 Plan Review: Replay Saved Strategies in Automation Outputs
+# Cross-AI Plan Review: Phase 07 (Revision Pass)
 
 ## Summary
 
-The three-plan structure is well-architected and faithfully implements the locked Phase 7 decisions (D-01 through D-09). Plan 01 establishes a clean Core-only replay seam with TDD, then Plans 02 and 03 wire it into CLI/headless and bundle paths respectively, both depending only on Plan 01 (correct DAG). The plans correctly identify that this is an orchestration problem, not a new algorithm problem, and reuse `MorphAssignmentService.ApplyStrategy`/`AssignmentStrategyService` rather than introducing new RNG. The biggest concerns are around (a) how `ReplaceWith`'s `MarkClean()` and dirty-state side effects interact with bundle source-project preservation, (b) BoS JSON generation continuing to use `request.Project` while BodyGen uses the replay clone in the same bundle plan, and (c) whether the replay summary text is actually exposed where users will see it (CLI stdout vs bundle report).
+The revisions absorb most of the prior round's high-value feedback: the constructor ripple in Plans 02/03 is now enumerated, the bundle dual-project footgun is collapsed by using `replayResult.Project` for both BodyGen and BoS generation, the replay summary has an explicit contract surface (`ReplayReportText` + `reports/replay.txt`), and Plan 01 grew explicit seeded-determinism, dirty-state, and empty-NPC tests. The biggest remaining issue is **a real behavioral bug introduced by Plan 01's edit to `MorphAssignmentService.ApplyStrategy`**: the new seeded dispatch path uses `AssignmentStrategyService.Apply(project, strategy)` (2-arg static) and silently drops the `eligibleRows` parameter, regressing existing GUI scoped-bulk semantics. Plan 02 also leaves CLI's BoS path using the source `project.SliderPresets` while BodyGen uses the clone — mirroring the dual-project pattern that was correctly eliminated in Plan 03.
 
 ---
 
 ## Plan 07-01: Core Replay Seam
 
 ### Strengths
-- **Clean TDD discipline** - RED-GREEN with concrete behavior list (5 distinct test cases) covering D-01, D-03, D-05, D-06, D-07, D-08, D-09.
-- **Reuses `MorphAssignmentService.ApplyStrategy`** correctly preserving the random-provider seam (D-07).
-- **Result contract design** matches existing record style (`HeadlessGenerationContracts.cs`, `PortableProjectBundleContracts.cs`) with `IsBlocked` convenience property for downstream gate decisions.
-- **`cloneBeforeReplay` parameter** gives callers explicit choice - important since CLI loads fresh per request and may not need clone overhead, while bundle MUST clone.
-- Scope is tightly bounded - no writer changes, no UI, no new strategy kinds.
+- 7 explicit test cases now cover D-01, D-03, D-05, D-06, D-07, D-08, D-09 plus seeded determinism, dirty/ChangeVersion invariants, and empty-NPC corner cases.
+- `AssignmentStrategyReplayResult` moved to its own `AssignmentStrategyReplayContracts.cs` file — bundle code no longer imports a "Headless" file. Good.
+- Test 5 asserts `IsDirty` and `ChangeVersion` on the source project — Claude's clone-fidelity concern.
+- Test 6 pins a seeded sequence — Codex's seeded-determinism concern.
+- `[Theory]` over `BodyGen` and `All` locks both intents independently.
 
 ### Concerns
-- **[MEDIUM] `ProjectModel.ReplaceWith` calls `MarkClean()` and triggers `DirtyStateChanged`** (ProjectModel.cs:104, 142-149). On a freshly-constructed `new ProjectModel()` this is harmless because `IsDirty` starts false, but the `ChangeVersion` increments and event firing during clone happens in a clone path that's about to be mutated again by `ApplyStrategy`. Worth confirming this doesn't leak observable state changes anywhere (it shouldn't - it's a fresh local instance - but the test in Task 1 should explicitly assert `sourceProject.IsDirty` and `sourceProject.ChangeVersion` are unchanged after replay, not just that assignments differ).
-- **[MEDIUM] `ReplaceWith` does not preserve NPC stable App-layer identity** (Phase 2 WORK-02). Each NPC is reconstructed with `new Npc(npc.Name) { Mod, EditorId, Race, FormId }`. For Core-only automation this is fine, but the blocked-NPC details returned in `BlockedNpcs` will reference the *clone's* NPC instances, not the source project's. Test 4 says blocked rows are "identifiable by `Mod`, `EditorId`, `Race`, and `FormId`" - good, that's the right identity contract. Just confirm error messages/logs don't leak the clone instance reference anywhere.
-- **[LOW] No test for `OutputIntent.All`** - Test 1 says "BodyGen and All intents" but the behavior list combines them. Add explicit `[Theory]` or two test methods so a future regression that breaks `All` but not `BodyGen` is caught.
-- **[LOW] No null-strategy + `cloneBeforeReplay: true` test** - Should still return a clone (or source?) with `Replayed=false`. The behavior here matters for callers: if bundle always passes `cloneBeforeReplay: true`, what `Project` does it get back when there's no strategy? The implementation as specified clones first, then short-circuits, so it returns the clone. That's correct (bundle still gets isolation guarantees) but should be tested.
-- **[LOW] `AssignmentStrategyReplayResult` location** - frontmatter says `HeadlessGenerationContracts.cs`, but the result is shared by bundle service too. Consider a dedicated `AssignmentStrategyReplayContracts.cs` or place it next to the service in `AssignmentStrategyReplayService.cs`. Cosmetic, but bundle-service authors shouldn't have to import a "Headless" contract file.
+- **[HIGH] `MorphAssignmentService.ApplyStrategy` regression: `eligibleRows` is silently dropped in the seeded path.** Plan 01 Task 2 says "when `strategy.Seed.HasValue`, delegate to `AssignmentStrategyService.Apply(project, strategy)`" — that's the 2-arg static overload that uses `eligibleRows: null` (= all `MorphedNpcs`). Existing GUI callers in `MorphsViewModelStrategyTests` and the scoped-bulk paths pass `eligibleRows` for visible/selected scopes. After this change, **a seeded GUI scoped-bulk run will silently expand to full project scope**, violating WORK-03. The fix is straightforward: branch on the provider, not the entry point:
+  ```csharp
+  var service = strategy.Seed.HasValue
+      ? new AssignmentStrategyService(new DeterministicAssignmentRandomProvider(strategy.Seed.Value))
+      : new AssignmentStrategyService(randomAssignmentProvider);
+  return service.Apply(project, strategy, eligibleRows);
+  ```
+  The plan should mandate this exact shape (or explicitly state `eligibleRows` is preserved across both paths).
+- **[HIGH] Plan 01's targeted gate misses GUI regressions.** Acceptance only runs `AssignmentStrategyReplayServiceTests`. Because Task 2 modifies `MorphAssignmentService.ApplyStrategy` — a service consumed by `MorphsViewModel` — the gate must include `AssignmentStrategyServiceTests` and `MorphsViewModelStrategyTests` (or the full suite). Otherwise the `eligibleRows` regression and any other GUI-side breakage land silently and only surface in Wave 2/3 noise.
+- **[MEDIUM] Test 4 documents partial mutation as expected without explicit guard rails.** "Documents that eligible rows may have been mutated on the working project" is the right factual statement, but Test 4 should also explicitly assert `result.IsBlocked == true` so downstream code (Plan 02/03) cannot accidentally consume a partially-mutated working project for output writes. Make the contract: callers must not use `Project` for generation when `IsBlocked` is true.
+- **[MEDIUM] No-clone path is untested.** Test 5 covers `cloneBeforeReplay: true` (source unchanged). The `cloneBeforeReplay: false` path mutates the source — but no test asserts that this is the actual behavior. Add a sibling test so both contracts are locked; otherwise nothing prevents a future "always clone" regression.
+- **[LOW] WHY comment on the seeded fork.** The seeded vs unseeded dispatch in `MorphAssignmentService` is non-obvious; a future reader will wonder why two code paths exist. The plan asks for a "short WHY comment" but doesn't specify what to say. Suggested wording: "Seeded strategies must use the deterministic provider directly so saved seeds reproduce identically across automation runs; unseeded calls keep the injected provider so tests can substitute their own draws."
 
 ### Suggestions
-- Add explicit assertions in Task 1: `sourceProject.IsDirty.Should().BeFalse()` and `sourceProject.MorphedNpcs[i].SliderPresets.Should().BeEquivalentTo(originalAssignments)` after replay with `cloneBeforeReplay: true`.
-- Add a `[Theory]` for `OutputIntent.BodyGen` and `OutputIntent.All` to lock both intents.
-- Place `AssignmentStrategyReplayResult` in either its own file or co-located with the service, not in `HeadlessGenerationContracts.cs`.
+- Replace the seeded-dispatch action with the `eligibleRows`-preserving form above and add it to acceptance criteria as `eligibleRows` appears in both branches.
+- Expand Plan 01 acceptance gate to `dotnet test --filter "FullyQualifiedName~AssignmentStrategyReplayServiceTests|FullyQualifiedName~AssignmentStrategyServiceTests|FullyQualifiedName~MorphsViewModelStrategyTests"`.
+- Add a no-clone source-mutation test to Test 5 (or as Test 5b).
 
-### Risk: **LOW**
-Pure additive Core code with strong TDD discipline and well-understood dependencies.
+### Risk: **MEDIUM**
+The replay seam itself is well-designed, but the `MorphAssignmentService` edit is a load-bearing change to a shared service with a real downstream regression baked into the plan as written.
 
 ---
 
 ## Plan 07-02: CLI/Headless Wiring
 
 ### Strengths
-- **Gate ordering is correct** - replay before overwrite preflight before writes (matches research Pattern 3 and existing missing-profile blocker pattern from Phase 6).
-- **Maps blocked replay to `AutomationExitCode.ValidationBlocked`** preserving stable script-facing exit codes (D-09).
-- **BoS-only non-replay test** locks D-01 behavior so a future refactor can't accidentally replay on `--intent bos`.
-- **Stale-assignment fixture** - task 1 explicitly requires fixtures where existing assignments are wrong, matching research Pitfall 5.
-- **Reuses `ConsoleCaptureCollection`** for `Program.Main` tests (matches Phase 6 LEARNINGS).
+- `Program.cs` now in `files_modified` and constructor injection is fully spelled out.
+- Stale-assignment fixture, seeded determinism repeat-test, BoS-only non-replay, no-strategy fallback, and `OutputIntent.All` blocker-no-write all covered.
+- Explicit gate-order test (replay → overwrite preflight → writes).
+- Templates byte-parity test (clone vs no-clone) locks the cloned-project invariant.
 
 ### Concerns
-- **[HIGH] `cloneBeforeReplay: true` for CLI is a behavioral change vs research recommendation A1.** Research assumption A1 says "Always use the helper result's `Project` and clone for both CLI and bundle" which the plan follows - fine. But the existing `HeadlessGenerationService.Run` *also* uses `project` for `templateGenerationService.GenerateTemplates(project.SliderPresets, ...)` and `bosJsonExportWriter.Write(..., project.SliderPresets, ...)`. After Plan 02, BodyGen morph generation uses `replayResult.Project`, but templates and BoS still use `project` (the loaded one) - **except both should produce identical bytes since `SliderPresets` is cloned identically by `ReplaceWith`**. Confirm the test asserts `templates.ini` bytes are identical with and without replay (since templates don't depend on NPC assignments). If `ReplaceWith` ever introduces preset-cloning drift, byte parity breaks silently. Add an explicit byte-equality test for `templates.ini`.
-- **[MEDIUM] Replay summary text destination is unclear.** The plan says "Append success message text such as `Assignment strategy replayed: {kind}; assigned NPCs: {assigned}; blocked NPCs: 0.`" to `HeadlessGenerationResult.Message`. But on success today, `Program.cs` likely prints `WrittenFiles` paths (per existing test `ProgramMainGenerateAllInvokesServiceInProcessAndPrintsWrittenFiles`). Where does this success message actually surface in CLI stdout? Task 1 says "Program.Main test: `generate --intent bodygen` prints the concise replay summary on stdout when replay succeeds" - but no task in 07-02 modifies `src/BS2BG.Cli/Program.cs`. If `Program.WriteResult` only prints `WrittenFiles` on success, the summary will be invisible. **Either (a) include a `Program.cs` edit in `files_modified`, or (b) clarify that `Result.Message` is included in stdout, or (c) drop the Program.Main stdout assertion.**
-- **[MEDIUM] Failure-message PII scope.** "Failure message must include blocked NPC `Mod`, `Name`, `EditorId`, `Race`, `FormId`, and `Reason`." For CLI this goes to stderr. NPC names from BodySlide projects are typically character names from mods (public data), not personally identifying - so this is fine. But the threat model T-07-05 says "do not include private file paths beyond existing output error handling" which is correct. Worth a one-line confirmation that no `request.ProjectPath` or output directory leaks into the blocked-NPC message.
-- **[MEDIUM] Service construction.** "Instantiate `AssignmentStrategyReplayService` with a `MorphAssignmentService` that uses `RandomAssignmentProvider`, or inject/store an equivalent Core-only replay service inside `HeadlessGenerationService`." This is vague. The current `HeadlessGenerationService` constructor takes 7 services. Adding `AssignmentStrategyReplayService` as an 8th constructor parameter is the cleanest answer, but this changes the public constructor signature, which `CliGenerationTests.CreateHeadlessService()` and `Program.cs` both depend on. The plan should be explicit: **add as constructor parameter and update both call sites**, not lazy-instantiate.
-- **[LOW] No test that overwrite preflight still runs after replay.** Task 1 doesn't assert ordering. Add a test where replay succeeds and target files exist without `--overwrite` -> expect `OverwriteRefused`, not `Success`.
+- **[MEDIUM] CLI dual-project pattern reintroduced.** Plan 02 Task 2 says "use `replayResult.Project` for BodyGen validation and BodyGen `PlanTargets`/template/morph generation; keep BoS JSON using the same `requestProfileCatalog` and byte-equivalent slider presets." This is exactly the dual-project shape that Plan 03 correctly eliminates. CLI should use `replayResult.Project` consistently for **all** generation (BodyGen + BoS), since `SliderPresets` clone fidelity is what makes the templates parity test pass — the same fidelity covers BoS bytes. Either commit to single-project consistency in CLI to match Plan 03, or add an explicit BoS byte-parity test mirroring the templates test.
+- **[MEDIUM] Replay-before-validation is implicit.** The plan lists order as "after project load and request profile catalog construction, then run validation/missing-profile checks/overwrite preflight/output planning". But the validation that follows must operate on `replayResult.Project`, not the source `project` — otherwise stale-assignment validation findings could block runs that replay would have fixed (Codex's HIGH concern from prior round). The plan implies this but doesn't enforce it; spell it out: "Validation, missing-profile checks, and PlanTargets all run against `replayResult.Project`. The original `project` is referenced only when `replayResult.Replayed == false`."
+- **[MEDIUM] `HeadlessGenerationResult.Message` semantics on success are ambiguous.** Today the success message is `"Generation completed successfully."` and `WriteResult` already prints it on stdout. The plan says to "append" the replay summary — does that mean the final Message becomes `"Assignment strategy replayed: {kind}; assigned NPCs: {n}; blocked NPCs: 0.\nGeneration completed successfully."`, or does the summary replace the existing line, or is there a new field? Tests assert `StandardOutput.Should().Contain("Assignment strategy replayed")`, but they don't lock the exact format. Pick: `Message` is multi-line with the replay summary first, then the success line — and lock it with a test that checks both substrings.
+- **[MEDIUM] Unseeded-strategy reproducibility hole.** With Plan 01's fix, seeded strategies are deterministic via `DeterministicAssignmentRandomProvider`, but unseeded strategies use the injected `RandomAssignmentProvider` — so repeated CLI runs of the same unseeded saved strategy produce different `morphs.ini` bytes. This may be intentional (users who want reproducibility save a seed) but it should be acknowledged in the plan. Otherwise users running `bs2bg generate` twice with an unseeded saved strategy will be surprised when bytes change. At minimum: document this in the success message (e.g., "(unseeded — non-deterministic)") or in `07-LEARNINGS.md`.
+- **[LOW] Failure-message PII assertion is loose.** The plan says blocked NPC details "must not include `request.ProjectPath` or output-directory strings". A test should explicitly assert `result.Message.Should().NotContain(request.ProjectPath).And.NotContain(request.OutputDirectory)` to lock this.
 
 ### Suggestions
-- Add `src/BS2BG.Cli/Program.cs` to `files_modified` if the success summary needs to print to stdout - or change Task 1 to assert on `result.Message` text, not stdout.
-- Specify constructor injection explicitly: "Add `AssignmentStrategyReplayService replayService` as a new constructor parameter; update `CreateHeadlessService()` test factory and `Program.cs` DI composition."
-- Add an explicit `templates.ini` byte-equality test (clone vs no-clone) to lock that templates are unaffected by the replay clone path.
-- Add an overwrite-after-successful-replay test to lock gate ordering.
+- Use `replayResult.Project` for both BodyGen and BoS in `HeadlessGenerationService.Run`. Add an explicit BoS byte-parity test (clone vs no-clone) mirroring the templates test.
+- Add a "validation runs against replay project" assertion: a test where the source project has a stale preset reference that validation would block but replay replaces, and confirm `Success` not `ValidationBlocked`.
+- Lock the success-Message format with a positive contains-both assertion.
+- Add explicit "no project path / no output dir leak" assertion to the blocked-replay test.
 
 ### Risk: **MEDIUM**
-The wiring is straightforward but the constructor change and stdout-summary plumbing have unstated knock-on effects on `Program.cs` and existing tests.
+Solid integration plan but the dual-project hangover from earlier reviews lingers in CLI even after Plan 03 fixed it for bundles. Validation-against-which-project ordering is also load-bearing and underspecified.
 
 ---
 
 ## Plan 07-03: Bundle Wiring
 
 ### Strengths
-- **Source-project preservation contract is explicit** - `Entry("project/project.jbs2bg", ..., SaveToString(request.Project, ...))` stays unchanged, only `AddGeneratedOutputEntries` is modified.
-- **Test 1's project entry preservation assertion** directly catches Pitfall 1 from research.
-- **Cloned working state** addresses the bundle-specific risk that `request.Project` is a *caller-shared* model (vs CLI's freshly-loaded project).
-- **`PortableProjectBundleOutcome.ValidationBlocked`** reuses existing outcome enum - no schema change.
-- **Privacy/path-scrubbing preserved** through existing report-text pipeline.
+- All constructor call sites enumerated: `Program.cs`, `AppBootstrapper.cs`, `MainWindowViewModel.cs`, `CreateService`, `CreateBundledOnlyService`, `CreateServiceWithCommitter`.
+- Single working project (`replayResult.Project` or `outputProject` parameter) feeds both BodyGen and BoS — the dual-project footgun is gone.
+- Explicit `ReplayReportText` property on both `Preview` and `Result`, **plus** `reports/replay.txt` zip entry — both surfaces locked and testable.
+- `project/project.jbs2bg` preserved via the existing `SaveToString(request.Project, request.SaveContext)` call — explicitly called out.
+- Project-entry preservation test parses through `ProjectFileService.Load` (semantic, not string-contains) — Claude's robustness concern addressed.
+- Caller-mutation test asserts `request.Project` `ChangeVersion`/`IsDirty`/assignments unchanged — D-05 enforcement.
+- Cross-CLI/bundle byte parity test in Task 1 — closes the cross-plan integration gap from prior round.
 
 ### Concerns
-- **[HIGH] BodyGen uses replay clone, BoS uses original - possible drift.** The plan says "use `replayResult.Project` for BodyGen template/morph generation but continue to use the original request project for BoS JSON if appropriate." This means within a single `OutputIntent.All` bundle, two different `ProjectModel` instances feed two different writers. Today, `AddGeneratedOutputEntries` does:
+- **[MEDIUM] `PortableProjectBundlePreview`/`Result` are positional records.** Adding `ReplayReportText` as a new property requires updating every constructor invocation in source and tests. Looking at the codebase, the existing test file constructs these directly:
   ```csharp
-  templateGenerationService.GenerateTemplates(request.Project.SliderPresets, requestProfileCatalog, ...)  // BodyGen
-  bosJsonExportWriter.Write(bosDirectory, request.Project.SliderPresets, requestProfileCatalog)           // BoS
+  var preview = new PortableProjectBundlePreview(
+      PortableProjectBundleOutcome.Success,
+      new[] { ... },
+      "{...}",
+      report,
+      new[] { "..." });
   ```
-  After Plan 03, BodyGen will use `replayResult.Project.SliderPresets` and BoS will use `request.Project.SliderPresets`. **`ReplaceWith` clones presets identically (line 75-80 of ProjectModel.cs), so bytes should match - but this is a non-obvious invariant** that depends on clone fidelity. Two safer options: (1) Use `replayResult.Project` for both BodyGen *and* BoS (since BoS doesn't depend on assignments, this is byte-equivalent and simpler to reason about), or (2) Add an explicit byte-parity test asserting `outputs/bos/Alpha.json` bytes are identical with and without `AssignmentStrategy` present. **Recommend option (1).**
-- **[HIGH] Constructor signature change.** `PortableProjectBundleService` has both a public and an internal constructor. Adding `AssignmentStrategyReplayService` requires updating both, plus all call sites in `MainWindowViewModel` (App layer), `AppBootstrapper` (DI), `CliGenerationTests`, and `PortableBundleServiceTests` (`CreateService`, `CreateBundledOnlyService`, `CreateServiceWithCommitter`). The plan does not enumerate these. The bundle service is consumed by both CLI and GUI, so this is broader than CLI alone.
-- **[MEDIUM] Templates use `SliderPresets`, which doesn't depend on NPC assignments.** Calling `templateGenerationService.GenerateTemplates(replayResult.Project.SliderPresets, ...)` when no strategy is present is a no-op semantically (clone of presets has identical content). But when `cloneBeforeReplay: true` and no strategy exists, you've cloned an entire `ProjectModel` (including `MorphedNpcs`, `CustomMorphTargets`, `CustomProfiles`) just to use `SliderPresets`. For typical projects this is fine; for projects with thousands of NPCs it's wasted allocation. Consider: skip the clone when `AssignmentStrategy is null` (Plan 01 already does this *internally* for the strategy application, but if `cloneBeforeReplay: true` is passed, the clone happens before the short-circuit). **Confirm Plan 01's contract: does `cloneBeforeReplay: true` clone before or after the strategy null check?** The Plan 01 code sample suggests clone first, then short-circuit - meaning bundle always pays clone cost. Acceptable, but worth flagging.
-- **[MEDIUM] Replay summary surface in bundle artifacts.** Research assumption A2 says "Add summary to result/preview-facing report text only; do not alter manifest schema." Plan 03 follows this but doesn't specify *which* report. Bundle has `reports/validation.txt` (built from `reportTextFormatter.Format(validationReport, ...)`). The replay summary is *not* a validation finding - appending it to validation.txt mixes concerns. Cleanest options: (a) append a dedicated `reports/replay.txt`, (b) extend `validation.txt` with a separate section, or (c) add to `PortableProjectBundleResult`/`PortableProjectBundlePreview` as a new top-level string property. The plan should pick one explicitly so tests can target the exact surface.
-- **[MEDIUM] Test 1's "Project entry preservation test"** asserts `project/project.jbs2bg` "still contains the original stale/source assignment." This requires the test fixture to have a deserializable, non-empty NPC assignment in the saved project that is *different* from what replay produces. Make sure the fixture stale assignment is to a *valid* preset name (so JSON deserialization round-trips), not just an arbitrary string - otherwise the assertion is checking string contains, not project semantics. The pseudo-test in research uses `.Should().Contain("StalePreset")` which is a string-contains check on the raw JSON; that's fragile but workable. Consider parsing the bundled `project.jbs2bg` back through `ProjectFileService.Load` and asserting on `project.MorphedNpcs[0].SliderPresets`.
-- **[MEDIUM] No test asserts `request.Project.MorphedNpcs` is unmutated after `Create()` returns.** D-05 says "Bundle generation must avoid mutating the caller's project model." The only way `cloneBeforeReplay: true` can fail to honor this is if `ReplaceWith` shares references (it doesn't - it clones), but a regression test should exist: assert NPC assignments on the *caller's* `ProjectModel` are byte-identical before and after `service.Create(request)`.
-- **[LOW] Preview success/blocker behavior** - Task 1 mentions "Preview test: `Preview` reports the same replay success/blocker outcome without writing the zip." Today `Preview` calls `BuildPlan` which calls `AddGeneratedOutputEntries` (which materializes generated bytes into staging directory just to checksum them). Replay will run during preview too. Confirm this is intentional - it's correct per D-09 (preview must show blocker details), just non-obvious.
+  Adding a 6th positional parameter breaks every such call. The plan doesn't enumerate these test sites (e.g., `PreviewContractsExposeEntriesManifestValidationReportPrivacyFindingsAndOutcome` in `PortableBundleServiceTests.cs`). Either make `ReplayReportText` a non-positional `public string ReplayReportText { get; init; } = string.Empty;` after the record header, or list every breaking call site. The init-property approach is simpler and backward-compatible.
+- **[MEDIUM] Validation-and-replay ordering for bundles is underspecified the same way as Plan 02.** Today `BuildPlan` runs validation against `request.Project` first, then `MissingProfile` check, then output entries. With replay, validation should run against `replayResult.Project` (otherwise stale-assignment findings could block). The plan says "after request-scoped catalog composition but before validation/missing-profile checks that could be affected by stale assignments" — making it explicit as: "Replay first; if blocked, return `ValidationBlocked` immediately. Otherwise run validation on `replayResult.Project`, then missing-profile on `replayResult.Project`."
+- **[MEDIUM] Manifest must include `reports/replay.txt`.** The bundle manifest already enumerates every entry with SHA-256 checksum. Adding `reports/replay.txt` to the zip without adding it to the manifest would break the existing checksum invariant tested by `BundleOutputBytesExactlyMatchExistingWriters` and friends. The plan adds the file but doesn't say "add the entry to the manifest list with kind = `replay-report`". Make this explicit.
+- **[MEDIUM] No `reports/replay.txt` for projects without a saved strategy.** D-08 says successful replay is visible. What about successful generation with no strategy (D-03)? Should the bundle include `reports/replay.txt` with content like `"No saved assignment strategy; generated from project assignments."`? Or omit the file entirely? The plan should pick one and lock it with a test, otherwise behavior diverges from CLI (which always emits a Message).
+- **[LOW] `ReplayReportText` privacy scrubbing is correctly added but tests must prove it.** The plan says "Include `ReplayReportText` in privacy scanning with existing `BundlePathScrubber.Scrub`/`FindPrivacyFindings`." Add a test where blocked NPC details are constructed in a way that includes a path-like string (synthetic — preset names don't normally include paths, but defensive) and assert the rendered `ReplayReportText` and bundle entry are scrubbed.
 
 ### Suggestions
-- **Use `replayResult.Project` for both BodyGen and BoS in `AddGeneratedOutputEntries`** to eliminate the dual-instance footgun.
-- Enumerate all constructor call sites that need updating (`MainWindowViewModel`, `AppBootstrapper`, three test factories).
-- Decide replay-summary surface explicitly - recommend a new property on `PortableProjectBundleResult`/`Preview` rather than embedding in `validation.txt`.
-- Add an explicit "caller's `ProjectModel` unmutated" test after `service.Create(request)` returns.
-- Parse the bundled `project.jbs2bg` back through `ProjectFileService.Load` for the preservation test instead of relying on string-contains assertions on raw JSON.
+- Switch `ReplayReportText` to a non-positional `init` property to avoid breaking every existing constructor call:
+  ```csharp
+  public sealed record PortableProjectBundlePreview(...)
+  {
+      public string ReplayReportText { get; init; } = string.Empty;
+  }
+  ```
+- Spell out the replay/validation/missing-profile order explicitly in Task 2.
+- Require `reports/replay.txt` to be added to the manifest entry list (and confirm with a test that loads the manifest and asserts the entry exists with a valid SHA-256).
+- Decide and lock no-strategy bundle behavior: either emit `reports/replay.txt` with a non-replay message, or skip the file entirely.
 
-### Risk: **MEDIUM-HIGH**
-The bundle path has more surface area (constructor changes ripple to GUI), the dual-instance pattern is subtle, and the replay-summary destination is underspecified.
+### Risk: **MEDIUM**
+The bundle plan is well-architected and addresses the prior dual-project critique cleanly, but the contract additions need to be lower-friction (init properties) and the manifest/replay-report relationship needs to be locked explicitly.
 
 ---
 
 ## Cross-Plan Concerns
 
 ### Dependency Graph
-- ✅ Wave 1: 07-01 (no deps)
-- ✅ Wave 2: 07-02 and 07-03 both depend on 07-01 only - correctly parallelizable.
+- ✅ Wave 1 (07-01) → Wave 2 (07-02, 07-03 both depend on 07-01) — correct.
+- ⚠️ Plan 07-03 lists `depends_on: [07-01, 07-02]` and is `wave: 3`, but the roadmap and prior reviews treat 07-02 and 07-03 as parallelizable Wave 2. The frontmatter ordering forces serialization. If parallel execution is desired, drop the `07-02` dependency. If sequential is intentional (e.g., to build on 02's success-message format for bundle reuse), keep it but document why.
 
 ### Coverage Gaps
-- **[MEDIUM] No phase-level integration test** that runs `generate` and `bundle` against the *same* fixture project to confirm `morphs.ini` bytes match between CLI and bundle outputs. Phase 6 had this implicit through shared `RequestScopedProfileCatalogComposer` testing; Phase 7 should too. Add to either Plan 02 or 03.
-- **[LOW] No test for projects with `AssignmentStrategy` but zero `MorphedNpcs`** - does replay return `Replayed=true, AssignedCount=0, BlockedNpcs=[]` (no-op success) or `Replayed=false`? The current `MorphAssignmentService.ApplyStrategy` will iterate an empty list and return `AssignmentStrategyResult(0, [])`. Plan 01's Test 1 should cover this corner.
+- **[HIGH] Plan 01 acceptance does not run GUI strategy tests.** See Plan 01 [HIGH] above.
+- **[MEDIUM] No test that validation runs against the replay project.** Both Plan 02 and Plan 03 should include a fixture where the source project has stale references that validation would flag, but replay replaces them — proving validation operates on the post-replay state.
+- **[LOW] No test for bundle preview without a strategy emitting consistent replay-report behavior** (see Plan 03 above).
 
-### Scope & Over-engineering
-- ✅ Scope is tight and matches phase goal.
-- ✅ Reuses existing services; no new RNG, no new strategy kinds, no writer changes.
-- ⚠️ The `cloneBeforeReplay` parameter is the only optional knob. Given that the user-facing decisions all favor "clone always" (D-05), consider whether the parameter should exist at all, or whether the helper should always clone. Keeping it gives tests a way to assert the no-clone path doesn't mutate when it shouldn't, which is useful - keep it but document clearly.
-
-### Performance
-- Bundle clone of full `ProjectModel` (including potentially thousands of NPCs) on every `Preview`/`Create` is acceptable for a one-shot CLI/GUI operation but worth a comment.
-- No new I/O; no new external calls; deterministic.
+### Scope and Performance
+- ✅ Scope is tight; no new RNG, no new strategy kinds, no writer changes.
+- Cloning `ProjectModel` per `Preview` and `Create` for projects with thousands of NPCs is acceptable for one-shot operations but worth a one-line comment near `cloneBeforeReplay: true`.
 
 ### Security
-- Threat model captures the relevant tampering and information-disclosure risks.
-- Privacy scrubbing is preserved through existing `BundlePathScrubber`.
-- One missing item: **confirm that blocked NPC details written to bundle reports go through the same path-scrubbing pipeline as validation report text.** If a strategy rule somehow includes a path-like string (it shouldn't - rules contain preset names and race filters), it would bypass scrubbing.
+- Threat model is complete. The new concern — `ReplayReportText` carrying blocked-NPC strings — is correctly routed through `BundlePathScrubber`. Just make sure the routing is **tested**, not just specified.
 
 ---
 
 ## Overall Risk Assessment: **MEDIUM**
 
-**Justification:**
-- Plan 01 is low-risk additive Core work with strong TDD.
-- Plans 02 and 03 are well-designed but underspecified in three areas: (a) constructor-injection ripple effects on existing tests and DI, (b) where the success replay summary actually surfaces (CLI stdout vs `result.Message` vs bundle report), and (c) the dual-`ProjectModel`-instance pattern in bundle generation that depends on `ReplaceWith` clone fidelity for byte parity.
-- None of these are blockers, but each adds review surface for the executor and could produce subtle test failures or runtime drift if not addressed before implementation.
+**Justification:** The architectural revisions are excellent and address most prior-round concerns. Plan 03 is now cleanest of the three. Risk is concentrated in two places:
 
-**Recommended pre-execution adjustments:**
-1. Plan 02: explicitly add `Program.cs` to `files_modified` (or remove the stdout-summary assertion).
-2. Plan 02 & 03: enumerate all constructor call sites that need updating.
-3. Plan 03: use `replayResult.Project` for both BodyGen and BoS generation, eliminating the dual-instance pattern.
-4. Plan 03: pick an explicit surface for the replay summary (recommend a new property on result/preview records, not embedded in `validation.txt`).
-5. All plans: add a cross-CLI/bundle byte-parity test for `morphs.ini` produced from the same fixture project.
+1. **Plan 01's `MorphAssignmentService.ApplyStrategy` edit drops `eligibleRows` for seeded strategies** — a real GUI regression baked into the plan as written. Must be fixed before execution.
+2. **Plan 02 leaves CLI with the dual-project shape Plan 03 correctly eliminated** — works today via clone fidelity but creates an asymmetric mental model and hides any future clone-drift bug.
 
-With these tightenings, risk drops to **LOW-MEDIUM**.
+Plus three smaller-but-load-bearing items: the `Preview`/`Result` record additions need to be init-properties to avoid breaking call sites, validation-against-which-project ordering needs to be explicit in both plans, and Plan 01's acceptance gate needs to include GUI strategy tests.
+
+### Recommended pre-execution adjustments
+1. **Plan 01 Task 2:** Branch on provider, not entry point, so `eligibleRows` is preserved across both seeded and unseeded paths. Add `eligibleRows` to acceptance criteria.
+2. **Plan 01 acceptance:** Expand targeted gate to include `AssignmentStrategyServiceTests` and `MorphsViewModelStrategyTests`.
+3. **Plan 02 Task 2:** Use `replayResult.Project` consistently for BodyGen and BoS generation (mirror Plan 03). Add BoS byte-parity test.
+4. **Plans 02 & 03:** State explicitly that validation, missing-profile checks, and overwrite/PlanTargets run against `replayResult.Project` after a successful replay. Add a test where validation against the source would have blocked but against the replay project succeeds.
+5. **Plan 03 Task 2:** Switch `ReplayReportText` to a non-positional `init` property on the record. Require the new `reports/replay.txt` zip entry to be registered in the manifest entry list. Decide and lock no-strategy bundle behavior.
+6. **All plans:** Add a "no path leakage in blocked-NPC message" assertion to the blocked-replay tests.
+
+With these tightened, risk drops to **LOW-MEDIUM**.
 
 ---
 
 ## Codex Review
 
 ## Overall Summary
-The three-plan structure is sound: Wave 1 creates the shared Core seam, and Wave 2 wires it into CLI and bundle paths with targeted integration tests. The main risk is not scope, but a few integration details that could leave Phase 7 only partially closed: seeded deterministic replay may not be guaranteed if the new seam uses `MorphAssignmentService(new RandomAssignmentProvider())`, bundle success/failure replay details do not currently have a clear contract surface, and validation ordering could block replay before stale assignments are replaced.
+
+The three plans are strong and mostly phase-complete: they preserve the right dependency order, keep replay in Core, reuse existing assignment services, and add tests that prove replay from saved strategy data rather than already-mutated assignments. The biggest risks are around shared-service behavior changes in `MorphAssignmentService`, validation/replay ordering, and Plan 03’s added bundle report surface, which may be more schema churn than necessary unless it is deliberately accepted.
 
 ## 07-01-PLAN.md
 
-### Summary
-Strong foundational plan. It correctly isolates replay in Core, uses TDD, avoids writer changes, and covers request-scoped cloning. It needs sharper coverage for seeded deterministic replay and blocked partial-mutation semantics.
-
 ### Strengths
-- Centralizes replay in one Core service, reducing CLI/bundle drift.
-- Uses `ProjectModel.ReplaceWith` for clone-based mutation isolation.
-- Tests BodyGen/All vs BoS-only scope, no-strategy behavior, blockers, and cloning.
-- Keeps byte-sensitive generation/export writers out of scope.
+
+- Good first wave: creates the reusable Core seam before CLI and bundle wiring.
+- Tests are aimed at the real bug: stale/wrong existing assignments with saved strategy data.
+- Includes BoS-only non-replay and no-strategy no-op paths.
+- Explicitly tests clone/no-mutation behavior, including `IsDirty` and `ChangeVersion`.
+- Recognizes blocked replay can partially mutate the working project and treats the result as fatal for callers.
+- Seeded deterministic replay is covered before integration paths inherit it.
 
 ### Concerns
-- **HIGH:** Seeded replay behavior is under-specified. The plan says to use `MorphAssignmentService.ApplyStrategy`, but the existing deterministic seed path appears to live on `AssignmentStrategyService.Apply(project, strategy)`. If the helper is built with `RandomAssignmentProvider`, saved seeded strategies may not replay deterministically.
-- **MEDIUM:** Blocked replay may partially mutate eligible NPCs before returning blockers. That can be acceptable, but the service/result should document that callers must discard or block output when `IsBlocked`.
-- **LOW:** `cloneBeforeReplay` is good, but tests should assert source project assignments, dirty state expectations, and strategy config remain unchanged.
+
+- **HIGH:** The proposed `MorphAssignmentService.ApplyStrategy` change may ignore `eligibleRows` when `strategy.Seed.HasValue` if it delegates directly to `AssignmentStrategyService.Apply(project, strategy)`. That could regress GUI or scoped strategy behavior if seeded strategies are ever applied to a subset.
+- **MEDIUM:** The plan changes a shared morph service in Wave 1. That is broader than a pure automation seam and should be protected by existing `AssignmentStrategyServiceTests` and `MorphsViewModelStrategyTests`, not only the new replay tests.
+- **MEDIUM:** Replay result exposes raw fields but no shared formatter for summary/blocker messages. Plans 02 and 03 may duplicate message formatting and drift.
+- **LOW:** `PrepareForBodyGen` name is slightly misleading because it also makes the BoS no-op decision. Acceptable, but the contract should state that BoS intent returns a no-op result.
 
 ### Suggestions
-- Add a direct `SeededRandom` test with a pinned expected assignment sequence.
-- Clarify or adjust the provider path so saved `strategy.Seed` is honored while preserving the random-provider abstraction.
-- Add a blocked replay test where one NPC is assigned and one is blocked, then assert callers can identify the blocked result and avoid using partial output state.
+
+- Preserve `eligibleRows` for seeded strategies. Prefer constructing/using the deterministic provider through the same service path rather than switching to a static overload that may drop subset semantics.
+- Add or run focused existing tests for seeded strategy with scoped eligible rows if that behavior exists.
+- Consider a small Core formatter/helper on the replay result, such as `ToSummaryText()` and `FormatBlockedDetails()`, to reduce CLI/bundle message drift.
+- Add XML docs that explicitly say blocked replay may leave the working project partially assigned and callers must not generate output when `IsBlocked`.
 
 ### Risk Assessment
-**MEDIUM.** The seam is the right abstraction, but seeded replay is central to "deterministic automation." If that path is wrong, later plans will inherit the bug.
+
+**MEDIUM.** The seam is well-scoped, but modifying `MorphAssignmentService` has shared behavioral risk, especially around seeded strategies plus `eligibleRows`.
 
 ## 07-02-PLAN.md
 
-### Summary
-The CLI integration plan targets the right behavior and includes meaningful end-to-end checks. The main gap is ordering: replay may need to happen before certain validation/export-readiness checks, or the working replayed project should be what BodyGen validation/generation sees.
-
 ### Strengths
-- Tests stale/wrong assignments so replay is actually proven.
-- Covers BodyGen, All, BoS-only, no-strategy, blocked replay, and `Program.Main`.
-- Requires `ValidationBlocked` exit code and no output files on replay failure.
-- Keeps replay automatic, matching D-02.
+
+- Correctly wires replay before BodyGen/all morph generation.
+- Tests cover BodyGen, All, BoS-only, no-strategy, blocked replay, overwrite ordering, stdout/stderr, and seeded repeatability.
+- Good no-write assertion for blocked `OutputIntent.All`; this is essential.
+- Keeps replay automatic and avoids adding a flag.
+- Constructor dependency is explicit and Core-only.
 
 ### Concerns
-- **HIGH:** Calling replay after validation can be too late if validation blocks on stale assignment references that replay would replace. Existing validation has blocker paths for missing preset references.
-- **HIGH:** Same seeded-strategy risk as Plan 01 if `HeadlessGenerationService` composes the replay service with plain `RandomAssignmentProvider`.
-- **MEDIUM:** "No output files" should explicitly include all requested `OutputIntent.All` outputs, not just `templates.ini` and `morphs.ini`.
-- **LOW:** Success summary appended only to `HeadlessGenerationResult.Message` is fine, but tests should avoid brittle exact full-message matching.
+
+- **HIGH:** The action text says validation/missing-profile checks should run after replay and use replay state “for BodyGen validation.” If project validation includes checks unrelated to generated assignments, changing the validation subject from loaded source to replay clone may alter diagnostics unexpectedly. The phase needs replay blockers elevated, but not necessarily all validation semantics rewritten around replayed state.
+- **MEDIUM:** “Use `replayResult.Project` for BodyGen `PlanTargets`/template/morph generation” is imprecise. `PlanTargets` should normally depend on request intent/output paths, not project mutation. If it currently depends on project name/profile, this is probably harmless, but the plan should avoid implying target planning needs replay state.
+- **MEDIUM:** Successful replay followed by overwrite refusal means replay work happens even when output will not be written. That matches the planned gate-order test, but it may be surprising. If replay can be expensive for large NPC sets, overwrite preflight before replay would save work. The tradeoff should be intentional because D-06 only requires blocked replay before writes, not before overwrite checks.
+- **LOW:** Requiring blocked messages to omit project/output paths is reasonable for privacy, but existing CLI error conventions may already include paths for actionable output errors. Keep the restriction scoped to replay messages.
 
 ### Suggestions
-- Define the exact ordering as: load project, compose catalog, prepare replay working state for BodyGen intents, block replay failures, then plan/overwrite/write using the proper source or working project per output type.
-- Add tests for `OutputIntent.All` blocked replay proving no BoS JSON is written either.
-- Add a seeded CLI test that saves a seeded strategy and verifies repeated runs produce identical `morphs.ini`.
+
+- Define the exact ordering as: load project, build request catalog, run existing validation/missing-profile checks as before where possible, run replay before target creation/writes, then overwrite/write gates. If replay blockers must appear before overwrite refusal, state that explicitly as a product choice.
+- Use `replayResult.Project` only where generated output actually consumes assignments, especially `MorphGenerationService.GenerateMorphs`.
+- Add one test proving existing validation-blocked behavior still wins or remains unchanged for non-replay validation failures.
+- If success summaries are appended to `HeadlessGenerationResult.Message`, ensure existing success output tests allow both message and written paths in a stable order.
 
 ### Risk Assessment
-**MEDIUM-HIGH.** The plan will likely close the common CLI gap, but validation ordering and seeded determinism are correctness risks.
+
+**MEDIUM.** The CLI plan achieves the phase goal, but validation ordering and “which project state is validated” need tightening to avoid diagnostic regressions.
 
 ## 07-03-PLAN.md
 
-### Summary
-The bundle plan correctly protects `project/project.jbs2bg` as source state while generating BodyGen output from replayed working state. The weakest area is reporting: current bundle result/preview contracts do not obviously carry success summary or blocked replay details, so D-08/D-09 need a more explicit contract change.
-
 ### Strengths
-- Explicitly preserves original bundled project state.
-- Tests generated `morphs.ini` separately from `project/project.jbs2bg`.
-- Covers BodyGen/All, BoS-only, blocked replay, and preview behavior.
-- Keeps path scrubbing and no-private-path constraints in view.
+
+- Correctly preserves `project/project.jbs2bg` from `request.Project`.
+- Uses request-scoped replay state for generated output.
+- Strong tests for project entry preservation, caller mutation, BoS-only behavior, blocked no-zip behavior, preview behavior, and CLI/bundle byte parity.
+- Explicit constructor ripple list is practical and likely prevents broken composition.
+- Adds a visible replay report surface instead of overloading privacy findings.
+- Includes privacy scanning for replay report text.
 
 ### Concerns
-- **HIGH:** Replay summary/blocker details have no clear result surface. `PortableProjectBundlePreview`/`Result` currently expose manifest, validation report, and privacy findings, not report text or status messages. Do not overload `PrivacyFindings` with replay details.
-- **HIGH:** Same seeded-strategy risk if bundle replay uses `MorphAssignmentService(new RandomAssignmentProvider())`.
-- **MEDIUM:** `reports/validation.txt` is built before replay in the current service. If success summaries belong there, the plan must explicitly rebuild/append report text before adding the report entry and scanning privacy.
-- **MEDIUM:** Preview currently builds a plan and stages generated files in a temp directory. The plan should distinguish "does not write destination zip" from "may create temp staging files," and tests should assert cleanup if practical.
+
+- **HIGH:** The plan says `AddGeneratedOutputEntries` should use `replayResult.Project` consistently for BodyGen templates, BodyGen morphs, and BoS JSON. Replay mutates NPC assignments, which should not affect templates or BoS JSON, but using replay state for all outputs unnecessarily broadens the blast radius. It also conflicts slightly with D-01’s “BoS-only does not replay” spirit if All-mode BoS is generated from replayed state.
+- **MEDIUM:** Adding `ReplayReportText` to both preview and result plus a new `reports/replay.txt` bundle entry is probably useful, but it is a new bundle contract surface. The phase required replay visibility in preview/report text, not necessarily a new artifact. This may be acceptable, but it should be treated as intentional product surface, not incidental implementation.
+- **MEDIUM:** “Before validation/missing-profile checks that could be affected by stale assignments” is vague. Bundle validation likely covers profile/output readiness beyond assignment replay. As in Plan 02, avoid changing unrelated validation semantics unless necessary.
+- **MEDIUM:** Updating `src/BS2BG.App/ViewModels/MainWindowViewModel.cs` for fallback construction risks App churn. If DI can fully own this, prefer reducing ViewModel construction knowledge of Core services.
+- **LOW:** A `reports/replay.txt` success entry may create a new privacy/reporting test burden. It should be scrubbed and included in manifest/checksum behavior intentionally.
 
 ### Suggestions
-- Extend contracts with a typed `ReplaySummary` / `StatusMessages` / `ReportText` surface, or add a synthetic validation/report finding. Pick one and test both preview and create.
-- Ensure blocked replay details include NPC identity and reason in a surface the CLI/App can actually display.
-- Add a test that opens the zip and confirms `reports/validation.txt` contains the concise replay success summary.
-- Add seeded bundle replay tests with repeated bundle creation producing identical `outputs/bodygen/morphs.ini`.
+
+- Use separate variables: `sourceProject` for project serialization and non-assignment-sensitive outputs; `bodyGenProject` for morph output after replay. Only use replay state for `morphs.ini` unless code inspection proves another generated artifact depends on assignments.
+- If `reports/replay.txt` is kept, document it as a stable bundle artifact and test manifest/checksum inclusion.
+- Make blocked replay happen before zip creation and generated entries, but preserve existing validation and missing-profile behavior unless a test proves replay must precede it.
+- Prefer DI composition updates in `AppBootstrapper`; only touch `MainWindowViewModel` fallback construction if it currently instantiates `PortableProjectBundleService` directly.
 
 ### Risk Assessment
-**MEDIUM-HIGH.** The generation/state split is right, but the reporting contract and seeded determinism need tightening before this is execution-ready.
 
-## Final Recommendation
-Approve the phase shape, but revise the plans before implementation. The required revisions are small and concrete: lock down seeded replay through tests and service design, make bundle replay reporting a first-class contract, and clarify validation/replay ordering so stale assignment state cannot block or leak into automation outputs.
+**MEDIUM-HIGH.** The bundle plan covers the right requirements, but it has the most contract and blast-radius risk: new report fields, new bundle artifact, App constructor ripple, and use of replayed state for outputs beyond `morphs.ini`.
+
+## Final Recommendations
+
+- Keep the three-wave structure. The sequencing is sound.
+- Tighten `MorphAssignmentService` seeded behavior so it preserves `eligibleRows` and the existing provider abstraction.
+- Centralize replay summary/blocker formatting in Core to avoid CLI and bundle text drift.
+- Be more conservative about validation ordering. Elevate replay blockers for BodyGen automation, but do not accidentally redefine broader project validation semantics.
+- In Plan 03, generate only assignment-dependent output from replayed state unless there is a demonstrated reason to use the replay clone everywhere.
+- Treat `ReplayReportText` and `reports/replay.txt` as explicit product/API decisions; otherwise, use existing report text surfaces to reduce contract churn.
+
+Overall risk: **MEDIUM**. The plans do achieve the Phase 7 goal, and the tests are stronger than usual because they target stale-assignment false positives. The main remaining risk is over-broad integration: changing shared assignment behavior and using replayed project state in places that do not need replay.
 
 ---
 
 ## Consensus Summary
 
-The three reviewers broadly agree that Phase 7 is well-scoped and architecturally sound: a shared Core replay seam, followed by CLI and bundle integration, is the right shape. The highest-value pre-execution changes are to tighten contract surfaces and ordering rather than rework the approach.
+The reviewers agree that Phase 7 has the right architecture: a reusable Core replay seam, followed by CLI and portable bundle wiring, directly targets the stale-assignment automation gap without changing byte-sensitive writers or assignment strategy semantics. The primary feedback is not to change the phase shape, but to tighten the plan details around shared-service regressions, validation ordering, and the new reporting surfaces before execution.
 
 ### Agreed Strengths
-- The shared Core `AssignmentStrategyReplayService` seam is the right abstraction to prevent CLI and bundle drift.
-- Reusing the existing assignment strategy services preserves the random-provider abstraction and avoids new assignment algorithms.
-- The stale-assignment test strategy is high signal because it proves replay actually happens instead of merely preserving existing assignments.
-- Request-scoped cloning is the correct safety posture for bundle output and likely acceptable for CLI consistency.
-- Treating blocked replay as fatal before output writes matches the modder-trust and reproducibility goals.
+
+- Centralizing replay in `AssignmentStrategyReplayService` is the correct abstraction to prevent CLI and bundle behavior drift.
+- Stale-assignment fixtures are high-signal tests because they prove replay comes from saved strategy data instead of pre-mutated NPC assignments.
+- Reusing existing assignment services and writer/generation paths preserves the random-provider abstraction and byte-sensitive output contracts.
+- Request-scoped clone/state isolation is the right safety posture for portable bundle output and acceptable for CLI consistency.
+- Treating blocked replay as fatal before output writes supports the phase's reproducibility and modder-trust goals.
 
 ### Agreed Concerns
-- **Replay summary/reporting surface is underspecified.** Claude and Codex both flagged that CLI stdout/result messages and bundle preview/result/report surfaces need an explicit contract so D-08/D-09 are actually visible to users and tests.
-- **Bundle dual-project generation is subtle.** Gemini and Claude both recommend avoiding a BodyGen-from-clone / BoS-from-original split, or at least testing clone byte parity. The simplest revision is to use `replayResult.Project` consistently for generated outputs while preserving `project/project.jbs2bg` from `request.Project`.
-- **Constructor/composition ripple effects need to be enumerated.** Claude flags `Program.cs`, test factories, App bootstrap, and ViewModel call sites. Codex flags the same risk through provider composition and deterministic replay behavior.
-- **Seeded deterministic replay needs explicit tests and construction guidance.** Codex raised this as a high-risk gap; it should be addressed by pinned seeded replay tests and clear service composition through the existing provider-compatible path.
-- **Blocking and write-order tests should cover full output intents.** Codex and Claude both recommend proving blocked `OutputIntent.All` creates no BodyGen or BoS outputs, and that overwrite preflight still happens after successful replay but before writes.
+
+- **HIGH: Seeded replay must preserve `eligibleRows`.** Claude and Codex both flagged that Plan 01's proposed seeded dispatch through `AssignmentStrategyService.Apply(project, strategy)` can drop scoped eligible-row semantics and regress GUI/scoped strategy behavior. Plan 01 should require an `eligibleRows`-preserving deterministic-provider path and run existing assignment/GUI strategy tests.
+- **MEDIUM-HIGH: Validation/replay ordering needs exact wording.** Claude and Codex both want the plans to state precisely which project instance is validated and generated from after replay, so stale source assignments do not block legitimate replay while unrelated validation semantics are not accidentally broadened.
+- **MEDIUM: Replay reporting surfaces must be explicit and stable.** Gemini likes the proposed `ReplayReportText`/`reports/replay.txt`; Claude and Codex both require treating it as a deliberate contract with manifest/checksum/privacy handling, not incidental text output.
+- **MEDIUM: CLI and bundle output project selection needs a clear invariant.** Claude recommends using `replayResult.Project` consistently for generated outputs; Codex recommends using replay state only for assignment-dependent morph output. Both agree the plan must make the state split explicit and test byte parity/no drift.
+- **MEDIUM: Constructor and shared-service changes need broader gates.** Bundle constructor ripple effects are enumerated, but Plan 01 also modifies shared morph behavior and should verify existing `AssignmentStrategyServiceTests` and `MorphsViewModelStrategyTests`, not only new replay tests.
 
 ### Divergent Views
-- Gemini assesses overall risk as low, while Claude and Codex rate the implementation risk medium to medium-high because of integration details. This is not a disagreement on architecture; it reflects whether the current plan wording is precise enough for execution.
-- Gemini suggests a `ProjectModel.Clone()` helper, while Claude treats the existing `ReplaceWith` path as sufficient but asks for dirty-state and mutation tests. Add the tests first; only add a clone helper if execution shows duplication or readability pressure.
-- Claude recommends a new result/preview property for bundle replay summaries, while Codex allows a typed summary, status messages, report text, or synthetic validation/report finding. The common requirement is to pick one explicit surface and test it.
+
+- Gemini rates the revised plans as low risk and approved, while Claude and Codex rate overall risk medium because Plan 01 still contains a concrete `eligibleRows` regression risk and Plans 02/03 still need tighter ordering/reporting contracts.
+- Claude prefers a single replay project for CLI/bundle generated outputs to avoid dual-project drift. Codex prefers a narrower blast radius where only assignment-dependent `morphs.ini` uses replay state. The planner should choose one invariant and add parity tests to enforce it.
+- Claude recommends `ReplayReportText` as a non-positional init property plus manifest inclusion for `reports/replay.txt`; Codex questions whether a new bundle artifact is necessary. The common requirement is to pick an explicit product/API surface and test it.
+
+### Recommended Plan Updates
+
+- Update Plan 01 so seeded strategies construct/use the deterministic provider while preserving `eligibleRows`; add acceptance checks for `eligibleRows` and run `AssignmentStrategyServiceTests` plus `MorphsViewModelStrategyTests`.
+- Add explicit replay-result docs/tests stating that blocked replay may partially mutate the working project and callers must not generate output when `IsBlocked` is true.
+- Clarify in Plans 02 and 03 whether validation, missing-profile checks, target planning, and each generated output use the source project or `replayResult.Project`; add tests for stale source assignments that replay fixes.
+- Decide whether CLI/bundle generated BoS/template outputs use replay state or source state, then add byte-parity tests for the chosen invariant.
+- Treat `ReplayReportText` and/or `reports/replay.txt` as a stable contract: choose no-strategy behavior, include manifest/checksum/privacy handling if a zip entry is added, and avoid breaking positional record call sites where possible.
+- Add no-path-leak assertions for replay-blocked CLI and bundle messages.
+
