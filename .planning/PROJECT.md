@@ -4,7 +4,7 @@
 
 BS2BG is a C# / Avalonia desktop utility for Skyrim SE and Fallout 4 modders that converts BodySlide preset XML into BodyGen `templates.ini`, `morphs.ini`, and BodyTypes of Skyrim JSON exports. It is a port and modernization of the Java/JavaFX `jBS2BG` v1.1.2 tool by Totiman / asdasfa, preserving file-format compatibility while improving maintainability, workflow clarity, and release packaging.
 
-The current codebase has implemented the M0-M7 porting milestones plus GSD Phases 1-6: core import/generation/export, project serialization, Avalonia UI, template and morph workflows, undo/redo, NPC import and assignment, release packaging, profile correctness, workflow preference persistence, NPC filtering, scoped bulk operations, undo hardening, diagnostics, import/export previews, custom profile management, CLI automation, portable bundle creation, deterministic assignment strategies, release trust packaging, and request-scoped custom profile catalogs for headless generation. Future work continues through scoped GSD/OpenSpec phases, with byte-identical output parity and modder trust as the primary constraints.
+The current codebase has implemented the M0-M7 porting milestones plus GSD Phases 1-7: core import/generation/export, project serialization, Avalonia UI, template and morph workflows, undo/redo, NPC import and assignment, release packaging, profile correctness, workflow preference persistence, NPC filtering, scoped bulk operations, undo hardening, diagnostics, import/export previews, custom profile management, CLI automation, portable bundle creation, deterministic assignment strategies, release trust packaging, request-scoped custom profile catalogs for headless generation, and saved assignment strategy replay in automation outputs. Future work continues through scoped GSD/OpenSpec phases, with byte-identical output parity and modder trust as the primary constraints.
 
 ## Core Value
 
@@ -30,6 +30,7 @@ Modders can reliably convert existing BodySlide presets into BodyGen and BoS out
 - ✓ Custom profile creation, validation, local storage, project embedding, recovery diagnostics, profile sharing, and Profiles workspace editing/filtering are validated — Phase 4
 - ✓ CLI generation, portable project bundles, deterministic assignment strategies, checksum-backed release artifacts, and packaged setup guidance are validated — Phase 5
 - ✓ CLI/headless generation composes embedded project custom profiles through a shared request-scoped catalog and blocks unresolved custom profile fallback — Phase 6
+- ✓ CLI/headless generation and portable bundles replay saved assignment strategies for BodyGen automation output while preserving BoS-only/no-strategy behavior and source project state — Phase 7
 
 ### Active
 
@@ -93,4 +94,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-28 after Phase 6 completion*
+*Last updated: 2026-04-28 after Phase 7 completion*
