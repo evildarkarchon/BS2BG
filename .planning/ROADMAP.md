@@ -184,7 +184,7 @@ Plans:
 **Wave 1**
 - [x] 07-01-PLAN.md — Create the reusable Core saved-strategy replay seam and direct replay tests.
 **Wave 2 (blocked on Wave 1 completion)**
-- [ ] 07-02-PLAN.md — Replay saved strategies in CLI/headless BodyGen generation before output writes.
+- [x] 07-02-PLAN.md — Replay saved strategies in CLI/headless BodyGen generation before output writes.
 **Wave 3 (blocked on Wave 2 completion)**
 - [ ] 07-03-PLAN.md — Replay saved strategies in portable bundle BodyGen outputs while preserving source project state.
 Cross-cutting constraints: BodyGen/all automation replays saved strategies automatically; BoS-only automation does not replay; blocked replay fails before writing files or zip entries; request-scoped replay state must not rewrite the bundled source project entry; seeded strategy replay must remain deterministic through the existing provider path; replay summaries must have explicit CLI and bundle result/report surfaces.
@@ -203,4 +203,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Profile Extensibility and Controlled Customization | 8/8 | Complete | 2026-04-27 |
 | 5. Automation, Sharing, and Release Trust | 10/10 | Complete | 2026-04-28 |
 | 6. Compose Custom Profiles in Headless Generation | 1/1 | Complete | 2026-04-28 |
-| 7. Replay Saved Strategies in Automation Outputs | 1/3 | In Progress | - |
+| 7. Replay Saved Strategies in Automation Outputs | 2/3 | In Progress | - |

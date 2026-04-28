@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-04-28T09:11:13.615Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-04-28T09:18:20.470Z"
 last_activity: 2026-04-28
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 49
-  percent: 96
+  completed_plans: 50
+  percent: 98
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 ## Current Position
 
 Phase: 07 (replay-saved-strategies-in-automation-outputs) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-28
 
-Progress: [██████████] 96%
+Progress: [██████████] 98%
 
 ## Performance Metrics
 
@@ -87,6 +87,7 @@ Progress: [██████████] 96%
 | Phase 05-automation-sharing-and-release-trust P10 | 5 min | 3 tasks | 6 files |
 | Phase 06 P01 | 8 min | 3 tasks | 7 files |
 | Phase 07 P01 | 4 min | 2 tasks | 4 files |
+| Phase 07-replay-saved-strategies-in-automation-outputs P02 | 4 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -101,9 +102,6 @@ Recent decisions affecting current work:
 - [Phase 03-validation-and-diagnostics]: Treat Diagnostics as a first-class workspace beside Templates and Morphs rather than a modal or text-only report. — Satisfies the Phase 3 UI-SPEC and keeps validation visible in the main workflow.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Custom profile identity uses only the internal Name property; file path remains source metadata. — Prevents filenames from becoming profile identity and satisfies Phase 4 D-12.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Embedded project profiles are dirty-tracked project-owned definitions and optional CustomProfiles serialization embeds only referenced non-bundled definitions. — Preserves legacy project shape while enabling project sharing with custom profile data.
-- [Phase 04-profile-extensibility-and-controlled-customization]: Invalid, duplicate, or bundled-name embedded profiles produce ProjectLoadResult diagnostics while legacy project data still loads. — Keeps project open non-blocking across the untrusted shared-project JSON boundary.
-- [Phase 04-profile-extensibility-and-controlled-customization]: Missing custom profile references are represented by one recovery-coded informational finding instead of separate generic unbundled and fallback rows. — Prevents duplicate profile findings in the Diagnostics workspace.
-- [Phase 04-profile-extensibility-and-controlled-customization]: Imported profile recovery identity uses only CustomProfileDefinition.Name with OrdinalIgnoreCase; FilePath remains source metadata only. — Satisfies D-12 and prevents filename masquerading.
 - [Phase 04-profile-extensibility-and-controlled-customization]: ProjectValidationService no longer emits generic unbundled-profile rows; ProfileDiagnosticsService owns recovery-aware profile fallback findings. — Keeps recovery deduplication mechanical through Code/Category.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Profile manager owns one editor instance per single-shell workspace session and prompts before discarding unsaved editor buffers. — Preserves unsaved custom-profile edits across selection changes until explicit discard.
 - [Phase 04-profile-extensibility-and-controlled-customization]: Profile editor validation is performed from in-memory row state instead of JSON serialization round-trips. — Keeps large profile table editing responsive while Core JSON validation remains the import/export boundary.
@@ -121,6 +119,9 @@ Recent decisions affecting current work:
 - [Phase 07]: Saved strategy replay centralized in Core — Saved BodyGen/all assignment strategy replay is centralized in Core through AssignmentStrategyReplayService instead of being duplicated in CLI or bundle code.
 - [Phase 07]: Blocked replay is fatal for generation — Blocked replay results expose IsBlocked and partial working-project semantics so later automation wiring can fail before generating stale morph output.
 - [Phase 07]: Seeded replay preserves eligibleRows — Seeded strategy replay branches on the random provider while still calling service.Apply(project, strategy, eligibleRows), preserving scoped GUI/bulk semantics.
+- [Phase 07]: CLI replay validates working state — Headless generation replays saved strategies on a cloned working project before assignment-dependent validation and output preflight.
+- [Phase 07]: CLI blocked replay writes nothing — Blocked replay returns ValidationBlocked before target planning or writer calls so all-intent requests leave BodyGen and BoS files absent.
+- [Phase 07]: CLI replay messages are script-friendly — Successful replay messages are concise stdout text; blocked messages include NPC identity fields and strategy reason without project or output-directory paths.
 
 ### Pending Todos
 
@@ -144,6 +145,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-28T09:10:58.544Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-04-28T09:18:07.044Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
