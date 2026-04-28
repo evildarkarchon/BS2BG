@@ -15,6 +15,7 @@ preset XML data into BodyGen `templates.ini`, `morphs.ini`, and BoS JSON output.
 - `RELEASE-NOTES.md` - v1.0.0 release notes and known limitations.
 - `UNSIGNED-BUILD.md` - unsigned build warning and verification path.
 - `QA-CHECKLIST.md` - release validation notes.
+- `BODYGEN-BODYSLIDE-BOS-SETUP.md` - source-of-truth packaged setup and troubleshooting guide for BodyGen, BodySlide, BodyTypes of Skyrim/BoS, and output-location checks.
 - `SIGNING-INFO.txt` - signed/unsigned status, optional certificate identity, and verification command when signing was configured.
 - `SHA256SUMS.txt` - package file checksums.
 
@@ -47,3 +48,11 @@ Read `SIGNING-INFO.txt` after extraction to see whether the build was signed. A
 signed build records `Status: Signed` and a SignTool verification command. An
 unsigned build is still a valid release artifact when the SHA-256 sidecar and
 packaged `SHA256SUMS.txt` verification both succeed.
+
+## Setup and troubleshooting guide
+
+Read `BODYGEN-BODYSLIDE-BOS-SETUP.md` before copying generated files into a
+mod-manager or manual layout. It is the packaged source of truth for BodySlide
+preset inputs, BodyGen `templates.ini`/`morphs.ini` placement, BodyTypes of
+Skyrim/BoS JSON output, common output-location mistakes, and the boundary that
+BS2BG generates files and setup guidance; it does not edit game plugins.

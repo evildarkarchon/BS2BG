@@ -30,7 +30,12 @@ Release: BS2BG v1.0.0 portable `win-x64`
 - `dotnet test BS2BG.sln`: Pass, 98 tests.
 - `pwsh -File tools/release/package-release.ps1 -Version 1.0.0`: Pass.
 - Package contents: `BS2BG.App.exe`, profiles, icon asset, README, credits,
-  release notes, unsigned-build notes, QA checklist, and `SHA256SUMS.txt`.
+  release notes, unsigned-build notes, QA checklist,
+  `BODYGEN-BODYSLIDE-BOS-SETUP.md`, and `SHA256SUMS.txt`.
+- Packaged setup docs: refresh the `Last verified` date in
+  `BODYGEN-BODYSLIDE-BOS-SETUP.md`, then confirm it covers BodyGen, BodySlide,
+  BodyTypes of Skyrim/BoS, output-location troubleshooting, generic
+  MO2/Vortex/manual placement guidance, and the no-plugin-editing boundary.
 - Clean extraction launch without Java or package-local .NET install: Pass.
 - Cold launch target under 1.5 seconds: Pass, main window handle observed
   under the release threshold.
