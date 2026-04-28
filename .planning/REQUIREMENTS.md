@@ -43,8 +43,8 @@ Accepted Phase 1 override: ROADMAP/requirement wording that previously mentioned
 
 ### Automation and Release Trust
 
-- [ ] **AUTO-01**: User can run a headless CLI generation path that uses the same Core services and output semantics as the GUI.
-- [ ] **AUTO-02**: User can create a portable project bundle containing the `.jbs2bg` file, generated outputs, profile JSON copies, and a validation report without private local paths.
+- [x] **AUTO-01**: User can run a headless CLI generation path that uses the same Core services and output semantics as the GUI.
+- [x] **AUTO-02**: User can create a portable project bundle containing the `.jbs2bg` file, generated outputs, profile JSON copies, and a validation report without private local paths.
 - [ ] **AUTO-03**: User can apply deterministic assignment strategy presets through seams that remain testable and do not bypass existing random-provider abstractions.
 - [ ] **AUTO-04**: User can verify downloaded release artifacts through checksums, signing information when available, and release-package assertions.
 - [ ] **AUTO-05**: User can access setup and troubleshooting guidance for BodyGen, BodySlide, BoS, and common output-location mistakes without BS2BG editing external game plugins.
@@ -106,8 +106,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXT-03 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | EXT-04 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | EXT-05 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
-| AUTO-01 | Phase 5: Automation, Sharing, and Release Trust | Pending |
-| AUTO-02 | Phase 5: Automation, Sharing, and Release Trust | Pending |
+| AUTO-01 | Phase 5: Automation, Sharing, and Release Trust | Complete |
+| AUTO-02 | Phase 5: Automation, Sharing, and Release Trust | Complete |
 | AUTO-03 | Phase 5: Automation, Sharing, and Release Trust | Pending |
 | AUTO-04 | Phase 5: Automation, Sharing, and Release Trust | Pending |
 | AUTO-05 | Phase 5: Automation, Sharing, and Release Trust | Pending |

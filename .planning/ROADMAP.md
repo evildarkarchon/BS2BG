@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: Workflow Persistence, Filtering, and Undo Hardening** - Users can safely resume, filter, bulk-edit, and undo large modding workflows.
 - [ ] **Phase 3: Validation and Diagnostics** - Users can inspect project health, import effects, and export consequences before committing risky changes.
 - [ ] **Phase 4: Profile Extensibility and Controlled Customization** - Users can manage custom local profiles without corrupting bundled profiles or legacy projects.
-- [ ] **Phase 5: Automation, Sharing, and Release Trust** - Users can automate generation, bundle projects, and verify portable releases through trusted paths.
+- [x] **Phase 5: Automation, Sharing, and Release Trust** - Users can automate generation, bundle projects, and verify portable releases through trusted paths. (completed 2026-04-28)
 
 ## Phase Details
 
@@ -149,7 +149,7 @@ Plans:
 - [x] 05-07-PLAN.md — Wire portable bundle creation into CLI and GUI preview/write workflows.
 - [x] 05-09-PLAN.md — Add packaged BodyGen/BodySlide/BoS setup and troubleshooting guidance.
 **Wave 5 (gap closure; blocked on Wave 4 verification)**
-- [ ] 05-10-PLAN.md — Close portable bundle overwrite safety, custom-profile generation catalog, and CLI failure-mapping gaps.
+- [x] 05-10-PLAN.md — Close portable bundle overwrite safety, custom-profile generation catalog, and CLI failure-mapping gaps.
 Cross-cutting constraints: CLI and bundle automation reuse Core generation/export paths only; deterministic assignment uses a pinned provider-compatible PRNG; bundle/release artifacts avoid private absolute paths; signing is optional when SHA-256 verification artifacts and unsigned docs are present.
 **UI hint**: yes
 
