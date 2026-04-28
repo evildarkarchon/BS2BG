@@ -44,7 +44,7 @@ public static class AppBootstrapper
         services.AddSingleton<IUserPreferencesService, UserPreferencesService>();
         services.AddSingleton<IUserProfileStore, UserProfileStore>();
         services.AddSingleton(provider =>
-            new TemplateProfileCatalogFactory(provider.GetRequiredService<IUserProfileStore>()));
+            new BS2BG.App.Services.TemplateProfileCatalogFactory(provider.GetRequiredService<IUserProfileStore>()));
         services.AddSingleton<ITemplateProfileCatalogService, TemplateProfileCatalogService>();
         services.AddSingleton<IRandomAssignmentProvider, RandomAssignmentProvider>();
         services.AddSingleton<MorphAssignmentService>();

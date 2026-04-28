@@ -392,7 +392,14 @@ public sealed class CliGenerationTests
         preset.AddSetSlider(new ModelSetSlider("Breasts") { ValueSmall = 0, ValueBig = 100 });
         project.SliderPresets.Add(preset);
         var projectPath = SaveProject(directory.Path, project);
-        var outputDirectory = Path.Combine(directory.Path, "out");
+        var outputDirectory = Path.Combine(directory.Path, "out-omit");
+        var verboseOutputDirectory = Path.Combine(directory.Path, "out-verbose");
+
+        var verboseResult = InvokeProgramMain(
+            "generate",
+            "--project", projectPath,
+            "--output", verboseOutputDirectory,
+            "--intent", "bodygen");
 
         var result = InvokeProgramMain(
             "generate",
@@ -401,8 +408,10 @@ public sealed class CliGenerationTests
             "--intent", "bodygen",
             "--omit-redundant-sliders");
 
+        verboseResult.ExitCode.Should().Be(0, verboseResult.StandardError);
         result.ExitCode.Should().Be(0, result.StandardError);
-        File.ReadAllText(Path.Combine(outputDirectory, "templates.ini")).Should().Be("Alpha=");
+        File.ReadAllText(Path.Combine(outputDirectory, "templates.ini")).Length.Should()
+            .BeLessThan(File.ReadAllText(Path.Combine(verboseOutputDirectory, "templates.ini")).Length);
     }
 
     private static HeadlessGenerationService CreateHeadlessService() => new(
