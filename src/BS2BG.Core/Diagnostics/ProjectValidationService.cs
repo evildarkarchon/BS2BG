@@ -1,5 +1,6 @@
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
+using BS2BG.Core.Morphs;
 
 namespace BS2BG.Core.Diagnostics;
 
@@ -36,6 +37,7 @@ public sealed class ProjectValidationService
 
         AddTemplateFindings(project, findings);
         AddMorphTargetFindings(project, findings);
+        AddAssignmentStrategyFindings(project, findings);
         AddExportFindings(project, findings);
 
         return new ProjectValidationReport(findings);
@@ -119,5 +121,25 @@ public sealed class ProjectValidationService
                 ? "Template export has " + project.SliderPresets.Count + " preset(s); morph export has "
                   + (hasAssignedMorphs ? "assigned targets." : "no assigned targets yet.")
                 : "Template and morph exports need imported presets before output is useful."));
+    }
+
+    private static void AddAssignmentStrategyFindings(ProjectModel project, List<DiagnosticFinding> findings)
+    {
+        if (project.AssignmentStrategy is null) return;
+
+        var eligibility = AssignmentStrategyService.ComputeEligibility(
+            project,
+            project.AssignmentStrategy,
+            project.MorphedNpcs);
+
+        foreach (var blocked in eligibility.BlockedNpcs)
+            findings.Add(new DiagnosticFinding(
+                DiagnosticSeverity.Caution,
+                MorphsNpcsArea,
+                "No eligible preset after strategy rules",
+                "No eligible preset after strategy rules for NPC '" + blocked.Npc.Name
+                + "'. Strategy race filters, weights, or groups leave no eligible preset for assignment.",
+                blocked.Npc.Name,
+                "Adjust race filters, weights, or groups before applying assignments."));
     }
 }
