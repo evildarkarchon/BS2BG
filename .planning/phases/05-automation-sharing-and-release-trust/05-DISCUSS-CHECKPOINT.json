@@ -1,0 +1,125 @@
+{
+  "phase": "5",
+  "phase_name": "Automation, Sharing, and Release Trust",
+  "timestamp": "2026-04-27T16:55:18-07:00",
+  "areas_completed": ["Headless CLI contract", "Portable bundle shape", "Deterministic assignments", "Release trust docs"],
+  "areas_remaining": [],
+  "decisions": {
+    "Headless CLI contract": [
+      {
+        "question": "What should the headless entry point be?",
+        "answer": "Dedicated CLI project",
+        "options_presented": ["Dedicated CLI project", "App binary flag", "You decide"]
+      },
+      {
+        "question": "Which outputs should the CLI generate by default?",
+        "answer": "Explicit outputs",
+        "options_presented": ["Explicit outputs", "Generate everything", "BodyGen default", "You decide"]
+      },
+      {
+        "question": "How strict should CLI validation be before writing outputs?",
+        "answer": "Block on blockers",
+        "options_presented": ["Block on blockers", "Always write", "Preview first only", "You decide"]
+      },
+      {
+        "question": "What should happen when CLI target files already exist?",
+        "answer": "Require overwrite flag",
+        "options_presented": ["Require overwrite flag", "Overwrite by default", "Timestamped folder", "You decide"]
+      }
+    ],
+    "Portable bundle shape": [
+      {
+        "question": "What should the portable project bundle produce?",
+        "answer": "Single zip",
+        "options_presented": ["Single zip", "Folder only", "Both zip and folder", "You decide"]
+      },
+      {
+        "question": "How should bundle contents be laid out inside the zip?",
+        "answer": "Structured folders",
+        "options_presented": ["Structured folders", "Flat root", "Mirror export folders", "You decide"]
+      },
+      {
+        "question": "Which profile files should be copied into the bundle?",
+        "answer": "Referenced custom only",
+        "options_presented": ["Referenced custom only", "All active profiles", "All local custom", "You decide"]
+      },
+      {
+        "question": "How strict should private path scrubbing be in bundle reports/manifests?",
+        "answer": "No absolute paths",
+        "options_presented": ["No absolute paths", "Keep source paths", "Hash local paths", "You decide"]
+      }
+    ],
+    "Deterministic assignments": [
+      {
+        "question": "What should deterministic assignment mean to users?",
+        "answer": "Seed replay",
+        "options_presented": ["Seed replay", "Stable NPC identity", "Saved snapshot only", "You decide"]
+      },
+      {
+        "question": "Should Phase 5 scope expand to include the full weighted/race/group strategy menu?",
+        "answer": "Yes. User explicitly corrected the workflow and pulled the full strategy menu into Phase 5 scope.",
+        "options_presented": ["Seeded random only", "Seeded plus round-robin", "Full strategy menu"]
+      },
+      {
+        "question": "Which assignment strategies must be included in the expanded Phase 5 scope?",
+        "answer": "Full menu: seeded random, round-robin, weights, race filters, and group/bucket rules",
+        "options_presented": ["Full menu", "Weights and races", "Groups only", "Custom selection"]
+      },
+      {
+        "question": "Where should assignment strategy configuration live?",
+        "answer": "Saved in project",
+        "options_presented": ["Saved in project", "Session only", "External config", "You decide"]
+      },
+      {
+        "question": "How should race-aware rules match NPCs?",
+        "answer": "NPC Race field",
+        "options_presented": ["NPC Race field", "Game data lookup", "Manual tags", "You decide"]
+      },
+      {
+        "question": "What should happen when a strategy rule leaves an NPC with no eligible presets?",
+        "answer": "Block and report",
+        "options_presented": ["Block and report", "Fallback to all presets", "Leave unassigned silently", "You decide"]
+      }
+    ],
+    "Release trust docs": [
+      {
+        "question": "What release-trust path should Phase 5 require?",
+        "answer": "Support both signed and unsigned paths",
+        "options_presented": ["Unsigned plus checksums", "Require signing", "Support both", "You decide"]
+      },
+      {
+        "question": "Where should BodyGen/BodySlide/BoS setup guidance live?",
+        "answer": "Packaged docs only",
+        "options_presented": ["Packaged docs only", "Docs and Help menu", "In-app wizard", "You decide"]
+      },
+      {
+        "question": "What should package assertions verify?",
+        "answer": "Manifest and smoke",
+        "options_presented": ["Manifest and smoke", "Manifest only", "Full install simulation", "You decide"]
+      }
+    ]
+  },
+  "deferred_ideas": [
+    "In-app setup wizard for BodyGen/BodySlide/BoS",
+    "Game-data/plugin lookup for race resolution",
+    "Cloud sharing/accounts/telemetry",
+    "Cross-platform release parity"
+  ],
+  "canonical_refs": [
+    ".planning/PROJECT.md",
+    ".planning/REQUIREMENTS.md",
+    ".planning/ROADMAP.md",
+    ".planning/STATE.md",
+    ".planning/phases/02-workflow-persistence-filtering-and-undo-hardening/02-CONTEXT.md",
+    ".planning/phases/03-validation-and-diagnostics/03-CONTEXT.md",
+    ".planning/phases/04-profile-extensibility-and-controlled-customization/04-CONTEXT.md",
+    ".planning/codebase/STACK.md",
+    ".planning/codebase/ARCHITECTURE.md",
+    ".planning/codebase/INTEGRATIONS.md",
+    "PRD.md",
+    "openspec/specs/template-generation-flow/spec.md",
+    "openspec/specs/morph-assignment-flow/spec.md",
+    "openspec/specs/profile-extensibility/spec.md",
+    "openspec/specs/release-polish/spec.md"
+  ]
+}
