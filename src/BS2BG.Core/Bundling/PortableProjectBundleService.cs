@@ -205,7 +205,7 @@ public sealed class PortableProjectBundleService
         var createdUtc = (request.CreatedUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
         var requestProfileCatalog = profileCatalogComposer.BuildForProject(request.Project, request.SaveContext);
         var replayResult = replayService.PrepareForBodyGen(request.Project, request.Intent, cloneBeforeReplay: true);
-        var replayReportText = FormatReplayReport(replayResult, request.PrivateRoots);
+        var replayReportText = FormatReplayReport(replayResult, request, request.PrivateRoots);
         if (replayResult.IsBlocked)
         {
             var blockedValidationReport = ProjectValidationService.Validate(request.Project, requestProfileCatalog);
@@ -377,10 +377,15 @@ public sealed class PortableProjectBundleService
     /// <summary>
     /// Formats the explicit replay-report contract used by previews, CLI output, and optional bundle report entries.
     /// </summary>
-    private static string FormatReplayReport(AssignmentStrategyReplayResult replayResult, IReadOnlyList<string> privateRoots)
+    private static string FormatReplayReport(
+        AssignmentStrategyReplayResult replayResult,
+        PortableProjectBundleRequest request,
+        IReadOnlyList<string> privateRoots)
     {
         if (!replayResult.Replayed)
-            return "No saved assignment strategy; generated from existing project assignments.";
+            return request.Project.AssignmentStrategy is null
+                ? "No saved assignment strategy; generated from existing project assignments."
+                : "Saved assignment strategy was not replayed because the output intent does not include BodyGen.";
 
         if (!replayResult.IsBlocked)
             return "Assignment strategy replayed: " + replayResult.StrategyKind + "; assigned NPCs: "

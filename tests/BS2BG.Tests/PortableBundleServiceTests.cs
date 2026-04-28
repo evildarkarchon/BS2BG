@@ -560,7 +560,7 @@ public sealed class PortableBundleServiceTests
     }
 
     [Fact]
-    public void BundleBosJsonIntentAndNoSavedAssignmentStrategyDoNotReplayOrWriteReplayReport()
+    public void BundleBosJsonIntentReportsSavedStrategySkippedAndNoSavedStrategyDoesNotWriteReplayReport()
     {
         using var directory = new TemporaryDirectory();
         var bosProject = CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy());
@@ -573,7 +573,7 @@ public sealed class PortableBundleServiceTests
 
         bos.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
         noStrategy.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
-        GetReplayReportText(bos).Should().Be("No saved assignment strategy; generated from existing project assignments.");
+        GetReplayReportText(bos).Should().Be("Saved assignment strategy was not replayed because the output intent does not include BodyGen.");
         GetReplayReportText(noStrategy).Should().Be("No saved assignment strategy; generated from existing project assignments.");
         SnapshotNpcAssignments(bosProject).Should().Contain(row => row.Contains("StalePreset", StringComparison.Ordinal));
         using var bosArchive = ZipFile.OpenRead(bosBundlePath);
