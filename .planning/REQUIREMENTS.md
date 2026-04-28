@@ -45,7 +45,7 @@ Accepted Phase 1 override: ROADMAP/requirement wording that previously mentioned
 
 - [x] **AUTO-01**: User can run a headless CLI generation path that uses the same Core services and output semantics as the GUI.
 - [ ] **AUTO-02**: User can create a portable project bundle containing the `.jbs2bg` file, generated outputs, profile JSON copies, and a validation report without private local paths.
-- [ ] **AUTO-03**: User can apply deterministic assignment strategy presets through seams that remain testable and do not bypass existing random-provider abstractions.
+- [x] **AUTO-03**: User can apply deterministic assignment strategy presets through seams that remain testable and do not bypass existing random-provider abstractions.
 - [x] **AUTO-04**: User can verify downloaded release artifacts through checksums, signing information when available, and release-package assertions.
 - [x] **AUTO-05**: User can access setup and troubleshooting guidance for BodyGen, BodySlide, BoS, and common output-location mistakes without BS2BG editing external game plugins.
 
@@ -108,15 +108,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXT-05 | Phase 4: Profile Extensibility and Controlled Customization | Complete |
 | AUTO-01 | Phase 6: Compose Custom Profiles in Headless Generation | Complete |
 | AUTO-02 | Phase 7: Replay Saved Strategies in Automation Outputs | Pending |
-| AUTO-03 | Phase 7: Replay Saved Strategies in Automation Outputs | Pending |
+| AUTO-03 | Phase 7: Replay Saved Strategies in Automation Outputs | Complete |
 | AUTO-04 | Phase 5: Automation, Sharing, and Release Trust | Complete |
 | AUTO-05 | Phase 5: Automation, Sharing, and Release Trust | Complete |
 
 **Coverage:**
 - v1 requirements: 25 total
 - Mapped to phases: 25
-- Complete after audit adjustment: 22
-- Pending gap closure: 3
+- Complete after audit adjustment: 23
+- Pending gap closure: 2
 - Unmapped: 0
 
 ---

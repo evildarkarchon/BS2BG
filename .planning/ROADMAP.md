@@ -182,7 +182,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 **Wave 1**
-- [ ] 07-01-PLAN.md — Create the reusable Core saved-strategy replay seam and direct replay tests.
+- [x] 07-01-PLAN.md — Create the reusable Core saved-strategy replay seam and direct replay tests.
 **Wave 2 (blocked on Wave 1 completion)**
 - [ ] 07-02-PLAN.md — Replay saved strategies in CLI/headless BodyGen generation before output writes.
 **Wave 3 (blocked on Wave 2 completion)**
@@ -203,4 +203,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Profile Extensibility and Controlled Customization | 8/8 | Complete | 2026-04-27 |
 | 5. Automation, Sharing, and Release Trust | 10/10 | Complete | 2026-04-28 |
 | 6. Compose Custom Profiles in Headless Generation | 1/1 | Complete | 2026-04-28 |
-| 7. Replay Saved Strategies in Automation Outputs | 0/TBD | Not started | - |
+| 7. Replay Saved Strategies in Automation Outputs | 1/3 | In Progress | - |
