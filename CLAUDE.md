@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues; external pull requests are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The repository uses the canonical labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository. See `docs/agents/domain.md`.
+
 ## Project
 
 **BS2BG (Bodyslide to Bodygen)** — a C# port of the Java/JavaFX tool `jBS2BG` v1.1.2 (original author: Totiman / asdasfa). Desktop utility for Skyrim SE / Fallout 4 modders that converts BodySlide preset XML into BodyGen `templates.ini` + `morphs.ini` and BoS JSON exports.
