@@ -15,20 +15,16 @@ namespace BS2BG.Core.Automation;
 /// </summary>
 public sealed class HeadlessGenerationService(
     ProjectFileService projectFileService,
-    TemplateGenerationService templateGenerationService,
-    MorphGenerationService morphGenerationService,
-    BodyGenIniExportWriter bodyGenIniExportWriter,
-    BosJsonExportWriter bosJsonExportWriter,
-    BosJsonExportPlanner bosJsonExportPlanner,
+    OutputArtifactPlanner outputArtifactPlanner,
+    OutputArtifactPreflight outputArtifactPreflight,
+    OutputArtifactCommitter outputArtifactCommitter,
     AssignmentStrategyReplayService replayService,
     TemplateProfileCatalog profileCatalog)
 {
     private readonly ProjectFileService projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
-    private readonly TemplateGenerationService templateGenerationService = templateGenerationService ?? throw new ArgumentNullException(nameof(templateGenerationService));
-    private readonly MorphGenerationService morphGenerationService = morphGenerationService ?? throw new ArgumentNullException(nameof(morphGenerationService));
-    private readonly BodyGenIniExportWriter bodyGenIniExportWriter = bodyGenIniExportWriter ?? throw new ArgumentNullException(nameof(bodyGenIniExportWriter));
-    private readonly BosJsonExportWriter bosJsonExportWriter = bosJsonExportWriter ?? throw new ArgumentNullException(nameof(bosJsonExportWriter));
-    private readonly BosJsonExportPlanner bosJsonExportPlanner = bosJsonExportPlanner ?? throw new ArgumentNullException(nameof(bosJsonExportPlanner));
+    private readonly OutputArtifactPlanner outputArtifactPlanner = outputArtifactPlanner ?? throw new ArgumentNullException(nameof(outputArtifactPlanner));
+    private readonly OutputArtifactPreflight outputArtifactPreflight = outputArtifactPreflight ?? throw new ArgumentNullException(nameof(outputArtifactPreflight));
+    private readonly OutputArtifactCommitter outputArtifactCommitter = outputArtifactCommitter ?? throw new ArgumentNullException(nameof(outputArtifactCommitter));
     private readonly AssignmentStrategyReplayService replayService = replayService ?? throw new ArgumentNullException(nameof(replayService));
     private readonly RequestScopedProfileCatalogComposer profileCatalogComposer = new(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog)));
 
@@ -92,7 +88,15 @@ public sealed class HeadlessGenerationService(
                 Array.Empty<string>(),
                 validationReport);
 
-        var plannedTargets = PlanTargets(request, generationProject).ToArray();
+        var outputPlan = outputArtifactPlanner.Plan(new OutputArtifactPlanningInput(
+            generationProject,
+            requestProfileCatalog,
+            request.Intent,
+            request.OmitRedundantSliders));
+        var plannedTargets = outputPlan.Groups
+            .SelectMany(group => outputArtifactPreflight.Preview(request.OutputDirectory, group).Files)
+            .Select(file => file.Path)
+            .ToArray();
         if (!request.Overwrite)
         {
             var existingTargets = plannedTargets.Where(File.Exists).ToArray();
@@ -109,22 +113,12 @@ public sealed class HeadlessGenerationService(
         var ledger = new List<FileWriteLedgerEntry>();
         try
         {
-            if (IncludesBodyGen(request.Intent))
+            foreach (var group in outputPlan.Groups)
             {
-                var templates = templateGenerationService.GenerateTemplates(generationProject.SliderPresets, requestProfileCatalog, request.OmitRedundantSliders);
-                var morphs = morphGenerationService.GenerateMorphs(generationProject).Text;
-                var result = bodyGenIniExportWriter.Write(request.OutputDirectory, templates, morphs);
-                writtenFiles.Add(result.TemplatesPath);
-                writtenFiles.Add(result.MorphsPath);
-                ledger.Add(new FileWriteLedgerEntry(result.TemplatesPath, FileWriteOutcome.Written));
-                ledger.Add(new FileWriteLedgerEntry(result.MorphsPath, FileWriteOutcome.Written));
-            }
-
-            if (IncludesBosJson(request.Intent))
-            {
-                var result = bosJsonExportWriter.Write(request.OutputDirectory, generationProject.SliderPresets, requestProfileCatalog);
-                writtenFiles.AddRange(result.FilePaths);
-                ledger.AddRange(result.FilePaths.Select(path => new FileWriteLedgerEntry(path, FileWriteOutcome.Written)));
+                // Groups commit separately so a completed BodyGen pair remains when a later BoS batch fails.
+                var result = outputArtifactCommitter.Commit(request.OutputDirectory, group);
+                writtenFiles.AddRange(result.WrittenFiles);
+                ledger.AddRange(result.WrittenFiles.Select(path => new FileWriteLedgerEntry(path, FileWriteOutcome.Written)));
             }
         }
         catch (AtomicWriteException exception)
@@ -144,23 +138,6 @@ public sealed class HeadlessGenerationService(
             validationReport,
             ledger);
     }
-
-    private IEnumerable<string> PlanTargets(HeadlessGenerationRequest request, ProjectModel project)
-    {
-        if (IncludesBodyGen(request.Intent))
-        {
-            yield return Path.Combine(request.OutputDirectory, "templates.ini");
-            yield return Path.Combine(request.OutputDirectory, "morphs.ini");
-        }
-
-        if (IncludesBosJson(request.Intent))
-            foreach (var path in bosJsonExportPlanner.Plan(request.OutputDirectory, project.SliderPresets))
-                yield return path;
-    }
-
-    private static bool IncludesBodyGen(OutputIntent intent) => intent is OutputIntent.BodyGen or OutputIntent.All;
-
-    private static bool IncludesBosJson(OutputIntent intent) => intent is OutputIntent.BosJson or OutputIntent.All;
 
     private static HeadlessGenerationResult UsageError(string message) => new(
         AutomationExitCode.UsageError,
@@ -225,7 +202,7 @@ public sealed class HeadlessGenerationService(
                + "; Reason=" + blocked.Reason;
     }
 
-    private static string CreateIoFailureMessage(OutputIntent intent, IReadOnlyList<string> writtenFiles, Exception exception)
+    private static string CreateIoFailureMessage(OutputIntent intent, List<string> writtenFiles, Exception exception)
     {
         var message = "Generation failed while writing output: " + exception.Message;
         if (intent == OutputIntent.All && writtenFiles.Count > 0)

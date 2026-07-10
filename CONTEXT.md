@@ -19,3 +19,7 @@ _Avoid_: Project profile
 **Local custom profile**:
 A reusable custom profile stored outside a project. It can supply a referenced custom profile when the project has no same-named project copy.
 _Avoid_: Global profile
+
+**Output artifact plan**:
+The complete ordered description of the BodyGen INI and BoS JSON files BS2BG intends to produce for one project state, including each file's commit-group-relative path and exact byte content. The same plan governs preview, direct export, automation, and portable bundles.
+_Avoid_: Export plan, Output list

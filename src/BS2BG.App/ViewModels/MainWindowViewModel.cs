@@ -4,6 +4,7 @@ using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Reactive.Threading.Tasks;
 using System.Windows.Input;
 using BS2BG.App.Services;
 using BS2BG.App.ViewModels.Workflow;
@@ -33,20 +34,18 @@ public enum AppWorkspace
 
 public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 {
-    private readonly BodyGenIniExportWriter bodyGenIniExportWriter;
-    private readonly BosJsonExportWriter bosJsonExportWriter;
     private readonly IAppDialogService dialogService;
     private readonly CompositeDisposable disposables = new();
-    private readonly ExportPreviewService exportPreviewService;
     private readonly IFileDialogService fileDialogService;
-    private readonly MorphGenerationService morphGenerationService;
+    private readonly OutputArtifactCommitter outputArtifactCommitter;
+    private readonly OutputArtifactPlanner outputArtifactPlanner;
+    private readonly OutputArtifactPreflight outputArtifactPreflight;
     private readonly PortableProjectBundleService portableProjectBundleService;
     private readonly IUserPreferencesService preferencesService;
     private readonly ITemplateProfileCatalogService profileCatalogService;
     private readonly ProjectModel project;
     private readonly BehaviorSubject<bool> projectOpenProfileRecoveryBusy = new(false);
     private readonly ProjectFileService projectFileService;
-    private readonly TemplateGenerationService templateGenerationService;
     private readonly UndoRedoService undoRedo;
     private UserPreferences currentPreferences;
 
@@ -90,11 +89,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         : this(
             new ProjectModel(),
             new ProjectFileService(),
-            new TemplateGenerationService(),
-            new MorphGenerationService(),
             CreateDesignTimeProfileCatalog(),
-            new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(new TemplateGenerationService()),
+            CreateDesignTimeOutputArtifactPlanner(),
+            new OutputArtifactPreflight(),
+            new OutputArtifactCommitter(),
             new EmptyFileDialogService(),
             new NullAppDialogService(),
             templates,
@@ -105,35 +103,31 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     public MainWindowViewModel(
         ProjectModel project,
         ProjectFileService projectFileService,
-        TemplateGenerationService templateGenerationService,
-        MorphGenerationService morphGenerationService,
         TemplateProfileCatalog profileCatalog,
-        BodyGenIniExportWriter bodyGenIniExportWriter,
-        BosJsonExportWriter bosJsonExportWriter,
+        OutputArtifactPlanner outputArtifactPlanner,
+        OutputArtifactPreflight outputArtifactPreflight,
+        OutputArtifactCommitter outputArtifactCommitter,
         IFileDialogService fileDialogService,
         IAppDialogService dialogService,
         TemplatesViewModel templates,
         MorphsViewModel morphs,
         UndoRedoService? undoRedo = null,
         IUserPreferencesService? preferencesService = null,
-        ExportPreviewService? exportPreviewService = null,
         DiagnosticsViewModel? diagnostics = null,
         PortableProjectBundleService? portableProjectBundleService = null)
         : this(
             project,
             projectFileService,
-            templateGenerationService,
-            morphGenerationService,
             new TemplateProfileCatalogService(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog))),
-            bodyGenIniExportWriter,
-            bosJsonExportWriter,
+            outputArtifactPlanner,
+            outputArtifactPreflight,
+            outputArtifactCommitter,
             fileDialogService,
             dialogService,
             templates,
             morphs,
             undoRedo,
             preferencesService,
-            exportPreviewService,
             diagnostics,
             profiles: null,
             navigationService: null,
@@ -144,18 +138,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     public MainWindowViewModel(
         ProjectModel project,
         ProjectFileService projectFileService,
-        TemplateGenerationService templateGenerationService,
-        MorphGenerationService morphGenerationService,
         ITemplateProfileCatalogService profileCatalogService,
-        BodyGenIniExportWriter bodyGenIniExportWriter,
-        BosJsonExportWriter bosJsonExportWriter,
+        OutputArtifactPlanner outputArtifactPlanner,
+        OutputArtifactPreflight outputArtifactPreflight,
+        OutputArtifactCommitter outputArtifactCommitter,
         IFileDialogService fileDialogService,
         IAppDialogService dialogService,
         TemplatesViewModel templates,
         MorphsViewModel morphs,
         UndoRedoService? undoRedo = null,
         IUserPreferencesService? preferencesService = null,
-        ExportPreviewService? exportPreviewService = null,
         DiagnosticsViewModel? diagnostics = null,
         ProfileManagerViewModel? profiles = null,
         INavigationService? navigationService = null,
@@ -163,24 +155,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
-        this.templateGenerationService = templateGenerationService
-                                         ?? throw new ArgumentNullException(nameof(templateGenerationService));
-        this.morphGenerationService = morphGenerationService
-                                      ?? throw new ArgumentNullException(nameof(morphGenerationService));
         this.profileCatalogService = profileCatalogService ?? throw new ArgumentNullException(nameof(profileCatalogService));
-        this.bodyGenIniExportWriter = bodyGenIniExportWriter
-                                      ?? throw new ArgumentNullException(nameof(bodyGenIniExportWriter));
-        this.bosJsonExportWriter = bosJsonExportWriter
-                                   ?? throw new ArgumentNullException(nameof(bosJsonExportWriter));
+        this.outputArtifactPlanner = outputArtifactPlanner ?? throw new ArgumentNullException(nameof(outputArtifactPlanner));
+        this.outputArtifactPreflight = outputArtifactPreflight ?? throw new ArgumentNullException(nameof(outputArtifactPreflight));
+        this.outputArtifactCommitter = outputArtifactCommitter ?? throw new ArgumentNullException(nameof(outputArtifactCommitter));
         this.fileDialogService = fileDialogService ?? throw new ArgumentNullException(nameof(fileDialogService));
         this.dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
-        this.exportPreviewService = exportPreviewService ?? new ExportPreviewService(templateGenerationService);
         this.portableProjectBundleService = portableProjectBundleService ?? new PortableProjectBundleService(
             projectFileService,
-            templateGenerationService,
-            morphGenerationService,
-            bodyGenIniExportWriter,
-            bosJsonExportWriter,
+            outputArtifactPlanner,
             new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
             profileCatalogService.Current,
             new DiagnosticReportTextFormatter());
@@ -374,11 +357,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         : this(
             project,
             new ProjectFileService(),
-            new TemplateGenerationService(),
-            new MorphGenerationService(),
             CreateDesignTimeProfileCatalog(),
-            new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(new TemplateGenerationService()),
+            CreateDesignTimeOutputArtifactPlanner(),
+            new OutputArtifactPreflight(),
+            new OutputArtifactCommitter(),
             new EmptyFileDialogService(),
             new NullAppDialogService(),
             CreateDesignTimeTemplates(project),
@@ -768,13 +750,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     public async Task SaveProjectAsAsync(CancellationToken cancellationToken = default) =>
         await SaveProjectInternalAsync(CurrentProjectPath, true, cancellationToken);
 
+    /// <summary>
+    /// Plans, previews, confirms, and commits the frozen BodyGen artifact pair for the current project state.
+    /// </summary>
     public async Task ExportBodyGenInisAsync(CancellationToken cancellationToken = default)
     {
-        Templates.GenerateTemplates();
-        Morphs.GenerateMorphs();
-
-        if (string.IsNullOrWhiteSpace(Templates.GeneratedTemplateText)
-            && string.IsNullOrWhiteSpace(Morphs.GeneratedMorphsText))
+        if (!HasAnyBodyGenOutputInput())
         {
             StatusMessage = "No generated BodyGen output to export.";
             return;
@@ -790,11 +771,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         try
         {
             ClearFileOperationLedger();
-            var preview = exportPreviewService.PreviewBodyGen(
+            var (group, preview) = await PrepareOutputAsync(
+                OutputIntent.BodyGen,
+                OutputArtifactGroupKind.BodyGen,
                 directoryPath,
-                Templates.GeneratedTemplateText,
-                Morphs.GeneratedMorphsText);
-            ApplyExportPreview("BodyGen", preview);
+                "BodyGen",
+                cancellationToken);
             if (RequiresExportConfirmation(preview)
                 && !await dialogService.ConfirmExportOverwriteAsync(preview, cancellationToken))
             {
@@ -802,10 +784,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
                 return;
             }
 
-            bodyGenIniExportWriter.Write(
-                directoryPath,
-                Templates.GeneratedTemplateText,
-                Morphs.GeneratedMorphsText);
+            await CommitOutputAsync(directoryPath, group, cancellationToken);
             StatusMessage = "Templates and Morphs INI exported.";
         }
         catch (Exception exception)
@@ -815,15 +794,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
     }
 
     /// <summary>
-    /// Builds a read-only BodyGen export preview using the same generated text that the writer receives.
+    /// Builds a read-only BodyGen export preview from the same frozen artifact bytes used for commit.
     /// </summary>
     public async Task PreviewBodyGenExportAsync(CancellationToken cancellationToken = default)
     {
-        Templates.GenerateTemplates();
-        Morphs.GenerateMorphs();
-
-        if (string.IsNullOrWhiteSpace(Templates.GeneratedTemplateText)
-            && string.IsNullOrWhiteSpace(Morphs.GeneratedMorphsText))
+        if (!HasAnyBodyGenOutputInput())
         {
             ClearExportPreview();
             StatusMessage = "No generated BodyGen output to preview.";
@@ -837,14 +812,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        var preview = exportPreviewService.PreviewBodyGen(
+        await PrepareOutputAsync(
+            OutputIntent.BodyGen,
+            OutputArtifactGroupKind.BodyGen,
             directoryPath,
-            Templates.GeneratedTemplateText,
-            Morphs.GeneratedMorphsText);
-        ApplyExportPreview("BodyGen", preview);
+            "BodyGen",
+            cancellationToken);
         StatusMessage = "BodyGen export preview ready.";
     }
 
+    /// <summary>
+    /// Plans, previews, confirms, and atomically commits the frozen BoS JSON artifact batch.
+    /// </summary>
     public async Task ExportBosJsonAsync(CancellationToken cancellationToken = default)
     {
         if (project.SliderPresets.Count == 0)
@@ -860,13 +839,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        var snapshot = project.SliderPresets.Select(preset => preset.Clone()).ToList();
-
         try
         {
             ClearFileOperationLedger();
-            var preview = exportPreviewService.PreviewBosJson(directoryPath, snapshot, CurrentCatalog);
-            ApplyExportPreview("BoS JSON", preview);
+            var (group, preview) = await PrepareOutputAsync(
+                OutputIntent.BosJson,
+                OutputArtifactGroupKind.BosJson,
+                directoryPath,
+                "BoS JSON",
+                cancellationToken);
             if (RequiresExportConfirmation(preview)
                 && !await dialogService.ConfirmExportOverwriteAsync(preview, cancellationToken))
             {
@@ -874,9 +855,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
                 return;
             }
 
-            await Task.Run(
-                () => bosJsonExportWriter.Write(directoryPath, snapshot, CurrentCatalog),
-                cancellationToken);
+            await CommitOutputAsync(directoryPath, group, cancellationToken);
             StatusMessage = "BodyTypes of Skyrim JSON files exported.";
         }
         catch (Exception exception)
@@ -904,22 +883,26 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        var snapshot = project.SliderPresets.Select(preset => preset.Clone()).ToList();
-        var preview = exportPreviewService.PreviewBosJson(directoryPath, snapshot, CurrentCatalog);
-        ApplyExportPreview("BoS JSON", preview);
+        await PrepareOutputAsync(
+            OutputIntent.BosJson,
+            OutputArtifactGroupKind.BosJson,
+            directoryPath,
+            "BoS JSON",
+            cancellationToken);
         StatusMessage = "BoS JSON export preview ready.";
     }
 
     /// <summary>
     /// Previews the portable bundle layout using current in-memory project state without writing the target zip.
     /// </summary>
-    public Task PreviewPortableBundleAsync(CancellationToken cancellationToken = default)
+    public async Task PreviewPortableBundleAsync(CancellationToken cancellationToken = default)
     {
         var request = BuildPortableBundleRequest(BundleTargetPath ?? string.Empty);
-        var preview = portableProjectBundleService.Preview(request);
+        var preview = await RunCancellableBackgroundAsync(
+            token => portableProjectBundleService.Preview(request, token),
+            cancellationToken);
         ApplyBundlePreview(preview, request.SourceProjectFileName);
         StatusMessage = "Portable bundle preview ready.";
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -943,13 +926,17 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
         var request = BuildPortableBundleRequest(targetPath);
         if (File.Exists(targetPath) && !BundleOverwriteAllowed)
         {
-            var preview = portableProjectBundleService.Preview(request);
+            var preview = await RunCancellableBackgroundAsync(
+                token => portableProjectBundleService.Preview(request, token),
+                cancellationToken);
             ApplyBundlePreview(preview, request.SourceProjectFileName);
             StatusMessage = "Target files already exist. Enable overwrite to replace them.";
             return;
         }
 
-        var result = await Task.Run(() => portableProjectBundleService.Create(request), cancellationToken);
+        var result = await RunAtomicCommitAsync(
+            () => portableProjectBundleService.Create(request),
+            cancellationToken);
         ApplyBundleResult(result, request.SourceProjectFileName);
         StatusMessage = result.Outcome == PortableProjectBundleOutcome.Success
             ? "Portable bundle created: " + Path.GetFileName(targetPath) + "."
@@ -980,8 +967,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        var projectSnapshot = new ProjectModel();
+        projectSnapshot.ReplaceWith(project);
         return new PortableProjectBundleRequest(
-            project,
+            projectSnapshot,
             bundlePath,
             sourceProjectFileName,
             BundleOutputIntent,
@@ -1116,6 +1105,86 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
 
         return new ProjectSaveContext(availableProfiles);
     }
+
+    /// <summary>
+    /// Captures the live project synchronously, then freezes exact output bytes on the ReactiveUI task-pool scheduler.
+    /// </summary>
+    /// <param name="intent">Output family selected by the invoking command.</param>
+    /// <param name="cancellationToken">Cancels background planning.</param>
+    /// <returns>An immutable plan that remains authoritative through any later confirmation and commit.</returns>
+    private Task<OutputArtifactPlan> PlanCurrentOutputAsync(
+        OutputIntent intent,
+        CancellationToken cancellationToken)
+    {
+        var projectSnapshot = new ProjectModel();
+        projectSnapshot.ReplaceWith(project);
+        var input = new OutputArtifactPlanningInput(
+            projectSnapshot,
+            CurrentCatalog,
+            intent,
+            Templates.OmitRedundantSliders);
+        return RunCancellableBackgroundAsync(
+            token => outputArtifactPlanner.Plan(input, token),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Produces one frozen plan group and derives its filesystem preview without regenerating content.
+    /// </summary>
+    private async Task<(OutputArtifactCommitGroup Group, ExportPreviewResult Preview)> PrepareOutputAsync(
+        OutputIntent intent,
+        OutputArtifactGroupKind groupKind,
+        string destinationRoot,
+        string previewKind,
+        CancellationToken cancellationToken)
+    {
+        var plan = await PlanCurrentOutputAsync(intent, cancellationToken);
+        var group = plan.GetRequiredGroup(groupKind);
+        var preview = await RunCancellableBackgroundAsync(
+            token => outputArtifactPreflight.Preview(destinationRoot, group, token),
+            cancellationToken);
+        ApplyExportPreview(previewKind, preview);
+        return (group, preview);
+    }
+
+    /// <summary>
+    /// Commits one frozen artifact group on the ReactiveUI task-pool scheduler and resumes on the main scheduler.
+    /// </summary>
+    private Task<OutputArtifactCommitResult> CommitOutputAsync(
+        string destinationRoot,
+        OutputArtifactCommitGroup group,
+        CancellationToken cancellationToken) =>
+        RunAtomicCommitAsync(() => outputArtifactCommitter.Commit(destinationRoot, group), cancellationToken);
+
+    /// <summary>
+    /// Runs cancellable CPU- or I/O-bound work on the ReactiveUI task-pool scheduler and observes completion on the main scheduler.
+    /// </summary>
+    private static Task<T> RunCancellableBackgroundAsync<T>(
+        Func<CancellationToken, T> work,
+        CancellationToken cancellationToken) =>
+        Observable.Start(() => work(cancellationToken), RxSchedulers.TaskpoolScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .ToTask(cancellationToken);
+
+    /// <summary>
+    /// Runs an atomic filesystem commit without abandoning its await after the commit has started.
+    /// </summary>
+    private static Task<T> RunAtomicCommitAsync<T>(Func<T> work, CancellationToken cancellationToken) =>
+        Observable.Start(
+                () =>
+                {
+                    // Abandoning the await could leave an atomic file commit running after the UI reports cancellation.
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return work();
+                },
+                RxSchedulers.TaskpoolScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .ToTask();
+
+    private bool HasAnyBodyGenOutputInput() =>
+        project.SliderPresets.Count > 0
+        || project.CustomMorphTargets.Count > 0
+        || project.MorphedNpcs.Count > 0;
 
     private void ClearFileOperationLedger()
     {
@@ -1369,6 +1438,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable
                     Array.Empty<string>()))
         });
     }
+
+    /// <summary>
+    /// Creates the exact-byte planner used by design-time and convenience construction paths.
+    /// </summary>
+    private static OutputArtifactPlanner CreateDesignTimeOutputArtifactPlanner() => new(
+        new TemplateGenerationService(),
+        new MorphGenerationService());
 
     private static TemplatesViewModel CreateDesignTimeTemplates(ProjectModel project)
     {

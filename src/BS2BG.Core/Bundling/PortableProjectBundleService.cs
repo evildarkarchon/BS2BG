@@ -23,14 +23,10 @@ public sealed class PortableProjectBundleService
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
     private readonly ProjectFileService projectFileService;
-    private readonly TemplateGenerationService templateGenerationService;
-    private readonly MorphGenerationService morphGenerationService;
-    private readonly BodyGenIniExportWriter bodyGenIniExportWriter;
-    private readonly BosJsonExportWriter bosJsonExportWriter;
+    private readonly OutputArtifactPlanner outputArtifactPlanner;
     private readonly AssignmentStrategyReplayService replayService;
     private readonly RequestScopedProfileCatalogComposer profileCatalogComposer;
     private readonly DiagnosticReportTextFormatter reportTextFormatter;
-    private readonly string? tempRoot;
     private readonly Action<string, string> bundleCommitter;
 
     /// <summary>
@@ -38,24 +34,16 @@ public sealed class PortableProjectBundleService
     /// </summary>
     public PortableProjectBundleService(
         ProjectFileService projectFileService,
-        TemplateGenerationService templateGenerationService,
-        MorphGenerationService morphGenerationService,
-        BodyGenIniExportWriter bodyGenIniExportWriter,
-        BosJsonExportWriter bosJsonExportWriter,
+        OutputArtifactPlanner outputArtifactPlanner,
         AssignmentStrategyReplayService replayService,
         TemplateProfileCatalog profileCatalog,
-        DiagnosticReportTextFormatter reportTextFormatter,
-        string? tempRoot = null)
+        DiagnosticReportTextFormatter reportTextFormatter)
         : this(
             projectFileService,
-            templateGenerationService,
-            morphGenerationService,
-            bodyGenIniExportWriter,
-            bosJsonExportWriter,
+            outputArtifactPlanner,
             replayService,
             profileCatalog,
             reportTextFormatter,
-            tempRoot,
             CommitBundleFile)
     {
     }
@@ -66,25 +54,17 @@ public sealed class PortableProjectBundleService
     /// <param name="bundleCommitter">Commits a fully written temp zip to the final bundle path.</param>
     internal PortableProjectBundleService(
         ProjectFileService projectFileService,
-        TemplateGenerationService templateGenerationService,
-        MorphGenerationService morphGenerationService,
-        BodyGenIniExportWriter bodyGenIniExportWriter,
-        BosJsonExportWriter bosJsonExportWriter,
+        OutputArtifactPlanner outputArtifactPlanner,
         AssignmentStrategyReplayService replayService,
         TemplateProfileCatalog profileCatalog,
         DiagnosticReportTextFormatter reportTextFormatter,
-        string? tempRoot,
         Action<string, string> bundleCommitter)
     {
         this.projectFileService = projectFileService ?? throw new ArgumentNullException(nameof(projectFileService));
-        this.templateGenerationService = templateGenerationService ?? throw new ArgumentNullException(nameof(templateGenerationService));
-        this.morphGenerationService = morphGenerationService ?? throw new ArgumentNullException(nameof(morphGenerationService));
-        this.bodyGenIniExportWriter = bodyGenIniExportWriter ?? throw new ArgumentNullException(nameof(bodyGenIniExportWriter));
-        this.bosJsonExportWriter = bosJsonExportWriter ?? throw new ArgumentNullException(nameof(bosJsonExportWriter));
+        this.outputArtifactPlanner = outputArtifactPlanner ?? throw new ArgumentNullException(nameof(outputArtifactPlanner));
         this.replayService = replayService ?? throw new ArgumentNullException(nameof(replayService));
         profileCatalogComposer = new RequestScopedProfileCatalogComposer(profileCatalog ?? throw new ArgumentNullException(nameof(profileCatalog)));
         this.reportTextFormatter = reportTextFormatter ?? throw new ArgumentNullException(nameof(reportTextFormatter));
-        this.tempRoot = tempRoot;
         this.bundleCommitter = bundleCommitter ?? throw new ArgumentNullException(nameof(bundleCommitter));
     }
 
@@ -93,11 +73,22 @@ public sealed class PortableProjectBundleService
     /// </summary>
     /// <param name="request">Bundle request containing project, output intent, source filename, and privacy roots.</param>
     /// <returns>A deterministic preview describing planned entries or blocking status.</returns>
-    public PortableProjectBundlePreview Preview(PortableProjectBundleRequest request)
+    public PortableProjectBundlePreview Preview(PortableProjectBundleRequest request) =>
+        Preview(request, CancellationToken.None);
+
+    /// <summary>
+    /// Plans the bundle contents while observing cancellation between its major phases.
+    /// </summary>
+    /// <param name="request">Bundle request containing project, output intent, source filename, and privacy roots.</param>
+    /// <param name="cancellationToken">Cancels preview planning between its major phases.</param>
+    /// <returns>A deterministic preview describing planned entries or blocking status.</returns>
+    public PortableProjectBundlePreview Preview(
+        PortableProjectBundleRequest request,
+        CancellationToken cancellationToken)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
 
-        var plan = BuildPlan(request);
+        var plan = BuildPlan(request, cancellationToken);
         return new PortableProjectBundlePreview(
             plan.Outcome,
             plan.ManifestEntries,
@@ -136,7 +127,7 @@ public sealed class PortableProjectBundleService
                 FindPrivacyFindings(string.Empty, reportText, string.Empty));
         }
 
-        var plan = BuildPlan(request);
+        var plan = BuildPlan(request, CancellationToken.None);
         if (plan.Outcome != PortableProjectBundleOutcome.Success)
         {
             return new PortableProjectBundleResult(
@@ -204,14 +195,16 @@ public sealed class PortableProjectBundleService
         }
     }
 
-    private BundlePlan BuildPlan(PortableProjectBundleRequest request)
+    private BundlePlan BuildPlan(PortableProjectBundleRequest request, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var createdUtc = (request.CreatedUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
         var profileResolution = ReferencedCustomProfileResolver.Resolve(
             request.Project,
             request.SaveContext?.AvailableCustomProfilesByName);
         var requestProfileCatalog = profileCatalogComposer.BuildForProject(profileResolution);
         var replayResult = replayService.PrepareForBodyGen(request.Project, request.Intent, cloneBeforeReplay: true);
+        cancellationToken.ThrowIfCancellationRequested();
         var replayReportText = FormatReplayReport(replayResult, request, request.PrivateRoots);
         if (replayResult.IsBlocked)
         {
@@ -227,6 +220,7 @@ public sealed class PortableProjectBundleService
 
         var outputProject = replayResult.Project;
         var validationReport = ProjectValidationService.Validate(outputProject, requestProfileCatalog);
+        cancellationToken.ThrowIfCancellationRequested();
         var reportText = reportTextFormatter.Format(validationReport, request.PrivateRoots);
         if (validationReport.BlockerCount > 0)
             return BlockedPlan(PortableProjectBundleOutcome.ValidationBlocked, createdUtc, validationReport, reportText, replayReportText, request.PrivateRoots);
@@ -240,7 +234,6 @@ public sealed class PortableProjectBundleService
             return BlockedPlan(PortableProjectBundleOutcome.MissingProfile, createdUtc, validationReport, missingText, replayReportText, request.PrivateRoots);
         }
 
-        var stagingDirectory = CreateStagingDirectory();
         try
         {
             var entries = new List<BundleContentEntry>
@@ -252,7 +245,14 @@ public sealed class PortableProjectBundleService
                 entries.Add(Entry("reports/replay.txt", "report", Utf8NoBom.GetBytes(replayReportText)));
 
             AddProfileEntries(entries, profileResolution.ResolvedProfiles);
-            AddGeneratedOutputEntries(entries, request, outputProject, stagingDirectory, requestProfileCatalog);
+            cancellationToken.ThrowIfCancellationRequested();
+            var outputPlan = outputArtifactPlanner.Plan(new OutputArtifactPlanningInput(
+                outputProject,
+                requestProfileCatalog,
+                request.Intent,
+                omitRedundantSliders: false), cancellationToken);
+            AddGeneratedOutputEntries(entries, outputPlan);
+            cancellationToken.ThrowIfCancellationRequested();
             RejectDuplicateEntries(entries.Select(entry => entry.Path));
 
             entries = entries.OrderBy(entry => entry.Path, StringComparer.Ordinal).ToList();
@@ -280,6 +280,10 @@ public sealed class PortableProjectBundleService
                 privacyFindings,
                 replayReportText);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception)
         {
             return new BundlePlan(
@@ -292,35 +296,25 @@ public sealed class PortableProjectBundleService
                 FindPrivacyFindings(string.Empty, reportText, replayReportText),
                 replayReportText);
         }
-        finally
-        {
-            TryDeleteDirectory(stagingDirectory);
-        }
     }
 
-    private void AddGeneratedOutputEntries(
+    /// <summary>
+    /// Mounts frozen artifact groups into their portable bundle roots without filesystem staging or re-encoding.
+    /// </summary>
+    private static void AddGeneratedOutputEntries(
         List<BundleContentEntry> entries,
-        PortableProjectBundleRequest request,
-        ProjectModel outputProject,
-        string stagingDirectory,
-        TemplateProfileCatalog requestProfileCatalog)
+        OutputArtifactPlan outputPlan)
     {
-        if (request.Intent is OutputIntent.BodyGen or OutputIntent.All)
+        foreach (var group in outputPlan.Groups)
         {
-            var bodyGenDirectory = Path.Combine(stagingDirectory, "bodygen");
-            var templatesText = templateGenerationService.GenerateTemplates(outputProject.SliderPresets, requestProfileCatalog, omitRedundantSliders: false);
-            var morphsText = morphGenerationService.GenerateMorphs(outputProject).Text;
-            bodyGenIniExportWriter.Write(bodyGenDirectory, templatesText, morphsText);
-            entries.Add(FileEntry("outputs/bodygen/templates.ini", "bodygen", Path.Combine(bodyGenDirectory, "templates.ini")));
-            entries.Add(FileEntry("outputs/bodygen/morphs.ini", "bodygen", Path.Combine(bodyGenDirectory, "morphs.ini")));
-        }
-
-        if (request.Intent is OutputIntent.BosJson or OutputIntent.All)
-        {
-            var bosDirectory = Path.Combine(stagingDirectory, "bos");
-            var result = bosJsonExportWriter.Write(bosDirectory, outputProject.SliderPresets, requestProfileCatalog);
-            foreach (var filePath in result.FilePaths.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
-                entries.Add(FileEntry("outputs/bos/" + Path.GetFileName(filePath), "bos", filePath));
+            var (prefix, kind) = group.Kind switch
+            {
+                OutputArtifactGroupKind.BodyGen => ("outputs/bodygen/", "bodygen"),
+                OutputArtifactGroupKind.BosJson => ("outputs/bos/", "bos"),
+                _ => throw new InvalidOperationException("Unknown output artifact group: " + group.Kind),
+            };
+            foreach (var artifact in group.Artifacts)
+                entries.Add(Entry(prefix + artifact.RelativePath, kind, artifact.CopyContent()));
         }
     }
 
@@ -429,9 +423,6 @@ public sealed class PortableProjectBundleService
         return string.Join("\n", rows) + "\n";
     }
 
-    private static BundleContentEntry FileEntry(string entryPath, string kind, string sourcePath) =>
-        Entry(entryPath, kind, File.ReadAllBytes(sourcePath));
-
     private static BundleContentEntry Entry(string path, string kind, byte[] bytes) =>
         new(BundlePathScrubber.NormalizeEntryPath(path), kind, bytes);
 
@@ -457,15 +448,6 @@ public sealed class PortableProjectBundleService
             : new[] { "No private path leaks detected." };
     }
 
-    private string CreateStagingDirectory()
-    {
-        var root = tempRoot ?? Path.GetTempPath();
-        Directory.CreateDirectory(root);
-        var path = Path.Combine(root, "bs2bg-bundle-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(path);
-        return path;
-    }
-
     private static void RejectDuplicateEntries(IEnumerable<string> paths)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -479,18 +461,6 @@ public sealed class PortableProjectBundleService
         var invalid = Path.GetInvalidFileNameChars().ToHashSet();
         var safe = new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
         return safe.Length == 0 ? "profile" : safe;
-    }
-
-    private static void TryDeleteDirectory(string path)
-    {
-        try
-        {
-            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
-        }
-        catch (Exception)
-        {
-            // Cleanup is best-effort so a secondary temp deletion problem does not mask the primary bundle outcome.
-        }
     }
 
     private static void TryDeleteFile(string path)

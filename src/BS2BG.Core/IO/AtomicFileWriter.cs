@@ -51,66 +51,102 @@ public static class AtomicFileWriter
             encoding);
     }
 
+    /// <summary>
+    /// Atomically writes a text batch by staging every encoded file before committing any target.
+    /// </summary>
     public static void WriteAtomicBatch(
         IReadOnlyList<(string Path, string Content)> entries,
         Encoding encoding)
     {
         if (entries is null) throw new ArgumentNullException(nameof(entries));
-
         if (encoding is null) throw new ArgumentNullException(nameof(encoding));
 
+        var pendingWrites = CreatePendingWrites(
+            entries,
+            content => content is null,
+            (tempPath, content) => File.WriteAllText(tempPath, content, encoding));
+        WriteAtomicBatchCore(pendingWrites);
+    }
+
+    /// <summary>
+    /// Atomically writes an exact-byte batch without decoding, newline normalization, or encoding conversion.
+    /// </summary>
+    /// <param name="entries">Target paths and authoritative bytes committed as one rollback group.</param>
+    public static void WriteAtomicBatch(IReadOnlyList<(string Path, byte[] Content)> entries)
+    {
+        if (entries is null) throw new ArgumentNullException(nameof(entries));
+
+        var pendingWrites = CreatePendingWrites(
+            entries,
+            content => content is null,
+            (tempPath, content) => File.WriteAllBytes(tempPath, content));
+        WriteAtomicBatchCore(pendingWrites);
+    }
+
+    /// <summary>
+    /// Validates a batch and captures its target/temp paths plus deferred staging action without changing encoding behavior.
+    /// </summary>
+    private static List<PendingWrite> CreatePendingWrites<T>(
+        IReadOnlyList<(string Path, T Content)> entries,
+        Func<T, bool> contentIsNull,
+        Action<string, T> writeTemp)
+    {
         if (entries.Count == 0)
             throw new ArgumentException("Entries must contain at least one item.", nameof(entries));
 
-        var normalized = new List<(string FullPath, string TempPath, string Content)>(entries.Count);
+        var pendingWrites = new List<PendingWrite>(entries.Count);
         var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in entries)
         {
             if (entry.Path is null)
                 throw new ArgumentException("Entry path cannot be null.", nameof(entries));
-
-            if (entry.Content is null)
+            if (contentIsNull(entry.Content))
                 throw new ArgumentException("Entry content cannot be null.", nameof(entries));
 
             var fullPath = Path.GetFullPath(entry.Path);
             if (!seenPaths.Add(fullPath))
-                throw new ArgumentException(
-                    "Duplicate target path: " + fullPath,
-                    nameof(entries));
+                throw new ArgumentException("Duplicate target path: " + fullPath, nameof(entries));
 
-            normalized.Add((fullPath, CreateTempPath(fullPath), entry.Content));
+            var tempPath = CreateTempPath(fullPath);
+            var content = entry.Content;
+            pendingWrites.Add(new PendingWrite(fullPath, tempPath, () => writeTemp(tempPath, content)));
         }
 
-        var ledger = new WriteOutcomeLedger(normalized.Select(entry => entry.FullPath));
+        return pendingWrites;
+    }
 
+    /// <summary>
+    /// Stages the full batch, commits in order, and rolls back earlier targets if a later commit fails.
+    /// </summary>
+    private static void WriteAtomicBatchCore(IReadOnlyList<PendingWrite> pendingWrites)
+    {
+        var ledger = new WriteOutcomeLedger(pendingWrites.Select(entry => entry.FullPath));
         try
         {
-            foreach (var entry in normalized)
-                File.WriteAllText(entry.TempPath, entry.Content, encoding);
+            foreach (var entry in pendingWrites) entry.WriteTemp();
         }
         catch
         {
-            foreach (var entry in normalized) TryDeleteTempFile(entry.TempPath);
-
+            foreach (var entry in pendingWrites) TryDeleteTempFile(entry.TempPath);
             throw;
         }
 
-        var committed = new List<(int Index, string FullPath, string? BackupPath)>(normalized.Count);
-        for (var i = 0; i < normalized.Count; i++)
+        var committed = new List<(int Index, string FullPath, string? BackupPath)>(pendingWrites.Count);
+        for (var i = 0; i < pendingWrites.Count; i++)
         {
-            var (fullPath, tempPath, _) = normalized[i];
+            var pending = pendingWrites[i];
             try
             {
-                if (File.Exists(fullPath))
+                if (File.Exists(pending.FullPath))
                 {
-                    var backupPath = fullPath + ".bak." + Guid.NewGuid().ToString("N");
-                    File.Replace(tempPath, fullPath, backupPath);
-                    committed.Add((i, fullPath, backupPath));
+                    var backupPath = pending.FullPath + ".bak." + Guid.NewGuid().ToString("N");
+                    File.Replace(pending.TempPath, pending.FullPath, backupPath);
+                    committed.Add((i, pending.FullPath, backupPath));
                 }
                 else
                 {
-                    File.Move(tempPath, fullPath);
-                    committed.Add((i, fullPath, null));
+                    File.Move(pending.TempPath, pending.FullPath);
+                    committed.Add((i, pending.FullPath, null));
                 }
 
                 ledger.SetOutcome(i, FileWriteOutcome.Written);
@@ -138,11 +174,10 @@ public static class AtomicFileWriter
                     }
                 }
 
-                for (var k = i; k < normalized.Count; k++) TryDeleteTempFile(normalized[k].TempPath);
+                for (var k = i; k < pendingWrites.Count; k++) TryDeleteTempFile(pendingWrites[k].TempPath);
 
                 ledger.SetOutcome(i, FileWriteOutcome.LeftUntouched, commitException.Message);
-                for (var k = i + 1; k < normalized.Count; k++)
-                    ledger.SetOutcome(k, FileWriteOutcome.Skipped);
+                for (var k = i + 1; k < pendingWrites.Count; k++) ledger.SetOutcome(k, FileWriteOutcome.Skipped);
 
                 if (rollbackExceptions.Count == 0)
                     throw new AtomicWriteException(
@@ -200,4 +235,6 @@ public static class AtomicFileWriter
             // Best-effort cleanup must not hide the original write or rollback failure.
         }
     }
+
+    private sealed record PendingWrite(string FullPath, string TempPath, Action WriteTemp);
 }

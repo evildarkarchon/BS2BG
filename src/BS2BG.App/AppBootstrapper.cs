@@ -41,17 +41,15 @@ public static class AppBootstrapper
         services.AddSingleton<ProfileDiagnosticsService>();
         services.AddSingleton<DiagnosticsReportFormatter>();
         services.AddSingleton<DiagnosticReportTextFormatter>();
-        services.AddSingleton<BodyGenIniExportWriter>();
-        services.AddSingleton<BosJsonExportWriter>();
+        services.AddSingleton<OutputArtifactPlanner>();
+        services.AddSingleton<OutputArtifactPreflight>();
+        services.AddSingleton<OutputArtifactCommitter>();
         services.AddSingleton<AssignmentStrategyReplayService>();
         // The singleton keeps only the bundled/base catalog; local and project custom profiles flow per request
         // through MainWindowViewModel.BuildProjectSaveContext so bundle output cannot capture a stale snapshot.
         services.AddSingleton(provider => new PortableProjectBundleService(
             provider.GetRequiredService<ProjectFileService>(),
-            provider.GetRequiredService<TemplateGenerationService>(),
-            provider.GetRequiredService<MorphGenerationService>(),
-            provider.GetRequiredService<BodyGenIniExportWriter>(),
-            provider.GetRequiredService<BosJsonExportWriter>(),
+            provider.GetRequiredService<OutputArtifactPlanner>(),
             provider.GetRequiredService<AssignmentStrategyReplayService>(),
             provider.GetRequiredService<ITemplateProfileCatalogService>().Current,
             provider.GetRequiredService<DiagnosticReportTextFormatter>()));

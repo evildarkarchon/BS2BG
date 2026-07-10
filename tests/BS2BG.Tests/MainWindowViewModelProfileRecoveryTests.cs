@@ -272,7 +272,11 @@ public sealed class MainWindowViewModelProfileRecoveryTests
     private static ViewModelServices CreateViewModel(ProjectModel project, IReadOnlyList<CustomProfileDefinition> localProfiles)
     {
         var templateGeneration = new TemplateGenerationService();
+        var morphGeneration = new MorphGenerationService();
         var catalogService = new StubTemplateProfileCatalogService(localProfiles);
+        var outputArtifactPlanner = new OutputArtifactPlanner(templateGeneration, morphGeneration);
+        var outputArtifactPreflight = new OutputArtifactPreflight();
+        var outputArtifactCommitter = new OutputArtifactCommitter();
         var templates = new TemplatesViewModel(
             project,
             new BodySlideXmlParser(),
@@ -284,18 +288,17 @@ public sealed class MainWindowViewModelProfileRecoveryTests
             project,
             new NpcTextParser(),
             new MorphAssignmentService(new RandomAssignmentProvider()),
-            new MorphGenerationService(),
+            morphGeneration,
             new EmptyNpcTextFilePicker(),
             new EmptyClipboardService());
         var dialog = new FakeAppDialogService([]);
         var viewModel = new MainWindowViewModel(
             project,
             new ProjectFileService(),
-            templateGeneration,
-            new MorphGenerationService(),
             catalogService,
-            new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(templateGeneration),
+            outputArtifactPlanner,
+            outputArtifactPreflight,
+            outputArtifactCommitter,
             new EmptyFileDialogService(),
             dialog,
             templates,

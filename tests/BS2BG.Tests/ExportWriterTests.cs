@@ -1,137 +1,21 @@
 using System.Text;
 using BS2BG.Core.Export;
-using BS2BG.Core.Formatting;
-using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 using BS2BG.Core.Serialization;
 using Xunit;
-using ModelSetSlider = BS2BG.Core.Models.SetSlider;
-using SliderPreset = BS2BG.Core.Models.SliderPreset;
 
 namespace BS2BG.Tests;
 
 public sealed class ExportWriterTests
 {
-    private static readonly string[] BreastInvertedNames = ["Breasts"];
-
     [Fact]
-    public void BodyGenIniExportWriterWritesTemplatesAndMorphsWithCrLfUtf8NoBom()
+    public void OutputArtifactCommitterRemovesTempFilesOnSuccess()
     {
         using var directory = new TemporaryDirectory();
-        var writer = new BodyGenIniExportWriter();
+        var committer = new OutputArtifactCommitter();
 
-        var result = writer.Write(directory.Path, "Alpha=Scale@1.0\nBeta=Scale@0.5",
-            "All|Female=Alpha\rSkyrim.esm|A2C94=Beta");
-
-        result.TemplatesPath.Should().Be(Path.Combine(directory.Path, "templates.ini"));
-        result.MorphsPath.Should().Be(Path.Combine(directory.Path, "morphs.ini"));
-        File.ReadAllText(result.TemplatesPath).Should().Be("Alpha=Scale@1.0\r\nBeta=Scale@0.5");
-        File.ReadAllText(result.MorphsPath).Should().Be("All|Female=Alpha\r\nSkyrim.esm|A2C94=Beta");
-
-        var templateBytes = File.ReadAllBytes(result.TemplatesPath);
-        HasUtf8Bom(templateBytes).Should().BeFalse();
-        templateBytes.Should().Contain((byte)'\r');
-        templateBytes.Should().Contain((byte)'\n');
-    }
-
-    [Fact]
-    public void BodyGenExportCombinesProfileSpecificTemplatesWithProfileIndependentMorphs()
-    {
-        using var directory = new TemporaryDirectory();
-        var catalog = new TemplateProfileCatalog(new[]
-        {
-            new TemplateProfile(
-                ProjectProfileMapping.SkyrimCbbe,
-                new SliderProfile(
-                    new[] { new SliderDefault("Breasts", 0.2f, 1f) },
-                    Array.Empty<SliderMultiplier>(),
-                    BreastInvertedNames)),
-            new TemplateProfile(
-                ProjectProfileMapping.Fallout4Cbbe,
-                new SliderProfile(
-                    new[] { new SliderDefault("Breasts", 1f, 1f) },
-                    Array.Empty<SliderMultiplier>(),
-                    Array.Empty<string>()))
-        });
-        var alpha = new SliderPreset("Alpha", ProjectProfileMapping.SkyrimCbbe);
-        alpha.AddSetSlider(new ModelSetSlider("Breasts"));
-        var beta = new SliderPreset("Beta", ProjectProfileMapping.Fallout4Cbbe);
-        beta.AddSetSlider(new ModelSetSlider("Breasts"));
-        var templatesText = new TemplateGenerationService().GenerateTemplates(new[] { beta, alpha }, catalog, false);
-        var project = new ProjectModel();
-        var customTarget = new CustomMorphTarget("All|Female");
-        customTarget.AddSliderPreset(alpha);
-        project.CustomMorphTargets.Add(customTarget);
-        var npc = new Npc("Lydia") { Mod = "Skyrim.esm", FormId = "000A2C94" };
-        npc.AddSliderPreset(beta);
-        project.MorphedNpcs.Add(npc);
-        var morphsText = new MorphGenerationService().GenerateMorphs(project).Text;
-        var writer = new BodyGenIniExportWriter();
-
-        var result = writer.Write(directory.Path, templatesText, morphsText);
-
-        File.ReadAllText(result.TemplatesPath).Should().Be("Alpha=Breasts@0.0\r\nBeta=Breasts@1.0");
-        File.ReadAllText(result.MorphsPath).Should().Be("All|Female=Alpha\r\nSkyrim.esm|A2C94=Beta");
-    }
-
-    [Fact]
-    public void BosJsonExportWriterSanitizesFilenamesAndKeepsOriginalBodyNames()
-    {
-        using var directory = new TemporaryDirectory();
-        var catalog = new TemplateProfileCatalog(new[]
-        {
-            new TemplateProfile(
-                ProjectProfileMapping.SkyrimCbbe,
-                new SliderProfile(
-                    Array.Empty<SliderDefault>(),
-                    Array.Empty<SliderMultiplier>(),
-                    Array.Empty<string>()))
-        });
-        var writer = new BosJsonExportWriter(new TemplateGenerationService());
-        var first = new SliderPreset("Preset:One");
-        var second = new SliderPreset("Preset?One");
-
-        var result = writer.Write(directory.Path, new[] { first, second }, catalog);
-
-        result.FilePaths.Should().Equal(Path.Combine(directory.Path, "Preset_One.json"),
-            Path.Combine(directory.Path, "Preset_One (2).json"));
-        File.ReadAllText(result.FilePaths[0]).Should().Contain("\"bodyname\": \"Preset:One\"");
-        File.ReadAllText(result.FilePaths[1]).Should().Contain("\"bodyname\": \"Preset?One\"");
-    }
-
-    [Fact]
-    public void BosJsonExportWriterSanitizesWindowsDeviceNames()
-    {
-        using var directory = new TemporaryDirectory();
-        var catalog = new TemplateProfileCatalog(new[]
-        {
-            new TemplateProfile(
-                ProjectProfileMapping.SkyrimCbbe,
-                new SliderProfile(
-                    Array.Empty<SliderDefault>(),
-                    Array.Empty<SliderMultiplier>(),
-                    Array.Empty<string>()))
-        });
-        var writer = new BosJsonExportWriter(new TemplateGenerationService());
-        var first = new SliderPreset("CON");
-        var second = new SliderPreset("COM1");
-
-        var result = writer.Write(directory.Path, new[] { first, second }, catalog);
-
-        result.FilePaths.Should().Equal(Path.Combine(directory.Path, "COM1_.json"),
-            Path.Combine(directory.Path, "CON_.json"));
-        File.ReadAllText(result.FilePaths[0]).Should().Contain("\"bodyname\": \"COM1\"");
-        File.ReadAllText(result.FilePaths[1]).Should().Contain("\"bodyname\": \"CON\"");
-    }
-
-    [Fact]
-    public void BodyGenIniExportWriterRemovesTempFilesOnSuccess()
-    {
-        using var directory = new TemporaryDirectory();
-        var writer = new BodyGenIniExportWriter();
-
-        writer.Write(directory.Path, "templates", "morphs");
+        committer.Commit(directory.Path, BodyGenGroup("templates", "morphs"));
 
         Directory.GetFiles(directory.Path).Should().BeEquivalentTo(
             Path.Combine(directory.Path, "templates.ini"),
@@ -139,16 +23,16 @@ public sealed class ExportWriterTests
     }
 
     [Fact]
-    public void BodyGenIniExportWriterAtomicallyReplacesExistingPair()
+    public void OutputArtifactCommitterAtomicallyReplacesExistingBodyGenGroup()
     {
         using var directory = new TemporaryDirectory();
         var templatesPath = Path.Combine(directory.Path, "templates.ini");
         var morphsPath = Path.Combine(directory.Path, "morphs.ini");
         File.WriteAllText(templatesPath, "OLD_TEMPLATES");
         File.WriteAllText(morphsPath, "OLD_MORPHS");
-        var writer = new BodyGenIniExportWriter();
+        var committer = new OutputArtifactCommitter();
 
-        writer.Write(directory.Path, "Alpha=1.0", "All|Female=Alpha");
+        committer.Commit(directory.Path, BodyGenGroup("Alpha=1.0", "All|Female=Alpha"));
 
         File.ReadAllText(templatesPath).Should().Be("Alpha=1.0");
         File.ReadAllText(morphsPath).Should().Be("All|Female=Alpha");
@@ -281,19 +165,10 @@ public sealed class ExportWriterTests
     }
 
     [Fact]
-    public void BosJsonExportWriterRollsBackOnLockedTargetMidBatch()
+    public void OutputArtifactCommitterRollsBackLockedBosTargetMidBatch()
     {
         using var directory = new TemporaryDirectory();
-        var catalog = new TemplateProfileCatalog(new[]
-        {
-            new TemplateProfile(
-                ProjectProfileMapping.SkyrimCbbe,
-                new SliderProfile(
-                    Array.Empty<SliderDefault>(),
-                    Array.Empty<SliderMultiplier>(),
-                    Array.Empty<string>()))
-        });
-        var writer = new BosJsonExportWriter(new TemplateGenerationService());
+        var committer = new OutputArtifactCommitter();
         var path1 = Path.Combine(directory.Path, "Preset1.json");
         var path2 = Path.Combine(directory.Path, "Preset2.json");
         var path3 = Path.Combine(directory.Path, "Preset3.json");
@@ -301,11 +176,11 @@ public sealed class ExportWriterTests
         File.WriteAllText(path2, "OLD_2");
         File.WriteAllText(path3, "OLD_3");
 
-        var presets = new[] { new SliderPreset("Preset1"), new SliderPreset("Preset2"), new SliderPreset("Preset3") };
+        var group = BosGroup("Preset1.json", "Preset2.json", "Preset3.json");
 
         using (new FileStream(path2, FileMode.Open, FileAccess.Read, FileShare.None))
         {
-            var act = () => writer.Write(directory.Path, presets, catalog);
+            var act = () => committer.Commit(directory.Path, group);
             act.Should().Throw<IOException>();
         }
 
@@ -334,18 +209,18 @@ public sealed class ExportWriterTests
     }
 
     [Fact]
-    public void BodyGenIniExportWriterPropagatesAtomicWriteExceptionLedgerWhenCommitFails()
+    public void OutputArtifactCommitterPropagatesAtomicWriteExceptionLedgerWhenCommitFails()
     {
         using var directory = new TemporaryDirectory();
         var templatesPath = Path.Combine(directory.Path, "templates.ini");
         var morphsPath = Path.Combine(directory.Path, "morphs.ini");
         File.WriteAllText(templatesPath, "OLD_TEMPLATES");
         File.WriteAllText(morphsPath, "OLD_MORPHS");
-        var writer = new BodyGenIniExportWriter();
+        var committer = new OutputArtifactCommitter();
 
         using (new FileStream(morphsPath, FileMode.Open, FileAccess.Read, FileShare.None))
         {
-            var act = () => writer.Write(directory.Path, "NEW_TEMPLATES", "NEW_MORPHS");
+            var act = () => committer.Commit(directory.Path, BodyGenGroup("NEW_TEMPLATES", "NEW_MORPHS"));
 
             var exception = act.Should().Throw<AtomicWriteException>().Which;
             exception.Entries.Should().Contain(entry => entry.Path == templatesPath && entry.Outcome == FileWriteOutcome.Restored);
@@ -374,8 +249,20 @@ public sealed class ExportWriterTests
         File.ReadAllText(projectPath).Should().Be("OLD_PROJECT");
     }
 
-    private static bool HasUtf8Bom(byte[] bytes) =>
-        bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+    private static OutputArtifactCommitGroup BodyGenGroup(string templates, string morphs) => new(
+        OutputArtifactGroupKind.BodyGen,
+        new[]
+        {
+            Artifact(OutputArtifactRole.BodyGenTemplates, "templates.ini", templates),
+            Artifact(OutputArtifactRole.BodyGenMorphs, "morphs.ini", morphs),
+        });
+
+    private static OutputArtifactCommitGroup BosGroup(params string[] paths) => new(
+        OutputArtifactGroupKind.BosJson,
+        paths.Select(path => Artifact(OutputArtifactRole.BosPresetJson, path, "{}")));
+
+    private static OutputArtifact Artifact(OutputArtifactRole role, string path, string content) =>
+        new(role, path, new UTF8Encoding(false).GetBytes(content));
 
     private sealed class FaultingEncoding : Encoding
     {

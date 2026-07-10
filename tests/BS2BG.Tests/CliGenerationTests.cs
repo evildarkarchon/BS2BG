@@ -838,15 +838,18 @@ public sealed class CliGenerationTests
         AssertNoImplementationStackTrace(result.StandardError);
     }
 
-    private static HeadlessGenerationService CreateHeadlessService() => new(
-        new ProjectFileService(),
-        new TemplateGenerationService(),
-        new MorphGenerationService(),
-        new BodyGenIniExportWriter(),
-        new BosJsonExportWriter(new TemplateGenerationService()),
-        new BosJsonExportPlanner(),
-        new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
-        CreateCatalog());
+    private static HeadlessGenerationService CreateHeadlessService()
+    {
+        var templateGenerationService = new TemplateGenerationService();
+        var morphGenerationService = new MorphGenerationService();
+        return new HeadlessGenerationService(
+            new ProjectFileService(),
+            new OutputArtifactPlanner(templateGenerationService, morphGenerationService),
+            new OutputArtifactPreflight(),
+            new OutputArtifactCommitter(),
+            new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
+            CreateCatalog());
+    }
 
     private static ProjectModel CreateStaleAssignmentStrategyProject(
         AssignmentStrategyDefinition? strategy,

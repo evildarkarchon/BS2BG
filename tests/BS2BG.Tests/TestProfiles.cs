@@ -71,10 +71,17 @@ internal static class TestProfiles
         var expectedDirectory = Path.Combine(directory, childName);
         var bodyGenDirectory = Path.Combine(expectedDirectory, "bodygen");
         var bosDirectory = Path.Combine(expectedDirectory, "bos");
-        var templatesText = new TemplateGenerationService().GenerateTemplates(project.SliderPresets, catalog, false);
-        var morphsText = new MorphGenerationService().GenerateMorphs(project).Text;
-        new BodyGenIniExportWriter().Write(bodyGenDirectory, templatesText, morphsText);
-        new BosJsonExportWriter(new TemplateGenerationService()).Write(bosDirectory, project.SliderPresets, catalog);
+        var plan = new OutputArtifactPlanner(
+                new TemplateGenerationService(),
+                new MorphGenerationService())
+            .Plan(new OutputArtifactPlanningInput(
+                project,
+                catalog,
+                OutputIntent.All,
+                omitRedundantSliders: false));
+        var committer = new OutputArtifactCommitter();
+        committer.Commit(bodyGenDirectory, plan.GetRequiredGroup(OutputArtifactGroupKind.BodyGen));
+        committer.Commit(bosDirectory, plan.GetRequiredGroup(OutputArtifactGroupKind.BosJson));
         return new ExpectedOutputPaths(
             Path.Combine(bodyGenDirectory, "templates.ini"),
             Path.Combine(bosDirectory, "Alpha.json"));

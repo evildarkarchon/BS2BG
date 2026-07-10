@@ -180,13 +180,14 @@ public static class Program
     private static HeadlessGenerationService CreateGenerationService()
     {
         var templateGenerationService = new TemplateGenerationService();
+        var outputArtifactPlanner = new OutputArtifactPlanner(
+            templateGenerationService,
+            new MorphGenerationService());
         return new HeadlessGenerationService(
             new ProjectFileService(),
-            templateGenerationService,
-            new MorphGenerationService(),
-            new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(templateGenerationService),
-            new BosJsonExportPlanner(),
+            outputArtifactPlanner,
+            new OutputArtifactPreflight(),
+            new OutputArtifactCommitter(),
             new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
             new TemplateProfileCatalogFactory().Create());
     }
@@ -206,10 +207,7 @@ public static class Program
         var catalog = new TemplateProfileCatalogFactory().Create();
         var service = new PortableProjectBundleService(
             projectFileService,
-            templateGenerationService,
-            new MorphGenerationService(),
-            new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(templateGenerationService),
+            new OutputArtifactPlanner(templateGenerationService, new MorphGenerationService()),
             new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
             catalog,
             new DiagnosticReportTextFormatter());

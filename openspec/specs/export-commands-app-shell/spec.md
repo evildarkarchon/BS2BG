@@ -31,6 +31,19 @@ The system SHALL export one BoS JSON file per preset to a chosen folder and SHAL
 - **WHEN** a preset name contains a Windows-reserved filename character
 - **THEN** the exported JSON filename is sanitized and the JSON body keeps the original preset name
 
+### Requirement: Preview and commit share one authoritative artifact plan
+The system SHALL freeze ordered, commit-group-relative paths and exact output bytes once per preview-confirm-commit operation. Preview, direct export, headless automation, and portable bundles SHALL consume those frozen artifacts without regenerating names or content.
+
+#### Scenario: Project state changes after BoS planning
+- **WHEN** a BoS export plan is created and the live project changes before filesystem commit
+- **THEN** the committed JSON bytes match the already-previewed plan
+- **AND** a later export operation creates a fresh plan from the newer project state
+
+#### Scenario: All-output automation fails during BoS commit
+- **WHEN** the BodyGen commit group succeeds and the later BoS commit group fails
+- **THEN** the BodyGen pair remains committed
+- **AND** the BoS batch rolls back independently
+
 ### Requirement: About dialog credits authors
 The system SHALL credit Totiman / asdasfa as original jBS2BG author and evildarkarchon as port author in the About dialog.
 

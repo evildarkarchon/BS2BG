@@ -436,24 +436,28 @@ public sealed class PortableBundleServiceTests
     }
 
     [Fact]
-    public void BundleOutputBytesExactlyMatchExistingWriters()
+    public void BundleOutputBytesExactlyMatchAuthoritativePlan()
     {
         using var directory = new TemporaryDirectory();
         var project = CreateProjectWithAssignedPreset();
         var bundlePath = Path.Combine(directory.Path, "bytes.zip");
-        var expectedDirectory = Path.Combine(directory.Path, "expected");
-        var expectedBosDirectory = Path.Combine(expectedDirectory, "bos");
-        var templatesText = new TemplateGenerationService().GenerateTemplates(project.SliderPresets, CreateCatalog(), false);
-        var morphsText = new MorphGenerationService().GenerateMorphs(project).Text;
-        new BodyGenIniExportWriter().Write(expectedDirectory, templatesText, morphsText);
-        new BosJsonExportWriter(new TemplateGenerationService()).Write(expectedBosDirectory, project.SliderPresets, CreateCatalog());
+        var expectedPlan = CreateOutputArtifactPlanner().Plan(new OutputArtifactPlanningInput(
+            project,
+            CreateCatalog(),
+            OutputIntent.All,
+            omitRedundantSliders: false), TestContext.Current.CancellationToken);
+        var expectedBodyGen = expectedPlan.GetRequiredGroup(OutputArtifactGroupKind.BodyGen);
+        var expectedBos = expectedPlan.GetRequiredGroup(OutputArtifactGroupKind.BosJson);
 
         CreateService().Create(CreateRequest(project, bundlePath, OutputIntent.All, overwrite: false)).Outcome.Should().Be(PortableProjectBundleOutcome.Success);
 
         using var archive = ZipFile.OpenRead(bundlePath);
-        ReadEntryBytes(archive, "outputs/bodygen/templates.ini").Should().Equal(File.ReadAllBytes(Path.Combine(expectedDirectory, "templates.ini")));
-        ReadEntryBytes(archive, "outputs/bodygen/morphs.ini").Should().Equal(File.ReadAllBytes(Path.Combine(expectedDirectory, "morphs.ini")));
-        ReadEntryBytes(archive, "outputs/bos/Alpha.json").Should().Equal(File.ReadAllBytes(Path.Combine(expectedBosDirectory, "Alpha.json")));
+        ReadEntryBytes(archive, "outputs/bodygen/templates.ini").Should().Equal(
+            expectedBodyGen.Artifacts.Single(artifact => artifact.Role == OutputArtifactRole.BodyGenTemplates).CopyContent());
+        ReadEntryBytes(archive, "outputs/bodygen/morphs.ini").Should().Equal(
+            expectedBodyGen.Artifacts.Single(artifact => artifact.Role == OutputArtifactRole.BodyGenMorphs).CopyContent());
+        ReadEntryBytes(archive, "outputs/bos/Alpha.json").Should().Equal(
+            expectedBos.Artifacts.Single().CopyContent());
     }
 
     [Fact]
@@ -627,9 +631,9 @@ public sealed class PortableBundleServiceTests
         var blockedPath = Path.Combine(directory.Path, "preview-blocked.zip");
         var noStrategyPath = Path.Combine(directory.Path, "preview-no-strategy.zip");
 
-        var success = CreateService().Preview(CreateRequest(CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy()), successPath, OutputIntent.BodyGen, overwrite: false));
-        var blocked = CreateService().Preview(CreateRequest(CreateStaleAssignmentStrategyProject(CreateNordOnlyBlockingStrategy()), blockedPath, OutputIntent.BodyGen, overwrite: false));
-        var noStrategy = CreateService().Preview(CreateRequest(CreateStaleAssignmentStrategyProject(null), noStrategyPath, OutputIntent.BodyGen, overwrite: false));
+        var success = CreateService().Preview(CreateRequest(CreateStaleAssignmentStrategyProject(CreateRaceFilterStrategy()), successPath, OutputIntent.BodyGen, overwrite: false), TestContext.Current.CancellationToken);
+        var blocked = CreateService().Preview(CreateRequest(CreateStaleAssignmentStrategyProject(CreateNordOnlyBlockingStrategy()), blockedPath, OutputIntent.BodyGen, overwrite: false), TestContext.Current.CancellationToken);
+        var noStrategy = CreateService().Preview(CreateRequest(CreateStaleAssignmentStrategyProject(null), noStrategyPath, OutputIntent.BodyGen, overwrite: false), TestContext.Current.CancellationToken);
 
         success.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
         GetReplayReportText(success).Should().Contain("Assignment strategy replayed: RaceFilters; assigned NPCs: 3; blocked NPCs: 0.");
@@ -712,29 +716,12 @@ public sealed class PortableBundleServiceTests
     }
 
     [Fact]
-    public void TempStagingDirectoryIsRemovedOnSuccessAndFailure()
-    {
-        using var directory = new TemporaryDirectory();
-        var tempRoot = Path.Combine(directory.Path, "temp-root");
-        Directory.CreateDirectory(tempRoot);
-        var successPath = Path.Combine(directory.Path, "success.zip");
-        var invalidBundlePath = Path.Combine(directory.Path, "not-a-file");
-        Directory.CreateDirectory(invalidBundlePath);
-        var service = CreateService(tempRoot);
-
-        service.Create(CreateRequest(CreateProjectWithAssignedPreset(), successPath, OutputIntent.BodyGen, overwrite: false)).Outcome.Should().Be(PortableProjectBundleOutcome.Success);
-        service.Create(CreateRequest(CreateProjectWithAssignedPreset(), invalidBundlePath, OutputIntent.BodyGen, overwrite: true)).Outcome.Should().Be(PortableProjectBundleOutcome.IoFailure);
-
-        Directory.EnumerateDirectories(tempRoot).Should().BeEmpty();
-    }
-
-    [Fact]
     public void PreviewReturnsManifestReportAndPrivacyFindingsWithoutWritingZip()
     {
         using var directory = new TemporaryDirectory();
         var bundlePath = Path.Combine(directory.Path, "preview.zip");
 
-        var preview = CreateService().Preview(CreateRequest(CreateProjectWithAssignedPreset(), bundlePath, OutputIntent.BodyGen, overwrite: false));
+        var preview = CreateService().Preview(CreateRequest(CreateProjectWithAssignedPreset(), bundlePath, OutputIntent.BodyGen, overwrite: false), TestContext.Current.CancellationToken);
 
         preview.Outcome.Should().Be(PortableProjectBundleOutcome.Success);
         preview.Entries.Should().Contain(entry => entry.Path == "project/project.jbs2bg");
@@ -744,48 +731,39 @@ public sealed class PortableBundleServiceTests
         File.Exists(bundlePath).Should().BeFalse();
     }
 
-    private static PortableProjectBundleService CreateService(string? tempRoot = null) => new(
+    private static PortableProjectBundleService CreateService() => new(
         new ProjectFileService(),
-        new TemplateGenerationService(),
-        new MorphGenerationService(),
-        new BodyGenIniExportWriter(),
-        new BosJsonExportWriter(new TemplateGenerationService()),
+        CreateOutputArtifactPlanner(),
         new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
         CreateCatalog(),
-        new DiagnosticReportTextFormatter(),
-        tempRoot);
+        new DiagnosticReportTextFormatter());
 
     private static PortableProjectBundleService CreateBundledOnlyService() => new(
         new ProjectFileService(),
-        new TemplateGenerationService(),
-        new MorphGenerationService(),
-        new BodyGenIniExportWriter(),
-        new BosJsonExportWriter(new TemplateGenerationService()),
+        CreateOutputArtifactPlanner(),
         new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
         CreateBundledOnlyCatalog(),
         new DiagnosticReportTextFormatter());
 
     private static PortableProjectBundleService CreateServiceWithCommitter() => new(
         new ProjectFileService(),
-        new TemplateGenerationService(),
-        new MorphGenerationService(),
-        new BodyGenIniExportWriter(),
-        new BosJsonExportWriter(new TemplateGenerationService()),
+        CreateOutputArtifactPlanner(),
         new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
         CreateCatalog(),
         new DiagnosticReportTextFormatter(),
-        tempRoot: null,
         bundleCommitter: ThrowingBundleCommitter.Commit);
 
     private static HeadlessGenerationService CreateHeadlessService() => new(
         new ProjectFileService(),
-        new TemplateGenerationService(),
-        new MorphGenerationService(),
-        new BodyGenIniExportWriter(),
-        new BosJsonExportWriter(new TemplateGenerationService()),
-        new BosJsonExportPlanner(),
+        CreateOutputArtifactPlanner(),
+        new OutputArtifactPreflight(),
+        new OutputArtifactCommitter(),
         new AssignmentStrategyReplayService(new MorphAssignmentService(new RandomAssignmentProvider())),
         CreateCatalog());
+
+    private static OutputArtifactPlanner CreateOutputArtifactPlanner() => new(
+        new TemplateGenerationService(),
+        new MorphGenerationService());
 
     private static MainWindowViewModel CreateBundleViewModel(ProjectModel project)
     {
@@ -794,11 +772,10 @@ public sealed class PortableBundleServiceTests
         return new MainWindowViewModel(
             project,
             new ProjectFileService(),
-            templateGenerationService,
-            new MorphGenerationService(),
             catalog,
-            new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(templateGenerationService),
+            new OutputArtifactPlanner(templateGenerationService, new MorphGenerationService()),
+            new OutputArtifactPreflight(),
+            new OutputArtifactCommitter(),
             new FakeBundleFileDialogService(),
             new NullAppDialogService(),
             CreateTemplatesViewModel(project, catalog),
@@ -815,11 +792,10 @@ public sealed class PortableBundleServiceTests
         return new MainWindowViewModel(
             project,
             new ProjectFileService(),
-            templateGenerationService,
-            new MorphGenerationService(),
             catalogService,
-            new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(templateGenerationService),
+            new OutputArtifactPlanner(templateGenerationService, new MorphGenerationService()),
+            new OutputArtifactPreflight(),
+            new OutputArtifactCommitter(),
             new FakeBundleFileDialogService(),
             new NullAppDialogService(),
             CreateTemplatesViewModel(project, catalogService.Current),
@@ -1058,10 +1034,14 @@ public sealed class PortableBundleServiceTests
         var expectedDirectory = Path.Combine(directory, childName);
         var bodyGenDirectory = Path.Combine(expectedDirectory, "bodygen");
         var bosDirectory = Path.Combine(expectedDirectory, "bos");
-        var templatesText = new TemplateGenerationService().GenerateTemplates(project.SliderPresets, catalog, false);
-        var morphsText = new MorphGenerationService().GenerateMorphs(project).Text;
-        new BodyGenIniExportWriter().Write(bodyGenDirectory, templatesText, morphsText);
-        new BosJsonExportWriter(new TemplateGenerationService()).Write(bosDirectory, project.SliderPresets, catalog);
+        var plan = CreateOutputArtifactPlanner().Plan(new OutputArtifactPlanningInput(
+            project,
+            catalog,
+            OutputIntent.All,
+            omitRedundantSliders: false));
+        var committer = new OutputArtifactCommitter();
+        committer.Commit(bodyGenDirectory, plan.GetRequiredGroup(OutputArtifactGroupKind.BodyGen));
+        committer.Commit(bosDirectory, plan.GetRequiredGroup(OutputArtifactGroupKind.BosJson));
         return new ExpectedOutputPaths(
             Path.Combine(bodyGenDirectory, "templates.ini"),
             Directory.GetFiles(bosDirectory, "*.json", SearchOption.TopDirectoryOnly)

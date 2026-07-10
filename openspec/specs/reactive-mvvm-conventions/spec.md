@@ -20,6 +20,8 @@ All commands exposed by App-layer ViewModels SHALL be instances of `ReactiveUI.R
 ### Requirement: Async commands provide cooperative cancellation via CancellationToken
 Long-running command bodies SHALL be created via `ReactiveCommand.CreateFromTask((CancellationToken) => Task)` (or a `CreateFromObservable` equivalent that propagates cancellation), so that disposing the command's invocation subscription cancels the in-flight task body.
 
+An atomic filesystem commit MAY honor cancellation only before the commit begins. Once started, its command body SHALL remain pending until the commit succeeds or rolls back; it MUST NOT report cancellation while file mutation can still complete in the background.
+
 #### Scenario: Disposing an in-flight async command invocation cancels its task
 - **WHEN** an async `ReactiveCommand` is invoked and the returned subscription is disposed before the task completes
 - **THEN** the `CancellationToken` passed to the task body is observed as cancelled and the task ends without producing a result
@@ -52,7 +54,7 @@ Derived or aggregate properties (for example, an aggregate `IsBusy` over child V
 - **THEN** `MainWindowViewModel.IsBusy` becomes `true` and `PropertyChanged` is raised, with no imperative aggregation code in the setter
 
 ### Requirement: Background work uses ReactiveUI schedulers
-Command bodies that perform long-running CPU- or I/O-bound work SHALL execute on `RxApp.TaskpoolScheduler` and SHALL marshal results to the UI via `RxApp.MainThreadScheduler`. ViewModels SHALL NOT call `Avalonia.Threading.Dispatcher.UIThread.InvokeAsync` (or equivalent) to push state changes onto the UI thread.
+Command bodies that perform long-running CPU- or I/O-bound work SHALL execute on `RxSchedulers.TaskpoolScheduler` and SHALL marshal results to the UI via `RxSchedulers.MainThreadScheduler`. ViewModels SHALL NOT call `Avalonia.Threading.Dispatcher.UIThread.InvokeAsync` (or equivalent) to push state changes onto the UI thread.
 
 #### Scenario: ViewModels do not invoke Dispatcher.UIThread directly
 - **WHEN** the source under `src/BS2BG.App/ViewModels/` is searched for `Dispatcher.UIThread.InvokeAsync` or `Dispatcher.UIThread.Post`

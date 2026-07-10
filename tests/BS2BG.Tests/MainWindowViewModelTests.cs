@@ -557,7 +557,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ExportBosJsonSnapshotsPresetsBeforeBackgroundWrite()
+    public async Task ExportBosJsonCommitsFrozenPlanBytesAfterProjectMutation()
     {
         using var directory = new TemporaryDirectory();
         var project = new ProjectModel();
@@ -573,16 +573,14 @@ public sealed class MainWindowViewModelTests
             preset.Clone(),
             profileCatalog.GetProfile(preset.ProfileName));
 
-        var inspectingWriter = new InspectingBosJsonExportWriter(
-            templateGeneration,
-            () => slider.ValueBig = 999);
+        var inspectingCommitter = new InspectingOutputArtifactCommitter(() => slider.ValueBig = 999);
 
         var dialogs = new FakeFileDialogService { BosJsonExportFolder = directory.Path };
         var viewModel = CreateViewModel(
             project,
             dialogs,
             profileCatalog: profileCatalog,
-            bosJsonExportWriter: inspectingWriter);
+            outputArtifactCommitter: inspectingCommitter);
 
         await viewModel.ExportBosJsonAsync(TestContext.Current.CancellationToken);
 
@@ -1006,6 +1004,8 @@ public sealed class MainWindowViewModelTests
     {
         var parser = new BodySlideXmlParser();
         var templateGeneration = new TemplateGenerationService();
+        var morphGeneration = new MorphGenerationService();
+        var outputArtifactPlanner = new OutputArtifactPlanner(templateGeneration, morphGeneration);
         var profileCatalog = CreateProfileCatalogWithDefault();
         var templates = new TemplatesViewModel(
             project,
@@ -1019,7 +1019,7 @@ public sealed class MainWindowViewModelTests
             project,
             new NpcTextParser(),
             new MorphAssignmentService(new RandomAssignmentProvider()),
-            new MorphGenerationService(),
+            morphGeneration,
             new EmptyNpcTextFilePicker(),
             new EmptyClipboardService(),
             undoRedo: undoRedo);
@@ -1027,11 +1027,10 @@ public sealed class MainWindowViewModelTests
         return new MainWindowViewModel(
             project,
             projectFileService ?? new ProjectFileService(),
-            templateGeneration,
-            new MorphGenerationService(),
             profileCatalog,
-            new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(templateGeneration),
+            outputArtifactPlanner,
+            new OutputArtifactPreflight(),
+            new OutputArtifactCommitter(),
             fileDialogs,
             new FakeAppDialogService(),
             templates,
@@ -1046,11 +1045,15 @@ public sealed class MainWindowViewModelTests
         TemplateProfileCatalog? profileCatalog = null,
         ITemplateProfileCatalogService? profileCatalogService = null,
         ProjectFileService? projectFileService = null,
-        BosJsonExportWriter? bosJsonExportWriter = null,
+        OutputArtifactCommitter? outputArtifactCommitter = null,
         INpcTextFilePicker? npcTextFilePicker = null)
     {
         var parser = new BodySlideXmlParser();
         var templateGeneration = new TemplateGenerationService();
+        var morphGeneration = new MorphGenerationService();
+        var outputArtifactPlanner = new OutputArtifactPlanner(templateGeneration, morphGeneration);
+        var outputArtifactPreflight = new OutputArtifactPreflight();
+        outputArtifactCommitter ??= new OutputArtifactCommitter();
         profileCatalog ??= CreateProfileCatalogWithDefault();
         var templates = profileCatalogService is null
             ? new TemplatesViewModel(
@@ -1071,7 +1074,7 @@ public sealed class MainWindowViewModelTests
             project,
             new NpcTextParser(),
             new MorphAssignmentService(new RandomAssignmentProvider()),
-            new MorphGenerationService(),
+            morphGeneration,
             npcTextFilePicker ?? new EmptyNpcTextFilePicker(),
             new EmptyClipboardService());
 
@@ -1079,11 +1082,10 @@ public sealed class MainWindowViewModelTests
             ? new MainWindowViewModel(
                 project,
                 projectFileService ?? new ProjectFileService(),
-                templateGeneration,
-                new MorphGenerationService(),
                 profileCatalog,
-                new BodyGenIniExportWriter(),
-                bosJsonExportWriter ?? new BosJsonExportWriter(templateGeneration),
+                outputArtifactPlanner,
+                outputArtifactPreflight,
+                outputArtifactCommitter,
                 fileDialogs,
                 dialogs ?? new FakeAppDialogService(),
                 templates,
@@ -1091,11 +1093,10 @@ public sealed class MainWindowViewModelTests
             : new MainWindowViewModel(
                 project,
                 projectFileService ?? new ProjectFileService(),
-                templateGeneration,
-                new MorphGenerationService(),
                 profileCatalogService,
-                new BodyGenIniExportWriter(),
-                bosJsonExportWriter ?? new BosJsonExportWriter(templateGeneration),
+                outputArtifactPlanner,
+                outputArtifactPreflight,
+                outputArtifactCommitter,
                 fileDialogs,
                 dialogs ?? new FakeAppDialogService(),
                 templates,
@@ -1386,24 +1387,17 @@ public sealed class MainWindowViewModelTests
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
-    private sealed class InspectingBosJsonExportWriter : BosJsonExportWriter
+    private sealed class InspectingOutputArtifactCommitter(Action mutateAfterPlanning) : OutputArtifactCommitter
     {
-        private readonly Action mutateAfterCapture;
-
-        public InspectingBosJsonExportWriter(
-            TemplateGenerationService templateGenerationService,
-            Action mutateAfterCapture)
-            : base(templateGenerationService) =>
-            this.mutateAfterCapture = mutateAfterCapture;
-
-        public override BosJsonExportResult Write(
-            string directoryPath,
-            IEnumerable<SliderPreset> presets,
-            TemplateProfileCatalog profileCatalog)
+        /// <summary>
+        /// Mutates the source project after planning, then commits the already-frozen artifact bytes.
+        /// </summary>
+        public override OutputArtifactCommitResult Commit(
+            string destinationRoot,
+            OutputArtifactCommitGroup group)
         {
-            var materialized = presets.ToList();
-            mutateAfterCapture();
-            return base.Write(directoryPath, materialized, profileCatalog);
+            mutateAfterPlanning();
+            return base.Commit(destinationRoot, group);
         }
     }
 

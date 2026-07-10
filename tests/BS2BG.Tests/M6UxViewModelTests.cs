@@ -283,7 +283,11 @@ public sealed class M6UxViewModelTests
     {
         undoRedo ??= new UndoRedoService();
         var templateGeneration = new TemplateGenerationService();
+        var morphGeneration = new MorphGenerationService();
         var profileCatalog = CreateCatalog();
+        var outputArtifactPlanner = new OutputArtifactPlanner(templateGeneration, morphGeneration);
+        var outputArtifactPreflight = new OutputArtifactPreflight();
+        var outputArtifactCommitter = new OutputArtifactCommitter();
         var templates = new TemplatesViewModel(
             project,
             new BodySlideXmlParser(),
@@ -296,18 +300,17 @@ public sealed class M6UxViewModelTests
             project,
             new NpcTextParser(),
             new MorphAssignmentService(new QueueRandomAssignmentProvider()),
-            new MorphGenerationService(),
+            morphGeneration,
             new EmptyNpcTextFilePicker(),
             new EmptyClipboardService(),
             undoRedo: undoRedo);
         var main = new MainWindowViewModel(
             project,
             new ProjectFileService(),
-            templateGeneration,
-            new MorphGenerationService(),
             profileCatalog,
-            new BodyGenIniExportWriter(),
-            new BosJsonExportWriter(templateGeneration),
+            outputArtifactPlanner,
+            outputArtifactPreflight,
+            outputArtifactCommitter,
             new EmptyFileDialogService(),
             new ConfirmingAppDialogService(),
             templates,
