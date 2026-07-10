@@ -7,6 +7,7 @@ using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
 using BS2BG.Core.Morphs;
+using BS2BG.Core.Profiles;
 
 namespace BS2BG.Core.Serialization;
 
@@ -31,7 +32,7 @@ public sealed record ProjectLoadDiagnostic(
     AssignmentStrategyDefinition? SalvageableAssignmentStrategy = null);
 
 /// <summary>
-/// Save-time profile resolver used to embed referenced local custom profiles that are not already project-owned.
+/// Save-time profile availability used to embed referenced local custom profiles that are not already project-owned.
 /// </summary>
 /// <param name="AvailableCustomProfilesByName">Case-insensitive custom profile definitions available from the runtime catalog or store.</param>
 public sealed record ProjectSaveContext(IReadOnlyDictionary<string, CustomProfileDefinition> AvailableCustomProfilesByName);
@@ -128,7 +129,7 @@ public class ProjectFileService
     {
         if (project is null) throw new ArgumentNullException(nameof(project));
 
-        return SaveToString(project, null);
+        return SaveToString(project, (ProjectSaveContext?)null);
     }
 
     /// <summary>
@@ -141,7 +142,26 @@ public class ProjectFileService
     {
         if (project is null) throw new ArgumentNullException(nameof(project));
 
-        return JsonSerializer.Serialize(ToDto(project, saveContext), JsonOptions);
+        var resolution = ReferencedCustomProfileResolver.Resolve(
+            project,
+            saveContext?.AvailableCustomProfilesByName);
+        return SaveToString(project, resolution);
+    }
+
+    /// <summary>
+    /// Serializes a project using a referenced custom-profile resolution already captured by the calling request.
+    /// </summary>
+    /// <param name="project">Project model to serialize.</param>
+    /// <param name="profileResolution">Stable resolution outcome for the same project request.</param>
+    /// <returns>Indented project JSON with only resolved custom profile snapshots embedded in name order.</returns>
+    internal string SaveToString(
+        ProjectModel project,
+        ReferencedCustomProfileResolution profileResolution)
+    {
+        if (project is null) throw new ArgumentNullException(nameof(project));
+        if (profileResolution is null) throw new ArgumentNullException(nameof(profileResolution));
+
+        return JsonSerializer.Serialize(ToDto(project, profileResolution), JsonOptions);
     }
 
     private static SliderPreset ToModel(string presetName, SliderPresetDto? dto)
@@ -198,7 +218,15 @@ public class ProjectFileService
         }
     }
 
-    private static ProjectFileDto ToDto(ProjectModel project, ProjectSaveContext? saveContext)
+    /// <summary>
+    /// Projects the current project and its stable profile resolution into the serialized project shape.
+    /// </summary>
+    /// <param name="project">Project state whose legacy and optional sections are serialized.</param>
+    /// <param name="profileResolution">Resolved custom profiles captured for this save request.</param>
+    /// <returns>Serialization DTO with optional sections appended after legacy project fields.</returns>
+    private static ProjectFileDto ToDto(
+        ProjectModel project,
+        ReferencedCustomProfileResolution profileResolution)
     {
         return new ProjectFileDto
         {
@@ -210,7 +238,7 @@ public class ProjectFileService
                 .ToDictionary(target => target.Name, ToDto, StringComparer.Ordinal),
             MorphedNpCs = new NamedNpcObjectList(project.MorphedNpcs
                 .Select(npc => new NamedNpcObject(npc.Name, ToDto(npc)))),
-            CustomProfiles = ToEmbeddedProfileDtos(project, saveContext),
+            CustomProfiles = ToEmbeddedProfileDtos(profileResolution),
             AssignmentStrategy = ToAssignmentStrategyElement(project.AssignmentStrategy),
         };
     }
@@ -238,47 +266,26 @@ public class ProjectFileService
         };
     }
 
-    private static JsonElement? ToEmbeddedProfileDtos(ProjectModel project, ProjectSaveContext? saveContext)
+    /// <summary>
+    /// Serializes resolved custom profile snapshots alphabetically for deterministic project-file output.
+    /// </summary>
+    /// <param name="profileResolution">Stable resolution outcome whose unresolved names remain only on presets.</param>
+    /// <returns>Embedded profile array, or <see langword="null"/> when no custom definitions resolved.</returns>
+    private static JsonElement? ToEmbeddedProfileDtos(ReferencedCustomProfileResolution profileResolution)
     {
-        var referencedNames = project.SliderPresets
-            .Select(preset => preset.ProfileName)
-            .Where(name => !IsBundledProfileName(name))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (referencedNames.Count == 0) return null;
+        if (profileResolution.ResolvedProfiles.Count == 0) return null;
 
-        var projectProfiles = project.CustomProfiles
-            .Where(profile => !IsBundledProfileName(profile.Name) && profile.SourceKind != ProfileSourceKind.Bundled)
-            .ToDictionary(profile => profile.Name, StringComparer.OrdinalIgnoreCase);
-        var resolved = new List<CustomProfileDefinition>();
-        foreach (var name in referencedNames)
-        {
-            if (projectProfiles.TryGetValue(name, out var projectProfile))
-            {
-                resolved.Add(projectProfile);
-                continue;
-            }
-
-            if (saveContext?.AvailableCustomProfilesByName.TryGetValue(name, out var contextProfile) == true
-                && !IsBundledProfileName(contextProfile.Name)
-                && contextProfile.SourceKind != ProfileSourceKind.Bundled)
-            {
-                resolved.Add(contextProfile);
-            }
-        }
-
-        if (resolved.Count == 0) return null;
-
-        var profiles = resolved
+        var profiles = profileResolution.ResolvedProfiles
             .OrderBy(profile => profile.Name, StringComparer.OrdinalIgnoreCase)
             .Select(ToEmbeddedProfileElement)
             .ToList();
         return JsonSerializer.SerializeToElement(profiles, JsonOptions);
     }
 
-    private static JsonElement ToEmbeddedProfileElement(CustomProfileDefinition profile) =>
+    private static JsonElement ToEmbeddedProfileElement(ReferencedCustomProfileSnapshot profile) =>
         JsonSerializer.SerializeToElement(ToEmbeddedProfileDto(profile), JsonOptions);
 
-    private static EmbeddedProfileDto ToEmbeddedProfileDto(CustomProfileDefinition profile) =>
+    private static EmbeddedProfileDto ToEmbeddedProfileDto(ReferencedCustomProfileSnapshot profile) =>
         new()
         {
             Version = 1,
@@ -570,7 +577,7 @@ public class ProjectFileService
             }
 
             var profile = result.Profile;
-            if (IsBundledProfileName(profile.Name))
+            if (ProjectProfileMapping.IsBundledProfileName(profile.Name))
             {
                 diagnostics.Add(new ProjectLoadDiagnostic(
                     "EmbeddedProfileBundledNameCollision",
@@ -605,11 +612,6 @@ public class ProjectFileService
 
         return null;
     }
-
-    private static bool IsBundledProfileName(string? name) =>
-        string.Equals(name, ProjectProfileMapping.SkyrimCbbe, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, ProjectProfileMapping.SkyrimUunp, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, ProjectProfileMapping.Fallout4Cbbe, StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<KeyValuePair<string, NpcDto?>> Enumerate(NamedNpcObjectList? values)
     {

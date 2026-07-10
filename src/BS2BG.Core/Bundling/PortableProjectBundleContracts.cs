@@ -29,7 +29,7 @@ public enum PortableProjectBundleOutcome
 /// <param name="Intent">Requested generated output family included in the bundle.</param>
 /// <param name="Overwrite">Whether an existing destination zip may be replaced.</param>
 /// <param name="CreatedUtc">Optional deterministic timestamp used for manifests and zip entry timestamps.</param>
-/// <param name="SaveContext">Optional save context for referenced local custom profile embedding.</param>
+/// <param name="SaveContext">Optional save/bundle adapter carrying fallback custom profiles available to resolution.</param>
 /// <param name="PrivateRoots">Local roots that must be scrubbed from reports and support artifacts.</param>
 public sealed record PortableProjectBundleRequest(
     ProjectModel Project,

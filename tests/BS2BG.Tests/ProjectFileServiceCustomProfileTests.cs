@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BS2BG.Core.Formatting;
 using BS2BG.Core.Models;
 using BS2BG.Core.Serialization;
@@ -110,6 +111,35 @@ public sealed class ProjectFileServiceCustomProfileTests
             .Should().BeLessThan(saved.IndexOf("\"CustomProfiles\"", StringComparison.Ordinal));
         saved.IndexOf("\"Name\": \"Context Body\"", StringComparison.Ordinal)
             .Should().BeLessThan(saved.IndexOf("\"Name\": \"Zeta Body\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Verifies saving malformed in-memory duplicate project copies follows the canonical first-wins resolution policy.
+    /// </summary>
+    [Fact]
+    public void SaveUsesFirstCaseInsensitiveProjectCopyWithoutThrowing()
+    {
+        var service = new ProjectFileService();
+        var project = TestProfiles.CreateProjectUsingProfile("Community Body");
+        project.CustomProfiles.Add(TestProfiles.CreateProfile(
+            "Community Body",
+            ProfileSourceKind.EmbeddedProject,
+            null,
+            TestProfiles.CreateEmbeddedSliderProfile()));
+        project.CustomProfiles.Add(TestProfiles.CreateProfile(
+            "community body",
+            ProfileSourceKind.EmbeddedProject,
+            null,
+            TestProfiles.CreateCommunitySliderProfile()));
+
+        var saved = service.SaveToString(project);
+
+        using var document = JsonDocument.Parse(saved);
+        var profiles = document.RootElement.GetProperty("CustomProfiles");
+        profiles.GetArrayLength().Should().Be(1);
+        profiles[0].GetProperty("Name").GetString().Should().Be("Community Body");
+        profiles[0].GetProperty("Defaults").GetProperty("Breasts").GetProperty("valueBig").GetSingle()
+            .Should().Be(0.9f);
     }
 
     [Fact]

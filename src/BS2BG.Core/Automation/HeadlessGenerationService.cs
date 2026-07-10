@@ -4,8 +4,9 @@ using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
 using BS2BG.Core.IO;
 using BS2BG.Core.Models;
-using BS2BG.Core.Serialization;
 using BS2BG.Core.Morphs;
+using BS2BG.Core.Profiles;
+using BS2BG.Core.Serialization;
 
 namespace BS2BG.Core.Automation;
 
@@ -61,7 +62,8 @@ public sealed class HeadlessGenerationService(
             return UsageError("Project file could not be read: " + exception.Message);
         }
 
-        var requestProfileCatalog = profileCatalogComposer.BuildForProject(project);
+        var profileResolution = ReferencedCustomProfileResolver.Resolve(project);
+        var requestProfileCatalog = profileCatalogComposer.BuildForProject(profileResolution);
         var replayResult = replayService.PrepareForBodyGen(project, request.Intent, cloneBeforeReplay: true);
         if (replayResult.IsBlocked)
             return new HeadlessGenerationResult(
@@ -79,7 +81,9 @@ public sealed class HeadlessGenerationService(
                 Array.Empty<string>(),
                 validationReport);
 
-        var missingProfiles = FindMissingReferencedCustomProfiles(generationProject, requestProfileCatalog).ToArray();
+        var missingProfiles = profileResolution.UnresolvedProfileNames
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         if (missingProfiles.Length > 0)
             return new HeadlessGenerationResult(
                 AutomationExitCode.ValidationBlocked,
@@ -153,20 +157,6 @@ public sealed class HeadlessGenerationService(
             foreach (var path in bosJsonExportPlanner.Plan(request.OutputDirectory, project.SliderPresets))
                 yield return path;
     }
-
-    /// <summary>
-    /// Finds non-bundled preset profile references that the request catalog cannot resolve before fallback generation can occur.
-    /// </summary>
-    /// <param name="project">Loaded project containing the profile references to check.</param>
-    /// <param name="requestProfileCatalog">Catalog composed for this request after project load.</param>
-    /// <returns>Distinct missing profile names ordered deterministically for stable CLI messages.</returns>
-    private static IEnumerable<string> FindMissingReferencedCustomProfiles(
-        ProjectModel project,
-        TemplateProfileCatalog requestProfileCatalog) => project.SliderPresets
-            .Select(preset => preset.ProfileName)
-            .Where(name => !requestProfileCatalog.ContainsProfile(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
 
     private static bool IncludesBodyGen(OutputIntent intent) => intent is OutputIntent.BodyGen or OutputIntent.All;
 

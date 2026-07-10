@@ -8,6 +8,7 @@ using BS2BG.Core.Diagnostics;
 using BS2BG.Core.Export;
 using BS2BG.Core.Generation;
 using BS2BG.Core.Models;
+using BS2BG.Core.Profiles;
 using BS2BG.Core.Serialization;
 
 namespace BS2BG.Core.Bundling;
@@ -119,9 +120,12 @@ public sealed class PortableProjectBundleService
 
         if (File.Exists(request.BundlePath) && !request.Overwrite)
         {
+            var profileResolution = ReferencedCustomProfileResolver.Resolve(
+                request.Project,
+                request.SaveContext?.AvailableCustomProfilesByName);
             var validationReport = ProjectValidationService.Validate(
                 request.Project,
-                profileCatalogComposer.BuildForProject(request.Project, request.SaveContext));
+                profileCatalogComposer.BuildForProject(profileResolution));
             var reportText = reportTextFormatter.Format(validationReport, request.PrivateRoots);
             return new PortableProjectBundleResult(
                 PortableProjectBundleOutcome.OverwriteRefused,
@@ -203,7 +207,10 @@ public sealed class PortableProjectBundleService
     private BundlePlan BuildPlan(PortableProjectBundleRequest request)
     {
         var createdUtc = (request.CreatedUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
-        var requestProfileCatalog = profileCatalogComposer.BuildForProject(request.Project, request.SaveContext);
+        var profileResolution = ReferencedCustomProfileResolver.Resolve(
+            request.Project,
+            request.SaveContext?.AvailableCustomProfilesByName);
+        var requestProfileCatalog = profileCatalogComposer.BuildForProject(profileResolution);
         var replayResult = replayService.PrepareForBodyGen(request.Project, request.Intent, cloneBeforeReplay: true);
         var replayReportText = FormatReplayReport(replayResult, request, request.PrivateRoots);
         if (replayResult.IsBlocked)
@@ -224,8 +231,9 @@ public sealed class PortableProjectBundleService
         if (validationReport.BlockerCount > 0)
             return BlockedPlan(PortableProjectBundleOutcome.ValidationBlocked, createdUtc, validationReport, reportText, replayReportText, request.PrivateRoots);
 
-        var bundleProfiles = profileCatalogComposer.ResolveReferencedCustomProfiles(request.Project, request.SaveContext).ToArray();
-        var missingProfiles = FindMissingReferencedCustomProfiles(request.Project, requestProfileCatalog).ToArray();
+        var missingProfiles = profileResolution.UnresolvedProfileNames
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         if (missingProfiles.Length > 0)
         {
             var missingText = reportText + "\nMissing custom profiles: " + string.Join(", ", missingProfiles) + "\n";
@@ -237,13 +245,13 @@ public sealed class PortableProjectBundleService
         {
             var entries = new List<BundleContentEntry>
             {
-                Entry("project/project.jbs2bg", "project", Utf8NoBom.GetBytes(projectFileService.SaveToString(request.Project, request.SaveContext))),
+                Entry("project/project.jbs2bg", "project", Utf8NoBom.GetBytes(projectFileService.SaveToString(request.Project, profileResolution))),
                 Entry("reports/validation.txt", "report", Utf8NoBom.GetBytes(reportText)),
             };
             if (replayResult.Replayed)
                 entries.Add(Entry("reports/replay.txt", "report", Utf8NoBom.GetBytes(replayReportText)));
 
-            AddProfileEntries(entries, bundleProfiles);
+            AddProfileEntries(entries, profileResolution.ResolvedProfiles);
             AddGeneratedOutputEntries(entries, request, outputProject, stagingDirectory, requestProfileCatalog);
             RejectDuplicateEntries(entries.Select(entry => entry.Path));
 
@@ -316,13 +324,23 @@ public sealed class PortableProjectBundleService
         }
     }
 
-    private static void AddProfileEntries(List<BundleContentEntry> entries, IEnumerable<CustomProfileDefinition> bundleProfiles)
+    /// <summary>
+    /// Adds resolved custom profile snapshots as deterministic standalone JSON entries in first-reference order.
+    /// </summary>
+    /// <param name="entries">Bundle content collection receiving profile entries.</param>
+    /// <param name="bundleProfiles">Stable profile snapshots resolved once for the bundle request.</param>
+    private static void AddProfileEntries(
+        List<BundleContentEntry> entries,
+        IEnumerable<ReferencedCustomProfileSnapshot> bundleProfiles)
     {
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var profile in bundleProfiles)
         {
             var safeName = GetUniqueProfileFileName(MakeSafeFileName(profile.Name), usedNames);
-            entries.Add(Entry("profiles/" + safeName, "profile", Utf8NoBom.GetBytes(ProfileDefinitionService.ExportProfileJson(profile))));
+            entries.Add(Entry(
+                "profiles/" + safeName,
+                "profile",
+                Utf8NoBom.GetBytes(ProfileDefinitionService.ExportProfileJson(profile.ToDefinition()))));
         }
     }
 
@@ -344,14 +362,6 @@ public sealed class PortableProjectBundleService
 
         return candidate;
     }
-
-    private static IEnumerable<string> FindMissingReferencedCustomProfiles(
-        ProjectModel project,
-        TemplateProfileCatalog requestProfileCatalog) => project.SliderPresets
-            .Select(preset => preset.ProfileName)
-            .Where(name => !requestProfileCatalog.ContainsProfile(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
 
     private static BundlePlan BlockedPlan(
         PortableProjectBundleOutcome outcome,
