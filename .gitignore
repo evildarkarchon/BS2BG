@@ -450,3 +450,4 @@ replay_pid*
 /.cocoindex_code/
 jBS2BG.code-workspace
 warnings.txt
+/target/

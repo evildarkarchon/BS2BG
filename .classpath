@@ -2,14 +2,22 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="src" path="assets"/>
-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8"/>
-	<classpathentry kind="con" path="org.eclipse.fx.ide.jdt.core.JAVAFX_CONTAINER"/>
-	<classpathentry kind="lib" path="C:/Java Libraries/minimal-json/minimal-json-0.9.5.jar" sourcepath="C:/Java Libraries/minimal-json/minimal-json-0.9.5-sources.jar"/>
-	<classpathentry kind="lib" path="C:/Java Libraries/commons-io-2.6/commons-io-2.6.jar" sourcepath="C:/Java Libraries/commons-io-2.6/commons-io-2.6-sources.jar">
+	<classpathentry kind="src" output="bin-test" path="test">
 		<attributes>
-			<attribute name="javadoc_location" value="jar:file:/C:/Java%20Libraries/commons-io-2.6/commons-io-2.6-javadoc.jar!/"/>
+			<attribute name="test" value="true"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="lib" path="C:/Java Libraries/juniversalchardet-2.1.0.jar"/>
+	<classpathentry kind="src" output="bin-test" path="test-resources">
+		<attributes>
+			<attribute name="test" value="true"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8"/>
+	<classpathentry kind="con" path="org.eclipse.fx.ide.jdt.core.JAVAFX_CONTAINER"/>
+	<classpathentry kind="con" path="org.eclipse.m2e.MAVEN2_CLASSPATH_CONTAINER">
+		<attributes>
+			<attribute name="maven.pomderived" value="true"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
