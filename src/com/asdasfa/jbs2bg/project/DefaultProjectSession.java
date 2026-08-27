@@ -157,6 +157,8 @@ final class DefaultProjectSession implements ProjectSession {
     @Override
     public ProjectOutcome save() {
         synchronized (operationLock) {
+            if (snapshot.getFileIdentity().isPresent())
+                return persist(snapshot.getFileIdentity().get());
             SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("project-file"),
                     OptionalInt.empty(), OptionalInt.empty());
             return rejected(ProjectDiagnosticCodes.FILE_IDENTITY_REQUIRED, location,
@@ -171,11 +173,57 @@ final class DefaultProjectSession implements ProjectSession {
     public ProjectOutcome saveAs(Path target) {
         Objects.requireNonNull(target, "target");
         synchronized (operationLock) {
-            SourceLocation location = new SourceLocation(Optional.of(target), Optional.empty(), OptionalInt.empty(),
-                    OptionalInt.empty());
-            return rejected(ProjectDiagnosticCodes.SAVE_UNAVAILABLE, location,
-                    "Saving Projects is not available in this ProjectSession implementation yet.");
+            if (snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT)
+                return rejectedActiveProjectRequired();
+            return persist(target);
         }
+    }
+
+    /**
+     * Persists the pinned Project snapshot and publishes its clean file identity
+     * only after the completed replacement succeeds.
+     *
+     * @param target requested Project destination
+     * @return changed, unchanged, or failed outcome at the operation boundary
+     */
+    private ProjectOutcome persist(Path target) {
+        Path normalizedTarget = target.toAbsolutePath().normalize();
+        try {
+            ProjectFileWriter.write(snapshot, normalizedTarget);
+        } catch (IOException exception) {
+            return failedSave(ProjectDiagnosticCodes.PROJECT_FILE_WRITE_FAILED, normalizedTarget,
+                    "The Project file could not be written: " + exception.getMessage());
+        } catch (RuntimeException exception) {
+            // Filesystem providers may surface environmental failures as unchecked exceptions.
+            return failedSave(ProjectDiagnosticCodes.PROJECT_SAVE_FAILED, normalizedTarget,
+                    "The Project could not be saved: " + exception.getMessage());
+        }
+
+        boolean changed = snapshot.isDirty() || !snapshot.getFileIdentity().isPresent()
+                || !normalizedTarget.equals(snapshot.getFileIdentity().get());
+        if (!changed)
+            return new UnchangedOutcome(snapshot);
+        ProjectSnapshot saved = new ProjectSnapshot(snapshot.getSliderPresets(), snapshot.getCustomMorphTargets(),
+                snapshot.getNpcMorphAssignments(), Optional.of(normalizedTarget), false,
+                ProjectLifecycleStatus.FILE_BACKED);
+        snapshot = saved;
+        return new ChangedOutcome(snapshot);
+    }
+
+    /**
+     * Reports a persistence failure without publishing file identity, clean state,
+     * or partially prepared Project content.
+     *
+     * @param code stable diagnostic code
+     * @param target requested destination
+     * @param message human-readable failure message
+     * @return failed outcome carrying the unchanged snapshot
+     */
+    private FailedOutcome failedSave(String code, Path target, String message) {
+        SourceLocation location = new SourceLocation(Optional.of(target), Optional.of("/"), OptionalInt.empty(),
+                OptionalInt.empty());
+        ProjectDiagnostic diagnostic = new ProjectDiagnostic(code, DiagnosticSeverity.ERROR, location, message);
+        return new FailedOutcome(snapshot, Collections.singletonList(diagnostic));
     }
 
     /**

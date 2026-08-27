@@ -359,12 +359,14 @@ final class ProjectFileLoader {
                         "A Slider Preset cannot contain duplicate slider-choice names.");
             Integer storedSmall = requiredNullableInteger(value, "valueSmall", choiceElement);
             Integer storedBig = requiredNullableInteger(value, "valueBig", choiceElement);
+            // Presence in SetSliders makes this explicit even when both stored values are null;
+            // only choices synthesized from absent members below are missing defaults.
             choices.add(new SliderChoiceSnapshot(name, requiredBoolean(value, "enabled", choiceElement),
                     storedSmall, storedBig,
                     storedSmall == null ? defaultSmall(name, uunp) : storedSmall.intValue(),
                     storedBig == null ? defaultBig(name, uunp) : storedBig.intValue(),
                     requiredInteger(value, "pctMin", choiceElement), requiredInteger(value, "pctMax", choiceElement),
-                    storedSmall == null && storedBig == null));
+                    false));
         }
         Map<String, DefaultSliderValue> defaults = uunp ? Settings.getDefaultsMapUUNP() : Settings.getDefaultsMap();
         for (Map.Entry<String, DefaultSliderValue> entry : defaults.entrySet()) {

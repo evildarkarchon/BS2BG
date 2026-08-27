@@ -29,8 +29,10 @@ public final class ProjectDiagnosticCodes {
     public static final String SLIDER_CHOICE_NAME_DUPLICATE = "SLIDER_CHOICE_NAME_DUPLICATE";
     /** A Project relationship repeats a Slider Preset reference without regard to case. */
     public static final String SLIDER_PRESET_ASSIGNMENT_DUPLICATE = "SLIDER_PRESET_ASSIGNMENT_DUPLICATE";
-    /** Project saving is not yet available through the foundational session. */
-    public static final String SAVE_UNAVAILABLE = "PROJECT_SAVE_UNAVAILABLE";
+    /** A Project file could not be written or installed on the local filesystem. */
+    public static final String PROJECT_FILE_WRITE_FAILED = "PROJECT_FILE_WRITE_FAILED";
+    /** An unexpected runtime failure prevented Project persistence. */
+    public static final String PROJECT_SAVE_FAILED = "PROJECT_SAVE_FAILED";
     /** Save requires a successfully adopted Project file identity. */
     public static final String FILE_IDENTITY_REQUIRED = "PROJECT_FILE_IDENTITY_REQUIRED";
     /** A Slider Preset name is null, empty, or whitespace-only after trimming. */
