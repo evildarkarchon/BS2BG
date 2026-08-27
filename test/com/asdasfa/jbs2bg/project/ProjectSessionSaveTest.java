@@ -180,8 +180,8 @@ class ProjectSessionSaveTest {
     }
 
     /**
-     * Verifies that Save As replaces an existing target only with a complete,
-     * reopenable Project and leaves no sibling staging file behind.
+     * Verifies that Save As atomically replaces an existing target with a complete,
+     * reopenable Project.
      *
      * @throws Exception when the existing test target cannot be prepared
      */
