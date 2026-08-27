@@ -3,10 +3,10 @@ package com.asdasfa.jbs2bg;
 import java.net.URL;
 import java.util.ResourceBundle;
 
-import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.Label;
@@ -42,11 +42,11 @@ public class PopupRenameController extends CustomController {
 	 */
 	@FXML
 	private void rename() {
-		SliderPreset selectedPreset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot selectedPreset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
 		if (selectedPreset == null)
 			return;
 
-		SliderPreset selectedTargetPreset = main.mainController.lvTargetPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot selectedTargetPreset = main.mainController.lvTargetPresets.getSelectionModel().getSelectedItem();
 		boolean restoreTargetPreset = selectedTargetPreset != null
 				&& selectedTargetPreset.getName().equalsIgnoreCase(selectedPreset.getName());
 		String newName = tfRename.getText();

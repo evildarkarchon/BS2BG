@@ -120,7 +120,8 @@ public class PopupNpcDatabaseController extends CustomController {
 		tvNpcDatabase.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
 			if (newSelection != null) {
 				main.mainController.popupImageViewController.setTitle(newSelection.getName());
-				main.mainController.popupImageViewController.setImage(newSelection.getImageFile());
+				main.mainController.popupImageViewController.setImage(
+						MainController.findNpcImageFile(newSelection.getName(), newSelection.getEditorId()));
 			} else { // Nothing selected
 				main.mainController.popupImageViewController.setTitle("");
 				main.mainController.popupImageViewController.setImage(null);
@@ -178,7 +179,8 @@ public class PopupNpcDatabaseController extends CustomController {
 			NPC npc = tvNpcDatabase.getSelectionModel().getSelectedItem();
 			if (npc != null) {
 				main.mainController.popupImageViewController.setTitle(npc.getName());
-				main.mainController.popupImageViewController.setImage(npc.getImageFile());
+				main.mainController.popupImageViewController.setImage(
+						MainController.findNpcImageFile(npc.getName(), npc.getEditorId()));
 			} else {
 				main.mainController.popupImageViewController.setTitle("");
 				main.mainController.popupImageViewController.setImage(null);
@@ -186,10 +188,10 @@ public class PopupNpcDatabaseController extends CustomController {
 		});
 		// When hidden, set the image in the popupImageView using the npc table
 		stage.setOnHidden(e -> {
-			NPC npc = main.mainController.tvNpc.getSelectionModel().getSelectedItem();
+			NpcMorphAssignmentSnapshot npc = main.mainController.tvNpc.getSelectionModel().getSelectedItem();
 			if (npc != null) {
-				main.mainController.popupImageViewController.setTitle(npc.getName());
-				main.mainController.popupImageViewController.setImage(npc.getImageFile());
+				main.mainController.popupImageViewController.setTitle(npc.getDisplayName());
+				main.mainController.popupImageViewController.setImage(MainController.findNpcImageFile(npc));
 			} else {
 				main.mainController.popupImageViewController.setTitle("");
 				main.mainController.popupImageViewController.setImage(null);

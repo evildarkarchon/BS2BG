@@ -5,7 +5,7 @@ BS2BG converts BodySlide Slider Presets into BodyGen and BodyTypes of Skyrim out
 ## Language
 
 **Project**:
-The modder-authored collection of Slider Presets, Custom Morph Targets, and NPC morph assignments that is edited and preserved together.
+The modder-authored collection of Slider Presets, Custom Morph Targets, and NPC Morph Assignments that is edited and preserved together.
 _Avoid_: Working document, workspace
 
 **Slider Preset**:

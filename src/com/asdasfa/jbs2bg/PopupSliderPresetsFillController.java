@@ -5,13 +5,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
 
-import com.asdasfa.jbs2bg.data.NPC;
-import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.NpcSliderPresetChoice;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
@@ -27,7 +27,7 @@ import javafx.scene.control.SelectionMode;
 public class PopupSliderPresetsFillController extends CustomController {
 	
 	@FXML
-	protected ListView<SliderPreset> lvPresets;
+	protected ListView<SliderPresetSnapshot> lvPresets;
 	
 	private CustomNotif notif;
 	
@@ -39,7 +39,7 @@ public class PopupSliderPresetsFillController extends CustomController {
 			@Override
 			public void test() {
 				for (int i = 0; i < lvPresets.getItems().size(); i++) {
-					SliderPreset item = lvPresets.getItems().get(i);
+					SliderPresetSnapshot item = lvPresets.getItems().get(i);
 					if (item.getName().toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;
@@ -66,9 +66,9 @@ public class PopupSliderPresetsFillController extends CustomController {
 	@Override
 	protected void onPostInit() {
 		lvPresets.setCellFactory(p ->
-			new ListCell<SliderPreset>() {
+			new ListCell<SliderPresetSnapshot>() {
 				@Override
-				protected void updateItem(SliderPreset item, boolean empty) {
+				protected void updateItem(SliderPresetSnapshot item, boolean empty) {
 					super.updateItem(item, empty);
 					if (empty || item == null) {
 						setText(null);
@@ -94,12 +94,12 @@ public class PopupSliderPresetsFillController extends CustomController {
 			 */
 			@Override
 			public void ok() {
-				ObservableList<SliderPreset> selectedPresets = lvPresets.getSelectionModel().getSelectedItems();
+				ObservableList<SliderPresetSnapshot> selectedPresets = lvPresets.getSelectionModel().getSelectedItems();
 				if (selectedPresets.size() <= 0) {
 					return;
 				}
 				
-				FilteredList<NPC> filteredNpcs = main.mainController.npcTableFilter.getFilteredList();
+				FilteredList<NpcMorphAssignmentSnapshot> filteredNpcs = main.mainController.npcTableFilter.getFilteredList();
 				List<NpcSliderPresetChoice> choices = choosePresetsForEmptyNpcs(filteredNpcs, selectedPresets);
 				
 				main.mainController.applyProjectEdit(NpcMorphAssignmentEdits.fillEmpty(choices));
@@ -121,20 +121,20 @@ public class PopupSliderPresetsFillController extends CustomController {
 	 * Completes every random fill choice on the JavaFX thread before immutable
 	 * request data crosses the ProjectSession seam.
 	 *
-	 * @param filteredNpcs NPC presentation values included by the active table filter
-	 * @param selectedPresets caller-selected Slider Preset presentation values
+	 * @param filteredNpcs immutable NPC assignments included by the active table filter
+	 * @param selectedPresets caller-selected immutable Slider Presets
 	 * @return explicit choices for currently empty filtered NPCs
 	 */
-	private List<NpcSliderPresetChoice> choosePresetsForEmptyNpcs(List<NPC> filteredNpcs,
-			List<SliderPreset> selectedPresets) {
+	private List<NpcSliderPresetChoice> choosePresetsForEmptyNpcs(List<NpcMorphAssignmentSnapshot> filteredNpcs,
+			List<SliderPresetSnapshot> selectedPresets) {
 		List<NpcSliderPresetChoice> choices = new ArrayList<>();
 		for (int i = 0; i < filteredNpcs.size(); i++) {
-			NPC npc = filteredNpcs.get(i);
-			if (npc.getSliderPresets().isEmpty()) { // Empty
+			NpcMorphAssignmentSnapshot npc = filteredNpcs.get(i);
+			if (npc.getSliderPresetNames().isEmpty()) { // Empty
 				// Give a random preset; MyUtils.random uses inclusive minimum and maximum bounds.
 				int random = MyUtils.random(0, selectedPresets.size()-1);
-				SliderPreset preset = selectedPresets.get(random);
-				NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity(npc.getMod(), npc.getEditorId());
+				SliderPresetSnapshot preset = selectedPresets.get(random);
+				NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId());
 				choices.add(new NpcSliderPresetChoice(identity, preset.getName()));
 			}
 		}
@@ -147,7 +147,7 @@ public class PopupSliderPresetsFillController extends CustomController {
 	
 	@FXML
 	private void fillEmpty() {
-		ObservableList<SliderPreset> selectedPresets = lvPresets.getSelectionModel().getSelectedItems();
+		ObservableList<SliderPresetSnapshot> selectedPresets = lvPresets.getSelectionModel().getSelectedItems();
 		if (selectedPresets.size() <= 0) {
 			notif.show("You don't have a selection!");
 			return;

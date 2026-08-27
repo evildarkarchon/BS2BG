@@ -159,6 +159,8 @@ final class DefaultProjectSession implements ProjectSession {
     @Override
     public ProjectOutcome save() {
         synchronized (operationLock) {
+            if (snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT)
+                return rejectedActiveProjectRequired();
             if (snapshot.getFileIdentity().isPresent())
                 return persist(snapshot.getFileIdentity().get());
             SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("project-file"),

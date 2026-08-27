@@ -1,16 +1,9 @@
 package com.asdasfa.jbs2bg.presentation;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 
-import com.asdasfa.jbs2bg.data.CustomMorphTarget;
-import com.asdasfa.jbs2bg.data.NPC;
-import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
@@ -32,12 +25,12 @@ import javafx.collections.ObservableList;
 public final class ProjectPresentation {
 
     private final String applicationName;
-    private final ObservableList<SliderPreset> mutableSliderPresets;
-    private final ObservableList<SliderPreset> sliderPresets;
-    private final ObservableList<CustomMorphTarget> mutableCustomMorphTargets;
-    private final ObservableList<CustomMorphTarget> customMorphTargets;
-    private final ObservableList<NPC> mutableNpcMorphAssignments;
-    private final ObservableList<NPC> npcMorphAssignments;
+    private final ObservableList<SliderPresetSnapshot> mutableSliderPresets;
+    private final ObservableList<SliderPresetSnapshot> sliderPresets;
+    private final ObservableList<CustomMorphTargetSnapshot> mutableCustomMorphTargets;
+    private final ObservableList<CustomMorphTargetSnapshot> customMorphTargets;
+    private final ObservableList<NpcMorphAssignmentSnapshot> mutableNpcMorphAssignments;
+    private final ObservableList<NpcMorphAssignmentSnapshot> npcMorphAssignments;
     private ProjectSnapshot snapshot;
 
     /**
@@ -79,18 +72,33 @@ public final class ProjectPresentation {
         return snapshot;
     }
 
-    /** @return the observable Slider Preset projection */
-    public ObservableList<SliderPreset> getSliderPresets() {
+    /**
+     * Returns a stable, structurally unmodifiable observable projection of
+     * immutable Slider Preset snapshot values.
+     *
+     * @return the observable Slider Preset projection
+     */
+    public ObservableList<SliderPresetSnapshot> getSliderPresets() {
         return sliderPresets;
     }
 
-    /** @return the observable Custom Morph Target projection */
-    public ObservableList<CustomMorphTarget> getCustomMorphTargets() {
+    /**
+     * Returns a stable, structurally unmodifiable observable projection of
+     * immutable Custom Morph Target snapshot values.
+     *
+     * @return the observable Custom Morph Target projection
+     */
+    public ObservableList<CustomMorphTargetSnapshot> getCustomMorphTargets() {
         return customMorphTargets;
     }
 
-    /** @return the observable NPC Morph Assignment projection */
-    public ObservableList<NPC> getNpcMorphAssignments() {
+    /**
+     * Returns a stable, structurally unmodifiable observable projection of
+     * immutable NPC Morph Assignment snapshot values.
+     *
+     * @return the observable NPC Morph Assignment projection
+     */
+    public ObservableList<NpcMorphAssignmentSnapshot> getNpcMorphAssignments() {
         return npcMorphAssignments;
     }
 
@@ -116,56 +124,19 @@ public final class ProjectPresentation {
     }
 
     /**
-     * Builds all converted values before publication, then replaces the contents of
-     * the stable presentation-owned lists so existing filter and sort pipelines survive.
+     * Replaces stable observable projections directly from one immutable Project
+     * snapshot.
+     *
+     * @param nextSnapshot complete immutable state to publish
      */
     private void renderSnapshot(ProjectSnapshot nextSnapshot) {
         if (nextSnapshot == snapshot)
             return;
 
-        List<SliderPreset> nextPresets = new ArrayList<>();
-        Map<String, SliderPreset> presetsByName = new LinkedHashMap<>();
-        for (SliderPresetSnapshot presetSnapshot : nextSnapshot.getSliderPresets()) {
-            SliderPreset preset = toSliderPreset(presetSnapshot);
-            nextPresets.add(preset);
-            presetsByName.put(normalizeName(preset.getName()), preset);
-        }
-
-        List<CustomMorphTarget> nextTargets = new ArrayList<>();
-        for (CustomMorphTargetSnapshot targetSnapshot : nextSnapshot.getCustomMorphTargets()) {
-            CustomMorphTarget target = new CustomMorphTarget(targetSnapshot.getName());
-            addAssignments(target, targetSnapshot.getSliderPresetNames(), presetsByName);
-            nextTargets.add(target);
-        }
-
-        List<NPC> nextNpcs = new ArrayList<>();
-        for (NpcMorphAssignmentSnapshot npcSnapshot : nextSnapshot.getNpcMorphAssignments()) {
-            NPC npc = new NPC(npcSnapshot);
-            addAssignments(npc, npcSnapshot.getSliderPresetNames(), presetsByName);
-            nextNpcs.add(npc);
-        }
-
-        mutableSliderPresets.setAll(nextPresets);
-        mutableCustomMorphTargets.setAll(nextTargets);
-        mutableNpcMorphAssignments.setAll(nextNpcs);
+        mutableSliderPresets.setAll(nextSnapshot.getSliderPresets());
+        mutableCustomMorphTargets.setAll(nextSnapshot.getCustomMorphTargets());
+        mutableNpcMorphAssignments.setAll(nextSnapshot.getNpcMorphAssignments());
         snapshot = nextSnapshot;
-    }
-
-    /** Converts one immutable Slider Preset snapshot into the legacy output-facing view value. */
-    private static SliderPreset toSliderPreset(SliderPresetSnapshot snapshot) {
-        return new SliderPreset(snapshot);
-    }
-
-    /** Resolves immutable relationship names against projections from the same snapshot. */
-    private static void addAssignments(com.asdasfa.jbs2bg.data.MorphTarget target, List<String> assignedNames,
-            Map<String, SliderPreset> presetsByName) {
-        for (String assignedName : assignedNames) {
-            SliderPreset assignedPreset = presetsByName.get(normalizeName(assignedName));
-            if (assignedPreset == null)
-                throw new IllegalArgumentException("Snapshot contains an unresolved Slider Preset assignment: "
-                        + assignedName);
-            target.addSliderPreset(assignedPreset);
-        }
     }
 
     /** Formats structured diagnostics without moving JavaFX controls into ProjectSession. */
@@ -220,11 +191,6 @@ public final class ProjectPresentation {
                 return true;
         }
         return false;
-    }
-
-    /** Normalizes relationship lookup while preserving display casing in projections. */
-    private static String normalizeName(String name) {
-        return name.toLowerCase(Locale.ROOT);
     }
 
     /** Requires a non-blank application name for stable title formatting. */

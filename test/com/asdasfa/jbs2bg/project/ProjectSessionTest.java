@@ -7,15 +7,29 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -1032,28 +1046,47 @@ class ProjectSessionTest {
     }
 
     /**
-     * Locks the external seam to explicit lifecycle operations and one edit entry,
-     * with no JavaFX or legacy mutable Project types in its method signatures.
+     * Locks the exact external seam and implementation dependencies so no parallel
+     * storage interface, legacy mutable Project type, or JavaFX type can reappear.
      *
-     * @throws Exception when a required interface method is absent
+     * @throws Exception when the contract or implementation bytecode cannot be inspected
      */
     @Test
-    void interfaceExposesExplicitLifecycleOperationsWithoutMutableOrJavaFxTypes() throws Exception {
+    void projectSessionContractIsExactAndJavaFxFree() throws Exception {
+        assertEquals(ProjectSnapshot.class, ProjectSession.class.getMethod("getSnapshot").getReturnType());
         assertOutcomeMethod("newProject");
         assertOutcomeMethod("open", Path.class);
         assertOutcomeMethod("save");
         assertOutcomeMethod("saveAs", Path.class);
         assertOutcomeMethod("apply", ProjectEdit.class);
+        assertEquals(SliderPresetImportOutcome.class,
+                ProjectSession.class.getMethod("importSliderPresets", List.class).getReturnType());
 
-        int applyMethods = 0;
+        Set<String> methodNames = new HashSet<>();
         for (Method method : ProjectSession.class.getDeclaredMethods()) {
-            if (method.getName().equals("apply"))
-                applyMethods++;
-            assertExternalType(method.getReturnType());
-            for (Class<?> parameterType : method.getParameterTypes())
+            methodNames.add(method.getName());
+            assertExternalType(method.getGenericReturnType());
+            for (Type parameterType : method.getGenericParameterTypes())
                 assertExternalType(parameterType);
         }
-        assertEquals(1, applyMethods);
+        assertEquals(new HashSet<>(Arrays.asList("getSnapshot", "newProject", "open", "save", "saveAs",
+                "importSliderPresets", "apply")), methodNames);
+
+        Class<?> implementation = ProjectSessions.create().getClass();
+        assertFalse(Modifier.isPublic(implementation.getModifiers()),
+                "ProjectSession implementation must remain hidden behind the external seam");
+        for (Field field : implementation.getDeclaredFields())
+            assertExternalType(field.getGenericType());
+        for (Constructor<?> constructor : implementation.getDeclaredConstructors()) {
+            for (Type parameterType : constructor.getGenericParameterTypes())
+                assertExternalType(parameterType);
+        }
+        for (Method method : implementation.getDeclaredMethods()) {
+            assertExternalType(method.getGenericReturnType());
+            for (Type parameterType : method.getGenericParameterTypes())
+                assertExternalType(parameterType);
+        }
+        assertClassDoesNotReferenceJavaFx(implementation);
     }
 
     /**
@@ -1106,14 +1139,126 @@ class ProjectSessionTest {
         }
     }
 
+    /**
+     * Races readers against repeated public rename edits and proves every observed
+     * snapshot contains one whole referential cascade across both relationship kinds.
+     *
+     * @throws Exception when a worker cannot complete within the test deadline
+     */
+    @Test
+    void readersObserveWholeRelationshipCascadeSnapshots() throws Exception {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(CustomMorphTargetEdits.create("All|Female", Collections.singletonList("Alpha")));
+        session.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot("Aela", "Skyrim.esm",
+                "FemaleNord", "NordRace", "1A696", Collections.singletonList("Alpha"))));
+
+        int readerCount = 6;
+        int renameCount = 200;
+        int readsPerWorker = 1000;
+        ExecutorService executor = Executors.newFixedThreadPool(readerCount + 1);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<List<ProjectSnapshot>>> readers = new ArrayList<>();
+
+        try {
+            Future<Void> writer = executor.submit(() -> {
+                start.await();
+                String currentName = "Alpha";
+                for (int iteration = 0; iteration < renameCount; iteration++) {
+                    String nextName = currentName.equals("Alpha") ? "Beta" : "Alpha";
+                    ProjectOutcome outcome = session.apply(SliderPresetEdits.rename(currentName, nextName));
+                    assertTrue(outcome instanceof ChangedOutcome);
+                    currentName = nextName;
+                }
+                return null;
+            });
+            for (int reader = 0; reader < readerCount; reader++) {
+                readers.add(executor.submit(() -> {
+                    start.await();
+                    List<ProjectSnapshot> observed = new ArrayList<>();
+                    for (int iteration = 0; iteration < readsPerWorker; iteration++)
+                        observed.add(session.getSnapshot());
+                    return observed;
+                }));
+            }
+
+            start.countDown();
+            writer.get(10, TimeUnit.SECONDS);
+            for (Future<List<ProjectSnapshot>> reader : readers) {
+                for (ProjectSnapshot observed : reader.get(10, TimeUnit.SECONDS))
+                    assertWholeRelationshipCascade(observed);
+            }
+            assertWholeRelationshipCascade(session.getSnapshot());
+        } finally {
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+        }
+    }
+
     private static void assertOutcomeMethod(String name, Class<?>... parameterTypes) throws Exception {
         assertEquals(ProjectOutcome.class, ProjectSession.class.getMethod(name, parameterTypes).getReturnType());
     }
 
-    private static void assertExternalType(Class<?> type) {
-        assertFalse(type.getName().startsWith("javafx."), "JavaFX leaked through ProjectSession: " + type);
-        assertFalse(type.getName().startsWith("com.asdasfa.jbs2bg.data."),
-                "Legacy mutable Project type leaked through ProjectSession: " + type);
+    /** Recursively rejects forbidden raw, array, and generic contract types. */
+    private static void assertExternalType(Type type) {
+        if (type instanceof Class<?>) {
+            Class<?> rawType = (Class<?>) type;
+            if (rawType.isArray()) {
+                assertExternalType(rawType.getComponentType());
+                return;
+            }
+            assertFalse(rawType.getName().startsWith("javafx."),
+                    "JavaFX leaked through ProjectSession: " + rawType);
+            assertFalse(rawType.getName().startsWith("com.asdasfa.jbs2bg.data."),
+                    "Legacy mutable Project type leaked through ProjectSession: " + rawType);
+            return;
+        }
+        if (type instanceof ParameterizedType) {
+            ParameterizedType parameterized = (ParameterizedType) type;
+            assertExternalType(parameterized.getRawType());
+            for (Type argument : parameterized.getActualTypeArguments())
+                assertExternalType(argument);
+            return;
+        }
+        if (type instanceof GenericArrayType) {
+            assertExternalType(((GenericArrayType) type).getGenericComponentType());
+            return;
+        }
+        if (type instanceof WildcardType) {
+            WildcardType wildcard = (WildcardType) type;
+            for (Type bound : wildcard.getLowerBounds())
+                assertExternalType(bound);
+            for (Type bound : wildcard.getUpperBounds())
+                assertExternalType(bound);
+            return;
+        }
+        if (type instanceof TypeVariable<?>) {
+            TypeVariable<?> variable = (TypeVariable<?>) type;
+            for (Type bound : variable.getBounds()) {
+                if (bound != variable)
+                    assertExternalType(bound);
+            }
+        }
+    }
+
+    /**
+     * Scans compiled implementation references so a JavaFX local/helper dependency
+     * cannot evade signature-only reflection checks.
+     */
+    private static void assertClassDoesNotReferenceJavaFx(Class<?> implementation) throws IOException {
+        String resourceName = implementation.getSimpleName() + ".class";
+        try (InputStream input = implementation.getResourceAsStream(resourceName)) {
+            assertTrue(input != null, "Missing implementation bytecode resource: " + resourceName);
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = input.read(buffer)) >= 0)
+                bytes.write(buffer, 0, read);
+            String constantPool = new String(bytes.toByteArray(), StandardCharsets.ISO_8859_1);
+            assertFalse(constantPool.contains("javafx/"),
+                    "JavaFX leaked into ProjectSession implementation bytecode");
+        }
     }
 
     private static void assertCompleteNewProject(ProjectSnapshot snapshot) {
@@ -1123,6 +1268,19 @@ class ProjectSessionTest {
         assertFalse(snapshot.getFileIdentity().isPresent());
         assertFalse(snapshot.isDirty());
         assertEquals(ProjectLifecycleStatus.UNTITLED, snapshot.getLifecycleStatus());
+    }
+
+    /** Asserts that both relationship collections agree with the one published preset name. */
+    private static void assertWholeRelationshipCascade(ProjectSnapshot snapshot) {
+        assertEquals(1, snapshot.getSliderPresets().size());
+        assertEquals(1, snapshot.getCustomMorphTargets().size());
+        assertEquals(1, snapshot.getNpcMorphAssignments().size());
+        String presetName = snapshot.getSliderPresets().get(0).getName();
+        assertTrue(presetName.equals("Alpha") || presetName.equals("Beta"));
+        assertEquals(Collections.singletonList(presetName),
+                snapshot.getCustomMorphTargets().get(0).getSliderPresetNames());
+        assertEquals(Collections.singletonList(presetName),
+                snapshot.getNpcMorphAssignments().get(0).getSliderPresetNames());
     }
 
     /**

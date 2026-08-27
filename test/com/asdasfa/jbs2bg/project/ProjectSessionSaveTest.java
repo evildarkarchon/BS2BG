@@ -17,6 +17,22 @@ class ProjectSessionSaveTest {
     @TempDir
     Path tempDirectory;
 
+    /** Save requires an active Project before file-identity validation can apply. */
+    @Test
+    void saveBeforeActiveProjectRejectsAndPreservesTheNoProjectSnapshot() {
+        ProjectSession session = ProjectSessions.create();
+        ProjectSnapshot before = session.getSnapshot();
+
+        ProjectOutcome outcome = session.save();
+
+        assertTrue(outcome instanceof RejectedOutcome);
+        assertSame(before, outcome.getSnapshot());
+        assertSame(before, session.getSnapshot());
+        assertEquals(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED,
+                outcome.getDiagnostics().get(0).getCode());
+        assertEquals("project", outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
+    }
+
     /**
      * Verifies that Save rejects an untitled Project without changing the latest
      * dirty snapshot.
@@ -34,6 +50,30 @@ class ProjectSessionSaveTest {
         assertSame(dirty, session.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.FILE_IDENTITY_REQUIRED,
                 outcome.getDiagnostics().get(0).getCode());
+    }
+
+    /** New Project atomically discards dirty file-backed state and is idempotent thereafter. */
+    @Test
+    void newProjectReplacesDirtyFileBackedStateAndThenReturnsUnchanged() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.saveAs(tempDirectory.resolve("existing.jbs2bg"));
+        ProjectSnapshot dirtyFileBacked = session.apply(SliderPresetEdits.create("Beta")).getSnapshot();
+
+        ProjectOutcome replaced = session.newProject();
+        ProjectOutcome repeated = session.newProject();
+
+        assertTrue(dirtyFileBacked.isDirty());
+        assertTrue(dirtyFileBacked.getFileIdentity().isPresent());
+        assertTrue(replaced instanceof ChangedOutcome);
+        assertTrue(replaced.getSnapshot().getSliderPresets().isEmpty());
+        assertFalse(replaced.getSnapshot().getFileIdentity().isPresent());
+        assertFalse(replaced.getSnapshot().isDirty());
+        assertEquals(ProjectLifecycleStatus.UNTITLED, replaced.getSnapshot().getLifecycleStatus());
+        assertTrue(repeated instanceof UnchangedOutcome);
+        assertSame(replaced.getSnapshot(), repeated.getSnapshot());
+        assertSame(repeated.getSnapshot(), session.getSnapshot());
     }
 
     /**

@@ -6,8 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -16,9 +20,6 @@ import java.util.OptionalInt;
 
 import org.junit.jupiter.api.Test;
 
-import com.asdasfa.jbs2bg.data.CustomMorphTarget;
-import com.asdasfa.jbs2bg.data.NPC;
-import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
@@ -35,7 +36,26 @@ import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.UnchangedOutcome;
 
+import javafx.collections.ObservableList;
+
 class ProjectPresentationTest {
+
+    /**
+     * Locks the presentation collection seam to immutable Project snapshot values
+     * without public mutation routes on the exposed element types.
+     *
+     * @throws Exception when a required collection getter is absent
+     */
+    @Test
+    void presentationCollectionsExposeOnlyImmutableSnapshotValues() throws Exception {
+        assertImmutableSnapshotGetter("getSliderPresets", SliderPresetSnapshot.class,
+                "getName", "getSliderChoices", "isUunp");
+        assertImmutableSnapshotGetter("getCustomMorphTargets", CustomMorphTargetSnapshot.class,
+                "getName", "getSliderPresetNames");
+        assertImmutableSnapshotGetter("getNpcMorphAssignments", NpcMorphAssignmentSnapshot.class,
+                "getDisplayName", "getEditorId", "getFormId", "getPluginName", "getRace",
+                "getSliderPresetNames");
+    }
 
     /**
      * Renders one coherent changed snapshot into the JavaFX-facing read model and
@@ -44,28 +64,37 @@ class ProjectPresentationTest {
     @Test
     void changedOutcomeRendersOneCoherentProjectReadModel() {
         ProjectPresentation presentation = newPresentation();
+        ObservableList<SliderPresetSnapshot> sliderPresets = presentation.getSliderPresets();
+        ObservableList<CustomMorphTargetSnapshot> customMorphTargets = presentation.getCustomMorphTargets();
+        ObservableList<NpcMorphAssignmentSnapshot> npcMorphAssignments = presentation.getNpcMorphAssignments();
         ProjectSnapshot snapshot = populatedSnapshot(Paths.get("projects", "example.jbs2bg"), true);
 
         ProjectPresentationUpdate update = presentation.render(new ChangedOutcome(snapshot));
 
+        assertSame(sliderPresets, presentation.getSliderPresets());
+        assertSame(customMorphTargets, presentation.getCustomMorphTargets());
+        assertSame(npcMorphAssignments, presentation.getNpcMorphAssignments());
         assertTrue(update.invalidatesGeneratedOutput());
         assertFalse(update.hasDiagnostics());
         assertEquals("jBS2BG - *example.jbs2bg", presentation.getWindowTitle());
         assertTrue(presentation.requiresDiscardConfirmation());
 
-        SliderPreset preset = presentation.getSliderPresets().get(0);
+        SliderPresetSnapshot preset = presentation.getSliderPresets().get(0);
+        assertSame(snapshot.getSliderPresets().get(0), preset);
         assertEquals("Athletic", preset.getName());
-        assertEquals(25, preset.getSetSliders().get(0).getValueSmall().intValue());
-        assertEquals(75, preset.getSetSliders().get(0).getValueBig().intValue());
+        assertEquals(25, preset.getSliderChoices().get(0).getEffectiveSmallValue());
+        assertEquals(75, preset.getSliderChoices().get(0).getEffectiveBigValue());
 
-        CustomMorphTarget target = presentation.getCustomMorphTargets().get(0);
+        CustomMorphTargetSnapshot target = presentation.getCustomMorphTargets().get(0);
+        assertSame(snapshot.getCustomMorphTargets().get(0), target);
         assertEquals("All|Female", target.getName());
-        assertEquals("Athletic", target.getSliderPresets().get(0).getName());
+        assertEquals(Collections.singletonList("Athletic"), target.getSliderPresetNames());
 
-        NPC npc = presentation.getNpcMorphAssignments().get(0);
-        assertEquals("Skyrim.esm", npc.getMod());
+        NpcMorphAssignmentSnapshot npc = presentation.getNpcMorphAssignments().get(0);
+        assertSame(snapshot.getNpcMorphAssignments().get(0), npc);
+        assertEquals("Skyrim.esm", npc.getPluginName());
         assertEquals("FemaleNord", npc.getEditorId());
-        assertEquals("Athletic", npc.getSliderPresets().get(0).getName());
+        assertEquals(Collections.singletonList("Athletic"), npc.getSliderPresetNames());
     }
 
     /**
@@ -89,7 +118,7 @@ class ProjectPresentationTest {
 
         ProjectPresentationUpdate unchanged = presentation
                 .render(new UnchangedOutcome(snapshot, diagnostics));
-        SliderPreset renderedBeforeFailure = presentation.getSliderPresets().get(0);
+        SliderPresetSnapshot renderedBeforeFailure = presentation.getSliderPresets().get(0);
         ProjectPresentationUpdate failed = presentation
                 .render(new FailedOutcome(snapshot, diagnostics));
 
@@ -111,7 +140,7 @@ class ProjectPresentationTest {
      * inferring it from nullable stored values while building view projections.
      */
     @Test
-    void explicitBothNullSliderChoiceDoesNotBecomeMissingDefault() {
+    void explicitSliderChoiceClassificationIsRenderedWithoutConversion() {
         ProjectPresentation presentation = newPresentation();
         SliderChoiceSnapshot explicitChoice = new SliderChoiceSnapshot("Waist", true, null, null, 20, 80, 15,
                 85, false);
@@ -126,13 +155,13 @@ class ProjectPresentationTest {
 
         presentation.render(new ChangedOutcome(snapshot));
 
-        SliderPreset rendered = presentation.getSliderPresets().get(0);
-        assertEquals(1, rendered.getSetSliders().size());
-        assertEquals(1, rendered.getMissingDefaultSetSliders().size());
-        assertEquals("Waist", rendered.getSetSliders().get(0).getName());
-        assertEquals(20, rendered.getSetSliders().get(0).getValueSmall().intValue());
-        assertEquals(80, rendered.getSetSliders().get(0).getValueBig().intValue());
-        assertEquals("Breasts", rendered.getMissingDefaultSetSliders().get(0).getName());
+        SliderPresetSnapshot rendered = presentation.getSliderPresets().get(0);
+        assertSame(explicitChoice, rendered.getSliderChoices().get(0));
+        assertFalse(rendered.getSliderChoices().get(0).isMissingDefault());
+        assertEquals(20, rendered.getSliderChoices().get(0).getEffectiveSmallValue());
+        assertEquals(80, rendered.getSliderChoices().get(0).getEffectiveBigValue());
+        assertSame(missingDefaultChoice, rendered.getSliderChoices().get(1));
+        assertTrue(rendered.getSliderChoices().get(1).isMissingDefault());
         assertEquals("jBS2BG *", presentation.getWindowTitle());
     }
 
@@ -169,5 +198,29 @@ class ProjectPresentationTest {
                 "NordRace", "1A696", Collections.singletonList("Athletic"));
         return new ProjectSnapshot(Collections.singletonList(preset), Collections.singletonList(target),
                 Arrays.asList(npc), Optional.of(fileIdentity), dirty, ProjectLifecycleStatus.FILE_BACKED);
+    }
+
+    /**
+     * Verifies one observable getter's immutable generic element contract.
+     *
+     * @param getterName public ProjectPresentation collection getter
+     * @param snapshotType required immutable element type
+     * @param expectedAccessors complete public API allowed on the immutable value
+     * @throws Exception when the getter is absent or its reflective signature cannot
+     *         be inspected
+     */
+    private static void assertImmutableSnapshotGetter(String getterName, Class<?> snapshotType,
+            String... expectedAccessors) throws Exception {
+        Method getter = ProjectPresentation.class.getMethod(getterName);
+        assertEquals(ObservableList.class, getter.getReturnType());
+        ParameterizedType returnType = (ParameterizedType) getter.getGenericReturnType();
+        assertEquals(snapshotType, returnType.getActualTypeArguments()[0]);
+
+        List<String> publicApi = new ArrayList<>();
+        for (Method method : snapshotType.getDeclaredMethods())
+            if (Modifier.isPublic(method.getModifiers()))
+                publicApi.add(method.getName());
+        Collections.sort(publicApi);
+        assertEquals(Arrays.asList(expectedAccessors), publicApi);
     }
 }

@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.ResourceBundle;
 import java.util.function.UnaryOperator;
 
-import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.ProjectSnapshot;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
@@ -175,7 +174,7 @@ public class PopupSetSlidersController extends CustomController {
 
 	/** Pins the selected logical preset and renders rows from the latest immutable snapshot. */
 	private void onShown() {
-		SliderPreset selectedPreset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot selectedPreset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
 		if (selectedPreset == null)
 			return;
 

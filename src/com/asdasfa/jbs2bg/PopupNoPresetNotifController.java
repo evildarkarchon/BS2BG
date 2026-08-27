@@ -1,15 +1,14 @@
 package com.asdasfa.jbs2bg;
 
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.ResourceBundle;
 
 import com.asdasfa.jbs2bg.controlsfx.table.TableFilter;
-import com.asdasfa.jbs2bg.data.CustomMorphTarget;
-import com.asdasfa.jbs2bg.data.MorphTarget;
-import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
+import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -29,25 +28,25 @@ import javafx.scene.control.cell.PropertyValueFactory;
 public class PopupNoPresetNotifController extends CustomController {
 	
 	@FXML
-	private ListView<CustomMorphTarget> lvNoPreset;
+	private ListView<CustomMorphTargetSnapshot> lvNoPreset;
 	
 	@FXML
-	private TableView<NPC> tvNoPreset;
+	private TableView<NpcMorphAssignmentSnapshot> tvNoPreset;
 	@FXML
-	private TableColumn<NPC, String> tcName;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcName;
 	@FXML
-	private TableColumn<NPC, String> tcMaster;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcMaster;
 	@FXML
-	private TableColumn<NPC, String> tcRace;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcRace;
 	@FXML
-	private TableColumn<NPC, String> tcEditorId;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcEditorId;
 	@FXML
-	private TableColumn<NPC, String> tcFormId;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcFormId;
 	
-	private TableFilter<NPC> noPresetTableFilter;
+	private TableFilter<NpcMorphAssignmentSnapshot> noPresetTableFilter;
 	
-	private final ObservableList<CustomMorphTarget> customMorphTargets = FXCollections.observableArrayList();
-	private final ObservableList<NPC> morphedNpcs = FXCollections.observableArrayList();
+	private final ObservableList<CustomMorphTargetSnapshot> customMorphTargets = FXCollections.observableArrayList();
+	private final ObservableList<NpcMorphAssignmentSnapshot> morphedNpcs = FXCollections.observableArrayList();
 	
 	@Override
 	public void initialize(URL location, ResourceBundle resources) {
@@ -59,7 +58,7 @@ public class PopupNoPresetNotifController extends CustomController {
 			@Override
 			public void test() {
 				for (int i = 0; i < lvNoPreset.getItems().size(); i++) {
-					CustomMorphTarget item = lvNoPreset.getItems().get(i);
+					CustomMorphTargetSnapshot item = lvNoPreset.getItems().get(i);
 					if (item.getName().toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;
@@ -80,9 +79,9 @@ public class PopupNoPresetNotifController extends CustomController {
 		});
 		
 		lvNoPreset.setCellFactory(p ->
-		new ListCell<CustomMorphTarget>() {
+		new ListCell<CustomMorphTargetSnapshot>() {
 				@Override
-				protected void updateItem(CustomMorphTarget item, boolean empty) {
+				protected void updateItem(CustomMorphTargetSnapshot item, boolean empty) {
 					super.updateItem(item, empty);
 					if (empty || item == null) {
 						setText(null);
@@ -100,8 +99,8 @@ public class PopupNoPresetNotifController extends CustomController {
 			@Override
 			public void test() {
 				for (int i = 0; i < noPresetTableFilter.getFilteredList().size(); i++) {
-					NPC npc = noPresetTableFilter.getFilteredList().get(i);
-					if (npc.getName().toUpperCase().startsWith(searchText.toUpperCase())) {
+					NpcMorphAssignmentSnapshot npc = noPresetTableFilter.getFilteredList().get(i);
+					if (npc.getDisplayName().toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;
 							continue;
@@ -118,15 +117,15 @@ public class PopupNoPresetNotifController extends CustomController {
 		tvNoPreset.setPlaceholder(new Label("EMPTY"));
 		tvNoPreset.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
 		tvNoPreset.setOnSort(e -> {
-			NPC npc = tvNoPreset.getSelectionModel().getSelectedItem();
+			NpcMorphAssignmentSnapshot npc = tvNoPreset.getSelectionModel().getSelectedItem();
 			if (npc != null)
 				tvNoPreset.scrollTo(npc);
 		});
-		tcName.setCellValueFactory(new PropertyValueFactory<NPC, String>("name"));
-		tcMaster.setCellValueFactory(new PropertyValueFactory<NPC, String>("mod"));
-		tcRace.setCellValueFactory(new PropertyValueFactory<NPC, String>("race"));
-		tcEditorId.setCellValueFactory(new PropertyValueFactory<NPC, String>("editorId"));
-		tcFormId.setCellValueFactory(new PropertyValueFactory<NPC, String>("formId"));
+		tcName.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("displayName"));
+		tcMaster.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("pluginName"));
+		tcRace.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("race"));
+		tcEditorId.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("editorId"));
+		tcFormId.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("formId"));
 		
 		tvNoPreset.setItems(morphedNpcs);
 		noPresetTableFilter = TableFilter.forTableView(tvNoPreset).lazy(true).apply();
@@ -140,25 +139,26 @@ public class PopupNoPresetNotifController extends CustomController {
 		tvNoPreset.managedProperty().bind(tvNoPreset.visibleProperty());
 	}
 	
-	public void notify(ArrayList<MorphTarget> targets) {
+	/**
+	 * Displays targets that the same generated-output result found to have no
+	 * Slider Preset assignments. Must run on the JavaFX thread; when first shown,
+	 * the method remains in a nested event loop until the user closes the warning.
+	 *
+	 * @param output immutable result whose text and warning rows share one snapshot
+	 * @throws NullPointerException when output is null
+	 */
+	public void notify(ProjectGeneratedOutput output) {
 		customMorphTargets.clear();
 		morphedNpcs.clear();
 		
 		stage.setTitle("");
 		
-		if (targets.size() <= 0)
+		customMorphTargets.addAll(output.getCustomMorphTargetsWithoutPresets());
+		morphedNpcs.addAll(output.getNpcMorphAssignmentsWithoutPresets());
+		if (customMorphTargets.isEmpty() && morphedNpcs.isEmpty())
 			return;
 		
 		stage.setTitle("Warning: Targets with no presets were found!");
-		
-		for (int i = 0; i < targets.size(); i++) {
-			MorphTarget target = targets.get(i);
-			if (target instanceof CustomMorphTarget) {
-				customMorphTargets.add((CustomMorphTarget) target);
-			} else if (target instanceof NPC) {
-				morphedNpcs.add((NPC) target);
-			}
-		}
 		
 		lvNoPreset.setVisible(true);
 		tvNoPreset.setVisible(true);

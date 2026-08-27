@@ -9,7 +9,10 @@ import java.util.logging.Logger;
 
 import org.apache.commons.io.FileUtils;
 
-import com.asdasfa.jbs2bg.data.SliderPreset;
+import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
+import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
+import com.asdasfa.jbs2bg.project.ProjectSnapshot;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
 import javafx.beans.binding.Bindings;
 import javafx.concurrent.Task;
@@ -40,6 +43,7 @@ public class PopupBosViewController extends CustomController {
 	private CustomNotif notif;
 	
 	private FileChooser fcFile;
+	private String currentArtifactFileName;
 	
 	@Override
 	public void initialize(URL location, ResourceBundle resources) {
@@ -50,9 +54,7 @@ public class PopupBosViewController extends CustomController {
 		stage.setOnShown(e -> {
 			onShown();
 		});
-		stage.setOnHidden(e -> {
-			taBosJson.clear();
-		});
+		stage.setOnHidden(e -> clearGeneratedOutput());
 		
 		notif = new CustomNotif(main);
 		notif.setOwner(stage);
@@ -69,19 +71,53 @@ public class PopupBosViewController extends CustomController {
 		stage.getScene().cursorProperty().bind(Bindings.when(mainPane.disabledProperty()).then(Cursor.WAIT).otherwise(Cursor.DEFAULT));
 	}
 	
+	/** Renders the selected BoS artifact from one coherent presentation snapshot. */
 	private void onShown() {
-		SliderPreset preset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
-		if (preset == null)
+		SliderPresetSnapshot selectedPreset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
+		if (selectedPreset == null) {
+			clearGeneratedOutput();
 			return;
+		}
+
+		// Capture once so the preview name and content cannot come from different renders.
+		ProjectSnapshot snapshot = main.projectPresentation.getSnapshot();
+		SliderPresetSnapshot preset = findPreset(snapshot, selectedPreset.getName());
+		if (preset == null) {
+			clearGeneratedOutput();
+			return;
+		}
+		boolean omitRedundantSliders = main.data.prefs.getBoolean(main.data.OMIT_REDUNDANT_SLIDERS, false);
+		ProjectGeneratedOutput output = ProjectOutputFormatter.generate(snapshot, omitRedundantSliders);
+		currentArtifactFileName = preset.getName() + ".json";
+		String bosJson = output.getBosJsonByFileName().get(currentArtifactFileName);
+		if (bosJson == null) {
+			clearGeneratedOutput();
+			return;
+		}
 		
 		stage.setTitle("BodyTypes of Skyrim JSON: " + preset.getName());
 		btnBack.requestFocus();
 		
-		taBosJson.setText(preset.toBosJson());
+		taBosJson.setText(bosJson);
+	}
+
+	/** Resolves the selected logical preset within the captured Project snapshot. */
+	private static SliderPresetSnapshot findPreset(ProjectSnapshot snapshot, String selectedName) {
+		for (SliderPresetSnapshot preset : snapshot.getSliderPresets()) {
+			if (preset.getName().equalsIgnoreCase(selectedName))
+				return preset;
+		}
+		return null;
 	}
 
 	/** Clears cached BoS output after a changed ProjectSession outcome. */
 	public void invalidateGeneratedOutput() {
+		clearGeneratedOutput();
+	}
+
+	/** Clears both parts of the currently rendered BoS artifact. */
+	private void clearGeneratedOutput() {
+		currentArtifactFileName = null;
 		taBosJson.clear();
 	}
 	
@@ -105,20 +141,27 @@ public class PopupBosViewController extends CustomController {
 		}
 	}
 	
+	/**
+	 * Captures the displayed artifact on the JavaFX thread, prompts for its
+	 * destination, and schedules a background write without retaining control state.
+	 */
 	@FXML
 	private void exportBosJson() {
 		File file;
-		SliderPreset preset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
-		if (preset == null)
+		// JavaFX controls are confined to this thread; the worker receives plain values.
+		String artifactFileName = currentArtifactFileName;
+		String artifactContent = taBosJson.getText();
+		String artifactEncoding = main.data.encoding;
+		if (artifactFileName == null)
 			return;
 		
 		try {
 			fcFile.setInitialDirectory(new File(main.data.prefs.get(main.data.LAST_USED_JSON_FOLDER, new File(".").getAbsolutePath())));
-			fcFile.setInitialFileName(preset.getName());
+			fcFile.setInitialFileName(withoutJsonExtension(artifactFileName));
 			file = fcFile.showSaveDialog(stage);
 		} catch (Exception e) {
 			fcFile.setInitialDirectory(main.data.homeDir);
-			fcFile.setInitialFileName(preset.getName());
+			fcFile.setInitialFileName(withoutJsonExtension(artifactFileName));
 			file = fcFile.showSaveDialog(stage);
 		}
 		
@@ -132,56 +175,62 @@ public class PopupBosViewController extends CustomController {
 
 		mainPane.setDisable(true);
 		Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file...");
-		try {
-			if (!file.getAbsolutePath().endsWith(".json"))
-				file = new File(file.getAbsolutePath() + ".json");
+		Task<Void> task = exportBosJsonTask(file, artifactContent, artifactEncoding);
+		task.setOnSucceeded(e -> {
+			Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file done.");
+			mainPane.setDisable(false);
+		});
+		task.setOnFailed(e -> {
+			Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file failed.");
+			mainPane.setDisable(false);
 			
-			Task<Void> task = exportBosJsonTask(file);
-			task.setOnSucceeded(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file done.");
-				mainPane.setDisable(false);
-			});
-			task.setOnFailed(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file failed.");
-				mainPane.setDisable(false);
-				
-				notif.showError("Exporting JSON file failed.");
-			});
-			task.setOnCancelled(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file cancelled.");
-				mainPane.setDisable(false);
-			});
-			task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
-				if (newValue != null) {
-					Exception e = (Exception) newValue;
-					e.printStackTrace();
-				}
-			});
+			notif.showError("Exporting JSON file failed.");
+		});
+		task.setOnCancelled(e -> {
+			Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file cancelled.");
+			mainPane.setDisable(false);
+		});
+		task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
+			if (newValue != null) {
+				Exception e = (Exception) newValue;
+				e.printStackTrace();
+			}
+		});
 
-			new Thread(task).start();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+		new Thread(task).start();
 	}
-	
-	private Task<Void> exportBosJsonTask(File file) throws InterruptedException {
+
+	/** Removes the extension used by the save-dialog filter from an artifact name. */
+	private static String withoutJsonExtension(String artifactFileName) {
+		return artifactFileName.endsWith(".json")
+				? artifactFileName.substring(0, artifactFileName.length() - ".json".length())
+				: artifactFileName;
+	}
+
+	/**
+	 * Creates a worker that writes only the immutable destination and content captured
+	 * on the JavaFX thread.
+	 *
+	 * @param file resolved export destination
+	 * @param content captured BoS JSON content
+	 * @param encoding captured output character encoding
+	 * @return background export task
+	 */
+	private static Task<Void> exportBosJsonTask(File file, String content, String encoding) {
 		return new Task<Void>() {
+			/**
+			 * Writes the already captured artifact without consulting JavaFX state.
+			 *
+			 * @return always {@code null} after a successful or empty export
+			 * @throws IOException when the artifact cannot be written
+			 */
 			@Override
-			public Void call() throws InterruptedException {
-				try {
-					String text = taBosJson.getText();
-					
-					if (!text.isEmpty()) {
-						if (file.exists())
-							FileUtils.deleteQuietly(file);
-						
-						FileUtils.writeStringToFile(file, text, main.data.encoding);
-					}
-				} catch (IOException e) {
-					e.printStackTrace();
-				} finally {
+			public Void call() throws IOException {
+				if (!content.isEmpty()) {
+					if (file.exists())
+						FileUtils.deleteQuietly(file);
+					FileUtils.writeStringToFile(file, content, encoding);
 				}
-				
 				return null;
 			}
 		};

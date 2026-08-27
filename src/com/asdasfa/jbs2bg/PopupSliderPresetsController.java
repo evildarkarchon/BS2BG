@@ -3,11 +3,11 @@ package com.asdasfa.jbs2bg;
 import java.net.URL;
 import java.util.ResourceBundle;
 
-import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.ListCell;
@@ -20,7 +20,7 @@ import javafx.scene.control.ListView;
 public class PopupSliderPresetsController extends CustomController {
 	
 	@FXML
-	protected ListView<SliderPreset> lvPresets;
+	protected ListView<SliderPresetSnapshot> lvPresets;
 
 	@Override
 	public void initialize(URL location, ResourceBundle resources) {
@@ -28,7 +28,7 @@ public class PopupSliderPresetsController extends CustomController {
 			@Override
 			public void test() {
 				for (int i = 0; i < lvPresets.getItems().size(); i++) {
-					SliderPreset item = lvPresets.getItems().get(i);
+					SliderPresetSnapshot item = lvPresets.getItems().get(i);
 					if (item.getName().toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;
@@ -52,9 +52,9 @@ public class PopupSliderPresetsController extends CustomController {
 	@Override
 	protected void onPostInit() {
 		lvPresets.setCellFactory(p ->
-			new ListCell<SliderPreset>() {
+			new ListCell<SliderPresetSnapshot>() {
 				@Override
-				protected void updateItem(SliderPreset item, boolean empty) {
+				protected void updateItem(SliderPresetSnapshot item, boolean empty) {
 					super.updateItem(item, empty);
 					if (empty || item == null) {
 						setText(null);
@@ -67,7 +67,7 @@ public class PopupSliderPresetsController extends CustomController {
 		);
 		
 		stage.setOnShowing(e -> {
-			SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
+			SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
 			if (preset != null) {
 				int index = lvPresets.getItems().indexOf(preset);
 				boolean indexVisible = MyUtils.isIndexVisible(lvPresets, index);
@@ -89,7 +89,7 @@ public class PopupSliderPresetsController extends CustomController {
 	 */
 	@FXML
 	private void addPresetToTarget() {
-		SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
 		if (preset == null)
 			return;
 		

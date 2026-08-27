@@ -5,9 +5,9 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.function.Consumer;
 import java.util.logging.Level;
@@ -16,28 +16,32 @@ import java.util.logging.Logger;
 import org.apache.commons.io.FileUtils;
 
 import com.asdasfa.jbs2bg.controlsfx.table.TableFilter;
-import com.asdasfa.jbs2bg.data.CustomMorphTarget;
-import com.asdasfa.jbs2bg.data.MorphTarget;
-import com.asdasfa.jbs2bg.data.NPC;
-import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
+import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.presentation.ProjectPresentationUpdate;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
+import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectEdit;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.ProjectSnapshot;
 import com.asdasfa.jbs2bg.project.RejectedOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
+import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Task;
@@ -97,7 +101,7 @@ public class MainController extends CustomController {
 	
 	// Templates
 	@FXML
-	protected ListView<SliderPreset> lvPresets;
+	protected ListView<SliderPresetSnapshot> lvPresets;
 	@FXML
 	private TextArea taTemplate;
 	@FXML
@@ -110,27 +114,27 @@ public class MainController extends CustomController {
 	
 	// Morphs
 	@FXML 
-	private ListView<CustomMorphTarget> lvCustomTargets;
+	private ListView<CustomMorphTargetSnapshot> lvCustomTargets;
 	@FXML
 	private TextField tfCustomTarget;
 	@FXML
 	private Label lblNpcCounter;
 	@FXML
-	protected TableView<NPC> tvNpc;
+	protected TableView<NpcMorphAssignmentSnapshot> tvNpc;
 	@FXML
-	private TableColumn<NPC, String> tcName;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcName;
 	@FXML
-	private TableColumn<NPC, String> tcMaster;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcMaster;
 	@FXML
-	private TableColumn<NPC, String> tcRace;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcRace;
 	@FXML
-	private TableColumn<NPC, String> tcEditorId;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcEditorId;
 	@FXML
-	private TableColumn<NPC, String> tcFormId;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcFormId;
 	@FXML
-	private TableColumn<NPC, String> tcSliderPresets;
+	private TableColumn<NpcMorphAssignmentSnapshot, String> tcSliderPresets;
 	@FXML
-	protected ListView<SliderPreset> lvTargetPresets;
+	protected ListView<SliderPresetSnapshot> lvTargetPresets;
 	@FXML
 	private Label lblTargetName;
 	@FXML
@@ -139,7 +143,7 @@ public class MainController extends CustomController {
 	private TextArea taMorphsGen;
 	// ^ Morphs ^
 	
-	protected TableFilter<NPC> npcTableFilter;
+	protected TableFilter<NpcMorphAssignmentSnapshot> npcTableFilter;
 	
 	// Confirm Dialogs
 	private CustomConfirm confirmNewFile;
@@ -250,11 +254,11 @@ public class MainController extends CustomController {
 			/** Publishes a UUNP toggle as one Slider Preset edit. */
 			@Override
 			public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
-				SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
+				SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
 				if (preset == null)
 					return;
 				
-				if (preset.isUUNP() != cbUUNP.isSelected()) { // Only mark changed if toggled
+				if (preset.isUunp() != cbUUNP.isSelected()) { // Only mark changed if toggled
 					applyProjectEdit(SliderPresetEdits.setUunp(preset.getName(), cbUUNP.isSelected()));
 					
 					lvPresets.requestFocus();
@@ -310,7 +314,6 @@ public class MainController extends CustomController {
 		taTemplate.clear();
 		taTemplatesGen.clear();
 		taMorphsGen.clear();
-		targetsWithoutPresets.clear();
 		if (popupBosViewController != null)
 			popupBosViewController.invalidateGeneratedOutput();
 		if (popupNoPresetNotifController != null)
@@ -344,13 +347,14 @@ public class MainController extends CustomController {
 		notif.setOwner(stage);
 	}
 	
+	/** Configures JavaFX views over immutable Project snapshot values. */
 	private void setupViews() {
-		/*lvPresets.setCellFactory(new Callback<ListView<SliderPreset>, ListCell<SliderPreset>>() {
+		/*lvPresets.setCellFactory(new Callback<ListView<SliderPresetSnapshot>, ListCell<SliderPresetSnapshot>>() {
 			@Override
-			public ListCell<SliderPreset> call(ListView<SliderPreset> param) {
-				ListCell<SliderPreset> cell = new ListCell<SliderPreset>() {
+			public ListCell<SliderPresetSnapshot> call(ListView<SliderPresetSnapshot> param) {
+				ListCell<SliderPresetSnapshot> cell = new ListCell<SliderPresetSnapshot>() {
 					@Override
-					protected void updateItem(SliderPreset item, boolean empty) {
+					protected void updateItem(SliderPresetSnapshot item, boolean empty) {
 						super.updateItem(item, empty);
 						if (empty || item == null) {
 							setText(null);
@@ -362,11 +366,11 @@ public class MainController extends CustomController {
 				};
 				return cell;
 			}
-        });*/
+		});*/
 		lvPresets.setCellFactory(p ->
-			new ListCell<SliderPreset>() {
+			new ListCell<SliderPresetSnapshot>() {
 				@Override
-				protected void updateItem(SliderPreset item, boolean empty) {
+				protected void updateItem(SliderPresetSnapshot item, boolean empty) {
 					super.updateItem(item, empty);
 					if (empty || item == null) {
 						setText(null);
@@ -378,7 +382,7 @@ public class MainController extends CustomController {
 			}
 		);
 		lvPresets.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
-			SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
+			SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
 			if (preset == null) {
 				cbUUNP.setDisable(true);
 				cbUUNP.setSelected(false);
@@ -386,14 +390,14 @@ public class MainController extends CustomController {
 			}
 			
 			cbUUNP.setDisable(false);
-			cbUUNP.setSelected(preset.isUUNP());
+			cbUUNP.setSelected(preset.isUunp());
 			updateTemplateText();
 		});
 		
 		lvCustomTargets.setCellFactory(p ->
-			new ListCell<CustomMorphTarget>() {
+			new ListCell<CustomMorphTargetSnapshot>() {
 				@Override
-				protected void updateItem(CustomMorphTarget item, boolean empty) {
+				protected void updateItem(CustomMorphTargetSnapshot item, boolean empty) {
 					super.updateItem(item, empty);
 					if (empty || item == null) {
 						setText(null);
@@ -410,7 +414,7 @@ public class MainController extends CustomController {
 				tfCustomTarget.setText(newSelection.getName());
 				
 				lblTargetName.setText(newSelection.getName());
-				lvTargetPresets.setItems(newSelection.getSliderPresets());
+				lvTargetPresets.setItems(resolveAssignedSliderPresets(newSelection.getSliderPresetNames()));
 				updatePresetCounter();
 			} else {
 				lblTargetName.setText("-null-");
@@ -420,9 +424,9 @@ public class MainController extends CustomController {
 		});
 		
 		lvTargetPresets.setCellFactory(p ->
-			new ListCell<SliderPreset>() {
+			new ListCell<SliderPresetSnapshot>() {
 				@Override
-				protected void updateItem(SliderPreset item, boolean empty) {
+				protected void updateItem(SliderPresetSnapshot item, boolean empty) {
 					super.updateItem(item, empty);
 					if (empty || item == null) {
 						setText(null);
@@ -443,7 +447,7 @@ public class MainController extends CustomController {
 		tvNpc.setPlaceholder(new Label("EMPTY"));
 		tvNpc.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
 		tvNpc.setOnSort(e -> {
-			NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+			NpcMorphAssignmentSnapshot npc = tvNpc.getSelectionModel().getSelectedItem();
 			if (npc != null)
 				tvNpc.scrollTo(npc);
 		});
@@ -452,12 +456,12 @@ public class MainController extends CustomController {
 				lvCustomTargets.getSelectionModel().clearSelection();
 				tfCustomTarget.setText("");
 				
-				lblTargetName.setText(newSelection.getName());
-				lvTargetPresets.setItems(newSelection.getSliderPresets());
+				lblTargetName.setText(newSelection.getDisplayName());
+				lvTargetPresets.setItems(resolveAssignedSliderPresets(newSelection.getSliderPresetNames()));
 				updatePresetCounter();
 				
-				popupImageViewController.setTitle(newSelection.getName());
-				popupImageViewController.setImage(newSelection.getImageFile());
+				popupImageViewController.setTitle(newSelection.getDisplayName());
+				popupImageViewController.setImage(findNpcImageFile(newSelection));
 			} else {
 				lblTargetName.setText("-null-");
 				lvTargetPresets.setItems(null);
@@ -467,12 +471,13 @@ public class MainController extends CustomController {
 				popupImageViewController.setImage(null);
 			}
 		});
-		tcName.setCellValueFactory(new PropertyValueFactory<NPC, String>("name"));
-		tcMaster.setCellValueFactory(new PropertyValueFactory<NPC, String>("mod"));
-		tcRace.setCellValueFactory(new PropertyValueFactory<NPC, String>("race"));
-		tcEditorId.setCellValueFactory(new PropertyValueFactory<NPC, String>("editorId"));
-		tcFormId.setCellValueFactory(new PropertyValueFactory<NPC, String>("formId"));
-		tcSliderPresets.setCellValueFactory(col -> col.getValue().getSliderPresetsString());
+		tcName.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("displayName"));
+		tcMaster.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("pluginName"));
+		tcRace.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("race"));
+		tcEditorId.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("editorId"));
+		tcFormId.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("formId"));
+		tcSliderPresets.setCellValueFactory(col ->
+				new ReadOnlyStringWrapper(String.join("|", col.getValue().getSliderPresetNames())));
 		
 		updateNpcCounter();
 	}
@@ -502,13 +507,13 @@ public class MainController extends CustomController {
 	 * @return the rendered outcome for typed callback decisions
 	 */
 	private ProjectOutcome renderProjectOutcome(ProjectOutcome outcome) {
-		SliderPreset selectedPreset = lvPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot selectedPreset = lvPresets.getSelectionModel().getSelectedItem();
 		String selectedPresetName = selectedPreset == null ? null : selectedPreset.getName();
-		CustomMorphTarget selectedCustomTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		CustomMorphTargetSnapshot selectedCustomTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
 		String selectedCustomTargetName = selectedCustomTarget == null ? null : selectedCustomTarget.getName();
-		NPC selectedNpc = tvNpc.getSelectionModel().getSelectedItem();
+		NpcMorphAssignmentSnapshot selectedNpc = tvNpc.getSelectionModel().getSelectedItem();
 		NpcMorphAssignmentIdentity selectedNpcIdentity = identityOf(selectedNpc);
-		SliderPreset selectedTargetPreset = lvTargetPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot selectedTargetPreset = lvTargetPresets.getSelectionModel().getSelectedItem();
 		String selectedTargetPresetName = selectedTargetPreset == null ? null : selectedTargetPreset.getName();
 		ProjectPresentationUpdate update = main.projectPresentation.render(outcome);
 		// Generated text must be cleared before selection listeners recreate the
@@ -547,7 +552,7 @@ public class MainController extends CustomController {
 	void selectSliderPreset(String name) {
 		if (name == null)
 			return;
-		for (SliderPreset preset : main.projectPresentation.getSliderPresets()) {
+		for (SliderPresetSnapshot preset : main.projectPresentation.getSliderPresets()) {
 			if (preset.getName().equalsIgnoreCase(name)) {
 				lvPresets.getSelectionModel().select(preset);
 				return;
@@ -557,7 +562,7 @@ public class MainController extends CustomController {
 
 	/** Restores a Custom Morph Target selection by stable case-insensitive name. */
 	private void selectCustomTarget(String name) {
-		for (CustomMorphTarget target : main.projectPresentation.getCustomMorphTargets()) {
+		for (CustomMorphTargetSnapshot target : main.projectPresentation.getCustomMorphTargets()) {
 			if (target.getName().equalsIgnoreCase(name)) {
 				lvCustomTargets.getSelectionModel().select(target);
 				return;
@@ -569,7 +574,7 @@ public class MainController extends CustomController {
 	void selectNpc(NpcMorphAssignmentIdentity identity) {
 		if (identity == null)
 			return;
-		for (NPC npc : main.projectPresentation.getNpcMorphAssignments()) {
+		for (NpcMorphAssignmentSnapshot npc : main.projectPresentation.getNpcMorphAssignments()) {
 			if (identity.equals(identityOf(npc))) {
 				tvNpc.getSelectionModel().select(npc);
 				return;
@@ -581,7 +586,7 @@ public class MainController extends CustomController {
 	void selectTargetPreset(String name) {
 		if (name == null || lvTargetPresets.getItems() == null)
 			return;
-		for (SliderPreset preset : lvTargetPresets.getItems()) {
+		for (SliderPresetSnapshot preset : lvTargetPresets.getItems()) {
 			if (preset.getName().equalsIgnoreCase(name)) {
 				int index = lvTargetPresets.getItems().indexOf(preset);
 				lvTargetPresets.getSelectionModel().select(index);
@@ -594,22 +599,85 @@ public class MainController extends CustomController {
 	}
 
 	/** Builds the stable identity used by every NPC edit and selection restoration. */
-	private static NpcMorphAssignmentIdentity identityOf(NPC npc) {
-		return npc == null ? null : new NpcMorphAssignmentIdentity(npc.getMod(), npc.getEditorId());
+	private static NpcMorphAssignmentIdentity identityOf(NpcMorphAssignmentSnapshot npc) {
+		return npc == null ? null : new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId());
 	}
 
 	/** Copies the logical identities selected by a filtered table before an atomic edit rebuilds it. */
-	private static List<NpcMorphAssignmentIdentity> identitiesOf(Iterable<NPC> npcs) {
+	private static List<NpcMorphAssignmentIdentity> identitiesOf(Iterable<NpcMorphAssignmentSnapshot> npcs) {
 		List<NpcMorphAssignmentIdentity> identities = new ArrayList<>();
-		for (NPC npc : npcs)
+		for (NpcMorphAssignmentSnapshot npc : npcs)
 			identities.add(identityOf(npc));
 		return identities;
 	}
 
+	/**
+	 * Resolves relationship names to immutable Slider Presets from the currently
+	 * rendered snapshot for one target-selection view.
+	 *
+	 * @param assignedNames canonical relationship names from an immutable target
+	 * @return presentation-owned observable list containing immutable values
+	 * @throws IllegalArgumentException when a rendered relationship is unresolved
+	 */
+	private ObservableList<SliderPresetSnapshot> resolveAssignedSliderPresets(List<String> assignedNames) {
+		ObservableList<SliderPresetSnapshot> resolved = FXCollections.observableArrayList();
+		for (String assignedName : assignedNames) {
+			SliderPresetSnapshot preset = findSliderPreset(assignedName);
+			if (preset == null)
+				throw new IllegalArgumentException(
+						"Snapshot contains an unresolved Slider Preset assignment: " + assignedName);
+			resolved.add(preset);
+		}
+		return resolved;
+	}
+
+	/** Resolves one Slider Preset in the latest rendered snapshot without regard to case. */
+	private SliderPresetSnapshot findSliderPreset(String name) {
+		for (SliderPresetSnapshot preset : main.projectPresentation.getSliderPresets()) {
+			if (preset.getName().equalsIgnoreCase(name))
+				return preset;
+		}
+		return null;
+	}
+
+	/**
+	 * Resolves an optional NPC preview image from immutable display values without
+	 * adding image-cache state to the Project snapshot.
+	 *
+	 * @param npc immutable NPC Morph Assignment selected for preview
+	 * @return the first matching local image, or null when none exists
+	 */
+	static File findNpcImageFile(NpcMorphAssignmentSnapshot npc) {
+		return findNpcImageFile(npc.getDisplayName(), npc.getEditorId());
+	}
+
+	/**
+	 * Resolves an optional NPC preview image from presentation display values.
+	 *
+	 * @param displayName NPC display name used by image-file conventions
+	 * @param editorId NPC editor ID used by image-file conventions
+	 * @return the first matching local image, or null when none exists
+	 */
+	static File findNpcImageFile(String displayName, String editorId) {
+		String[] imageExtensions = { ".jpg", "jpeg", ".png", ".bmp" };
+		for (String extension : imageExtensions) {
+			File withEditorId = new File("images/" + displayName + " (" + editorId + ")"
+					+ extension);
+			if (withEditorId.exists())
+				return withEditorId;
+		}
+		for (String extension : imageExtensions) {
+			File withoutEditorId = new File("images/" + displayName + extension);
+			if (withoutEditorId.exists())
+				return withoutEditorId;
+		}
+		return null;
+	}
+
 	/** Clears assignments from whichever logical target is currently selected. */
 	private void clearCurrentTargetAssignments() {
-		CustomMorphTarget customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
-		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+		CustomMorphTargetSnapshot customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		NpcMorphAssignmentSnapshot npc = tvNpc.getSelectionModel().getSelectedItem();
 		if (customTarget != null)
 			applyProjectEdit(CustomMorphTargetEdits.clearSliderPresets(customTarget.getName()));
 		else if (npc != null)
@@ -624,10 +692,10 @@ public class MainController extends CustomController {
 	 * @return the rendered Project outcome
 	 */
 	ProjectOutcome addSliderPresetToCurrentTarget(String presetName) {
-		CustomMorphTarget customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		CustomMorphTargetSnapshot customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
 		if (customTarget != null)
 			return applyProjectEdit(CustomMorphTargetEdits.addSliderPreset(customTarget.getName(), presetName));
-		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+		NpcMorphAssignmentSnapshot npc = tvNpc.getSelectionModel().getSelectedItem();
 		if (npc != null)
 			return applyProjectEdit(NpcMorphAssignmentEdits.addSliderPreset(identityOf(npc), presetName));
 		throw new IllegalStateException("A morph target must remain selected while its preset popup is open");
@@ -743,7 +811,7 @@ public class MainController extends CustomController {
 			/** Removes the identities captured by the active NPC table filter atomically. */
 			@Override
 			public void ok() {
-				FilteredList<NPC> items = npcTableFilter.getFilteredList();
+				FilteredList<NpcMorphAssignmentSnapshot> items = npcTableFilter.getFilteredList();
 				applyProjectEdit(NpcMorphAssignmentEdits.removeNpcs(identitiesOf(items)));
 			}
 		};
@@ -760,7 +828,7 @@ public class MainController extends CustomController {
 			/** Clears assignments for the identities captured by the active filter atomically. */
 			@Override
 			public void ok() {
-				FilteredList<NPC> items = npcTableFilter.getFilteredList();
+				FilteredList<NpcMorphAssignmentSnapshot> items = npcTableFilter.getFilteredList();
 				ProjectOutcome outcome = applyProjectEdit(
 						NpcMorphAssignmentEdits.clearSliderPresetsForNpcs(identitiesOf(items)));
 				if (!(outcome instanceof ChangedOutcome)) { // No NPC in the table was cleared
@@ -1073,25 +1141,24 @@ public class MainController extends CustomController {
 		applyProjectEdit(SliderPresetEdits.clear());
 	}
 	
+	/** Confirms a delete only when the selected Slider Preset has relationships. */
 	@FXML
 	private void showConfirmRemovePreset() {
-		SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
 		if (preset == null)
 			return;
 		
 		boolean used = false;
 		// Search custom morph targets
-		for (CustomMorphTarget target : main.projectPresentation.getCustomMorphTargets()) {
-			ObservableList<SliderPreset> presets = target.getSliderPresets();
-			if (presets.contains(preset)) {
+		for (CustomMorphTargetSnapshot target : main.projectPresentation.getCustomMorphTargets()) {
+			if (target.getSliderPresetNames().contains(preset.getName())) {
 				used = true;
 				break;
 			}
 		}
 		if (!used) { // Search NPCs
-			for (NPC npc : main.projectPresentation.getNpcMorphAssignments()) {
-				ObservableList<SliderPreset> presets = npc.getSliderPresets();
-				if (presets.contains(preset)) {
+			for (NpcMorphAssignmentSnapshot npc : main.projectPresentation.getNpcMorphAssignments()) {
+				if (npc.getSliderPresetNames().contains(preset.getName())) {
 					used = true;
 					break;
 				}
@@ -1107,7 +1174,7 @@ public class MainController extends CustomController {
 	
 	/** Deletes the selected logical Slider Preset through the session cascade. */
 	private void removeSelectedPreset() {
-		SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
 		if (preset == null)
 			return;
 		
@@ -1117,7 +1184,7 @@ public class MainController extends CustomController {
 	/** Duplicates the selected Slider Preset and selects the returned copy. */
 	@FXML
 	private void duplicateSelectedPreset() {
-		SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
 		if (preset == null)
 			return;
 		
@@ -1129,9 +1196,8 @@ public class MainController extends CustomController {
 	
 	@FXML
 	private void showConfirmClearTargetPresets() {
-		MorphTarget target = getCurrentTarget();
-		
-		if (target == null)
+		if (lvCustomTargets.getSelectionModel().getSelectedItem() == null
+				&& tvNpc.getSelectionModel().getSelectedItem() == null)
 			return;
 		
 		if (lvTargetPresets.getItems().size() <= 0)
@@ -1169,12 +1235,9 @@ public class MainController extends CustomController {
 		lblNpcCounter.setText("(" + count + ")");
 	}
 	
+	/** Updates the selected target's relationship count from its immutable view list. */
 	public void updatePresetCounter() {
-		int count = 0;
-		MorphTarget target = getCurrentTarget();
-		if (target != null) {
-			count = target.getSliderPresets().size();
-		}
+		int count = lvTargetPresets.getItems() == null ? 0 : lvTargetPresets.getItems().size();
 		
 		if (count < 31) {
 			lblPresetCounter.setStyle("-fx-text-fill: -fx-light-text-color");
@@ -1243,7 +1306,8 @@ public class MainController extends CustomController {
 	
 	@FXML
 	private void showPopupSliderPresets() {
-		if (getCurrentTarget() == null)
+		if (lvCustomTargets.getSelectionModel().getSelectedItem() == null
+				&& tvNpc.getSelectionModel().getSelectedItem() == null)
 			return;
 		
 		Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
@@ -1269,10 +1333,10 @@ public class MainController extends CustomController {
 			return;
 		
 		boolean hasEmpty = false;
-		FilteredList<NPC> filteredNpcs = npcTableFilter.getFilteredList();
+		FilteredList<NpcMorphAssignmentSnapshot> filteredNpcs = npcTableFilter.getFilteredList();
 		for (int i = 0; i < filteredNpcs.size(); i++) {
-			NPC npc = filteredNpcs.get(i);
-			if (npc.getSliderPresets().isEmpty()) { // Empty
+			NpcMorphAssignmentSnapshot npc = filteredNpcs.get(i);
+			if (npc.getSliderPresetNames().isEmpty()) { // Empty
 				hasEmpty = true;
 				break;
 			}
@@ -1341,82 +1405,59 @@ public class MainController extends CustomController {
 		popupRename.show();
 	}
 	
+	/** Renders the selected Slider Preset preview from the latest coherent Project snapshot. */
 	public void updateTemplateText() {
-		SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
 		if (preset == null) {
 			taTemplate.setText("");
 			return;
 		}
-		
-		taTemplate.setText(preset.toLine(cbOmitRedundantSliders.isSelected()));
+
+		ProjectGeneratedOutput output = ProjectOutputFormatter.generate(main.projectPresentation.getSnapshot(),
+				cbOmitRedundantSliders.isSelected());
+		taTemplate.setText(output.getTemplateLinesByPresetName().get(preset.getName()));
 		taTemplate.positionCaret(0);
     }
 	
+	/** Captures one Project snapshot and schedules Templates generation from it. */
 	@FXML
 	private void generateTemplates() {
-		if (main.projectPresentation.getSliderPresets().isEmpty()) {
+		ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
+		boolean omitRedundantSliders = cbOmitRedundantSliders.isSelected();
+		if (outputSnapshot.getSliderPresets().isEmpty()) {
 			notif.show("You don't have any presets in the list, add some BodySlide XML presets first!");
 			taTemplatesGen.setText("");
 			taTemplatesGen.positionCaret(0);
 			return;
 		}
 		
-		mainPane.setDisable(true);
-		Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Templates...");
-		try {
-			Task<Void> task = generateTemplatesTask();
-			task.setOnSucceeded(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Templates done.");
-				mainPane.setDisable(false);
-			});
-			task.setOnFailed(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Templates failed.");
-				mainPane.setDisable(false);
-				
-				notif.showError("Generating Templates failed.");
-			});
-			task.setOnCancelled(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Templates cancelled.");
-				mainPane.setDisable(false);
-			});
-			task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
-				if (newValue != null) {
-					Exception e = (Exception) newValue;
-					e.printStackTrace();
-				}
-			});
-
-			new Thread(task).start();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+		// Capture occurs before dispatch so the worker cannot mix a later Project
+		// render or read JavaFX controls off the application thread.
+		Task<ProjectGeneratedOutput> task = generateProjectOutputTask(outputSnapshot, omitRedundantSliders);
+		scheduleBackgroundTask(task, output -> {
+			taTemplatesGen.setText(output.getTemplatesText());
+			taTemplatesGen.positionCaret(0);
+			Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Templates done.");
+		}, "Generating Templates", "Generating Templates failed.");
 	}
-	
-	private Task<Void> generateTemplatesTask() throws InterruptedException {
-		return new Task<Void>() {
+
+	/**
+	 * Creates a worker that formats every Project-derived artifact from one pinned
+	 * immutable snapshot.
+	 *
+	 * @param outputSnapshot coherent Project state captured before scheduling
+	 * @param omitRedundantSliders Templates option captured before scheduling
+	 * @return background task yielding immutable generated output
+	 */
+	private Task<ProjectGeneratedOutput> generateProjectOutputTask(ProjectSnapshot outputSnapshot,
+			boolean omitRedundantSliders) {
+		return new Task<ProjectGeneratedOutput>() {
+			/** @return immutable output derived only from the captured Project snapshot */
 			@Override
-			public Void call() throws InterruptedException {
-				doGenerateTemplates();
-				
-				return null;
+			public ProjectGeneratedOutput call() {
+				return ProjectOutputFormatter.generate(outputSnapshot, omitRedundantSliders);
 			}
 		};
-	}
-	
-	private void doGenerateTemplates() {
-		String newLine = System.getProperty("line.separator");
-		String template = "";
-
-		ObservableList<SliderPreset> sliderPresets = main.projectPresentation.getSliderPresets();
-		for (int i = 0; i < sliderPresets.size(); i++) {
-			SliderPreset sliderPreset = sliderPresets.get(i);
-			template = template + sliderPreset.toLine(cbOmitRedundantSliders.isSelected());
-			if (i < sliderPresets.size() - 1)
-				template += newLine;
-		}
-
-		taTemplatesGen.setText(template);
-		taTemplatesGen.positionCaret(0);
 	}
 	
 	@FXML
@@ -1443,7 +1484,7 @@ public class MainController extends CustomController {
 			return;
 
 		List<String> initialAssignments = new ArrayList<>();
-		ObservableList<SliderPreset> presets = main.projectPresentation.getSliderPresets();
+		ObservableList<SliderPresetSnapshot> presets = main.projectPresentation.getSliderPresets();
 		if (!presets.isEmpty()) {
 			// Random choice belongs to the popup/controller boundary so replaying the
 			// validated edit never changes its meaning.
@@ -1463,7 +1504,7 @@ public class MainController extends CustomController {
 	/** Deletes the selected Custom Morph Target by logical name. */
 	@FXML
 	private void removeSelectedCustomTarget() {
-		CustomMorphTarget customMorphTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		CustomMorphTargetSnapshot customMorphTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
 		if (customMorphTarget == null)
 			return;
 		
@@ -1473,12 +1514,12 @@ public class MainController extends CustomController {
 	/** Removes the selected relationship from the active custom or NPC target. */
 	@FXML
 	private void removePresetFromTarget() {
-		SliderPreset preset = lvTargetPresets.getSelectionModel().getSelectedItem();
+		SliderPresetSnapshot preset = lvTargetPresets.getSelectionModel().getSelectedItem();
 		if (preset == null)
 			return;
 
-		CustomMorphTarget customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
-		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+		CustomMorphTargetSnapshot customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		NpcMorphAssignmentSnapshot npc = tvNpc.getSelectionModel().getSelectedItem();
 		if (customTarget != null)
 			applyProjectEdit(CustomMorphTargetEdits.removeSliderPreset(customTarget.getName(), preset.getName()));
 		else if (npc != null)
@@ -1489,13 +1530,13 @@ public class MainController extends CustomController {
 	/** Assigns the complete current preset catalog to the active target in one edit. */
 	@FXML
 	private void addAllPresetsToTarget() {
-		CustomMorphTarget customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
-		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+		CustomMorphTargetSnapshot customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		NpcMorphAssignmentSnapshot npc = tvNpc.getSelectionModel().getSelectedItem();
 		if (customTarget == null && npc == null)
 			return;
 
 		List<String> presetNames = new ArrayList<>();
-		for (SliderPreset preset : main.projectPresentation.getSliderPresets())
+		for (SliderPresetSnapshot preset : main.projectPresentation.getSliderPresets())
 			presetNames.add(preset.getName());
 		if (customTarget != null)
 			applyProjectEdit(CustomMorphTargetEdits.addSliderPresets(customTarget.getName(), presetNames));
@@ -1514,113 +1555,36 @@ public class MainController extends CustomController {
 	/** Deletes the selected NPC Morph Assignment by stable identity. */
 	@FXML
 	private void removeSelectedNpc() {
-		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+		NpcMorphAssignmentSnapshot npc = tvNpc.getSelectionModel().getSelectedItem();
 		if (npc == null)
 			return;
 		
 		applyProjectEdit(NpcMorphAssignmentEdits.removeNpc(identityOf(npc)));
 	}
 	
+	/** Captures one Project snapshot and schedules Morphs generation from it. */
 	@FXML
 	private void generateMorphs() {
-		if (main.projectPresentation.getCustomMorphTargets().isEmpty()
-				&& main.projectPresentation.getNpcMorphAssignments().isEmpty()) {
+		ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
+		boolean omitRedundantSliders = cbOmitRedundantSliders.isSelected();
+		if (outputSnapshot.getCustomMorphTargets().isEmpty()
+				&& outputSnapshot.getNpcMorphAssignments().isEmpty()) {
 			notif.show("You don't have any morphs in the list, add some morph targets first!");
 			taMorphsGen.setText("");
 			taMorphsGen.positionCaret(0);
 			return;
 		}
 		
-		mainPane.setDisable(true);
-		Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Morphs...");
-		try {
-			Task<Void> task = generateMorphsTask();
-			task.setOnSucceeded(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Morphs done.");
-				mainPane.setDisable(false);
-				
-				// If there are targets without any presets, notify
-				popupNoPresetNotifController.notify(targetsWithoutPresets);
-			});
-			task.setOnFailed(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Morphs failed.");
-				mainPane.setDisable(false);
-				
-				notif.showError("Generating Morphs failed.");
-			});
-			task.setOnCancelled(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Morphs cancelled.");
-				mainPane.setDisable(false);
-			});
-			task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
-				if (newValue != null) {
-					Exception e = (Exception) newValue;
-					e.printStackTrace();
-				}
-			});
+		Task<ProjectGeneratedOutput> task = generateProjectOutputTask(outputSnapshot, omitRedundantSliders);
+		scheduleBackgroundTask(task, output -> {
+			taMorphsGen.setText(output.getMorphsText());
+			taMorphsGen.positionCaret(0);
+			Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Morphs done.");
 
-			new Thread(task).start();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+			// If there are targets without any presets, notify
+			popupNoPresetNotifController.notify(output);
+		}, "Generating Morphs", "Generating Morphs failed.");
 	}
-	
-	private Task<Void> generateMorphsTask() throws InterruptedException {
-		return new Task<Void>() {
-			@Override
-			public Void call() throws InterruptedException {
-				doGenerateMorphs();
-				
-				return null;
-			}
-		};
-	}
-	
-	ArrayList<MorphTarget> targetsWithoutPresets = new ArrayList<MorphTarget>();
-	private void doGenerateMorphs() {
-		targetsWithoutPresets.clear();
-		
-		String newLine = System.getProperty("line.separator");
-		String morph = "";
-		
-		ArrayList<String> morphLineList = new ArrayList<String>();
-		for (MorphTarget target : main.projectPresentation.getCustomMorphTargets()) {
-			String s = target.toLine();
-			morphLineList.add(s);
-			
-			if (!target.hasPresets())
-				targetsWithoutPresets.add(target);
-		}
-		ArrayList<NPC> morphedNpcs = new ArrayList<NPC>();
-		morphedNpcs.addAll(main.projectPresentation.getNpcMorphAssignments());
-		morphedNpcs.sort(comparatorNpcByMod);
-		for (int i = 0; i < morphedNpcs.size(); i++) {
-			MorphTarget target = morphedNpcs.get(i);
-			String s = target.toLine();
-			morphLineList.add(s);
-			
-			if (!target.hasPresets())
-				targetsWithoutPresets.add(target);
-		}
-		
-		for (int i = 0; i < morphLineList.size(); i++) {
-			String line = morphLineList.get(i);
-			morph = morph + line + newLine;
-		}
-		
-		morphLineList.clear();
-		morphedNpcs.clear();
-		
-		taMorphsGen.setText(morph);
-		taMorphsGen.positionCaret(0);
-	}
-	
-	private Comparator<? super NPC> comparatorNpcByMod = new Comparator<NPC>() {
-        @Override
-        public int compare(NPC npc1, NPC npc2) {
-            return npc1.getMod().compareToIgnoreCase(npc2.getMod());
-        }
-    };
 	
 	@FXML
 	private void copyMorphs() {
@@ -1634,14 +1598,6 @@ public class MainController extends CustomController {
 		} else {
 			notif.show("There is nothing in the output, add and generate a morph first!");
 		}
-	}
-	
-	private MorphTarget getCurrentTarget() {
-		MorphTarget target = lvCustomTargets.getSelectionModel().getSelectedItem();
-		if (target == null) // No selection in custom targets, try NPCs
-			target = tvNpc.getSelectionModel().getSelectedItem();
-		
-		return target;
 	}
 	
 	@FXML
@@ -1802,6 +1758,21 @@ public class MainController extends CustomController {
 	 * @param <T> typed result returned by the operation
 	 */
 	private <T> void scheduleBackgroundTask(Task<T> task, Consumer<T> success, String operation) {
+		scheduleBackgroundTask(task, success, operation, operation + " failed unexpectedly.");
+	}
+
+	/**
+	 * Applies the shared JavaFX scheduling lifecycle while preserving an operation's
+	 * established user-facing failure message.
+	 *
+	 * @param task worker task whose value is delivered on the JavaFX thread
+	 * @param success presentation callback for the task's typed value
+	 * @param operation user-facing operation phrase for start and cancellation logs
+	 * @param failureMessage exact failure notification and log text
+	 * @param <T> typed result returned by the operation
+	 */
+	private <T> void scheduleBackgroundTask(Task<T> task, Consumer<T> success, String operation,
+			String failureMessage) {
 		mainPane.setDisable(true);
 		Logger.getLogger(getClass().getName()).log(Level.INFO, operation + "...");
 		task.setOnSucceeded(e -> {
@@ -1809,9 +1780,9 @@ public class MainController extends CustomController {
 			success.accept(task.getValue());
 		});
 		task.setOnFailed(e -> {
-			Logger.getLogger(getClass().getName()).log(Level.INFO, operation + " failed unexpectedly.");
+			Logger.getLogger(getClass().getName()).log(Level.INFO, failureMessage);
 			mainPane.setDisable(false);
-			notif.showError(operation + " failed unexpectedly.");
+			notif.showError(failureMessage);
 		});
 		task.setOnCancelled(e -> {
 			Logger.getLogger(getClass().getName()).log(Level.INFO, operation + " cancelled.");
@@ -1829,6 +1800,7 @@ public class MainController extends CustomController {
 		return outcome instanceof RejectedOutcome || outcome instanceof FailedOutcome;
 	}
 	
+	/** Captures one Project snapshot before scheduling combined INI generation and writing. */
 	@FXML
 	private void export() {
 		File targetDir;
@@ -1849,90 +1821,72 @@ public class MainController extends CustomController {
 			return;
         
 		main.data.prefs.put(main.data.LAST_USED_INI_FOLDER, targetDir.getAbsolutePath());
+		ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
+		boolean omitRedundantSliders = cbOmitRedundantSliders.isSelected();
         
-        mainPane.setDisable(true);
-		Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting Templates and Morphs INI...");
-		try {
-			Task<Void> task = exportTask(targetDir);
-			task.setOnSucceeded(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting Templates and Morphs INI done.");
-				mainPane.setDisable(false);
-				
-				//if (popupImageView.isShowing())
-				//	popupImageView.hide();
-				
-				notif.show("Templates and Morphs INI exported!");
-				
-				// If there are targets without any presets, notify
-				popupNoPresetNotifController.notify(targetsWithoutPresets);
-			});
-			task.setOnFailed(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting Templates and Morphs INI failed.");
-				mainPane.setDisable(false);
-				
-				notif.showError("Exporting Templates and Morphs INI failed.");
-			});
-			task.setOnCancelled(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting Templates and Morphs INI cancelled.");
-				mainPane.setDisable(false);
-			});
-			task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
-				if (newValue != null) {
-					Exception e = (Exception) newValue;
-					e.printStackTrace();
-				}
-			});
+		Task<ProjectGeneratedOutput> task = exportTask(targetDir, outputSnapshot, omitRedundantSliders);
+		scheduleBackgroundTask(task, output -> {
+			taTemplatesGen.setText(output.getTemplatesText());
+			taMorphsGen.setText(output.getMorphsText());
+			Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting Templates and Morphs INI done.");
 
-			new Thread(task).start();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-	}
-	
-	private Task<Void> exportTask(File targetDir) throws InterruptedException {
-		return new Task<Void>() {
-			@Override
-			public Void call() throws InterruptedException {
-				doExport(targetDir);
+			//if (popupImageView.isShowing())
+			//	popupImageView.hide();
 				
-				return null;
+			notif.show("Templates and Morphs INI exported!");
+				
+			// If there are targets without any presets, notify
+			popupNoPresetNotifController.notify(output);
+		}, "Exporting Templates and Morphs INI", "Exporting Templates and Morphs INI failed.");
+	}
+
+	/**
+	 * Formats and writes both INI files from exactly one captured Project snapshot.
+	 *
+	 * @param targetDir selected output directory
+	 * @param outputSnapshot coherent Project state captured before scheduling
+	 * @param omitRedundantSliders Templates option captured before scheduling
+	 * @return worker task yielding the immutable artifacts written to disk
+	 */
+	private Task<ProjectGeneratedOutput> exportTask(File targetDir, ProjectSnapshot outputSnapshot,
+			boolean omitRedundantSliders) {
+		return new Task<ProjectGeneratedOutput>() {
+			/**
+			 * @return the same immutable output written to both INI destinations
+			 * @throws Exception when either INI destination cannot be written
+			 */
+			@Override
+			public ProjectGeneratedOutput call() throws Exception {
+				ProjectGeneratedOutput output = ProjectOutputFormatter.generate(outputSnapshot,
+						omitRedundantSliders);
+				writeIniOutputs(targetDir, output);
+				return output;
 			}
 		};
 	}
-	
+
 	/**
-	 * Generate templates and morphs to the textAreas first before calling.
-	 * @param targetDir
+	 * Writes already-generated Templates and Morphs artifacts without consulting
+	 * Project or JavaFX state.
+	 *
+	 * @param targetDir selected output directory
+	 * @param output immutable artifacts derived from one Project snapshot
+	 * @throws IOException when either output cannot be written
 	 */
-	private void doExport(File targetDir) {
-		doGenerateTemplates();
-        doGenerateMorphs();
-        
-		String templatesString = taTemplatesGen.getText();
-		String morphsString = taMorphsGen.getText();
+	private void writeIniOutputs(File targetDir, ProjectGeneratedOutput output) throws IOException {
+		File templatesFile = new File(targetDir.getAbsolutePath() + "/templates.ini");
+		File morphsFile = new File(targetDir.getAbsolutePath() + "/morphs.ini");
 		
-		// For some reason, TextArea uses "\n" or Unix LF for new lines,
-		// Replace "\n"'s with ("line.separator") to convert lines to CR LF.
-		String newLine = System.getProperty("line.separator");
-		templatesString = templatesString.replace("\n", newLine);
-		morphsString = morphsString.replace("\n", newLine);
+		if (templatesFile.exists())
+			FileUtils.deleteQuietly(templatesFile);
+		if (morphsFile.exists())
+			FileUtils.deleteQuietly(morphsFile);
 		
-		try {
-			File templatesFile = new File(targetDir.getAbsolutePath() + "/templates.ini");
-			File morphsFile = new File(targetDir.getAbsolutePath() + "/morphs.ini");
-			
-			if (templatesFile.exists())
-				FileUtils.deleteQuietly(templatesFile);
-			if (morphsFile.exists())
-				FileUtils.deleteQuietly(morphsFile);
-			
-			FileUtils.writeStringToFile(templatesFile, templatesString, main.data.encoding);
-			FileUtils.writeStringToFile(morphsFile, morphsString, main.data.encoding);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		FileUtils.writeStringToFile(templatesFile, output.getTemplatesText(), main.data.encoding);
+		FileUtils.writeStringToFile(morphsFile, output.getMorphsText(), main.data.encoding);
 	}
 	
+	/** Captures one Project snapshot before scheduling BoS artifact generation and writing. */
 	@FXML
 	private void exportBosJson() {
 		File targetDir;
@@ -1953,57 +1907,42 @@ public class MainController extends CustomController {
 			return;
         
 		main.data.prefs.put(main.data.LAST_USED_JSON_FOLDER, targetDir.getAbsolutePath());
+		ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
+		boolean omitRedundantSliders = cbOmitRedundantSliders.isSelected();
         
-        mainPane.setDisable(true);
-		Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON files...");
-		try {
-			Task<Void> task = exportBosJsonTask(targetDir);
-			task.setOnSucceeded(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON files done.");
-				mainPane.setDisable(false);
-				
-				notif.show("BodyTypes of Skyrim JSON files exported!");
-			});
-			task.setOnFailed(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON files failed.");
-				mainPane.setDisable(false);
-				
-				notif.showError("Exporting BoS JSON files failed.");
-			});
-			task.setOnCancelled(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON fiels cancelled.");
-				mainPane.setDisable(false);
-			});
-			task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
-				if (newValue != null) {
-					Exception e = (Exception) newValue;
-					e.printStackTrace();
-				}
-			});
+		Task<Void> task = exportBosJsonTask(targetDir, outputSnapshot, omitRedundantSliders);
+		scheduleBackgroundTask(task, ignored -> {
+			Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON files done.");
 
-			new Thread(task).start();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+			notif.show("BodyTypes of Skyrim JSON files exported!");
+		}, "Exporting BoS JSON files", "Exporting BoS JSON files failed.");
 	}
-	
-	private Task<Void> exportBosJsonTask(File targetDir) throws InterruptedException {
+
+	/**
+	 * Writes BoS files produced from one pinned Project snapshot without reading UI
+	 * state from the worker thread.
+	 *
+	 * @param targetDir selected output directory
+	 * @param outputSnapshot coherent Project state captured before scheduling
+	 * @param omitRedundantSliders captured formatter option
+	 * @return worker task that writes every generated BoS artifact
+	 */
+	private Task<Void> exportBosJsonTask(File targetDir, ProjectSnapshot outputSnapshot,
+			boolean omitRedundantSliders) {
 		return new Task<Void>() {
+			/**
+			 * @return always {@code null} after every captured BoS artifact is written
+			 * @throws Exception when any BoS destination cannot be written
+			 */
 			@Override
-			public Void call() throws InterruptedException {
-				for (SliderPreset sliderPreset : main.projectPresentation.getSliderPresets()) {
-					
-					String bosJson = sliderPreset.toBosJson();
-					try {
-						File file = new File(targetDir.getAbsolutePath() + "/" + sliderPreset.getName() + ".json");
-						
-						if (file.exists())
-							FileUtils.deleteQuietly(file);
-						
-						FileUtils.writeStringToFile(file, bosJson, main.data.encoding);
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
+			public Void call() throws Exception {
+				ProjectGeneratedOutput output = ProjectOutputFormatter.generate(outputSnapshot,
+						omitRedundantSliders);
+				for (Map.Entry<String, String> artifact : output.getBosJsonByFileName().entrySet()) {
+					File file = new File(targetDir.getAbsolutePath() + "/" + artifact.getKey());
+					if (file.exists())
+						FileUtils.deleteQuietly(file);
+					FileUtils.writeStringToFile(file, artifact.getValue(), main.data.encoding);
 				}
 				
 				return null;
@@ -2049,7 +1988,7 @@ public class MainController extends CustomController {
 			@Override
 			public void test() {
 				for (int i = 0; i < lvPresets.getItems().size(); i++) {
-					SliderPreset item = lvPresets.getItems().get(i);
+					SliderPresetSnapshot item = lvPresets.getItems().get(i);
 					if (item.getName().toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;
@@ -2073,7 +2012,7 @@ public class MainController extends CustomController {
 			@Override
 			public void test() {
 				for (int i = 0; i < lvCustomTargets.getItems().size(); i++) {
-					CustomMorphTarget item = lvCustomTargets.getItems().get(i);
+					CustomMorphTargetSnapshot item = lvCustomTargets.getItems().get(i);
 					if (item.getName().toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;
@@ -2099,12 +2038,12 @@ public class MainController extends CustomController {
 				String colName = tvNpc.getColumns().get(0).getText(); // Use the first column's data for searching
 				
 				for (int i = 0; i < npcTableFilter.getFilteredList().size(); i++) {
-					NPC npc = npcTableFilter.getFilteredList().get(i);
-					String text = npc.getName();
+					NpcMorphAssignmentSnapshot npc = npcTableFilter.getFilteredList().get(i);
+					String text = npc.getDisplayName();
 					if (colName.equalsIgnoreCase("Name")) {
-						text = npc.getName();
+						text = npc.getDisplayName();
 					} else if (colName.equalsIgnoreCase("Master")) {
-						text = npc.getMod();
+						text = npc.getPluginName();
 					} else if (colName.equalsIgnoreCase("Race")) {
 						text = npc.getRace();
 					} else if (colName.equalsIgnoreCase("EditorID")) {
@@ -2112,9 +2051,9 @@ public class MainController extends CustomController {
 					} else if (colName.equalsIgnoreCase("FormID")) {
 						text = npc.getFormId();
 					} else if (colName.equalsIgnoreCase("Slider Presets")) {
-						text = npc.getSliderPresetsString().get();
+						text = String.join("|", npc.getSliderPresetNames());
 					} else {
-						text = npc.getName();
+						text = npc.getDisplayName();
 					}
 					
 					if (text.toUpperCase().startsWith(searchText.toUpperCase())) {
@@ -2135,7 +2074,7 @@ public class MainController extends CustomController {
 			@Override
 			public void test() {
 				for (int i = 0; i < lvTargetPresets.getItems().size(); i++) {
-					SliderPreset item = lvTargetPresets.getItems().get(i);
+					SliderPresetSnapshot item = lvTargetPresets.getItems().get(i);
 					if (item.getName().toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;

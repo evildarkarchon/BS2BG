@@ -17,6 +17,7 @@ BS2BG will replace the shallow, publicly mutable `Data` state and controller-own
 ## Consequences
 
 - Presentation code schedules synchronous, thread-safe operations and renders the snapshot returned with each outcome.
+- Templates, Morphs, BoS output, and exports capture one immutable Project snapshot per workflow; generation caches, scheduling, clipboard behavior, and artifact writing remain outside `ProjectSession`.
 - Failed open or save operations preserve the current Project, file identity, and dirty state. Recoverable missing Slider Preset assignments produce diagnostics and leave the recovered Project dirty.
 - The NPC Database remains independent; adding an NPC creates an NPC Morph Assignment rather than sharing mutable state.
 - Migration begins with a repeatable Maven and JUnit 5 test foundation, then replaces behavior incrementally through the `ProjectSession` interface instead of layering pass-through modules over `Data`.

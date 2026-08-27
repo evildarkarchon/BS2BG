@@ -55,6 +55,28 @@ class ProjectSessionImportTest {
         Settings.getDefaultsMapUUNP().putAll(originalUunpDefaults);
     }
 
+    /** Import rejects every selected source without parsing when no Project is active. */
+    @Test
+    void importBeforeActiveProjectRejectsEverySourceWithoutPublishing() {
+        ProjectSession session = ProjectSessions.create();
+        ProjectSnapshot before = session.getSnapshot();
+        List<Path> sources = Arrays.asList(tempDirectory.resolve("first.xml"),
+                tempDirectory.resolve("second.xml"));
+
+        SliderPresetImportOutcome outcome = session.importSliderPresets(sources);
+
+        assertTrue(outcome.getProjectOutcome() instanceof RejectedOutcome);
+        assertSame(before, outcome.getProjectOutcome().getSnapshot());
+        assertSame(before, session.getSnapshot());
+        assertEquals(2, outcome.getSourceOutcomes().size());
+        for (ProjectOutcome sourceOutcome : outcome.getSourceOutcomes()) {
+            assertTrue(sourceOutcome instanceof RejectedOutcome);
+            assertSame(before, sourceOutcome.getSnapshot());
+            assertEquals(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED,
+                    sourceOutcome.getDiagnostics().get(0).getCode());
+        }
+    }
+
     /**
      * Imports every valid source independently and returns one canonically ordered,
      * dirty snapshot with legacy dot normalization and slider value semantics.
