@@ -11,7 +11,6 @@ import java.util.logging.Logger;
 
 import org.apache.commons.io.FileUtils;
 
-import com.asdasfa.jbs2bg.MainController;
 import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonArray;
 import com.eclipsesource.json.JsonObject;
@@ -252,9 +251,9 @@ public class Settings {
 				INVERTED.add(v);
 			}
 		} catch (FileNotFoundException e) {
-			Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, e);
+			Logger.getLogger(Settings.class.getName()).log(Level.SEVERE, null, e);
 		} catch (IOException e) {
-			Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, e);
+			Logger.getLogger(Settings.class.getName()).log(Level.SEVERE, null, e);
 		}
 	}
 	
@@ -292,9 +291,9 @@ public class Settings {
 				INVERTED_UUNP.add(v);
 			}
 		} catch (FileNotFoundException e) {
-			Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, e);
+			Logger.getLogger(Settings.class.getName()).log(Level.SEVERE, null, e);
 		} catch (IOException e) {
-			Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, e);
+			Logger.getLogger(Settings.class.getName()).log(Level.SEVERE, null, e);
 		}
 	}
 
