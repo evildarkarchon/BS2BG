@@ -429,12 +429,12 @@ final class ProjectFileLoader {
             Map<String, String> presetNames, Path source, List<ProjectDiagnostic> diagnostics) {
         List<NpcMorphAssignmentSnapshot> npcs = new ArrayList<>();
         Set<NpcMorphAssignmentIdentity> npcIdentities = new HashSet<>();
-        Set<String> displayNameMembers = new HashSet<>();
+        // The member name is only the display name, which is not part of NPC identity:
+        // the legacy format and ProjectFileWriter both emit one member per assignment,
+        // so distinct NPCs named alike (e.g. two "Guard" entries) legitimately repeat
+        // the key. Identity duplicates are rejected below on plugin name + editor ID.
         for (Member member : object) {
             String npcElement = childElement("/MorphedNPCs", member.getName());
-            if (!displayNameMembers.add(member.getName()))
-                throw new InvalidProjectFileException(ProjectDiagnosticCodes.PROJECT_MEMBER_DUPLICATE, npcElement,
-                        "NPC Morph Assignment member '" + member.getName() + "' occurs more than once.");
             JsonObject value = requiredObjectValue(member.getValue(), npcElement, "An NPC Morph Assignment");
             validateSupportedMembers(value, npcElement, "Mod", "EditorId", "Race", "FormId", "SliderPresets");
             String pluginName = requiredString(value, "Mod", npcElement);

@@ -4,7 +4,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
-import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
@@ -62,8 +61,12 @@ public final class ProjectPresentation {
      */
     public ProjectPresentationUpdate render(ProjectOutcome outcome) {
         ProjectOutcome requiredOutcome = Objects.requireNonNull(outcome, "outcome");
+        ProjectSnapshot previous = snapshot;
         renderSnapshot(requiredOutcome.getSnapshot());
-        return new ProjectPresentationUpdate(requiredOutcome instanceof ChangedOutcome,
+        // Generated output depends only on Project content. A save publishes a
+        // ChangedOutcome for the dirty flag / file identity alone, so keying
+        // invalidation on the outcome type would discard freshly generated text.
+        return new ProjectPresentationUpdate(!sameContent(previous, snapshot),
                 formatDiagnostics(requiredOutcome.getDiagnostics()), hasErrorDiagnostic(requiredOutcome));
     }
 
@@ -133,10 +136,39 @@ public final class ProjectPresentation {
         if (nextSnapshot == snapshot)
             return;
 
+        // setAll fires list and selection listeners synchronously, and those listeners
+        // read getSnapshot() (e.g. to rebuild a preset preview). Publish the snapshot
+        // first so no listener combines a new list item with the previous snapshot.
+        snapshot = nextSnapshot;
         mutableSliderPresets.setAll(nextSnapshot.getSliderPresets());
         mutableCustomMorphTargets.setAll(nextSnapshot.getCustomMorphTargets());
         mutableNpcMorphAssignments.setAll(nextSnapshot.getNpcMorphAssignments());
-        snapshot = nextSnapshot;
+    }
+
+    /**
+     * Reports whether two snapshots carry the same Project content. Snapshot lists
+     * are always defensive copies, so the comparison is by element identity: the
+     * session reuses immutable element values whenever a collection is untouched.
+     *
+     * @param left previously rendered snapshot
+     * @param right newly rendered snapshot
+     * @return true when every content collection holds identical elements in order
+     */
+    private static boolean sameContent(ProjectSnapshot left, ProjectSnapshot right) {
+        return sameElements(left.getSliderPresets(), right.getSliderPresets())
+                && sameElements(left.getCustomMorphTargets(), right.getCustomMorphTargets())
+                && sameElements(left.getNpcMorphAssignments(), right.getNpcMorphAssignments());
+    }
+
+    /** Compares two lists by size and per-index element identity. */
+    private static boolean sameElements(List<?> left, List<?> right) {
+        if (left.size() != right.size())
+            return false;
+        for (int index = 0; index < left.size(); index++) {
+            if (left.get(index) != right.get(index))
+                return false;
+        }
+        return true;
     }
 
     /** Formats structured diagnostics without moving JavaFX controls into ProjectSession. */

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -14,6 +15,7 @@ import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
@@ -26,6 +28,9 @@ class ProjectSessionSliderChoiceTest {
 
     private final Map<String, DefaultSliderValue> originalDefaults = new LinkedHashMap<>();
     private final Map<String, DefaultSliderValue> originalUunpDefaults = new LinkedHashMap<>();
+
+    @TempDir
+    Path tempDirectory;
 
     /** Seeds distinct regular and UUNP defaults so mode changes are observable. */
     @BeforeEach
@@ -104,7 +109,66 @@ class ProjectSessionSliderChoiceTest {
 
         assertTrue(fullRange instanceof ChangedOutcome);
         assertTrue(collapsedRange instanceof ChangedOutcome);
-        assertEquals(Arrays.asList("Arms", "Waist"), names(collapsedRange.getSnapshot().getSliderPresets().get(0)));
+        // Breasts and Legs are the standard defaults synthesized at creation; Waist's
+        // synthesized default was replaced by the explicit choice above.
+        assertEquals(Arrays.asList("Arms", "Breasts", "Legs", "Waist"),
+                names(collapsedRange.getSnapshot().getSliderPresets().get(0)));
+    }
+
+    /**
+     * Rejects blank slider-choice names on both edit paths, because the Project file
+     * loader rejects them and a published blank name could not round-trip.
+     */
+    @Test
+    void sliderChoiceEditsRejectBlankNames() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        ProjectSnapshot before = session.apply(SliderPresetEdits.create("Alpha")).getSnapshot();
+
+        for (String blankName : Arrays.asList("", "   ")) {
+            SliderChoiceSnapshot blank = explicit(blankName, 20, 80, 0, 100);
+            ProjectOutcome single = session.apply(SliderPresetEdits.setSliderChoice("Alpha", blank));
+            assertSliderChoiceRejected(single, ProjectDiagnosticCodes.SLIDER_CHOICE_NAME_REQUIRED,
+                    "slider-preset.slider-choice.name", before);
+
+            ProjectOutcome full = session.apply(SliderPresetEdits.update("Alpha",
+                    new SliderPresetSnapshot("Alpha", false, Arrays.asList(explicit("Arms", 5, 95, 0, 100), blank))));
+            assertSliderChoiceRejected(full, ProjectDiagnosticCodes.SLIDER_CHOICE_NAME_REQUIRED,
+                    "slider-preset.slider-choice.name", before);
+        }
+        assertSame(before, session.getSnapshot());
+    }
+
+    /**
+     * Seeds a created Slider Preset with the standard mode's synthesized defaults so
+     * its generated output is identical before and after a save/reopen cycle.
+     *
+     * @throws Exception when the temporary Project cannot be saved
+     */
+    @Test
+    void creatingSliderPresetSynthesizesStandardDefaultsMatchingReopen() throws Exception {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+
+        ProjectOutcome created = session.apply(SliderPresetEdits.create("Alpha"));
+        SliderPresetSnapshot preset = created.getSnapshot().getSliderPresets().get(0);
+
+        assertTrue(created instanceof ChangedOutcome);
+        assertFalse(preset.isUunp());
+        assertEquals(Arrays.asList("Breasts", "Legs", "Waist"), names(preset));
+        assertSynthesized(find(preset, "Breasts"), 20, 100);
+        assertSynthesized(find(preset, "Legs"), 0, 100);
+        assertSynthesized(find(preset, "Waist"), 0, 100);
+
+        Path savedFile = tempDirectory.resolve("created.jbs2bg");
+        assertTrue(session.saveAs(savedFile) instanceof ChangedOutcome);
+        SliderPresetSnapshot reopened = ProjectSessions.create().open(savedFile).getSnapshot()
+                .getSliderPresets().get(0);
+
+        assertEquals(names(preset), names(reopened));
+        assertSynthesized(find(reopened, "Breasts"), 20, 100);
+        assertSynthesized(find(reopened, "Legs"), 0, 100);
+        assertSynthesized(find(reopened, "Waist"), 0, 100);
     }
 
     /**

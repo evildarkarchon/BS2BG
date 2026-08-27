@@ -11,7 +11,8 @@ public final class SliderPresetEdits {
     }
 
     /**
-     * Requests creation of an empty, non-UUNP Slider Preset.
+     * Requests creation of a non-UUNP Slider Preset seeded with the standard mode's
+     * synthesized default choices, matching what a save/reopen cycle would produce.
      *
      * @param name requested Slider Preset name; the session trims and validates it
      * @return an immutable creation request
@@ -33,8 +34,8 @@ public final class SliderPresetEdits {
 
     /**
      * Requests replacement of one Slider Preset's complete observable value. The
-     * session rejects replacements whose slider-choice names repeat without regard
-     * to case or whose percentages are outside 0–100 or reversed. When the
+     * session rejects replacements containing a blank slider-choice name, names that
+     * repeat without regard to case, or percentages outside 0–100 or reversed. When the
      * replacement changes the UUNP flag, its synthesized defaults are rebuilt for
      * the requested mode exactly as {@link #setUunp(String, boolean)} would.
      *
@@ -92,8 +93,8 @@ public final class SliderPresetEdits {
 
     /**
      * Requests replacement or addition of one immutable slider choice. The session
-     * rejects choices whose percentages are outside 0–100 or whose minimum exceeds
-     * the maximum.
+     * rejects choices whose name is blank, whose percentages are outside 0–100, or
+     * whose minimum exceeds the maximum.
      *
      * @param presetName existing Slider Preset name, compared without regard to case
      * @param choice complete observable slider-choice value

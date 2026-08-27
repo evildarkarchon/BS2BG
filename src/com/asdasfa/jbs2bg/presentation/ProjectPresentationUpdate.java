@@ -23,7 +23,11 @@ public final class ProjectPresentationUpdate {
         this.errorDiagnostics = errorDiagnostics;
     }
 
-    /** @return true only when the rendered outcome changed Project state */
+    /**
+     * @return true only when the rendered outcome changed Project content (Slider
+     *         Presets, Custom Morph Targets, or NPC Morph Assignments); dirty-flag or
+     *         file-identity changes alone, such as a save, do not invalidate
+     */
     public boolean invalidatesGeneratedOutput() {
         return invalidatesGeneratedOutput;
     }

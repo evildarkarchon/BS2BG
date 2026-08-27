@@ -526,6 +526,10 @@ public class MainController extends CustomController {
 		else if (selectedNpcIdentity != null)
 			selectNpc(selectedNpcIdentity);
 		selectTargetPreset(selectedTargetPresetName);
+		// Re-selecting an unchanged preset instance fires no selection event, so the
+		// preview cleared above must be rebuilt explicitly from the published snapshot.
+		if (update.invalidatesGeneratedOutput())
+			updateTemplateText();
 		stage.setTitle(main.projectPresentation.getWindowTitle());
 		if (update.hasDiagnostics()) {
 			if (update.hasErrorDiagnostics())

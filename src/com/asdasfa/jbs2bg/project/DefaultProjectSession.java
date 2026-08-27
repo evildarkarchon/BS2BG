@@ -1196,7 +1196,9 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Creates an empty Slider Preset and publishes the catalog in canonical order.
+     * Creates a non-UUNP Slider Preset seeded with the standard mode's synthesized
+     * defaults, so a freshly created preset generates the same output as it would
+     * after a save/reopen cycle (which synthesizes the same defaults on load).
      *
      * @param edit immutable creation request
      * @return a changed outcome carrying the new dirty snapshot
@@ -1207,7 +1209,8 @@ final class DefaultProjectSession implements ProjectSession {
             return rejection;
         String name = edit.getName().trim();
         List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
-        presets.add(new SliderPresetSnapshot(name, false, Collections.<SliderChoiceSnapshot>emptyList()));
+        presets.add(new SliderPresetSnapshot(name, false, SliderChoiceDefaults.rebuildForMode(
+                Collections.<SliderChoiceSnapshot>emptyList(), false)));
         return publishChangedPresets(presets);
     }
 
@@ -1367,7 +1370,7 @@ final class DefaultProjectSession implements ProjectSession {
             return rejected(ProjectDiagnosticCodes.SLIDER_CHOICE_REQUIRED, location,
                     "A slider-choice edit requires a value.");
         }
-        RejectedOutcome rejection = validateSliderChoicePercentages(edit.getChoice());
+        RejectedOutcome rejection = validateSliderChoice(edit.getChoice());
         if (rejection != null)
             return rejection;
 
@@ -1429,9 +1432,9 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Validates a complete replacement choice list: slider names must be unique
-     * without regard to case (otherwise a later single-choice edit could only reach
-     * the first match) and every percentage range must be well-formed.
+     * Validates a complete replacement choice list: every choice must be valid on
+     * its own and slider names must be unique without regard to case (otherwise a
+     * later single-choice edit could only reach the first match).
      *
      * @param choices requested replacement choices
      * @return a structured rejection, or null when every choice is valid
@@ -1439,6 +1442,9 @@ final class DefaultProjectSession implements ProjectSession {
     private RejectedOutcome validateSliderChoices(List<SliderChoiceSnapshot> choices) {
         List<String> seenNames = new ArrayList<>();
         for (SliderChoiceSnapshot choice : choices) {
+            RejectedOutcome rejection = validateSliderChoice(choice);
+            if (rejection != null)
+                return rejection;
             for (String seenName : seenNames) {
                 if (seenName.equalsIgnoreCase(choice.getName()))
                     return rejectedSliderChoice(ProjectDiagnosticCodes.SLIDER_CHOICE_NAME_DUPLICATE,
@@ -1446,11 +1452,24 @@ final class DefaultProjectSession implements ProjectSession {
                             "A Slider Preset cannot contain duplicate slider-choice names: " + choice.getName());
             }
             seenNames.add(choice.getName());
-            RejectedOutcome rejection = validateSliderChoicePercentages(choice);
-            if (rejection != null)
-                return rejection;
         }
         return null;
+    }
+
+    /**
+     * Validates one choice independently of its siblings: the name must not be
+     * blank (the Project file loader rejects blank names, so publishing one would
+     * create a Project that cannot round-trip) and the percentage range must be
+     * well-formed.
+     *
+     * @param choice requested choice value
+     * @return a structured rejection, or null when the choice is valid
+     */
+    private RejectedOutcome validateSliderChoice(SliderChoiceSnapshot choice) {
+        if (choice.getName().trim().isEmpty())
+            return rejectedSliderChoice(ProjectDiagnosticCodes.SLIDER_CHOICE_NAME_REQUIRED,
+                    "slider-preset.slider-choice.name", "A slider-choice name must not be empty.");
+        return validateSliderChoicePercentages(choice);
     }
 
     /**

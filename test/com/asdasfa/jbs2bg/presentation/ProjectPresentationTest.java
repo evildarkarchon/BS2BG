@@ -36,6 +36,7 @@ import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.UnchangedOutcome;
 
+import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 
 class ProjectPresentationTest {
@@ -115,6 +116,9 @@ class ProjectPresentationTest {
                         Optional.of("/"), OptionalInt.empty(), OptionalInt.empty()),
                 "The source could not be read.");
         List<ProjectDiagnostic> diagnostics = Arrays.asList(diagnostic, missingDiagnostic);
+        // Non-changed outcomes always carry the session's current snapshot, which the
+        // presentation has already rendered; establish that state first.
+        presentation.render(new ChangedOutcome(snapshot));
 
         ProjectPresentationUpdate unchanged = presentation
                 .render(new UnchangedOutcome(snapshot, diagnostics));
@@ -133,6 +137,53 @@ class ProjectPresentationTest {
                 failed.getDiagnosticText());
         assertEquals("jBS2BG - example.jbs2bg", presentation.getWindowTitle());
         assertFalse(presentation.requiresDiscardConfirmation());
+    }
+
+    /**
+     * Keeps generated output when a changed outcome alters only save metadata (dirty
+     * flag or file identity) while still invalidating on real content changes.
+     */
+    @Test
+    void metadataOnlyChangesPreserveGeneratedOutput() {
+        ProjectPresentation presentation = newPresentation();
+        ProjectSnapshot dirty = populatedSnapshot(Paths.get("projects", "example.jbs2bg"), true);
+        presentation.render(new ChangedOutcome(dirty));
+        ProjectSnapshot saved = new ProjectSnapshot(dirty.getSliderPresets(), dirty.getCustomMorphTargets(),
+                dirty.getNpcMorphAssignments(), Optional.of(Paths.get("projects", "renamed.jbs2bg")), false,
+                ProjectLifecycleStatus.FILE_BACKED);
+
+        ProjectPresentationUpdate savedUpdate = presentation.render(new ChangedOutcome(saved));
+
+        assertFalse(savedUpdate.invalidatesGeneratedOutput());
+        assertSame(saved, presentation.getSnapshot());
+        assertSame(saved.getSliderPresets().get(0), presentation.getSliderPresets().get(0));
+        assertEquals("jBS2BG - renamed.jbs2bg", presentation.getWindowTitle());
+        assertFalse(presentation.requiresDiscardConfirmation());
+
+        ProjectSnapshot edited = new ProjectSnapshot(Collections.<SliderPresetSnapshot>emptyList(),
+                saved.getCustomMorphTargets(), saved.getNpcMorphAssignments(), saved.getFileIdentity(), true,
+                ProjectLifecycleStatus.FILE_BACKED);
+        ProjectPresentationUpdate editedUpdate = presentation.render(new ChangedOutcome(edited));
+
+        assertTrue(editedUpdate.invalidatesGeneratedOutput());
+    }
+
+    /**
+     * Makes the published snapshot visible before projection listeners fire, so a
+     * listener never combines a new list item with the previous snapshot.
+     */
+    @Test
+    void projectionListenersObserveThePublishedSnapshot() {
+        ProjectPresentation presentation = newPresentation();
+        ProjectSnapshot next = populatedSnapshot(Paths.get("projects", "example.jbs2bg"), true);
+        List<ProjectSnapshot> observedSnapshots = new ArrayList<>();
+        presentation.getSliderPresets().addListener(
+                (ListChangeListener<SliderPresetSnapshot>) change -> observedSnapshots.add(presentation.getSnapshot()));
+
+        presentation.render(new ChangedOutcome(next));
+
+        assertEquals(1, observedSnapshots.size());
+        assertSame(next, observedSnapshots.get(0));
     }
 
     /**
