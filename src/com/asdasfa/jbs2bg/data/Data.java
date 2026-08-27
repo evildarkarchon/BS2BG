@@ -1,33 +1,13 @@
 package com.asdasfa.jbs2bg.data;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.prefs.Preferences;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.LineIterator;
 import org.mozilla.universalchardet.UniversalDetector;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
-
-import com.asdasfa.jbs2bg.data.SliderPreset.SetSlider;
-import com.eclipsesource.json.Json;
-import com.eclipsesource.json.JsonArray;
-import com.eclipsesource.json.JsonObject;
-import com.eclipsesource.json.JsonObject.Member;
-import com.eclipsesource.json.WriterConfig;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -45,7 +25,6 @@ public class Data {
 	public final ObservableList<NPC> morphedNpcs = FXCollections.observableArrayList();
     
 	public File homeDir;
-	public File currentFile = null;
 	
 	public Preferences prefs;
 	public final String LAST_USED_FOLDER = "Last used folder";
@@ -56,9 +35,6 @@ public class Data {
 	public final String OMIT_REDUNDANT_SLIDERS = "Omit redundant sliders";
 	
 	public final String encoding = "UTF-8";
-	
-	private DocumentBuilderFactory dbFactory;
-    private DocumentBuilder dBuilder;
     
 	public Data() {
 		homeDir = new File(System.getProperty("user.home"));
@@ -76,44 +52,6 @@ public class Data {
 			prefs = Preferences.userRoot().node(getClass().getName());
 		}
 		
-		dbFactory = DocumentBuilderFactory.newInstance();
-		try {
-			dBuilder = dbFactory.newDocumentBuilder();
-		} catch (ParserConfigurationException e) {
-			e.printStackTrace();
-		}
-	}
-    
-	public void parseXmlPreset(File file) throws SAXException, IOException {
-		Document doc = dBuilder.parse(file);
-		doc.getDocumentElement().normalize();
-		if (!doc.getDocumentElement().getNodeName().equalsIgnoreCase("SliderPresets"))
-			return;
-
-		NodeList nodes = doc.getElementsByTagName("Preset");
-		for (int i = 0; i < nodes.getLength(); i++) {
-			Node node = nodes.item(i);
-			if (node.getNodeType() == Node.ELEMENT_NODE) {
-				Element e = (Element) node;
-
-				String name = e.getAttribute("name");
-				if (name == null)
-					continue;
-				
-				if (name.isEmpty())
-					continue;
-
-				SliderPreset sliderPreset = new SliderPreset(e);
-				if (!sliderPresetExists(sliderPreset)) {
-					sliderPresets.add(sliderPreset);
-				} else { // Already exists, just update
-					SliderPreset existingSliderPreset = getSliderPreset(sliderPreset.getName());
-					if (existingSliderPreset != null) {
-						existingSliderPreset.clearAndCopySliders(sliderPreset);
-					}
-				}
-			}
-		}
 	}
 	
 	public boolean sliderPresetExists(SliderPreset sliderPreset) {
@@ -122,15 +60,6 @@ public class Data {
 				return true;
 		}
 		return false;
-	}
-	
-	public SliderPreset getSliderPreset(String sliderPresetName) {
-		for (int i = 0; i < sliderPresets.size(); i++) {
-			SliderPreset sliderPreset = sliderPresets.get(i);
-			if (sliderPreset.getName().equalsIgnoreCase(sliderPresetName))
-				return sliderPreset;
-		}
-		return null;
 	}
 	
 	public void sortPresets() {
@@ -189,141 +118,4 @@ public class Data {
 		return false;
 	}
 	
-	public void openFromFile(File file) {
-		try {
-			String inputEncoding = UniversalDetector.detectCharset(file);
-			
-			String s = FileUtils.readFileToString(file, inputEncoding);
-			
-			JsonObject root = Json.parse(s).asObject();
-			
-			JsonObject joSliderPresets = root.get("SliderPresets").asObject();
-			JsonObject joCustomMorphTargets = root.get("CustomMorphTargets").asObject();
-			JsonObject joMorphedNpcs = root.get("MorphedNPCs").asObject();
-			
-			for (Member member : joSliderPresets) {
-				SliderPreset sliderPreset = new SliderPreset(member);
-				
-				sliderPresets.add(sliderPreset);
-			}
-			sortPresets();
-			
-			for (Member member : joCustomMorphTargets) {
-				CustomMorphTarget cmt = new CustomMorphTarget(member, sliderPresets);
-				customMorphTargets.add(cmt);
-			}
-			sortCustomMorphTargets();
-			
-			for (Member member : joMorphedNpcs) {
-				NPC npc = new NPC(member, sliderPresets);
-				morphedNpcs.add(npc);
-			}
-		} catch (FileNotFoundException e) {
-			Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, e);
-		} catch (IOException e) {
-			Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, e);
-		} finally {
-			currentFile = file;
-		}
-	}
-	
-	public void saveToFile(File file) {
-		JsonObject root = new JsonObject();
-
-		JsonObject joSliderPresets = new JsonObject();
-		JsonObject joCustomMorphTargets = new JsonObject();
-		JsonObject joMorphedNpcs = new JsonObject();
-
-		for (int i = 0; i < sliderPresets.size(); i++) {
-			SliderPreset sliderPreset = sliderPresets.get(i);
-			
-			JsonObject joSliderPreset = new JsonObject();
-			
-			joSliderPreset.add("isUUNP", sliderPreset.isUUNP());
-
-			JsonArray jaSliders = new JsonArray();
-			
-			ArrayList<SetSlider> allSliders = sliderPreset.getAllSetSliders();
-			for (int j = 0; j < allSliders.size(); j++) {
-				SetSlider slider = allSliders.get(j);
-
-				if (sliderPreset.getMissingDefaultSetSlider(slider.getName()) == null) { // A regular slider
-					jaSliders.add(slider.toJsonObject());
-				} else { // A missing default slider
-					if (slider.getPctMin() == 100 && slider.getPctMax() == 100 && slider.isEnabled()) {
-						// Don't save sliders with both weights at 100 for missing defaults and is enabled (All defaults)
-					} else {
-						jaSliders.add(slider.toJsonObject());
-					}
-				}
-			}
-			joSliderPreset.add("SetSliders", jaSliders);
-
-			joSliderPresets.add(sliderPreset.getName(), joSliderPreset);
-		}
-
-		for (int i = 0; i < customMorphTargets.size(); i++) {
-			JsonObject joCustomMorphTarget = new JsonObject();
-
-			CustomMorphTarget cmt = customMorphTargets.get(i);
-
-			JsonArray jaSPresets = new JsonArray();
-			ObservableList<SliderPreset> sliderPresets = cmt.getSliderPresets();
-			for (int j = 0; j < sliderPresets.size(); j++) {
-				SliderPreset sliderPreset = sliderPresets.get(j);
-
-				jaSPresets.add(sliderPreset.getName());
-			}
-			joCustomMorphTarget.add("SliderPresets", jaSPresets);
-
-			joCustomMorphTargets.add(cmt.getName(), joCustomMorphTarget);
-		}
-
-		for (int i = 0; i < morphedNpcs.size(); i++) {
-			JsonObject joNpc = new JsonObject();
-
-			NPC npc = morphedNpcs.get(i);
-
-			joNpc.add("Mod", npc.getMod());
-			joNpc.add("EditorId", npc.getEditorId());
-			joNpc.add("Race", npc.getRace());
-			joNpc.add("FormId", npc.getFormId());
-
-			JsonArray jaSPresets = new JsonArray();
-			ObservableList<SliderPreset> sliderPresets = npc.getSliderPresets();
-			for (int j = 0; j < sliderPresets.size(); j++) {
-				SliderPreset sliderPreset = sliderPresets.get(j);
-
-				jaSPresets.add(sliderPreset.getName());
-			}
-			joNpc.add("SliderPresets", jaSPresets);
-
-			joMorphedNpcs.add(npc.getName(), joNpc);
-		}
-
-		root.add("SliderPresets", joSliderPresets);
-		root.add("CustomMorphTargets", joCustomMorphTargets);
-		root.add("MorphedNPCs", joMorphedNpcs);
-
-		String saveString = root.toString(WriterConfig.PRETTY_PRINT);
-		
-		try {
-			if (file.exists())
-				FileUtils.deleteQuietly(file);
-			
-			FileUtils.writeStringToFile(file, saveString, encoding);
-		} catch (IOException e) {
-			e.printStackTrace();
-		} finally {
-			currentFile = file;
-		}
-	}
-	
-	public void reset() {
-		currentFile = null;
-		sliderPresets.clear();
-		customMorphTargets.clear();
-		morphedNpcs.clear();
-		npcDatabase.clear();
-	}
 }

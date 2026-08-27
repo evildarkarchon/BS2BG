@@ -3,15 +3,17 @@ package com.asdasfa.jbs2bg;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.ResourceBundle;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.apache.commons.io.FileUtils;
-import org.xml.sax.SAXException;
 
 import com.asdasfa.jbs2bg.controlsfx.table.TableFilter;
 import com.asdasfa.jbs2bg.data.CustomMorphTarget;
@@ -20,6 +22,11 @@ import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.presentation.ProjectPresentationUpdate;
+import com.asdasfa.jbs2bg.project.FailedOutcome;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.RejectedOutcome;
+import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
 
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
@@ -279,28 +286,14 @@ public class MainController extends CustomController {
 		setupFileChoosers();
 		
 		connectViews();
-		
-		/*main.data.sliderPresets.addListener((ListChangeListener.Change<? extends SliderPreset> c) -> {
-			while (c.next()) {
-				if (c.wasAdded() || c.wasRemoved() || c.wasReplaced() || c.wasPermutated() || c.wasUpdated()) {
-					markChanged();
-				}
-			}
-		});*/
-		/*main.data.morphedNpcs.addListener((ListChangeListener.Change<? extends NPC> c) -> {
-			while (c.next()) {
-				if (c.wasAdded() || c.wasRemoved() || c.wasReplaced() || c.wasPermutated() || c.wasUpdated()) {
-					markChanged();
-				}
-			}
-		});*/
+		stage.setTitle(main.projectPresentation.getWindowTitle());
 		
 		// Don't allow closing if mainPane is disabled, meaning doing some tasks
 		stage.setOnCloseRequest(e -> {
 			if (mainPane.isDisabled())
 				e.consume();
 			
-			if (changed) {
+			if (main.projectPresentation.requiresDiscardConfirmation()) {
 				e.consume();
 				confirmExit.show();
 			}
@@ -308,21 +301,25 @@ public class MainController extends CustomController {
 		stage.getScene().cursorProperty().bind(Bindings.when(mainPane.disabledProperty()).then(Cursor.WAIT).otherwise(Cursor.DEFAULT));
 	}
 	
-	private boolean changed = false;
+	/**
+	 * Invalidates generated presentation output for edit routes that are migrated
+	 * by the follow-up Project-edit workflow. Dirty state and titles are no longer
+	 * inferred here.
+	 */
 	protected void markChanged() {
-		if (!changed) {
-			if (main.data.currentFile != null) {
-				stage.setTitle(main.appName + " - " + "*" + main.data.currentFile.getName());
-			} else {
-				stage.setTitle(main.appName + " *");
-			}
-		}
-		
-		changed = true;
-		
-		// Clear TextAreas every time a changed is made
+		invalidateGeneratedOutput();
+	}
+
+	/** Clears every generated Project-derived output cache owned by presentation. */
+	private void invalidateGeneratedOutput() {
+		taTemplate.clear();
 		taTemplatesGen.clear();
 		taMorphsGen.clear();
+		targetsWithoutPresets.clear();
+		if (popupBosViewController != null)
+			popupBosViewController.invalidateGeneratedOutput();
+		if (popupNoPresetNotifController != null)
+			popupNoPresetNotifController.invalidateGeneratedOutput();
 	}
 	
 	private void setupKeyCombinations() {
@@ -489,16 +486,15 @@ public class MainController extends CustomController {
 	 * Connect the views to their lists.
 	 */
 	protected void connectViews() {
-		lvPresets.setItems(main.data.sliderPresets);
+		lvPresets.setItems(main.projectPresentation.getSliderPresets());
 		
-		tvNpc.setItems(main.data.morphedNpcs);
+		tvNpc.setItems(main.projectPresentation.getNpcMorphAssignments());
 		npcTableFilter = TableFilter.forTableView(tvNpc).lazy(true).apply();
 		
-		lvCustomTargets.setItems(main.data.customMorphTargets);
+		lvCustomTargets.setItems(main.projectPresentation.getCustomMorphTargets());
 		
 		popupSliderPresetsController.connectViews();
 		popupSliderPresetsFillController.connectViews();
-		popupNpcDatabaseController.connectViews();
 		
 		updateNpcCounter();
 	}
@@ -517,7 +513,34 @@ public class MainController extends CustomController {
 		
 		popupSliderPresetsController.disconnectViews();
 		popupSliderPresetsFillController.disconnectViews();
-		popupNpcDatabaseController.disconnectViews();
+	}
+
+	/**
+	 * Renders exactly the snapshot returned by a typed ProjectSession outcome on
+	 * the JavaFX thread and realizes presentation-only diagnostics and invalidation.
+	 *
+	 * @param outcome completed synchronous ProjectSession operation
+	 * @return the rendered outcome for typed callback decisions
+	 */
+	private ProjectOutcome renderProjectOutcome(ProjectOutcome outcome) {
+		boolean replacesProjection = outcome.getSnapshot() != main.projectPresentation.getSnapshot();
+		if (replacesProjection)
+			disconnectViews();
+		ProjectPresentationUpdate update = main.projectPresentation.render(outcome);
+		if (replacesProjection)
+			connectViews();
+		stage.setTitle(main.projectPresentation.getWindowTitle());
+		if (update.invalidatesGeneratedOutput())
+			invalidateGeneratedOutput();
+		if (update.hasDiagnostics()) {
+			if (update.hasErrorDiagnostics())
+				notif.showError(update.getDiagnosticText());
+			else
+				notif.show(update.getDiagnosticText());
+		}
+		updateNpcCounter();
+		updatePresetCounter();
+		return outcome;
 	}
 	
 	private void setupAlerts() {
@@ -930,6 +953,7 @@ public class MainController extends CustomController {
 		fcExportBosJson.setTitle("Export BoS JSON files");
 	}
 	
+	/** Selects BodySlide XML sources, schedules their session import, and renders the aggregate outcome. */
 	@FXML
 	private void addXmlPresets() {
 		List<File> files;
@@ -943,61 +967,33 @@ public class MainController extends CustomController {
 		if (files != null) {
 			main.data.prefs.put(main.data.LAST_USED_PRESET_FOLDER, files.get(0).getParent());
 			
-			mainPane.setDisable(true);
-			Logger.getLogger(getClass().getName()).log(Level.INFO, "Parsing XML presets...");
-			// Disconnect ListView items from lists, so that list can be modified from another thread
-			lvPresets.setItems(null);
-			try {
-				Task<Void> task = parseXmlPresets(files);
-				task.setOnSucceeded(e -> {
-					Logger.getLogger(getClass().getName()).log(Level.INFO, "XML parsing done.");
-					mainPane.setDisable(false);
-					lvPresets.setItems(main.data.sliderPresets);
-					
-					markChanged();
-				});
-				task.setOnFailed(e -> {
-					Logger.getLogger(getClass().getName()).log(Level.INFO, "XML parsing failed.");
-					mainPane.setDisable(false);
-					lvPresets.setItems(main.data.sliderPresets);
-					
-					notif.showError("XML parsing failed.");
-				});
-				task.setOnCancelled(e -> {
-					Logger.getLogger(getClass().getName()).log(Level.INFO, "XML parsing cancelled.");
-					mainPane.setDisable(false);
-					lvPresets.setItems(main.data.sliderPresets);
-				});
-				task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
-					if (newValue != null) {
-						Exception e = (Exception) newValue;
-						e.printStackTrace();
-					}
-				});
-
-				new Thread(task).start();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+			Task<SliderPresetImportOutcome> task = importSliderPresets(files);
+			scheduleBackgroundTask(task, importOutcome -> {
+				renderProjectOutcome(importOutcome.getProjectOutcome());
+				Logger.getLogger(getClass().getName()).log(Level.INFO,
+						isRejectedOrFailed(importOutcome.getProjectOutcome())
+								? "XML parsing completed without a successful Project change."
+								: "XML parsing done.");
+			}, "XML parsing");
 		} else {
 		}
 	}
 	
-	private Task<Void> parseXmlPresets(List<File> files) throws InterruptedException {
-		return new Task<Void>() {
+	/**
+	 * Creates a worker wrapper for one synchronous ProjectSession XML batch without
+	 * letting the worker thread touch JavaFX controls or presentation projections.
+	 *
+	 * @param files selected BodySlide XML sources in chooser order
+	 * @return background task carrying the aggregate and per-source outcomes
+	 */
+	private Task<SliderPresetImportOutcome> importSliderPresets(List<File> files) {
+		List<Path> sources = new ArrayList<>();
+		for (File file : files)
+			sources.add(file.toPath());
+		return new Task<SliderPresetImportOutcome>() {
 			@Override
-			public Void call() throws InterruptedException {
-				for (int i = 0; i < files.size(); i++) {
-					File file = files.get(i);
-					try {
-						main.data.parseXmlPreset(file);
-					} catch (SAXException | IOException e) {
-						e.printStackTrace();
-					}
-				}
-				// Sort alphabetically after adding a preset/presets
-				main.data.sortPresets();
-				return null;
+			protected SliderPresetImportOutcome call() {
+				return main.projectSession.importSliderPresets(sources);
 			}
 		};
 	}
@@ -1665,32 +1661,29 @@ public class MainController extends CustomController {
 	
 	@FXML
 	private void showConfirmNewFile() {
-		if (changed) {
+		if (main.projectPresentation.requiresDiscardConfirmation()) {
 			confirmNewFile.show();
 		} else { // Just reset to newFile
 			newFile();
 		}
 	}
 	
+	/** Establishes and renders a clean untitled Project through ProjectSession. */
 	private void newFile() {
-		// Disconnect View items from lists, so that list can be modified from another thread
-		disconnectViews();
-		// Reset all lists
-		main.data.reset();
+		renderProjectOutcome(main.projectSession.newProject());
 		reset();
-		// Reconnect Views to lists
-		connectViews();
 	}
 	
 	@FXML
 	private void showConfirmOpenFile() {
-		if (changed) {
+		if (main.projectPresentation.requiresDiscardConfirmation()) {
 			confirmOpenFile.show();
 		} else {
 			openFromFile();
 		}
 	}
 	
+	/** Selects a Project file and schedules an atomic ProjectSession open operation. */
 	private void openFromFile() {
 		File file;
 		fcFile.setTitle("Open jBS2BG File");
@@ -1704,138 +1697,62 @@ public class MainController extends CustomController {
 		if (file != null) {
 			main.data.prefs.put(main.data.LAST_USED_FOLDER, file.getParent());
 			
-			mainPane.setDisable(true);
-			Logger.getLogger(getClass().getName()).log(Level.INFO, "Opening jBS2BG file...");
-			// Disconnect View items from lists, so that list can be modified from another thread
-			disconnectViews();
-			// Reset all lists
-			main.data.reset();
-			reset();
-			try {
-				Task<Void> task = openFromFileTask(file);
-				task.setOnSucceeded(e -> {
-					Logger.getLogger(getClass().getName()).log(Level.INFO, "Opening jBS2BG file done.");
-					mainPane.setDisable(false);
-					
-					connectViews();
-					// Append file name to title
-					if (main.data.currentFile != null)
-						stage.setTitle(main.appName + " - " + main.data.currentFile.getName());
-					
-					// If there are targets without any presets, notify
-					popupNoPresetNotifController.notify(targetsWithoutPresets);
-				});
-				task.setOnFailed(e -> {
-					Logger.getLogger(getClass().getName()).log(Level.INFO, "Opening jBS2BG file failed.");
-					mainPane.setDisable(false);
-					
-					connectViews();
-					
-					notif.showError("Opening jBS2BG file failed.");
-				});
-				task.setOnCancelled(e -> {
-					Logger.getLogger(getClass().getName()).log(Level.INFO, "Opening jBS2BG file cancelled.");
-					mainPane.setDisable(false);
-					
-					connectViews();
-				});
-				task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
-					if (newValue != null) {
-						Exception e = (Exception) newValue;
-						e.printStackTrace();
-					}
-				});
-
-				new Thread(task).start();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+			Task<ProjectOutcome> task = openProject(file.toPath());
+			scheduleBackgroundTask(task, outcome -> {
+				renderProjectOutcome(outcome);
+				if (!isRejectedOrFailed(outcome))
+					reset();
+				Logger.getLogger(getClass().getName()).log(Level.INFO,
+						isRejectedOrFailed(outcome) ? "Opening jBS2BG file rejected or failed."
+								: "Opening jBS2BG file done.");
+			}, "Opening jBS2BG file");
 		} else {
 		}
 	}
 	
-	private Task<Void> openFromFileTask(File file) throws InterruptedException {
-		return new Task<Void>() {
+	/**
+	 * Creates a worker wrapper for synchronous atomic Project opening without
+	 * mutating JavaFX state on the worker thread.
+	 *
+	 * @param source selected Project file
+	 * @return background task carrying the typed open outcome
+	 */
+	private Task<ProjectOutcome> openProject(Path source) {
+		return new Task<ProjectOutcome>() {
 			@Override
-			public Void call() throws InterruptedException {
-				main.data.openFromFile(file);
-				
-				doGenerateTemplates();
-				doGenerateMorphs();
-				
-				return null;
+			protected ProjectOutcome call() {
+				return main.projectSession.open(source);
 			}
 		};
 	}
-	
+
+	/** Saves to the rendered file identity or delegates untitled Projects to Save As. */
 	@FXML
 	private void save() {
-		File saveFile;
-		if (main.data.currentFile == null) { // There is currently no opened file
-			File file;
-			fcFile.setTitle("Save jBS2BG File");
-			try {
-				fcFile.setInitialDirectory(new File(main.data.prefs.get(main.data.LAST_USED_FOLDER, new File(".").getAbsolutePath())));
-				file = fcFile.showSaveDialog(stage);
-			} catch (Exception e) {
-				fcFile.setInitialDirectory(main.data.homeDir);
-				file = fcFile.showSaveDialog(stage);
-			}
-			
-			if (file == null) // Cancelled
-				return;
-			
-			main.data.prefs.put(main.data.LAST_USED_FOLDER, file.getParent());
-			saveFile = file;
-		} else {
-			saveFile = main.data.currentFile;
+		if (main.projectPresentation.getSnapshot().getFileIdentity().isPresent()) {
+			scheduleSave(saveProject());
+			return;
 		}
-
-		if (!saveFile.getAbsolutePath().endsWith(".jbs2bg"))
-			saveFile = new File(saveFile.getAbsolutePath() + ".jbs2bg");
-
-		mainPane.setDisable(true);
-		Logger.getLogger(getClass().getName()).log(Level.INFO, "Saving jBS2BG file...");
-		try {
-			if (!saveFile.getAbsolutePath().endsWith(".jbs2bg"))
-				saveFile = new File(saveFile.getAbsolutePath() + ".jbs2bg");
-			
-			Task<Void> task = saveToFileTask(saveFile);
-			task.setOnSucceeded(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Saving jBS2BG file done.");
-				mainPane.setDisable(false);
-				
-				// Append file name to title
-				if (main.data.currentFile != null)
-					stage.setTitle(main.appName + " - " + main.data.currentFile.getName());
-				
-				changed = false;
-			});
-			task.setOnFailed(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Saving jBS2BG file failed.");
-				mainPane.setDisable(false);
-				
-				notif.showError("Saving jBS2BG file failed.");
-			});
-			task.setOnCancelled(e -> {
-				Logger.getLogger(getClass().getName()).log(Level.INFO, "Saving jBS2BG file cancelled.");
-				mainPane.setDisable(false);
-			});
-			task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
-				if (newValue != null) {
-					Exception e = (Exception) newValue;
-					e.printStackTrace();
-				}
-			});
-
-			new Thread(task).start();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+		Path target = chooseProjectSaveTarget();
+		if (target != null)
+			scheduleSave(saveProjectAs(target));
 	}
-	
+
+	/** Selects a target and schedules an atomic ProjectSession Save As operation. */
 	@FXML
 	private void saveToFile() {
+		Path target = chooseProjectSaveTarget();
+		if (target != null)
+			scheduleSave(saveProjectAs(target));
+	}
+
+	/**
+	 * Keeps chooser state and extension normalization in presentation while
+	 * returning the exact target supplied to ProjectSession Save As.
+	 *
+	 * @return normalized target path, or null when the chooser is cancelled
+	 */
+	private Path chooseProjectSaveTarget() {
 		File saveFile;
 		fcFile.setTitle("Save jBS2BG File");
 		try {
@@ -1845,60 +1762,86 @@ public class MainController extends CustomController {
 			fcFile.setInitialDirectory(main.data.homeDir);
 			saveFile = fcFile.showSaveDialog(stage);
 		}
-		if (saveFile != null) {
-			main.data.prefs.put(main.data.LAST_USED_FOLDER, saveFile.getParent());
-			
-			mainPane.setDisable(true);
-			Logger.getLogger(getClass().getName()).log(Level.INFO, "Saving jBS2BG file...");
-			try {
-				if (!saveFile.getAbsolutePath().endsWith(".jbs2bg"))
-					saveFile = new File(saveFile.getAbsolutePath() + ".jbs2bg");
-				
-				Task<Void> task = saveToFileTask(saveFile);
-				task.setOnSucceeded(e -> {
-					Logger.getLogger(getClass().getName()).log(Level.INFO, "Saving jBS2BG file done.");
-					mainPane.setDisable(false);
-					
-					// Append file name to title
-					if (main.data.currentFile != null)
-						stage.setTitle(main.appName + " - " + main.data.currentFile.getName());
-					
-					changed = false;
-				});
-				task.setOnFailed(e -> {
-					Logger.getLogger(getClass().getName()).log(Level.INFO, "Saving jBS2BG file failed.");
-					mainPane.setDisable(false);
-					
-					notif.showError("Saving jBS2BG file failed.");
-				});
-				task.setOnCancelled(e -> {
-					Logger.getLogger(getClass().getName()).log(Level.INFO, "Saving jBS2BG file cancelled.");
-					mainPane.setDisable(false);
-				});
-				task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
-					if (newValue != null) {
-						Exception e = (Exception) newValue;
-						e.printStackTrace();
-					}
-				});
-
-				new Thread(task).start();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		} else {
-		}
+		if (saveFile == null)
+			return null;
+		main.data.prefs.put(main.data.LAST_USED_FOLDER, saveFile.getParent());
+		String target = saveFile.getAbsolutePath();
+		if (!target.toLowerCase(Locale.ROOT).endsWith(".jbs2bg"))
+			target += ".jbs2bg";
+		return new File(target).toPath();
 	}
-	
-	private Task<Void> saveToFileTask(File file) throws InterruptedException {
-		return new Task<Void>() {
+
+	/** @return background task for saving to the adopted Project file identity */
+	private Task<ProjectOutcome> saveProject() {
+		return new Task<ProjectOutcome>() {
 			@Override
-			public Void call() throws InterruptedException {
-				main.data.saveToFile(file);
-				
-				return null;
+			protected ProjectOutcome call() {
+				return main.projectSession.save();
 			}
 		};
+	}
+
+	/**
+	 * Creates a background task for atomic Save As while retaining scheduling in
+	 * presentation.
+	 *
+	 * @param target chooser-selected normalized target
+	 * @return background task carrying the typed Save As outcome
+	 */
+	private Task<ProjectOutcome> saveProjectAs(Path target) {
+		return new Task<ProjectOutcome>() {
+			@Override
+			protected ProjectOutcome call() {
+				return main.projectSession.saveAs(target);
+			}
+		};
+	}
+
+	/** Schedules a save task and distinguishes typed failure outcomes from task failure. */
+	private void scheduleSave(Task<ProjectOutcome> task) {
+		scheduleBackgroundTask(task, outcome -> {
+			renderProjectOutcome(outcome);
+			Logger.getLogger(getClass().getName()).log(Level.INFO,
+					isRejectedOrFailed(outcome) ? "Saving jBS2BG file rejected or failed."
+							: "Saving jBS2BG file done.");
+		}, "Saving jBS2BG file");
+	}
+
+	/**
+	 * Applies the shared JavaFX scheduling, busy, and unexpected-failure lifecycle
+	 * around a synchronous domain operation.
+	 *
+	 * @param task worker task that invokes the synchronous operation
+	 * @param success presentation callback for the task's typed value
+	 * @param operation user-facing operation phrase for logging and errors
+	 * @param <T> typed result returned by the operation
+	 */
+	private <T> void scheduleBackgroundTask(Task<T> task, Consumer<T> success, String operation) {
+		mainPane.setDisable(true);
+		Logger.getLogger(getClass().getName()).log(Level.INFO, operation + "...");
+		task.setOnSucceeded(e -> {
+			mainPane.setDisable(false);
+			success.accept(task.getValue());
+		});
+		task.setOnFailed(e -> {
+			Logger.getLogger(getClass().getName()).log(Level.INFO, operation + " failed unexpectedly.");
+			mainPane.setDisable(false);
+			notif.showError(operation + " failed unexpectedly.");
+		});
+		task.setOnCancelled(e -> {
+			Logger.getLogger(getClass().getName()).log(Level.INFO, operation + " cancelled.");
+			mainPane.setDisable(false);
+		});
+		task.exceptionProperty().addListener((obs, oldValue, newValue) -> {
+			if (newValue != null)
+				newValue.printStackTrace();
+		});
+		new Thread(task).start();
+	}
+
+	/** @return true when a completed task carries a rejected or failed Project operation */
+	private static boolean isRejectedOrFailed(ProjectOutcome outcome) {
+		return outcome instanceof RejectedOutcome || outcome instanceof FailedOutcome;
 	}
 	
 	@FXML
@@ -2084,10 +2027,9 @@ public class MainController extends CustomController {
 		};
 	}
 	
+	/** Resets transient controls after a successful New Project or Open render. */
 	private void reset() {
-		changed = false;
-
-		stage.setTitle(main.appName);
+		stage.setTitle(main.projectPresentation.getWindowTitle());
 		
 		taTemplate.setText("");
 		taTemplate.positionCaret(0);

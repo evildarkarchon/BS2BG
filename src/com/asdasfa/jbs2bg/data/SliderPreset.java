@@ -12,15 +12,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
-import com.eclipsesource.json.JsonArray;
+import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.eclipsesource.json.JsonObject;
-import com.eclipsesource.json.JsonObject.Member;
-import com.eclipsesource.json.JsonValue;
 import com.eclipsesource.json.WriterConfig;
 
 import javafx.collections.FXCollections;
@@ -38,59 +33,43 @@ public class SliderPreset {
 	private final ObservableList<SetSlider> missingDefaultSetSliders = FXCollections.observableArrayList();
 	private boolean isUUNP = false;
 
-	public SliderPreset(Element e) {
-		name = e.getAttribute("name"); // Name of SliderPreset
-		name = name.replaceAll("\\.", " "); // Replace all dots with space
-
-		NodeList sliderNodes = e.getElementsByTagName("SetSlider");
-		for (int i = 0; i < sliderNodes.getLength(); i++) { // For each SetSlider in the xml
-			Node sliderNode = sliderNodes.item(i);
-			if (sliderNode.getNodeType() == Node.ELEMENT_NODE) {
-				Element sliderElement = (Element) sliderNode;
-				String sliderName = sliderElement.getAttribute("name"); // Name of SetSlider
-				String size = sliderElement.getAttribute("size");
-
-				int value = 0;
-
-				if (size.equalsIgnoreCase("small")) { // Small size
-					String sValue = sliderElement.getAttribute("value");
-					int v = Integer.parseInt(sValue);
-					value = v;
-				} else { // Big size
-					String sValue = sliderElement.getAttribute("value");
-					int v = Integer.parseInt(sValue);
-					value = v;
-				}
-
-				SetSlider slider = getSetSlider(sliderName);
-				if (slider == null) { // Slider doesn't exist, create new one
-					slider = new SetSlider();
-					slider.setName(sliderName);
-					if (size.equalsIgnoreCase("small")) { // Small size
-						slider.setValueSmall(value);
-					} else { // Big size
-						slider.setValueBig(value);
-					}
-					setSliders.add(slider);
-				} else { // Slider exists, just set again for probably small or big size value
-					if (size.equalsIgnoreCase("small")) { // Small size
-						slider.setValueSmall(value);
-					} else { // Big size
-						slider.setValueBig(value);
-					}
-				}
-			}
-		}
-		sortSetSliders();
-		
-		setIsUUNP(false);
-	}
-
 	public SliderPreset(SliderPreset sliderPreset) {
 		name = sliderPreset.getName();
 		name = name.replaceAll("\\.", " "); // Replace all dots with space
 
 		clearAndCopySliders(sliderPreset);
+	}
+
+	/**
+	 * Creates an output-facing projection from one immutable Slider Preset
+	 * snapshot. The explicit missing-default classification is retained even when
+	 * both persisted values are absent.
+	 *
+	 * @param snapshot immutable Slider Preset values to project
+	 * @throws NullPointerException when snapshot is null
+	 */
+	public SliderPreset(SliderPresetSnapshot snapshot) {
+		if (snapshot == null)
+			throw new NullPointerException("snapshot");
+		name = snapshot.getName();
+		isUUNP = snapshot.isUunp();
+		for (SliderChoiceSnapshot choice : snapshot.getSliderChoices()) {
+			SetSlider slider = new SetSlider();
+			slider.setName(choice.getName());
+			slider.setEnabled(choice.isEnabled());
+			// Output projections use the snapshot's frozen effective values so a later
+			// Settings change cannot reinterpret the outcome that was rendered.
+			slider.setValueSmall(Integer.valueOf(choice.getEffectiveSmallValue()));
+			slider.setValueBig(Integer.valueOf(choice.getEffectiveBigValue()));
+			slider.setPctMin(choice.getPercentageMinimum());
+			slider.setPctMax(choice.getPercentageMaximum());
+			if (choice.isMissingDefault())
+				missingDefaultSetSliders.add(slider);
+			else
+				setSliders.add(slider);
+		}
+		sortSetSliders();
+		Collections.sort(missingDefaultSetSliders, comparatorSetSliders);
 	}
 	
 	public void clearAndCopySliders(SliderPreset sliderPreset) {
@@ -106,28 +85,6 @@ public class SliderPreset {
 		setIsUUNP(sliderPreset.isUUNP());
 	}
 
-	public SliderPreset(Member member) {
-		name = member.getName();
-		name = name.replaceAll("\\.", " "); // Replace all dots with space
-
-		JsonObject jo = member.getValue().asObject();
-		
-		isUUNP = jo.getBoolean("isUUNP", false);
-
-		JsonArray ja = jo.get("SetSliders").asArray();
-		for (int i = 0; i < ja.size(); i++) {
-			SetSlider slider = new SetSlider(ja.get(i).asObject());
-			if (slider.getValueSmall() == null && slider.getValueBig() == null) { // Both values are null, put it in missing default
-				missingDefaultSetSliders.add(slider);
-			} else {
-				setSliders.add(slider);
-			}
-		}
-		sortSetSliders();
-		
-		setMissingDefaultSetSliders(); // Call this instead of setIsUUNP to keep the loaded missing default sliders
-	}
-	
 	public void setIsUUNP(boolean isUUNP) {
 		this.isUUNP = isUUNP;
 		
@@ -443,57 +400,6 @@ public class SliderPreset {
 			valueBig = setSlider.getValueBig();
 			pctMin = setSlider.getPctMin();
 			pctMax = setSlider.getPctMax();
-		}
-
-		public SetSlider(JsonObject jsonObject) {
-			name = jsonObject.getString("name", "");
-			enabled = jsonObject.getBoolean("enabled", true);
-			JsonValue jv;
-			jv = jsonObject.get("valueSmall");
-			if (!jv.isNull()) {
-				if (jv.isNumber()) {
-					valueSmall = jv.asInt();
-				} else {
-					valueSmall = null;
-				}
-			} else {
-				valueSmall = null;
-			}
-			jv = jsonObject.get("valueBig");
-			if (!jv.isNull()) {
-				if (jv.isNumber()) {
-					valueBig = jv.asInt();
-				} else {
-					valueBig = null;
-				}
-			} else {
-				valueBig = null;
-			}
-			pctMin = jsonObject.getInt("pctMin", 0);
-			pctMax = jsonObject.getInt("pctMax", 100);
-		}
-
-		public JsonObject toJsonObject() {
-			JsonObject jo = new JsonObject();
-			
-			jo.add("name", name);
-			jo.add("enabled", enabled);
-			if (valueSmall != null) {
-				jo.add("valueSmall", valueSmall);
-			} else {
-				String v = null;
-				jo.add("valueSmall", v);
-			}
-			if (valueBig != null) {
-				jo.add("valueBig", valueBig);
-			} else {
-				String v = null;
-				jo.add("valueBig", v);
-			}
-			jo.add("pctMin", pctMin);
-			jo.add("pctMax", pctMax);
-			
-			return jo;
 		}
 
 		public void setName(String name) {

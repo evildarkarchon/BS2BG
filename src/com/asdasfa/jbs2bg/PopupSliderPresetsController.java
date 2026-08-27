@@ -79,7 +79,7 @@ public class PopupSliderPresetsController extends CustomController {
 	}
 	
 	protected void connectViews() {
-		lvPresets.setItems(main.data.sliderPresets);
+		lvPresets.setItems(main.projectPresentation.getSliderPresets());
 	}
 	
 	protected void disconnectViews() {

@@ -172,6 +172,15 @@ public class PopupNoPresetNotifController extends CustomController {
 		if (!stage.isShowing())
 			stage.showAndWait();
 	}
+
+	/** Clears and closes a warning whose target projections belong to an obsolete snapshot. */
+	public void invalidateGeneratedOutput() {
+		customMorphTargets.clear();
+		morphedNpcs.clear();
+		stage.setTitle("");
+		if (stage.isShowing())
+			stage.hide();
+	}
 	
 	@FXML
 	private void hide() {

@@ -7,6 +7,10 @@ import java.util.logging.Logger;
 
 import com.asdasfa.jbs2bg.data.Data;
 import com.asdasfa.jbs2bg.data.Settings;
+import com.asdasfa.jbs2bg.presentation.ProjectPresentation;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.ProjectSession;
+import com.asdasfa.jbs2bg.project.ProjectSessions;
 
 import javafx.application.Application;
 import javafx.event.EventHandler;
@@ -44,11 +48,21 @@ public class Main extends Application {
 	public MainController mainController;
 	
 	public final Data data = new Data();
+	public final ProjectSession projectSession;
+	public final ProjectPresentation projectPresentation;
 	
 	public int initSuccess = 0;
 	
+	/**
+	 * Initializes legacy settings plus the authoritative ProjectSession and renders
+	 * its initial untitled snapshot into the transitional JavaFX read model.
+	 */
 	public Main() {
 		initSuccess = Settings.init();
+		projectSession = ProjectSessions.create();
+		ProjectOutcome initialProject = projectSession.newProject();
+		projectPresentation = new ProjectPresentation(appName, initialProject.getSnapshot(), data.sliderPresets,
+				data.customMorphTargets, data.morphedNpcs);
 	}
 	
 	@Override

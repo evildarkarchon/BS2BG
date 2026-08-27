@@ -4,12 +4,9 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 
-import com.eclipsesource.json.JsonArray;
-import com.eclipsesource.json.JsonObject;
-import com.eclipsesource.json.JsonObject.Member;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 
 import javafx.beans.property.SimpleStringProperty;
-import javafx.collections.ObservableList;
 
 /**
  *
@@ -50,36 +47,25 @@ public class NPC extends MorphTarget {
 		findImageFile();
 	}
 
-	public NPC(Member member, ObservableList<SliderPreset> sliderPresets) {
-		name = member.getName();
-
-		JsonObject jo = member.getValue().asObject();
-		mod = jo.getString("Mod", "");
-		editorId = jo.getString("EditorId", "");
-		race = jo.getString("Race", "");
-		formId = jo.getString("FormId", "");
-		
+	/**
+	 * Creates a presentation projection from immutable NPC Morph Assignment values.
+	 * Slider Preset relationships are attached after all projected presets exist.
+	 *
+	 * @param snapshot immutable NPC Morph Assignment values to project
+	 * @throws NullPointerException when snapshot is null
+	 */
+	public NPC(NpcMorphAssignmentSnapshot snapshot) {
+		if (snapshot == null)
+			throw new NullPointerException("snapshot");
+		this.name = snapshot.getDisplayName();
+		this.mod = snapshot.getPluginName();
+		this.editorId = snapshot.getEditorId();
+		this.race = snapshot.getRace();
+		this.formId = snapshot.getFormId();
 		trimFormId();
-
-		JsonArray ja = jo.get("SliderPresets").asArray();
-		for (int i = 0; i < ja.size(); i++) {
-			String presetName = ja.get(i).asString();
-
-			SliderPreset sliderPreset = null;
-			for (int j = 0; j < sliderPresets.size(); j++) { // Search the list for existing sliderPreset
-				SliderPreset sp = sliderPresets.get(j);
-				if (sp.getName().equals(presetName)) {
-					sliderPreset = sp;
-					break;
-				}
-			}
-			if (sliderPreset != null)
-				addSliderPreset(sliderPreset);
-		}
-
 		findImageFile();
 	}
-	
+
 	@Override
 	public void clearSliderPresets() {
 		super.clearSliderPresets();

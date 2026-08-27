@@ -79,6 +79,11 @@ public class PopupBosViewController extends CustomController {
 		
 		taBosJson.setText(preset.toBosJson());
 	}
+
+	/** Clears cached BoS output after a changed ProjectSession outcome. */
+	public void invalidateGeneratedOutput() {
+		taBosJson.clear();
+	}
 	
 	@FXML
 	private void hide() {

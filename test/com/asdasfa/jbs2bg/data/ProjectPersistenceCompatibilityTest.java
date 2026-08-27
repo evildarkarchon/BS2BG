@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
@@ -23,7 +22,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.asdasfa.jbs2bg.data.SliderPreset.SetSlider;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
@@ -74,63 +72,6 @@ class ProjectPersistenceCompatibilityTest {
 		Settings.getDefaultsMap().putAll(ORIGINAL_DEFAULTS);
 		Settings.getDefaultsMapUUNP().clear();
 		Settings.getDefaultsMapUUNP().putAll(ORIGINAL_UUNP_DEFAULTS);
-	}
-
-	/**
-	 * Characterizes the observable Project semantics represented by a legacy file.
-	 *
-	 * @throws Exception when the fixture cannot be located or loaded
-	 */
-	@Test
-	void legacyProjectLoadsWithSliderValuesAndAssignmentReferences() throws Exception {
-		File fixture = fixtureFile(SEMANTICS_FIXTURE);
-		Data project = openProject(fixture);
-
-		assertProjectSemantics(project);
-		assertEquals(fixture, project.currentFile);
-	}
-
-	/**
-	 * Verifies that a Slider Preset containing only synthesized defaults remains
-	 * observable in memory while retaining the legacy omission rule on save.
-	 *
-	 * @throws Exception when the fixture cannot be loaded or the Project saved
-	 */
-	@Test
-	void allDefaultMissingSlidersRemainOmittedWhenSaved() throws Exception {
-		Data project = openProject(fixtureFile(ALL_DEFAULTS_FIXTURE));
-		SliderPreset preset = findPreset(project, "All Defaults");
-
-		assertTrue(preset.getSetSliders().isEmpty());
-		assertNotNull(preset.getMissingDefaultSetSlider("Breasts"));
-		assertEquals(Integer.valueOf(20), preset.getMissingDefaultSetSlider("Breasts").getValueSmall());
-		assertEquals(Integer.valueOf(100), preset.getMissingDefaultSetSlider("Breasts").getValueBig());
-
-		File savedProject = tempDirectory.resolve("all-defaults-round-trip.jbs2bg").toFile();
-		project.saveToFile(savedProject);
-
-		JsonObject savedPreset = readJson(savedProject).get("SliderPresets").asObject().get("All Defaults")
-				.asObject();
-		assertTrue(savedPreset.get("SetSliders").asArray().isEmpty());
-		assertEquals(savedProject, project.currentFile);
-	}
-
-	/**
-	 * Verifies semantic round-tripping of legacy field names, Slider Preset values,
-	 * UUNP state, Project assignments, and assignment references.
-	 *
-	 * @throws Exception when the fixture cannot be loaded or the Project saved
-	 */
-	@Test
-	void legacyProjectRoundTripsSemanticallyWithoutJsonOrderingRequirements() throws Exception {
-		Data project = openProject(fixtureFile(SEMANTICS_FIXTURE));
-		File savedProject = tempDirectory.resolve("semantic-round-trip.jbs2bg").toFile();
-
-		project.saveToFile(savedProject);
-
-		assertSavedProjectSemantics(readJson(savedProject));
-		Data reopenedProject = openProject(savedProject);
-		assertProjectSemantics(reopenedProject);
 	}
 
 	/**
@@ -299,59 +240,6 @@ class ProjectPersistenceCompatibilityTest {
 	}
 
 	/**
-	 * Loads a Project through the same public operation used by production callers.
-	 *
-	 * @param file the Project file to load
-	 * @return a newly created Data instance containing the loaded Project
-	 */
-	private static Data openProject(File file) {
-		Data project = new Data();
-		project.openFromFile(file);
-		return project;
-	}
-
-	/**
-	 * Asserts the caller-visible meaning of the representative legacy Project.
-	 *
-	 * @param project the loaded Project state
-	 */
-	private static void assertProjectSemantics(Data project) {
-		SliderPreset cbbe = findPreset(project, "CBBE Curvy");
-		SliderPreset uunp = findPreset(project, "UUNP Athletic");
-		assertFalse(cbbe.isUUNP());
-		assertTrue(uunp.isUUNP());
-
-		SetSlider waist = findSlider(cbbe, "Waist");
-		assertEquals(Integer.valueOf(20), waist.getValueSmall());
-		assertEquals(Integer.valueOf(80), waist.getValueBig());
-		assertEquals(10, waist.getPctMin());
-		assertEquals(90, waist.getPctMax());
-
-		SetSlider arms = findSlider(uunp, "Arms");
-		assertEquals(Integer.valueOf(100), arms.getValueSmall());
-		assertEquals(Integer.valueOf(50), arms.getValueBig());
-		assertEquals(25, arms.getPctMin());
-		assertEquals(75, arms.getPctMax());
-
-		assertEquals(1, project.customMorphTargets.size());
-		CustomMorphTarget target = project.customMorphTargets.get(0);
-		assertEquals("All|Female", target.getName());
-		assertEquals(2, target.getSliderPresets().size());
-		assertSame(cbbe, findAssignedPreset(target, "CBBE Curvy"));
-		assertSame(uunp, findAssignedPreset(target, "UUNP Athletic"));
-
-		assertEquals(1, project.morphedNpcs.size());
-		NPC npc = project.morphedNpcs.get(0);
-		assertEquals("Lydia", npc.getName());
-		assertEquals("Skyrim.esm", npc.getMod());
-		assertEquals("HousecarlWhiterun", npc.getEditorId());
-		assertEquals("NordRace", npc.getRace());
-		assertEquals("A2C94", npc.getFormId());
-		assertEquals(1, npc.getSliderPresets().size());
-		assertSame(uunp, findAssignedPreset(npc, "UUNP Athletic"));
-	}
-
-	/**
 	 * Asserts saved Project data structurally so formatting and JSON member ordering
 	 * remain outside the compatibility contract.
 	 *
@@ -391,53 +279,6 @@ class ProjectPersistenceCompatibilityTest {
 		assertEquals("NordRace", npc.getString("Race", ""));
 		assertEquals("A2C94", npc.getString("FormId", ""));
 		assertTrue(containsString(npc.get("SliderPresets").asArray(), "UUNP Athletic"));
-	}
-
-	/**
-	 * Finds a Slider Preset by its domain name without depending on list ordering.
-	 *
-	 * @param project the Project state to search
-	 * @param name the Slider Preset name
-	 * @return the matching Slider Preset
-	 * @throws AssertionError when no matching Slider Preset exists
-	 */
-	private static SliderPreset findPreset(Data project, String name) {
-		SliderPreset preset = project.getSliderPreset(name);
-		assertNotNull(preset, "Missing Slider Preset: " + name);
-		return preset;
-	}
-
-	/**
-	 * Finds an explicitly stored slider by name.
-	 *
-	 * @param preset the Slider Preset to search
-	 * @param name the slider name
-	 * @return the matching slider
-	 * @throws AssertionError when no matching slider exists
-	 */
-	private static SetSlider findSlider(SliderPreset preset, String name) {
-		for (SetSlider slider : preset.getSetSliders()) {
-			if (slider.getName().equals(name))
-				return slider;
-		}
-		throw new AssertionError("Missing slider: " + name);
-	}
-
-	/**
-	 * Finds a Slider Preset assignment by name without depending on assignment
-	 * ordering.
-	 *
-	 * @param target the Custom Morph Target or NPC Morph Assignment to search
-	 * @param name the Slider Preset name
-	 * @return the matching assigned Slider Preset
-	 * @throws AssertionError when no matching assignment exists
-	 */
-	private static SliderPreset findAssignedPreset(MorphTarget target, String name) {
-		for (SliderPreset preset : target.getSliderPresets()) {
-			if (preset.getName().equals(name))
-				return preset;
-		}
-		throw new AssertionError("Missing Slider Preset assignment: " + name);
 	}
 
 	/**
