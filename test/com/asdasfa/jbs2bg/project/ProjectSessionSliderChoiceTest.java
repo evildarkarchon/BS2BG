@@ -253,6 +253,67 @@ class ProjectSessionSliderChoiceTest {
     }
 
     /**
+     * Derives a single-choice edit's effective values from its stored endpoints and
+     * the Slider Preset's mode rather than trusting the caller. Only stored endpoints
+     * are persisted, so publishing divergent effective values would change generated
+     * output across a save/reopen cycle.
+     */
+    @Test
+    void singleChoiceEditRederivesEffectiveValuesFromStoredEndpoints() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        SliderChoiceSnapshot divergentWaist = new SliderChoiceSnapshot("Waist", true, Integer.valueOf(20),
+                Integer.valueOf(80), 55, 65, 10, 90, false);
+        SliderChoiceSnapshot deferringBreasts = new SliderChoiceSnapshot("Breasts", true, null, null, 7, 7, 0, 100,
+                false);
+
+        ProjectOutcome waistOutcome = session.apply(SliderPresetEdits.setSliderChoice("Alpha", divergentWaist));
+        ProjectOutcome breastsOutcome = session.apply(SliderPresetEdits.setSliderChoice("Alpha", deferringBreasts));
+        SliderPresetSnapshot preset = breastsOutcome.getSnapshot().getSliderPresets().get(0);
+
+        assertTrue(waistOutcome instanceof ChangedOutcome);
+        assertTrue(breastsOutcome instanceof ChangedOutcome);
+        assertExplicitStored(find(preset, "Waist"), 20, 80, 10, 90);
+        SliderChoiceSnapshot breasts = find(preset, "Breasts");
+        assertFalse(breasts.isMissingDefault());
+        assertFalse(breasts.getStoredSmallValue().isPresent());
+        assertFalse(breasts.getStoredBigValue().isPresent());
+        // Absent stored endpoints defer to the regular-mode Breasts default of 0.2/1.0.
+        assertEquals(20, breasts.getEffectiveSmallValue());
+        assertEquals(100, breasts.getEffectiveBigValue());
+
+        // Different caller-supplied effective values over identical stored endpoints are
+        // not an observable change once both derive from the same stored state.
+        ProjectOutcome sameStored = session.apply(SliderPresetEdits.setSliderChoice("Alpha",
+                new SliderChoiceSnapshot("Waist", true, Integer.valueOf(20), Integer.valueOf(80), 1, 2, 10, 90,
+                        false)));
+        assertTrue(sameStored instanceof UnchangedOutcome);
+        assertSame(breastsOutcome.getSnapshot(), sameStored.getSnapshot());
+    }
+
+    /**
+     * Applies the same stored-endpoint derivation to a full update that keeps the
+     * current mode, which previously published the caller's effective values verbatim.
+     */
+    @Test
+    void sameModeFullUpdateRederivesEffectiveValuesFromStoredEndpoints() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        SliderChoiceSnapshot divergentWaist = new SliderChoiceSnapshot("Waist", true, Integer.valueOf(20),
+                Integer.valueOf(80), 55, 65, 10, 90, false);
+
+        ProjectOutcome outcome = session.apply(SliderPresetEdits.update("Alpha",
+                new SliderPresetSnapshot("Alpha", false, Arrays.asList(divergentWaist))));
+        SliderPresetSnapshot preset = outcome.getSnapshot().getSliderPresets().get(0);
+
+        assertTrue(outcome instanceof ChangedOutcome);
+        assertFalse(preset.isUunp());
+        assertExplicitStored(find(preset, "Waist"), 20, 80, 10, 90);
+    }
+
+    /**
      * Builds an explicit choice with both stored values present.
      *
      * @param name slider name

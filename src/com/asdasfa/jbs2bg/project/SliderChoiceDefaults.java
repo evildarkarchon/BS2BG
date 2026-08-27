@@ -100,17 +100,48 @@ final class SliderChoiceDefaults {
             if (choice.isMissingDefault())
                 continue;
             representedNames.add(choice.getName());
-            Integer storedSmall = choice.getStoredSmallValue().isPresent()
-                    ? Integer.valueOf(choice.getStoredSmallValue().getAsInt()) : null;
-            Integer storedBig = choice.getStoredBigValue().isPresent()
-                    ? Integer.valueOf(choice.getStoredBigValue().getAsInt()) : null;
-            rebuilt.add(new SliderChoiceSnapshot(choice.getName(), choice.isEnabled(), storedSmall, storedBig,
-                    effectiveSmall(choice.getName(), storedSmall, uunp),
-                    effectiveBig(choice.getName(), storedBig, uunp),
-                    choice.getPercentageMinimum(), choice.getPercentageMaximum(), false));
+            rebuilt.add(resolveEffective(choice, uunp));
         }
         rebuilt.addAll(synthesizeMissing(representedNames, uunp));
         Collections.sort(rebuilt, NAME_ORDER);
         return rebuilt;
+    }
+
+    /**
+     * Returns a copy of one choice whose effective endpoints are derived from its
+     * stored endpoints and the requested mode, discarding whatever effective values
+     * the caller supplied. Only stored endpoints are persisted and the Project file
+     * loader re-derives effective values from them, so any other effective values
+     * would silently change generated output across a save/reopen cycle.
+     *
+     * @param choice caller-supplied choice
+     * @param uunp whether the UUNP defaults apply
+     * @return an immutable copy with mode-consistent effective values and every
+     *         other value preserved
+     */
+    static SliderChoiceSnapshot resolveEffective(SliderChoiceSnapshot choice, boolean uunp) {
+        Integer storedSmall = choice.getStoredSmallValue().isPresent()
+                ? Integer.valueOf(choice.getStoredSmallValue().getAsInt()) : null;
+        Integer storedBig = choice.getStoredBigValue().isPresent()
+                ? Integer.valueOf(choice.getStoredBigValue().getAsInt()) : null;
+        return new SliderChoiceSnapshot(choice.getName(), choice.isEnabled(), storedSmall, storedBig,
+                effectiveSmall(choice.getName(), storedSmall, uunp),
+                effectiveBig(choice.getName(), storedBig, uunp),
+                choice.getPercentageMinimum(), choice.getPercentageMaximum(), choice.isMissingDefault());
+    }
+
+    /**
+     * Applies {@link #resolveEffective(SliderChoiceSnapshot, boolean)} to every
+     * choice, preserving list order.
+     *
+     * @param choices caller-supplied choices
+     * @param uunp whether the UUNP defaults apply
+     * @return a new list of mode-consistent copies in the same order
+     */
+    static List<SliderChoiceSnapshot> resolveEffective(List<SliderChoiceSnapshot> choices, boolean uunp) {
+        List<SliderChoiceSnapshot> resolved = new ArrayList<>(choices.size());
+        for (SliderChoiceSnapshot choice : choices)
+            resolved.add(resolveEffective(choice, uunp));
+        return resolved;
     }
 }

@@ -20,6 +20,18 @@ import com.eclipsesource.json.WriterConfig;
  */
 final class ProjectFileWriter {
 
+    /**
+     * Maximum number of code points of the target filename carried into the staging
+     * file's name. Files.createTempFile appends a random numeric component and the
+     * ".tmp" suffix, so an unbounded prefix would push a legal target name near the
+     * filesystem's 255-unit component limit over it and fail every save of that
+     * target. The prefix only exists to make an orphaned staging file attributable
+     * to its Project, so a short leading fragment is sufficient; the limit is in
+     * code points (never splitting a surrogate pair) and small enough that even
+     * four-byte UTF-8 characters stay well inside the limit.
+     */
+    private static final int STAGING_PREFIX_NAME_LIMIT = 32;
+
     private ProjectFileWriter() {
     }
 
@@ -45,7 +57,7 @@ final class ProjectFileWriter {
         String targetName = normalizedTarget.getFileName() == null
                 ? "project"
                 : normalizedTarget.getFileName().toString();
-        String prefix = "." + targetName + "-";
+        String prefix = "." + leadingCodePoints(targetName, STAGING_PREFIX_NAME_LIMIT) + "-";
         if (prefix.length() < 3)
             prefix = ".project-";
 
@@ -60,6 +72,21 @@ final class ProjectFileWriter {
             cleanupTemporary(temporary, failure);
             throw failure;
         }
+    }
+
+    /**
+     * Returns at most the first {@code limit} code points of a string, so that a
+     * truncation never ends inside a surrogate pair.
+     *
+     * @param value string to truncate
+     * @param limit maximum number of code points to keep
+     * @return the whole string when it is short enough, otherwise its leading fragment
+     */
+    private static String leadingCodePoints(String value, int limit) {
+        int codePoints = value.codePointCount(0, value.length());
+        if (codePoints <= limit)
+            return value;
+        return value.substring(0, value.offsetByCodePoints(0, limit));
     }
 
     /**

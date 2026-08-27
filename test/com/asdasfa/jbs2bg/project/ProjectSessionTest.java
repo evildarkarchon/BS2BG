@@ -874,14 +874,18 @@ class ProjectSessionTest {
     }
 
     /**
-     * Verifies that UUNP and slider-choice edits preserve every observable value,
-     * order choices canonically, and report repeated values as no-ops.
+     * Verifies that UUNP and slider-choice edits preserve every stored value,
+     * order choices canonically, and report repeated values as no-ops. Effective
+     * values are the one exception: they always derive from the stored endpoints
+     * and the Slider Preset's mode, so a caller-supplied divergent pair is replaced
+     * by the mode's Slider settings rather than published.
      */
     @Test
     void uunpAndSliderChoiceEditsPreserveImmutableValueSemantics() {
         ProjectSession session = ProjectSessions.create();
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
+        // The 30/70 effective pair deliberately disagrees with the absent stored endpoints.
         SliderChoiceSnapshot waist = new SliderChoiceSnapshot("Waist", true, null, null, 30, 70, 25, 75, true);
         SliderChoiceSnapshot arms = new SliderChoiceSnapshot("Arms", false, Integer.valueOf(10),
                 Integer.valueOf(90), 10, 90, 0, 100, false);
@@ -900,8 +904,10 @@ class ProjectSessionTest {
         SliderChoiceSnapshot exposedWaist = preset.getSliderChoices().get(1);
         assertFalse(exposedWaist.getStoredSmallValue().isPresent());
         assertFalse(exposedWaist.getStoredBigValue().isPresent());
-        assertEquals(30, exposedWaist.getEffectiveSmallValue());
-        assertEquals(70, exposedWaist.getEffectiveBigValue());
+        assertEquals(com.asdasfa.jbs2bg.data.Settings.getDefaultValueSmallUUNP("Waist"),
+                exposedWaist.getEffectiveSmallValue());
+        assertEquals(com.asdasfa.jbs2bg.data.Settings.getDefaultValueBigUUNP("Waist"),
+                exposedWaist.getEffectiveBigValue());
         assertEquals(25, exposedWaist.getPercentageMinimum());
         assertEquals(75, exposedWaist.getPercentageMaximum());
         assertTrue(exposedWaist.isMissingDefault());

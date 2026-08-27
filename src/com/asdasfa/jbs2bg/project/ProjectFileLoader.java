@@ -289,7 +289,11 @@ final class ProjectFileLoader {
     }
 
     /**
-     * Parses and canonically orders the legacy Slider Preset catalog.
+     * Parses and canonically orders the legacy Slider Preset catalog. Persisted keys
+     * are normalized the way the legacy loader normalized them (dots become spaces,
+     * then surrounding whitespace is trimmed) before identity validation, so a
+     * previously accepted dotted key still opens and a key that only differs by dots
+     * is a duplicate rather than a distinct Slider Preset.
      *
      * @param object persisted Slider Preset map
      * @param presetNames destination identity-to-canonical-name index
@@ -300,14 +304,13 @@ final class ProjectFileLoader {
             Map<String, String> presetNames) {
         List<SliderPresetSnapshot> presets = new ArrayList<>();
         for (Member member : object) {
-            String name = member.getName().trim();
+            // Dots are replaced before trimming so a leading or trailing dot cannot
+            // leave the normalized name with surrounding whitespace.
+            String name = member.getName().replace('.', ' ').trim();
             String presetElement = childElement("/SliderPresets", member.getName());
             if (name.isEmpty())
                 throw new InvalidProjectFileException(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_REQUIRED,
                         presetElement, "A Slider Preset name must not be empty.");
-            if (name.indexOf('.') >= 0)
-                throw new InvalidProjectFileException(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_CONTAINS_DOT,
-                        presetElement, "A Slider Preset name must not contain dots.");
             if (presetNames.containsKey(name))
                 throw new InvalidProjectFileException(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_DUPLICATE,
                         presetElement, "A Slider Preset with this name already exists in the Project file.");

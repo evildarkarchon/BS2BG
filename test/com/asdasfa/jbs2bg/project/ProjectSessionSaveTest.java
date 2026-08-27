@@ -102,6 +102,38 @@ class ProjectSessionSaveTest {
     }
 
     /**
+     * Verifies that Save As succeeds for a legal filename near the filesystem's
+     * component-length limit: the staging file derives its name from the target, so
+     * an unbounded prefix would push the staging name past the limit and fail every
+     * save of a target that is itself valid.
+     *
+     * @throws Exception when the temporary directory cannot be listed
+     */
+    @Test
+    void saveAsNearFilenameLengthLimitStillStagesAndReplacesAtomically() throws Exception {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        // 241 characters plus the extension is 248: legal on NTFS and ext4 (255), but
+        // leaves no room for a random staging component appended to the full name.
+        char[] stem = new char[241];
+        java.util.Arrays.fill(stem, 'p');
+        Path target = tempDirectory.resolve(new String(stem) + ".jbs2bg");
+
+        ProjectOutcome outcome = session.saveAs(target);
+
+        assertTrue(outcome instanceof ChangedOutcome);
+        assertFalse(outcome.getSnapshot().isDirty());
+        assertEquals(target.toAbsolutePath().normalize(), outcome.getSnapshot().getFileIdentity().get());
+        ProjectOutcome reopened = ProjectSessions.create().open(target);
+        assertTrue(reopened instanceof ChangedOutcome);
+        assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().get(0).getName());
+        try (java.util.stream.Stream<Path> siblings = Files.list(tempDirectory)) {
+            assertEquals(1, siblings.count(), "no staging file may be left beside the saved Project");
+        }
+    }
+
+    /**
      * Verifies that Save writes later Project edits to the adopted identity and
      * clears dirty state only after that persistence succeeds.
      */

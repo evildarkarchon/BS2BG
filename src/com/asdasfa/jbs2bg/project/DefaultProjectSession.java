@@ -1266,9 +1266,14 @@ final class DefaultProjectSession implements ProjectSession {
         // A replacement that flips UUNP is treated like the UUNP edit: the caller's
         // synthesized defaults belong to the old mode, so they are rebuilt here rather
         // than trusted, keeping full updates and SetUunp observably equivalent.
+        // A same-mode replacement keeps its choices but still re-derives their
+        // effective endpoints from the stored ones (see SliderChoiceDefaults.resolveEffective).
         if (current.isUunp() != replacement.isUunp())
             replacement = new SliderPresetSnapshot(replacement.getName(), replacement.isUunp(),
                     SliderChoiceDefaults.rebuildForMode(replacement.getSliderChoices(), replacement.isUunp()));
+        else
+            replacement = new SliderPresetSnapshot(replacement.getName(), replacement.isUunp(),
+                    SliderChoiceDefaults.resolveEffective(replacement.getSliderChoices(), replacement.isUunp()));
         if (sameSliderPreset(current, replacement))
             return new UnchangedOutcome(snapshot);
         return replaceSliderPreset(index, replacement);
@@ -1375,14 +1380,18 @@ final class DefaultProjectSession implements ProjectSession {
             return rejection;
 
         SliderPresetSnapshot current = snapshot.getSliderPresets().get(presetIndex);
+        // The caller's effective endpoints are not trusted: only the stored endpoints
+        // survive a save/reopen cycle, so the published choice must carry the values
+        // the loader would derive from them under this Slider Preset's mode.
+        SliderChoiceSnapshot choice = SliderChoiceDefaults.resolveEffective(edit.getChoice(), current.isUunp());
         List<SliderChoiceSnapshot> choices = new ArrayList<>(current.getSliderChoices());
-        int choiceIndex = findSliderChoice(choices, edit.getChoice().getName());
-        if (choiceIndex >= 0 && sameSliderChoice(choices.get(choiceIndex), edit.getChoice()))
+        int choiceIndex = findSliderChoice(choices, choice.getName());
+        if (choiceIndex >= 0 && sameSliderChoice(choices.get(choiceIndex), choice))
             return new UnchangedOutcome(snapshot);
         if (choiceIndex >= 0)
-            choices.set(choiceIndex, edit.getChoice());
+            choices.set(choiceIndex, choice);
         else
-            choices.add(edit.getChoice());
+            choices.add(choice);
         Collections.sort(choices, SLIDER_CHOICE_NAME_ORDER);
         SliderPresetSnapshot changed = new SliderPresetSnapshot(current.getName(), current.isUunp(), choices);
         return replaceSliderPreset(presetIndex, changed);
