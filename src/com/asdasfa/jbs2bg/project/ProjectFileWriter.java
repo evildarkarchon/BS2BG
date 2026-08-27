@@ -30,7 +30,10 @@ final class ProjectFileWriter {
      *
      * @param snapshot immutable Project content to persist
      * @param target requested destination file
+     * @throws NullPointerException when snapshot or target is null
      * @throws IOException when the temporary file cannot be written or installed
+     * @throws RuntimeException when the filesystem provider reports an unchecked
+     *         environmental failure
      */
     static void write(ProjectSnapshot snapshot, Path target) throws IOException {
         byte[] content = serialize(snapshot).getBytes(StandardCharsets.UTF_8);

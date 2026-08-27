@@ -145,10 +145,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @return failure carrying the unchanged snapshot
      */
     private FailedOutcome failedOpen(String code, Path source, String message) {
-        SourceLocation location = new SourceLocation(Optional.of(source), Optional.of("/"), OptionalInt.empty(),
-                OptionalInt.empty());
-        ProjectDiagnostic diagnostic = new ProjectDiagnostic(code, DiagnosticSeverity.ERROR, location, message);
-        return new FailedOutcome(snapshot, Collections.singletonList(diagnostic));
+        return failedOperation(code, Optional.of(source), "/", message);
     }
 
     /**
@@ -187,15 +184,22 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or failed outcome at the operation boundary
      */
     private ProjectOutcome persist(Path target) {
-        Path normalizedTarget = target.toAbsolutePath().normalize();
+        Path normalizedTarget;
+        try {
+            normalizedTarget = target.toAbsolutePath().normalize();
+        } catch (RuntimeException exception) {
+            // A path that cannot be normalized also cannot safely identify a filesystem source.
+            return failedOperation(ProjectDiagnosticCodes.PROJECT_SAVE_FAILED, Optional.<Path>empty(),
+                    "project-file", "The Project target could not be resolved: " + exception.getMessage());
+        }
         try {
             ProjectFileWriter.write(snapshot, normalizedTarget);
         } catch (IOException exception) {
-            return failedSave(ProjectDiagnosticCodes.PROJECT_FILE_WRITE_FAILED, normalizedTarget,
-                    "The Project file could not be written: " + exception.getMessage());
+            return failedOperation(ProjectDiagnosticCodes.PROJECT_FILE_WRITE_FAILED, Optional.of(normalizedTarget),
+                    "/", "The Project file could not be written: " + exception.getMessage());
         } catch (RuntimeException exception) {
             // Filesystem providers may surface environmental failures as unchecked exceptions.
-            return failedSave(ProjectDiagnosticCodes.PROJECT_SAVE_FAILED, normalizedTarget,
+            return failedOperation(ProjectDiagnosticCodes.PROJECT_SAVE_FAILED, Optional.of(normalizedTarget), "/",
                     "The Project could not be saved: " + exception.getMessage());
         }
 
@@ -211,16 +215,18 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Reports a persistence failure without publishing file identity, clean state,
-     * or partially prepared Project content.
+     * Reports an operation failure without replacing or partially updating the
+     * currently published Project snapshot.
      *
      * @param code stable diagnostic code
-     * @param target requested destination
+     * @param path requested filesystem source, or empty when path resolution failed
+     * @param element stable logical location within the operation
      * @param message human-readable failure message
      * @return failed outcome carrying the unchanged snapshot
+     * @throws NullPointerException when an argument is null
      */
-    private FailedOutcome failedSave(String code, Path target, String message) {
-        SourceLocation location = new SourceLocation(Optional.of(target), Optional.of("/"), OptionalInt.empty(),
+    private FailedOutcome failedOperation(String code, Optional<Path> path, String element, String message) {
+        SourceLocation location = new SourceLocation(path, Optional.of(element), OptionalInt.empty(),
                 OptionalInt.empty());
         ProjectDiagnostic diagnostic = new ProjectDiagnostic(code, DiagnosticSeverity.ERROR, location, message);
         return new FailedOutcome(snapshot, Collections.singletonList(diagnostic));

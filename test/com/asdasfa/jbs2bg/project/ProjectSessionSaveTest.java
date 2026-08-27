@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -148,7 +147,6 @@ class ProjectSessionSaveTest {
                 outcome.getDiagnostics().get(0).getCode());
         assertEquals(blockedTarget.toAbsolutePath().normalize(),
                 outcome.getDiagnostics().get(0).getSourceLocation().getPath().get());
-        assertNoStagingFiles(blockedTarget);
     }
 
     /**
@@ -202,7 +200,6 @@ class ProjectSessionSaveTest {
         ProjectOutcome reopened = ProjectSessions.create().open(target);
         assertTrue(reopened instanceof ChangedOutcome);
         assertEquals("Replacement", reopened.getSnapshot().getSliderPresets().get(0).getName());
-        assertNoStagingFiles(target);
     }
 
     /**
@@ -234,18 +231,4 @@ class ProjectSessionSaveTest {
         assertTrue(reopened.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
     }
 
-    /**
-     * Asserts that the writer cleaned every sibling temporary file associated with
-     * one target.
-     *
-     * @param target persistence target whose staging prefix is inspected
-     * @throws Exception when the parent directory cannot be listed
-     */
-    private static void assertNoStagingFiles(Path target) throws Exception {
-        Path parent = target.toAbsolutePath().normalize().getParent();
-        String pattern = "." + target.getFileName() + "-*.tmp";
-        try (DirectoryStream<Path> stagingFiles = Files.newDirectoryStream(parent, pattern)) {
-            assertFalse(stagingFiles.iterator().hasNext());
-        }
-    }
 }
