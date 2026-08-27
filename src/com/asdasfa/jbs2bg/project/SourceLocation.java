@@ -16,7 +16,8 @@ public final class SourceLocation {
 	private final Integer column;
 
 	/**
-	 * Creates a source location. Paths are normalized to absolute paths, and line
+	 * Creates a source location. Paths are normalized to absolute paths when the
+	 * provider permits it; otherwise the selected path identity is retained. Line
 	 * and column numbers are one-based when present.
 	 *
 	 * @param path source file path, or empty for a logical Project source
@@ -29,9 +30,20 @@ public final class SourceLocation {
 	public SourceLocation(Optional<Path> path, Optional<String> element, OptionalInt line, OptionalInt column) {
 		Optional<Path> requiredPath = Objects.requireNonNull(path, "path");
 		Optional<String> requiredElement = Objects.requireNonNull(element, "element");
-		this.path = requiredPath.isPresent()
-				? Objects.requireNonNull(requiredPath.get(), "path value").toAbsolutePath().normalize()
+		Path selectedPath = requiredPath.isPresent()
+				? Objects.requireNonNull(requiredPath.get(), "path value")
 				: null;
+		Path normalizedPath = selectedPath;
+		if (selectedPath != null) {
+			try {
+				normalizedPath = selectedPath.toAbsolutePath().normalize();
+			} catch (RuntimeException exception) {
+				// A provider failure must not erase the selected source from the
+				// diagnostic that reports that same resolution failure.
+				normalizedPath = selectedPath;
+			}
+		}
+		this.path = normalizedPath;
 		this.element = requiredElement.isPresent()
 				? Objects.requireNonNull(requiredElement.get(), "element value")
 				: null;
@@ -47,7 +59,7 @@ public final class SourceLocation {
 		this.column = column.isPresent() ? Integer.valueOf(column.getAsInt()) : null;
 	}
 
-	/** @return the normalized source path, or empty when not file-backed */
+	/** @return the normalized source path, retained selected path, or empty when not file-backed */
 	public Optional<Path> getPath() {
 		return Optional.ofNullable(path);
 	}

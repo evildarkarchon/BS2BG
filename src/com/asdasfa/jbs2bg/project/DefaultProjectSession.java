@@ -215,6 +215,9 @@ final class DefaultProjectSession implements ProjectSession {
                 finalSourceOutcomes.add(outcomeAtSnapshot(sourceOutcome, snapshot));
 
             ProjectOutcome projectOutcome;
+            // A published source must make the batch Changed so dirty handling stays
+            // truthful. Without a change, rejection distinguishes invalid content from
+            // a batch made solely of environmental failures; exact kinds remain per file.
             if (changed)
                 projectOutcome = new ChangedOutcome(snapshot, diagnostics);
             else if (rejected)
@@ -289,7 +292,7 @@ final class DefaultProjectSession implements ProjectSession {
         } catch (RuntimeException exception) {
             // An unresolvable path cannot safely be sent to the filesystem parser.
             return failedOperation(ProjectDiagnosticCodes.SLIDER_PRESET_XML_IMPORT_FAILED,
-                    Optional.<Path>empty(), "/",
+                    Optional.of(source), "/",
                     "The BodySlide XML source could not be resolved: " + exception.getMessage());
         }
         try {
@@ -429,7 +432,7 @@ final class DefaultProjectSession implements ProjectSession {
      * currently published Project snapshot.
      *
      * @param code stable diagnostic code
-     * @param path requested filesystem source, or empty when path resolution failed
+     * @param path requested filesystem source, or empty when no identity is available
      * @param element stable logical location within the operation
      * @param message human-readable failure message
      * @return failed outcome carrying the unchanged snapshot

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -320,6 +321,36 @@ class ProjectSessionImportTest {
             executor.shutdownNow();
             assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
         }
+    }
+
+    /**
+     * Retains the selected source identity when its filesystem can no longer
+     * resolve an absolute path, so the per-file diagnostic remains actionable.
+     */
+    @Test
+    void unresolvableSourceDiagnosticStillIdentifiesSelectedPath() {
+        Path source = (Path) Proxy.newProxyInstance(Path.class.getClassLoader(), new Class<?>[] { Path.class },
+                (proxy, method, arguments) -> {
+                    if ("toAbsolutePath".equals(method.getName()))
+                        throw new UnsupportedOperationException("No absolute path is available.");
+                    if ("toString".equals(method.getName()))
+                        return "unresolvable:/presets.xml";
+                    if ("hashCode".equals(method.getName()))
+                        return Integer.valueOf(System.identityHashCode(proxy));
+                    if ("equals".equals(method.getName()))
+                        return Boolean.valueOf(proxy == arguments[0]);
+                    throw new AssertionError("Unexpected Path method: " + method.getName());
+                });
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+
+        SliderPresetImportOutcome outcome = session.importSliderPresets(Collections.singletonList(source));
+
+        assertTrue(outcome.getProjectOutcome() instanceof FailedOutcome);
+        ProjectDiagnostic diagnostic = outcome.getDiagnostics().get(0);
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_XML_IMPORT_FAILED, diagnostic.getCode());
+        assertSame(source, diagnostic.getSourceLocation().getPath().get());
+        assertFalse(outcome.getSnapshot().isDirty());
     }
 
     /** Writes one UTF-8 BodySlide XML source in the temporary directory. */
