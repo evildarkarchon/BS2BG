@@ -49,6 +49,18 @@ public final class NpcMorphAssignmentEdits {
     }
 
     /**
+     * Requests atomic assignment of several existing Slider Presets to one NPC
+     * Morph Assignment. Duplicate requested or existing relationships are no-ops.
+     *
+     * @param identity existing NPC Morph Assignment identity
+     * @param sliderPresetNames caller-selected Slider Preset names
+     * @return an immutable assignment-batch request
+     */
+    public static ProjectEdit addSliderPresets(NpcMorphAssignmentIdentity identity, List<String> sliderPresetNames) {
+        return new AddSliderPresets(identity, sliderPresetNames);
+    }
+
+    /**
      * Requests removal of one Slider Preset relationship from an NPC Morph Assignment.
      *
      * @param identity existing NPC Morph Assignment identity
@@ -185,6 +197,34 @@ public final class NpcMorphAssignmentEdits {
         /** @return the requested Slider Preset name */
         String getSliderPresetName() {
             return sliderPresetName;
+        }
+    }
+
+    /** Immutable assignment-batch request interpreted only by ProjectSession. */
+    static final class AddSliderPresets implements NpcMorphAssignmentEdit {
+        private final NpcMorphAssignmentIdentity identity;
+        private final List<String> sliderPresetNames;
+
+        /**
+         * Defensively captures one NPC identity and the selected relationship set.
+         *
+         * @param identity existing NPC identity
+         * @param sliderPresetNames selected Slider Preset names, or null for validation
+         */
+        AddSliderPresets(NpcMorphAssignmentIdentity identity, List<String> sliderPresetNames) {
+            this.identity = identity;
+            this.sliderPresetNames = sliderPresetNames == null ? null
+                    : ImmutableValues.copyOf(sliderPresetNames, "sliderPresetNames");
+        }
+
+        /** @return the requested NPC identity, or null when omitted */
+        NpcMorphAssignmentIdentity getIdentity() {
+            return identity;
+        }
+
+        /** @return immutable selected Slider Preset names, or null when omitted */
+        List<String> getSliderPresetNames() {
+            return sliderPresetNames;
         }
     }
 

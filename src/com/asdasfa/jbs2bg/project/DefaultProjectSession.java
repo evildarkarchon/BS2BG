@@ -463,6 +463,8 @@ final class DefaultProjectSession implements ProjectSession {
                 return addNpcs((NpcMorphAssignmentEdits.AddNpcs) edit);
             if (edit instanceof NpcMorphAssignmentEdits.AddSliderPreset)
                 return addNpcSliderPreset((NpcMorphAssignmentEdits.AddSliderPreset) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.AddSliderPresets)
+                return addNpcSliderPresets((NpcMorphAssignmentEdits.AddSliderPresets) edit);
             if (edit instanceof NpcMorphAssignmentEdits.RemoveSliderPreset)
                 return removeNpcSliderPreset((NpcMorphAssignmentEdits.RemoveSliderPreset) edit);
             if (edit instanceof NpcMorphAssignmentEdits.ClearSliderPresets)
@@ -481,6 +483,8 @@ final class DefaultProjectSession implements ProjectSession {
                 return createCustomMorphTarget((CustomMorphTargetEdits.Create) edit);
             if (edit instanceof CustomMorphTargetEdits.AddSliderPreset)
                 return addCustomMorphTargetSliderPreset((CustomMorphTargetEdits.AddSliderPreset) edit);
+            if (edit instanceof CustomMorphTargetEdits.AddSliderPresets)
+                return addCustomMorphTargetSliderPresets((CustomMorphTargetEdits.AddSliderPresets) edit);
             if (edit instanceof CustomMorphTargetEdits.RemoveSliderPreset)
                 return removeCustomMorphTargetSliderPreset((CustomMorphTargetEdits.RemoveSliderPreset) edit);
             if (edit instanceof CustomMorphTargetEdits.ClearSliderPresets)
@@ -546,7 +550,7 @@ final class DefaultProjectSession implements ProjectSession {
                         "An NPC Morph Assignment with this plugin name and editor ID already exists.");
         }
 
-        List<String> canonicalAssignments = canonicalNpcSliderPresetNames(source.getSliderPresetNames());
+        List<String> canonicalAssignments = canonicalSliderPresetNames(source.getSliderPresetNames());
         if (canonicalAssignments == null)
             return rejectedSliderPresetNotFound();
         NpcMorphAssignmentSnapshot copied = copyNpc(source, canonicalAssignments);
@@ -576,7 +580,7 @@ final class DefaultProjectSession implements ProjectSession {
             if (containsNpcIdentity(candidate, source))
                 return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE,
                         "A filtered NPC batch contains duplicate plugin-name/editor-ID identity.");
-            List<String> canonicalAssignments = canonicalNpcSliderPresetNames(source.getSliderPresetNames());
+            List<String> canonicalAssignments = canonicalSliderPresetNames(source.getSliderPresetNames());
             if (canonicalAssignments == null)
                 return rejectedSliderPresetNotFound();
             candidate.add(copyNpc(source, canonicalAssignments));
@@ -624,6 +628,45 @@ final class DefaultProjectSession implements ProjectSession {
                 return new UnchangedOutcome(snapshot);
         }
         assignments.add(presetName);
+        Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
+        return replaceNpcMorphAssignment(npcIndex, copyNpc(current, assignments));
+    }
+
+    /**
+     * Validates and adds a caller-selected Slider Preset batch to one NPC Morph
+     * Assignment before publishing any relationship change.
+     *
+     * @param edit immutable assignment-batch request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome addNpcSliderPresets(NpcMorphAssignmentEdits.AddSliderPresets edit) {
+        int npcIndex = findNpcMorphAssignment(edit.getIdentity());
+        if (npcIndex < 0)
+            return rejectedNpcMorphAssignmentNotFound();
+        if (edit.getSliderPresetNames() == null)
+            return rejectedSliderPresetNotFound();
+        List<String> requestedAssignments = canonicalSliderPresetNames(edit.getSliderPresetNames());
+        if (requestedAssignments == null)
+            return rejectedSliderPresetNotFound();
+
+        NpcMorphAssignmentSnapshot current = snapshot.getNpcMorphAssignments().get(npcIndex);
+        List<String> assignments = new ArrayList<>(current.getSliderPresetNames());
+        boolean changed = false;
+        for (String requestedAssignment : requestedAssignments) {
+            boolean duplicate = false;
+            for (String existingAssignment : assignments) {
+                if (existingAssignment.equalsIgnoreCase(requestedAssignment)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                assignments.add(requestedAssignment);
+                changed = true;
+            }
+        }
+        if (!changed)
+            return new UnchangedOutcome(snapshot);
         Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
         return replaceNpcMorphAssignment(npcIndex, copyNpc(current, assignments));
     }
@@ -879,7 +922,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @param requestedNames explicit caller-owned Slider Preset choices
      * @return canonical ordered names, or null when any requested preset is absent
      */
-    private List<String> canonicalNpcSliderPresetNames(List<String> requestedNames) {
+    private List<String> canonicalSliderPresetNames(List<String> requestedNames) {
         List<String> canonicalNames = new ArrayList<>();
         for (String requestedName : requestedNames) {
             int presetIndex = findSliderPreset(requestedName);
@@ -914,8 +957,8 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Creates an empty Custom Morph Target and publishes the collection in
-     * canonical order.
+     * Creates a Custom Morph Target with its validated caller-selected
+     * relationships and publishes the collection in canonical order.
      *
      * @param edit immutable creation request
      * @return a changed outcome carrying the new dirty snapshot
@@ -924,9 +967,14 @@ final class DefaultProjectSession implements ProjectSession {
         RejectedOutcome rejection = validateCustomMorphTargetName(edit.getName());
         if (rejection != null)
             return rejection;
+        if (edit.getSliderPresetNames() == null)
+            return rejectedSliderPresetNotFound();
+        List<String> canonicalAssignments = canonicalSliderPresetNames(edit.getSliderPresetNames());
+        if (canonicalAssignments == null)
+            return rejectedSliderPresetNotFound();
         String name = edit.getName().trim();
         List<CustomMorphTargetSnapshot> targets = new ArrayList<>(snapshot.getCustomMorphTargets());
-        targets.add(new CustomMorphTargetSnapshot(name, Collections.<String>emptyList()));
+        targets.add(new CustomMorphTargetSnapshot(name, canonicalAssignments));
         return publishChangedCustomMorphTargets(targets);
     }
 
@@ -956,6 +1004,46 @@ final class DefaultProjectSession implements ProjectSession {
         Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
         CustomMorphTargetSnapshot changed = new CustomMorphTargetSnapshot(current.getName(), assignments);
         return replaceCustomMorphTarget(targetIndex, changed);
+    }
+
+    /**
+     * Validates and adds a caller-selected Slider Preset batch to one Custom Morph
+     * Target before publishing any relationship change.
+     *
+     * @param edit immutable assignment-batch request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome addCustomMorphTargetSliderPresets(CustomMorphTargetEdits.AddSliderPresets edit) {
+        int targetIndex = findCustomMorphTarget(edit.getTargetName());
+        if (targetIndex < 0)
+            return rejectedCustomMorphTargetNotFound();
+        if (edit.getSliderPresetNames() == null)
+            return rejectedSliderPresetNotFound();
+        List<String> requestedAssignments = canonicalSliderPresetNames(edit.getSliderPresetNames());
+        if (requestedAssignments == null)
+            return rejectedSliderPresetNotFound();
+
+        CustomMorphTargetSnapshot current = snapshot.getCustomMorphTargets().get(targetIndex);
+        List<String> assignments = new ArrayList<>(current.getSliderPresetNames());
+        boolean changed = false;
+        for (String requestedAssignment : requestedAssignments) {
+            boolean duplicate = false;
+            for (String existingAssignment : assignments) {
+                if (existingAssignment.equalsIgnoreCase(requestedAssignment)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                assignments.add(requestedAssignment);
+                changed = true;
+            }
+        }
+        if (!changed)
+            return new UnchangedOutcome(snapshot);
+        Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
+        return replaceCustomMorphTarget(targetIndex,
+                new CustomMorphTargetSnapshot(current.getName(), assignments));
     }
 
     /**

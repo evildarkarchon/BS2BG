@@ -2,13 +2,17 @@ package com.asdasfa.jbs2bg;
 
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.ResourceBundle;
+import java.util.function.UnaryOperator;
 
 import com.asdasfa.jbs2bg.data.SliderPreset;
-import com.asdasfa.jbs2bg.data.SliderPreset.SetSlider;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.ProjectSnapshot;
+import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
+import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
@@ -18,408 +22,396 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.VBox;
 
 /**
- * 
+ * Edits one Slider Preset from immutable session snapshots. Each row gesture
+ * submits one slider-choice edit, while every master gesture submits one atomic
+ * full-preset edit regardless of the number of displayed choices.
+ *
  * @author Totiman
  */
 public class PopupSetSlidersController extends CustomController {
-	
+
 	@FXML
 	private ScrollPane spSetSlidersList;
 	@FXML
 	private VBox vbSetSlidersList;
-	
 	@FXML
 	private CheckBox cbAll;
 	@FXML
 	private CheckBox cbAllMin;
 	@FXML
 	private CheckBox cbAllMax;
-	
 	@FXML
 	private TextField tfAll;
 	@FXML
 	private TextField tfAllMin;
 	@FXML
 	private TextField tfAllMax;
-	
 	@FXML
 	private Slider sldAll;
 	@FXML
 	private Slider sldAllMin;
 	@FXML
 	private Slider sldAllMax;
-	
 	@FXML
 	private Button btnBack;
-	
-	public final ArrayList<SetSliderControl> setSliderControls = new ArrayList<SetSliderControl>();
-	
+
+	private final List<SetSliderControl> setSliderControls = new ArrayList<>();
+	private SliderPresetSnapshot currentPreset;
+	private boolean updatingMasterControls;
+
+	/** Creates the FXML controller; application dependencies arrive in post-initialization. */
 	public PopupSetSlidersController() {
 	}
-	
+
+	/** {@inheritDoc} */
 	@Override
 	public void initialize(URL location, ResourceBundle resources) {
 	}
-	
+
+	/** Installs popup lifecycle and master-control listeners after application injection. */
 	@Override
 	protected void onPostInit() {
-		double scrollSpeedMult = 2;
-		vbSetSlidersList.setOnScroll(e -> {
-			double deltaY = e.getDeltaY() * scrollSpeedMult;
+		double scrollSpeedMultiplier = 2;
+		vbSetSlidersList.setOnScroll(event -> {
 			double height = spSetSlidersList.getContent().getBoundsInLocal().getHeight();
-			double vvalue = spSetSlidersList.getVvalue();
-			spSetSlidersList.setVvalue(vvalue + -deltaY/height);
+			if (height > 0) {
+				double deltaY = event.getDeltaY() * scrollSpeedMultiplier;
+				spSetSlidersList.setVvalue(spSetSlidersList.getVvalue() - deltaY / height);
+			}
 		});
-		
-		stage.setOnShown(e -> {
-			onShown();
-		});
-		stage.setOnHidden(e -> {
+
+		stage.setOnShown(event -> onShown());
+		stage.setOnHidden(event -> {
+			currentPreset = null;
 			setSliderControls.clear();
 			vbSetSlidersList.getChildren().clear();
 		});
-		
-		// Checkbox All
-		cbAll.selectedProperty().addListener(new ChangeListener<Boolean>() {
-			@Override
-			public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
-				SliderPreset preset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
-				if (preset == null)
-					return;
-				
-				int v = (int) sldAll.getValue();
-				
-				boolean useAll = cbAll.isSelected();
-				// Enable slider and text fields if cbAll is selected
-				sldAll.setDisable(!useAll);
-				tfAll.setText(v + "%");
-				tfAll.setDisable(!useAll);
-				
-				if (useAll) { // If selected, uncheck both min and max sliders
+		installMasterListeners();
+	}
+
+	/** Installs one atomic bulk-edit handler for every master-control gesture. */
+	private void installMasterListeners() {
+		cbAll.selectedProperty().addListener((observable, oldValue, newValue) -> {
+			if (updatingMasterControls || currentPreset == null)
+				return;
+			int value = (int) sldAll.getValue();
+			withMasterControlUpdate(() -> {
+				if (newValue.booleanValue()) {
 					cbAllMin.setSelected(false);
 					cbAllMax.setSelected(false);
+					sldAllMin.setValue(value);
+					sldAllMax.setValue(value);
+			}
+				refreshMasterControlState();
+			});
+			refreshRowDisableState();
+			submitBulkEdit(choice -> choice.withPercentageRange(value, value));
+		});
 
-					sldAllMin.setDisable(true);
-					sldAllMin.setValue(v);
-					tfAllMin.setText(v + "%");
-					tfAllMin.setDisable(true);
+		cbAllMin.selectedProperty().addListener((observable, oldValue, newValue) -> {
+			if (updatingMasterControls || currentPreset == null)
+				return;
+			int value = (int) sldAllMin.getValue();
+			withMasterControlUpdate(() -> {
+				if (newValue.booleanValue())
+					cbAll.setSelected(false);
+				refreshMasterControlState();
+			});
+			refreshRowDisableState();
+			submitBulkEdit(choice -> choice.withPercentageRange(
+					Math.min(value, choice.getPercentageMaximum()), choice.getPercentageMaximum()));
+		});
 
-					sldAllMax.setDisable(true);
-					sldAllMax.setValue(v);
-					tfAllMax.setText(v + "%");
-					tfAllMax.setDisable(true);
-				}
-				
-				// Enable/Disable all SetSliderControls and override their values with the one in sldAll
-				for (int i = 0; i < setSliderControls.size(); i++) {
-					SetSliderControl setSliderControl = setSliderControls.get(i);
-					setSliderControl.setAllSliderValue(v);
-					setSliderControl.setDisable(useAll);
-				}
-			}
-		});
-		// Checkbox All Min
-		cbAllMin.selectedProperty().addListener(new ChangeListener<Boolean>() {
-			@Override
-			public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
-				SliderPreset preset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
-				if (preset == null)
-					return;
-				
-				int v = (int) sldAllMin.getValue();
-				
-				boolean useAllMin = cbAllMin.isSelected();
-				// Enable slider and text fields if cbAllMin is selected
-				sldAllMin.setDisable(!useAllMin);
-				tfAllMin.setText(v + "%");
-				tfAllMin.setDisable(!useAllMin);
-				
-				if (useAllMin) { // If selected, uncheck "all" sliders
+		cbAllMax.selectedProperty().addListener((observable, oldValue, newValue) -> {
+			if (updatingMasterControls || currentPreset == null)
+				return;
+			int value = (int) sldAllMax.getValue();
+			withMasterControlUpdate(() -> {
+				if (newValue.booleanValue())
 					cbAll.setSelected(false);
-					
-					sldAll.setDisable(true);
-					tfAll.setText((int) sldAll.getValue() + "%");
-					tfAll.setDisable(true);
-				}
-				
-				// Enable/Disable all SetSliderControls and override their min values with the one in sldAllMin
-				for (int i = 0; i < setSliderControls.size(); i++) {
-					SetSliderControl setSliderControl = setSliderControls.get(i);
-					setSliderControl.setAllMinSliderValue(v);
-					if (!cbAllMax.isSelected())
-						setSliderControl.setDisable(useAllMin);
-				}
-			}
+				refreshMasterControlState();
+			});
+			refreshRowDisableState();
+			submitBulkEdit(choice -> choice.withPercentageRange(choice.getPercentageMinimum(),
+					Math.max(value, choice.getPercentageMinimum())));
 		});
-		// Checkbox All Max
-		cbAllMax.selectedProperty().addListener(new ChangeListener<Boolean>() {
-			@Override
-			public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
-				SliderPreset preset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
-				if (preset == null)
-					return;
-				
-				int v = (int) sldAllMax.getValue();
-				
-				boolean useAllMax = cbAllMax.isSelected();
-				// Enable slider and text fields if cbAllMax is selected
-				sldAllMax.setDisable(!useAllMax);
-				tfAllMax.setText(v + "%");
-				tfAllMax.setDisable(!useAllMax);
-				
-				if (useAllMax) { // If selected, uncheck "all" sliders
-					cbAll.setSelected(false);
-					
-					sldAll.setDisable(true);
-					tfAll.setText((int) sldAll.getValue() + "%");
-					tfAll.setDisable(true);
-				}
-				
-				// Enable/Disable all SetSliderControls and override their min values with the one in sldAllMin
-				for (int i = 0; i < setSliderControls.size(); i++) {
-					SetSliderControl setSliderControl = setSliderControls.get(i);
-					setSliderControl.setAllMaxSliderValue(v);
-					if (!cbAllMin.isSelected())
-						setSliderControl.setDisable(useAllMax);
-				}
-			}
+
+		sldAll.valueProperty().addListener((observable, oldValue, newValue) -> {
+			int value = newValue.intValue();
+			tfAll.setText(value + "%");
+			if (updatingMasterControls || currentPreset == null || !cbAll.isSelected())
+				return;
+			withMasterControlUpdate(() -> {
+				sldAllMin.setValue(value);
+				sldAllMax.setValue(value);
+				tfAllMin.setText(value + "%");
+				tfAllMax.setText(value + "%");
+			});
+			submitBulkEdit(choice -> choice.withPercentageRange(value, value));
 		});
-		
-		// Slider All
-		sldAll.valueProperty().addListener(new ChangeListener<Number>() {
-			@Override
-			public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-				int v = newValue.intValue();
-				if (!cbAll.isSelected()) {
-					tfAll.setText(v + "%");
-					return;
-				}
-				
-				tfAll.setText(v + "%");
-				
-				for (int i = 0; i < setSliderControls.size(); i++) {
-					SetSliderControl setSliderControl = setSliderControls.get(i);
-					setSliderControl.setAllSliderValue(v);
-				}
-				
-				sldAllMin.setValue(v);
-				sldAllMax.setValue(v);
-			}
+
+		sldAllMin.valueProperty().addListener((observable, oldValue, newValue) -> {
+			int value = Math.min(newValue.intValue(), (int) sldAllMax.getValue());
+			tfAllMin.setText(value + "%");
+			if (updatingMasterControls || currentPreset == null || !cbAllMin.isSelected())
+				return;
+			if (value != newValue.intValue())
+				withMasterControlUpdate(() -> sldAllMin.setValue(value));
+			submitBulkEdit(choice -> choice.withPercentageRange(
+					Math.min(value, choice.getPercentageMaximum()), choice.getPercentageMaximum()));
 		});
-		// Slider All Min
-		sldAllMin.valueProperty().addListener(new ChangeListener<Number>() {
-			@Override
-			public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-				int v = newValue.intValue();
-				if (!cbAllMin.isSelected()) {
-					tfAllMin.setText(v + "%");
-					return;
-				}
-				
-				int vMax = (int) sldAllMax.getValue();
-				if (v > vMax) {
-					v = vMax;
-					sldAllMin.setValue(v);
-				}
-				tfAllMin.setText(v + "%");
-				
-				for (int i = 0; i < setSliderControls.size(); i++) {
-					SetSliderControl setSliderControl = setSliderControls.get(i);
-					setSliderControl.setAllMinSliderValue(v);
-				}
-			}
-		});
-		// Slider All Max
-		sldAllMax.valueProperty().addListener(new ChangeListener<Number>() {
-			@Override
-			public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-				int v = newValue.intValue();
-				if (!cbAllMax.isSelected()) {
-					tfAllMax.setText(v + "%");
-					return;
-				}
-				
-				int vMin = (int) sldAllMin.getValue();
-				if (v < vMin) {
-					v = vMin;
-					sldAllMax.setValue(v);
-				}
-				tfAllMax.setText(v + "%");
-				
-				for (int i = 0; i < setSliderControls.size(); i++) {
-					SetSliderControl setSliderControl = setSliderControls.get(i);
-					setSliderControl.setAllMaxSliderValue(v);
-				}
-			}
+
+		sldAllMax.valueProperty().addListener((observable, oldValue, newValue) -> {
+			int value = Math.max(newValue.intValue(), (int) sldAllMin.getValue());
+			tfAllMax.setText(value + "%");
+			if (updatingMasterControls || currentPreset == null || !cbAllMax.isSelected())
+				return;
+			if (value != newValue.intValue())
+				withMasterControlUpdate(() -> sldAllMax.setValue(value));
+			submitBulkEdit(choice -> choice.withPercentageRange(choice.getPercentageMinimum(),
+					Math.max(value, choice.getPercentageMinimum())));
 		});
 	}
-	
+
+	/** Pins the selected logical preset and renders rows from the latest immutable snapshot. */
 	private void onShown() {
-		SliderPreset preset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
-		if (preset == null)
+		SliderPreset selectedPreset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
+		if (selectedPreset == null)
 			return;
-		
-		stage.setTitle("SetSliders: " + preset.getName());
+
+		currentPreset = findPreset(main.projectPresentation.getSnapshot(), selectedPreset.getName());
+		if (currentPreset == null)
+			return;
+		stage.setTitle("SetSliders: " + currentPreset.getName());
 		btnBack.requestFocus();
-		
-		int defaultValue = 100;
-		
-		cbAll.setSelected(false);
-		tfAll.setText(defaultValue + "%");
-		tfAll.setDisable(true);
-		sldAll.setDisable(true);
-		sldAll.setValue(defaultValue);
+		resetMasterControls();
+		rebuildRows(currentPreset);
+	}
 
-		cbAllMin.setSelected(false);
-		tfAllMin.setText(defaultValue + "%");
-		tfAllMin.setDisable(true);
-		sldAllMin.setDisable(true);
-		sldAllMin.setValue(defaultValue);
+	/** Restores the master controls to their neutral defaults without publishing edits. */
+	private void resetMasterControls() {
+		withMasterControlUpdate(() -> {
+			int defaultValue = 100;
+			cbAll.setSelected(false);
+			cbAllMin.setSelected(false);
+			cbAllMax.setSelected(false);
+			sldAll.setValue(defaultValue);
+			sldAllMin.setValue(defaultValue);
+			sldAllMax.setValue(defaultValue);
+			tfAll.setText(defaultValue + "%");
+			tfAllMin.setText(defaultValue + "%");
+			tfAllMax.setText(defaultValue + "%");
+			refreshMasterControlState();
+		});
+		refreshRowDisableState();
+	}
 
-		cbAllMax.setSelected(false);
-		tfAllMax.setText(defaultValue + "%");
-		tfAllMax.setDisable(true);
-		sldAllMax.setDisable(true);
-		sldAllMax.setValue(defaultValue);
-		
+	/** Rebuilds row controls from one coherent preset snapshot. */
+	private void rebuildRows(SliderPresetSnapshot preset) {
 		setSliderControls.clear();
 		vbSetSlidersList.getChildren().clear();
-		
-		ArrayList<SetSlider> allSliders = preset.getAllSetSliders();
-		for (int i = 0; i < allSliders.size(); i++) {
-			SetSlider setSlider = allSliders.get(i);
-			SetSliderControl setSliderControl = new SetSliderControl(main, setSlider);
-			
-			vbSetSlidersList.getChildren().add(setSliderControl);
-			setSliderControls.add(setSliderControl);
+		for (SliderChoiceSnapshot choice : preset.getSliderChoices()) {
+			SetSliderControl control = new SetSliderControl(main, preset.getName(), preset.isUunp(), choice,
+					this::acceptPublishedPreset);
+			setSliderControls.add(control);
+			vbSetSlidersList.getChildren().add(control);
+		}
+		refreshRowDisableState();
+	}
+
+	/**
+	 * Keeps the next bulk edit based on the exact snapshot returned by a row edit,
+	 * or closes the popup when that snapshot no longer contains the pinned preset.
+	 */
+	private void acceptPublishedPreset(SliderPresetSnapshot publishedPreset) {
+		if (publishedPreset == null) {
+			currentPreset = null;
+			stage.hide();
+			return;
+		}
+		currentPreset = publishedPreset;
+	}
+
+	/**
+	 * Applies one complete preset replacement so a master gesture publishes no
+	 * intermediate per-row states.
+	 *
+	 * @param transform pure transformation applied to every latest choice value
+	 */
+	private void submitBulkEdit(UnaryOperator<SliderChoiceSnapshot> transform) {
+		if (currentPreset == null)
+			return;
+		List<SliderChoiceSnapshot> changedChoices = new ArrayList<>(currentPreset.getSliderChoices().size());
+		for (SliderChoiceSnapshot choice : currentPreset.getSliderChoices())
+			changedChoices.add(transform.apply(choice));
+		SliderPresetSnapshot replacement = new SliderPresetSnapshot(currentPreset.getName(), currentPreset.isUunp(),
+				changedChoices);
+		ProjectOutcome outcome = main.mainController.applyProjectEdit(
+				SliderPresetEdits.update(currentPreset.getName(), replacement));
+		synchronizeRows(outcome);
+	}
+
+	/** Re-renders every row from the exact preset carried by a bulk-edit outcome. */
+	private void synchronizeRows(ProjectOutcome outcome) {
+		SliderPresetSnapshot publishedPreset = findPreset(outcome.getSnapshot(), currentPreset.getName());
+		if (publishedPreset == null) {
+			currentPreset = null;
+			stage.hide();
+			return;
+		}
+		currentPreset = publishedPreset;
+		for (SetSliderControl control : setSliderControls) {
+			SliderChoiceSnapshot choice = findChoice(publishedPreset, control.getChoiceName());
+			if (choice != null)
+				control.render(choice, publishedPreset.isUunp());
 		}
 	}
-	
+
+	/** Updates row interactivity from the three mutually coordinated master modes. */
+	private void refreshRowDisableState() {
+		boolean disabled = cbAll.isSelected() || cbAllMin.isSelected() || cbAllMax.isSelected();
+		for (SetSliderControl control : setSliderControls)
+			control.setDisable(disabled);
+	}
+
+	/** Updates master slider/text enabled state without changing Project data. */
+	private void refreshMasterControlState() {
+		setMasterEnabled(sldAll, tfAll, cbAll.isSelected());
+		setMasterEnabled(sldAllMin, tfAllMin, cbAllMin.isSelected());
+		setMasterEnabled(sldAllMax, tfAllMax, cbAllMax.isSelected());
+	}
+
+	/** Applies one master enabled state to its slider and read-only percentage field. */
+	private static void setMasterEnabled(Slider slider, TextField textField, boolean enabled) {
+		slider.setDisable(!enabled);
+		textField.setDisable(!enabled);
+	}
+
+	/** Runs a presentation-only master update while suppressing recursive edits. */
+	private void withMasterControlUpdate(Runnable update) {
+		boolean wasUpdating = updatingMasterControls;
+		updatingMasterControls = true;
+		try {
+			update.run();
+		} finally {
+			updatingMasterControls = wasUpdating;
+		}
+	}
+
+	/** Resolves a logical preset from one immutable Project snapshot. */
+	private static SliderPresetSnapshot findPreset(ProjectSnapshot snapshot, String requestedName) {
+		for (SliderPresetSnapshot preset : snapshot.getSliderPresets()) {
+			if (preset.getName().equalsIgnoreCase(requestedName))
+				return preset;
+		}
+		return null;
+	}
+
+	/** Resolves a logical slider choice from one immutable preset snapshot. */
+	private static SliderChoiceSnapshot findChoice(SliderPresetSnapshot preset, String requestedName) {
+		for (SliderChoiceSnapshot choice : preset.getSliderChoices()) {
+			if (choice.getName().equalsIgnoreCase(requestedName))
+				return choice;
+		}
+		return null;
+	}
+
+	/** Hides the modal popup without changing its already-published Project state. */
 	@FXML
 	private void hide() {
 		stage.hide();
 	}
-	
+
+	/** Sets every choice range to zero in one Project edit. */
 	@FXML
 	private void zeroAll() {
-		if (main.mainController.lvPresets.getSelectionModel().getSelectedItem() == null)
-			return;
-		
-		sldAll.setValue(0);
-		sldAllMin.setValue(0);
-		sldAllMax.setValue(0);
-		
-		for (int i = 0; i < setSliderControls.size(); i++) {
-			SetSliderControl setSliderControl = setSliderControls.get(i);
-			setSliderControl.setAllSliderValue(0);
-		}
+		setAllValue(0);
 	}
-	
+
+	/** Sets every choice range to fifty percent in one Project edit. */
 	@FXML
 	private void fiftyAll() {
-		if (main.mainController.lvPresets.getSelectionModel().getSelectedItem() == null)
-			return;
-		
-		sldAll.setValue(50);
-		sldAllMin.setValue(50);
-		sldAllMax.setValue(50);
-		
-		for (int i = 0; i < setSliderControls.size(); i++) {
-			SetSliderControl setSliderControl = setSliderControls.get(i);
-			setSliderControl.setAllSliderValue(50);
-		}
+		setAllValue(50);
 	}
-	
+
+	/** Sets every choice range to one hundred percent in one Project edit. */
 	@FXML
 	private void hundredAll() {
-		if (main.mainController.lvPresets.getSelectionModel().getSelectedItem() == null)
-			return;
-		
-		sldAll.setValue(100);
-		sldAllMin.setValue(100);
-		sldAllMax.setValue(100);
-		
-		for (int i = 0; i < setSliderControls.size(); i++) {
-			SetSliderControl setSliderControl = setSliderControls.get(i);
-			setSliderControl.setAllSliderValue(100);
-		}
+		setAllValue(100);
 	}
-	
+
+	/** Updates both master displays and atomically applies one exact range value. */
+	private void setAllValue(int value) {
+		if (currentPreset == null)
+			return;
+		withMasterControlUpdate(() -> {
+			sldAll.setValue(value);
+			sldAllMin.setValue(value);
+			sldAllMax.setValue(value);
+			tfAll.setText(value + "%");
+			tfAllMin.setText(value + "%");
+			tfAllMax.setText(value + "%");
+		});
+		submitBulkEdit(choice -> choice.withPercentageRange(value, value));
+	}
+
+	/** Sets every choice minimum to zero, clamped by its latest maximum. */
 	@FXML
 	private void zeroAllMin() {
-		if (main.mainController.lvPresets.getSelectionModel().getSelectedItem() == null)
-			return;
-		
-		sldAllMin.setValue(0);
-		
-		for (int i = 0; i < setSliderControls.size(); i++) {
-			SetSliderControl setSliderControl = setSliderControls.get(i);
-			setSliderControl.setAllMinSliderValue(0);
-		}
+		setAllMinimum(0);
 	}
-	
+
+	/** Sets every choice minimum to fifty percent, clamped by its latest maximum. */
 	@FXML
 	private void fiftyAllMin() {
-		if (main.mainController.lvPresets.getSelectionModel().getSelectedItem() == null)
-			return;
-		
-		sldAllMin.setValue(50);
-		
-		for (int i = 0; i < setSliderControls.size(); i++) {
-			SetSliderControl setSliderControl = setSliderControls.get(i);
-			setSliderControl.setAllMinSliderValue(50);
-		}
+		setAllMinimum(50);
 	}
-	
+
+	/** Sets every choice minimum to one hundred percent, clamped by its latest maximum. */
 	@FXML
 	private void hundredAllMin() {
-		if (main.mainController.lvPresets.getSelectionModel().getSelectedItem() == null)
-			return;
-		
-		sldAllMin.setValue(100);
-		
-		for (int i = 0; i < setSliderControls.size(); i++) {
-			SetSliderControl setSliderControl = setSliderControls.get(i);
-			setSliderControl.setAllMinSliderValue(100);
-		}
+		setAllMinimum(100);
 	}
-	
+
+	/** Updates the minimum master display and applies one row-clamped bulk edit. */
+	private void setAllMinimum(int value) {
+		if (currentPreset == null)
+			return;
+		withMasterControlUpdate(() -> {
+			sldAllMin.setValue(value);
+			tfAllMin.setText(value + "%");
+		});
+		submitBulkEdit(choice -> choice.withPercentageRange(
+				Math.min(value, choice.getPercentageMaximum()), choice.getPercentageMaximum()));
+	}
+
+	/** Sets every choice maximum to zero, clamped by its latest minimum. */
 	@FXML
 	private void zeroAllMax() {
-		if (main.mainController.lvPresets.getSelectionModel().getSelectedItem() == null)
-			return;
-		
-		sldAllMax.setValue(0);
-		
-		for (int i = 0; i < setSliderControls.size(); i++) {
-			SetSliderControl setSliderControl = setSliderControls.get(i);
-			setSliderControl.setAllMaxSliderValue(0);
-		}
+		setAllMaximum(0);
 	}
-	
+
+	/** Sets every choice maximum to fifty percent, clamped by its latest minimum. */
 	@FXML
 	private void fiftyAllMax() {
-		if (main.mainController.lvPresets.getSelectionModel().getSelectedItem() == null)
-			return;
-		
-		sldAllMax.setValue(50);
-		
-		for (int i = 0; i < setSliderControls.size(); i++) {
-			SetSliderControl setSliderControl = setSliderControls.get(i);
-			setSliderControl.setAllMaxSliderValue(50);
-		}
+		setAllMaximum(50);
 	}
-	
+
+	/** Sets every choice maximum to one hundred percent, clamped by its latest minimum. */
 	@FXML
 	private void hundredAllMax() {
-		if (main.mainController.lvPresets.getSelectionModel().getSelectedItem() == null)
+		setAllMaximum(100);
+	}
+
+	/** Updates the maximum master display and applies one row-clamped bulk edit. */
+	private void setAllMaximum(int value) {
+		if (currentPreset == null)
 			return;
-		
-		sldAllMax.setValue(100);
-		
-		for (int i = 0; i < setSliderControls.size(); i++) {
-			SetSliderControl setSliderControl = setSliderControls.get(i);
-			setSliderControl.setAllMaxSliderValue(100);
-		}
+		withMasterControlUpdate(() -> {
+			sldAllMax.setValue(value);
+			tfAllMax.setText(value + "%");
+		});
+		submitBulkEdit(choice -> choice.withPercentageRange(choice.getPercentageMinimum(),
+				Math.max(value, choice.getPercentageMinimum())));
 	}
 }

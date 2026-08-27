@@ -55,14 +55,13 @@ public class Main extends Application {
 	
 	/**
 	 * Initializes legacy settings plus the authoritative ProjectSession and renders
-	 * its initial untitled snapshot into the transitional JavaFX read model.
+	 * its initial untitled snapshot into the JavaFX read model.
 	 */
 	public Main() {
 		initSuccess = Settings.init();
 		projectSession = ProjectSessions.create();
 		ProjectOutcome initialProject = projectSession.newProject();
-		projectPresentation = new ProjectPresentation(appName, initialProject.getSnapshot(), data.sliderPresets,
-				data.customMorphTargets, data.morphedNpcs);
+		projectPresentation = new ProjectPresentation(appName, initialProject.getSnapshot());
 	}
 	
 	@Override

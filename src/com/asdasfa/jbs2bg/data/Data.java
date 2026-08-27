@@ -2,7 +2,6 @@ package com.asdasfa.jbs2bg.data;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Comparator;
 import java.util.prefs.Preferences;
 
 import org.apache.commons.io.FileUtils;
@@ -18,11 +17,7 @@ import javafx.collections.ObservableList;
  */
 public class Data {
 	
-	public final ObservableList<SliderPreset> sliderPresets = FXCollections.observableArrayList();
 	public final ObservableList<NPC> npcDatabase = FXCollections.observableArrayList();
-	
-	public final ObservableList<CustomMorphTarget> customMorphTargets = FXCollections.observableArrayList();
-	public final ObservableList<NPC> morphedNpcs = FXCollections.observableArrayList();
     
 	public File homeDir;
 	
@@ -53,36 +48,6 @@ public class Data {
 		}
 		
 	}
-	
-	public boolean sliderPresetExists(SliderPreset sliderPreset) {
-		for (int i = 0; i < sliderPresets.size(); i++) {
-			if (sliderPresets.get(i).getName().equalsIgnoreCase(sliderPreset.getName()))
-				return true;
-		}
-		return false;
-	}
-	
-	public void sortPresets() {
-		if (sliderPresets.size() > 0)
-			FXCollections.sort(sliderPresets, comparatorSliderPreset);
-	}
-	private Comparator<? super SliderPreset> comparatorSliderPreset = new Comparator<SliderPreset>() {
-        @Override
-        public int compare(SliderPreset sp1, SliderPreset sp2) {
-            return sp1.getName().compareToIgnoreCase(sp2.getName());
-        }
-    };
-    
-    public void sortCustomMorphTargets() {
-		if (customMorphTargets.size() > 0)
-			FXCollections.sort(customMorphTargets, comparatorCustomMorphTarget);
-	}
-	private Comparator<? super CustomMorphTarget> comparatorCustomMorphTarget = new Comparator<CustomMorphTarget>() {
-        @Override
-        public int compare(CustomMorphTarget cmt1, CustomMorphTarget cmt2) {
-            return cmt1.getName().compareToIgnoreCase(cmt2.getName());
-        }
-    };
 	
 	public void parseNpcFile(File file) {
 		try {

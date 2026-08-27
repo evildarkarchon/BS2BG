@@ -26,15 +26,18 @@ import javafx.collections.ObservableList;
 
 /**
  * Presentation-owned read model rendered exclusively from immutable
- * ProjectSession snapshots. The legacy JavaFX controllers consume its observable
- * projections while their edit routes are migrated separately.
+ * ProjectSession snapshots. JavaFX controllers observe these projections but
+ * submit all changes back through the session edit seam.
  */
 public final class ProjectPresentation {
 
     private final String applicationName;
     private final ObservableList<SliderPreset> mutableSliderPresets;
+    private final ObservableList<SliderPreset> sliderPresets;
     private final ObservableList<CustomMorphTarget> mutableCustomMorphTargets;
+    private final ObservableList<CustomMorphTarget> customMorphTargets;
     private final ObservableList<NPC> mutableNpcMorphAssignments;
+    private final ObservableList<NPC> npcMorphAssignments;
     private ProjectSnapshot snapshot;
 
     /**
@@ -46,30 +49,13 @@ public final class ProjectPresentation {
      * @throws IllegalArgumentException when the application name is blank
      */
     public ProjectPresentation(String applicationName, ProjectSnapshot initialSnapshot) {
-        this(applicationName, initialSnapshot, FXCollections.<SliderPreset>observableArrayList(),
-                FXCollections.<CustomMorphTarget>observableArrayList(), FXCollections.<NPC>observableArrayList());
-    }
-
-    /**
-     * Creates a presentation renderer over existing JavaFX projection lists so
-     * lifecycle migration can preserve legacy view bindings until edit routes are
-     * migrated.
-     *
-     * @param applicationName base application title
-     * @param initialSnapshot initial immutable Project state
-     * @param sliderPresets existing Slider Preset projection list
-     * @param customMorphTargets existing Custom Morph Target projection list
-     * @param npcMorphAssignments existing NPC Morph Assignment projection list
-     * @throws NullPointerException when an argument is null
-     * @throws IllegalArgumentException when the application name is blank
-     */
-    public ProjectPresentation(String applicationName, ProjectSnapshot initialSnapshot,
-            ObservableList<SliderPreset> sliderPresets, ObservableList<CustomMorphTarget> customMorphTargets,
-            ObservableList<NPC> npcMorphAssignments) {
         this.applicationName = requireApplicationName(applicationName);
-        this.mutableSliderPresets = Objects.requireNonNull(sliderPresets, "sliderPresets");
-        this.mutableCustomMorphTargets = Objects.requireNonNull(customMorphTargets, "customMorphTargets");
-        this.mutableNpcMorphAssignments = Objects.requireNonNull(npcMorphAssignments, "npcMorphAssignments");
+        this.mutableSliderPresets = FXCollections.observableArrayList();
+        this.sliderPresets = FXCollections.unmodifiableObservableList(mutableSliderPresets);
+        this.mutableCustomMorphTargets = FXCollections.observableArrayList();
+        this.customMorphTargets = FXCollections.unmodifiableObservableList(mutableCustomMorphTargets);
+        this.mutableNpcMorphAssignments = FXCollections.observableArrayList();
+        this.npcMorphAssignments = FXCollections.unmodifiableObservableList(mutableNpcMorphAssignments);
         renderSnapshot(Objects.requireNonNull(initialSnapshot, "initialSnapshot"));
     }
 
@@ -95,17 +81,17 @@ public final class ProjectPresentation {
 
     /** @return the observable Slider Preset projection */
     public ObservableList<SliderPreset> getSliderPresets() {
-        return mutableSliderPresets;
+        return sliderPresets;
     }
 
     /** @return the observable Custom Morph Target projection */
     public ObservableList<CustomMorphTarget> getCustomMorphTargets() {
-        return mutableCustomMorphTargets;
+        return customMorphTargets;
     }
 
     /** @return the observable NPC Morph Assignment projection */
     public ObservableList<NPC> getNpcMorphAssignments() {
-        return mutableNpcMorphAssignments;
+        return npcMorphAssignments;
     }
 
     /**
@@ -131,7 +117,7 @@ public final class ProjectPresentation {
 
     /**
      * Builds all converted values before publication. The controller disconnects
-     * view bindings while these three transitional observable lists are replaced.
+     * view bindings while the three presentation-owned observable lists are replaced.
      */
     private void renderSnapshot(ProjectSnapshot nextSnapshot) {
         if (nextSnapshot == snapshot)

@@ -3,10 +3,11 @@ package com.asdasfa.jbs2bg;
 import java.net.URL;
 import java.util.ResourceBundle;
 
-import com.asdasfa.jbs2bg.data.MorphTarget;
 import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.project.ChangedOutcome;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.ListCell;
@@ -86,31 +87,44 @@ public class PopupSliderPresetsController extends CustomController {
 		lvPresets.setItems(null);
 	}
 	
+	/**
+	 * Assigns the selected Slider Preset to the currently selected Project target
+	 * through one explicit Project edit.
+	 */
 	@FXML
 	private void addPresetToTarget() {
 		SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
 		if (preset == null)
 			return;
 		
-		MorphTarget target = main.mainController.getCurrentTarget();
-		if (target != null) {
-			target.addSliderPreset(preset);
-			target.sortPresets();
-			
-			int index = main.mainController.lvTargetPresets.getItems().indexOf(preset);
-			main.mainController.lvTargetPresets.getSelectionModel().select(index);
-			main.mainController.lvTargetPresets.getFocusModel().focus(index);
-			
-			boolean indexVisible = MyUtils.isIndexVisible(main.mainController.lvTargetPresets, index);
-			if (!indexVisible)
-				main.mainController.lvTargetPresets.scrollTo(index);
-			
-			main.mainController.updatePresetCounter();
-			
-			main.mainController.markChanged();
-		}
+		String presetName = preset.getName();
+		ProjectOutcome outcome = main.mainController.addSliderPresetToCurrentTarget(presetName);
+		if (outcome instanceof ChangedOutcome)
+			selectTargetPreset(presetName);
 		
 		lvPresets.requestFocus();
+	}
+
+	/**
+	 * Restores navigation to an assigned Slider Preset after a changed snapshot
+	 * rebuilds the selected target's presentation list.
+	 *
+	 * @param presetName canonical assigned Slider Preset name
+	 */
+	private void selectTargetPreset(String presetName) {
+		if (main.mainController.lvTargetPresets.getItems() == null)
+			return;
+		for (SliderPreset targetPreset : main.mainController.lvTargetPresets.getItems()) {
+			if (targetPreset.getName().equalsIgnoreCase(presetName)) {
+				int index = main.mainController.lvTargetPresets.getItems().indexOf(targetPreset);
+				main.mainController.lvTargetPresets.getSelectionModel().select(index);
+				main.mainController.lvTargetPresets.getFocusModel().focus(index);
+				boolean indexVisible = MyUtils.isIndexVisible(main.mainController.lvTargetPresets, index);
+				if (!indexVisible)
+					main.mainController.lvTargetPresets.scrollTo(index);
+				return;
+			}
+		}
 	}
 	
 	@FXML

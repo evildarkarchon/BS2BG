@@ -1,12 +1,17 @@
 package com.asdasfa.jbs2bg;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.function.Consumer;
 
-import com.asdasfa.jbs2bg.data.SliderPreset.SetSlider;
+import com.asdasfa.jbs2bg.data.Settings;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.ProjectSnapshot;
+import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
+import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
-import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.CheckBox;
@@ -17,14 +22,21 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.VBox;
 
 /**
- * 
+ * JavaFX editor for one immutable Slider Preset choice. User changes are sent
+ * through {@link com.asdasfa.jbs2bg.project.ProjectSession}; this control never
+ * mutates the legacy presentation-domain objects it renders.
+ *
  * @author Totiman
  */
 public class SetSliderControl extends VBox {
-	
-	private Main main;
-	private SetSlider setSlider;
-	
+
+	private final Main main;
+	private final String presetName;
+	private final Consumer<SliderPresetSnapshot> publishedPresetConsumer;
+	private SliderChoiceSnapshot draft;
+	private boolean uunp;
+	private boolean updatingControls;
+
 	@FXML
 	public CheckBox cbEnabled;
 	@FXML
@@ -37,227 +49,191 @@ public class SetSliderControl extends VBox {
 	public Slider sldMin;
 	@FXML
 	public Slider sldMax;
-	
-	private MyChangeListener mclMin;
-	private MyChangeListener mclMax;
-	
-	public SetSliderControl(Main main, SetSlider setSlider) {
+
+	/**
+	 * Creates a row bound to one logical preset and choice. The consumer receives
+	 * the exact preset snapshot returned by each completed single-row edit so the
+	 * owning popup can keep its bulk-edit base coherent.
+	 *
+	 * @param main application composition root
+	 * @param presetName stable logical preset name targeted by row edits
+	 * @param uunp whether UUNP output rules format this choice
+	 * @param choice immutable choice value to render
+	 * @param publishedPresetConsumer receives the preset from each returned snapshot,
+	 *        or {@code null} when the logical preset no longer exists
+	 * @throws RuntimeException when the FXML control cannot be loaded
+	 */
+	public SetSliderControl(Main main, String presetName, boolean uunp, SliderChoiceSnapshot choice,
+			Consumer<SliderPresetSnapshot> publishedPresetConsumer) {
 		this.main = main;
-		this.setSlider = setSlider;
-		
+		this.presetName = presetName;
+		this.uunp = uunp;
+		this.draft = choice;
+		this.publishedPresetConsumer = publishedPresetConsumer;
+
 		FXMLLoader loader = new FXMLLoader(getClass().getResource("setslider_control.fxml"));
 		loader.setRoot(this);
 		loader.setController(this);
-		
+
 		try {
 			loader.load();
 			getStylesheets().add(main.style);
 			setPrefWidth(320);
 			setPrefHeight(140);
-			
-			tfBgFormat.setText(setSlider.toText());
-			sldMin.setValue(setSlider.getPctMin());
-			sldMax.setValue(setSlider.getPctMax());
-			tfMin.setText(setSlider.getPctMin() + "%");
-			tfMax.setText(setSlider.getPctMax() + "%");
-			
-			mclMin = new MyChangeListener() {
-				@Override
-				protected void doChanged(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-					int v = newValue.intValue();
-					int vMax = (int) sldMax.getValue();
-					if (v > vMax) {
-						v = vMax;
-						sldMin.setValue(v);
-					}
-					setSlider.setPctMin(v);
-					
-					tfBgFormat.setText(setSlider.toText());
-					String value = "" + v + "%";
-					tfMin.setText(value);
-					
-					// Instant update template text
-					main.mainController.updateTemplateText();
-					
-					main.mainController.markChanged();
-				}
-			};
-			
-			mclMax = new MyChangeListener() {
-				@Override
-				protected void doChanged(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-					int v = newValue.intValue();
-					int vMin = (int) sldMin.getValue();
-					if (v < vMin) {
-						v = vMin;
-						sldMax.setValue(v);
-					}
-					setSlider.setPctMax(v);
-					
-					tfBgFormat.setText(setSlider.toText());
-					String value = "" + v + "%";
-					tfMax.setText(value);
-					
-					// Instant update template text
-					main.mainController.updateTemplateText();
-					
-					main.mainController.markChanged();
-				}
-			};
-			
-			// For when sliding
-			sldMin.valueProperty().addListener(mclMin);
-			sldMax.valueProperty().addListener(mclMax);
-			
-			// For just clicking instead of dragging
-			/*sldMin.setOnMouseReleased(e -> {
-				if (!sldMin.isValueChanging())
-					main.mainController.updateTemplateText();
-			});
-			sldMax.setOnMouseReleased(e -> {
-				if (!sldMax.isValueChanging())
-					main.mainController.updateTemplateText();
-			});*/
-			
-			// For after dragging, update text area information
-			/*sldMin.valueChangingProperty().addListener(new ChangeListener<Boolean>() {
-				@Override
-				public void changed(ObservableValue<? extends Boolean> observable, Boolean wasChanging, Boolean changing) {
-					if (!changing)
-						main.mainController.updateTemplateText();
-				}
-			});
-			sldMax.valueChangingProperty().addListener(new ChangeListener<Boolean>() {
-				@Override
-				public void changed(ObservableValue<? extends Boolean> observable, Boolean wasChanging, Boolean changing) {
-					if (!changing)
-						main.mainController.updateTemplateText();
-				}
-			});*/
-			
-			// For when using the arrow keys for sliding and also, consume other keys,
-			// to prevent it from clashing with the scroll pane
-			sldMin.addEventFilter(KeyEvent.ANY, new EventHandler<KeyEvent>() {
-				@Override
-				public void handle(KeyEvent keyEvent) {
-					if (keyEvent.getCode() == KeyCode.LEFT || keyEvent.getCode() == KeyCode.RIGHT) {
-						main.mainController.updateTemplateText();
-					} else {
-						if (keyEvent.getCode() == KeyCode.PAGE_DOWN || keyEvent.getCode() == KeyCode.PAGE_UP
-						|| keyEvent.getCode() == KeyCode.HOME || keyEvent.getCode() == KeyCode.END)
-							keyEvent.consume();
-					}
-				}
-			});
-			sldMax.addEventFilter(KeyEvent.ANY, new EventHandler<KeyEvent>() {
-				@Override
-				public void handle(KeyEvent keyEvent) {
-					if (keyEvent.getCode() == KeyCode.LEFT || keyEvent.getCode() == KeyCode.RIGHT) {
-						main.mainController.updateTemplateText();
-					} else {
-						if (keyEvent.getCode() == KeyCode.PAGE_DOWN || keyEvent.getCode() == KeyCode.PAGE_UP
-						|| keyEvent.getCode() == KeyCode.HOME || keyEvent.getCode() == KeyCode.END)
-							keyEvent.consume();
-					}
-				}
-			});
-			
-			cbEnabled.setSelected(setSlider.isEnabled());
-			cbEnabled.selectedProperty().addListener(new ChangeListener<Boolean>() {
-				@Override
-				public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
-					if (setSlider.isEnabled() != cbEnabled.isSelected()) {
-						setSlider.setEnabled(cbEnabled.isSelected());
-						main.mainController.updateTemplateText();
-						main.mainController.markChanged();
-					}
-				}
-			});
+			render(choice, uunp);
+			installEditListeners();
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
 	}
-	
-	private abstract class MyChangeListener implements ChangeListener<Number> {
-		public boolean active = true;
-		
-		public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-			if (active)
-				doChanged(observable, oldValue, newValue);
-		}
-		
-		protected abstract void doChanged(ObservableValue<? extends Number> observable, Number oldValue, Number newValue);
-	}
-	
-	public void setAllSliderValue(int value) {
-		mclMin.active = false;
-		mclMax.active = false;
 
-		sldMin.setValue(value);
-		sldMax.setValue(value);
+	/** Installs listeners that translate row gestures into one explicit Project edit. */
+	private void installEditListeners() {
+		sldMin.valueProperty().addListener((observable, oldValue, newValue) -> {
+			if (updatingControls)
+				return;
+			int rawMinimum = newValue.intValue();
+			int requestedMinimum = Math.min(rawMinimum, draft.getPercentageMaximum());
+			if (requestedMinimum != draft.getPercentageMinimum())
+				submitChoice(draft.withPercentageRange(requestedMinimum, draft.getPercentageMaximum()));
+			else {
+				tfMin.setText(requestedMinimum + "%");
+				if (rawMinimum != requestedMinimum)
+					setSliderValueWithoutEdit(sldMin, requestedMinimum);
+			}
+		});
 
-		setSlider.setPctMin(value);
-		setSlider.setPctMax(value);
+		sldMax.valueProperty().addListener((observable, oldValue, newValue) -> {
+			if (updatingControls)
+				return;
+			int rawMaximum = newValue.intValue();
+			int requestedMaximum = Math.max(rawMaximum, draft.getPercentageMinimum());
+			if (requestedMaximum != draft.getPercentageMaximum())
+				submitChoice(draft.withPercentageRange(draft.getPercentageMinimum(), requestedMaximum));
+			else {
+				tfMax.setText(requestedMaximum + "%");
+				if (rawMaximum != requestedMaximum)
+					setSliderValueWithoutEdit(sldMax, requestedMaximum);
+			}
+		});
 
-		tfBgFormat.setText(setSlider.toText());
+		cbEnabled.selectedProperty().addListener((observable, oldValue, newValue) -> {
+			if (!updatingControls && draft.isEnabled() != newValue.booleanValue())
+				submitChoice(draft.withEnabled(newValue.booleanValue()));
+		});
 
-		String v = "" + value + "%";
-		tfMin.setText(v);
-
-		v = "" + value + "%";
-		tfMax.setText(v);
-
-		main.mainController.updateTemplateText();
-
-		mclMin.active = true;
-		mclMax.active = true;
-		
-		main.mainController.markChanged();
-	}
-
-	public void setAllMinSliderValue(int value) {
-		mclMin.active = false;
-
-		int vMax = (int) sldMax.getValue();
-		if (value > vMax) {
-			value = vMax;
-		}
-		sldMin.setValue(value);
-
-		setSlider.setPctMin(value);
-
-		tfBgFormat.setText(setSlider.toText());
-
-		String v = "" + value + "%";
-		tfMin.setText(v);
-
-		main.mainController.updateTemplateText();
-
-		mclMin.active = true;
-		
-		main.mainController.markChanged();
+		// Page/Home/End would also scroll the containing pane, so keep those keys local.
+		sldMin.addEventFilter(KeyEvent.ANY, this::consumeScrollingSliderKey);
+		sldMax.addEventFilter(KeyEvent.ANY, this::consumeScrollingSliderKey);
 	}
 
-	public void setAllMaxSliderValue(int value) {
-		mclMax.active = false;
+	/** Consumes slider navigation keys that otherwise conflict with popup scrolling. */
+	private void consumeScrollingSliderKey(KeyEvent keyEvent) {
+		KeyCode code = keyEvent.getCode();
+		if (code == KeyCode.PAGE_DOWN || code == KeyCode.PAGE_UP || code == KeyCode.HOME || code == KeyCode.END)
+			keyEvent.consume();
+	}
 
-		int vMin = (int) sldMin.getValue();
-		if (value < vMin) {
-			value = vMin;
+	/** Restores a clamped slider thumb without recursively submitting another edit. */
+	private void setSliderValueWithoutEdit(Slider slider, int value) {
+		updatingControls = true;
+		try {
+			slider.setValue(value);
+		} finally {
+			updatingControls = false;
 		}
-		sldMax.setValue(value);
+	}
 
-		setSlider.setPctMax(value);
+	/**
+	 * Applies one complete immutable choice and then re-renders from the exact
+	 * snapshot returned by the session, including rejected and unchanged outcomes.
+	 *
+	 * @param requestedChoice complete requested choice value
+	 */
+	private void submitChoice(SliderChoiceSnapshot requestedChoice) {
+		ProjectOutcome outcome = main.mainController.applyProjectEdit(
+				SliderPresetEdits.setSliderChoice(presetName, requestedChoice));
+		SliderPresetSnapshot publishedPreset = findPreset(outcome.getSnapshot(), presetName);
+		if (publishedPreset == null) {
+			publishedPresetConsumer.accept(null);
+			return;
+		}
 
-		tfBgFormat.setText(setSlider.toText());
+		SliderChoiceSnapshot publishedChoice = findChoice(publishedPreset, requestedChoice.getName());
+		if (publishedChoice != null)
+			render(publishedChoice, publishedPreset.isUunp());
+		publishedPresetConsumer.accept(publishedPreset);
+	}
 
-		String v = "" + value + "%";
-		tfMax.setText(v);
+	/**
+	 * Renders a session-published value without recursively submitting JavaFX
+	 * property changes as new edits.
+	 *
+	 * @param choice immutable choice to display
+	 * @param requestedUunp whether UUNP formatting rules apply
+	 */
+	public void render(SliderChoiceSnapshot choice, boolean requestedUunp) {
+		updatingControls = true;
+		try {
+			draft = choice;
+			uunp = requestedUunp;
+			cbEnabled.setSelected(choice.isEnabled());
+			sldMin.setValue(choice.getPercentageMinimum());
+			sldMax.setValue(choice.getPercentageMaximum());
+			tfMin.setText(choice.getPercentageMinimum() + "%");
+			tfMax.setText(choice.getPercentageMaximum() + "%");
+			tfBgFormat.setText(formatChoice(choice, requestedUunp));
+		} finally {
+			updatingControls = false;
+		}
+	}
 
-		main.mainController.updateTemplateText();
+	/** @return the stable slider-choice name rendered by this row */
+	public String getChoiceName() {
+		return draft.getName();
+	}
 
-		mclMax.active = true;
-		
-		main.mainController.markChanged();
+	/** Resolves a logical preset from one coherent returned Project snapshot. */
+	private static SliderPresetSnapshot findPreset(ProjectSnapshot snapshot, String requestedName) {
+		for (SliderPresetSnapshot preset : snapshot.getSliderPresets()) {
+			if (preset.getName().equalsIgnoreCase(requestedName))
+				return preset;
+		}
+		return null;
+	}
+
+	/** Resolves a logical choice from an immutable preset snapshot. */
+	private static SliderChoiceSnapshot findChoice(SliderPresetSnapshot preset, String requestedName) {
+		for (SliderChoiceSnapshot choice : preset.getSliderChoices()) {
+			if (choice.getName().equalsIgnoreCase(requestedName))
+				return choice;
+		}
+		return null;
+	}
+
+	/** Formats the BodyGen choice text directly from immutable effective values. */
+	private static String formatChoice(SliderChoiceSnapshot choice, boolean uunp) {
+		float small = choice.getEffectiveSmallValue() * 0.01f;
+		float big = choice.getEffectiveBigValue() * 0.01f;
+		boolean inverted = uunp ? Settings.isInvertedUUNP(choice.getName()) : Settings.isInverted(choice.getName());
+		float multiplier = uunp ? Settings.getMultiplierUUNP(choice.getName()) : Settings.getMultiplier(choice.getName());
+		if (inverted) {
+			small = 1f - small;
+			big = 1f - big;
+		}
+
+		float difference = big - small;
+		float minimum = small + difference * (choice.getPercentageMinimum() * 0.01f);
+		float maximum = small + difference * (choice.getPercentageMaximum() * 0.01f);
+		minimum = roundToTwoDecimals(minimum * multiplier);
+		maximum = roundToTwoDecimals(maximum * multiplier);
+		if (minimum != maximum)
+			return choice.getName() + "@" + minimum + ":" + maximum;
+		return choice.getName() + "@" + maximum;
+	}
+
+	/** Rounds output exactly as the legacy SetSlider formatter did. */
+	private static float roundToTwoDecimals(float value) {
+		return new BigDecimal(Float.toString(value)).setScale(2, RoundingMode.HALF_UP).floatValue();
 	}
 }

@@ -23,9 +23,15 @@ import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
 import com.asdasfa.jbs2bg.presentation.ProjectPresentationUpdate;
+import com.asdasfa.jbs2bg.project.ChangedOutcome;
+import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
+import com.asdasfa.jbs2bg.project.ProjectEdit;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.RejectedOutcome;
+import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
 
 import javafx.application.Platform;
@@ -241,6 +247,7 @@ public class MainController extends CustomController {
 		
 		cbUUNP.setDisable(true);
 		cbUUNP.selectedProperty().addListener(new ChangeListener<Boolean>() {
+			/** Publishes a UUNP toggle as one Slider Preset edit. */
 			@Override
 			public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
 				SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
@@ -248,10 +255,7 @@ public class MainController extends CustomController {
 					return;
 				
 				if (preset.isUUNP() != cbUUNP.isSelected()) { // Only mark changed if toggled
-					preset.setIsUUNP(cbUUNP.isSelected());
-					
-					updateTemplateText();
-					markChanged();
+					applyProjectEdit(SliderPresetEdits.setUunp(preset.getName(), cbUUNP.isSelected()));
 					
 					lvPresets.requestFocus();
 				}
@@ -301,15 +305,6 @@ public class MainController extends CustomController {
 		stage.getScene().cursorProperty().bind(Bindings.when(mainPane.disabledProperty()).then(Cursor.WAIT).otherwise(Cursor.DEFAULT));
 	}
 	
-	/**
-	 * Invalidates generated presentation output for edit routes that are migrated
-	 * by the follow-up Project-edit workflow. Dirty state and titles are no longer
-	 * inferred here.
-	 */
-	protected void markChanged() {
-		invalidateGeneratedOutput();
-	}
-
 	/** Clears every generated Project-derived output cache owned by presentation. */
 	private void invalidateGeneratedOutput() {
 		taTemplate.clear();
@@ -523,15 +518,31 @@ public class MainController extends CustomController {
 	 * @return the rendered outcome for typed callback decisions
 	 */
 	private ProjectOutcome renderProjectOutcome(ProjectOutcome outcome) {
+		SliderPreset selectedPreset = lvPresets.getSelectionModel().getSelectedItem();
+		String selectedPresetName = selectedPreset == null ? null : selectedPreset.getName();
+		CustomMorphTarget selectedCustomTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		String selectedCustomTargetName = selectedCustomTarget == null ? null : selectedCustomTarget.getName();
+		NPC selectedNpc = tvNpc.getSelectionModel().getSelectedItem();
+		NpcMorphAssignmentIdentity selectedNpcIdentity = identityOf(selectedNpc);
+		SliderPreset selectedTargetPreset = lvTargetPresets.getSelectionModel().getSelectedItem();
+		String selectedTargetPresetName = selectedTargetPreset == null ? null : selectedTargetPreset.getName();
 		boolean replacesProjection = outcome.getSnapshot() != main.projectPresentation.getSnapshot();
 		if (replacesProjection)
 			disconnectViews();
 		ProjectPresentationUpdate update = main.projectPresentation.render(outcome);
-		if (replacesProjection)
-			connectViews();
-		stage.setTitle(main.projectPresentation.getWindowTitle());
+		// Generated text must be cleared before selection listeners recreate the
+		// selected preview from the newly returned snapshot.
 		if (update.invalidatesGeneratedOutput())
 			invalidateGeneratedOutput();
+		if (replacesProjection)
+			connectViews();
+		selectSliderPreset(selectedPresetName);
+		if (selectedCustomTargetName != null)
+			selectCustomTarget(selectedCustomTargetName);
+		else if (selectedNpcIdentity != null)
+			selectNpc(selectedNpcIdentity);
+		selectTargetPreset(selectedTargetPresetName);
+		stage.setTitle(main.projectPresentation.getWindowTitle());
 		if (update.hasDiagnostics()) {
 			if (update.hasErrorDiagnostics())
 				notif.showError(update.getDiagnosticText());
@@ -541,6 +552,102 @@ public class MainController extends CustomController {
 		updateNpcCounter();
 		updatePresetCounter();
 		return outcome;
+	}
+
+	/**
+	 * Applies one validated Project edit and renders exactly its returned snapshot.
+	 *
+	 * @param edit immutable user action to validate and publish atomically
+	 * @return the typed session outcome used by popup callback decisions
+	 */
+	ProjectOutcome applyProjectEdit(ProjectEdit edit) {
+		return renderProjectOutcome(main.projectSession.apply(edit));
+	}
+
+	/** Restores a Slider Preset selection by stable case-insensitive name. */
+	void selectSliderPreset(String name) {
+		if (name == null)
+			return;
+		for (SliderPreset preset : main.projectPresentation.getSliderPresets()) {
+			if (preset.getName().equalsIgnoreCase(name)) {
+				lvPresets.getSelectionModel().select(preset);
+				return;
+			}
+		}
+	}
+
+	/** Restores a Custom Morph Target selection by stable case-insensitive name. */
+	private void selectCustomTarget(String name) {
+		for (CustomMorphTarget target : main.projectPresentation.getCustomMorphTargets()) {
+			if (target.getName().equalsIgnoreCase(name)) {
+				lvCustomTargets.getSelectionModel().select(target);
+				return;
+			}
+		}
+	}
+
+	/** Restores an NPC Morph Assignment selection by its logical identity. */
+	void selectNpc(NpcMorphAssignmentIdentity identity) {
+		if (identity == null)
+			return;
+		for (NPC npc : main.projectPresentation.getNpcMorphAssignments()) {
+			if (identity.equals(identityOf(npc))) {
+				tvNpc.getSelectionModel().select(npc);
+				return;
+			}
+		}
+	}
+
+	/** Restores an assigned Slider Preset selection after its target is restored. */
+	private void selectTargetPreset(String name) {
+		if (name == null || lvTargetPresets.getItems() == null)
+			return;
+		for (SliderPreset preset : lvTargetPresets.getItems()) {
+			if (preset.getName().equalsIgnoreCase(name)) {
+				lvTargetPresets.getSelectionModel().select(preset);
+				return;
+			}
+		}
+	}
+
+	/** Builds the stable identity used by every NPC edit and selection restoration. */
+	private static NpcMorphAssignmentIdentity identityOf(NPC npc) {
+		return npc == null ? null : new NpcMorphAssignmentIdentity(npc.getMod(), npc.getEditorId());
+	}
+
+	/** Copies the logical identities selected by a filtered table before an atomic edit rebuilds it. */
+	private static List<NpcMorphAssignmentIdentity> identitiesOf(Iterable<NPC> npcs) {
+		List<NpcMorphAssignmentIdentity> identities = new ArrayList<>();
+		for (NPC npc : npcs)
+			identities.add(identityOf(npc));
+		return identities;
+	}
+
+	/** Clears assignments from whichever logical target is currently selected. */
+	private void clearCurrentTargetAssignments() {
+		CustomMorphTarget customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+		if (customTarget != null)
+			applyProjectEdit(CustomMorphTargetEdits.clearSliderPresets(customTarget.getName()));
+		else if (npc != null)
+			applyProjectEdit(NpcMorphAssignmentEdits.clearSliderPresets(identityOf(npc)));
+	}
+
+	/**
+	 * Assigns one Slider Preset to the selected target through the matching domain
+	 * edit family.
+	 *
+	 * @param presetName existing Slider Preset name selected by the popup
+	 * @return the rendered Project outcome
+	 */
+	ProjectOutcome addSliderPresetToCurrentTarget(String presetName) {
+		CustomMorphTarget customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		if (customTarget != null)
+			return applyProjectEdit(CustomMorphTargetEdits.addSliderPreset(customTarget.getName(), presetName));
+		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+		if (npc != null)
+			return applyProjectEdit(NpcMorphAssignmentEdits.addSliderPreset(identityOf(npc), presetName));
+		throw new IllegalStateException("A morph target must remain selected while its preset popup is open");
 	}
 	
 	private void setupAlerts() {
@@ -620,17 +727,10 @@ public class MainController extends CustomController {
 		confirmRemovePreset.setCancelButtonText("Cancel");
 		
 		confirmClearTargetPresets = new CustomConfirm(main) {
+			/** Clears the currently selected target's relationships atomically. */
 			@Override
 			public void ok() {
-				MorphTarget target = getCurrentTarget();
-				if (target == null)
-					return;
-				
-				target.clearSliderPresets();
-				
-				updatePresetCounter();
-				
-				markChanged();
+				clearCurrentTargetAssignments();
 			}
 		};
 		confirmClearTargetPresets.setTitle("Confirm Action");
@@ -642,16 +742,10 @@ public class MainController extends CustomController {
 		confirmClearTargetPresets.setCancelButtonText("Cancel");
 		
 		confirmClearCustomTargets = new CustomConfirm(main) {
+			/** Clears the complete Custom Morph Target catalog atomically. */
 			@Override
 			public void ok() {
-				// Explicit clear call
-				for (int i = 0; i < main.data.customMorphTargets.size(); i++) {
-					main.data.customMorphTargets.get(i).clearSliderPresets();
-				}
-				
-				main.data.customMorphTargets.clear();
-				
-				markChanged();
+				applyProjectEdit(CustomMorphTargetEdits.clear());
 			}
 		};
 		confirmClearCustomTargets.setTitle("Confirm Action");
@@ -663,19 +757,11 @@ public class MainController extends CustomController {
 		confirmClearCustomTargets.setCancelButtonText("Cancel");
 		
 		confirmClearNpcs = new CustomConfirm(main) {
+			/** Removes the identities captured by the active NPC table filter atomically. */
 			@Override
 			public void ok() {
 				FilteredList<NPC> items = npcTableFilter.getFilteredList();
-				// Explicit clear call
-				for (int i = 0; i < items.size(); i++) {
-					items.get(i).clearSliderPresets();
-				}
-				
-				main.data.morphedNpcs.removeAll(items);
-				
-				updateNpcCounter();
-				
-				markChanged();
+				applyProjectEdit(NpcMorphAssignmentEdits.removeNpcs(identitiesOf(items)));
 			}
 		};
 		confirmClearNpcs.setTitle("Confirm Action");
@@ -688,25 +774,15 @@ public class MainController extends CustomController {
 		confirmClearNpcs.setCancelButtonText("Cancel");
 		
 		confirmClearAssignments = new CustomConfirm(main) {
+			/** Clears assignments for the identities captured by the active filter atomically. */
 			@Override
 			public void ok() {
 				FilteredList<NPC> items = npcTableFilter.getFilteredList();
-				boolean cleared = false;
-				for (int i = 0; i < items.size(); i++) {
-					NPC npc = items.get(i);
-					
-					if (!npc.getSliderPresets().isEmpty()) {
-						npc.clearSliderPresets();
-						cleared = true;
-					}
-				}
-				
-				if (!cleared) { // No NPC in the table was cleared
+				ProjectOutcome outcome = applyProjectEdit(
+						NpcMorphAssignmentEdits.clearSliderPresetsForNpcs(identitiesOf(items)));
+				if (!(outcome instanceof ChangedOutcome)) { // No NPC in the table was cleared
 					notif.show("No NPC in the table was cleared!");
-					return;
 				}
-				
-				markChanged();
 			}
 		};
 		confirmClearAssignments.setTitle("Confirm Action");
@@ -1000,31 +1076,18 @@ public class MainController extends CustomController {
 	
 	@FXML
 	private void showConfirmClearPresets() {
-		if (main.data.sliderPresets.size() <= 0)
+		if (main.projectPresentation.getSliderPresets().isEmpty())
 			return;
 		
 		confirmClearPresets.show();
 	}
 	
+	/** Clears the Project Slider Preset catalog and its cascaded relationships. */
 	private void clearPresets() {
-		if (main.data.sliderPresets.size() <= 0)
+		if (main.projectPresentation.getSliderPresets().isEmpty())
 			return;
-		
-		main.data.sliderPresets.clear();
-		// Remove all presets from all targets
-		for (int i = 0; i < main.data.customMorphTargets.size(); i++) {
-			main.data.customMorphTargets.get(i).clearSliderPresets();
-		}
-		for (int i = 0; i < main.data.morphedNpcs.size(); i++) {
-			main.data.morphedNpcs.get(i).clearSliderPresets();
-		}
-		for (int i = 0; i < main.data.npcDatabase.size(); i++) {
-			main.data.npcDatabase.get(i).clearSliderPresets();
-		}
-		taTemplate.setText("");
-		taTemplatesGen.setText("");
-		
-		markChanged();
+
+		applyProjectEdit(SliderPresetEdits.clear());
 	}
 	
 	@FXML
@@ -1035,16 +1098,16 @@ public class MainController extends CustomController {
 		
 		boolean used = false;
 		// Search custom morph targets
-		for (int i = 0; i < main.data.customMorphTargets.size(); i++) {
-			ObservableList<SliderPreset> presets = main.data.customMorphTargets.get(i).getSliderPresets();
+		for (CustomMorphTarget target : main.projectPresentation.getCustomMorphTargets()) {
+			ObservableList<SliderPreset> presets = target.getSliderPresets();
 			if (presets.contains(preset)) {
 				used = true;
 				break;
 			}
 		}
 		if (!used) { // Search NPCs
-			for (int i = 0; i < main.data.morphedNpcs.size(); i++) {
-				ObservableList<SliderPreset> presets = main.data.morphedNpcs.get(i).getSliderPresets();
+			for (NPC npc : main.projectPresentation.getNpcMorphAssignments()) {
+				ObservableList<SliderPreset> presets = npc.getSliderPresets();
 				if (presets.contains(preset)) {
 					used = true;
 					break;
@@ -1059,51 +1122,26 @@ public class MainController extends CustomController {
 		}
 	}
 	
+	/** Deletes the selected logical Slider Preset through the session cascade. */
 	private void removeSelectedPreset() {
 		SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
 		if (preset == null)
 			return;
 		
-		main.data.sliderPresets.remove(preset);
-		// Remove this preset from all targets that uses it
-		for (int i = 0; i < main.data.customMorphTargets.size(); i++) {
-			main.data.customMorphTargets.get(i).removeSliderPreset(preset);
-		}
-		for (int i = 0; i < main.data.morphedNpcs.size(); i++) {
-			main.data.morphedNpcs.get(i).removeSliderPreset(preset);
-		}
-		
-		updatePresetCounter();
-		updateTemplateText();
-		
-		markChanged();
+		applyProjectEdit(SliderPresetEdits.delete(preset.getName()));
 	}
 	
+	/** Duplicates the selected Slider Preset and selects the returned copy. */
 	@FXML
 	private void duplicateSelectedPreset() {
 		SliderPreset preset = lvPresets.getSelectionModel().getSelectedItem();
 		if (preset == null)
 			return;
 		
-		SliderPreset presetCopy = new SliderPreset(preset);
-		presetCopy.setName(preset.getName() + "(Dupe)");
-		
-		if (!main.data.sliderPresetExists(presetCopy)) {
-			main.data.sliderPresets.add(presetCopy);
-			main.data.sortPresets();
-			
-			int index = lvPresets.getItems().indexOf(presetCopy);
-			boolean indexVisible = MyUtils.isIndexVisible(lvPresets, index);
-			
-			lvPresets.getSelectionModel().select(index);
-			lvPresets.getFocusModel().focus(index);
-			if (!indexVisible)
-				lvPresets.scrollTo(index);
-		} else {
-			notif.show("Duplication failed. The output duplicate's name will clash with an existing one, please rename your duplicates.");
-		}
-		
-		markChanged();
+		String duplicateName = preset.getName() + "(Dupe)";
+		ProjectOutcome outcome = applyProjectEdit(SliderPresetEdits.duplicate(preset.getName(), duplicateName));
+		if (outcome instanceof ChangedOutcome)
+			selectSliderPreset(duplicateName);
 	}
 	
 	@FXML
@@ -1144,7 +1182,7 @@ public class MainController extends CustomController {
 	}
 	
 	public void updateNpcCounter() {
-		int count = main.data.morphedNpcs.size();
+		int count = main.projectPresentation.getNpcMorphAssignments().size();
 		lblNpcCounter.setText("(" + count + ")");
 	}
 	
@@ -1333,7 +1371,7 @@ public class MainController extends CustomController {
 	
 	@FXML
 	private void generateTemplates() {
-		if (main.data.sliderPresets.size() <= 0) {
+		if (main.projectPresentation.getSliderPresets().isEmpty()) {
 			notif.show("You don't have any presets in the list, add some BodySlide XML presets first!");
 			taTemplatesGen.setText("");
 			taTemplatesGen.positionCaret(0);
@@ -1386,10 +1424,11 @@ public class MainController extends CustomController {
 		String newLine = System.getProperty("line.separator");
 		String template = "";
 
-		for (int i = 0; i < main.data.sliderPresets.size(); i++) {
-			SliderPreset sliderPreset = main.data.sliderPresets.get(i);
+		ObservableList<SliderPreset> sliderPresets = main.projectPresentation.getSliderPresets();
+		for (int i = 0; i < sliderPresets.size(); i++) {
+			SliderPreset sliderPreset = sliderPresets.get(i);
 			template = template + sliderPreset.toLine(cbOmitRedundantSliders.isSelected());
-			if (i < main.data.sliderPresets.size() - 1)
+			if (i < sliderPresets.size() - 1)
 				template += newLine;
 		}
 
@@ -1411,6 +1450,7 @@ public class MainController extends CustomController {
 		}
 	}
 	
+	/** Creates one Custom Morph Target with any random initial choice fixed before apply. */
 	@FXML
 	private void addCustomMorphTarget() {
 		String name = tfCustomTarget.getText();
@@ -1419,100 +1459,65 @@ public class MainController extends CustomController {
 		if (name.isEmpty())
 			return;
 
-		boolean exists = false;
-		for (int i = 0; i < main.data.customMorphTargets.size(); i++) {
-			CustomMorphTarget c = main.data.customMorphTargets.get(i);
-			if (c.getName().equalsIgnoreCase(name)) {
-				exists = true;
-				break;
-			}
+		List<String> initialAssignments = new ArrayList<>();
+		ObservableList<SliderPreset> presets = main.projectPresentation.getSliderPresets();
+		if (!presets.isEmpty()) {
+			// Random choice belongs to the popup/controller boundary so replaying the
+			// validated edit never changes its meaning.
+			int random = MyUtils.random(0, presets.size() - 1);
+			initialAssignments.add(presets.get(random).getName());
 		}
-
-		if (!exists) {
-			CustomMorphTarget customMorphTarget = new CustomMorphTarget(name);
-			// Give a random preset
-			if (main.data.sliderPresets.size() > 0) {
-				// min inclusive, max inclusive
-				int random = MyUtils.random(0, main.data.sliderPresets.size()-1);
-				SliderPreset preset = main.data.sliderPresets.get(random);
-				
-				customMorphTarget.addSliderPreset(preset);
-				customMorphTarget.sortPresets();
-			}
-			main.data.customMorphTargets.add(customMorphTarget);
-			main.data.sortCustomMorphTargets();
-			
-			lvCustomTargets.getSelectionModel().clearSelection();
-			
-			int index = lvCustomTargets.getItems().indexOf(customMorphTarget);
-			boolean indexVisible = MyUtils.isIndexVisible(lvCustomTargets, index);
-			
-			if (!indexVisible)
-				lvCustomTargets.scrollTo(index);
-			
+		ProjectOutcome outcome = applyProjectEdit(CustomMorphTargetEdits.create(name, initialAssignments));
+		if (outcome instanceof ChangedOutcome) {
+			selectCustomTarget(name);
 			tfCustomTarget.setText("");
-			
-			markChanged();
 		}
 		
 		tfCustomTarget.requestFocus();
 		tfCustomTarget.positionCaret(tfCustomTarget.getText().length());
 	}
 	
+	/** Deletes the selected Custom Morph Target by logical name. */
 	@FXML
 	private void removeSelectedCustomTarget() {
 		CustomMorphTarget customMorphTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
 		if (customMorphTarget == null)
 			return;
 		
-		customMorphTarget.clearSliderPresets(); // Explicit clear call
-		main.data.customMorphTargets.remove(customMorphTarget);
-		
-		markChanged();
+		applyProjectEdit(CustomMorphTargetEdits.delete(customMorphTarget.getName()));
 	}
 	
+	/** Removes the selected relationship from the active custom or NPC target. */
 	@FXML
 	private void removePresetFromTarget() {
-		MorphTarget target = getCurrentTarget();
-		if (target == null)
-			return;
-		
 		SliderPreset preset = lvTargetPresets.getSelectionModel().getSelectedItem();
 		if (preset == null)
 			return;
-		
-		target.removeSliderPreset(preset);
-		
-		updatePresetCounter();
-		
+
+		CustomMorphTarget customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+		if (customTarget != null)
+			applyProjectEdit(CustomMorphTargetEdits.removeSliderPreset(customTarget.getName(), preset.getName()));
+		else if (npc != null)
+			applyProjectEdit(NpcMorphAssignmentEdits.removeSliderPreset(identityOf(npc), preset.getName()));
 		lvTargetPresets.requestFocus();
-		
-		markChanged();
 	}
 	
+	/** Assigns the complete current preset catalog to the active target in one edit. */
 	@FXML
 	private void addAllPresetsToTarget() {
-		MorphTarget target = getCurrentTarget();
-		if (target == null)
+		CustomMorphTarget customTarget = lvCustomTargets.getSelectionModel().getSelectedItem();
+		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
+		if (customTarget == null && npc == null)
 			return;
-		
-		int lastCount = target.getSliderPresets().size();
-		for (int i = 0; i < main.data.sliderPresets.size(); i++) {
-			SliderPreset preset = main.data.sliderPresets.get(i);
-			target.addSliderPreset(preset);
-		}
-		target.sortPresets();
-		
-		int index = lvTargetPresets.getSelectionModel().getSelectedIndex();
-		boolean indexVisible = MyUtils.isIndexVisible(lvTargetPresets, index);
-		if (!indexVisible)
-			lvTargetPresets.scrollTo(index);
-		
-		updatePresetCounter();
-		
-		int newCount = target.getSliderPresets().size();
-		if (lastCount != newCount)
-			markChanged();
+
+		List<String> presetNames = new ArrayList<>();
+		for (SliderPreset preset : main.projectPresentation.getSliderPresets())
+			presetNames.add(preset.getName());
+		if (customTarget != null)
+			applyProjectEdit(CustomMorphTargetEdits.addSliderPresets(customTarget.getName(), presetNames));
+		else
+			applyProjectEdit(NpcMorphAssignmentEdits.addSliderPresets(identityOf(npc), presetNames));
 	}
 	
 	@FXML
@@ -1523,22 +1528,20 @@ public class MainController extends CustomController {
 		popupImageView.show();
 	}
 	
+	/** Deletes the selected NPC Morph Assignment by stable identity. */
 	@FXML
 	private void removeSelectedNpc() {
 		NPC npc = tvNpc.getSelectionModel().getSelectedItem();
 		if (npc == null)
 			return;
 		
-		npc.clearSliderPresets(); // Explicit clear call
-		main.data.morphedNpcs.remove(npc);
-		updateNpcCounter();
-		
-		markChanged();
+		applyProjectEdit(NpcMorphAssignmentEdits.removeNpc(identityOf(npc)));
 	}
 	
 	@FXML
 	private void generateMorphs() {
-		if (main.data.customMorphTargets.size() <= 0 && main.data.morphedNpcs.size() <= 0) {
+		if (main.projectPresentation.getCustomMorphTargets().isEmpty()
+				&& main.projectPresentation.getNpcMorphAssignments().isEmpty()) {
 			notif.show("You don't have any morphs in the list, add some morph targets first!");
 			taMorphsGen.setText("");
 			taMorphsGen.positionCaret(0);
@@ -1598,8 +1601,7 @@ public class MainController extends CustomController {
 		String morph = "";
 		
 		ArrayList<String> morphLineList = new ArrayList<String>();
-		for (int i = 0; i < main.data.customMorphTargets.size(); i++) {
-			MorphTarget target = main.data.customMorphTargets.get(i);
+		for (MorphTarget target : main.projectPresentation.getCustomMorphTargets()) {
 			String s = target.toLine();
 			morphLineList.add(s);
 			
@@ -1607,7 +1609,7 @@ public class MainController extends CustomController {
 				targetsWithoutPresets.add(target);
 		}
 		ArrayList<NPC> morphedNpcs = new ArrayList<NPC>();
-		morphedNpcs.addAll(main.data.morphedNpcs);
+		morphedNpcs.addAll(main.projectPresentation.getNpcMorphAssignments());
 		morphedNpcs.sort(comparatorNpcByMod);
 		for (int i = 0; i < morphedNpcs.size(); i++) {
 			MorphTarget target = morphedNpcs.get(i);
@@ -1651,7 +1653,7 @@ public class MainController extends CustomController {
 		}
 	}
 	
-	public MorphTarget getCurrentTarget() {
+	private MorphTarget getCurrentTarget() {
 		MorphTarget target = lvCustomTargets.getSelectionModel().getSelectedItem();
 		if (target == null) // No selection in custom targets, try NPCs
 			target = tvNpc.getSelectionModel().getSelectedItem();
@@ -2006,8 +2008,7 @@ public class MainController extends CustomController {
 		return new Task<Void>() {
 			@Override
 			public Void call() throws InterruptedException {
-				for (int i = 0; i < main.data.sliderPresets.size(); i++) {
-					SliderPreset sliderPreset = main.data.sliderPresets.get(i);
+				for (SliderPreset sliderPreset : main.projectPresentation.getSliderPresets()) {
 					
 					String bosJson = sliderPreset.toBosJson();
 					try {

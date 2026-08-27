@@ -226,6 +226,35 @@ class ProjectSessionTest {
     }
 
     /**
+     * Creates a Custom Morph Target and its caller-selected Slider Preset
+     * relationships in one atomic edit, rejecting the whole request when any
+     * relationship endpoint is invalid.
+     */
+    @Test
+    void creatingCustomMorphTargetWithAssignmentsIsAtomic() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Zulu"));
+        session.apply(SliderPresetEdits.create("alpha"));
+        ProjectSnapshot beforeCreate = session.getSnapshot();
+
+        ProjectOutcome created = session.apply(
+                CustomMorphTargetEdits.create(" All|Female ", Arrays.asList("zulu", "ALPHA")));
+
+        assertTrue(created instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("alpha", "Zulu"),
+                created.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames());
+
+        ProjectOutcome rejected = session.apply(
+                CustomMorphTargetEdits.create("All|Male", Arrays.asList("Alpha", "missing")));
+
+        assertRejectedWithCode(rejected, ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND,
+                created.getSnapshot());
+        assertEquals(Arrays.asList("All|Female"), customMorphTargetNames(session.getSnapshot()));
+        assertNotSame(beforeCreate, created.getSnapshot());
+    }
+
+    /**
      * Verifies that empty and duplicate Custom Morph Target names are rejected
      * without changing the snapshot or its truthful dirty state.
      */
@@ -278,6 +307,32 @@ class ProjectSessionTest {
         assertTrue(duplicate instanceof UnchangedOutcome);
         assertSame(assigned, duplicate.getSnapshot());
         assertSame(assigned, session.getSnapshot());
+    }
+
+    /**
+     * Adds a caller-selected Slider Preset batch to one Custom Morph Target with
+     * one atomic publication and no partial change when any endpoint is invalid.
+     */
+    @Test
+    void addingMultipleCustomMorphTargetAssignmentsIsAtomic() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Zulu"));
+        session.apply(SliderPresetEdits.create("alpha"));
+        session.apply(CustomMorphTargetEdits.create("All|Female"));
+
+        ProjectOutcome added = session.apply(CustomMorphTargetEdits.addSliderPresets("all|FEMALE",
+                Arrays.asList("zulu", "ALPHA", "alpha")));
+
+        assertTrue(added instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("alpha", "Zulu"),
+                added.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames());
+
+        ProjectOutcome rejected = session.apply(CustomMorphTargetEdits.addSliderPresets("All|Female",
+                Arrays.asList("Alpha", "missing")));
+
+        assertRejectedWithCode(rejected, ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, added.getSnapshot());
+        assertSame(added.getSnapshot(), session.getSnapshot());
     }
 
     /**
@@ -435,6 +490,33 @@ class ProjectSessionTest {
         assertTrue(cleared.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames().isEmpty());
         assertTrue(alreadyEmpty instanceof UnchangedOutcome);
         assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
+    }
+
+    /**
+     * Adds several Slider Preset relationships to one NPC Morph Assignment with
+     * one atomic publication and no partial state when validation fails.
+     */
+    @Test
+    void addingMultipleNpcSliderPresetAssignmentsIsAtomic() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Zulu"));
+        session.apply(SliderPresetEdits.create("alpha"));
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("Lydia", "Skyrim.esm", "HousecarlWhiterun")));
+        NpcMorphAssignmentIdentity lydia = new NpcMorphAssignmentIdentity("SKYRIM.ESM", "housecarlwhiterun");
+
+        ProjectOutcome added = session.apply(NpcMorphAssignmentEdits.addSliderPresets(lydia,
+                Arrays.asList("zulu", "ALPHA", "alpha")));
+
+        assertTrue(added instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("alpha", "Zulu"),
+                added.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames());
+
+        ProjectOutcome rejected = session.apply(NpcMorphAssignmentEdits.addSliderPresets(lydia,
+                Arrays.asList("Alpha", "missing")));
+
+        assertRejectedWithCode(rejected, ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, added.getSnapshot());
+        assertSame(added.getSnapshot(), session.getSnapshot());
     }
 
     /**

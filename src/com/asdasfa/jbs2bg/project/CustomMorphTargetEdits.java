@@ -1,5 +1,8 @@
 package com.asdasfa.jbs2bg.project;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Creates explicit immutable edit requests for the Project's Custom Morph
  * Targets and their Slider Preset relationships. Validation is performed
@@ -18,7 +21,19 @@ public final class CustomMorphTargetEdits {
      * @return an immutable creation request
      */
     public static ProjectEdit create(String name) {
-        return new Create(name);
+        return create(name, Collections.<String>emptyList());
+    }
+
+    /**
+     * Requests creation of a Custom Morph Target with explicit Slider Preset
+     * relationships chosen by the caller before submission.
+     *
+     * @param name requested Custom Morph Target name; the session trims and validates it
+     * @param sliderPresetNames initial Slider Preset relationships
+     * @return an immutable atomic creation request
+     */
+    public static ProjectEdit create(String name, List<String> sliderPresetNames) {
+        return new Create(name, sliderPresetNames);
     }
 
     /**
@@ -30,6 +45,18 @@ public final class CustomMorphTargetEdits {
      */
     public static ProjectEdit addSliderPreset(String targetName, String sliderPresetName) {
         return new AddSliderPreset(targetName, sliderPresetName);
+    }
+
+    /**
+     * Requests atomic assignment of several existing Slider Presets to one Custom
+     * Morph Target. Duplicate requested or existing relationships are no-ops.
+     *
+     * @param targetName existing Custom Morph Target name, compared without regard to case
+     * @param sliderPresetNames caller-selected Slider Preset names
+     * @return an immutable assignment-batch request
+     */
+    public static ProjectEdit addSliderPresets(String targetName, List<String> sliderPresetNames) {
+        return new AddSliderPresets(targetName, sliderPresetNames);
     }
 
     /**
@@ -79,19 +106,28 @@ public final class CustomMorphTargetEdits {
     /** Immutable creation request interpreted only by the ProjectSession module. */
     static final class Create implements CustomMorphTargetEdit {
         private final String name;
+        private final List<String> sliderPresetNames;
 
         /**
          * Captures the raw requested name so validation remains inside ProjectSession.
          *
          * @param name caller-supplied Custom Morph Target name
+         * @param sliderPresetNames caller-selected initial relationships, or null for validation
          */
-        Create(String name) {
+        Create(String name, List<String> sliderPresetNames) {
             this.name = name;
+            this.sliderPresetNames = sliderPresetNames == null ? null
+                    : ImmutableValues.copyOf(sliderPresetNames, "sliderPresetNames");
         }
 
         /** @return the raw requested Custom Morph Target name */
         String getName() {
             return name;
+        }
+
+        /** @return immutable initial Slider Preset names, or null when omitted */
+        List<String> getSliderPresetNames() {
+            return sliderPresetNames;
         }
     }
 
@@ -119,6 +155,34 @@ public final class CustomMorphTargetEdits {
         /** @return the requested Slider Preset name */
         String getSliderPresetName() {
             return sliderPresetName;
+        }
+    }
+
+    /** Immutable assignment-batch request interpreted only by ProjectSession. */
+    static final class AddSliderPresets implements CustomMorphTargetEdit {
+        private final String targetName;
+        private final List<String> sliderPresetNames;
+
+        /**
+         * Defensively captures the target and caller-selected relationship set.
+         *
+         * @param targetName existing Custom Morph Target name
+         * @param sliderPresetNames selected Slider Preset names, or null for validation
+         */
+        AddSliderPresets(String targetName, List<String> sliderPresetNames) {
+            this.targetName = targetName;
+            this.sliderPresetNames = sliderPresetNames == null ? null
+                    : ImmutableValues.copyOf(sliderPresetNames, "sliderPresetNames");
+        }
+
+        /** @return the requested Custom Morph Target name */
+        String getTargetName() {
+            return targetName;
+        }
+
+        /** @return immutable selected Slider Preset names, or null when omitted */
+        List<String> getSliderPresetNames() {
+            return sliderPresetNames;
         }
     }
 

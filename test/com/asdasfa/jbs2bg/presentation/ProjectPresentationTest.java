@@ -1,6 +1,7 @@
 package com.asdasfa.jbs2bg.presentation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -133,6 +134,20 @@ class ProjectPresentationTest {
         assertEquals(80, rendered.getSetSliders().get(0).getValueBig().intValue());
         assertEquals("Breasts", rendered.getMissingDefaultSetSliders().get(0).getName());
         assertEquals("jBS2BG *", presentation.getWindowTitle());
+    }
+
+    /**
+     * Exposes observable Project projections for JavaFX rendering without allowing
+     * controllers to mutate the top-level Project collections directly.
+     */
+    @Test
+    void renderedProjectCollectionsAreStructurallyReadOnly() {
+        ProjectPresentation presentation = newPresentation();
+        presentation.render(new ChangedOutcome(populatedSnapshot(Paths.get("projects", "example.jbs2bg"), true)));
+
+        assertThrows(UnsupportedOperationException.class, () -> presentation.getSliderPresets().clear());
+        assertThrows(UnsupportedOperationException.class, () -> presentation.getCustomMorphTargets().clear());
+        assertThrows(UnsupportedOperationException.class, () -> presentation.getNpcMorphAssignments().clear());
     }
 
     /** Creates a presentation read model from the canonical New Project outcome. */

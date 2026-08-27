@@ -1,12 +1,17 @@
 package com.asdasfa.jbs2bg;
 
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.ResourceBundle;
 
 import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
+import com.asdasfa.jbs2bg.project.NpcSliderPresetChoice;
 
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
@@ -83,33 +88,21 @@ public class PopupSliderPresetsFillController extends CustomController {
 		notif.setOwner(stage);
 		
 		confirmFillEmpty = new CustomConfirm(main) {
+			/**
+			 * Freezes the current filter and selection into explicit random choices, then
+			 * submits one atomic fill edit.
+			 */
 			@Override
 			public void ok() {
-				FilteredList<NPC> filteredNpcs = main.mainController.npcTableFilter.getFilteredList();
 				ObservableList<SliderPreset> selectedPresets = lvPresets.getSelectionModel().getSelectedItems();
 				if (selectedPresets.size() <= 0) {
 					return;
 				}
 				
-				boolean filled = false;
-				for (int i = 0; i < filteredNpcs.size(); i++) {
-					NPC npc = filteredNpcs.get(i);
-					if (npc.getSliderPresets().isEmpty()) { // Empty
-						npc.clearSliderPresets(); // Explicit clear
-						// Give a random preset
-						// min inclusive, max exclusive
-						int random = MyUtils.random(0, selectedPresets.size()-1);
-						SliderPreset preset = selectedPresets.get(random);
-						npc.addSliderPreset(preset);
-						
-						filled = true;
-					}
-				}
+				FilteredList<NPC> filteredNpcs = main.mainController.npcTableFilter.getFilteredList();
+				List<NpcSliderPresetChoice> choices = choosePresetsForEmptyNpcs(filteredNpcs, selectedPresets);
 				
-				if (filled) {
-					main.mainController.updatePresetCounter();
-					main.mainController.markChanged();
-				}
+				main.mainController.applyProjectEdit(NpcMorphAssignmentEdits.fillEmpty(choices));
 				
 				stage.hide();
 			}
@@ -122,6 +115,30 @@ public class PopupSliderPresetsFillController extends CustomController {
 		);
 		confirmFillEmpty.setOkButtonText("Fill");
 		confirmFillEmpty.setCancelButtonText("Cancel");
+	}
+
+	/**
+	 * Completes every random fill choice on the JavaFX thread before immutable
+	 * request data crosses the ProjectSession seam.
+	 *
+	 * @param filteredNpcs NPC presentation values included by the active table filter
+	 * @param selectedPresets caller-selected Slider Preset presentation values
+	 * @return explicit choices for currently empty filtered NPCs
+	 */
+	private List<NpcSliderPresetChoice> choosePresetsForEmptyNpcs(List<NPC> filteredNpcs,
+			List<SliderPreset> selectedPresets) {
+		List<NpcSliderPresetChoice> choices = new ArrayList<>();
+		for (int i = 0; i < filteredNpcs.size(); i++) {
+			NPC npc = filteredNpcs.get(i);
+			if (npc.getSliderPresets().isEmpty()) { // Empty
+				// Give a random preset; MyUtils.random uses inclusive minimum and maximum bounds.
+				int random = MyUtils.random(0, selectedPresets.size()-1);
+				SliderPreset preset = selectedPresets.get(random);
+				NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity(npc.getMod(), npc.getEditorId());
+				choices.add(new NpcSliderPresetChoice(identity, preset.getName()));
+			}
+		}
+		return choices;
 	}
 	
 	protected void connectViews() {

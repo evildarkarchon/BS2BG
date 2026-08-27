@@ -91,4 +91,29 @@ public final class SliderChoiceSnapshot {
 	public boolean isMissingDefault() {
 		return missingDefault;
 	}
+
+	/**
+	 * Returns a copy with the requested participation state while preserving every
+	 * stored, effective, percentage, and synthesized-default value.
+	 *
+	 * @param requestedEnabled whether the copied choice participates in output
+	 * @return an immutable copy with the requested enabled state
+	 */
+	public SliderChoiceSnapshot withEnabled(boolean requestedEnabled) {
+		return new SliderChoiceSnapshot(name, requestedEnabled, storedSmallValue, storedBigValue,
+				effectiveSmallValue, effectiveBigValue, percentageMinimum, percentageMaximum, missingDefault);
+	}
+
+	/**
+	 * Returns a copy with a new percentage range while preserving the choice's
+	 * source values and synthesized-default identity.
+	 *
+	 * @param requestedMinimum requested lower randomization percentage
+	 * @param requestedMaximum requested upper randomization percentage
+	 * @return an immutable copy with the requested percentage range
+	 */
+	public SliderChoiceSnapshot withPercentageRange(int requestedMinimum, int requestedMaximum) {
+		return new SliderChoiceSnapshot(name, enabled, storedSmallValue, storedBigValue, effectiveSmallValue,
+				effectiveBigValue, requestedMinimum, requestedMaximum, missingDefault);
+	}
 }

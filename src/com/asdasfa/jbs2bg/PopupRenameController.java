@@ -3,9 +3,11 @@ package com.asdasfa.jbs2bg;
 import java.net.URL;
 import java.util.ResourceBundle;
 
-import com.asdasfa.jbs2bg.data.MorphTarget;
 import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.project.ChangedOutcome;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.Label;
@@ -35,62 +37,55 @@ public class PopupRenameController extends CustomController {
 		});
 	}
 	
+	/**
+	 * Requests a validated Slider Preset rename and reselects the rebuilt
+	 * presentation value only when the Project changed.
+	 */
 	@FXML
 	private void rename() {
+		SliderPreset selectedPreset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
+		if (selectedPreset == null)
+			return;
+
+		SliderPreset selectedTargetPreset = main.mainController.lvTargetPresets.getSelectionModel().getSelectedItem();
+		boolean restoreTargetPreset = selectedTargetPreset != null
+				&& selectedTargetPreset.getName().equalsIgnoreCase(selectedPreset.getName());
 		String newName = tfRename.getText();
-		if (newName.trim().isEmpty() || newName.trim().contains(".")) {
-			lblRenameWarning.setText("Invalid name!");
-		} else {
-			SliderPreset selectedPreset = main.mainController.lvPresets.getSelectionModel().getSelectedItem();
-			if (newName.equals(selectedPreset.getName())) { // Same name, nope
+		ProjectOutcome outcome = main.mainController
+				.applyProjectEdit(SliderPresetEdits.rename(selectedPreset.getName(), newName));
+		if (!(outcome instanceof ChangedOutcome)) {
+			if (outcome.getDiagnostics().isEmpty())
 				lblRenameWarning.setText("Name needs to be different than the old one!");
-			} else {
-				boolean exists = false;
-	            for (int i = 0; i < main.data.sliderPresets.size(); i++) {
-	                if (main.data.sliderPresets.get(i).getName().equals(newName)) {
-	                    exists = true;
-	                    break;
-	                }
-	            }
-	            if (exists) { // Exists already, nope
-	            	lblRenameWarning.setText("There's already a preset of the same name!");
-	            } else { // Success
-	            	SliderPreset preset = selectedPreset;
-	            	preset.setName(newName); // Set it
-	            	main.data.sortPresets(); // Sort
-	            	//main.mainController.lvPresets.refresh();
-	            	
-	            	// Also sort presets in targets
-	            	for (int i = 0; i < main.data.customMorphTargets.size(); i++) {
-	            		main.data.customMorphTargets.get(i).sortPresets();
-	            	}
-	            	for (int i = 0; i < main.data.morphedNpcs.size(); i++) {
-	            		main.data.morphedNpcs.get(i).sortPresets();
-	            	}
-	            	
-	            	// Also sort target presets to refresh its listView
-	            	MorphTarget target = main.mainController.getCurrentTarget();
-	            	if (target != null) {
-	            		target.sortPresets();
-	            		
-	            		int index = main.mainController.lvTargetPresets.getItems().indexOf(preset);
-		            	boolean indexVisible = MyUtils.isIndexVisible(main.mainController.lvTargetPresets, index);
-		            	if (!indexVisible)
-		    				main.mainController.lvTargetPresets.scrollTo(index);
-	            	}
-	            	
-	            	int index = main.mainController.lvPresets.getItems().indexOf(preset);
-	            	boolean indexVisible = MyUtils.isIndexVisible(main.mainController.lvPresets, index);
-	    			
-	    			main.mainController.lvPresets.getSelectionModel().select(index);
-	    			main.mainController.lvPresets.getFocusModel().focus(index);
-	    			if (!indexVisible)
-	    				main.mainController.lvPresets.scrollTo(index);
-	    			
-	    			main.mainController.markChanged();
-	            	
-	            	stage.hide();
-	            }
+			else
+				lblRenameWarning.setText(outcome.getDiagnostics().get(0).getMessage());
+			return;
+		}
+
+		String canonicalName = newName.trim();
+		main.mainController.selectSliderPreset(canonicalName);
+		if (restoreTargetPreset)
+			selectTargetPreset(canonicalName);
+		stage.hide();
+	}
+
+	/**
+	 * Restores the renamed assignment selection against the rebuilt current-target
+	 * projection without mutating Project state.
+	 *
+	 * @param presetName canonical renamed Slider Preset name
+	 */
+	private void selectTargetPreset(String presetName) {
+		if (main.mainController.lvTargetPresets.getItems() == null)
+			return;
+		for (SliderPreset preset : main.mainController.lvTargetPresets.getItems()) {
+			if (preset.getName().equalsIgnoreCase(presetName)) {
+				int index = main.mainController.lvTargetPresets.getItems().indexOf(preset);
+				main.mainController.lvTargetPresets.getSelectionModel().select(index);
+				main.mainController.lvTargetPresets.getFocusModel().focus(index);
+				boolean indexVisible = MyUtils.isIndexVisible(main.mainController.lvTargetPresets, index);
+				if (!indexVisible)
+					main.mainController.lvTargetPresets.scrollTo(index);
+				return;
 			}
 		}
 	}
