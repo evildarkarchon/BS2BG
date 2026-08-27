@@ -10,6 +10,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+import javax.xml.parsers.ParserConfigurationException;
+
+import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
+
 import com.eclipsesource.json.ParseException;
 
 /**
@@ -174,6 +179,211 @@ final class DefaultProjectSession implements ProjectSession {
                 return rejectedActiveProjectRequired();
             return persist(target);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public SliderPresetImportOutcome importSliderPresets(List<Path> sources) {
+        List<Path> selectedSources = ImmutableValues.copyOf(sources, "sources");
+        synchronized (operationLock) {
+            if (snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT) {
+                List<ProjectOutcome> rejectedSources = new ArrayList<>();
+                for (int index = 0; index < selectedSources.size(); index++)
+                    rejectedSources.add(rejectedActiveProjectRequired());
+                return new SliderPresetImportOutcome(rejectedActiveProjectRequired(), rejectedSources);
+            }
+
+            List<ProjectOutcome> sourceOutcomes = new ArrayList<>();
+            List<ProjectDiagnostic> diagnostics = new ArrayList<>();
+            boolean changed = false;
+            boolean rejected = false;
+            boolean failed = false;
+            for (Path source : selectedSources) {
+                ProjectOutcome sourceOutcome = importSliderPresetSource(source);
+                sourceOutcomes.add(sourceOutcome);
+                diagnostics.addAll(sourceOutcome.getDiagnostics());
+                ImportOutcomeKind outcomeKind = importOutcomeKind(sourceOutcome);
+                changed |= outcomeKind == ImportOutcomeKind.CHANGED;
+                rejected |= outcomeKind == ImportOutcomeKind.REJECTED;
+                failed |= outcomeKind == ImportOutcomeKind.FAILED;
+            }
+
+            List<ProjectOutcome> finalSourceOutcomes = new ArrayList<>();
+            for (ProjectOutcome sourceOutcome : sourceOutcomes)
+                finalSourceOutcomes.add(outcomeAtSnapshot(sourceOutcome, snapshot));
+
+            ProjectOutcome projectOutcome;
+            if (changed)
+                projectOutcome = new ChangedOutcome(snapshot, diagnostics);
+            else if (rejected)
+                projectOutcome = new RejectedOutcome(snapshot, diagnostics);
+            else if (failed)
+                projectOutcome = new FailedOutcome(snapshot, diagnostics);
+            else
+                projectOutcome = new UnchangedOutcome(snapshot, diagnostics);
+            return new SliderPresetImportOutcome(projectOutcome, finalSourceOutcomes);
+        }
+    }
+
+    /**
+     * Retypes one source result against the final batch snapshot while preserving
+     * its classification and diagnostics.
+     *
+     * @param outcome source result captured during ordered processing
+     * @param finalSnapshot latest snapshot after every selected source
+     * @return equivalent typed outcome carrying the final snapshot
+     */
+    private static ProjectOutcome outcomeAtSnapshot(ProjectOutcome outcome, ProjectSnapshot finalSnapshot) {
+        switch (importOutcomeKind(outcome)) {
+        case CHANGED:
+            return new ChangedOutcome(finalSnapshot, outcome.getDiagnostics());
+        case REJECTED:
+            return new RejectedOutcome(finalSnapshot, outcome.getDiagnostics());
+        case FAILED:
+            return new FailedOutcome(finalSnapshot, outcome.getDiagnostics());
+        case UNCHANGED:
+            return new UnchangedOutcome(finalSnapshot, outcome.getDiagnostics());
+        default:
+            throw new IllegalStateException("Unsupported import outcome kind.");
+        }
+    }
+
+    /**
+     * Classifies the established typed Project outcomes once for import aggregation
+     * and final-snapshot rebinding.
+     *
+     * @param outcome typed source outcome
+     * @return corresponding import aggregation kind
+     */
+    private static ImportOutcomeKind importOutcomeKind(ProjectOutcome outcome) {
+        if (outcome instanceof ChangedOutcome)
+            return ImportOutcomeKind.CHANGED;
+        if (outcome instanceof RejectedOutcome)
+            return ImportOutcomeKind.REJECTED;
+        if (outcome instanceof FailedOutcome)
+            return ImportOutcomeKind.FAILED;
+        return ImportOutcomeKind.UNCHANGED;
+    }
+
+    /** Internal classification for the four public typed Project outcomes. */
+    private enum ImportOutcomeKind {
+        CHANGED,
+        UNCHANGED,
+        REJECTED,
+        FAILED
+    }
+
+    /**
+     * Parses and commits one source without allowing its failure to escape or
+     * discard state committed by another selected file.
+     *
+     * @param source selected BodySlide XML source
+     * @return one typed source outcome at the latest coherent snapshot
+     */
+    private ProjectOutcome importSliderPresetSource(Path source) {
+        Path normalizedSource;
+        try {
+            normalizedSource = source.toAbsolutePath().normalize();
+        } catch (RuntimeException exception) {
+            // An unresolvable path cannot safely be sent to the filesystem parser.
+            return failedOperation(ProjectDiagnosticCodes.SLIDER_PRESET_XML_IMPORT_FAILED,
+                    Optional.<Path>empty(), "/",
+                    "The BodySlide XML source could not be resolved: " + exception.getMessage());
+        }
+        try {
+            List<BodySlidePresetFileParser.ParsedPreset> imported = BodySlidePresetFileParser.parse(normalizedSource);
+            return upsertImportedSliderPresets(imported, normalizedSource);
+        } catch (SAXParseException exception) {
+            return rejectedMalformedXml(normalizedSource, exception,
+                    optionalPositive(exception.getLineNumber()), optionalPositive(exception.getColumnNumber()));
+        } catch (SAXException exception) {
+            return rejectedMalformedXml(normalizedSource, exception, OptionalInt.empty(), OptionalInt.empty());
+        } catch (BodySlidePresetFileParser.InvalidBodySlidePresetException exception) {
+            SourceLocation location = new SourceLocation(Optional.of(normalizedSource),
+                    Optional.of(exception.getElement()), OptionalInt.empty(), OptionalInt.empty());
+            return rejected(exception.getCode(), location, exception.getMessage());
+        } catch (IOException exception) {
+            return failedOperation(ProjectDiagnosticCodes.SLIDER_PRESET_XML_READ_FAILED,
+                    Optional.of(normalizedSource), "/",
+                    "The BodySlide XML source could not be read: " + exception.getMessage());
+        } catch (ParserConfigurationException exception) {
+            return failedOperation(ProjectDiagnosticCodes.SLIDER_PRESET_XML_IMPORT_FAILED,
+                    Optional.of(normalizedSource), "/",
+                    "Secure BodySlide XML parsing is unavailable: " + exception.getMessage());
+        } catch (RuntimeException exception) {
+            // Keep an unexpected parser/provider failure scoped to this source so the
+            // batch can report it without losing earlier independent commits.
+            return failedOperation(ProjectDiagnosticCodes.SLIDER_PRESET_XML_IMPORT_FAILED,
+                    Optional.of(normalizedSource), "/",
+                    "The BodySlide XML source could not be imported: " + exception.getMessage());
+        }
+    }
+
+    /**
+     * Builds one malformed-XML rejection with optional parser coordinates.
+     *
+     * @param source normalized XML source
+     * @param exception parser failure
+     * @param line optional one-based line
+     * @param column optional one-based column
+     * @return structured rejection carrying the current coherent snapshot
+     */
+    private RejectedOutcome rejectedMalformedXml(Path source, SAXException exception, OptionalInt line,
+            OptionalInt column) {
+        SourceLocation location = new SourceLocation(Optional.of(source), Optional.of("/"), line, column);
+        return rejected(ProjectDiagnosticCodes.SLIDER_PRESET_XML_MALFORMED, location,
+                "The BodySlide source contains malformed XML: " + exception.getMessage());
+    }
+
+    /**
+     * Converts positive SAX coordinates to the optional source-location form.
+     *
+     * @param value parser coordinate, or a non-positive unknown marker
+     * @return present one-based coordinate when known
+     */
+    private static OptionalInt optionalPositive(int value) {
+        return value > 0 ? OptionalInt.of(value) : OptionalInt.empty();
+    }
+
+    /**
+     * Upserts every detached preset from one valid source and publishes at most
+     * one dirty snapshot. Existing display identity and relationships are retained.
+     *
+     * @param imported complete detached source payload with XML name locations
+     * @param source normalized XML source for validation diagnostics
+     * @return changed, unchanged, or rejected source outcome
+     */
+    private ProjectOutcome upsertImportedSliderPresets(List<BodySlidePresetFileParser.ParsedPreset> imported,
+            Path source) {
+        List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
+        boolean changed = false;
+        for (BodySlidePresetFileParser.ParsedPreset parsedPreset : imported) {
+            SliderPresetSnapshot candidate = parsedPreset.getPreset();
+            int index = findSliderPreset(presets, candidate.getName());
+            SliderPresetNameProblem nameProblem = findSliderPresetNameProblem(candidate.getName(), presets,
+                    index < 0 ? OptionalInt.empty() : OptionalInt.of(index));
+            if (nameProblem != null) {
+                SourceLocation location = new SourceLocation(Optional.of(source),
+                        Optional.of(parsedPreset.getNameElement()), OptionalInt.empty(), OptionalInt.empty());
+                return rejected(nameProblem.code, location, nameProblem.message);
+            }
+            if (index < 0) {
+                presets.add(candidate);
+                changed = true;
+                continue;
+            }
+
+            SliderPresetSnapshot current = presets.get(index);
+            SliderPresetSnapshot replacement = new SliderPresetSnapshot(current.getName(), candidate.isUunp(),
+                    candidate.getSliderChoices());
+            if (!sameSliderPreset(current, replacement)) {
+                presets.set(index, replacement);
+                changed = true;
+            }
+        }
+        return changed ? publishChangedPresets(presets) : new UnchangedOutcome(snapshot);
     }
 
     /**
@@ -1077,11 +1287,22 @@ final class DefaultProjectSession implements ProjectSession {
      * @return the catalog index, or -1 when no logical Slider Preset matches
      */
     private int findSliderPreset(String name) {
+        return findSliderPreset(snapshot.getSliderPresets(), name);
+    }
+
+    /**
+     * Finds a Slider Preset inside a detached working catalog by logical identity.
+     *
+     * @param presets working catalog
+     * @param name requested name
+     * @return matching index, or -1 when absent
+     */
+    private static int findSliderPreset(List<SliderPresetSnapshot> presets, String name) {
         if (name == null)
             return -1;
         String normalizedName = name.trim();
-        for (int index = 0; index < snapshot.getSliderPresets().size(); index++) {
-            if (snapshot.getSliderPresets().get(index).getName().equalsIgnoreCase(normalizedName))
+        for (int index = 0; index < presets.size(); index++) {
+            if (presets.get(index).getName().equalsIgnoreCase(normalizedName))
                 return index;
         }
         return -1;
@@ -1331,20 +1552,48 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a structured rejection, or null when the trimmed name is valid
      */
     private RejectedOutcome validateSliderPresetName(String requestedName, OptionalInt exemptIndex) {
+        SliderPresetNameProblem problem = findSliderPresetNameProblem(requestedName,
+                snapshot.getSliderPresets(), exemptIndex);
+        return problem == null ? null : rejectedSliderPresetName(problem.code, problem.message);
+    }
+
+    /**
+     * Applies the single Project name-validation implementation to any current or
+     * detached Slider Preset catalog.
+     *
+     * @param requestedName name before trimming
+     * @param presets catalog whose logical identities must remain unique
+     * @param exemptIndex existing identity allowed to retain or replace its name
+     * @return validation problem, or null when the name satisfies every invariant
+     */
+    private static SliderPresetNameProblem findSliderPresetNameProblem(String requestedName,
+            List<SliderPresetSnapshot> presets, OptionalInt exemptIndex) {
         if (requestedName == null || requestedName.trim().isEmpty())
-            return rejectedSliderPresetName(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_REQUIRED,
+            return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_REQUIRED,
                     "A Slider Preset name must not be empty.");
         String normalizedName = requestedName.trim();
         if (normalizedName.indexOf('.') >= 0)
-            return rejectedSliderPresetName(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_CONTAINS_DOT,
+            return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_CONTAINS_DOT,
                     "A Slider Preset name must not contain dots.");
-        for (int index = 0; index < snapshot.getSliderPresets().size(); index++) {
+        for (int index = 0; index < presets.size(); index++) {
             if ((!exemptIndex.isPresent() || index != exemptIndex.getAsInt())
-                    && snapshot.getSliderPresets().get(index).getName().equalsIgnoreCase(normalizedName))
-                return rejectedSliderPresetName(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_DUPLICATE,
+                    && presets.get(index).getName().equalsIgnoreCase(normalizedName))
+                return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_DUPLICATE,
                         "A Slider Preset with this name already exists.");
         }
         return null;
+    }
+
+    /** Immutable validation detail shared by edit and XML-import callers. */
+    private static final class SliderPresetNameProblem {
+        private final String code;
+        private final String message;
+
+        /** Creates one stable name-validation problem. */
+        private SliderPresetNameProblem(String code, String message) {
+            this.code = code;
+            this.message = message;
+        }
     }
 
     /**

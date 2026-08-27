@@ -47,6 +47,16 @@ public final class ProjectDiagnosticCodes {
     public static final String SLIDER_CHOICE_REQUIRED = "SLIDER_CHOICE_REQUIRED";
     /** A full-update edit omitted its required immutable Slider Preset value. */
     public static final String SLIDER_PRESET_VALUE_REQUIRED = "SLIDER_PRESET_VALUE_REQUIRED";
+    /** A selected BodySlide XML source could not be read. */
+    public static final String SLIDER_PRESET_XML_READ_FAILED = "SLIDER_PRESET_XML_READ_FAILED";
+    /** A selected BodySlide source contains malformed XML syntax. */
+    public static final String SLIDER_PRESET_XML_MALFORMED = "SLIDER_PRESET_XML_MALFORMED";
+    /** A BodySlide XML document has an unsupported or incomplete structure. */
+    public static final String SLIDER_PRESET_XML_STRUCTURE_INVALID = "SLIDER_PRESET_XML_STRUCTURE_INVALID";
+    /** A BodySlide slider value cannot be represented as a legacy integer. */
+    public static final String SLIDER_PRESET_XML_VALUE_INVALID = "SLIDER_PRESET_XML_VALUE_INVALID";
+    /** An unexpected parser or runtime failure prevented one XML source import. */
+    public static final String SLIDER_PRESET_XML_IMPORT_FAILED = "SLIDER_PRESET_XML_IMPORT_FAILED";
     /** A Custom Morph Target name is null, empty, or whitespace-only after trimming. */
     public static final String CUSTOM_MORPH_TARGET_NAME_REQUIRED = "CUSTOM_MORPH_TARGET_NAME_REQUIRED";
     /** A Custom Morph Target name duplicates another Project name without regard to case. */

@@ -1,6 +1,7 @@
 package com.asdasfa.jbs2bg.project;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * External seam for synchronous access to the active Project and its lifecycle.
@@ -48,6 +49,17 @@ public interface ProjectSession {
 	 * @throws NullPointerException when target is null
 	 */
 	ProjectOutcome saveAs(Path target);
+
+	/**
+	 * Parses and upserts Slider Presets from an ordered batch of BodySlide XML
+	 * files. Each source is parsed before its changes are committed, so a rejected
+	 * or failed source cannot discard successful imports from other files.
+	 *
+	 * @param sources BodySlide XML files in selection order
+	 * @return aggregate and per-source typed outcomes carrying coherent snapshots
+	 * @throws NullPointerException when sources or any contained source is null
+	 */
+	SliderPresetImportOutcome importSliderPresets(List<Path> sources);
 
 	/**
 	 * Applies one explicit Project edit atomically. Unknown edit request types are
