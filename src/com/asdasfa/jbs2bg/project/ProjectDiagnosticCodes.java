@@ -27,6 +27,12 @@ public final class ProjectDiagnosticCodes {
     public static final String SLIDER_CHOICE_REQUIRED = "SLIDER_CHOICE_REQUIRED";
     /** A full-update edit omitted its required immutable Slider Preset value. */
     public static final String SLIDER_PRESET_VALUE_REQUIRED = "SLIDER_PRESET_VALUE_REQUIRED";
+    /** A Custom Morph Target name is null, empty, or whitespace-only after trimming. */
+    public static final String CUSTOM_MORPH_TARGET_NAME_REQUIRED = "CUSTOM_MORPH_TARGET_NAME_REQUIRED";
+    /** A Custom Morph Target name duplicates another Project name without regard to case. */
+    public static final String CUSTOM_MORPH_TARGET_NAME_DUPLICATE = "CUSTOM_MORPH_TARGET_NAME_DUPLICATE";
+    /** A requested Custom Morph Target does not exist in the active Project. */
+    public static final String CUSTOM_MORPH_TARGET_NOT_FOUND = "CUSTOM_MORPH_TARGET_NOT_FOUND";
 
     private ProjectDiagnosticCodes() {
     }

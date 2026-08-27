@@ -27,6 +27,19 @@ final class DefaultProjectSession implements ProjectSession {
                     return left.getName().compareToIgnoreCase(right.getName());
                 }
             };
+    private static final Comparator<CustomMorphTargetSnapshot> CUSTOM_MORPH_TARGET_NAME_ORDER =
+            new Comparator<CustomMorphTargetSnapshot>() {
+                @Override
+                public int compare(CustomMorphTargetSnapshot left, CustomMorphTargetSnapshot right) {
+                    return left.getName().compareToIgnoreCase(right.getName());
+                }
+            };
+    private static final Comparator<String> CASE_INSENSITIVE_NAME_ORDER = new Comparator<String>() {
+        @Override
+        public int compare(String left, String right) {
+            return left.compareToIgnoreCase(right);
+        }
+    };
 
     private final Object operationLock = new Object();
     private volatile ProjectSnapshot snapshot = ProjectSnapshot.noProject();
@@ -101,9 +114,22 @@ final class DefaultProjectSession implements ProjectSession {
     public ProjectOutcome apply(ProjectEdit edit) {
         Objects.requireNonNull(edit, "edit");
         synchronized (operationLock) {
-            if (edit instanceof SliderPresetEdits.SliderPresetEdit
+            if ((edit instanceof SliderPresetEdits.SliderPresetEdit
+                    || edit instanceof CustomMorphTargetEdits.CustomMorphTargetEdit)
                     && snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT)
                 return rejectedActiveProjectRequired();
+            if (edit instanceof CustomMorphTargetEdits.Create)
+                return createCustomMorphTarget((CustomMorphTargetEdits.Create) edit);
+            if (edit instanceof CustomMorphTargetEdits.AddSliderPreset)
+                return addCustomMorphTargetSliderPreset((CustomMorphTargetEdits.AddSliderPreset) edit);
+            if (edit instanceof CustomMorphTargetEdits.RemoveSliderPreset)
+                return removeCustomMorphTargetSliderPreset((CustomMorphTargetEdits.RemoveSliderPreset) edit);
+            if (edit instanceof CustomMorphTargetEdits.ClearSliderPresets)
+                return clearCustomMorphTargetSliderPresets((CustomMorphTargetEdits.ClearSliderPresets) edit);
+            if (edit instanceof CustomMorphTargetEdits.Delete)
+                return deleteCustomMorphTarget((CustomMorphTargetEdits.Delete) edit);
+            if (edit instanceof CustomMorphTargetEdits.Clear)
+                return clearCustomMorphTargets();
             if (edit instanceof SliderPresetEdits.Create)
                 return createSliderPreset((SliderPresetEdits.Create) edit);
             if (edit instanceof SliderPresetEdits.Duplicate)
@@ -137,6 +163,202 @@ final class DefaultProjectSession implements ProjectSession {
                 OptionalInt.empty());
         return rejected(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED, location,
                 "Create or open a Project before applying edits.");
+    }
+
+    /**
+     * Creates an empty Custom Morph Target and publishes the collection in
+     * canonical order.
+     *
+     * @param edit immutable creation request
+     * @return a changed outcome carrying the new dirty snapshot
+     */
+    private ProjectOutcome createCustomMorphTarget(CustomMorphTargetEdits.Create edit) {
+        RejectedOutcome rejection = validateCustomMorphTargetName(edit.getName());
+        if (rejection != null)
+            return rejection;
+        String name = edit.getName().trim();
+        List<CustomMorphTargetSnapshot> targets = new ArrayList<>(snapshot.getCustomMorphTargets());
+        targets.add(new CustomMorphTargetSnapshot(name, Collections.<String>emptyList()));
+        return publishChangedCustomMorphTargets(targets);
+    }
+
+    /**
+     * Adds one canonical Slider Preset relationship to a Custom Morph Target.
+     * Duplicate logical relationships preserve the exact current snapshot.
+     *
+     * @param edit immutable assignment-add request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome addCustomMorphTargetSliderPreset(CustomMorphTargetEdits.AddSliderPreset edit) {
+        int targetIndex = findCustomMorphTarget(edit.getTargetName());
+        if (targetIndex < 0)
+            return rejectedCustomMorphTargetNotFound();
+        int presetIndex = findSliderPreset(edit.getSliderPresetName());
+        if (presetIndex < 0)
+            return rejectedSliderPresetNotFound();
+
+        CustomMorphTargetSnapshot current = snapshot.getCustomMorphTargets().get(targetIndex);
+        String presetName = snapshot.getSliderPresets().get(presetIndex).getName();
+        List<String> assignments = new ArrayList<>(current.getSliderPresetNames());
+        for (String assignment : assignments) {
+            if (assignment.equalsIgnoreCase(presetName))
+                return new UnchangedOutcome(snapshot);
+        }
+        assignments.add(presetName);
+        Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
+        CustomMorphTargetSnapshot changed = new CustomMorphTargetSnapshot(current.getName(), assignments);
+        return replaceCustomMorphTarget(targetIndex, changed);
+    }
+
+    /**
+     * Removes one case-insensitive Slider Preset relationship from a Custom Morph
+     * Target, preserving the current snapshot when it is already absent.
+     *
+     * @param edit immutable assignment-remove request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome removeCustomMorphTargetSliderPreset(CustomMorphTargetEdits.RemoveSliderPreset edit) {
+        int targetIndex = findCustomMorphTarget(edit.getTargetName());
+        if (targetIndex < 0)
+            return rejectedCustomMorphTargetNotFound();
+
+        CustomMorphTargetSnapshot current = snapshot.getCustomMorphTargets().get(targetIndex);
+        String requestedName = edit.getSliderPresetName() == null ? "" : edit.getSliderPresetName().trim();
+        List<String> assignments = new ArrayList<>(current.getSliderPresetNames());
+        int assignmentIndex = -1;
+        for (int index = 0; index < assignments.size(); index++) {
+            if (assignments.get(index).equalsIgnoreCase(requestedName)) {
+                assignmentIndex = index;
+                break;
+            }
+        }
+        if (assignmentIndex < 0)
+            return new UnchangedOutcome(snapshot);
+        assignments.remove(assignmentIndex);
+        CustomMorphTargetSnapshot changed = new CustomMorphTargetSnapshot(current.getName(), assignments);
+        return replaceCustomMorphTarget(targetIndex, changed);
+    }
+
+    /**
+     * Clears every Slider Preset relationship from a Custom Morph Target while
+     * preserving the current snapshot when the relationship collection is empty.
+     *
+     * @param edit immutable assignment-clear request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome clearCustomMorphTargetSliderPresets(CustomMorphTargetEdits.ClearSliderPresets edit) {
+        int targetIndex = findCustomMorphTarget(edit.getTargetName());
+        if (targetIndex < 0)
+            return rejectedCustomMorphTargetNotFound();
+
+        CustomMorphTargetSnapshot current = snapshot.getCustomMorphTargets().get(targetIndex);
+        if (current.getSliderPresetNames().isEmpty())
+            return new UnchangedOutcome(snapshot);
+        CustomMorphTargetSnapshot changed = new CustomMorphTargetSnapshot(current.getName(),
+                Collections.<String>emptyList());
+        return replaceCustomMorphTarget(targetIndex, changed);
+    }
+
+    /**
+     * Replaces one Custom Morph Target and publishes the dirty canonical collection.
+     *
+     * @param targetIndex collection index to replace
+     * @param changed replacement immutable value
+     * @return a changed outcome carrying the published snapshot
+     */
+    private ChangedOutcome replaceCustomMorphTarget(int targetIndex, CustomMorphTargetSnapshot changed) {
+        List<CustomMorphTargetSnapshot> targets = new ArrayList<>(snapshot.getCustomMorphTargets());
+        targets.set(targetIndex, changed);
+        return publishChangedCustomMorphTargets(targets);
+    }
+
+    /**
+     * Removes one existing Custom Morph Target selected by case-insensitive identity.
+     *
+     * @param edit immutable deletion request
+     * @return a changed or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome deleteCustomMorphTarget(CustomMorphTargetEdits.Delete edit) {
+        int targetIndex = findCustomMorphTarget(edit.getName());
+        if (targetIndex < 0)
+            return rejectedCustomMorphTargetNotFound();
+        List<CustomMorphTargetSnapshot> targets = new ArrayList<>(snapshot.getCustomMorphTargets());
+        targets.remove(targetIndex);
+        return publishChangedCustomMorphTargets(targets);
+    }
+
+    /**
+     * Clears a non-empty Custom Morph Target collection without manufacturing a
+     * dirty transition for an already-empty Project.
+     *
+     * @return changed or unchanged outcome at the pinned snapshot
+     */
+    private ProjectOutcome clearCustomMorphTargets() {
+        if (snapshot.getCustomMorphTargets().isEmpty())
+            return new UnchangedOutcome(snapshot);
+        return publishChangedCustomMorphTargets(new ArrayList<CustomMorphTargetSnapshot>());
+    }
+
+    /**
+     * Finds a Custom Morph Target using its case-insensitive Project identity.
+     *
+     * @param name requested name, optionally surrounded by whitespace
+     * @return the collection index, or -1 when no logical target matches
+     */
+    private int findCustomMorphTarget(String name) {
+        if (name == null)
+            return -1;
+        String normalizedName = name.trim();
+        for (int index = 0; index < snapshot.getCustomMorphTargets().size(); index++) {
+            if (snapshot.getCustomMorphTargets().get(index).getName().equalsIgnoreCase(normalizedName))
+                return index;
+        }
+        return -1;
+    }
+
+    /**
+     * Rejects an edit whose Custom Morph Target cannot be resolved.
+     *
+     * @return a structured rejection carrying the current snapshot
+     */
+    private RejectedOutcome rejectedCustomMorphTargetNotFound() {
+        SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("custom-morph-target.name"),
+                OptionalInt.empty(), OptionalInt.empty());
+        return rejected(ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NOT_FOUND, location,
+                "The requested Custom Morph Target does not exist.");
+    }
+
+    /**
+     * Validates a requested Custom Morph Target name without restricting BodyGen
+     * condition syntax.
+     *
+     * @param requestedName caller-supplied name before normalization
+     * @return a structured rejection, or null when the trimmed name is valid
+     */
+    private RejectedOutcome validateCustomMorphTargetName(String requestedName) {
+        if (requestedName == null || requestedName.trim().isEmpty())
+            return rejectedCustomMorphTargetName(ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_REQUIRED,
+                    "A Custom Morph Target name must not be empty.");
+        String normalizedName = requestedName.trim();
+        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets()) {
+            if (target.getName().equalsIgnoreCase(normalizedName))
+                return rejectedCustomMorphTargetName(ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_DUPLICATE,
+                        "A Custom Morph Target with this name already exists.");
+        }
+        return null;
+    }
+
+    /**
+     * Builds a naming rejection at the stable Custom Morph Target name location.
+     *
+     * @param code stable diagnostic code
+     * @param message human-readable validation failure
+     * @return a rejection carrying the unchanged current snapshot
+     */
+    private RejectedOutcome rejectedCustomMorphTargetName(String code, String message) {
+        SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("custom-morph-target.name"),
+                OptionalInt.empty(), OptionalInt.empty());
+        return rejected(code, location, message);
     }
 
     /**
@@ -230,7 +452,8 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Removes one existing Slider Preset selected by case-insensitive identity.
+     * Removes one existing Slider Preset and every affected Custom Morph Target
+     * relationship in one atomically published snapshot.
      *
      * @param edit immutable deletion request
      * @return a changed or rejected outcome at the pinned snapshot
@@ -239,21 +462,25 @@ final class DefaultProjectSession implements ProjectSession {
         int index = findSliderPreset(edit.getName());
         if (index < 0)
             return rejectedSliderPresetNotFound();
+        String removedName = snapshot.getSliderPresets().get(index).getName();
         List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
         presets.remove(index);
-        return publishChangedPresets(presets);
+        List<CustomMorphTargetSnapshot> targets = removeCustomMorphTargetAssignments(removedName);
+        return publishChangedProjectState(presets, targets);
     }
 
     /**
-     * Clears a non-empty Slider Preset catalog without manufacturing a dirty
-     * transition for an already-empty Project.
+     * Clears a non-empty Slider Preset catalog and every Custom Morph Target
+     * relationship atomically, without manufacturing a dirty transition for an
+     * already-empty Project.
      *
      * @return changed or unchanged outcome at the pinned snapshot
      */
     private ProjectOutcome clearSliderPresets() {
         if (snapshot.getSliderPresets().isEmpty())
             return new UnchangedOutcome(snapshot);
-        return publishChangedPresets(new ArrayList<SliderPresetSnapshot>());
+        List<CustomMorphTargetSnapshot> targets = clearAllCustomMorphTargetAssignments();
+        return publishChangedProjectState(new ArrayList<SliderPresetSnapshot>(), targets);
     }
 
     /**
@@ -389,16 +616,93 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Replaces one Slider Preset and publishes the dirty canonical catalog.
+     * Replaces one Slider Preset and, when its display name changes, rewrites every
+     * affected Custom Morph Target relationship in the same published snapshot.
      *
      * @param index catalog index to replace
      * @param changed replacement immutable value
      * @return a changed outcome carrying the published snapshot
      */
     private ChangedOutcome replaceSliderPreset(int index, SliderPresetSnapshot changed) {
+        String previousName = snapshot.getSliderPresets().get(index).getName();
         List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
         presets.set(index, changed);
+        if (!previousName.equals(changed.getName())) {
+            List<CustomMorphTargetSnapshot> targets = renameCustomMorphTargetAssignments(previousName,
+                    changed.getName());
+            return publishChangedProjectState(presets, targets);
+        }
         return publishChangedPresets(presets);
+    }
+
+    /**
+     * Rewrites every relationship to a renamed Slider Preset while retaining
+     * canonical assignment order and unaffected immutable target values.
+     *
+     * @param previousName prior Slider Preset display name
+     * @param changedName replacement canonical display name
+     * @return Custom Morph Targets with every matching relationship updated
+     */
+    private List<CustomMorphTargetSnapshot> renameCustomMorphTargetAssignments(String previousName,
+            String changedName) {
+        List<CustomMorphTargetSnapshot> targets = new ArrayList<>();
+        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets()) {
+            List<String> assignments = new ArrayList<>(target.getSliderPresetNames());
+            boolean changed = false;
+            for (int index = 0; index < assignments.size(); index++) {
+                if (assignments.get(index).equalsIgnoreCase(previousName)) {
+                    assignments.set(index, changedName);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
+                targets.add(new CustomMorphTargetSnapshot(target.getName(), assignments));
+            } else {
+                targets.add(target);
+            }
+        }
+        return targets;
+    }
+
+    /**
+     * Removes every relationship to a deleted Slider Preset without changing
+     * unrelated Custom Morph Target values.
+     *
+     * @param removedName deleted Slider Preset display name
+     * @return Custom Morph Targets with matching relationships removed
+     */
+    private List<CustomMorphTargetSnapshot> removeCustomMorphTargetAssignments(String removedName) {
+        List<CustomMorphTargetSnapshot> targets = new ArrayList<>();
+        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets()) {
+            List<String> assignments = new ArrayList<>(target.getSliderPresetNames());
+            boolean changed = false;
+            for (int index = assignments.size() - 1; index >= 0; index--) {
+                if (assignments.get(index).equalsIgnoreCase(removedName)) {
+                    assignments.remove(index);
+                    changed = true;
+                }
+            }
+            targets.add(changed ? new CustomMorphTargetSnapshot(target.getName(), assignments) : target);
+        }
+        return targets;
+    }
+
+    /**
+     * Clears every Custom Morph Target relationship when the Slider Preset catalog
+     * is cleared, retaining already-empty immutable target values.
+     *
+     * @return Custom Morph Targets with empty Slider Preset relationships
+     */
+    private List<CustomMorphTargetSnapshot> clearAllCustomMorphTargetAssignments() {
+        List<CustomMorphTargetSnapshot> targets = new ArrayList<>();
+        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets()) {
+            if (target.getSliderPresetNames().isEmpty())
+                targets.add(target);
+            else
+                targets.add(new CustomMorphTargetSnapshot(target.getName(), Collections.<String>emptyList()));
+        }
+        return targets;
     }
 
     /**
@@ -458,8 +762,34 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed outcome carrying the published snapshot
      */
     private ChangedOutcome publishChangedPresets(List<SliderPresetSnapshot> presets) {
+        return publishChangedProjectState(presets,
+                new ArrayList<>(snapshot.getCustomMorphTargets()));
+    }
+
+    /**
+     * Sorts changed Custom Morph Targets and atomically publishes a dirty Project
+     * snapshot.
+     *
+     * @param targets changed Custom Morph Target values
+     * @return a changed outcome carrying the published snapshot
+     */
+    private ChangedOutcome publishChangedCustomMorphTargets(List<CustomMorphTargetSnapshot> targets) {
+        return publishChangedProjectState(new ArrayList<>(snapshot.getSliderPresets()), targets);
+    }
+
+    /**
+     * Canonically orders and atomically publishes changed Slider Presets together
+     * with their repaired Custom Morph Target relationships.
+     *
+     * @param presets changed Slider Preset catalog
+     * @param targets repaired Custom Morph Target values
+     * @return a changed outcome carrying the single coherent snapshot
+     */
+    private ChangedOutcome publishChangedProjectState(List<SliderPresetSnapshot> presets,
+            List<CustomMorphTargetSnapshot> targets) {
         Collections.sort(presets, SLIDER_PRESET_NAME_ORDER);
-        snapshot = new ProjectSnapshot(presets, snapshot.getCustomMorphTargets(), snapshot.getNpcMorphAssignments(),
+        Collections.sort(targets, CUSTOM_MORPH_TARGET_NAME_ORDER);
+        snapshot = new ProjectSnapshot(presets, targets, snapshot.getNpcMorphAssignments(),
                 snapshot.getFileIdentity(), true, snapshot.getLifecycleStatus());
         return new ChangedOutcome(snapshot);
     }

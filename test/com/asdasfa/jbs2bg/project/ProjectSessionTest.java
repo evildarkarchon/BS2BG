@@ -205,6 +205,210 @@ class ProjectSessionTest {
     }
 
     /**
+     * Verifies that creating Custom Morph Targets accepts BodyGen condition syntax,
+     * normalizes names, orders snapshots, and dirties the Project.
+     */
+    @Test
+    void creatingCustomMorphTargetsTrimsNamesOrdersSnapshotsAndMarksDirty() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+
+        ProjectOutcome first = session.apply(CustomMorphTargetEdits.create(" zeta|Female "));
+        ProjectOutcome second = session.apply(CustomMorphTargetEdits.create("Alpha"));
+
+        assertTrue(first instanceof ChangedOutcome);
+        assertTrue(second instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("Alpha", "zeta|Female"), customMorphTargetNames(second.getSnapshot()));
+        assertTrue(second.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
+        assertTrue(second.getSnapshot().isDirty());
+        assertSame(second.getSnapshot(), session.getSnapshot());
+    }
+
+    /**
+     * Verifies that empty and duplicate Custom Morph Target names are rejected
+     * without changing the snapshot or its truthful dirty state.
+     */
+    @Test
+    void invalidAndDuplicateCustomMorphTargetCreationPreservesSnapshotAndDirtyState() {
+        ProjectSession session = ProjectSessions.create();
+        ProjectSnapshot clean = session.newProject().getSnapshot();
+
+        ProjectOutcome omitted = session.apply(CustomMorphTargetEdits.create(null));
+        ProjectOutcome blank = session.apply(CustomMorphTargetEdits.create("   "));
+
+        assertCustomMorphTargetRejected(omitted, ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_REQUIRED, clean);
+        assertCustomMorphTargetRejected(blank, ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_REQUIRED, clean);
+        assertFalse(clean.isDirty());
+
+        ProjectSnapshot dirty = session.apply(CustomMorphTargetEdits.create("All|Female")).getSnapshot();
+        ProjectOutcome duplicate = session.apply(CustomMorphTargetEdits.create(" all|FEMALE "));
+
+        assertCustomMorphTargetRejected(duplicate,
+                ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_DUPLICATE, dirty);
+        assertTrue(dirty.isDirty());
+        assertEquals(Arrays.asList("All|Female"), customMorphTargetNames(dirty));
+    }
+
+    /**
+     * Verifies that Slider Preset assignments resolve case-insensitively, retain
+     * canonical display names and order, and reject duplicate work as a no-op.
+     */
+    @Test
+    void addingCustomMorphTargetAssignmentsOrdersNamesAndTreatsDuplicatesAsUnchanged() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Zulu"));
+        session.apply(SliderPresetEdits.create("alpha"));
+        session.apply(CustomMorphTargetEdits.create("All|Female"));
+
+        ProjectOutcome first = session.apply(CustomMorphTargetEdits.addSliderPreset("all|FEMALE", "zulu"));
+        ProjectOutcome second = session.apply(CustomMorphTargetEdits.addSliderPreset("All|Female", "ALPHA"));
+        ProjectSnapshot assigned = second.getSnapshot();
+
+        assertTrue(first instanceof ChangedOutcome);
+        assertTrue(second instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("alpha", "Zulu"),
+                assigned.getCustomMorphTargets().get(0).getSliderPresetNames());
+        assertTrue(assigned.isDirty());
+
+        ProjectOutcome duplicate = session.apply(
+                CustomMorphTargetEdits.addSliderPreset("ALL|female", "Alpha"));
+
+        assertTrue(duplicate instanceof UnchangedOutcome);
+        assertSame(assigned, duplicate.getSnapshot());
+        assertSame(assigned, session.getSnapshot());
+    }
+
+    /**
+     * Verifies that assignment removal and clearing change only existing
+     * relationships and preserve the exact snapshot for idempotent no-ops.
+     */
+    @Test
+    void removingAndClearingCustomMorphTargetAssignmentsReportsTruthfulOutcomes() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.create("beta"));
+        session.apply(CustomMorphTargetEdits.create("All|Female"));
+        session.apply(CustomMorphTargetEdits.addSliderPreset("All|Female", "Alpha"));
+        session.apply(CustomMorphTargetEdits.addSliderPreset("All|Female", "beta"));
+
+        ProjectOutcome removed = session.apply(
+                CustomMorphTargetEdits.removeSliderPreset("all|female", "ALPHA"));
+        assertTrue(removed instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("beta"),
+                removed.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames());
+
+        ProjectOutcome missing = session.apply(
+                CustomMorphTargetEdits.removeSliderPreset("All|Female", "Alpha"));
+        assertTrue(missing instanceof UnchangedOutcome);
+        assertSame(removed.getSnapshot(), missing.getSnapshot());
+
+        ProjectOutcome cleared = session.apply(CustomMorphTargetEdits.clearSliderPresets("ALL|FEMALE"));
+        assertTrue(cleared instanceof ChangedOutcome);
+        assertTrue(cleared.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
+
+        ProjectOutcome alreadyEmpty = session.apply(CustomMorphTargetEdits.clearSliderPresets("All|Female"));
+        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
+        assertTrue(alreadyEmpty.getSnapshot().isDirty());
+    }
+
+    /**
+     * Verifies that Custom Morph Target delete and clear operations update only
+     * existing targets and preserve truthful rejected and unchanged outcomes.
+     */
+    @Test
+    void deletingAndClearingCustomMorphTargetsReportsTruthfulOutcomes() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(CustomMorphTargetEdits.create("Alpha"));
+        session.apply(CustomMorphTargetEdits.create("beta|Female"));
+
+        ProjectOutcome deleted = session.apply(CustomMorphTargetEdits.delete("ALPHA"));
+        assertTrue(deleted instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("beta|Female"), customMorphTargetNames(deleted.getSnapshot()));
+
+        ProjectOutcome missing = session.apply(CustomMorphTargetEdits.delete("missing"));
+        assertCustomMorphTargetRejected(missing, ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NOT_FOUND,
+                deleted.getSnapshot());
+
+        ProjectOutcome cleared = session.apply(CustomMorphTargetEdits.clear());
+        assertTrue(cleared instanceof ChangedOutcome);
+        assertTrue(cleared.getSnapshot().getCustomMorphTargets().isEmpty());
+        assertTrue(cleared.getSnapshot().isDirty());
+
+        ProjectOutcome alreadyEmpty = session.apply(CustomMorphTargetEdits.clear());
+        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
+    }
+
+    /**
+     * Verifies that Slider Preset rename publishes the catalog and all Custom Morph
+     * Target relationships together with canonical display names and ordering.
+     */
+    @Test
+    void renamingSliderPresetCascadesToEveryCustomMorphTargetRelationship() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.create("beta"));
+        session.apply(CustomMorphTargetEdits.create("Zeta|Female"));
+        session.apply(CustomMorphTargetEdits.create("All|Male"));
+        session.apply(CustomMorphTargetEdits.addSliderPreset("Zeta|Female", "Alpha"));
+        session.apply(CustomMorphTargetEdits.addSliderPreset("All|Male", "Alpha"));
+        session.apply(CustomMorphTargetEdits.addSliderPreset("All|Male", "beta"));
+
+        ProjectOutcome renamed = session.apply(SliderPresetEdits.rename("ALPHA", " Gamma "));
+        ProjectSnapshot snapshot = renamed.getSnapshot();
+
+        assertTrue(renamed instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("beta", "Gamma"), sliderPresetNames(snapshot));
+        assertEquals(Arrays.asList("All|Male", "Zeta|Female"), customMorphTargetNames(snapshot));
+        assertEquals(Arrays.asList("beta", "Gamma"),
+                snapshot.getCustomMorphTargets().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("Gamma"),
+                snapshot.getCustomMorphTargets().get(1).getSliderPresetNames());
+        assertSame(snapshot, session.getSnapshot());
+        assertTrue(snapshot.isDirty());
+    }
+
+    /**
+     * Verifies that Slider Preset delete and clear operations remove every affected
+     * Custom Morph Target relationship in the same published snapshot.
+     */
+    @Test
+    void deletingAndClearingSliderPresetsCascadeToEveryCustomMorphTargetRelationship() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.create("beta"));
+        session.apply(CustomMorphTargetEdits.create("All|Female"));
+        session.apply(CustomMorphTargetEdits.create("All|Male"));
+        session.apply(CustomMorphTargetEdits.addSliderPreset("All|Female", "Alpha"));
+        session.apply(CustomMorphTargetEdits.addSliderPreset("All|Female", "beta"));
+        session.apply(CustomMorphTargetEdits.addSliderPreset("All|Male", "Alpha"));
+
+        ProjectOutcome deleted = session.apply(SliderPresetEdits.delete("ALPHA"));
+        ProjectSnapshot afterDelete = deleted.getSnapshot();
+
+        assertTrue(deleted instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("beta"), sliderPresetNames(afterDelete));
+        assertEquals(Arrays.asList("beta"),
+                afterDelete.getCustomMorphTargets().get(0).getSliderPresetNames());
+        assertTrue(afterDelete.getCustomMorphTargets().get(1).getSliderPresetNames().isEmpty());
+
+        ProjectOutcome cleared = session.apply(SliderPresetEdits.clear());
+        ProjectSnapshot afterClear = cleared.getSnapshot();
+
+        assertTrue(cleared instanceof ChangedOutcome);
+        assertTrue(afterClear.getSliderPresets().isEmpty());
+        assertTrue(afterClear.getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
+        assertTrue(afterClear.getCustomMorphTargets().get(1).getSliderPresetNames().isEmpty());
+        assertSame(afterClear, session.getSnapshot());
+    }
+
+    /**
      * Verifies that UUNP and slider-choice edits preserve every observable value,
      * order choices canonically, and report repeated values as no-ops.
      */
@@ -497,6 +701,19 @@ class ProjectSessionTest {
     }
 
     /**
+     * Extracts the ordered Custom Morph Target names exposed by a session snapshot.
+     *
+     * @param snapshot immutable Project state to inspect
+     * @return names in snapshot order
+     */
+    private static List<String> customMorphTargetNames(ProjectSnapshot snapshot) {
+        List<String> names = new ArrayList<>();
+        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets())
+            names.add(target.getName());
+        return names;
+    }
+
+    /**
      * Asserts the common structured naming rejection contract.
      *
      * @param outcome rejected session operation
@@ -509,6 +726,23 @@ class ProjectSessionTest {
         assertEquals(code, outcome.getDiagnostics().get(0).getCode());
         assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
         assertEquals("slider-preset.name",
+                outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
+    }
+
+    /**
+     * Asserts the structured Custom Morph Target naming rejection contract.
+     *
+     * @param outcome rejected session operation
+     * @param code expected stable diagnostic code
+     * @param snapshot exact prior snapshot that must be preserved
+     */
+    private static void assertCustomMorphTargetRejected(ProjectOutcome outcome, String code,
+            ProjectSnapshot snapshot) {
+        assertTrue(outcome instanceof RejectedOutcome);
+        assertSame(snapshot, outcome.getSnapshot());
+        assertEquals(code, outcome.getDiagnostics().get(0).getCode());
+        assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
+        assertEquals("custom-morph-target.name",
                 outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
     }
 }
