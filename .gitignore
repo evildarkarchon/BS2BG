@@ -452,3 +452,5 @@ jBS2BG.code-workspace
 warnings.txt
 graphify-out/
 /target/
+.claude/settings.json
+.codex/hooks.json
