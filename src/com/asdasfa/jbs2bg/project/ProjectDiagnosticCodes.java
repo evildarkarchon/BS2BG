@@ -9,8 +9,26 @@ public final class ProjectDiagnosticCodes {
     public static final String EDIT_UNSUPPORTED = "PROJECT_EDIT_UNSUPPORTED";
     /** A known Project edit requires New Project or Open to establish active state. */
     public static final String ACTIVE_PROJECT_REQUIRED = "PROJECT_ACTIVE_REQUIRED";
-    /** Project loading is not yet available through the foundational session. */
-    public static final String OPEN_UNAVAILABLE = "PROJECT_OPEN_UNAVAILABLE";
+    /** A Project file could not be read from the local filesystem. */
+    public static final String PROJECT_FILE_READ_FAILED = "PROJECT_FILE_READ_FAILED";
+    /** An unexpected environmental or runtime failure prevented Project opening. */
+    public static final String PROJECT_OPEN_FAILED = "PROJECT_OPEN_FAILED";
+    /** A Project file contains syntactically malformed JSON. */
+    public static final String PROJECT_JSON_MALFORMED = "PROJECT_JSON_MALFORMED";
+    /** A Project file omits or mis-shapes required legacy structure. */
+    public static final String PROJECT_STRUCTURE_INVALID = "PROJECT_STRUCTURE_INVALID";
+    /** A legacy Project field has the wrong JSON value type. */
+    public static final String PROJECT_VALUE_TYPE_INVALID = "PROJECT_VALUE_TYPE_INVALID";
+    /** A Project object contains a field outside the supported legacy schema. */
+    public static final String PROJECT_FIELD_UNSUPPORTED = "PROJECT_FIELD_UNSUPPORTED";
+    /** A supported Project object repeats the same persisted member. */
+    public static final String PROJECT_MEMBER_DUPLICATE = "PROJECT_MEMBER_DUPLICATE";
+    /** A persisted assignment names a Slider Preset absent from the loaded catalog. */
+    public static final String SLIDER_PRESET_ASSIGNMENT_MISSING = "SLIDER_PRESET_ASSIGNMENT_MISSING";
+    /** A Slider Preset repeats the same slider-choice identity without regard to case. */
+    public static final String SLIDER_CHOICE_NAME_DUPLICATE = "SLIDER_CHOICE_NAME_DUPLICATE";
+    /** A Project relationship repeats a Slider Preset reference without regard to case. */
+    public static final String SLIDER_PRESET_ASSIGNMENT_DUPLICATE = "SLIDER_PRESET_ASSIGNMENT_DUPLICATE";
     /** Project saving is not yet available through the foundational session. */
     public static final String SAVE_UNAVAILABLE = "PROJECT_SAVE_UNAVAILABLE";
     /** Save requires a successfully adopted Project file identity. */

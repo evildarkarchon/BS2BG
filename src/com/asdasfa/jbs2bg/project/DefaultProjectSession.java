@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg.project;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -8,6 +9,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+
+import com.eclipsesource.json.ParseException;
 
 /**
  * Serializes Project operations and atomically publishes immutable snapshots.
@@ -83,11 +86,69 @@ final class DefaultProjectSession implements ProjectSession {
     public ProjectOutcome open(Path source) {
         Objects.requireNonNull(source, "source");
         synchronized (operationLock) {
-            SourceLocation location = new SourceLocation(Optional.of(source), Optional.empty(), OptionalInt.empty(),
-                    OptionalInt.empty());
-            return rejected(ProjectDiagnosticCodes.OPEN_UNAVAILABLE, location,
-                    "Opening Projects is not available in this ProjectSession implementation yet.");
+            try {
+                ProjectFileLoader.LoadedProject loaded = ProjectFileLoader.load(source);
+                snapshot = loaded.getSnapshot();
+                return new ChangedOutcome(snapshot, loaded.getDiagnostics());
+            } catch (IOException exception) {
+                return failedOpen(ProjectDiagnosticCodes.PROJECT_FILE_READ_FAILED, source,
+                        "The Project file could not be read: " + exception.getMessage());
+            } catch (ParseException exception) {
+                return rejectedMalformedJson(source, exception);
+            } catch (ProjectFileLoader.InvalidProjectFileException exception) {
+                return rejectedInvalidProject(source, exception);
+            } catch (RuntimeException exception) {
+                // Known document failures are handled above; this boundary keeps an
+                // unexpected loader failure from escaping after callers entrusted state to Open.
+                return failedOpen(ProjectDiagnosticCodes.PROJECT_OPEN_FAILED, source,
+                        "The Project could not be opened: " + exception.getMessage());
+            }
         }
+    }
+
+    /**
+     * Reports JSON parser coordinates while preserving the active Project.
+     *
+     * @param source malformed Project file
+     * @param exception parser failure with one-based coordinates
+     * @return structured rejection carrying the unchanged snapshot
+     */
+    private RejectedOutcome rejectedMalformedJson(Path source, ParseException exception) {
+        SourceLocation location = new SourceLocation(Optional.of(source), Optional.of("/"),
+                OptionalInt.of(exception.getLine()), OptionalInt.of(exception.getColumn()));
+        return rejected(ProjectDiagnosticCodes.PROJECT_JSON_MALFORMED, location,
+                "The Project file contains malformed JSON: " + exception.getMessage());
+    }
+
+    /**
+     * Reports a stable schema or domain validation location while preserving the
+     * active Project.
+     *
+     * @param source invalid Project file
+     * @param exception structured candidate validation failure
+     * @return structured rejection carrying the unchanged snapshot
+     */
+    private RejectedOutcome rejectedInvalidProject(Path source,
+            ProjectFileLoader.InvalidProjectFileException exception) {
+        SourceLocation location = new SourceLocation(Optional.of(source), Optional.of(exception.getElement()),
+                OptionalInt.empty(), OptionalInt.empty());
+        return rejected(exception.getCode(), location, exception.getMessage());
+    }
+
+    /**
+     * Builds a failed open outcome without replacing the currently published
+     * Project snapshot.
+     *
+     * @param code stable diagnostic code
+     * @param source requested source file
+     * @param message human-readable failure message
+     * @return failure carrying the unchanged snapshot
+     */
+    private FailedOutcome failedOpen(String code, Path source, String message) {
+        SourceLocation location = new SourceLocation(Optional.of(source), Optional.of("/"), OptionalInt.empty(),
+                OptionalInt.empty());
+        ProjectDiagnostic diagnostic = new ProjectDiagnostic(code, DiagnosticSeverity.ERROR, location, message);
+        return new FailedOutcome(snapshot, Collections.singletonList(diagnostic));
     }
 
     /**
