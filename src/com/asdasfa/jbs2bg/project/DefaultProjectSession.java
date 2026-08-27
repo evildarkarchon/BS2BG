@@ -650,24 +650,9 @@ final class DefaultProjectSession implements ProjectSession {
             return rejectedSliderPresetNotFound();
 
         NpcMorphAssignmentSnapshot current = snapshot.getNpcMorphAssignments().get(npcIndex);
-        List<String> assignments = new ArrayList<>(current.getSliderPresetNames());
-        boolean changed = false;
-        for (String requestedAssignment : requestedAssignments) {
-            boolean duplicate = false;
-            for (String existingAssignment : assignments) {
-                if (existingAssignment.equalsIgnoreCase(requestedAssignment)) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (!duplicate) {
-                assignments.add(requestedAssignment);
-                changed = true;
-            }
-        }
-        if (!changed)
+        List<String> assignments = mergeSliderPresetAssignments(current.getSliderPresetNames(), requestedAssignments);
+        if (assignments.size() == current.getSliderPresetNames().size())
             return new UnchangedOutcome(snapshot);
-        Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
         return replaceNpcMorphAssignment(npcIndex, copyNpc(current, assignments));
     }
 
@@ -944,6 +929,32 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
+     * Merges canonical relationship names without making case-only duplicates and
+     * returns the complete relationship set in stable display order.
+     *
+     * @param existingNames current canonical Slider Preset relationships
+     * @param requestedNames validated canonical relationships to add
+     * @return a new canonically ordered relationship list
+     */
+    private static List<String> mergeSliderPresetAssignments(List<String> existingNames,
+            List<String> requestedNames) {
+        List<String> mergedNames = new ArrayList<>(existingNames);
+        for (String requestedName : requestedNames) {
+            boolean duplicate = false;
+            for (String existingName : mergedNames) {
+                if (existingName.equalsIgnoreCase(requestedName)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate)
+                mergedNames.add(requestedName);
+        }
+        Collections.sort(mergedNames, CASE_INSENSITIVE_NAME_ORDER);
+        return mergedNames;
+    }
+
+    /**
      * Creates a distinct NPC Morph Assignment value from copied source fields.
      *
      * @param source source NPC value
@@ -1024,24 +1035,9 @@ final class DefaultProjectSession implements ProjectSession {
             return rejectedSliderPresetNotFound();
 
         CustomMorphTargetSnapshot current = snapshot.getCustomMorphTargets().get(targetIndex);
-        List<String> assignments = new ArrayList<>(current.getSliderPresetNames());
-        boolean changed = false;
-        for (String requestedAssignment : requestedAssignments) {
-            boolean duplicate = false;
-            for (String existingAssignment : assignments) {
-                if (existingAssignment.equalsIgnoreCase(requestedAssignment)) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (!duplicate) {
-                assignments.add(requestedAssignment);
-                changed = true;
-            }
-        }
-        if (!changed)
+        List<String> assignments = mergeSliderPresetAssignments(current.getSliderPresetNames(), requestedAssignments);
+        if (assignments.size() == current.getSliderPresetNames().size())
             return new UnchangedOutcome(snapshot);
-        Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
         return replaceCustomMorphTarget(targetIndex,
                 new CustomMorphTargetSnapshot(current.getName(), assignments));
     }

@@ -480,7 +480,7 @@ public class MainController extends CustomController {
 	/**
 	 * Connect the views to their lists.
 	 */
-	protected void connectViews() {
+	private void connectViews() {
 		lvPresets.setItems(main.projectPresentation.getSliderPresets());
 		
 		tvNpc.setItems(main.projectPresentation.getNpcMorphAssignments());
@@ -494,22 +494,6 @@ public class MainController extends CustomController {
 		updateNpcCounter();
 	}
 	
-	/**
-	 * Disconnect the views from their lists.
-	 */
-	protected void disconnectViews() {
-		lvPresets.setItems(null);
-		
-		tvNpc.setItems(null);
-		
-		lvCustomTargets.setItems(null);
-		
-		lvTargetPresets.setItems(null);
-		
-		popupSliderPresetsController.disconnectViews();
-		popupSliderPresetsFillController.disconnectViews();
-	}
-
 	/**
 	 * Renders exactly the snapshot returned by a typed ProjectSession outcome on
 	 * the JavaFX thread and realizes presentation-only diagnostics and invalidation.
@@ -526,16 +510,11 @@ public class MainController extends CustomController {
 		NpcMorphAssignmentIdentity selectedNpcIdentity = identityOf(selectedNpc);
 		SliderPreset selectedTargetPreset = lvTargetPresets.getSelectionModel().getSelectedItem();
 		String selectedTargetPresetName = selectedTargetPreset == null ? null : selectedTargetPreset.getName();
-		boolean replacesProjection = outcome.getSnapshot() != main.projectPresentation.getSnapshot();
-		if (replacesProjection)
-			disconnectViews();
 		ProjectPresentationUpdate update = main.projectPresentation.render(outcome);
 		// Generated text must be cleared before selection listeners recreate the
 		// selected preview from the newly returned snapshot.
 		if (update.invalidatesGeneratedOutput())
 			invalidateGeneratedOutput();
-		if (replacesProjection)
-			connectViews();
 		selectSliderPreset(selectedPresetName);
 		if (selectedCustomTargetName != null)
 			selectCustomTarget(selectedCustomTargetName);
@@ -599,12 +578,16 @@ public class MainController extends CustomController {
 	}
 
 	/** Restores an assigned Slider Preset selection after its target is restored. */
-	private void selectTargetPreset(String name) {
+	void selectTargetPreset(String name) {
 		if (name == null || lvTargetPresets.getItems() == null)
 			return;
 		for (SliderPreset preset : lvTargetPresets.getItems()) {
 			if (preset.getName().equalsIgnoreCase(name)) {
-				lvTargetPresets.getSelectionModel().select(preset);
+				int index = lvTargetPresets.getItems().indexOf(preset);
+				lvTargetPresets.getSelectionModel().select(index);
+				lvTargetPresets.getFocusModel().focus(index);
+				if (!MyUtils.isIndexVisible(lvTargetPresets, index))
+					lvTargetPresets.scrollTo(index);
 				return;
 			}
 		}

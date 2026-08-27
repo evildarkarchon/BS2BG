@@ -145,10 +145,6 @@ public class PopupSliderPresetsFillController extends CustomController {
 		lvPresets.setItems(main.projectPresentation.getSliderPresets());
 	}
 	
-	protected void disconnectViews() {
-		lvPresets.setItems(null);
-	}
-	
 	@FXML
 	private void fillEmpty() {
 		ObservableList<SliderPreset> selectedPresets = lvPresets.getSelectionModel().getSelectedItems();

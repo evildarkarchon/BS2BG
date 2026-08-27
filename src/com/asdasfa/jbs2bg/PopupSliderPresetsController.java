@@ -83,10 +83,6 @@ public class PopupSliderPresetsController extends CustomController {
 		lvPresets.setItems(main.projectPresentation.getSliderPresets());
 	}
 	
-	protected void disconnectViews() {
-		lvPresets.setItems(null);
-	}
-	
 	/**
 	 * Assigns the selected Slider Preset to the currently selected Project target
 	 * through one explicit Project edit.
@@ -100,31 +96,9 @@ public class PopupSliderPresetsController extends CustomController {
 		String presetName = preset.getName();
 		ProjectOutcome outcome = main.mainController.addSliderPresetToCurrentTarget(presetName);
 		if (outcome instanceof ChangedOutcome)
-			selectTargetPreset(presetName);
+			main.mainController.selectTargetPreset(presetName);
 		
 		lvPresets.requestFocus();
-	}
-
-	/**
-	 * Restores navigation to an assigned Slider Preset after a changed snapshot
-	 * rebuilds the selected target's presentation list.
-	 *
-	 * @param presetName canonical assigned Slider Preset name
-	 */
-	private void selectTargetPreset(String presetName) {
-		if (main.mainController.lvTargetPresets.getItems() == null)
-			return;
-		for (SliderPreset targetPreset : main.mainController.lvTargetPresets.getItems()) {
-			if (targetPreset.getName().equalsIgnoreCase(presetName)) {
-				int index = main.mainController.lvTargetPresets.getItems().indexOf(targetPreset);
-				main.mainController.lvTargetPresets.getSelectionModel().select(index);
-				main.mainController.lvTargetPresets.getFocusModel().focus(index);
-				boolean indexVisible = MyUtils.isIndexVisible(main.mainController.lvTargetPresets, index);
-				if (!indexVisible)
-					main.mainController.lvTargetPresets.scrollTo(index);
-				return;
-			}
-		}
 	}
 	
 	@FXML

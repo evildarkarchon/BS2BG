@@ -4,7 +4,6 @@ import java.net.URL;
 import java.util.ResourceBundle;
 
 import com.asdasfa.jbs2bg.data.SliderPreset;
-import com.asdasfa.jbs2bg.etc.MyUtils;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
@@ -64,30 +63,8 @@ public class PopupRenameController extends CustomController {
 		String canonicalName = newName.trim();
 		main.mainController.selectSliderPreset(canonicalName);
 		if (restoreTargetPreset)
-			selectTargetPreset(canonicalName);
+			main.mainController.selectTargetPreset(canonicalName);
 		stage.hide();
-	}
-
-	/**
-	 * Restores the renamed assignment selection against the rebuilt current-target
-	 * projection without mutating Project state.
-	 *
-	 * @param presetName canonical renamed Slider Preset name
-	 */
-	private void selectTargetPreset(String presetName) {
-		if (main.mainController.lvTargetPresets.getItems() == null)
-			return;
-		for (SliderPreset preset : main.mainController.lvTargetPresets.getItems()) {
-			if (preset.getName().equalsIgnoreCase(presetName)) {
-				int index = main.mainController.lvTargetPresets.getItems().indexOf(preset);
-				main.mainController.lvTargetPresets.getSelectionModel().select(index);
-				main.mainController.lvTargetPresets.getFocusModel().focus(index);
-				boolean indexVisible = MyUtils.isIndexVisible(main.mainController.lvTargetPresets, index);
-				if (!indexVisible)
-					main.mainController.lvTargetPresets.scrollTo(index);
-				return;
-			}
-		}
 	}
 	
 	@FXML

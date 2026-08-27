@@ -116,8 +116,8 @@ public final class ProjectPresentation {
     }
 
     /**
-     * Builds all converted values before publication. The controller disconnects
-     * view bindings while the three presentation-owned observable lists are replaced.
+     * Builds all converted values before publication, then replaces the contents of
+     * the stable presentation-owned lists so existing filter and sort pipelines survive.
      */
     private void renderSnapshot(ProjectSnapshot nextSnapshot) {
         if (nextSnapshot == snapshot)
