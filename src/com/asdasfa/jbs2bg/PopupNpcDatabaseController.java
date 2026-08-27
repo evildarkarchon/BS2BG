@@ -2,15 +2,23 @@ package com.asdasfa.jbs2bg;
 
 import java.io.File;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.ResourceBundle;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.asdasfa.jbs2bg.controlsfx.table.TableFilter;
 import com.asdasfa.jbs2bg.data.NPC;
-import com.asdasfa.jbs2bg.data.SliderPreset;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.project.ChangedOutcome;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
 import javafx.beans.binding.Bindings;
 import javafx.collections.transformation.FilteredList;
@@ -56,8 +64,6 @@ public class PopupNpcDatabaseController extends CustomController {
 	
 	private CustomConfirm confirmAddAllNpcs;
 	private CustomConfirm confirmClearNpcDatabase;
-	
-	private CustomNotif notif;
 	
 	// File Choosers
 	private FileChooser fcNpcTxt;
@@ -132,32 +138,6 @@ public class PopupNpcDatabaseController extends CustomController {
 			@Override
 			public void ok() {
 				addAllNpcsToMorph();
-				main.mainController.updateNpcCounter();
-				/*FilteredList<NPC> items = npcDatabaseTableFilter.getFilteredList();
-				for (int i = 0; i < items.size(); i++) {
-					NPC npc = items.get(i);
-					
-					boolean exists = false;
-					for (int j = 0; j < main.data.morphedNpcs.size(); j++) {
-						NPC n = main.data.morphedNpcs.get(j);
-						if (n.getMod().equalsIgnoreCase(npc.getMod()) && n.getEditorId().equalsIgnoreCase(npc.getEditorId())) {
-							exists = true;
-							break;
-						}
-					}
-					
-					if (!exists) {
-						// Give a random preset
-						if (main.data.sliderPresets.size() > 0) {
-							// min inclusive, max exclusive
-							int random = MyUtils.random(0, main.data.sliderPresets.size()-1);
-							SliderPreset preset = main.data.sliderPresets.get(random);
-							npc.addSliderPreset(preset);
-						}
-						
-						main.data.morphedNpcs.add(npc);
-					}
-				}*/
 			}
 		};
 		confirmAddAllNpcs.setTitle("Confirm Action");
@@ -188,9 +168,6 @@ public class PopupNpcDatabaseController extends CustomController {
 		confirmClearNpcDatabase.setOkButtonText("Clear");
 		confirmClearNpcDatabase.setCancelButtonText("Cancel");
 		confirmClearNpcDatabase.setOwner(stage);
-		
-		notif = new CustomNotif(main);
-		notif.setOwner(stage);
 		
 		fcNpcTxt = new FileChooser();
 		fcNpcTxt.setTitle("Add NPC Text file");
@@ -299,118 +276,73 @@ public class PopupNpcDatabaseController extends CustomController {
 		};
 	}
 	
+	/**
+	 * Copies the selected source row into one explicit Project edit. The logical
+	 * identity is captured before apply because a changed render replaces the
+	 * projected NPC instance that must be selected afterward.
+	 */
 	@FXML
 	private void addNpcToMorph() {
 		NPC npc = tvNpcDatabase.getSelectionModel().getSelectedItem();
 		if (npc == null)
 			return;
-		
-		boolean exists = false;
-		for (int i = 0; i < main.data.morphedNpcs.size(); i++) {
-			NPC n = main.data.morphedNpcs.get(i);
-			if (n.getMod().equalsIgnoreCase(npc.getMod()) && n.getEditorId().equalsIgnoreCase(npc.getEditorId())) {
-				exists = true;
-				break;
-			}
-		}
-		
-		if (!exists) {
-			npc.clearSliderPresets(); // Important to clear first
-			// Give a random preset
-			if (cbAssignRandom.isSelected() && main.data.sliderPresets.size() > 0) {
-				// min inclusive, max exclusive
-				int random = MyUtils.random(0, main.data.sliderPresets.size()-1);
-				SliderPreset preset = main.data.sliderPresets.get(random);
-				npc.addSliderPreset(preset);
-			}
-			
-			// Add to morphedNpcs
-			main.data.morphedNpcs.add(npc);
-			
-			main.mainController.tvNpc.getSelectionModel().select(npc);
-			main.mainController.tvNpc.scrollTo(npc);
-			
-			main.mainController.updateNpcCounter();
-			
-			main.mainController.markChanged();
-		} else {
-			notif.show("NPC is already in the list of morph targets!");
-		}
+
+		NpcMorphAssignmentIdentity identity = identityOf(npc);
+		NpcMorphAssignmentSnapshot source = copySource(npc, chooseRandomPresetNames());
+		ProjectOutcome outcome = main.mainController.applyProjectEdit(NpcMorphAssignmentEdits.addNpc(source));
+		if (outcome instanceof ChangedOutcome)
+			main.mainController.selectNpc(identity);
 		
 		tvNpcDatabase.requestFocus();
 	}
 	
+	/**
+	 * Copies the currently filtered source rows, completes every optional random
+	 * choice, and submits one atomic Project edit.
+	 */
 	private void addAllNpcsToMorph() {
-		doAddAllNpcsToMorph();
-		/*
-		mainPane.setDisable(true);
-		
-		main.mainController.disconnectViews();
-		try {
-			Task<Void> task = addAllNpcsToMorphTask();
-			task.setOnSucceeded(e -> {
-				mainPane.setDisable(false);
-				main.mainController.connectViews();
-				main.mainController.updateNpcCounter();
-			});
-			task.setOnFailed(e -> {
-				mainPane.setDisable(false);
-				main.mainController.connectViews();
-				main.mainController.updateNpcCounter();
-			});
-			task.setOnCancelled(e -> {
-				mainPane.setDisable(false);
-				main.mainController.connectViews();
-				main.mainController.updateNpcCounter();
-			});
-
-			new Thread(task).start();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}*/
+		List<NPC> filteredSources = new ArrayList<>(npcDatabaseTableFilter.getFilteredList());
+		List<NpcMorphAssignmentSnapshot> copiedSources = new ArrayList<>(filteredSources.size());
+		for (NPC source : filteredSources)
+			copiedSources.add(copySource(source, chooseRandomPresetNames()));
+		main.mainController.applyProjectEdit(NpcMorphAssignmentEdits.addNpcs(copiedSources));
 	}
-	
-	/*private Task<Void> addAllNpcsToMorphTask() throws InterruptedException {
-		return new Task<Void>() {
-			@Override
-			public Void call() throws InterruptedException {
-				doAddAllNpcsToMorph();
-				return null;
-			}
-		};
-	}*/
-	
-	private void doAddAllNpcsToMorph() {
-		FilteredList<NPC> items = npcDatabaseTableFilter.getFilteredList();
-		int lastCount = main.data.morphedNpcs.size();
-		for (int i = 0; i < items.size(); i++) {
-			NPC npc = items.get(i);
-			
-			boolean exists = false;
-			for (int j = 0; j < main.data.morphedNpcs.size(); j++) {
-				NPC n = main.data.morphedNpcs.get(j);
-				if (n.getMod().equalsIgnoreCase(npc.getMod()) && n.getEditorId().equalsIgnoreCase(npc.getEditorId())) {
-					exists = true;
-					break;
-				}
-			}
-			
-			if (!exists) {
-				npc.clearSliderPresets(); // Important to clear first
-				// Give a random preset
-				if (cbAssignRandom.isSelected() && main.data.sliderPresets.size() > 0) {
-					// min inclusive, max exclusive
-					int random = MyUtils.random(0, main.data.sliderPresets.size()-1);
-					SliderPreset preset = main.data.sliderPresets.get(random);
-					npc.addSliderPreset(preset);
-				}
-				
-				main.data.morphedNpcs.add(npc);
-			}
-		}
-		int newCount = main.data.morphedNpcs.size();
-		if (lastCount != newCount)
-			main.mainController.markChanged();
+
+	/**
+	 * Creates an immutable source value without retaining or mutating the NPC
+	 * Database entry.
+	 *
+	 * @param source session-scoped NPC Database entry
+	 * @param sliderPresetNames explicit Project assignment choices
+	 * @return copied immutable values for one Project edit
+	 */
+	private static NpcMorphAssignmentSnapshot copySource(NPC source, List<String> sliderPresetNames) {
+		return new NpcMorphAssignmentSnapshot(source.getName(), source.getMod(), source.getEditorId(), source.getRace(),
+				source.getFormId(), sliderPresetNames);
+	}
+
+	/**
+	 * Completes one optional random Project assignment choice before submission.
+	 *
+	 * @return an empty list when random assignment is disabled or unavailable;
+	 *         otherwise, the chosen canonical Slider Preset name
+	 */
+	private List<String> chooseRandomPresetNames() {
+		List<SliderPresetSnapshot> sliderPresets = main.projectPresentation.getSnapshot().getSliderPresets();
+		if (!cbAssignRandom.isSelected() || sliderPresets.isEmpty())
+			return Collections.emptyList();
+		int randomIndex = MyUtils.random(0, sliderPresets.size() - 1);
+		return Collections.singletonList(sliderPresets.get(randomIndex).getName());
+	}
+
+	/**
+	 * Derives the complete case-insensitive Project identity from a source entry.
+	 *
+	 * @param npc NPC Database entry
+	 * @return immutable Project identity used for post-render selection
+	 */
+	private static NpcMorphAssignmentIdentity identityOf(NPC npc) {
+		return new NpcMorphAssignmentIdentity(npc.getMod(), npc.getEditorId());
 	}
 	
 	@FXML
