@@ -21,9 +21,6 @@ import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 import org.xml.sax.helpers.DefaultHandler;
 
-import com.asdasfa.jbs2bg.data.Settings;
-import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
-
 /**
  * Parses one BodySlide XML file into detached immutable Slider Preset values.
  * No Project state is changed until the caller accepts the complete result.
@@ -173,20 +170,17 @@ final class BodySlidePresetFileParser {
      * @return complete immutable choice list
      */
     private static List<SliderChoiceSnapshot> completeChoices(Map<String, MutableChoice> explicit) {
+        // BodySlide XML has no UUNP marker, so imported presets always start in the
+        // non-UUNP mode; a later UUNP edit rebuilds the synthesized defaults.
         Map<String, SliderChoiceSnapshot> choices = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (MutableChoice choice : explicit.values()) {
             choices.put(choice.name, new SliderChoiceSnapshot(choice.name, true, choice.small, choice.big,
-                    choice.small == null ? Settings.getDefaultValueSmall(choice.name) : choice.small.intValue(),
-                    choice.big == null ? Settings.getDefaultValueBig(choice.name) : choice.big.intValue(),
+                    SliderChoiceDefaults.effectiveSmall(choice.name, choice.small, false),
+                    SliderChoiceDefaults.effectiveBig(choice.name, choice.big, false),
                     100, 100, false));
         }
-        for (Map.Entry<String, DefaultSliderValue> entry : Settings.getDefaultsMap().entrySet()) {
-            if (!choices.containsKey(entry.getKey())) {
-                choices.put(entry.getKey(), new SliderChoiceSnapshot(entry.getKey(), true, null, null,
-                        (int) (entry.getValue().getValueSmall() * 100),
-                        (int) (entry.getValue().getValueBig() * 100), 100, 100, true));
-            }
-        }
+        for (SliderChoiceSnapshot synthesized : SliderChoiceDefaults.synthesizeMissing(choices.keySet(), false))
+            choices.put(synthesized.getName(), synthesized);
         return new ArrayList<>(choices.values());
     }
 

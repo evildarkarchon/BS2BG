@@ -20,8 +20,6 @@ import java.util.TreeSet;
 
 import org.mozilla.universalchardet.UniversalDetector;
 
-import com.asdasfa.jbs2bg.data.Settings;
-import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonArray;
 import com.eclipsesource.json.JsonObject;
@@ -363,19 +361,12 @@ final class ProjectFileLoader {
             // only choices synthesized from absent members below are missing defaults.
             choices.add(new SliderChoiceSnapshot(name, requiredBoolean(value, "enabled", choiceElement),
                     storedSmall, storedBig,
-                    storedSmall == null ? defaultSmall(name, uunp) : storedSmall.intValue(),
-                    storedBig == null ? defaultBig(name, uunp) : storedBig.intValue(),
+                    SliderChoiceDefaults.effectiveSmall(name, storedSmall, uunp),
+                    SliderChoiceDefaults.effectiveBig(name, storedBig, uunp),
                     requiredInteger(value, "pctMin", choiceElement), requiredInteger(value, "pctMax", choiceElement),
                     false));
         }
-        Map<String, DefaultSliderValue> defaults = uunp ? Settings.getDefaultsMapUUNP() : Settings.getDefaultsMap();
-        for (Map.Entry<String, DefaultSliderValue> entry : defaults.entrySet()) {
-            if (!representedNames.contains(entry.getKey())) {
-                choices.add(new SliderChoiceSnapshot(entry.getKey(), true, null, null,
-                        (int) (entry.getValue().getValueSmall() * 100),
-                        (int) (entry.getValue().getValueBig() * 100), 100, 100, true));
-            }
-        }
+        choices.addAll(SliderChoiceDefaults.synthesizeMissing(representedNames, uunp));
         Collections.sort(choices, new Comparator<SliderChoiceSnapshot>() {
             @Override
             public int compare(SliderChoiceSnapshot left, SliderChoiceSnapshot right) {
@@ -383,28 +374,6 @@ final class ProjectFileLoader {
             }
         });
         return choices;
-    }
-
-    /**
-     * Resolves an effective small value from the active Slider settings.
-     *
-     * @param name slider name used by settings lookup
-     * @param uunp whether the UUNP defaults apply
-     * @return configured small value as a percentage, or zero when absent
-     */
-    private static int defaultSmall(String name, boolean uunp) {
-        return uunp ? Settings.getDefaultValueSmallUUNP(name) : Settings.getDefaultValueSmall(name);
-    }
-
-    /**
-     * Resolves an effective big value from the active Slider settings.
-     *
-     * @param name slider name used by settings lookup
-     * @param uunp whether the UUNP defaults apply
-     * @return configured big value as a percentage, or zero when absent
-     */
-    private static int defaultBig(String name, boolean uunp) {
-        return uunp ? Settings.getDefaultValueBigUUNP(name) : Settings.getDefaultValueBig(name);
     }
 
     /**

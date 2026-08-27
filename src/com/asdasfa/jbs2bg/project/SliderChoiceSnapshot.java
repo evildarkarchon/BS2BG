@@ -22,6 +22,12 @@ public final class SliderChoiceSnapshot {
 	 * Creates a slider-choice snapshot. Nullable stored values preserve the legacy
 	 * distinction between persisted choices and synthesized defaults.
 	 *
+	 * <p>A synthesized default ({@code missingDefault == true}) never carries a
+	 * stored value; its effective values come from the Slider settings alone. The
+	 * reverse is intentionally not enforced: a legacy file may persist an explicit
+	 * choice whose stored values are both null, and that choice must stay explicit
+	 * so it is serialized rather than omitted on save.
+	 *
 	 * @param name slider name
 	 * @param enabled whether the slider participates in output
 	 * @param storedSmallValue persisted small value, or null when synthesized
@@ -32,11 +38,17 @@ public final class SliderChoiceSnapshot {
 	 * @param percentageMaximum upper randomization percentage
 	 * @param missingDefault whether this choice was synthesized from defaults
 	 * @throws NullPointerException when name is null
+	 * @throws IllegalArgumentException when a synthesized default carries a stored value
 	 */
 	public SliderChoiceSnapshot(String name, boolean enabled, Integer storedSmallValue, Integer storedBigValue,
 			int effectiveSmallValue, int effectiveBigValue, int percentageMinimum, int percentageMaximum,
 			boolean missingDefault) {
 		this.name = Objects.requireNonNull(name, "name");
+		// Rejecting this here, rather than in the session, keeps the contradictory
+		// state unrepresentable for every producer (loader, XML parser, UI copies).
+		if (missingDefault && (storedSmallValue != null || storedBigValue != null))
+			throw new IllegalArgumentException(
+					"A synthesized default slider choice cannot carry stored values: " + name);
 		this.enabled = enabled;
 		this.storedSmallValue = storedSmallValue;
 		this.storedBigValue = storedBigValue;

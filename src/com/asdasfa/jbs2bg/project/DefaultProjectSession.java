@@ -1253,10 +1253,20 @@ final class DefaultProjectSession implements ProjectSession {
         RejectedOutcome rejection = validateSliderPresetName(edit.getReplacement().getName(), OptionalInt.of(index));
         if (rejection != null)
             return rejection;
+        rejection = validateSliderChoices(edit.getReplacement().getSliderChoices());
+        if (rejection != null)
+            return rejection;
 
+        SliderPresetSnapshot current = snapshot.getSliderPresets().get(index);
         SliderPresetSnapshot replacement = canonicalSliderPreset(edit.getReplacement(),
                 edit.getReplacement().getName().trim());
-        if (sameSliderPreset(snapshot.getSliderPresets().get(index), replacement))
+        // A replacement that flips UUNP is treated like the UUNP edit: the caller's
+        // synthesized defaults belong to the old mode, so they are rebuilt here rather
+        // than trusted, keeping full updates and SetUunp observably equivalent.
+        if (current.isUunp() != replacement.isUunp())
+            replacement = new SliderPresetSnapshot(replacement.getName(), replacement.isUunp(),
+                    SliderChoiceDefaults.rebuildForMode(replacement.getSliderChoices(), replacement.isUunp()));
+        if (sameSliderPreset(current, replacement))
             return new UnchangedOutcome(snapshot);
         return replaceSliderPreset(index, replacement);
     }
@@ -1320,7 +1330,10 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Changes the UUNP flag without flattening the Slider Preset's immutable choices.
+     * Changes the UUNP flag and rebuilds the Slider Preset's synthesized defaults for
+     * the requested mode, matching the legacy toggle: explicit choices are retained
+     * (with effective values re-resolved for absent stored endpoints) while every
+     * previously synthesized default is replaced by the new mode's defaults.
      *
      * @param edit immutable UUNP request
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
@@ -1333,13 +1346,13 @@ final class DefaultProjectSession implements ProjectSession {
         if (current.isUunp() == edit.isUunp())
             return new UnchangedOutcome(snapshot);
         SliderPresetSnapshot changed = new SliderPresetSnapshot(current.getName(), edit.isUunp(),
-                current.getSliderChoices());
+                SliderChoiceDefaults.rebuildForMode(current.getSliderChoices(), edit.isUunp()));
         return replaceSliderPreset(index, changed);
     }
 
     /**
-     * Upserts one slider choice while preserving nullable stored values, effective
-     * values, percentages, and missing-default identity.
+     * Upserts one validated slider choice while preserving nullable stored values,
+     * effective values, percentages, and missing-default identity.
      *
      * @param edit immutable slider-choice request
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
@@ -1354,6 +1367,9 @@ final class DefaultProjectSession implements ProjectSession {
             return rejected(ProjectDiagnosticCodes.SLIDER_CHOICE_REQUIRED, location,
                     "A slider-choice edit requires a value.");
         }
+        RejectedOutcome rejection = validateSliderChoicePercentages(edit.getChoice());
+        if (rejection != null)
+            return rejection;
 
         SliderPresetSnapshot current = snapshot.getSliderPresets().get(presetIndex);
         List<SliderChoiceSnapshot> choices = new ArrayList<>(current.getSliderChoices());
@@ -1410,6 +1426,67 @@ final class DefaultProjectSession implements ProjectSession {
                 return index;
         }
         return -1;
+    }
+
+    /**
+     * Validates a complete replacement choice list: slider names must be unique
+     * without regard to case (otherwise a later single-choice edit could only reach
+     * the first match) and every percentage range must be well-formed.
+     *
+     * @param choices requested replacement choices
+     * @return a structured rejection, or null when every choice is valid
+     */
+    private RejectedOutcome validateSliderChoices(List<SliderChoiceSnapshot> choices) {
+        List<String> seenNames = new ArrayList<>();
+        for (SliderChoiceSnapshot choice : choices) {
+            for (String seenName : seenNames) {
+                if (seenName.equalsIgnoreCase(choice.getName()))
+                    return rejectedSliderChoice(ProjectDiagnosticCodes.SLIDER_CHOICE_NAME_DUPLICATE,
+                            "slider-preset.slider-choice.name",
+                            "A Slider Preset cannot contain duplicate slider-choice names: " + choice.getName());
+            }
+            seenNames.add(choice.getName());
+            RejectedOutcome rejection = validateSliderChoicePercentages(choice);
+            if (rejection != null)
+                return rejection;
+        }
+        return null;
+    }
+
+    /**
+     * Validates one choice's randomization range. Output calculation uses both
+     * percentages directly as interpolation factors, so values outside 0–100 or a
+     * reversed range would generate out-of-range or inverted BodyGen intervals.
+     *
+     * @param choice requested choice value
+     * @return a structured rejection, or null when the range is valid
+     */
+    private RejectedOutcome validateSliderChoicePercentages(SliderChoiceSnapshot choice) {
+        int minimum = choice.getPercentageMinimum();
+        int maximum = choice.getPercentageMaximum();
+        if (minimum < 0 || minimum > 100 || maximum < 0 || maximum > 100)
+            return rejectedSliderChoice(ProjectDiagnosticCodes.SLIDER_CHOICE_PERCENTAGE_INVALID,
+                    "slider-preset.slider-choice.percentage",
+                    "Slider-choice percentages must be between 0 and 100: " + choice.getName());
+        if (minimum > maximum)
+            return rejectedSliderChoice(ProjectDiagnosticCodes.SLIDER_CHOICE_PERCENTAGE_INVALID,
+                    "slider-preset.slider-choice.percentage",
+                    "A slider-choice minimum percentage must not exceed its maximum: " + choice.getName());
+        return null;
+    }
+
+    /**
+     * Builds a slider-choice validation rejection at a stable logical location.
+     *
+     * @param code stable diagnostic code
+     * @param element stable logical location within the Slider Preset
+     * @param message human-readable validation failure
+     * @return a rejection carrying the unchanged current snapshot
+     */
+    private RejectedOutcome rejectedSliderChoice(String code, String element, String message) {
+        SourceLocation location = new SourceLocation(Optional.empty(), Optional.of(element), OptionalInt.empty(),
+                OptionalInt.empty());
+        return rejected(code, location, message);
     }
 
     /**

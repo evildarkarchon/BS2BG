@@ -45,6 +45,8 @@ public final class ProjectDiagnosticCodes {
     public static final String SLIDER_PRESET_NOT_FOUND = "SLIDER_PRESET_NOT_FOUND";
     /** A slider-choice edit omitted its required immutable value. */
     public static final String SLIDER_CHOICE_REQUIRED = "SLIDER_CHOICE_REQUIRED";
+    /** A slider-choice percentage is outside 0–100 or the minimum exceeds the maximum. */
+    public static final String SLIDER_CHOICE_PERCENTAGE_INVALID = "SLIDER_CHOICE_PERCENTAGE_INVALID";
     /** A full-update edit omitted its required immutable Slider Preset value. */
     public static final String SLIDER_PRESET_VALUE_REQUIRED = "SLIDER_PRESET_VALUE_REQUIRED";
     /** A selected BodySlide XML source could not be read. */

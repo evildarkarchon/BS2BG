@@ -32,7 +32,11 @@ public final class SliderPresetEdits {
     }
 
     /**
-     * Requests replacement of one Slider Preset's complete observable value.
+     * Requests replacement of one Slider Preset's complete observable value. The
+     * session rejects replacements whose slider-choice names repeat without regard
+     * to case or whose percentages are outside 0–100 or reversed. When the
+     * replacement changes the UUNP flag, its synthesized defaults are rebuilt for
+     * the requested mode exactly as {@link #setUunp(String, boolean)} would.
      *
      * @param currentName existing logical Slider Preset name
      * @param replacement requested immutable replacement value
@@ -73,7 +77,10 @@ public final class SliderPresetEdits {
     }
 
     /**
-     * Requests a change to whether a Slider Preset uses UUNP defaults.
+     * Requests a change to whether a Slider Preset uses UUNP defaults. Like the
+     * legacy toggle, the session discards every synthesized default choice and
+     * rebuilds the requested mode's missing defaults; explicit choices are retained
+     * with effective values re-resolved for absent stored endpoints.
      *
      * @param name existing Slider Preset name, compared without regard to case
      * @param uunp requested UUNP flag
@@ -84,7 +91,9 @@ public final class SliderPresetEdits {
     }
 
     /**
-     * Requests replacement or addition of one immutable slider choice.
+     * Requests replacement or addition of one immutable slider choice. The session
+     * rejects choices whose percentages are outside 0–100 or whose minimum exceeds
+     * the maximum.
      *
      * @param presetName existing Slider Preset name, compared without regard to case
      * @param choice complete observable slider-choice value
