@@ -33,6 +33,12 @@ public final class ProjectDiagnosticCodes {
     public static final String CUSTOM_MORPH_TARGET_NAME_DUPLICATE = "CUSTOM_MORPH_TARGET_NAME_DUPLICATE";
     /** A requested Custom Morph Target does not exist in the active Project. */
     public static final String CUSTOM_MORPH_TARGET_NOT_FOUND = "CUSTOM_MORPH_TARGET_NOT_FOUND";
+    /** An NPC-add edit omitted the copied source value required for promotion. */
+    public static final String NPC_MORPH_ASSIGNMENT_REQUIRED = "NPC_MORPH_ASSIGNMENT_REQUIRED";
+    /** An NPC-add edit duplicates an existing plugin-name/editor-ID identity. */
+    public static final String NPC_MORPH_ASSIGNMENT_DUPLICATE = "NPC_MORPH_ASSIGNMENT_DUPLICATE";
+    /** A requested NPC Morph Assignment identity does not exist in the Project. */
+    public static final String NPC_MORPH_ASSIGNMENT_NOT_FOUND = "NPC_MORPH_ASSIGNMENT_NOT_FOUND";
 
     private ProjectDiagnosticCodes() {
     }

@@ -34,6 +34,16 @@ final class DefaultProjectSession implements ProjectSession {
                     return left.getName().compareToIgnoreCase(right.getName());
                 }
             };
+    private static final Comparator<NpcMorphAssignmentSnapshot> NPC_MORPH_ASSIGNMENT_IDENTITY_ORDER =
+            new Comparator<NpcMorphAssignmentSnapshot>() {
+                /** Orders NPC Morph Assignments by plugin name and then editor ID. */
+                @Override
+                public int compare(NpcMorphAssignmentSnapshot left, NpcMorphAssignmentSnapshot right) {
+                    int pluginOrder = left.getPluginName().compareToIgnoreCase(right.getPluginName());
+                    return pluginOrder != 0 ? pluginOrder
+                            : left.getEditorId().compareToIgnoreCase(right.getEditorId());
+                }
+            };
     private static final Comparator<String> CASE_INSENSITIVE_NAME_ORDER = new Comparator<String>() {
         @Override
         public int compare(String left, String right) {
@@ -115,9 +125,30 @@ final class DefaultProjectSession implements ProjectSession {
         Objects.requireNonNull(edit, "edit");
         synchronized (operationLock) {
             if ((edit instanceof SliderPresetEdits.SliderPresetEdit
-                    || edit instanceof CustomMorphTargetEdits.CustomMorphTargetEdit)
+                    || edit instanceof CustomMorphTargetEdits.CustomMorphTargetEdit
+                    || edit instanceof NpcMorphAssignmentEdits.NpcMorphAssignmentEdit)
                     && snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT)
                 return rejectedActiveProjectRequired();
+            if (edit instanceof NpcMorphAssignmentEdits.AddNpc)
+                return addNpc((NpcMorphAssignmentEdits.AddNpc) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.AddNpcs)
+                return addNpcs((NpcMorphAssignmentEdits.AddNpcs) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.AddSliderPreset)
+                return addNpcSliderPreset((NpcMorphAssignmentEdits.AddSliderPreset) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.RemoveSliderPreset)
+                return removeNpcSliderPreset((NpcMorphAssignmentEdits.RemoveSliderPreset) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.ClearSliderPresets)
+                return clearNpcSliderPresets((NpcMorphAssignmentEdits.ClearSliderPresets) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.ClearSliderPresetsForNpcs)
+                return clearNpcSliderPresetsForNpcs((NpcMorphAssignmentEdits.ClearSliderPresetsForNpcs) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.RemoveNpc)
+                return removeNpc((NpcMorphAssignmentEdits.RemoveNpc) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.RemoveNpcs)
+                return removeNpcs((NpcMorphAssignmentEdits.RemoveNpcs) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.ClearNpcs)
+                return clearNpcs();
+            if (edit instanceof NpcMorphAssignmentEdits.FillEmpty)
+                return fillEmpty((NpcMorphAssignmentEdits.FillEmpty) edit);
             if (edit instanceof CustomMorphTargetEdits.Create)
                 return createCustomMorphTarget((CustomMorphTargetEdits.Create) edit);
             if (edit instanceof CustomMorphTargetEdits.AddSliderPreset)
@@ -163,6 +194,395 @@ final class DefaultProjectSession implements ProjectSession {
                 OptionalInt.empty());
         return rejected(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED, location,
                 "Create or open a Project before applying edits.");
+    }
+
+    /**
+     * Copies one NPC source value into an independent, canonically assigned NPC
+     * Morph Assignment. Existing case-insensitive identity is rejected without
+     * changing the Project.
+     *
+     * @param edit immutable NPC-add request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome addNpc(NpcMorphAssignmentEdits.AddNpc edit) {
+        NpcMorphAssignmentSnapshot source = edit.getSource();
+        if (source == null) {
+            SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("npc-morph-assignment"),
+                    OptionalInt.empty(), OptionalInt.empty());
+            return rejected(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED, location,
+                    "Adding an NPC requires copied source values.");
+        }
+        for (NpcMorphAssignmentSnapshot assignment : snapshot.getNpcMorphAssignments()) {
+            if (sameNpcIdentity(assignment, source))
+                return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE,
+                        "An NPC Morph Assignment with this plugin name and editor ID already exists.");
+        }
+
+        List<String> canonicalAssignments = canonicalNpcSliderPresetNames(source.getSliderPresetNames());
+        if (canonicalAssignments == null)
+            return rejectedSliderPresetNotFound();
+        NpcMorphAssignmentSnapshot copied = copyNpc(source, canonicalAssignments);
+        List<NpcMorphAssignmentSnapshot> assignments = new ArrayList<>(snapshot.getNpcMorphAssignments());
+        assignments.add(copied);
+        return publishChangedNpcMorphAssignments(assignments);
+    }
+
+    /**
+     * Builds and validates a complete filtered bulk-add candidate before publishing
+     * one atomic Project snapshot. Existing identities are expected no-ops.
+     *
+     * @param edit immutable caller-filtered bulk-add request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome addNpcs(NpcMorphAssignmentEdits.AddNpcs edit) {
+        if (edit.getSources() == null)
+            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                    "Filtered NPC promotion requires copied source values.");
+        if (edit.getSources().isEmpty())
+            return new UnchangedOutcome(snapshot);
+
+        List<NpcMorphAssignmentSnapshot> candidate = new ArrayList<>(snapshot.getNpcMorphAssignments());
+        for (NpcMorphAssignmentSnapshot source : edit.getSources()) {
+            if (containsNpcIdentity(snapshot.getNpcMorphAssignments(), source))
+                continue;
+            if (containsNpcIdentity(candidate, source))
+                return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE,
+                        "A filtered NPC batch contains duplicate plugin-name/editor-ID identity.");
+            List<String> canonicalAssignments = canonicalNpcSliderPresetNames(source.getSliderPresetNames());
+            if (canonicalAssignments == null)
+                return rejectedSliderPresetNotFound();
+            candidate.add(copyNpc(source, canonicalAssignments));
+        }
+        if (candidate.size() == snapshot.getNpcMorphAssignments().size())
+            return new UnchangedOutcome(snapshot);
+        return publishChangedNpcMorphAssignments(candidate);
+    }
+
+    /**
+     * Searches an arbitrary immutable candidate collection by NPC Project identity.
+     *
+     * @param assignments candidate NPC Morph Assignments
+     * @param requested requested source value
+     * @return true when plugin name and editor ID already occur in the candidate
+     */
+    private static boolean containsNpcIdentity(List<NpcMorphAssignmentSnapshot> assignments,
+            NpcMorphAssignmentSnapshot requested) {
+        for (NpcMorphAssignmentSnapshot assignment : assignments) {
+            if (sameNpcIdentity(assignment, requested))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Adds one validated canonical Slider Preset relationship to an NPC Morph Assignment.
+     *
+     * @param edit immutable relationship-add request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome addNpcSliderPreset(NpcMorphAssignmentEdits.AddSliderPreset edit) {
+        int npcIndex = findNpcMorphAssignment(edit.getIdentity());
+        if (npcIndex < 0)
+            return rejectedNpcMorphAssignmentNotFound();
+        int presetIndex = findSliderPreset(edit.getSliderPresetName());
+        if (presetIndex < 0)
+            return rejectedSliderPresetNotFound();
+
+        NpcMorphAssignmentSnapshot current = snapshot.getNpcMorphAssignments().get(npcIndex);
+        String presetName = snapshot.getSliderPresets().get(presetIndex).getName();
+        List<String> assignments = new ArrayList<>(current.getSliderPresetNames());
+        for (String assignment : assignments) {
+            if (assignment.equalsIgnoreCase(presetName))
+                return new UnchangedOutcome(snapshot);
+        }
+        assignments.add(presetName);
+        Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
+        return replaceNpcMorphAssignment(npcIndex, copyNpc(current, assignments));
+    }
+
+    /**
+     * Removes one case-insensitive Slider Preset relationship from an NPC Morph Assignment.
+     *
+     * @param edit immutable relationship-remove request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome removeNpcSliderPreset(NpcMorphAssignmentEdits.RemoveSliderPreset edit) {
+        int npcIndex = findNpcMorphAssignment(edit.getIdentity());
+        if (npcIndex < 0)
+            return rejectedNpcMorphAssignmentNotFound();
+        NpcMorphAssignmentSnapshot current = snapshot.getNpcMorphAssignments().get(npcIndex);
+        String requestedName = edit.getSliderPresetName() == null ? "" : edit.getSliderPresetName().trim();
+        List<String> assignments = new ArrayList<>(current.getSliderPresetNames());
+        for (int index = 0; index < assignments.size(); index++) {
+            if (assignments.get(index).equalsIgnoreCase(requestedName)) {
+                assignments.remove(index);
+                return replaceNpcMorphAssignment(npcIndex, copyNpc(current, assignments));
+            }
+        }
+        return new UnchangedOutcome(snapshot);
+    }
+
+    /**
+     * Clears every Slider Preset relationship from one NPC Morph Assignment.
+     *
+     * @param edit immutable relationship-clear request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome clearNpcSliderPresets(NpcMorphAssignmentEdits.ClearSliderPresets edit) {
+        int npcIndex = findNpcMorphAssignment(edit.getIdentity());
+        if (npcIndex < 0)
+            return rejectedNpcMorphAssignmentNotFound();
+        NpcMorphAssignmentSnapshot current = snapshot.getNpcMorphAssignments().get(npcIndex);
+        if (current.getSliderPresetNames().isEmpty())
+            return new UnchangedOutcome(snapshot);
+        return replaceNpcMorphAssignment(npcIndex, copyNpc(current, Collections.<String>emptyList()));
+    }
+
+    /**
+     * Validates a filtered identity selection before atomically clearing every
+     * selected NPC's Slider Preset relationships.
+     *
+     * @param edit immutable filtered assignment-clear request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome clearNpcSliderPresetsForNpcs(
+            NpcMorphAssignmentEdits.ClearSliderPresetsForNpcs edit) {
+        if (edit.getIdentities() == null)
+            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                    "Filtered assignment clearing requires an NPC identity selection.");
+        if (edit.getIdentities().isEmpty())
+            return new UnchangedOutcome(snapshot);
+
+        for (NpcMorphAssignmentIdentity identity : edit.getIdentities()) {
+            if (findNpcMorphAssignment(identity) < 0)
+                return rejectedNpcMorphAssignmentNotFound();
+        }
+        List<NpcMorphAssignmentSnapshot> candidate = new ArrayList<>(snapshot.getNpcMorphAssignments());
+        boolean changed = false;
+        for (NpcMorphAssignmentIdentity identity : edit.getIdentities()) {
+            int npcIndex = findNpcMorphAssignment(identity);
+            NpcMorphAssignmentSnapshot current = candidate.get(npcIndex);
+            if (!current.getSliderPresetNames().isEmpty()) {
+                candidate.set(npcIndex, copyNpc(current, Collections.<String>emptyList()));
+                changed = true;
+            }
+        }
+        if (!changed)
+            return new UnchangedOutcome(snapshot);
+        return publishChangedNpcMorphAssignments(candidate);
+    }
+
+    /**
+     * Removes one NPC Morph Assignment selected by case-insensitive identity.
+     *
+     * @param edit immutable NPC-remove request
+     * @return a changed or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome removeNpc(NpcMorphAssignmentEdits.RemoveNpc edit) {
+        int npcIndex = findNpcMorphAssignment(edit.getIdentity());
+        if (npcIndex < 0)
+            return rejectedNpcMorphAssignmentNotFound();
+        List<NpcMorphAssignmentSnapshot> assignments = new ArrayList<>(snapshot.getNpcMorphAssignments());
+        assignments.remove(npcIndex);
+        return publishChangedNpcMorphAssignments(assignments);
+    }
+
+    /**
+     * Atomically removes the NPC Morph Assignments selected by a caller-owned
+     * filtered identity list, preserving state when none match.
+     *
+     * @param edit immutable filtered removal request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome removeNpcs(NpcMorphAssignmentEdits.RemoveNpcs edit) {
+        if (edit.getIdentities() == null)
+            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                    "Filtered NPC removal requires an identity selection.");
+        if (edit.getIdentities().isEmpty())
+            return new UnchangedOutcome(snapshot);
+
+        List<NpcMorphAssignmentSnapshot> remaining = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot assignment : snapshot.getNpcMorphAssignments()) {
+            boolean selected = false;
+            for (NpcMorphAssignmentIdentity identity : edit.getIdentities()) {
+                if (identity.equals(identityOf(assignment))) {
+                    selected = true;
+                    break;
+                }
+            }
+            if (!selected)
+                remaining.add(assignment);
+        }
+        if (remaining.size() == snapshot.getNpcMorphAssignments().size())
+            return new UnchangedOutcome(snapshot);
+        return publishChangedNpcMorphAssignments(remaining);
+    }
+
+    /**
+     * Clears every NPC Morph Assignment without dirtying an already-empty Project.
+     *
+     * @return changed or unchanged outcome at the pinned snapshot
+     */
+    private ProjectOutcome clearNpcs() {
+        if (snapshot.getNpcMorphAssignments().isEmpty())
+            return new UnchangedOutcome(snapshot);
+        return publishChangedNpcMorphAssignments(new ArrayList<NpcMorphAssignmentSnapshot>());
+    }
+
+    /**
+     * Validates every explicit caller-owned choice and stages all eligible NPC
+     * replacements before a single publish, so rejection cannot expose a partial fill.
+     *
+     * @param edit immutable fill-empty request
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome fillEmpty(NpcMorphAssignmentEdits.FillEmpty edit) {
+        if (edit.getChoices() == null)
+            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                    "Fill-empty requires explicit NPC and Slider Preset choices.");
+        if (edit.getChoices().isEmpty())
+            return new UnchangedOutcome(snapshot);
+
+        List<NpcMorphAssignmentIdentity> seen = new ArrayList<>();
+        List<NpcMorphAssignmentSnapshot> candidate = new ArrayList<>(snapshot.getNpcMorphAssignments());
+        boolean changed = false;
+        for (NpcSliderPresetChoice choice : edit.getChoices()) {
+            if (seen.contains(choice.getIdentity()))
+                return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE,
+                        "Fill-empty contains more than one choice for the same NPC identity.");
+            seen.add(choice.getIdentity());
+            int npcIndex = findNpcMorphAssignment(choice.getIdentity());
+            if (npcIndex < 0)
+                return rejectedNpcMorphAssignmentNotFound();
+            int presetIndex = findSliderPreset(choice.getSliderPresetName());
+            if (presetIndex < 0)
+                return rejectedSliderPresetNotFound();
+
+            NpcMorphAssignmentSnapshot current = snapshot.getNpcMorphAssignments().get(npcIndex);
+            if (current.getSliderPresetNames().isEmpty()) {
+                String canonicalName = snapshot.getSliderPresets().get(presetIndex).getName();
+                candidate.set(npcIndex, copyNpc(current, Collections.singletonList(canonicalName)));
+                changed = true;
+            }
+        }
+        if (!changed)
+            return new UnchangedOutcome(snapshot);
+        return publishChangedNpcMorphAssignments(candidate);
+    }
+
+    /**
+     * Finds an NPC Morph Assignment by its complete case-insensitive Project identity.
+     *
+     * @param identity requested plugin-name/editor-ID identity
+     * @return assignment index, or -1 when omitted or absent
+     */
+    private int findNpcMorphAssignment(NpcMorphAssignmentIdentity identity) {
+        if (identity == null)
+            return -1;
+        for (int index = 0; index < snapshot.getNpcMorphAssignments().size(); index++) {
+            NpcMorphAssignmentSnapshot assignment = snapshot.getNpcMorphAssignments().get(index);
+            if (identity.equals(identityOf(assignment)))
+                return index;
+        }
+        return -1;
+    }
+
+    /**
+     * Replaces one NPC Morph Assignment and publishes the canonical Project collection.
+     *
+     * @param index collection index to replace
+     * @param changed replacement immutable value
+     * @return a changed outcome carrying the published snapshot
+     */
+    private ChangedOutcome replaceNpcMorphAssignment(int index, NpcMorphAssignmentSnapshot changed) {
+        List<NpcMorphAssignmentSnapshot> assignments = new ArrayList<>(snapshot.getNpcMorphAssignments());
+        assignments.set(index, changed);
+        return publishChangedNpcMorphAssignments(assignments);
+    }
+
+    /**
+     * Rejects an edit whose NPC identity cannot be resolved.
+     *
+     * @return a structured rejection carrying the current snapshot
+     */
+    private RejectedOutcome rejectedNpcMorphAssignmentNotFound() {
+        return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND,
+                "The requested NPC Morph Assignment does not exist.");
+    }
+
+    /**
+     * Builds an NPC edit rejection at the stable identity location.
+     *
+     * @param code stable diagnostic code
+     * @param message human-readable validation failure
+     * @return a rejection carrying the unchanged current snapshot
+     */
+    private RejectedOutcome rejectedNpc(String code, String message) {
+        SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("npc-morph-assignment.identity"),
+                OptionalInt.empty(), OptionalInt.empty());
+        return rejected(code, location, message);
+    }
+
+    /**
+     * Reports whether two NPC values have the same Project identity.
+     *
+     * @param left first NPC value
+     * @param right second NPC value
+     * @return true when plugin name and editor ID match without regard to case
+     */
+    private static boolean sameNpcIdentity(NpcMorphAssignmentSnapshot left, NpcMorphAssignmentSnapshot right) {
+        return identityOf(left).equals(identityOf(right));
+    }
+
+    /**
+     * Extracts the complete logical identity from an immutable NPC Morph Assignment.
+     *
+     * @param assignment immutable NPC Morph Assignment value
+     * @return plugin-name/editor-ID identity with case-insensitive value semantics
+     */
+    private static NpcMorphAssignmentIdentity identityOf(NpcMorphAssignmentSnapshot assignment) {
+        return new NpcMorphAssignmentIdentity(assignment.getPluginName(), assignment.getEditorId());
+    }
+
+    /**
+     * Resolves caller-supplied assignment names to canonical Project display names
+     * while removing case-insensitive duplicates.
+     *
+     * @param requestedNames explicit caller-owned Slider Preset choices
+     * @return canonical ordered names, or null when any requested preset is absent
+     */
+    private List<String> canonicalNpcSliderPresetNames(List<String> requestedNames) {
+        List<String> canonicalNames = new ArrayList<>();
+        for (String requestedName : requestedNames) {
+            int presetIndex = findSliderPreset(requestedName);
+            if (presetIndex < 0)
+                return null;
+            String canonicalName = snapshot.getSliderPresets().get(presetIndex).getName();
+            boolean duplicate = false;
+            for (String existingName : canonicalNames) {
+                if (existingName.equalsIgnoreCase(canonicalName)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate)
+                canonicalNames.add(canonicalName);
+        }
+        Collections.sort(canonicalNames, CASE_INSENSITIVE_NAME_ORDER);
+        return canonicalNames;
+    }
+
+    /**
+     * Creates a distinct NPC Morph Assignment value from copied source fields.
+     *
+     * @param source source NPC value
+     * @param canonicalAssignments validated canonical Slider Preset names
+     * @return a new independent immutable NPC Morph Assignment
+     */
+    private static NpcMorphAssignmentSnapshot copyNpc(NpcMorphAssignmentSnapshot source,
+            List<String> canonicalAssignments) {
+        return new NpcMorphAssignmentSnapshot(source.getDisplayName(), source.getPluginName(), source.getEditorId(),
+                source.getRace(), source.getFormId(), canonicalAssignments);
     }
 
     /**
@@ -466,7 +886,8 @@ final class DefaultProjectSession implements ProjectSession {
         List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
         presets.remove(index);
         List<CustomMorphTargetSnapshot> targets = removeCustomMorphTargetAssignments(removedName);
-        return publishChangedProjectState(presets, targets);
+        List<NpcMorphAssignmentSnapshot> npcs = removeNpcAssignments(removedName);
+        return publishChangedProjectState(presets, targets, npcs);
     }
 
     /**
@@ -480,7 +901,8 @@ final class DefaultProjectSession implements ProjectSession {
         if (snapshot.getSliderPresets().isEmpty())
             return new UnchangedOutcome(snapshot);
         List<CustomMorphTargetSnapshot> targets = clearAllCustomMorphTargetAssignments();
-        return publishChangedProjectState(new ArrayList<SliderPresetSnapshot>(), targets);
+        List<NpcMorphAssignmentSnapshot> npcs = clearAllNpcAssignments();
+        return publishChangedProjectState(new ArrayList<SliderPresetSnapshot>(), targets, npcs);
     }
 
     /**
@@ -630,7 +1052,8 @@ final class DefaultProjectSession implements ProjectSession {
         if (!previousName.equals(changed.getName())) {
             List<CustomMorphTargetSnapshot> targets = renameCustomMorphTargetAssignments(previousName,
                     changed.getName());
-            return publishChangedProjectState(presets, targets);
+            List<NpcMorphAssignmentSnapshot> npcs = renameNpcAssignments(previousName, changed.getName());
+            return publishChangedProjectState(presets, targets, npcs);
         }
         return publishChangedPresets(presets);
     }
@@ -706,6 +1129,73 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
+     * Rewrites every NPC relationship to a renamed Slider Preset without mutating
+     * caller-held NPC Database source values.
+     *
+     * @param previousName prior Slider Preset display name
+     * @param changedName replacement canonical display name
+     * @return copied NPC Morph Assignments with repaired relationships
+     */
+    private List<NpcMorphAssignmentSnapshot> renameNpcAssignments(String previousName, String changedName) {
+        List<NpcMorphAssignmentSnapshot> assignments = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments()) {
+            List<String> presetNames = new ArrayList<>(npc.getSliderPresetNames());
+            boolean changed = false;
+            for (int index = 0; index < presetNames.size(); index++) {
+                if (presetNames.get(index).equalsIgnoreCase(previousName)) {
+                    presetNames.set(index, changedName);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                Collections.sort(presetNames, CASE_INSENSITIVE_NAME_ORDER);
+                assignments.add(copyNpc(npc, presetNames));
+            } else {
+                assignments.add(npc);
+            }
+        }
+        return assignments;
+    }
+
+    /**
+     * Removes every NPC relationship to a deleted Slider Preset while retaining
+     * independent NPC values and unrelated assignments.
+     *
+     * @param removedName deleted Slider Preset display name
+     * @return copied NPC Morph Assignments with matching relationships removed
+     */
+    private List<NpcMorphAssignmentSnapshot> removeNpcAssignments(String removedName) {
+        List<NpcMorphAssignmentSnapshot> assignments = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments()) {
+            List<String> presetNames = new ArrayList<>(npc.getSliderPresetNames());
+            boolean changed = false;
+            for (int index = presetNames.size() - 1; index >= 0; index--) {
+                if (presetNames.get(index).equalsIgnoreCase(removedName)) {
+                    presetNames.remove(index);
+                    changed = true;
+                }
+            }
+            assignments.add(changed ? copyNpc(npc, presetNames) : npc);
+        }
+        return assignments;
+    }
+
+    /**
+     * Clears every Project NPC relationship when the Slider Preset catalog is
+     * cleared, without changing or retaining a reference to NPC Database entries.
+     *
+     * @return NPC Morph Assignments with empty Slider Preset relationships
+     */
+    private List<NpcMorphAssignmentSnapshot> clearAllNpcAssignments() {
+        List<NpcMorphAssignmentSnapshot> assignments = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments()) {
+            assignments.add(npc.getSliderPresetNames().isEmpty() ? npc
+                    : copyNpc(npc, Collections.<String>emptyList()));
+        }
+        return assignments;
+    }
+
+    /**
      * Rejects an edit whose target cannot be resolved without changing dirty state.
      *
      * @return a structured rejection carrying the current snapshot
@@ -778,6 +1268,19 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
+     * Canonically orders and atomically publishes changed NPC Morph Assignments.
+     *
+     * @param assignments changed NPC Morph Assignment values
+     * @return a changed outcome carrying the published snapshot
+     */
+    private ChangedOutcome publishChangedNpcMorphAssignments(List<NpcMorphAssignmentSnapshot> assignments) {
+        Collections.sort(assignments, NPC_MORPH_ASSIGNMENT_IDENTITY_ORDER);
+        snapshot = new ProjectSnapshot(snapshot.getSliderPresets(), snapshot.getCustomMorphTargets(), assignments,
+                snapshot.getFileIdentity(), true, snapshot.getLifecycleStatus());
+        return new ChangedOutcome(snapshot);
+    }
+
+    /**
      * Canonically orders and atomically publishes changed Slider Presets together
      * with their repaired Custom Morph Target relationships.
      *
@@ -787,9 +1290,24 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ChangedOutcome publishChangedProjectState(List<SliderPresetSnapshot> presets,
             List<CustomMorphTargetSnapshot> targets) {
+        return publishChangedProjectState(presets, targets,
+                new ArrayList<>(snapshot.getNpcMorphAssignments()));
+    }
+
+    /**
+     * Canonically orders and atomically publishes every changed Project collection.
+     *
+     * @param presets changed Slider Preset catalog
+     * @param targets repaired Custom Morph Target values
+     * @param npcs repaired NPC Morph Assignment values
+     * @return a changed outcome carrying the single coherent snapshot
+     */
+    private ChangedOutcome publishChangedProjectState(List<SliderPresetSnapshot> presets,
+            List<CustomMorphTargetSnapshot> targets, List<NpcMorphAssignmentSnapshot> npcs) {
         Collections.sort(presets, SLIDER_PRESET_NAME_ORDER);
         Collections.sort(targets, CUSTOM_MORPH_TARGET_NAME_ORDER);
-        snapshot = new ProjectSnapshot(presets, targets, snapshot.getNpcMorphAssignments(),
+        Collections.sort(npcs, NPC_MORPH_ASSIGNMENT_IDENTITY_ORDER);
+        snapshot = new ProjectSnapshot(presets, targets, npcs,
                 snapshot.getFileIdentity(), true, snapshot.getLifecycleStatus());
         return new ChangedOutcome(snapshot);
     }

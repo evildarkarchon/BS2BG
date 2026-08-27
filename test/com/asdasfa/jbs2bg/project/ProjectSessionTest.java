@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -341,6 +342,374 @@ class ProjectSessionTest {
         ProjectOutcome alreadyEmpty = session.apply(CustomMorphTargetEdits.clear());
         assertTrue(alreadyEmpty instanceof UnchangedOutcome);
         assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
+    }
+
+    /**
+     * Verifies that promotion from the NPC Database copies source values and uses
+     * only plugin name plus editor ID, without regard to case, as Project identity.
+     */
+    @Test
+    void addingNpcCopiesSourceAndTreatsPluginAndEditorIdAsIdentity() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        List<String> callerAssignments = new ArrayList<>(Arrays.asList("alpha"));
+        NpcMorphAssignmentSnapshot source = new NpcMorphAssignmentSnapshot("Lydia", "Skyrim.esm",
+                "HousecarlWhiterun", "NordRace", "A2C94", callerAssignments);
+
+        ProjectOutcome added = session.apply(NpcMorphAssignmentEdits.addNpc(source));
+        callerAssignments.clear();
+
+        assertTrue(added instanceof ChangedOutcome);
+        NpcMorphAssignmentSnapshot assignment = added.getSnapshot().getNpcMorphAssignments().get(0);
+        assertNotSame(source, assignment);
+        assertEquals("Lydia", assignment.getDisplayName());
+        assertEquals("Skyrim.esm", assignment.getPluginName());
+        assertEquals("HousecarlWhiterun", assignment.getEditorId());
+        assertEquals("NordRace", assignment.getRace());
+        assertEquals("A2C94", assignment.getFormId());
+        assertEquals(Arrays.asList("Alpha"), assignment.getSliderPresetNames());
+
+        NpcMorphAssignmentSnapshot sameIdentity = new NpcMorphAssignmentSnapshot("Different Display",
+                "SKYRIM.ESM", "housecarlwhiterun", "BretonRace", "FFFFFF",
+                new ArrayList<String>());
+        ProjectOutcome duplicate = session.apply(NpcMorphAssignmentEdits.addNpc(sameIdentity));
+
+        assertTrue(duplicate instanceof RejectedOutcome);
+        assertSame(added.getSnapshot(), duplicate.getSnapshot());
+        assertSame(duplicate.getSnapshot(), session.getSnapshot());
+        assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE,
+                duplicate.getDiagnostics().get(0).getCode());
+        assertEquals("Lydia", duplicate.getSnapshot().getNpcMorphAssignments().get(0).getDisplayName());
+        assertEquals("A2C94", duplicate.getSnapshot().getNpcMorphAssignments().get(0).getFormId());
+    }
+
+    /**
+     * Verifies that case-insensitive NPC identity equality remains safe for caller
+     * hash collections even for Unicode characters with asymmetric lowercase forms.
+     */
+    @Test
+    void npcIdentityHashCodeMatchesCaseInsensitiveEquality() {
+        NpcMorphAssignmentIdentity latinCapitalI = new NpcMorphAssignmentIdentity("I.esm", "EDITOR");
+        NpcMorphAssignmentIdentity dotlessLowerI = new NpcMorphAssignmentIdentity("\u0131.esm", "editor");
+
+        assertEquals(latinCapitalI, dotlessLowerI);
+        assertEquals(latinCapitalI.hashCode(), dotlessLowerI.hashCode());
+    }
+
+    /**
+     * Verifies that NPC assignment edits resolve identity and Slider Presets
+     * case-insensitively while preserving unique canonical relationship order.
+     */
+    @Test
+    void npcSliderPresetAssignmentEditsAreUniqueCanonicalAndTruthful() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Zulu"));
+        session.apply(SliderPresetEdits.create("alpha"));
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("Lydia", "Skyrim.esm", "HousecarlWhiterun")));
+        NpcMorphAssignmentIdentity lydia = new NpcMorphAssignmentIdentity("SKYRIM.ESM", "housecarlwhiterun");
+
+        ProjectOutcome first = session.apply(NpcMorphAssignmentEdits.addSliderPreset(lydia, "zulu"));
+        ProjectOutcome second = session.apply(NpcMorphAssignmentEdits.addSliderPreset(lydia, "ALPHA"));
+        ProjectOutcome duplicate = session.apply(NpcMorphAssignmentEdits.addSliderPreset(lydia, "alpha"));
+
+        assertTrue(first instanceof ChangedOutcome);
+        assertTrue(second instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("alpha", "Zulu"),
+                second.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertTrue(duplicate instanceof UnchangedOutcome);
+        assertSame(second.getSnapshot(), duplicate.getSnapshot());
+
+        ProjectOutcome removed = session.apply(NpcMorphAssignmentEdits.removeSliderPreset(lydia, "ALPHA"));
+        ProjectOutcome alreadyRemoved = session.apply(NpcMorphAssignmentEdits.removeSliderPreset(lydia, "alpha"));
+        ProjectOutcome cleared = session.apply(NpcMorphAssignmentEdits.clearSliderPresets(lydia));
+        ProjectOutcome alreadyEmpty = session.apply(NpcMorphAssignmentEdits.clearSliderPresets(lydia));
+
+        assertTrue(removed instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("Zulu"),
+                removed.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertTrue(alreadyRemoved instanceof UnchangedOutcome);
+        assertSame(removed.getSnapshot(), alreadyRemoved.getSnapshot());
+        assertTrue(cleared instanceof ChangedOutcome);
+        assertTrue(cleared.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames().isEmpty());
+        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
+    }
+
+    /**
+     * Verifies canonical plugin/editor ordering and truthful single, filtered-batch,
+     * and clear-all NPC Morph Assignment removal behavior.
+     */
+    @Test
+    void npcRemovalAndClearEditsPreserveCanonicalOrderingAndNoOps() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("Zulu", "Skyrim.esm", "ZuluEditor")));
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("Dawnguard", "Dawnguard.esm", "ZuluEditor")));
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("Alpha", "skyrim.ESM", "AlphaEditor")));
+
+        assertEquals(Arrays.asList("Dawnguard.esm/ZuluEditor", "skyrim.ESM/AlphaEditor",
+                "Skyrim.esm/ZuluEditor"), npcIdentities(session.getSnapshot()));
+
+        ProjectOutcome removed = session.apply(NpcMorphAssignmentEdits.removeNpc(
+                new NpcMorphAssignmentIdentity("SKYRIM.ESM", "zulueditor")));
+        ProjectOutcome missing = session.apply(NpcMorphAssignmentEdits.removeNpc(
+                new NpcMorphAssignmentIdentity("Skyrim.esm", "Missing")));
+        ProjectOutcome filtered = session.apply(NpcMorphAssignmentEdits.removeNpcs(Arrays.asList(
+                new NpcMorphAssignmentIdentity("DAWNGUARD.ESM", "zulueditor"))));
+        ProjectOutcome noMatches = session.apply(NpcMorphAssignmentEdits.removeNpcs(Arrays.asList(
+                new NpcMorphAssignmentIdentity("Missing.esm", "Missing"))));
+
+        assertTrue(removed instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("Dawnguard.esm/ZuluEditor", "skyrim.ESM/AlphaEditor"),
+                npcIdentities(removed.getSnapshot()));
+        assertNpcRejected(missing, ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND, removed.getSnapshot());
+        assertTrue(filtered instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("skyrim.ESM/AlphaEditor"), npcIdentities(filtered.getSnapshot()));
+        assertTrue(noMatches instanceof UnchangedOutcome);
+        assertSame(filtered.getSnapshot(), noMatches.getSnapshot());
+
+        ProjectOutcome cleared = session.apply(NpcMorphAssignmentEdits.clearNpcs());
+        ProjectOutcome alreadyEmpty = session.apply(NpcMorphAssignmentEdits.clearNpcs());
+
+        assertTrue(cleared instanceof ChangedOutcome);
+        assertTrue(cleared.getSnapshot().getNpcMorphAssignments().isEmpty());
+        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
+    }
+
+    /**
+     * Verifies that filtered bulk NPC promotion defensively captures caller input,
+     * skips existing identities, and validates the complete candidate before publish.
+     */
+    @Test
+    void filteredBulkNpcAddIsDefensivelyCopiedAndAtomicOnRejection() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        List<NpcMorphAssignmentSnapshot> filteredSources = new ArrayList<>(Arrays.asList(
+                new NpcMorphAssignmentSnapshot("Beta", "Skyrim.esm", "BetaEditor", "NordRace", "100001",
+                        Arrays.asList("alpha")),
+                npc("Gamma", "Skyrim.esm", "GammaEditor")));
+        ProjectEdit request = NpcMorphAssignmentEdits.addNpcs(filteredSources);
+        filteredSources.clear();
+
+        ProjectOutcome added = session.apply(request);
+
+        assertTrue(added instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("Skyrim.esm/BetaEditor", "Skyrim.esm/GammaEditor"),
+                npcIdentities(added.getSnapshot()));
+        assertEquals(Arrays.asList("Alpha"),
+                added.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames());
+
+        ProjectOutcome duplicates = session.apply(NpcMorphAssignmentEdits.addNpcs(Arrays.asList(
+                npc("Changed", "SKYRIM.ESM", "betaeditor"),
+                npc("Changed", "SKYRIM.ESM", "gammaeditor"))));
+        assertTrue(duplicates instanceof UnchangedOutcome);
+        assertSame(added.getSnapshot(), duplicates.getSnapshot());
+
+        NpcMorphAssignmentSnapshot valid = npc("Delta", "Skyrim.esm", "DeltaEditor");
+        NpcMorphAssignmentSnapshot invalid = new NpcMorphAssignmentSnapshot("Epsilon", "Skyrim.esm",
+                "EpsilonEditor", "NordRace", "100002", Arrays.asList("Missing Preset"));
+        ProjectSnapshot beforeRejectedBatch = session.getSnapshot();
+
+        ProjectOutcome rejected = session.apply(NpcMorphAssignmentEdits.addNpcs(Arrays.asList(valid, invalid)));
+
+        assertTrue(rejected instanceof RejectedOutcome);
+        assertSame(beforeRejectedBatch, rejected.getSnapshot());
+        assertSame(beforeRejectedBatch, session.getSnapshot());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, rejected.getDiagnostics().get(0).getCode());
+        assertEquals(Arrays.asList("Skyrim.esm/BetaEditor", "Skyrim.esm/GammaEditor"),
+                npcIdentities(rejected.getSnapshot()));
+    }
+
+    /**
+     * Verifies that fill-empty consumes explicit caller-owned choices, preserves
+     * non-empty NPCs, and rejects a mixed-validity choice set without partial fill.
+     */
+    @Test
+    void fillEmptyUsesExplicitChoicesAndPublishesAtomically() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.create("beta"));
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("First", "Skyrim.esm", "FirstEditor")));
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("Second", "Skyrim.esm", "SecondEditor")));
+        session.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot("Occupied", "Skyrim.esm",
+                "OccupiedEditor", "NordRace", "100003", Arrays.asList("Alpha"))));
+        List<NpcSliderPresetChoice> callerChoices = new ArrayList<>(Arrays.asList(
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("SKYRIM.ESM", "firsteditor"), "BETA"),
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("Skyrim.esm", "occupiededitor"), "beta"),
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("Skyrim.esm", "secondeditor"), "alpha")));
+        ProjectEdit fillRequest = NpcMorphAssignmentEdits.fillEmpty(callerChoices);
+        callerChoices.clear();
+
+        ProjectOutcome filled = session.apply(fillRequest);
+
+        assertTrue(filled instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("beta"), npcAssignments(filled.getSnapshot(), "FirstEditor"));
+        assertEquals(Arrays.asList("Alpha"), npcAssignments(filled.getSnapshot(), "OccupiedEditor"));
+        assertEquals(Arrays.asList("Alpha"), npcAssignments(filled.getSnapshot(), "SecondEditor"));
+
+        ProjectOutcome noEligible = session.apply(NpcMorphAssignmentEdits.fillEmpty(Arrays.asList(
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("Skyrim.esm", "firsteditor"), "Alpha"))));
+        assertTrue(noEligible instanceof UnchangedOutcome);
+        assertSame(filled.getSnapshot(), noEligible.getSnapshot());
+
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("Third", "Skyrim.esm", "ThirdEditor")));
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("Fourth", "Skyrim.esm", "FourthEditor")));
+        ProjectSnapshot beforeRejectedFill = session.getSnapshot();
+        ProjectOutcome rejected = session.apply(NpcMorphAssignmentEdits.fillEmpty(Arrays.asList(
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("Skyrim.esm", "thirdeditor"), "Alpha"),
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("Skyrim.esm", "fourtheditor"),
+                        "Missing Preset"))));
+
+        assertTrue(rejected instanceof RejectedOutcome);
+        assertSame(beforeRejectedFill, rejected.getSnapshot());
+        assertSame(beforeRejectedFill, session.getSnapshot());
+        assertTrue(npcAssignments(rejected.getSnapshot(), "ThirdEditor").isEmpty());
+        assertTrue(npcAssignments(rejected.getSnapshot(), "FourthEditor").isEmpty());
+    }
+
+    /**
+     * Verifies that a filtered assignment-clear action is one defensively copied,
+     * fully validated edit rather than a sequence of partially visible mutations.
+     */
+    @Test
+    void filteredNpcAssignmentClearIsDefensivelyCopiedAndAtomic() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot("First", "Skyrim.esm",
+                "FirstEditor", "NordRace", "100004", Arrays.asList("Alpha"))));
+        session.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot("Second", "Skyrim.esm",
+                "SecondEditor", "NordRace", "100005", Arrays.asList("Alpha"))));
+        List<NpcMorphAssignmentIdentity> filtered = new ArrayList<>(Arrays.asList(
+                new NpcMorphAssignmentIdentity("SKYRIM.ESM", "firsteditor")));
+        ProjectEdit clearRequest = NpcMorphAssignmentEdits.clearSliderPresetsForNpcs(filtered);
+        filtered.clear();
+
+        ProjectOutcome cleared = session.apply(clearRequest);
+
+        assertTrue(cleared instanceof ChangedOutcome);
+        assertTrue(npcAssignments(cleared.getSnapshot(), "FirstEditor").isEmpty());
+        assertEquals(Arrays.asList("Alpha"), npcAssignments(cleared.getSnapshot(), "SecondEditor"));
+
+        ProjectOutcome alreadyEmpty = session.apply(NpcMorphAssignmentEdits.clearSliderPresetsForNpcs(Arrays.asList(
+                new NpcMorphAssignmentIdentity("Skyrim.esm", "firsteditor"))));
+        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
+
+        ProjectSnapshot beforeRejected = session.getSnapshot();
+        ProjectOutcome rejected = session.apply(NpcMorphAssignmentEdits.clearSliderPresetsForNpcs(Arrays.asList(
+                new NpcMorphAssignmentIdentity("Skyrim.esm", "secondeditor"),
+                new NpcMorphAssignmentIdentity("Missing.esm", "MissingEditor"))));
+
+        assertNpcRejected(rejected, ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND, beforeRejected);
+        assertSame(beforeRejected, session.getSnapshot());
+        assertEquals(Arrays.asList("Alpha"), npcAssignments(rejected.getSnapshot(), "SecondEditor"));
+    }
+
+    /**
+     * Verifies that Slider Preset cascades repair Project NPC relationships while
+     * retaining NPC metadata and leaving the independent source value unchanged.
+     */
+    @Test
+    void sliderPresetRenameDeleteAndClearCascadeToNpcAssignmentsOnly() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.create("beta"));
+        NpcMorphAssignmentSnapshot source = new NpcMorphAssignmentSnapshot("Lydia", "Skyrim.esm",
+                "HousecarlWhiterun", "NordRace", "A2C94", Arrays.asList("Alpha", "beta"));
+        session.apply(NpcMorphAssignmentEdits.addNpc(source));
+
+        ProjectOutcome renamed = session.apply(SliderPresetEdits.rename("ALPHA", " Gamma "));
+
+        assertTrue(renamed instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("beta", "Gamma"), npcAssignments(renamed.getSnapshot(), "HousecarlWhiterun"));
+        NpcMorphAssignmentSnapshot retained = renamed.getSnapshot().getNpcMorphAssignments().get(0);
+        assertEquals("Lydia", retained.getDisplayName());
+        assertEquals("NordRace", retained.getRace());
+        assertEquals("A2C94", retained.getFormId());
+        assertEquals(Arrays.asList("Alpha", "beta"), source.getSliderPresetNames());
+
+        ProjectOutcome deleted = session.apply(SliderPresetEdits.delete("gamma"));
+        assertTrue(deleted instanceof ChangedOutcome);
+        assertEquals(Arrays.asList("beta"), npcAssignments(deleted.getSnapshot(), "HousecarlWhiterun"));
+        assertEquals(Arrays.asList("Alpha", "beta"), source.getSliderPresetNames());
+
+        ProjectOutcome cleared = session.apply(SliderPresetEdits.clear());
+        assertTrue(cleared instanceof ChangedOutcome);
+        assertEquals(1, cleared.getSnapshot().getNpcMorphAssignments().size());
+        assertTrue(npcAssignments(cleared.getSnapshot(), "HousecarlWhiterun").isEmpty());
+        assertEquals(Arrays.asList("Alpha", "beta"), source.getSliderPresetNames());
+    }
+
+    /**
+     * Verifies that known NPC edits require an active Project and that empty bulk
+     * actions preserve the canonical clean New Project snapshot.
+     */
+    @Test
+    void npcEditsRequireActiveProjectAndEmptyBulkActionsRemainClean() {
+        ProjectSession session = ProjectSessions.create();
+        ProjectSnapshot noProject = session.getSnapshot();
+
+        ProjectOutcome beforeActiveProject = session.apply(NpcMorphAssignmentEdits.clearNpcs());
+
+        assertTrue(beforeActiveProject instanceof RejectedOutcome);
+        assertSame(noProject, beforeActiveProject.getSnapshot());
+        assertEquals(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED,
+                beforeActiveProject.getDiagnostics().get(0).getCode());
+
+        ProjectSnapshot clean = session.newProject().getSnapshot();
+        List<ProjectOutcome> noOps = Arrays.asList(
+                session.apply(NpcMorphAssignmentEdits.addNpcs(Collections.<NpcMorphAssignmentSnapshot>emptyList())),
+                session.apply(NpcMorphAssignmentEdits.removeNpcs(Collections.<NpcMorphAssignmentIdentity>emptyList())),
+                session.apply(NpcMorphAssignmentEdits.clearSliderPresetsForNpcs(
+                        Collections.<NpcMorphAssignmentIdentity>emptyList())),
+                session.apply(NpcMorphAssignmentEdits.fillEmpty(Collections.<NpcSliderPresetChoice>emptyList())),
+                session.apply(NpcMorphAssignmentEdits.clearNpcs()));
+
+        for (ProjectOutcome outcome : noOps) {
+            assertTrue(outcome instanceof UnchangedOutcome);
+            assertSame(clean, outcome.getSnapshot());
+            assertFalse(outcome.getSnapshot().isDirty());
+        }
+        assertSame(clean, session.getSnapshot());
+    }
+
+    /**
+     * Verifies structured rejection and exact snapshot preservation for unresolved
+     * NPC and Slider Preset endpoints supplied to explicit NPC edits.
+     */
+    @Test
+    void invalidNpcEditEndpointsRejectWithoutChangingProjectState() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(NpcMorphAssignmentEdits.addNpc(npc("Lydia", "Skyrim.esm", "HousecarlWhiterun")));
+        ProjectSnapshot before = session.getSnapshot();
+
+        ProjectOutcome missingNpc = session.apply(NpcMorphAssignmentEdits.addSliderPreset(
+                new NpcMorphAssignmentIdentity("Missing.esm", "MissingEditor"), "Alpha"));
+        ProjectOutcome missingPreset = session.apply(NpcMorphAssignmentEdits.addSliderPreset(
+                new NpcMorphAssignmentIdentity("Skyrim.esm", "HousecarlWhiterun"), "Missing Preset"));
+        ProjectOutcome invalidSourceAssignments = session.apply(NpcMorphAssignmentEdits.addNpc(
+                new NpcMorphAssignmentSnapshot("Bad", "Skyrim.esm", "BadEditor", "NordRace", "100006",
+                        Arrays.asList("Missing Preset"))));
+
+        assertNpcRejected(missingNpc, ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND, before);
+        assertTrue(missingPreset instanceof RejectedOutcome);
+        assertSame(before, missingPreset.getSnapshot());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND,
+                missingPreset.getDiagnostics().get(0).getCode());
+        assertTrue(invalidSourceAssignments instanceof RejectedOutcome);
+        assertSame(before, invalidSourceAssignments.getSnapshot());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND,
+                invalidSourceAssignments.getDiagnostics().get(0).getCode());
+        assertSame(before, session.getSnapshot());
     }
 
     /**
@@ -714,6 +1083,49 @@ class ProjectSessionTest {
     }
 
     /**
+     * Creates copied NPC source values without assigned Slider Presets for concise
+     * ProjectSession behavior tests.
+     *
+     * @param displayName NPC display name
+     * @param pluginName source plugin name
+     * @param editorId NPC editor ID
+     * @return immutable source values ready for an NPC-add edit
+     */
+    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId) {
+        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, "NordRace", "123456",
+                Collections.<String>emptyList());
+    }
+
+    /**
+     * Extracts ordered NPC plugin/editor identities from a Project snapshot.
+     *
+     * @param snapshot immutable Project state to inspect
+     * @return identities in snapshot order
+     */
+    private static List<String> npcIdentities(ProjectSnapshot snapshot) {
+        List<String> identities = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot assignment : snapshot.getNpcMorphAssignments())
+            identities.add(assignment.getPluginName() + "/" + assignment.getEditorId());
+        return identities;
+    }
+
+    /**
+     * Returns one NPC's immutable assigned Slider Preset names by editor ID.
+     *
+     * @param snapshot immutable Project state to inspect
+     * @param editorId editor ID to resolve without regard to case
+     * @return immutable assigned Slider Preset names
+     * @throws AssertionError when no NPC has the requested editor ID
+     */
+    private static List<String> npcAssignments(ProjectSnapshot snapshot, String editorId) {
+        for (NpcMorphAssignmentSnapshot assignment : snapshot.getNpcMorphAssignments()) {
+            if (assignment.getEditorId().equalsIgnoreCase(editorId))
+                return assignment.getSliderPresetNames();
+        }
+        throw new AssertionError("Missing NPC Morph Assignment: " + editorId);
+    }
+
+    /**
      * Asserts the common structured naming rejection contract.
      *
      * @param outcome rejected session operation
@@ -743,6 +1155,22 @@ class ProjectSessionTest {
         assertEquals(code, outcome.getDiagnostics().get(0).getCode());
         assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
         assertEquals("custom-morph-target.name",
+                outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
+    }
+
+    /**
+     * Asserts the common structured NPC identity rejection contract.
+     *
+     * @param outcome rejected session operation
+     * @param code expected stable diagnostic code
+     * @param snapshot exact prior snapshot that must be preserved
+     */
+    private static void assertNpcRejected(ProjectOutcome outcome, String code, ProjectSnapshot snapshot) {
+        assertTrue(outcome instanceof RejectedOutcome);
+        assertSame(snapshot, outcome.getSnapshot());
+        assertEquals(code, outcome.getDiagnostics().get(0).getCode());
+        assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
+        assertEquals("npc-morph-assignment.identity",
                 outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
     }
 }
