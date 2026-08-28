@@ -82,9 +82,8 @@ script's closing report and `transitional.completeApplicationGate=false` in the 
 explicitly; a green run proves the pinned toolchain and the JavaFX-independent `ProjectSession`, immutable
 snapshot, and package-private `Project` contracts only.
 
-ADR-0001's "preserving Java 8" clause predates the modernization; the maintainer's position is that ADR-0002 is
-the governing Project-seam decision. Recording that supersession in the ADR files is #81's deliverable and is not
-done here.
+ADR-0001's "preserving Java 8" clause predates the modernization and is marked superseded by ADR-0002, which
+governs the Project seam; the `--release 25` target here is consistent with the current ADRs.
 
 ## Updating a pin
 
