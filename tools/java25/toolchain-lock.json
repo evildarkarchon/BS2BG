@@ -1,0 +1,43 @@
+{
+  "$comment": "Pinned inputs for the transitional Java 25 verification run (issue #94). Every value is an explicit reviewed lock; tools/java25/verify-java25.ps1 fails closed when an artifact hash, version string, or architecture differs. Update sources: Adoptium publishes the Temurin SHA-256 as a release asset; Gluon publishes no checksum, so the JavaFX value was recorded from the official artifact on 2026-08-28 (see docs/research/windows-portable-release-policy.md).",
+  "targetRelease": 25,
+  "architecture": {
+    "os": "Windows",
+    "processorArchitecture": "AMD64",
+    "javaOsArch": "amd64",
+    "jdkReleaseOsArch": "x86_64"
+  },
+  "maven": {
+    "version": "3.9.16",
+    "distributionSha256": "5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce"
+  },
+  "jdk": {
+    "id": "temurin-25.0.4.1+1-windows-x64",
+    "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_x64_windows_hotspot_25.0.4.1_1.zip",
+    "sha256": "00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283",
+    "archiveRootDirectory": "jdk-25.0.4.1+1",
+    "release": {
+      "IMPLEMENTOR": "Eclipse Adoptium",
+      "IMPLEMENTOR_VERSION": "Temurin-25.0.4.1+1",
+      "JAVA_VERSION": "25.0.4.1",
+      "JAVA_RUNTIME_VERSION": "25.0.4.1+1-LTS",
+      "SEMANTIC_VERSION": "25.0.4.1+1",
+      "IMAGE_TYPE": "JDK",
+      "OS_NAME": "Windows",
+      "OS_ARCH": "x86_64"
+    }
+  },
+  "javafx": {
+    "id": "openjfx-25.0.4-windows-x64-jmods",
+    "version": "25.0.4",
+    "url": "https://download2.gluonhq.com/openjfx/25.0.4/openjfx-25.0.4_windows-x64_bin-jmods.zip",
+    "sha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
+    "archiveRootDirectory": "javafx-jmods-25.0.4",
+    "requiredModules": [
+      "javafx.base",
+      "javafx.graphics",
+      "javafx.controls",
+      "javafx.fxml"
+    ]
+  }
+}

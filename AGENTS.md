@@ -12,6 +12,10 @@ Triage uses the canonical `needs-triage`, `needs-info`, `ready-for-agent`, `read
 
 This repository uses the single-context domain documentation layout. See `docs/agents/domain.md`.
 
+### Build and verification
+
+The transitional Java 25 build runs through one repository-owned command, `tools/java25/verify-java25.ps1`, which checksum-provisions the pinned Temurin 25 / JavaFX 25 inputs and invokes the committed Maven Wrapper with the `.mvn/toolchains.xml` toolchain. Plain `mvnw` fails closed unless `BS2BG_JDK25_HOME` is set. It is not the complete application gate; see `docs/build/java25-transitional-verification.md`.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
