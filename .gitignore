@@ -455,3 +455,4 @@ graphify-out/
 .claude/settings.json
 .codex/hooks.json
 .playwright-mcp/
+BS2BG.code-workspace
