@@ -19,9 +19,16 @@ import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
  * <p>Project file loading, BodySlide XML import, and UUNP edits all go through
  * this single implementation so every path publishes the same synthesized state
  * and a save/reopen cycle cannot change a Slider Preset's meaning.
+ *
+ * <p>This is also where a choice list's canonical case-insensitive order and its
+ * lookup by slider name live. Choices are a Slider Preset's payload, which the
+ * {@link Project} aggregate replaces wholesale and never inspects (ADR-0002), so
+ * their ordering belongs with the other slider-configuration rules rather than
+ * with Project integrity or with the session.
  */
 final class SliderChoiceDefaults {
 
+    /** Canonical slider-choice order: slider name, without regard to case. */
     private static final Comparator<SliderChoiceSnapshot> NAME_ORDER = new Comparator<SliderChoiceSnapshot>() {
         @Override
         public int compare(SliderChoiceSnapshot left, SliderChoiceSnapshot right) {
@@ -128,6 +135,53 @@ final class SliderChoiceDefaults {
                 effectiveSmall(choice.getName(), storedSmall, uunp),
                 effectiveBig(choice.getName(), storedBig, uunp),
                 choice.getPercentageMinimum(), choice.getPercentageMaximum(), choice.isMissingDefault());
+    }
+
+    /**
+     * Copies a choice list into canonical case-insensitive slider-name order. The
+     * input is never mutated.
+     *
+     * @param choices choices in any order
+     * @return a new list in canonical order
+     */
+    static List<SliderChoiceSnapshot> sortedByName(List<SliderChoiceSnapshot> choices) {
+        List<SliderChoiceSnapshot> sorted = new ArrayList<>(choices);
+        Collections.sort(sorted, NAME_ORDER);
+        return sorted;
+    }
+
+    /**
+     * Upserts one choice by case-insensitive slider name: the choice replaces the
+     * existing one with that name, or is added when the name is new, and the
+     * result is in canonical order. Display casing is not part of a choice's
+     * identity, so "Breasts" replaces "breasts". The input is never mutated.
+     *
+     * @param choices current choices, in any order
+     * @param choice replacement or new choice
+     * @return a new list in canonical order carrying the choice
+     */
+    static List<SliderChoiceSnapshot> withChoice(List<SliderChoiceSnapshot> choices, SliderChoiceSnapshot choice) {
+        List<SliderChoiceSnapshot> next = new ArrayList<>(choices);
+        int index = indexOfName(next, choice.getName());
+        if (index >= 0)
+            next.set(index, choice);
+        else
+            next.add(choice);
+        Collections.sort(next, NAME_ORDER);
+        return next;
+    }
+
+    /**
+     * Locates a choice by slider name without regard to case.
+     *
+     * @return the index, or -1 when no choice has that name
+     */
+    private static int indexOfName(List<SliderChoiceSnapshot> choices, String name) {
+        for (int index = 0; index < choices.size(); index++) {
+            if (choices.get(index).getName().equalsIgnoreCase(name))
+                return index;
+        }
+        return -1;
     }
 
     /**

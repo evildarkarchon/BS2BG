@@ -96,20 +96,39 @@ final class Project {
             (npc, names) -> new NpcMorphAssignmentSnapshot(npc.getDisplayName(), npc.getPluginName(),
                     npc.getEditorId(), npc.getRace(), npc.getFormId(), names));
 
+    /**
+     * The one canonical empty aggregate. New Project publishes this instance, so
+     * the session can tell a repeated New Project (same instance, Unchanged) from
+     * a Project that edits merely emptied again (a different instance, dirty).
+     */
+    private static final Project EMPTY = new Project(Collections.<SliderPresetSnapshot>emptyList(),
+            Collections.<CustomMorphTargetSnapshot>emptyList(), Collections.<NpcMorphAssignmentSnapshot>emptyList());
+
     private final List<SliderPresetSnapshot> sliderPresets;
     private final List<CustomMorphTargetSnapshot> customMorphTargets;
     private final List<NpcMorphAssignmentSnapshot> npcMorphAssignments;
 
     /**
      * Adopts already-canonical, already-unmodifiable collections. Only reached
-     * from {@link #from(ProjectSnapshot)} and from operations on a valid aggregate,
-     * so no validation or copying happens here.
+     * from {@link #from(ProjectSnapshot)}, {@link #empty()}, and operations on a
+     * valid aggregate, so no validation or copying happens here.
      */
     private Project(List<SliderPresetSnapshot> sliderPresets, List<CustomMorphTargetSnapshot> customMorphTargets,
             List<NpcMorphAssignmentSnapshot> npcMorphAssignments) {
         this.sliderPresets = sliderPresets;
         this.customMorphTargets = customMorphTargets;
         this.npcMorphAssignments = npcMorphAssignments;
+    }
+
+    /**
+     * Returns the canonical empty aggregate: no Slider Presets, Custom Morph
+     * Targets, or NPC Morph Assignments. Always the same instance, so a caller
+     * that publishes it can later recognise it by identity.
+     *
+     * @return the single empty aggregate
+     */
+    static Project empty() {
+        return EMPTY;
     }
 
     /**

@@ -66,6 +66,34 @@ class ProjectSessionTest {
     }
 
     /**
+     * Guards the identity rule behind New Project: a repeated New Project on a
+     * pristine untitled Project is Unchanged, while a New Project after an edit
+     * that merely emptied the Project again is Changed, because that Project is
+     * dirty and must be replaced by a clean one.
+     */
+    @Test
+    void repeatedNewProjectIsUnchangedUntilTheProjectIsEdited() {
+        ProjectSession session = ProjectSessions.create();
+        ProjectSnapshot first = session.newProject().getSnapshot();
+
+        ProjectOutcome repeated = session.newProject();
+        assertTrue(repeated instanceof UnchangedOutcome);
+        assertSame(first, repeated.getSnapshot());
+        assertSame(first, session.getSnapshot());
+
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.clear());
+        assertTrue(session.getSnapshot().isDirty());
+        assertTrue(session.getSnapshot().getSliderPresets().isEmpty());
+
+        ProjectOutcome replaced = session.newProject();
+        assertTrue(replaced instanceof ChangedOutcome);
+        assertNotSame(first, replaced.getSnapshot());
+        assertFalse(replaced.getSnapshot().isDirty());
+        assertSame(replaced.getSnapshot(), session.getSnapshot());
+    }
+
+    /**
      * Proves that snapshots copy their complete value graph and expose no mutable
      * collection or legacy domain object to callers.
      */

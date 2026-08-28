@@ -42,6 +42,13 @@ class ProjectTest {
         assertSame(empty, empty.clearSliderPresets());
         assertNotSame(project, project.clearSliderPresets());
 
+        // The canonical empty aggregate is one instance, so the session can tell a
+        // repeated New Project from a Project that was merely emptied by edits.
+        assertSame(Project.empty(), Project.empty());
+        assertTrue(Project.empty().getSliderPresets().isEmpty());
+        assertTrue(Project.empty().getCustomMorphTargets().isEmpty());
+        assertTrue(Project.empty().getNpcMorphAssignments().isEmpty());
+
         // Relationship operations: an assignment that is already present (in any
         // casing), an absent unassignment, and clearing an already-empty referrer
         // are no-ops for both referrer kinds.

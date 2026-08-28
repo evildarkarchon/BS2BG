@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -19,22 +18,31 @@ import com.eclipsesource.json.ParseException;
 
 /**
  * Serializes Project operations and atomically publishes immutable snapshots.
- * Slider Preset edits and the BodySlide XML import delegate content rules to the
- * {@link Project} aggregate and translate its results into outcomes here.
+ *
+ * <p>Project content is owned by the {@link Project} aggregate, which the session
+ * holds as its source of truth and swaps under the operation lock; every edit
+ * handler looks up, delegates to the aggregate, and translates the result into an
+ * outcome. Lifecycle state (file identity, dirty, recovered) stays here and on the
+ * published snapshot, which {@link #publish} asks the aggregate to produce from
+ * its content plus that lifecycle. "Did anything change" is answered by aggregate
+ * instance identity, never by a per-handler comparison.
  */
 final class DefaultProjectSession implements ProjectSession {
-    // Slider-choice order stays here rather than in Project: choices are a Slider
-    // Preset's payload, which the aggregate replaces wholesale and never inspects.
-    private static final Comparator<SliderChoiceSnapshot> SLIDER_CHOICE_NAME_ORDER =
-            new Comparator<SliderChoiceSnapshot>() {
-                @Override
-                public int compare(SliderChoiceSnapshot left, SliderChoiceSnapshot right) {
-                    return left.getName().compareToIgnoreCase(right.getName());
-                }
-            };
+
+    private static final List<ProjectDiagnostic> NO_DIAGNOSTICS = Collections.emptyList();
 
     private final Object operationLock = new Object();
+    /**
+     * Published view for lock-free readers; volatile so {@link #getSnapshot()} sees
+     * a complete snapshot without taking the operation lock.
+     */
     private volatile ProjectSnapshot snapshot = ProjectSnapshot.noProject();
+    /**
+     * Source of truth for Project content. Read and written only under the
+     * operation lock, and always swapped together with {@link #snapshot} by
+     * {@link #publish}, so the two never disagree about content.
+     */
+    private Project project = Project.empty();
 
     /**
      * {@inheritDoc}
@@ -50,11 +58,11 @@ final class DefaultProjectSession implements ProjectSession {
     @Override
     public ProjectOutcome newProject() {
         synchronized (operationLock) {
-            ProjectSnapshot emptyProject = ProjectSnapshot.empty();
-            if (snapshot == emptyProject)
-                return new UnchangedOutcome(snapshot);
-            snapshot = emptyProject;
-            return new ChangedOutcome(snapshot);
+            // The canonical empty aggregate is one instance, so a repeated New
+            // Project on a pristine untitled Project is Unchanged by identity, while
+            // a Project that edits emptied again is a different (dirty) instance.
+            return publish(Project.empty(), Optional.<Path>empty(), false, ProjectLifecycleStatus.UNTITLED,
+                    NO_DIAGNOSTICS);
         }
     }
 
@@ -67,8 +75,14 @@ final class DefaultProjectSession implements ProjectSession {
         synchronized (operationLock) {
             try {
                 ProjectFileLoader.LoadedProject loaded = ProjectFileLoader.load(source);
-                snapshot = loaded.getSnapshot();
-                return new ChangedOutcome(snapshot, loaded.getDiagnostics());
+                ProjectSnapshot loadedSnapshot = loaded.getSnapshot();
+                // Constructing the aggregate re-validates name uniqueness and dangling
+                // Slider Preset references. The loader already enforces both, so a
+                // violation here is a loader regression; it surfaces as a failed open
+                // through the boundary below instead of publishing a broken Project.
+                Project opened = Project.from(loadedSnapshot);
+                return publish(opened, loadedSnapshot.getFileIdentity(), loadedSnapshot.isDirty(),
+                        loadedSnapshot.getLifecycleStatus(), loaded.getDiagnostics());
             } catch (IOException exception) {
                 return failedOpen(ProjectDiagnosticCodes.PROJECT_FILE_READ_FAILED, source,
                         "The Project file could not be read: " + exception.getMessage());
@@ -171,9 +185,9 @@ final class DefaultProjectSession implements ProjectSession {
                 return new SliderPresetImportOutcome(rejectedActiveProjectRequired(), rejectedSources);
             }
 
+            Project before = project;
             List<ProjectOutcome> sourceOutcomes = new ArrayList<>();
             List<ProjectDiagnostic> diagnostics = new ArrayList<>();
-            boolean changed = false;
             boolean rejected = false;
             boolean failed = false;
             for (Path source : selectedSources) {
@@ -181,7 +195,6 @@ final class DefaultProjectSession implements ProjectSession {
                 sourceOutcomes.add(sourceOutcome);
                 diagnostics.addAll(sourceOutcome.getDiagnostics());
                 ImportOutcomeKind outcomeKind = importOutcomeKind(sourceOutcome);
-                changed |= outcomeKind == ImportOutcomeKind.CHANGED;
                 rejected |= outcomeKind == ImportOutcomeKind.REJECTED;
                 failed |= outcomeKind == ImportOutcomeKind.FAILED;
             }
@@ -192,9 +205,11 @@ final class DefaultProjectSession implements ProjectSession {
 
             ProjectOutcome projectOutcome;
             // A published source must make the batch Changed so dirty handling stays
-            // truthful. Without a change, rejection distinguishes invalid content from
-            // a batch made solely of environmental failures; exact kinds remain per file.
-            if (changed)
+            // truthful; each source publishes through the aggregate, so the batch
+            // changed exactly when the aggregate is no longer the instance it started
+            // from. Without a change, rejection distinguishes invalid content from a
+            // batch made solely of environmental failures; exact kinds remain per file.
+            if (project != before)
                 projectOutcome = new ChangedOutcome(snapshot, diagnostics);
             else if (rejected)
                 projectOutcome = new RejectedOutcome(snapshot, diagnostics);
@@ -338,7 +353,6 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome upsertImportedSliderPresets(List<BodySlidePresetFileParser.ParsedPreset> imported,
             Path source) {
-        Project project = project();
         Project upserted = project;
         for (BodySlidePresetFileParser.ParsedPreset parsedPreset : imported) {
             SliderPresetSnapshot candidate = parsedPreset.getPreset();
@@ -350,12 +364,13 @@ final class DefaultProjectSession implements ProjectSession {
             }
             upserted = upserted.upsertSliderPreset(candidate);
         }
-        return outcome(project, upserted);
+        return outcome(upserted);
     }
 
     /**
      * Persists the pinned Project snapshot and publishes its clean file identity
-     * only after the completed replacement succeeds.
+     * only after the completed replacement succeeds. Content is untouched, so the
+     * save is Unchanged exactly when the Project was already clean at that identity.
      *
      * @param target requested Project destination
      * @return changed, unchanged, or failed outcome at the operation boundary
@@ -380,15 +395,8 @@ final class DefaultProjectSession implements ProjectSession {
                     "The Project could not be saved: " + exception.getMessage());
         }
 
-        boolean changed = snapshot.isDirty() || !snapshot.getFileIdentity().isPresent()
-                || !normalizedTarget.equals(snapshot.getFileIdentity().get());
-        if (!changed)
-            return new UnchangedOutcome(snapshot);
-        ProjectSnapshot saved = new ProjectSnapshot(snapshot.getSliderPresets(), snapshot.getCustomMorphTargets(),
-                snapshot.getNpcMorphAssignments(), Optional.of(normalizedTarget), false,
-                ProjectLifecycleStatus.FILE_BACKED);
-        snapshot = saved;
-        return new ChangedOutcome(snapshot);
+        return publish(project, Optional.of(normalizedTarget), false, ProjectLifecycleStatus.FILE_BACKED,
+                NO_DIAGNOSTICS);
     }
 
     /**
@@ -508,8 +516,7 @@ final class DefaultProjectSession implements ProjectSession {
             return rejected(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED, location,
                     "Adding an NPC requires copied source values.");
         }
-        Project project = project();
-        return outcome(project, project.addNpcMorphAssignment(edit.getSource()));
+        return outcome(project.addNpcMorphAssignment(edit.getSource()));
     }
 
     /**
@@ -524,8 +531,7 @@ final class DefaultProjectSession implements ProjectSession {
         if (edit.getSources() == null)
             return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
                     "Filtered NPC promotion requires copied source values.");
-        Project project = project();
-        return outcome(project, project.addNpcMorphAssignments(edit.getSources()));
+        return outcome(project.addNpcMorphAssignments(edit.getSources()));
     }
 
     /**
@@ -536,10 +542,9 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome addNpcSliderPreset(NpcMorphAssignmentEdits.AddSliderPreset edit) {
-        Project project = project();
         if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
             return rejectedNpcMorphAssignmentNotFound();
-        return outcome(project, project.assignSliderPreset(Project.ReferrerKey.npcMorphAssignment(edit.getIdentity()),
+        return outcome(project.assignSliderPreset(Project.ReferrerKey.npcMorphAssignment(edit.getIdentity()),
                 edit.getSliderPresetName()));
     }
 
@@ -551,12 +556,11 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome addNpcSliderPresets(NpcMorphAssignmentEdits.AddSliderPresets edit) {
-        Project project = project();
         if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
             return rejectedNpcMorphAssignmentNotFound();
         if (edit.getSliderPresetNames() == null)
             return rejectedSliderPresetNotFound();
-        return outcome(project, project.assignSliderPresets(
+        return outcome(project.assignSliderPresets(
                 Project.ReferrerKey.npcMorphAssignment(edit.getIdentity()), edit.getSliderPresetNames()));
     }
 
@@ -568,10 +572,9 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome removeNpcSliderPreset(NpcMorphAssignmentEdits.RemoveSliderPreset edit) {
-        Project project = project();
         if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
             return rejectedNpcMorphAssignmentNotFound();
-        return outcome(project, project.unassignSliderPreset(
+        return outcome(project.unassignSliderPreset(
                 Project.ReferrerKey.npcMorphAssignment(edit.getIdentity()), edit.getSliderPresetName()));
     }
 
@@ -583,10 +586,9 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome clearNpcSliderPresets(NpcMorphAssignmentEdits.ClearSliderPresets edit) {
-        Project project = project();
         if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
             return rejectedNpcMorphAssignmentNotFound();
-        return outcome(project, project.clearSliderPresetAssignments(
+        return outcome(project.clearSliderPresetAssignments(
                 Project.ReferrerKey.npcMorphAssignment(edit.getIdentity())));
     }
 
@@ -603,14 +605,13 @@ final class DefaultProjectSession implements ProjectSession {
         if (edit.getIdentities() == null)
             return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
                     "Filtered assignment clearing requires an NPC identity selection.");
-        Project project = project();
         List<Project.ReferrerKey> keys = new ArrayList<>(edit.getIdentities().size());
         for (NpcMorphAssignmentIdentity identity : edit.getIdentities()) {
             if (!project.findNpcMorphAssignment(identity).isPresent())
                 return rejectedNpcMorphAssignmentNotFound();
             keys.add(Project.ReferrerKey.npcMorphAssignment(identity));
         }
-        return outcome(project, project.clearSliderPresetAssignments(keys));
+        return outcome(project.clearSliderPresetAssignments(keys));
     }
 
     /**
@@ -620,10 +621,9 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome removeNpc(NpcMorphAssignmentEdits.RemoveNpc edit) {
-        Project project = project();
         if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
             return rejectedNpcMorphAssignmentNotFound();
-        return outcome(project, project.removeNpcMorphAssignment(edit.getIdentity()));
+        return outcome(project.removeNpcMorphAssignment(edit.getIdentity()));
     }
 
     /**
@@ -637,8 +637,7 @@ final class DefaultProjectSession implements ProjectSession {
         if (edit.getIdentities() == null)
             return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
                     "Filtered NPC removal requires an identity selection.");
-        Project project = project();
-        return outcome(project, project.removeNpcMorphAssignments(edit.getIdentities()));
+        return outcome(project.removeNpcMorphAssignments(edit.getIdentities()));
     }
 
     /**
@@ -647,8 +646,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed or unchanged outcome at the pinned snapshot
      */
     private ProjectOutcome clearNpcs() {
-        Project project = project();
-        return outcome(project, project.clearNpcMorphAssignments());
+        return outcome(project.clearNpcMorphAssignments());
     }
 
     /**
@@ -663,8 +661,7 @@ final class DefaultProjectSession implements ProjectSession {
         if (edit.getChoices() == null)
             return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
                     "Fill-empty requires explicit NPC and Slider Preset choices.");
-        Project project = project();
-        return outcome(project, project.fillEmptyNpcMorphAssignments(edit.getChoices()));
+        return outcome(project.fillEmptyNpcMorphAssignments(edit.getChoices()));
     }
 
     /**
@@ -703,7 +700,6 @@ final class DefaultProjectSession implements ProjectSession {
         RejectedOutcome rejection = validateCustomMorphTargetName(edit.getName());
         if (rejection != null)
             return rejection;
-        Project project = project();
         String name = edit.getName().trim();
         Project.Result added = project.addCustomMorphTarget(
                 new CustomMorphTargetSnapshot(name, Collections.<String>emptyList()));
@@ -711,7 +707,7 @@ final class DefaultProjectSession implements ProjectSession {
             return rejected(added);
         if (edit.getSliderPresetNames() == null)
             return rejectedSliderPresetNotFound();
-        return outcome(project, added.getProject().assignSliderPresets(Project.ReferrerKey.customMorphTarget(name),
+        return outcome(added.getProject().assignSliderPresets(Project.ReferrerKey.customMorphTarget(name),
                 edit.getSliderPresetNames()));
     }
 
@@ -723,11 +719,10 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome addCustomMorphTargetSliderPreset(CustomMorphTargetEdits.AddSliderPreset edit) {
-        Project project = project();
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getTargetName());
         if (!target.isPresent())
             return rejectedCustomMorphTargetNotFound();
-        return outcome(project, project.assignSliderPreset(Project.ReferrerKey.customMorphTarget(target.get().getName()),
+        return outcome(project.assignSliderPreset(Project.ReferrerKey.customMorphTarget(target.get().getName()),
                 edit.getSliderPresetName()));
     }
 
@@ -739,13 +734,12 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome addCustomMorphTargetSliderPresets(CustomMorphTargetEdits.AddSliderPresets edit) {
-        Project project = project();
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getTargetName());
         if (!target.isPresent())
             return rejectedCustomMorphTargetNotFound();
         if (edit.getSliderPresetNames() == null)
             return rejectedSliderPresetNotFound();
-        return outcome(project, project.assignSliderPresets(
+        return outcome(project.assignSliderPresets(
                 Project.ReferrerKey.customMorphTarget(target.get().getName()), edit.getSliderPresetNames()));
     }
 
@@ -757,11 +751,10 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome removeCustomMorphTargetSliderPreset(CustomMorphTargetEdits.RemoveSliderPreset edit) {
-        Project project = project();
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getTargetName());
         if (!target.isPresent())
             return rejectedCustomMorphTargetNotFound();
-        return outcome(project, project.unassignSliderPreset(
+        return outcome(project.unassignSliderPreset(
                 Project.ReferrerKey.customMorphTarget(target.get().getName()), edit.getSliderPresetName()));
     }
 
@@ -773,11 +766,10 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome clearCustomMorphTargetSliderPresets(CustomMorphTargetEdits.ClearSliderPresets edit) {
-        Project project = project();
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getTargetName());
         if (!target.isPresent())
             return rejectedCustomMorphTargetNotFound();
-        return outcome(project, project.clearSliderPresetAssignments(
+        return outcome(project.clearSliderPresetAssignments(
                 Project.ReferrerKey.customMorphTarget(target.get().getName())));
     }
 
@@ -788,11 +780,10 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome deleteCustomMorphTarget(CustomMorphTargetEdits.Delete edit) {
-        Project project = project();
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getName());
         if (!target.isPresent())
             return rejectedCustomMorphTargetNotFound();
-        return outcome(project, project.removeCustomMorphTarget(target.get().getName()));
+        return outcome(project.removeCustomMorphTarget(target.get().getName()));
     }
 
     /**
@@ -802,8 +793,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed or unchanged outcome at the pinned snapshot
      */
     private ProjectOutcome clearCustomMorphTargets() {
-        Project project = project();
-        return outcome(project, project.clearCustomMorphTargets());
+        return outcome(project.clearCustomMorphTargets());
     }
 
     /**
@@ -859,10 +849,9 @@ final class DefaultProjectSession implements ProjectSession {
         RejectedOutcome rejection = validateSliderPresetName(edit.getName());
         if (rejection != null)
             return rejection;
-        Project project = project();
         SliderPresetSnapshot created = new SliderPresetSnapshot(edit.getName().trim(), false,
                 SliderChoiceDefaults.rebuildForMode(Collections.<SliderChoiceSnapshot>emptyList(), false));
-        return outcome(project, project.addSliderPreset(created));
+        return outcome(project.addSliderPreset(created));
     }
 
     /**
@@ -872,7 +861,6 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome duplicateSliderPreset(SliderPresetEdits.Duplicate edit) {
-        Project project = project();
         Optional<SliderPresetSnapshot> source = project.findSliderPreset(edit.getSourceName());
         if (!source.isPresent())
             return rejectedSliderPresetNotFound();
@@ -881,7 +869,7 @@ final class DefaultProjectSession implements ProjectSession {
             return rejection;
         SliderPresetSnapshot duplicate = new SliderPresetSnapshot(edit.getDuplicateName().trim(),
                 source.get().isUunp(), source.get().getSliderChoices());
-        return outcome(project, project.addSliderPreset(duplicate));
+        return outcome(project.addSliderPreset(duplicate));
     }
 
     /**
@@ -894,7 +882,6 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome updateSliderPreset(SliderPresetEdits.Update edit) {
-        Project project = project();
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getCurrentName());
         if (!found.isPresent())
             return rejectedSliderPresetNotFound();
@@ -928,7 +915,7 @@ final class DefaultProjectSession implements ProjectSession {
         else
             replacement = new SliderPresetSnapshot(replacement.getName(), replacement.isUunp(),
                     SliderChoiceDefaults.resolveEffective(replacement.getSliderChoices(), replacement.isUunp()));
-        return outcome(project, renamed.getProject().replaceSliderPreset(normalizedName, replacement));
+        return outcome(renamed.getProject().replaceSliderPreset(normalizedName, replacement));
     }
 
     /**
@@ -939,14 +926,13 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome renameSliderPreset(SliderPresetEdits.Rename edit) {
-        Project project = project();
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getCurrentName());
         if (!found.isPresent())
             return rejectedSliderPresetNotFound();
         RejectedOutcome rejection = validateSliderPresetName(edit.getNewName());
         if (rejection != null)
             return rejection;
-        return outcome(project, project.renameSliderPreset(found.get().getName(), edit.getNewName().trim()));
+        return outcome(project.renameSliderPreset(found.get().getName(), edit.getNewName().trim()));
     }
 
     /**
@@ -957,11 +943,10 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome deleteSliderPreset(SliderPresetEdits.Delete edit) {
-        Project project = project();
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getName());
         if (!found.isPresent())
             return rejectedSliderPresetNotFound();
-        return outcome(project, project.removeSliderPreset(found.get().getName()));
+        return outcome(project.removeSliderPreset(found.get().getName()));
     }
 
     /**
@@ -972,8 +957,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed or unchanged outcome at the pinned snapshot
      */
     private ProjectOutcome clearSliderPresets() {
-        Project project = project();
-        return outcome(project, project.clearSliderPresets());
+        return outcome(project.clearSliderPresets());
     }
 
     /**
@@ -986,18 +970,18 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome setSliderPresetUunp(SliderPresetEdits.SetUunp edit) {
-        Project project = project();
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getName());
         if (!found.isPresent())
             return rejectedSliderPresetNotFound();
         SliderPresetSnapshot current = found.get();
         // Same mode is a no-op by rule, not by value comparison: rebuilding defaults
-        // for the current mode is skipped entirely rather than trusted to round-trip.
+        // for the current mode is skipped entirely rather than trusted to round-trip,
+        // and the aggregate is handed back as is so identity reports Unchanged.
         if (current.isUunp() == edit.isUunp())
-            return new UnchangedOutcome(snapshot);
+            return outcome(project);
         SliderPresetSnapshot changed = new SliderPresetSnapshot(current.getName(), edit.isUunp(),
                 SliderChoiceDefaults.rebuildForMode(current.getSliderChoices(), edit.isUunp()));
-        return outcome(project, project.replaceSliderPreset(current.getName(), changed));
+        return outcome(project.replaceSliderPreset(current.getName(), changed));
     }
 
     /**
@@ -1008,7 +992,6 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome setSliderChoice(SliderPresetEdits.SetSliderChoice edit) {
-        Project project = project();
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getPresetName());
         if (!found.isPresent())
             return rejectedSliderPresetNotFound();
@@ -1027,32 +1010,11 @@ final class DefaultProjectSession implements ProjectSession {
         // survive a save/reopen cycle, so the published choice must carry the values
         // the loader would derive from them under this Slider Preset's mode.
         SliderChoiceSnapshot choice = SliderChoiceDefaults.resolveEffective(edit.getChoice(), current.isUunp());
-        List<SliderChoiceSnapshot> choices = new ArrayList<>(current.getSliderChoices());
-        int choiceIndex = findSliderChoice(choices, choice.getName());
-        if (choiceIndex >= 0)
-            choices.set(choiceIndex, choice);
-        else
-            choices.add(choice);
-        Collections.sort(choices, SLIDER_CHOICE_NAME_ORDER);
-        SliderPresetSnapshot changed = new SliderPresetSnapshot(current.getName(), current.isUunp(), choices);
+        SliderPresetSnapshot changed = new SliderPresetSnapshot(current.getName(), current.isUunp(),
+                SliderChoiceDefaults.withChoice(current.getSliderChoices(), choice));
         // An identical choice yields a value-equal preset, which the aggregate
         // reports as the same instance and outcome() translates to Unchanged.
-        return outcome(project, project.replaceSliderPreset(current.getName(), changed));
-    }
-
-    /**
-     * Finds a slider choice without making display casing part of its identity.
-     *
-     * @param choices current immutable choice values
-     * @param name requested slider name
-     * @return the choice index, or -1 when absent
-     */
-    private static int findSliderChoice(List<SliderChoiceSnapshot> choices, String name) {
-        for (int index = 0; index < choices.size(); index++) {
-            if (choices.get(index).getName().equalsIgnoreCase(name))
-                return index;
-        }
-        return -1;
+        return outcome(project.replaceSliderPreset(current.getName(), changed));
     }
 
     /**
@@ -1140,9 +1102,8 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a canonically ordered immutable value
      */
     private static SliderPresetSnapshot canonicalSliderPreset(SliderPresetSnapshot source, String normalizedName) {
-        List<SliderChoiceSnapshot> choices = new ArrayList<>(source.getSliderChoices());
-        Collections.sort(choices, SLIDER_CHOICE_NAME_ORDER);
-        return new SliderPresetSnapshot(normalizedName, source.isUunp(), choices);
+        return new SliderPresetSnapshot(normalizedName, source.isUunp(),
+                SliderChoiceDefaults.sortedByName(source.getSliderChoices()));
     }
 
     /**
@@ -1214,43 +1175,57 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Views the pinned snapshot's content as a Project aggregate.
-     *
-     * <p>Transitional: until the lifecycle migration makes the session own the
-     * aggregate, each migrated handler rebuilds it from the published snapshot,
-     * which re-validates the Project invariants on every edit.
-     *
-     * @return an aggregate over the current snapshot's content
-     */
-    private Project project() {
-        return Project.from(snapshot);
-    }
-
-    /**
      * Translates a rule-checked aggregate result into the session outcome.
      *
-     * @param before aggregate the handler started from
      * @param result next aggregate or its single rejection diagnostic
      * @return rejected, unchanged, or changed outcome at the pinned snapshot
      */
-    private ProjectOutcome outcome(Project before, Project.Result result) {
-        return result.isRejected() ? rejected(result) : outcome(before, result.getProject());
+    private ProjectOutcome outcome(Project.Result result) {
+        return result.isRejected() ? rejected(result) : outcome(result.getProject());
     }
 
     /**
-     * Translates an aggregate transition into the session outcome: the same
-     * instance means nothing changed and the snapshot stays pinned; any other
-     * instance is published as a dirty snapshot.
+     * Translates an edit's aggregate transition into the session outcome. Content
+     * is an edit's only observable, so the file identity and lifecycle status are
+     * kept and the Project is marked dirty only when the aggregate actually moved;
+     * handing back the current instance therefore never dirties a clean Project.
      *
-     * @param before aggregate the handler started from
-     * @param after aggregate the handler ended with
+     * @param next aggregate the handler ended with
      * @return unchanged or changed outcome
      */
-    private ProjectOutcome outcome(Project before, Project after) {
-        if (after == before)
-            return new UnchangedOutcome(snapshot);
-        snapshot = after.toSnapshot(snapshot.getFileIdentity(), true, snapshot.getLifecycleStatus());
-        return new ChangedOutcome(snapshot);
+    private ProjectOutcome outcome(Project next) {
+        boolean dirty = snapshot.isDirty() || next != project;
+        return publish(next, snapshot.getFileIdentity(), dirty, snapshot.getLifecycleStatus(), NO_DIAGNOSTICS);
+    }
+
+    /**
+     * The single publish step: the only place a Project transition becomes
+     * visible. It is Unchanged when the next aggregate is the current instance and
+     * the requested lifecycle is the one already published, so no caller compares
+     * content itself; otherwise the aggregate produces the snapshot from its
+     * content plus the requested lifecycle, and the aggregate and snapshot are
+     * swapped together. Must be called under the operation lock.
+     *
+     * @param next aggregate to publish, possibly the current instance
+     * @param fileIdentity adopted Project path, or empty for an untitled Project
+     * @param dirty whether the published Project has unsaved changes
+     * @param lifecycleStatus stable lifecycle classification to publish
+     * @param diagnostics diagnostics the outcome carries either way
+     * @return unchanged or changed outcome at the published snapshot
+     * @throws IllegalArgumentException when the lifecycle contradicts itself or the
+     *         content (see {@link ProjectSnapshot}); nothing is swapped when it does
+     */
+    private ProjectOutcome publish(Project next, Optional<Path> fileIdentity, boolean dirty,
+            ProjectLifecycleStatus lifecycleStatus, List<ProjectDiagnostic> diagnostics) {
+        boolean sameContent = next == project;
+        boolean sameLifecycle = fileIdentity.equals(snapshot.getFileIdentity()) && dirty == snapshot.isDirty()
+                && lifecycleStatus == snapshot.getLifecycleStatus();
+        if (sameContent && sameLifecycle)
+            return new UnchangedOutcome(snapshot, diagnostics);
+        ProjectSnapshot published = next.toSnapshot(fileIdentity, dirty, lifecycleStatus);
+        project = next;
+        snapshot = published;
+        return new ChangedOutcome(published, diagnostics);
     }
 
     /**
