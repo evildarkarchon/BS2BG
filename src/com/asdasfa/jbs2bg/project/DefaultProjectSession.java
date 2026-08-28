@@ -19,15 +19,12 @@ import com.eclipsesource.json.ParseException;
 
 /**
  * Serializes Project operations and atomically publishes immutable snapshots.
+ * Slider Preset edits and the BodySlide XML import delegate content rules to the
+ * {@link Project} aggregate and translate its results into outcomes here.
  */
 final class DefaultProjectSession implements ProjectSession {
-    private static final Comparator<SliderPresetSnapshot> SLIDER_PRESET_NAME_ORDER =
-            new Comparator<SliderPresetSnapshot>() {
-                @Override
-                public int compare(SliderPresetSnapshot left, SliderPresetSnapshot right) {
-                    return left.getName().compareToIgnoreCase(right.getName());
-                }
-            };
+    // Slider-choice order stays here rather than in Project: choices are a Slider
+    // Preset's payload, which the aggregate replaces wholesale and never inspects.
     private static final Comparator<SliderChoiceSnapshot> SLIDER_CHOICE_NAME_ORDER =
             new Comparator<SliderChoiceSnapshot>() {
                 @Override
@@ -35,29 +32,6 @@ final class DefaultProjectSession implements ProjectSession {
                     return left.getName().compareToIgnoreCase(right.getName());
                 }
             };
-    private static final Comparator<CustomMorphTargetSnapshot> CUSTOM_MORPH_TARGET_NAME_ORDER =
-            new Comparator<CustomMorphTargetSnapshot>() {
-                @Override
-                public int compare(CustomMorphTargetSnapshot left, CustomMorphTargetSnapshot right) {
-                    return left.getName().compareToIgnoreCase(right.getName());
-                }
-            };
-    private static final Comparator<NpcMorphAssignmentSnapshot> NPC_MORPH_ASSIGNMENT_IDENTITY_ORDER =
-            new Comparator<NpcMorphAssignmentSnapshot>() {
-                /** Orders NPC Morph Assignments by plugin name and then editor ID. */
-                @Override
-                public int compare(NpcMorphAssignmentSnapshot left, NpcMorphAssignmentSnapshot right) {
-                    int pluginOrder = left.getPluginName().compareToIgnoreCase(right.getPluginName());
-                    return pluginOrder != 0 ? pluginOrder
-                            : left.getEditorId().compareToIgnoreCase(right.getEditorId());
-                }
-            };
-    private static final Comparator<String> CASE_INSENSITIVE_NAME_ORDER = new Comparator<String>() {
-        @Override
-        public int compare(String left, String right) {
-            return left.compareToIgnoreCase(right);
-        }
-    };
 
     private final Object operationLock = new Object();
     private volatile ProjectSnapshot snapshot = ProjectSnapshot.noProject();
@@ -354,7 +328,9 @@ final class DefaultProjectSession implements ProjectSession {
 
     /**
      * Upserts every detached preset from one valid source and publishes at most
-     * one dirty snapshot. Existing display identity and relationships are retained.
+     * one dirty snapshot. Existing display identity and relationships are retained
+     * by the aggregate's upsert; a name rule violation rejects the whole source at
+     * its XML location before anything is published.
      *
      * @param imported complete detached source payload with XML name locations
      * @param source normalized XML source for validation diagnostics
@@ -362,33 +338,19 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome upsertImportedSliderPresets(List<BodySlidePresetFileParser.ParsedPreset> imported,
             Path source) {
-        List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
-        boolean changed = false;
+        Project project = project();
+        Project upserted = project;
         for (BodySlidePresetFileParser.ParsedPreset parsedPreset : imported) {
             SliderPresetSnapshot candidate = parsedPreset.getPreset();
-            int index = findSliderPreset(presets, candidate.getName());
-            SliderPresetNameProblem nameProblem = findSliderPresetNameProblem(candidate.getName(), presets,
-                    index < 0 ? OptionalInt.empty() : OptionalInt.of(index));
+            SliderPresetNameProblem nameProblem = findSliderPresetNameProblem(candidate.getName());
             if (nameProblem != null) {
                 SourceLocation location = new SourceLocation(Optional.of(source),
                         Optional.of(parsedPreset.getNameElement()), OptionalInt.empty(), OptionalInt.empty());
                 return rejected(nameProblem.code, location, nameProblem.message);
             }
-            if (index < 0) {
-                presets.add(candidate);
-                changed = true;
-                continue;
-            }
-
-            SliderPresetSnapshot current = presets.get(index);
-            SliderPresetSnapshot replacement = new SliderPresetSnapshot(current.getName(), candidate.isUunp(),
-                    candidate.getSliderChoices());
-            if (!sameSliderPreset(current, replacement)) {
-                presets.set(index, replacement);
-                changed = true;
-            }
+            upserted = upserted.upsertSliderPreset(candidate);
         }
-        return changed ? publishChangedPresets(presets) : new UnchangedOutcome(snapshot);
+        return outcome(project, upserted);
     }
 
     /**
@@ -630,7 +592,7 @@ final class DefaultProjectSession implements ProjectSession {
                 return new UnchangedOutcome(snapshot);
         }
         assignments.add(presetName);
-        Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
+        Collections.sort(assignments, Project.ASSIGNMENT_NAME_ORDER);
         return replaceNpcMorphAssignment(npcIndex, copyNpc(current, assignments));
     }
 
@@ -926,7 +888,7 @@ final class DefaultProjectSession implements ProjectSession {
             if (!duplicate)
                 canonicalNames.add(canonicalName);
         }
-        Collections.sort(canonicalNames, CASE_INSENSITIVE_NAME_ORDER);
+        Collections.sort(canonicalNames, Project.ASSIGNMENT_NAME_ORDER);
         return canonicalNames;
     }
 
@@ -952,7 +914,7 @@ final class DefaultProjectSession implements ProjectSession {
             if (!duplicate)
                 mergedNames.add(requestedName);
         }
-        Collections.sort(mergedNames, CASE_INSENSITIVE_NAME_ORDER);
+        Collections.sort(mergedNames, Project.ASSIGNMENT_NAME_ORDER);
         return mergedNames;
     }
 
@@ -1014,7 +976,7 @@ final class DefaultProjectSession implements ProjectSession {
                 return new UnchangedOutcome(snapshot);
         }
         assignments.add(presetName);
-        Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
+        Collections.sort(assignments, Project.ASSIGNMENT_NAME_ORDER);
         CustomMorphTargetSnapshot changed = new CustomMorphTargetSnapshot(current.getName(), assignments);
         return replaceCustomMorphTarget(targetIndex, changed);
     }
@@ -1204,14 +1166,13 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed outcome carrying the new dirty snapshot
      */
     private ProjectOutcome createSliderPreset(SliderPresetEdits.Create edit) {
-        RejectedOutcome rejection = validateSliderPresetName(edit.getName(), OptionalInt.empty());
+        RejectedOutcome rejection = validateSliderPresetName(edit.getName());
         if (rejection != null)
             return rejection;
-        String name = edit.getName().trim();
-        List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
-        presets.add(new SliderPresetSnapshot(name, false, SliderChoiceDefaults.rebuildForMode(
-                Collections.<SliderChoiceSnapshot>emptyList(), false)));
-        return publishChangedPresets(presets);
+        Project project = project();
+        SliderPresetSnapshot created = new SliderPresetSnapshot(edit.getName().trim(), false,
+                SliderChoiceDefaults.rebuildForMode(Collections.<SliderChoiceSnapshot>emptyList(), false));
+        return outcome(project, project.addSliderPreset(created));
     }
 
     /**
@@ -1221,31 +1182,31 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome duplicateSliderPreset(SliderPresetEdits.Duplicate edit) {
-        int sourceIndex = findSliderPreset(edit.getSourceName());
-        if (sourceIndex < 0)
+        Project project = project();
+        Optional<SliderPresetSnapshot> source = project.findSliderPreset(edit.getSourceName());
+        if (!source.isPresent())
             return rejectedSliderPresetNotFound();
-        RejectedOutcome rejection = validateSliderPresetName(edit.getDuplicateName(), OptionalInt.empty());
+        RejectedOutcome rejection = validateSliderPresetName(edit.getDuplicateName());
         if (rejection != null)
             return rejection;
-
-        SliderPresetSnapshot source = snapshot.getSliderPresets().get(sourceIndex);
-        SliderPresetSnapshot duplicate = new SliderPresetSnapshot(edit.getDuplicateName().trim(), source.isUunp(),
-                source.getSliderChoices());
-        List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
-        presets.add(duplicate);
-        return publishChangedPresets(presets);
+        SliderPresetSnapshot duplicate = new SliderPresetSnapshot(edit.getDuplicateName().trim(),
+                source.get().isUunp(), source.get().getSliderChoices());
+        return outcome(project, project.addSliderPreset(duplicate));
     }
 
     /**
      * Replaces the complete Slider Preset value after normalizing its name and
-     * slider-choice order.
+     * slider-choice order. A display-name change is applied as a rename first so
+     * the duplicate-name rule is reported before slider-choice rules, as before;
+     * the renamed aggregate is discarded if a later rule rejects the edit.
      *
      * @param edit immutable full-update request
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome updateSliderPreset(SliderPresetEdits.Update edit) {
-        int index = findSliderPreset(edit.getCurrentName());
-        if (index < 0)
+        Project project = project();
+        Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getCurrentName());
+        if (!found.isPresent())
             return rejectedSliderPresetNotFound();
         if (edit.getReplacement() == null) {
             SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("slider-preset"),
@@ -1253,16 +1214,19 @@ final class DefaultProjectSession implements ProjectSession {
             return rejected(ProjectDiagnosticCodes.SLIDER_PRESET_VALUE_REQUIRED, location,
                     "A Slider Preset update requires a replacement value.");
         }
-        RejectedOutcome rejection = validateSliderPresetName(edit.getReplacement().getName(), OptionalInt.of(index));
+        RejectedOutcome rejection = validateSliderPresetName(edit.getReplacement().getName());
         if (rejection != null)
             return rejection;
+        SliderPresetSnapshot current = found.get();
+        String normalizedName = edit.getReplacement().getName().trim();
+        Project.Result renamed = project.renameSliderPreset(current.getName(), normalizedName);
+        if (renamed.isRejected())
+            return rejected(renamed);
         rejection = validateSliderChoices(edit.getReplacement().getSliderChoices());
         if (rejection != null)
             return rejection;
 
-        SliderPresetSnapshot current = snapshot.getSliderPresets().get(index);
-        SliderPresetSnapshot replacement = canonicalSliderPreset(edit.getReplacement(),
-                edit.getReplacement().getName().trim());
+        SliderPresetSnapshot replacement = canonicalSliderPreset(edit.getReplacement(), normalizedName);
         // A replacement that flips UUNP is treated like the UUNP edit: the caller's
         // synthesized defaults belong to the old mode, so they are rebuilt here rather
         // than trusted, keeping full updates and SetUunp observably equivalent.
@@ -1274,9 +1238,7 @@ final class DefaultProjectSession implements ProjectSession {
         else
             replacement = new SliderPresetSnapshot(replacement.getName(), replacement.isUunp(),
                     SliderChoiceDefaults.resolveEffective(replacement.getSliderChoices(), replacement.isUunp()));
-        if (sameSliderPreset(current, replacement))
-            return new UnchangedOutcome(snapshot);
-        return replaceSliderPreset(index, replacement);
+        return outcome(project, renamed.getProject().replaceSliderPreset(normalizedName, replacement));
     }
 
     /**
@@ -1287,54 +1249,41 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome renameSliderPreset(SliderPresetEdits.Rename edit) {
-        int index = findSliderPreset(edit.getCurrentName());
-        if (index < 0)
+        Project project = project();
+        Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getCurrentName());
+        if (!found.isPresent())
             return rejectedSliderPresetNotFound();
-        RejectedOutcome rejection = validateSliderPresetName(edit.getNewName(), OptionalInt.of(index));
+        RejectedOutcome rejection = validateSliderPresetName(edit.getNewName());
         if (rejection != null)
             return rejection;
-
-        SliderPresetSnapshot current = snapshot.getSliderPresets().get(index);
-        String normalizedName = edit.getNewName().trim();
-        if (current.getName().equals(normalizedName))
-            return new UnchangedOutcome(snapshot);
-        SliderPresetSnapshot renamed = new SliderPresetSnapshot(normalizedName, current.isUunp(),
-                current.getSliderChoices());
-        return replaceSliderPreset(index, renamed);
+        return outcome(project, project.renameSliderPreset(found.get().getName(), edit.getNewName().trim()));
     }
 
     /**
      * Removes one existing Slider Preset and every affected Custom Morph Target
-     * relationship in one atomically published snapshot.
+     * and NPC Morph Assignment relationship in one atomically published snapshot.
      *
      * @param edit immutable deletion request
      * @return a changed or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome deleteSliderPreset(SliderPresetEdits.Delete edit) {
-        int index = findSliderPreset(edit.getName());
-        if (index < 0)
+        Project project = project();
+        Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getName());
+        if (!found.isPresent())
             return rejectedSliderPresetNotFound();
-        String removedName = snapshot.getSliderPresets().get(index).getName();
-        List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
-        presets.remove(index);
-        List<CustomMorphTargetSnapshot> targets = removeCustomMorphTargetAssignments(removedName);
-        List<NpcMorphAssignmentSnapshot> npcs = removeNpcAssignments(removedName);
-        return publishChangedProjectState(presets, targets, npcs);
+        return outcome(project, project.removeSliderPreset(found.get().getName()));
     }
 
     /**
-     * Clears a non-empty Slider Preset catalog and every Custom Morph Target
-     * relationship atomically, without manufacturing a dirty transition for an
-     * already-empty Project.
+     * Clears a non-empty Slider Preset catalog and every Custom Morph Target and
+     * NPC Morph Assignment relationship atomically, without manufacturing a dirty
+     * transition for an already-empty Project.
      *
      * @return changed or unchanged outcome at the pinned snapshot
      */
     private ProjectOutcome clearSliderPresets() {
-        if (snapshot.getSliderPresets().isEmpty())
-            return new UnchangedOutcome(snapshot);
-        List<CustomMorphTargetSnapshot> targets = clearAllCustomMorphTargetAssignments();
-        List<NpcMorphAssignmentSnapshot> npcs = clearAllNpcAssignments();
-        return publishChangedProjectState(new ArrayList<SliderPresetSnapshot>(), targets, npcs);
+        Project project = project();
+        return outcome(project, project.clearSliderPresets());
     }
 
     /**
@@ -1347,15 +1296,18 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome setSliderPresetUunp(SliderPresetEdits.SetUunp edit) {
-        int index = findSliderPreset(edit.getName());
-        if (index < 0)
+        Project project = project();
+        Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getName());
+        if (!found.isPresent())
             return rejectedSliderPresetNotFound();
-        SliderPresetSnapshot current = snapshot.getSliderPresets().get(index);
+        SliderPresetSnapshot current = found.get();
+        // Same mode is a no-op by rule, not by value comparison: rebuilding defaults
+        // for the current mode is skipped entirely rather than trusted to round-trip.
         if (current.isUunp() == edit.isUunp())
             return new UnchangedOutcome(snapshot);
         SliderPresetSnapshot changed = new SliderPresetSnapshot(current.getName(), edit.isUunp(),
                 SliderChoiceDefaults.rebuildForMode(current.getSliderChoices(), edit.isUunp()));
-        return replaceSliderPreset(index, changed);
+        return outcome(project, project.replaceSliderPreset(current.getName(), changed));
     }
 
     /**
@@ -1366,8 +1318,9 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome setSliderChoice(SliderPresetEdits.SetSliderChoice edit) {
-        int presetIndex = findSliderPreset(edit.getPresetName());
-        if (presetIndex < 0)
+        Project project = project();
+        Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getPresetName());
+        if (!found.isPresent())
             return rejectedSliderPresetNotFound();
         if (edit.getChoice() == null) {
             SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("slider-preset.slider-choice"),
@@ -1379,47 +1332,40 @@ final class DefaultProjectSession implements ProjectSession {
         if (rejection != null)
             return rejection;
 
-        SliderPresetSnapshot current = snapshot.getSliderPresets().get(presetIndex);
+        SliderPresetSnapshot current = found.get();
         // The caller's effective endpoints are not trusted: only the stored endpoints
         // survive a save/reopen cycle, so the published choice must carry the values
         // the loader would derive from them under this Slider Preset's mode.
         SliderChoiceSnapshot choice = SliderChoiceDefaults.resolveEffective(edit.getChoice(), current.isUunp());
         List<SliderChoiceSnapshot> choices = new ArrayList<>(current.getSliderChoices());
         int choiceIndex = findSliderChoice(choices, choice.getName());
-        if (choiceIndex >= 0 && sameSliderChoice(choices.get(choiceIndex), choice))
-            return new UnchangedOutcome(snapshot);
         if (choiceIndex >= 0)
             choices.set(choiceIndex, choice);
         else
             choices.add(choice);
         Collections.sort(choices, SLIDER_CHOICE_NAME_ORDER);
         SliderPresetSnapshot changed = new SliderPresetSnapshot(current.getName(), current.isUunp(), choices);
-        return replaceSliderPreset(presetIndex, changed);
+        // An identical choice yields a value-equal preset, which the aggregate
+        // reports as the same instance and outcome() translates to Unchanged.
+        return outcome(project, project.replaceSliderPreset(current.getName(), changed));
     }
 
     /**
      * Finds a Slider Preset using its case-insensitive Project identity.
      *
+     * <p>Transitional: only the Custom Morph Target and NPC Morph Assignment
+     * handlers still resolve presets by catalog index; they move onto
+     * {@link Project#findSliderPreset(String)} with their own migration.
+     *
      * @param name requested name, optionally surrounded by whitespace
      * @return the catalog index, or -1 when no logical Slider Preset matches
      */
     private int findSliderPreset(String name) {
-        return findSliderPreset(snapshot.getSliderPresets(), name);
-    }
-
-    /**
-     * Finds a Slider Preset inside a detached working catalog by logical identity.
-     *
-     * @param presets working catalog
-     * @param name requested name
-     * @return matching index, or -1 when absent
-     */
-    private static int findSliderPreset(List<SliderPresetSnapshot> presets, String name) {
         if (name == null)
             return -1;
         String normalizedName = name.trim();
-        for (int index = 0; index < presets.size(); index++) {
-            if (presets.get(index).getName().equalsIgnoreCase(normalizedName))
+        for (int index = 0; index < snapshot.getSliderPresets().size(); index++) {
+            if (snapshot.getSliderPresets().get(index).getName().equalsIgnoreCase(normalizedName))
                 return index;
         }
         return -1;
@@ -1518,25 +1464,6 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Compares all observable slider-choice values so only real persisted-state
-     * changes dirty the Project.
-     *
-     * @param left current choice
-     * @param right requested choice
-     * @return true when every exposed value is equal
-     */
-    private static boolean sameSliderChoice(SliderChoiceSnapshot left, SliderChoiceSnapshot right) {
-        return left.getName().equals(right.getName()) && left.isEnabled() == right.isEnabled()
-                && left.getStoredSmallValue().equals(right.getStoredSmallValue())
-                && left.getStoredBigValue().equals(right.getStoredBigValue())
-                && left.getEffectiveSmallValue() == right.getEffectiveSmallValue()
-                && left.getEffectiveBigValue() == right.getEffectiveBigValue()
-                && left.getPercentageMinimum() == right.getPercentageMinimum()
-                && left.getPercentageMaximum() == right.getPercentageMaximum()
-                && left.isMissingDefault() == right.isMissingDefault();
-    }
-
-    /**
      * Produces a Slider Preset whose choices are in stable case-insensitive order.
      *
      * @param source immutable source value
@@ -1547,182 +1474,6 @@ final class DefaultProjectSession implements ProjectSession {
         List<SliderChoiceSnapshot> choices = new ArrayList<>(source.getSliderChoices());
         Collections.sort(choices, SLIDER_CHOICE_NAME_ORDER);
         return new SliderPresetSnapshot(normalizedName, source.isUunp(), choices);
-    }
-
-    /**
-     * Compares complete immutable Slider Preset values after canonicalization.
-     *
-     * @param left current value
-     * @param right requested canonical value
-     * @return true when name, UUNP, and every slider choice are equal
-     */
-    private static boolean sameSliderPreset(SliderPresetSnapshot left, SliderPresetSnapshot right) {
-        if (!left.getName().equals(right.getName()) || left.isUunp() != right.isUunp()
-                || left.getSliderChoices().size() != right.getSliderChoices().size())
-            return false;
-        for (int index = 0; index < left.getSliderChoices().size(); index++) {
-            if (!sameSliderChoice(left.getSliderChoices().get(index), right.getSliderChoices().get(index)))
-                return false;
-        }
-        return true;
-    }
-
-    /**
-     * Replaces one Slider Preset and, when its display name changes, rewrites every
-     * affected Custom Morph Target relationship in the same published snapshot.
-     *
-     * @param index catalog index to replace
-     * @param changed replacement immutable value
-     * @return a changed outcome carrying the published snapshot
-     */
-    private ChangedOutcome replaceSliderPreset(int index, SliderPresetSnapshot changed) {
-        String previousName = snapshot.getSliderPresets().get(index).getName();
-        List<SliderPresetSnapshot> presets = new ArrayList<>(snapshot.getSliderPresets());
-        presets.set(index, changed);
-        if (!previousName.equals(changed.getName())) {
-            List<CustomMorphTargetSnapshot> targets = renameCustomMorphTargetAssignments(previousName,
-                    changed.getName());
-            List<NpcMorphAssignmentSnapshot> npcs = renameNpcAssignments(previousName, changed.getName());
-            return publishChangedProjectState(presets, targets, npcs);
-        }
-        return publishChangedPresets(presets);
-    }
-
-    /**
-     * Rewrites every relationship to a renamed Slider Preset while retaining
-     * canonical assignment order and unaffected immutable target values.
-     *
-     * @param previousName prior Slider Preset display name
-     * @param changedName replacement canonical display name
-     * @return Custom Morph Targets with every matching relationship updated
-     */
-    private List<CustomMorphTargetSnapshot> renameCustomMorphTargetAssignments(String previousName,
-            String changedName) {
-        List<CustomMorphTargetSnapshot> targets = new ArrayList<>();
-        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets()) {
-            List<String> assignments = new ArrayList<>(target.getSliderPresetNames());
-            boolean changed = false;
-            for (int index = 0; index < assignments.size(); index++) {
-                if (assignments.get(index).equalsIgnoreCase(previousName)) {
-                    assignments.set(index, changedName);
-                    changed = true;
-                }
-            }
-            if (changed) {
-                Collections.sort(assignments, CASE_INSENSITIVE_NAME_ORDER);
-                targets.add(new CustomMorphTargetSnapshot(target.getName(), assignments));
-            } else {
-                targets.add(target);
-            }
-        }
-        return targets;
-    }
-
-    /**
-     * Removes every relationship to a deleted Slider Preset without changing
-     * unrelated Custom Morph Target values.
-     *
-     * @param removedName deleted Slider Preset display name
-     * @return Custom Morph Targets with matching relationships removed
-     */
-    private List<CustomMorphTargetSnapshot> removeCustomMorphTargetAssignments(String removedName) {
-        List<CustomMorphTargetSnapshot> targets = new ArrayList<>();
-        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets()) {
-            List<String> assignments = new ArrayList<>(target.getSliderPresetNames());
-            boolean changed = false;
-            for (int index = assignments.size() - 1; index >= 0; index--) {
-                if (assignments.get(index).equalsIgnoreCase(removedName)) {
-                    assignments.remove(index);
-                    changed = true;
-                }
-            }
-            targets.add(changed ? new CustomMorphTargetSnapshot(target.getName(), assignments) : target);
-        }
-        return targets;
-    }
-
-    /**
-     * Clears every Custom Morph Target relationship when the Slider Preset catalog
-     * is cleared, retaining already-empty immutable target values.
-     *
-     * @return Custom Morph Targets with empty Slider Preset relationships
-     */
-    private List<CustomMorphTargetSnapshot> clearAllCustomMorphTargetAssignments() {
-        List<CustomMorphTargetSnapshot> targets = new ArrayList<>();
-        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets()) {
-            if (target.getSliderPresetNames().isEmpty())
-                targets.add(target);
-            else
-                targets.add(new CustomMorphTargetSnapshot(target.getName(), Collections.<String>emptyList()));
-        }
-        return targets;
-    }
-
-    /**
-     * Rewrites every NPC relationship to a renamed Slider Preset without mutating
-     * caller-held NPC Database source values.
-     *
-     * @param previousName prior Slider Preset display name
-     * @param changedName replacement canonical display name
-     * @return copied NPC Morph Assignments with repaired relationships
-     */
-    private List<NpcMorphAssignmentSnapshot> renameNpcAssignments(String previousName, String changedName) {
-        List<NpcMorphAssignmentSnapshot> assignments = new ArrayList<>();
-        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments()) {
-            List<String> presetNames = new ArrayList<>(npc.getSliderPresetNames());
-            boolean changed = false;
-            for (int index = 0; index < presetNames.size(); index++) {
-                if (presetNames.get(index).equalsIgnoreCase(previousName)) {
-                    presetNames.set(index, changedName);
-                    changed = true;
-                }
-            }
-            if (changed) {
-                Collections.sort(presetNames, CASE_INSENSITIVE_NAME_ORDER);
-                assignments.add(copyNpc(npc, presetNames));
-            } else {
-                assignments.add(npc);
-            }
-        }
-        return assignments;
-    }
-
-    /**
-     * Removes every NPC relationship to a deleted Slider Preset while retaining
-     * independent NPC values and unrelated assignments.
-     *
-     * @param removedName deleted Slider Preset display name
-     * @return copied NPC Morph Assignments with matching relationships removed
-     */
-    private List<NpcMorphAssignmentSnapshot> removeNpcAssignments(String removedName) {
-        List<NpcMorphAssignmentSnapshot> assignments = new ArrayList<>();
-        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments()) {
-            List<String> presetNames = new ArrayList<>(npc.getSliderPresetNames());
-            boolean changed = false;
-            for (int index = presetNames.size() - 1; index >= 0; index--) {
-                if (presetNames.get(index).equalsIgnoreCase(removedName)) {
-                    presetNames.remove(index);
-                    changed = true;
-                }
-            }
-            assignments.add(changed ? copyNpc(npc, presetNames) : npc);
-        }
-        return assignments;
-    }
-
-    /**
-     * Clears every Project NPC relationship when the Slider Preset catalog is
-     * cleared, without changing or retaining a reference to NPC Database entries.
-     *
-     * @return NPC Morph Assignments with empty Slider Preset relationships
-     */
-    private List<NpcMorphAssignmentSnapshot> clearAllNpcAssignments() {
-        List<NpcMorphAssignmentSnapshot> assignments = new ArrayList<>();
-        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments()) {
-            assignments.add(npc.getSliderPresetNames().isEmpty() ? npc
-                    : copyNpc(npc, Collections.<String>emptyList()));
-        }
-        return assignments;
     }
 
     /**
@@ -1738,43 +1489,33 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Validates a requested Slider Preset name against Project naming invariants.
+     * Validates a requested Slider Preset name against the rules that stay with
+     * the handlers: trimmed, non-empty, and dot-free. Uniqueness is the
+     * aggregate's rule and is reported by {@link Project#addSliderPreset} and
+     * {@link Project#renameSliderPreset}.
      *
      * @param requestedName caller-supplied name before normalization
-     * @param exemptIndex existing catalog index allowed to retain its logical name,
-     *        or empty when creating a new Slider Preset
      * @return a structured rejection, or null when the trimmed name is valid
      */
-    private RejectedOutcome validateSliderPresetName(String requestedName, OptionalInt exemptIndex) {
-        SliderPresetNameProblem problem = findSliderPresetNameProblem(requestedName,
-                snapshot.getSliderPresets(), exemptIndex);
+    private RejectedOutcome validateSliderPresetName(String requestedName) {
+        SliderPresetNameProblem problem = findSliderPresetNameProblem(requestedName);
         return problem == null ? null : rejectedSliderPresetName(problem.code, problem.message);
     }
 
     /**
-     * Applies the single Project name-validation implementation to any current or
-     * detached Slider Preset catalog.
+     * Applies the handler-side Slider Preset name rules for both edit and XML-import
+     * callers, which report the problem at different locations.
      *
      * @param requestedName name before trimming
-     * @param presets catalog whose logical identities must remain unique
-     * @param exemptIndex existing identity allowed to retain or replace its name
-     * @return validation problem, or null when the name satisfies every invariant
+     * @return validation problem, or null when the name is trimmed-non-empty and dot-free
      */
-    private static SliderPresetNameProblem findSliderPresetNameProblem(String requestedName,
-            List<SliderPresetSnapshot> presets, OptionalInt exemptIndex) {
+    private static SliderPresetNameProblem findSliderPresetNameProblem(String requestedName) {
         if (requestedName == null || requestedName.trim().isEmpty())
             return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_REQUIRED,
                     "A Slider Preset name must not be empty.");
-        String normalizedName = requestedName.trim();
-        if (normalizedName.indexOf('.') >= 0)
+        if (requestedName.trim().indexOf('.') >= 0)
             return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_CONTAINS_DOT,
                     "A Slider Preset name must not contain dots.");
-        for (int index = 0; index < presets.size(); index++) {
-            if ((!exemptIndex.isPresent() || index != exemptIndex.getAsInt())
-                    && presets.get(index).getName().equalsIgnoreCase(normalizedName))
-                return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_DUPLICATE,
-                        "A Slider Preset with this name already exists.");
-        }
         return null;
     }
 
@@ -1804,14 +1545,53 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Sorts changed Slider Presets and atomically publishes a dirty Project snapshot.
+     * Views the pinned snapshot's content as a Project aggregate.
      *
-     * @param presets changed catalog values
-     * @return a changed outcome carrying the published snapshot
+     * <p>Transitional: until the lifecycle migration makes the session own the
+     * aggregate, each migrated handler rebuilds it from the published snapshot,
+     * which re-validates the Project invariants on every edit.
+     *
+     * @return an aggregate over the current snapshot's content
      */
-    private ChangedOutcome publishChangedPresets(List<SliderPresetSnapshot> presets) {
-        return publishChangedProjectState(presets,
-                new ArrayList<>(snapshot.getCustomMorphTargets()));
+    private Project project() {
+        return Project.from(snapshot);
+    }
+
+    /**
+     * Translates a rule-checked aggregate result into the session outcome.
+     *
+     * @param before aggregate the handler started from
+     * @param result next aggregate or its single rejection diagnostic
+     * @return rejected, unchanged, or changed outcome at the pinned snapshot
+     */
+    private ProjectOutcome outcome(Project before, Project.Result result) {
+        return result.isRejected() ? rejected(result) : outcome(before, result.getProject());
+    }
+
+    /**
+     * Translates an aggregate transition into the session outcome: the same
+     * instance means nothing changed and the snapshot stays pinned; any other
+     * instance is published as a dirty snapshot.
+     *
+     * @param before aggregate the handler started from
+     * @param after aggregate the handler ended with
+     * @return unchanged or changed outcome
+     */
+    private ProjectOutcome outcome(Project before, Project after) {
+        if (after == before)
+            return new UnchangedOutcome(snapshot);
+        snapshot = after.toSnapshot(snapshot.getFileIdentity(), true, snapshot.getLifecycleStatus());
+        return new ChangedOutcome(snapshot);
+    }
+
+    /**
+     * Wraps an aggregate rejection while the operation lock pins the snapshot.
+     *
+     * @param result rejected aggregate result
+     * @return a rejection carrying the pinned snapshot and the aggregate's diagnostic
+     */
+    private RejectedOutcome rejected(Project.Result result) {
+        return new RejectedOutcome(snapshot, Collections.singletonList(result.getDiagnostic()));
     }
 
     /**
@@ -1822,7 +1602,10 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed outcome carrying the published snapshot
      */
     private ChangedOutcome publishChangedCustomMorphTargets(List<CustomMorphTargetSnapshot> targets) {
-        return publishChangedProjectState(new ArrayList<>(snapshot.getSliderPresets()), targets);
+        Collections.sort(targets, Project.CUSTOM_MORPH_TARGET_NAME_ORDER);
+        snapshot = new ProjectSnapshot(snapshot.getSliderPresets(), targets, snapshot.getNpcMorphAssignments(),
+                snapshot.getFileIdentity(), true, snapshot.getLifecycleStatus());
+        return new ChangedOutcome(snapshot);
     }
 
     /**
@@ -1832,40 +1615,8 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed outcome carrying the published snapshot
      */
     private ChangedOutcome publishChangedNpcMorphAssignments(List<NpcMorphAssignmentSnapshot> assignments) {
-        Collections.sort(assignments, NPC_MORPH_ASSIGNMENT_IDENTITY_ORDER);
+        Collections.sort(assignments, Project.NPC_MORPH_ASSIGNMENT_IDENTITY_ORDER);
         snapshot = new ProjectSnapshot(snapshot.getSliderPresets(), snapshot.getCustomMorphTargets(), assignments,
-                snapshot.getFileIdentity(), true, snapshot.getLifecycleStatus());
-        return new ChangedOutcome(snapshot);
-    }
-
-    /**
-     * Canonically orders and atomically publishes changed Slider Presets together
-     * with their repaired Custom Morph Target relationships.
-     *
-     * @param presets changed Slider Preset catalog
-     * @param targets repaired Custom Morph Target values
-     * @return a changed outcome carrying the single coherent snapshot
-     */
-    private ChangedOutcome publishChangedProjectState(List<SliderPresetSnapshot> presets,
-            List<CustomMorphTargetSnapshot> targets) {
-        return publishChangedProjectState(presets, targets,
-                new ArrayList<>(snapshot.getNpcMorphAssignments()));
-    }
-
-    /**
-     * Canonically orders and atomically publishes every changed Project collection.
-     *
-     * @param presets changed Slider Preset catalog
-     * @param targets repaired Custom Morph Target values
-     * @param npcs repaired NPC Morph Assignment values
-     * @return a changed outcome carrying the single coherent snapshot
-     */
-    private ChangedOutcome publishChangedProjectState(List<SliderPresetSnapshot> presets,
-            List<CustomMorphTargetSnapshot> targets, List<NpcMorphAssignmentSnapshot> npcs) {
-        Collections.sort(presets, SLIDER_PRESET_NAME_ORDER);
-        Collections.sort(targets, CUSTOM_MORPH_TARGET_NAME_ORDER);
-        Collections.sort(npcs, NPC_MORPH_ASSIGNMENT_IDENTITY_ORDER);
-        snapshot = new ProjectSnapshot(presets, targets, npcs,
                 snapshot.getFileIdentity(), true, snapshot.getLifecycleStatus());
         return new ChangedOutcome(snapshot);
     }
