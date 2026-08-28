@@ -1,0 +1,954 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Not production code. Do not port line-by-line.
+
+  Question: which SHAPE should each secondary workflow take inside the Rail Studio
+  workbench decided on #67? (GitHub issue #77 on map #62)
+
+  Six workflows that are separate popup Stages today, each with three structurally
+  different treatments. Pick a shape per workflow with the pink bar (← → cycle the
+  shape of the selected workflow, "Open" launches it), the ? panel, or the URL:
+    ?sliders=dialog|inplace|overlay &npcdb=dialog|area|overlay &fill=dialog|inspector|flyout
+    &bos=dialog|editor|drawer &rename=dialog|inline|inspector &image=window|inspector|flyout
+
+  Variant A (Rail Studio) only. index.html is the #67 artifact and is left untouched;
+  the shell, data, job engine, and theme tokens are copied from it.
+
+  Faithfulness notes (from the survey of the current popups):
+    - Today every popup writes through immediately; Back/Cancel only hides. Same here.
+    - Today SetSliders and BoS focus the Back button on open; Rename focuses the field.
+    - Today NPC import / BoS export disable the pane, bind a WAIT cursor, and block close.
+      Here they run as status-bar jobs (cancellable) and the surface stays closable — an
+      explicit alternative for the maintainer to accept or reject.
+    - No toasts (per #67). Per-gesture edits report in the status bar only; bulk edits,
+      adds, fills, renames, and imports get Activity entries (+ InfoBar where durable).
+
+  Run: double-click this file. No build, no server.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE · BS2BG secondary workflows</title>
+<style>
+/* ───────────── Theme tokens (copied from index.html) ───────────── */
+:root { --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; --mono: Consolas, "Cascadia Mono", monospace; --radius: 4px; --ctl-h: 32px; --dur: 160ms; }
+:root, [data-theme="light"] {
+  --bg: #f3f3f3; --surface: #ffffff; --surface-2: #f9f9f9; --surface-3: #ededed;
+  --text: #1b1b1b; --text-2: #5c5c5c; --border: #d9d9d9; --border-strong: #8a8a8a;
+  --accent: #005fb8; --accent-hover: #1a6fc4; --accent-text: #ffffff; --focus: #1b1b1b; --sel: #e5effa;
+  --success: #0f7b0f; --success-bg: #dff6dd; --warning: #9d5d00; --warning-bg: #fff4ce; --error: #c42b1c; --error-bg: #fde7e9;
+  --shadow: 0 4px 16px rgba(0,0,0,.14);
+}
+[data-theme="dark"] {
+  --bg: #202020; --surface: #2b2b2b; --surface-2: #323232; --surface-3: #3a3a3a;
+  --text: #ffffff; --text-2: #c5c5c5; --border: #3f3f3f; --border-strong: #7a7a7a;
+  --accent: #60cdff; --accent-hover: #7fd6ff; --accent-text: #000000; --focus: #ffffff; --sel: #3a4a5a;
+  --success: #6ccb5f; --success-bg: #393d1b; --warning: #fce100; --warning-bg: #433519; --error: #ff99a4; --error-bg: #442726;
+  --shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+[data-theme="hc"] {
+  --bg: #000000; --surface: #000000; --surface-2: #000000; --surface-3: #000000;
+  --text: #ffffff; --text-2: #ffffff; --border: #ffffff; --border-strong: #ffffff;
+  --accent: #ffff00; --accent-hover: #ffff00; --accent-text: #000000; --focus: #ffff00; --sel: #1aebff;
+  --success: #3ff23f; --success-bg: #000000; --warning: #ffff00; --warning-bg: #000000; --error: #ff8080; --error-bg: #000000;
+  --shadow: none;
+}
+[data-theme="hc"] .sel { color: #000 !important; }
+[data-theme="hc"] .card, [data-theme="hc"] .pane, [data-theme="hc"] button, [data-theme="hc"] input, [data-theme="hc"] .infobar, [data-theme="hc"] .modal, [data-theme="hc"] .flyout, [data-theme="hc"] .companion { border-color: #fff !important; }
+[data-theme="hc"] .rail-item[aria-current="page"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (forced-colors: active) { :root { --bg: Canvas; --surface: Canvas; --surface-2: Canvas; --surface-3: Canvas; --text: CanvasText; --text-2: CanvasText; --border: CanvasText; --border-strong: CanvasText; --accent: Highlight; --accent-text: HighlightText; --focus: Highlight; --sel: Highlight; } }
+[data-motion="reduced"] *, [data-motion="reduced"] *::before, [data-motion="reduced"] *::after { transition: none !important; animation: none !important; }
+
+/* ───────────── Base (copied) ───────────── */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { font: 13px/1.4 var(--font); color: var(--text); background: var(--bg); }
+#stage { position: fixed; inset: 0; padding: 0 0 56px 0; display: flex; justify-content: center; }
+#app { width: 100%; height: 100%; background: var(--bg); position: relative; overflow: hidden; display: flex; flex-direction: column; }
+#stage.narrow #app { width: 720px; border-left: 2px dashed var(--border-strong); border-right: 2px dashed var(--border-strong); }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+h2 { font-size: 14px; } h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { height: var(--ctl-h); padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: background var(--dur); }
+button:hover { background: var(--surface-3); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.primary:hover { background: var(--accent-hover); }
+button.subtle { border-color: transparent; background: transparent; }
+button.subtle:hover { background: var(--surface-3); }
+button.icon { width: var(--ctl-h); padding: 0; justify-content: center; }
+button.danger { color: var(--error); }
+input[type=text], input[type=search], select { height: var(--ctl-h); padding: 0 8px; border: 1px solid var(--border); border-bottom-color: var(--border-strong); border-radius: var(--radius); background: var(--surface); }
+textarea { width: 100%; height: 100%; resize: none; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 8px; font-family: var(--mono); font-size: 12px; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+[role=option]:focus-visible, tr:focus-visible, .rail-item:focus-visible { outline-offset: -2px; }
+kbd { font: 11px var(--mono); border: 1px solid var(--border-strong); border-radius: 3px; padding: 0 4px; background: var(--surface-2); }
+.muted { color: var(--text-2); }
+.row { display: flex; align-items: center; gap: 8px; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 12px; background: var(--surface-3); border: 1px solid var(--border); font-size: 12px; }
+.chip button { height: 18px; width: 18px; padding: 0; border: 0; background: transparent; }
+.badge { display: inline-flex; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-text); font-size: 11px; align-items: center; justify-content: center; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+/* flex: 0 0 auto — the bar may wrap to two rows in a narrow window; without it the shell squeezes it and clips the second row. */
+.cmdbar { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; min-height: 42px; flex: 0 0 auto; }
+.cmdbar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-h); padding: 0 8px; cursor: default; }
+.toggle .sw { width: 36px; height: 18px; border-radius: 9px; border: 1px solid var(--border-strong); position: relative; background: var(--surface); }
+.toggle .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-2); transition: left var(--dur); }
+.toggle[aria-checked=true] .sw { background: var(--accent); border-color: var(--accent); }
+.toggle[aria-checked=true] .sw::after { left: 20px; background: var(--accent-text); }
+[role=listbox] { list-style: none; margin: 0; padding: 4px; }
+[role=option] { padding: 6px 8px; border-radius: var(--radius); cursor: default; display: flex; align-items: center; gap: 8px; border-left: 3px solid transparent; }
+[role=option]:hover { background: var(--surface-3); }
+[role=option][aria-selected=true] { background: var(--sel); border-left-color: var(--accent); }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--surface-2); font-weight: 600; color: var(--text-2); z-index: 1; }
+tbody tr { cursor: default; }
+tbody tr:hover { background: var(--surface-3); }
+tbody tr[aria-selected=true] { background: var(--sel); box-shadow: inset 3px 0 0 var(--accent); }
+tbody tr.warn td:last-child { color: var(--warning); font-weight: 600; }
+.filterrow { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex-wrap: wrap; align-items: center; }
+.filterrow input { height: 28px; }
+.statusbar { height: 28px; flex: 0 0 auto; border-top: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 12px; padding: 0 10px; font-size: 12px; }
+.statusbar .prog { width: 160px; }
+progress { width: 100%; height: 6px; accent-color: var(--accent); }
+.ring { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; }
+[data-motion="reduced"] .ring { border: 2px dashed var(--accent); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.infobar { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius); background: var(--surface-2); flex-wrap: wrap; }
+.infobar.success { border-left-color: var(--success); background: var(--success-bg); }
+.infobar.error { border-left-color: var(--error); background: var(--error-bg); }
+.infobar.warning { border-left-color: var(--warning); background: var(--warning-bg); }
+.infobar.info { border-left-color: var(--accent); }
+.infobar .ico { font-weight: 700; width: 16px; text-align: center; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.35); z-index: 20; }
+[data-theme="hc"] .scrim { background: rgba(0,0,0,.7); }
+.drawer { position: absolute; left: 48px; right: 0; bottom: 0; height: 42%; background: var(--surface); border-top: 2px solid var(--border-strong); box-shadow: var(--shadow); z-index: 21; display: flex; flex-direction: column; transition: transform var(--dur); }
+.drawer.closed { transform: translateY(calc(100% - 34px)); }
+.drawer > header { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.drawer > header .tabs { display: flex; gap: 2px; }
+.drawer > header .tabs button { height: 26px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; }
+.drawer > header .tabs button[aria-selected=true] { border-bottom-color: var(--accent); font-weight: 600; }
+.side-overlay { position: absolute; top: 0; bottom: 0; width: 300px; background: var(--surface); border-right: 1px solid var(--border); box-shadow: var(--shadow); z-index: 21; display: flex; flex-direction: column; }
+.side-overlay.right { right: 0; border-right: 0; border-left: 1px solid var(--border); }
+.side-overlay > header { min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); }
+.side-overlay > .body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+
+/* ───────────── Variant A · Rail Studio (copied) ───────────── */
+.A .titlebar { height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.A .shell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 48px 260px 1fr 280px; grid-template-rows: minmax(0, 1fr); position: relative; overflow: hidden; }
+.A .shell.narrow { grid-template-columns: 48px 1fr; }
+.A .rail { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 6px 4px; gap: 2px; }
+.A .rail-item { height: 40px; width: 40px; border-radius: var(--radius); border: 0; background: transparent; display: flex; align-items: center; justify-content: center; font-size: 16px; position: relative; }
+.A .rail-item:hover { background: var(--surface-3); }
+.A .rail-item[aria-current="page"] { background: var(--sel); }
+.A .rail-item[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; background: var(--accent); border-radius: 2px; }
+.A .rail-item .badge { position: absolute; top: 4px; right: 4px; }
+.A .rail .spacer { flex: 1; }
+.A .col { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
+.A .col:last-child { border-right: 0; }
+.A .col > header { min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); }
+.A .col > .body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.A .editor-body { padding: 10px; gap: 10px; }
+.A .kv { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; padding: 10px; font-size: 12px; align-items: center; }
+.A .kv dt { color: var(--text-2); } .A .kv dd { margin: 0; min-width: 0; }
+.A .kv input[type=text] { width: 100%; height: 28px; }
+.A .inspector-actions { padding: 10px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); }
+.A .inspector-actions button { justify-content: flex-start; }
+.A .drawer .body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; min-height: 0; }
+.A .drawer .body.single { grid-template-columns: 1fr; }
+.A .drawer .body > div { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+
+/* ───────────── New: workflow surfaces ───────────── */
+.modal-scrim { position: absolute; inset: 0; background: rgba(0,0,0,.4); z-index: 40; display: flex; align-items: center; justify-content: center; }
+.modal-scrim.top { z-index: 50; }
+[data-theme="hc"] .modal-scrim { background: rgba(0,0,0,.75); }
+.modal { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow); display: flex; flex-direction: column; max-width: calc(100% - 32px); max-height: calc(100% - 32px); min-width: 0; }
+.modal > header { height: 36px; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 14px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.modal > .body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.modal > footer { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); align-items: center; }
+.busy { cursor: wait; }
+.busy .dim { opacity: .55; pointer-events: none; }
+.flyout { position: absolute; z-index: 45; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow); display: flex; flex-direction: column; min-width: 260px; max-width: 440px; max-height: 70%; }
+.flyout > header { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.flyout > .body { overflow: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.flyout > footer { padding: 8px 10px; border-top: 1px solid var(--border); display: flex; gap: 6px; align-items: center; }
+.light-scrim { position: absolute; inset: 0; z-index: 44; }
+.companion { position: absolute; top: 8px; right: 8px; width: 300px; z-index: 23; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.companion > header { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; border-bottom: 1px solid var(--border); font-weight: 600; background: var(--surface-2); }
+.companion > .body { padding: 8px; }
+.portrait { display: block; width: 100%; height: auto; background: var(--surface-3); border: 1px solid var(--border); border-radius: var(--radius); }
+.portrait-empty { padding: 16px; text-align: center; color: var(--text-2); border: 1px dashed var(--border-strong); border-radius: var(--radius); font-size: 12px; }
+.grid-wrap { display: grid; grid-template-columns: 1fr 230px; gap: 10px; min-height: 0; flex: 1 1 auto; }
+.slrows { overflow: auto; display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 2px; }
+.slrow { border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; display: grid; grid-template-columns: 24px 1fr; gap: 4px 8px; background: var(--surface); }
+.slrow.off .fmt, .slrow.off .rng { opacity: .5; }
+.slrow .fmt { font-family: var(--mono); font-size: 12px; align-self: center; }
+.slrow .rng { grid-column: 2; display: grid; grid-template-columns: 34px 1fr 44px; gap: 8px; align-items: center; font-size: 12px; }
+.slrow .rng label { color: var(--text-2); }
+.slrow .rng .pct { font-family: var(--mono); text-align: right; }
+input[type=range] { width: 100%; height: 20px; accent-color: var(--accent); margin: 0; }
+.rowlocked .slrow { pointer-events: none; opacity: .5; }
+.gang { display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); overflow: auto; }
+.gang .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.gang .grid3 button { padding: 0 4px; height: 28px; font-size: 12px; justify-content: center; }
+.gang .grow-row { display: grid; grid-template-columns: 20px 44px 1fr; gap: 6px; align-items: center; font-size: 12px; }
+.gang .grow-row .pct { font-family: var(--mono); }
+.gang h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); margin-top: 4px; }
+.multi [role=option] .cb { width: 14px; height: 14px; border: 1px solid var(--border-strong); border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; background: var(--surface); flex: 0 0 auto; }
+.multi [role=option][aria-selected=true] .cb { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.field-err { color: var(--error); font-size: 12px; margin-top: 4px; }
+input.invalid { border-color: var(--error) !important; border-bottom-width: 2px; }
+.editor-tabs { display: flex; gap: 2px; }
+.editor-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; border-radius: 0; height: 30px; padding: 0 8px; }
+.editor-tabs button[aria-selected=true] { border-bottom-color: var(--accent); font-weight: 600; }
+.shape-tag { display: inline-flex; align-items: center; gap: 4px; font: 11px/1 var(--font); background: #111; color: #ff4fd8; border: 1px solid #ff4fd8; border-radius: 999px; padding: 3px 8px; white-space: nowrap; }
+.rename-inline { display: block; padding: 4px 8px; }
+.rename-inline input { width: 100%; height: 26px; }
+.src-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+
+/* ───────────── Prototype bar / help (not part of the design) ───────────── */
+#proto-bar { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 1000; background: #111; color: #fff; border: 2px solid #ff4fd8; border-radius: 999px; padding: 6px 10px; display: flex; align-items: center; gap: 8px; font: 12px/1 var(--font); box-shadow: 0 6px 24px rgba(0,0,0,.5); white-space: nowrap; }
+#proto-bar button, #proto-bar select { height: 26px; background: #222; color: #fff; border: 1px solid #555; border-radius: 999px; padding: 0 10px; font-size: 12px; }
+#proto-bar button.on { background: #ff4fd8; color: #000; border-color: #ff4fd8; }
+#proto-bar .lbl { font-weight: 700; min-width: 210px; text-align: center; }
+#proto-bar .sep { width: 1px; height: 18px; background: #444; }
+#proto-bar .focus { color: #9be7ff; font-family: var(--mono); min-width: 120px; }
+#help { position: fixed; right: 12px; bottom: 60px; width: 520px; max-height: 78vh; overflow: auto; z-index: 999; background: var(--surface); border: 2px solid #ff4fd8; border-radius: 8px; padding: 14px 16px; box-shadow: var(--shadow); }
+#help h2 { margin-bottom: 6px; } #help h3 { margin: 14px 0 4px; } #help ul { margin: 0; padding-left: 18px; } #help li { margin: 2px 0; }
+#help table { font-size: 12px; } #help td { border: 0; padding: 2px 6px 2px 0; vertical-align: top; }
+#help .wf { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; margin: 6px 0; }
+#help .wf label { display: block; padding: 3px 0; }
+#help .wf label span.n { color: var(--text-2); font-size: 12px; display: block; padding-left: 22px; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="app" tabindex="-1"></div></div>
+<div id="proto-bar" aria-label="Prototype controls (not part of the design)">
+  <select id="pb-wf" title="Workflow whose shape ← → cycle"></select>
+  <button id="pb-prev" title="Previous shape (←)">←</button>
+  <span class="lbl" id="pb-label"></span>
+  <button id="pb-next" title="Next shape (→)">→</button>
+  <button id="pb-open" title="Launch the selected workflow the way the app would">Open</button>
+  <span class="sep"></span>
+  <select id="pb-theme" title="Theme"><option value="system">Theme: system</option><option value="light">Light</option><option value="dark">Dark</option><option value="hc">High contrast</option></select>
+  <button id="pb-narrow" title="Constrain the window to 720px">Narrow</button>
+  <button id="pb-motion" title="Simulate Windows 'animation effects off'">Reduce motion</button>
+  <button id="pb-fail" title="Make the next job fail">Fail next job</button>
+  <span class="sep"></span>
+  <span class="focus" id="pb-focus" title="Where focus went after the last close"></span>
+  <button id="pb-help" title="Shapes, design notes, questions (?)">?</button>
+</div>
+<div id="help" hidden></div>
+<div class="sr" aria-live="polite" id="live"></div>
+<script>
+/* ═══════════════════════════ Fake domain data ═══════════════════════════ */
+const RAW_PRESETS = [
+  ["CBBE Curvy", false, "Breasts@40:60, BreastsSmall@20, Butt@55, Hips@45:65, Waist@30, Thighs@50, Calves@40"],
+  ["CBBE Slim", false, "Breasts@15:25, Butt@30, Hips@30, Waist@10, Thighs@35, Calves@30"],
+  ["CBBE Vanilla", false, "Breasts@35, Butt@40, Hips@40, Waist@30"],
+  ["Athletic", false, "Breasts@25, Butt@35, Hips@30, Waist@5:15, Thighs@45, Calves@45, ShoulderWidth@60"],
+  ["Pear", false, "Breasts@20, Butt@70:85, Hips@75, Waist@25, Thighs@70"],
+  ["Top Heavy", false, "Breasts@75:90, BreastsSmall@0, Butt@30, Hips@35, Waist@20"],
+  ["Petite", false, "Breasts@10, Butt@20, Hips@20, Waist@0, Thighs@25, Calves@20"],
+  ["Mature", false, "Breasts@45:55, BreastsSag@30, Butt@50, Hips@55, Waist@45, Belly@30"],
+  ["UUNP Slim", true, "Breasts@20, Butt@30, Hips@30, Waist@15, Thighs@35"],
+  ["UUNP Curvy", true, "Breasts@50:65, Butt@60, Hips@55, Waist@35, Thighs@55"],
+];
+const EXTRA_SLIDERS = ["BreastsSag", "Belly", "ShoulderWidth", "Arms", "Legs", "Neck", "BreastFlatness"];
+/* A preset is a list of SliderChoiceSnapshot-like rows: name, min, max (percent), enabled.
+   Three extra rows are added so the grid shows a redundant (enabled at 0) and disabled sliders. */
+function makePreset([name, uunp, line]) {
+  const choices = line.split(", ").map(s => { const [n, v] = s.split("@"); const [a, b] = v.split(":"); return { name: n, min: +a, max: b == null ? +a : +b, enabled: true }; });
+  EXTRA_SLIDERS.filter(n => !choices.some(c => c.name === n)).slice(0, 3).forEach((n, i) => choices.push({ name: n, min: 0, max: 0, enabled: i === 0 }));
+  return { name, uunp, choices };
+}
+const frac = v => String(Math.round(v) / 100);
+const fmtChoice = c => c.min === c.max ? `${c.name}@${frac(c.min)}` : `${c.name}@${frac(c.min)}:${frac(c.max)}`;
+const activeChoices = (p, omit) => p.choices.filter(c => c.enabled && !(omit && c.min === 0 && c.max === 0));
+const lineOf = (p, omit = false) => `${p.name}=${activeChoices(p, omit).map(fmtChoice).join(", ")}`;
+function bosJson(p) { const o = {}; activeChoices(p, S.omit).forEach(c => o[c.name] = c.min === c.max ? c.min / 100 : [c.min / 100, c.max / 100]); return JSON.stringify({ [p.name]: o }, null, 2); }
+
+const TARGETS = [
+  { name: "All|Female", presets: ["CBBE Curvy", "CBBE Slim", "CBBE Vanilla", "Athletic"] },
+  { name: "Nord|Female", presets: ["Athletic", "Top Heavy"] },
+  { name: "Breton|Female", presets: ["Petite", "CBBE Slim"] },
+  { name: "Elder|Female", presets: [] },
+];
+const NPC = (name, master, race, editorId, formId, presets = [], src = "SkyrimFemaleNPCs.txt") => ({ name, master, race, editorId, formId, presets, src });
+const NPCS = [
+  NPC("Lydia", "Skyrim.esm", "Nord", "HousecarlWhiterun", "0A2C8E", ["Athletic"]),
+  NPC("Aela the Huntress", "Skyrim.esm", "Nord", "Aela", "01A696", ["Athletic", "CBBE Curvy"]),
+  NPC("Serana", "Dawnguard.esm", "Nord", "DLC1Serana", "002B74", ["CBBE Slim"], "Dawnguard.txt"),
+  NPC("Jordis the Sword-Maiden", "Skyrim.esm", "Nord", "HousecarlSolitude", "0A2C90", ["Athletic"]),
+  NPC("Mjoll the Lioness", "Skyrim.esm", "Nord", "Mjoll", "019DF9", ["Top Heavy"]),
+  NPC("Uthgerd the Unbroken", "Skyrim.esm", "Nord", "Uthgerd", "013BAA", []),
+  NPC("Ysolda", "Skyrim.esm", "Nord", "Ysolda", "01A6AB", ["Pear"]),
+  NPC("Camilla Valerius", "Skyrim.esm", "Imperial", "CamillaValerius", "013481", ["CBBE Curvy"]),
+  NPC("Carlotta Valentia", "Skyrim.esm", "Imperial", "CarlottaValentia", "013BA5", []),
+  NPC("Sapphire", "Skyrim.esm", "Nord", "Sapphire", "01CB33", ["CBBE Slim"]),
+  NPC("Vex", "Skyrim.esm", "Imperial", "Vex", "01CB35", ["Petite"]),
+  NPC("Karliah", "Skyrim.esm", "Dark Elf", "Karliah", "058F1A", ["CBBE Slim", "Petite"]),
+  NPC("Delphine", "Skyrim.esm", "Breton", "Delphine", "013478", ["Mature"]),
+  NPC("Elisif the Fair", "Skyrim.esm", "Nord", "Elisif", "013BB9", []),
+];
+/* NPC Database = session-scoped list parsed from pipe-delimited .txt files (mod|name|editorId|race|formId). */
+const NPCDB = NPCS.map(n => ({ ...n, presets: undefined })).concat([
+  NPC("Irileth", "Skyrim.esm", "Dark Elf", "Irileth", "01A66A"),
+  NPC("Njada Stonearm", "Skyrim.esm", "Nord", "NjadaStonearm", "01A6B7"),
+  NPC("Ria", "Skyrim.esm", "Imperial", "Ria", "01A6B4"),
+  NPC("Brelyna Maryon", "Skyrim.esm", "Dark Elf", "Brelyna", "01C1A1"),
+  NPC("Muiri", "Skyrim.esm", "Breton", "Muiri", "013B9C"),
+  NPC("Olfina Gray-Mane", "Skyrim.esm", "Nord", "OlfinaGrayMane", "013BB6"),
+  NPC("Hulda", "Skyrim.esm", "Nord", "Hulda", "013BA7"),
+  NPC("Adrianne Avenicci", "Skyrim.esm", "Imperial", "AdrianneAvenicci", "013BAD"),
+  NPC("Valerica", "Dawnguard.esm", "Nord", "DLC1Valerica", "003B8B", [], "Dawnguard.txt"),
+  NPC("Beleval", "Dawnguard.esm", "Nord", "DLC1Beleval", "0035E2", [], "Dawnguard.txt"),
+]);
+const IMPORT_BATCH = [NPC("Frea", "Dragonborn.esm", "Nord", "DLC2Frea", "0177DB", [], "Dragonborn.txt"), NPC("Edla", "Dragonborn.esm", "Nord", "DLC2Edla", "01B65B", [], "Dragonborn.txt"), NPC("Aeta", "Dragonborn.esm", "Nord", "DLC2Aeta", "01B658", [], "Dragonborn.txt"), NPC("Mirri Severin", "Dragonborn.esm", "Dark Elf", "DLC2MirriSeverin", "01B65E", [], "Dragonborn.txt"), NPC("Tilisu Severin", "Dragonborn.esm", "Dark Elf", "DLC2TilisuSeverin", "01B65F", [], "Dragonborn.txt")];
+const NO_IMAGE = new Set(["Uthgerd the Unbroken", "Elisif the Fair", "Carlotta Valentia", "Frea", "Hulda"]);
+const imageFile = n => `images/${n.name} (${n.editorId}).png`;
+function portraitUri(n) {
+  if (!n || NO_IMAGE.has(n.name)) return null;
+  const hue = [...n.name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360, ini = n.name.split(/\s+/).map(w => w[0]).slice(0, 2).join("");
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='260' height='300'><rect width='260' height='300' fill='hsl(${hue},35%,45%)'/><circle cx='130' cy='115' r='58' fill='hsl(${hue},30%,82%)'/><rect x='55' y='185' width='150' height='115' rx='40' fill='hsl(${hue},30%,82%)'/><text x='130' y='130' font-family='Segoe UI,sans-serif' font-size='44' text-anchor='middle' fill='hsl(${hue},35%,30%)'>${ini}</text><text x='130' y='285' font-family='Segoe UI,sans-serif' font-size='13' text-anchor='middle' fill='#fff'>${n.name} · ${n.race}</text></svg>`;
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
+/* ═══════════════════════════ Shapes under test ═══════════════════════════ */
+const WF = {
+  sliders: { label: "Set Sliders", shapes: { dialog: "Modal dialog (as today)", inplace: "Editor pane is the grid", overlay: "Wide side overlay" } },
+  npcdb:   { label: "NPC Database", shapes: { dialog: "Modal dialog (as today)", area: "Rail area (Ctrl+3)", overlay: "Docked side panel" } },
+  fill:    { label: "Fill Empty", shapes: { dialog: "Modal list + confirm (as today)", inspector: "Inspector panel, inline confirm", flyout: "Flyout on the button" } },
+  bos:     { label: "BoS JSON view", shapes: { dialog: "Modal window (as today)", editor: "Editor tab", drawer: "Output drawer tab" } },
+  rename:  { label: "Rename preset", shapes: { dialog: "Modal dialog (as today)", inline: "Edit in the list (F2)", inspector: "Editable Name in inspector" } },
+  image:   { label: "Image view", shapes: { window: "Always-on-top companion (as today)", inspector: "Portrait in the inspector", flyout: "Flyout from View Image" } },
+};
+
+/* ═══════════════════════════ State ═══════════════════════════ */
+const S = {
+  area: "templates",                      // templates | morphs | npcdb (npcdb only when shape.npcdb === "area")
+  presets: RAW_PRESETS.map(makePreset), targets: TARGETS.map(t => ({ ...t, presets: [...t.presets] })), npcs: NPCS.map(n => ({ ...n, presets: [...n.presets] })), npcdb: NPCDB.map(n => ({ ...n })),
+  selPreset: 0, selTarget: 0, selNpc: 0, morphFocus: "targets",
+  uunp: false, omit: true, search: "", npcFilter: "",
+  output: { templates: "", morphs: "", stale: true, at: null },
+  job: null, failNext: false, notes: [], errorModal: null, statusText: "Ready",
+  drawer: false, outTab: "ini",           // ini | bos (bos only when shape.bos === "drawer")
+  editorTab: "sliders",                   // sliders | bos (bos only when shape.bos === "editor")
+  overlay: null, narrow: false, theme: "system", motion: "auto", help: false, pendingConfirm: null,
+  shape: { sliders: "dialog", npcdb: "dialog", fill: "dialog", bos: "dialog", rename: "dialog", image: "window" },
+  wf: null,                               // transient surface currently open: sliders | npcdb | fill | bos | rename | image
+  wfOpener: null, focusAfter: null, lastRestore: "", barWf: "sliders",
+  gang: { all: false, min: false, max: false, vAll: 100, vMin: 100, vMax: 100 },
+  db: { sel: 0, filter: "", assignRandom: false, info: null },
+  fill: { sel: new Set(), confirming: false, err: null },
+  rename: { active: false, draft: "", err: null },
+  imageOpen: false, imageFly: false, imgOpener: null,   // image has its own opener so it can stack on the NPC Database surfaces
+};
+
+/* ═══════════════════════════ Fake job engine (copied; + importNpcTxt) ═══════════════════════════ */
+const JOB_LABELS = { generateTemplates: "Generating templates", generateMorphs: "Generating morphs", exportIni: "Exporting BodyGen INIs", exportBos: "Exporting BoS JSON", importXml: "Importing BodySlide XML presets", importNpcTxt: "Importing NPC text file" };
+function startJob(kind) {
+  if (S.job) { status("A job is already running."); render(); return; }
+  S.job = { kind, label: JOB_LABELS[kind], progress: 0, cancelled: false };
+  announce(S.job.label + " started.");
+  const tick = () => {
+    if (!S.job || S.job.cancelled) return;
+    S.job.progress = Math.min(100, S.job.progress + 4 + Math.random() * 8);
+    if (S.job.progress >= 100) { const j = S.job; S.job = null; if (S.failNext) { S.failNext = false; syncBar(); finishJob(j, false); } else finishJob(j, true); }
+    else { render(); setTimeout(tick, 120); }
+  };
+  render(); setTimeout(tick, 200);
+}
+function cancelJob() { if (!S.job) return; const j = S.job; j.cancelled = true; S.job = null; note("info", j.label + " cancelled."); render(); }
+function finishJob(j, ok) {
+  if (!ok) { note("error", j.label + " failed unexpectedly."); S.errorModal = j.label + " failed unexpectedly.\n\njava.io.IOException: (prototype) simulated failure"; S.focusAfter = { sel: "#errOk" }; render(); return; }
+  if (j.kind === "generateTemplates" || j.kind === "generateMorphs" || j.kind === "exportIni") {
+    const tpl = S.presets.filter(p => S.uunp === p.uunp).map(p => lineOf(p, S.omit)).join("\n");
+    const mor = S.targets.map(t => `${t.name}=${t.presets.join("|")}`).concat(S.npcs.map(n => `${n.master}|${n.formId}=${n.presets.join("|")}`)).join("\n");
+    if (j.kind !== "generateMorphs") S.output.templates = tpl;
+    if (j.kind !== "generateTemplates") S.output.morphs = mor;
+    S.output.stale = false; S.output.at = new Date();
+  }
+  if (j.kind === "importNpcTxt") {
+    const added = IMPORT_BATCH.filter(b => !S.npcdb.some(n => n.master === b.master && n.editorId.toLowerCase() === b.editorId.toLowerCase()));
+    S.npcdb.push(...added.map(n => ({ ...n })));
+    S.db.info = { sev: added.length ? "success" : "info", text: `${added.length} NPCs added from Dragonborn.txt (${IMPORT_BATCH.length - added.length} duplicates skipped) · 2 lines skipped: fewer than 5 fields.` };
+    note("warning", "Dragonborn.txt: 2 lines skipped (fewer than 5 pipe-delimited fields).", true);
+    note("success", `${added.length} NPCs added to the NPC Database from Dragonborn.txt.`);
+    render(); return;
+  }
+  const msgs = { generateTemplates: "Templates generated.", generateMorphs: "Morphs generated.", exportIni: "Templates and Morphs INI exported to D:\\Mods\\BodyGen\\", exportBos: `BodyTypes of Skyrim JSON exported to D:\\Mods\\BoS\\${curPreset().name}.json`, importXml: "3 presets imported, 1 renamed (dots → spaces)." };
+  const empties = S.npcs.filter(n => !n.presets.length).length + S.targets.filter(t => !t.presets.length).length;
+  if ((j.kind === "generateMorphs" || j.kind === "exportIni") && empties) note("warning", `${empties} targets have no assigned presets and were skipped.`, true);
+  note("success", msgs[j.kind]);
+  if (j.kind.startsWith("generate")) { S.drawer = true; S.outTab = "ini"; }   // #67: Generate auto-reveals the drawer
+  render();
+}
+
+/* Notification model (#67): no toasts. Every message gets a durable Activity entry and replaces the
+   status-bar text; `durable` ones also render as an InfoBar in the pane that triggered them until
+   dismissed. status() is the chatty tier: status bar + live region only, no Activity entry. */
+let nid = 0;
+function note(sev, text, durable = sev === "error") { const n = { id: ++nid, sev, text, time: new Date(), durable, dismissed: false }; S.notes.unshift(n); S.statusText = text; announce(text); return n; }
+function status(text) { S.statusText = text; announce(text); }
+function announce(t) { const l = document.getElementById("live"); l.textContent = ""; setTimeout(() => l.textContent = t, 30); }
+function confirm2(text, onOk, okLabel = "Yes") { S.pendingConfirm = { text, onOk, okLabel }; S.focusAfter = { sel: "#confirmYes" }; render(); }
+
+/* ═══════════════════════════ Helpers ═══════════════════════════ */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ICO = { success: "✓", error: "✕", warning: "!", info: "i" };
+const visPresets = () => S.presets.filter(p => p.name.toLowerCase().includes(S.search.toLowerCase()));
+const visNpcs = () => S.npcs.filter(n => [n.name, n.master, n.race, n.editorId].join(" ").toLowerCase().includes(S.npcFilter.toLowerCase()));
+const visDb = () => S.npcdb.filter(n => [n.name, n.master, n.race, n.editorId].join(" ").toLowerCase().includes(S.db.filter.toLowerCase()));
+const curPreset = () => S.presets[S.selPreset];
+const curTarget = () => S.morphFocus === "targets" ? S.targets[S.selTarget] : S.npcs[S.selNpc];
+const emptyNpcs = () => visNpcs().filter(n => !n.presets.length);
+const inProject = n => S.npcs.some(x => x.master === n.master && x.formId === n.formId);
+const fmtTime = d => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const shapeTag = wf => `<span class="shape-tag" title="Prototype: shape of this workflow. ← → cycles it.">${esc(WF[wf].label)} · ${esc(WF[wf].shapes[S.shape[wf]])}</span>`;
+/* The image follows whichever NPC surface is in front, as today (NPC Database when it is showing, else the NPC table). */
+const imageSubject = () => (S.wf === "npcdb" || S.area === "npcdb") ? visDb()[S.db.sel] || null : (S.morphFocus === "npcs" ? S.npcs[S.selNpc] : null);
+function infobar(n, extra = "") { return `<div class="infobar ${n.sev}" role="${n.sev === "error" ? "alert" : "status"}"><span class="ico" aria-hidden="true">${ICO[n.sev]}</span><span class="grow">${esc(n.text)}</span>${extra}${n.id ? `<button class="subtle icon" data-act="dismiss" data-id="${n.id}" aria-label="Dismiss">✕</button>` : ""}</div>`; }
+const paneInfobars = () => S.notes.filter(n => n.durable && !n.dismissed).slice(0, 2).map(n => infobar(n)).join("");
+function jobInline() { return S.job ? `<span class="row" role="status"><span class="ring" aria-hidden="true"></span><progress value="${S.job.progress}" max="100" style="width:80px" aria-label="${esc(S.job.label)}"></progress><span class="mono">${Math.round(S.job.progress)}%</span></span>` : ""; }
+
+/* ═══════════════════════════ Open / close workflows (focus contract lives here) ═══════════════════════════ */
+const isOpen = wf => S.wf === wf || (wf === "image" && (S.imageOpen || S.imageFly)) || (wf === "rename" && S.rename.active) || (wf === "bos" && (S.editorTab === "bos" || (S.drawer && S.outTab === "bos"))) || (wf === "npcdb" && S.area === "npcdb");
+function resetWf(wf) {
+  if (S.wf === wf) S.wf = null;
+  if (wf === "image") { S.imageOpen = false; S.imageFly = false; }
+  if (wf === "rename") { S.rename.active = false; S.rename.err = null; }
+  if (wf === "bos") { S.editorTab = "sliders"; if (S.outTab === "bos") { S.outTab = "ini"; S.drawer = false; } }
+  if (wf === "npcdb" && S.area === "npcdb") S.area = "morphs";
+  if (wf === "fill") { S.fill.confirming = false; S.fill.err = null; }
+}
+/* openWf records the opener (by id) so closeWf can hand focus back explicitly — the same-window
+   surfaces have no window manager to do it for them. `sel` names what takes focus on open. */
+function openWf(wf, keepOpener = false) {
+  if (!keepOpener) { const ae = document.activeElement, opener = ae && ae.id && ae !== app ? "#" + ae.id : null; if (wf === "image") S.imgOpener = opener; else S.wfOpener = opener; S.lastRestore = ""; }
+  S.barWf = wf;
+  const sh = S.shape[wf], p = curPreset(), focus = (sel, select) => S.focusAfter = { sel, select };
+  switch (wf) {
+    case "sliders":
+      if (!p) return;
+      if (sh === "inplace") focus("#grid input");
+      else { S.wf = "sliders"; resetGang(); focus(sh === "dialog" ? "#btnSlidersBack" : "#grid input"); }
+      break;
+    case "npcdb":
+      S.db.info = null;
+      if (sh === "area") { S.area = "npcdb"; S.overlay = null; focus("#tvDb tr[aria-selected=true]"); }
+      else { S.wf = "npcdb"; focus("#tvDb tr[aria-selected=true]"); }
+      break;
+    case "fill": {
+      S.area = "morphs";
+      if (!emptyNpcs().length) { note("info", "No NPC in the table is empty!", true); break; }
+      S.fill = { sel: new Set(), confirming: false, err: null }; S.wf = "fill";
+      if (sh === "inspector" && S.narrow) S.overlay = "inspector";
+      focus("#fillList");
+      break;
+    }
+    case "bos":
+      if (!p) return;
+      if (sh === "dialog") { S.wf = "bos"; focus("#btnBosBack"); }
+      else if (sh === "editor") { S.editorTab = "bos"; focus("#bosText"); }
+      else { S.drawer = true; S.outTab = "bos"; focus("#bosText"); }
+      break;
+    case "rename":
+      if (!p) return;
+      S.rename = { active: sh !== "dialog", draft: p.name, err: null };
+      if (sh === "dialog") { S.wf = "rename"; focus("#renameField", true); }
+      else if (sh === "inline") focus("#renameInline", true);
+      else { if (S.narrow) S.overlay = "inspector"; focus("#inspName", true); }
+      break;
+    case "image":
+      if (sh === "window") S.imageOpen = true;                       // non-modal companion: does not take focus
+      else if (sh === "flyout") { S.imageFly = true; focus("#imgClose"); }
+      else { if (S.area !== "npcdb") S.morphFocus = "npcs"; if (S.narrow) S.overlay = "inspector"; focus("#inspPortrait"); }
+      break;
+  }
+  syncBar(); render();
+}
+function closeWf(restore = true) {
+  const opener = S.wfOpener;
+  S.wf = null; S.fill.confirming = false; S.fill.err = null; S.rename.active = false; S.rename.err = null;
+  if (restore && opener) S.focusAfter = { sel: opener, restore: true };
+  S.wfOpener = null; render();
+}
+function closeImage() { const op = S.imgOpener; S.imageFly = false; S.imageOpen = false; S.imgOpener = null; if (op) S.focusAfter = { sel: op, restore: true }; render(); }
+function resetGang() { S.gang = { all: false, min: false, max: false, vAll: 100, vMin: 100, vMax: 100 }; }
+
+/* ═══════════════════════════ Command bars ═══════════════════════════ */
+function templateCommands() {
+  const sh = S.shape;
+  return `<button data-act="job" data-kind="importXml">＋ Add BodySlide XML Presets</button><span class="sep"></span><button class="subtle" id="btnRename" data-act="open" data-wf="rename" title="F2">Rename${sh.rename === "dialog" ? "…" : ""}</button><button class="subtle" data-act="noop">Duplicate</button><button class="subtle danger" data-act="remove-preset">Remove</button><button class="subtle danger" data-act="clear-presets">Clear</button><span class="sep"></span><button class="subtle" id="btnSliders" data-act="open" data-wf="sliders">${sh.sliders === "inplace" ? "Go to SetSliders" : "Edit SetSliders…"}</button><button class="subtle" id="btnBos" data-act="open" data-wf="bos">View BoS JSON${sh.bos === "dialog" ? "…" : ""}</button><span class="sep"></span><span class="toggle" role="switch" aria-checked="${S.uunp}" data-act="uunp" tabindex="0"><span class="sw" aria-hidden="true"></span>UUNP</span>`;
+}
+function morphCommands() {
+  const npc = S.morphFocus === "npcs";
+  return `<input type="text" placeholder="Custom target, e.g. All|Female" data-input="newTarget" aria-label="New custom morph target" style="width:190px"><button data-act="add-target">Add</button><span class="sep"></span><button class="subtle" id="btnNpcDb" data-act="open" data-wf="npcdb" title="Ctrl+3">＋ Add NPCs…</button><button class="subtle" id="btnImage" data-act="open" data-wf="image" ${npc ? "" : "disabled"}>View Image</button><button class="subtle danger" data-act="remove-npc" ${npc ? "" : "disabled"}>Remove</button><span class="sep"></span><button class="subtle" id="btnFill" data-act="open" data-wf="fill">Fill Empty…</button><button class="subtle danger" data-act="clear-assignments">Clear Assignments</button>`;
+}
+function dbButtons(ctx) {
+  const busy = S.job && S.job.kind === "importNpcTxt";
+  return `<button id="btnDbFile" data-act="db-file" ${S.job ? "disabled" : ""}>＋ Add NPCs from file…</button><span class="toggle" role="switch" aria-checked="${S.db.assignRandom}" data-act="db-random" tabindex="0"><span class="sw" aria-hidden="true"></span>Assign random preset</span><button class="subtle" id="btnDbImage" data-act="open" data-wf="image">View Image</button><span class="sep"></span><button class="primary" id="btnDbAdd" data-act="db-add" ${busy ? "disabled" : ""}>${ctx === "area" ? "Add to Project" : "⇐ Add"}</button><button data-act="db-add-all" ${busy ? "disabled" : ""}>Add All (${visDb().length})</button><button class="subtle danger" data-act="db-clear" ${busy ? "disabled" : ""}>Clear</button>`;
+}
+function dbCommands() { return `<button class="subtle" id="btnAreaBack" data-act="area-back">← Back to Morphs</button><span class="sep"></span>${dbButtons("area")}`; }
+function generateCommands() {
+  const kind = S.area === "templates" ? "generateTemplates" : "generateMorphs";
+  return `<span class="toggle" role="switch" aria-checked="${S.omit}" data-act="omit" tabindex="0"><span class="sw" aria-hidden="true"></span>Omit redundant sliders</span><button class="primary" data-act="job" data-kind="${kind}" ${S.job ? "disabled" : ""}>▶ Generate ${S.area === "templates" ? "Templates" : "Morphs"}</button><button data-act="job" data-kind="exportIni" ${S.job ? "disabled" : ""}>Export INIs…</button>`;
+}
+
+/* ═══════════════════════════ Lists and tables ═══════════════════════════ */
+function presetList(id) {
+  return `<ul role="listbox" id="${id}" aria-label="Slider Presets" tabindex="0" data-list="presets">${visPresets().map(p => {
+    const i = S.presets.indexOf(p), sel = i === S.selPreset;
+    if (sel && S.rename.active && S.shape.rename === "inline") return `<li role="option" data-idx="${i}" aria-selected="true" class="rename-inline"><input type="text" id="renameInline" value="${esc(S.rename.draft)}" data-input="renameDraft" aria-label="New name" class="mono ${S.rename.err ? "invalid" : ""}" aria-invalid="${!!S.rename.err}">${S.rename.err ? `<div class="field-err" role="alert">${esc(S.rename.err)}</div>` : `<div class="muted" style="font-size:11px;margin-top:2px">Enter renames · Esc cancels</div>`}</li>`;
+    return `<li role="option" data-idx="${i}" aria-selected="${sel}" ${sel ? 'tabindex="0"' : ""}><span class="grow">${esc(p.name)}</span>${p.uunp ? `<span class="chip">UUNP</span>` : ""}<span class="muted mono">${p.choices.length}</span></li>`; }).join("")}</ul>`;
+}
+function targetList(id) { return `<ul role="listbox" id="${id}" aria-label="Custom Morph Targets" tabindex="0" data-list="targets">${S.targets.map((t, i) => `<li role="option" data-idx="${i}" aria-selected="${S.morphFocus === "targets" && i === S.selTarget}"><span class="grow mono">${esc(t.name)}</span>${t.presets.length ? `<span class="badge">${t.presets.length}</span>` : `<span class="chip" style="color:var(--warning)">empty</span>`}</li>`).join("")}</ul>`; }
+function morphsList() {
+  return `<header><h2 class="grow">Custom Targets</h2><span class="badge">${S.targets.length}</span></header><div class="body" style="flex:0 0 auto;max-height:40%">${targetList("lvTargets")}</div><div class="row" style="padding:6px 8px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)"><input type="text" placeholder="All|Female" data-input="newTarget" class="grow" aria-label="New custom morph target"><button data-act="add-target">Add</button></div><header><h2 class="grow">NPCs</h2><span class="badge">${S.npcs.length}</span></header><div class="body" id="lvNpcsBody"><ul role="listbox" id="lvNpcs" aria-label="NPC Morph Assignments" tabindex="0" data-list="npcs">${visNpcs().map(n => { const i = S.npcs.indexOf(n); return `<li role="option" data-idx="${i}" aria-selected="${S.morphFocus === "npcs" && i === S.selNpc}"><span class="grow">${esc(n.name)}</span>${n.presets.length ? `<span class="muted mono">${n.presets.length}</span>` : `<span style="color:var(--warning)" aria-label="no presets">!</span>`}</li>`; }).join("")}</ul></div>`;
+}
+function npcTable(id) {
+  const rows = visNpcs(), narrow = S.narrow;
+  return `<div class="filterrow"><input type="search" placeholder="Filter NPCs (Ctrl+K)" value="${esc(S.npcFilter)}" data-input="npcFilter" aria-label="Filter NPCs"><span class="muted row">${rows.length} of ${S.npcs.length}</span><span class="grow"></span><span class="muted">${emptyNpcs().length} without presets</span></div><div style="overflow:auto;flex:1 1 auto;min-height:0" id="tvNpcWrap"><table id="${id}" role="grid" aria-label="NPC Morph Assignments"><thead>${narrow ? `<tr><th>Name</th><th>Race</th><th>Slider Presets</th></tr>` : `<tr><th>Name</th><th>Master</th><th>Race</th><th>EditorID</th><th>FormID</th><th>Slider Presets</th></tr>`}</thead><tbody>${rows.map(n => { const i = S.npcs.indexOf(n), sel = S.morphFocus === "npcs" && i === S.selNpc; return `<tr role="row" data-npc="${i}" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" class="${n.presets.length ? "" : "warn"}">${narrow ? `<td>${esc(n.name)}</td><td>${esc(n.race)}</td>` : `<td>${esc(n.name)}</td><td class="muted">${esc(n.master)}</td><td>${esc(n.race)}</td><td class="mono">${esc(n.editorId)}</td><td class="mono muted">${esc(n.formId)}</td>`}<td>${n.presets.length ? esc(n.presets.join(" | ")) : "— none —"}</td></tr>`; }).join("")}</tbody></table></div>`;
+}
+function presetsForTarget(tgt) {
+  const available = S.presets.filter(p => !tgt.presets.includes(p.name));
+  return `<div class="row" style="padding:8px 10px;border-bottom:1px solid var(--border)"><span class="grow"><span class="muted">Slider presets for</span> <b class="mono">${esc(tgt.name)}</b></span><span class="badge" aria-label="count">${tgt.presets.length}</span></div><div style="padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px">${tgt.presets.map(p => `<span class="chip">${esc(p)}<button data-act="unassign" data-p="${esc(p)}" aria-label="Remove ${esc(p)}">✕</button></span>`).join("") || `<span class="muted">No presets assigned — this target will be skipped by Generate Morphs.</span>`}</div><div class="row" style="padding:0 10px 8px;flex-wrap:wrap"><select data-input="assignPick" aria-label="Preset to add"><option value="">Add preset…</option>${available.map(p => `<option>${esc(p.name)}</option>`).join("")}</select><button data-act="assign">Add</button><button data-act="assign-all">Add All</button><button class="danger" data-act="clear-target">Clear</button></div>`;
+}
+function npcFacts(n) { return `<dl class="kv"><dt>Name</dt><dd>${esc(n.name)}</dd><dt>Master</dt><dd>${esc(n.master)}</dd><dt>Race</dt><dd>${esc(n.race)}</dd><dt>EditorID</dt><dd class="mono">${esc(n.editorId)}</dd><dt>FormID</dt><dd class="mono">${esc(n.formId)}</dd></dl>`; }
+function imageBody(n) { const uri = n && portraitUri(n); return uri ? `<img class="portrait" src="${uri}" alt="${esc(n.name)}" title="${esc(imageFile(n))}">` : `<div class="portrait-empty">${n ? `No image found<br><span class="mono">${esc(imageFile(n))}</span>` : "No NPC selected."}</div>`; }
+function portraitBlock(n) { return `<div style="padding:10px 10px 0" id="inspPortrait" tabindex="-1" aria-label="NPC image"><div class="row" style="margin-bottom:4px"><span class="muted grow">Image</span>${shapeTag("image")}</div>${imageBody(n)}</div>`; }
+
+/* ═══════════════════════════ SetSliders grid + gang panel ═══════════════════════════ */
+function sliderGrid(p) {
+  const locked = S.gang.all || S.gang.min || S.gang.max;
+  return `<div class="slrows ${locked ? "rowlocked" : ""}" id="grid" role="group" aria-label="Slider choices for ${esc(p.name)}">${p.choices.map((c, i) => `<div class="slrow ${c.enabled ? "" : "off"}"><input type="checkbox" id="sl-${i}-en" ${c.enabled ? "checked" : ""} data-act="sl-enable" data-s="${i}" aria-label="Enable ${esc(c.name)}"><span class="fmt" id="sl-${i}-fmt">${esc(c.enabled ? fmtChoice(c) : c.name + " (disabled)")}</span><div class="rng"><label for="sl-${i}-min">Min</label><input type="range" id="sl-${i}-min" min="0" max="100" value="${c.min}" data-input="sl" data-s="${i}" data-k="min" ${c.enabled ? "" : "disabled"}><span class="pct" id="sl-${i}-min-pct">${c.min}%</span></div><div class="rng"><label for="sl-${i}-max">Max</label><input type="range" id="sl-${i}-max" min="0" max="100" value="${c.max}" data-input="sl" data-s="${i}" data-k="max" ${c.enabled ? "" : "disabled"}><span class="pct" id="sl-${i}-max-pct">${c.max}%</span></div></div>`).join("")}</div>`;
+}
+function gangPanel() {
+  const g = S.gang, cap = k => k[0].toUpperCase() + k.slice(1);
+  const row = (k, label) => { const on = g[k], v = g["v" + cap(k)]; return `<div class="grow-row"><input type="checkbox" id="gang-${k}" ${on ? "checked" : ""} data-act="gang-cb" data-k="${k}" aria-label="Gang ${label}"><span class="pct" id="gang-${k}-pct">${v}%</span><input type="range" id="gang-${k}-sl" min="0" max="100" value="${v}" data-input="gang" data-k="${k}" ${on ? "" : "disabled"} aria-label="${label} for all sliders"></div>`; };
+  const btns = k => [0, 100, 50].map(v => `<button data-act="gang-set" data-k="${k}" data-v="${v}">${v} All${k === "all" ? "" : " " + cap(k)}</button>`).join("");
+  return `<div class="gang" role="group" aria-label="Set all sliders"><h4>All</h4><div class="grid3">${btns("all")}</div>${row("all", "All")}<h4>Min</h4><div class="grid3">${btns("min")}</div>${row("min", "Min")}<h4>Max</h4><div class="grid3">${btns("max")}</div>${row("max", "Max")}<p class="muted" style="margin:4px 0 0;font-size:11px">Ticking a gang box locks the rows (as today); its slider writes one atomic preset edit.</p></div>`;
+}
+function readonlySliders(p) { return `<div class="card" style="padding:0;flex:1 1 auto;overflow:auto;min-height:120px"><table><thead><tr><th>Slider</th><th>Min</th><th>Max</th><th>Enabled</th></tr></thead><tbody>${p.choices.map(c => `<tr class="${c.enabled ? "" : "muted"}"><td>${esc(c.name)}</td><td class="mono">${c.min}%</td><td class="mono">${c.max}%</td><td>${c.enabled ? "☑" : "☐"}</td></tr>`).join("")}</tbody></table></div>`; }
+
+/* ═══════════════════════════ Panes per area ═══════════════════════════ */
+function templatesEditor(p) {
+  const tabs = S.shape.bos === "editor" ? `<div class="editor-tabs" role="tablist"><button role="tab" aria-selected="${S.editorTab === "sliders"}" data-act="editor-tab" data-t="sliders">Sliders</button><button role="tab" aria-selected="${S.editorTab === "bos"}" data-act="editor-tab" data-t="bos">BoS JSON</button></div>` : "";
+  let body;
+  if (S.shape.bos === "editor" && S.editorTab === "bos") body = bosBody(p, "editor");
+  else if (S.shape.sliders === "inplace") body = `<div class="muted">Template line (live)</div><textarea readonly id="tplLine" aria-label="Template line" style="height:60px;flex:0 0 auto">${esc(lineOf(p, S.omit))}</textarea><div class="row"><span class="muted grow">SetSliders — every gesture writes through; gang controls are in the inspector</span>${shapeTag("sliders")}</div>${sliderGrid(p)}`;
+  else body = `<div class="muted">Template line (read-only preview; edit via SetSliders)</div><textarea readonly id="tplLine" aria-label="Template line" style="height:60px;flex:0 0 auto">${esc(lineOf(p, S.omit))}</textarea><div class="row"><span class="muted grow">SetSliders (read-only here)</span><button class="subtle" style="height:24px" data-act="open" data-wf="sliders" id="btnSlidersInline">Edit…</button></div>${readonlySliders(p)}`;
+  return `<header><h2 class="grow">${esc(p.name)}</h2>${tabs}${jobInline()}</header><div class="body editor-body">${paneInfobars()}${body}</div>`;
+}
+function templatesInspector(p) {
+  const used = `${S.targets.filter(t => t.presets.includes(p.name)).length} targets, ${S.npcs.filter(n => n.presets.includes(p.name)).length} NPCs`;
+  const nameRow = S.shape.rename === "inspector"
+    ? `<dt><label for="inspName">Name</label></dt><dd><input type="text" id="inspName" class="mono ${S.rename.err ? "invalid" : ""}" value="${esc(S.rename.active ? S.rename.draft : p.name)}" data-input="renameDraft" aria-invalid="${!!S.rename.err}" aria-describedby="inspNameErr">${S.rename.err ? `<div class="field-err" id="inspNameErr" role="alert">${esc(S.rename.err)}</div>` : `<div class="muted" id="inspNameErr" style="font-size:11px">Enter or leave the field renames · Esc reverts</div>`}</dd>`
+    : `<dt>Name</dt><dd>${esc(p.name)}</dd>`;
+  const gang = S.shape.sliders === "inplace" ? `<div style="padding:0 10px 10px"><div class="row" style="margin-bottom:4px"><span class="muted grow">Set all</span>${shapeTag("sliders")}</div>${gangPanel()}</div>` : "";
+  return `<header><h3 class="grow">Inspector</h3>${S.shape.rename === "inspector" ? shapeTag("rename") : ""}</header><div class="body"><dl class="kv">${nameRow}<dt>Sliders</dt><dd>${p.choices.length} (${activeChoices(p, true).length} non-zero)</dd><dt>Body</dt><dd>${p.uunp ? "UUNP" : "CBBE"}</dd><dt>Used by</dt><dd>${used}</dd><dt>Status</dt><dd>${S.output.stale ? '<span style="color:var(--warning)">Output stale</span>' : '<span style="color:var(--success)">In output</span>'}</dd></dl>${gang}<div class="inspector-actions"><button data-act="open" data-wf="sliders" id="insSliders">${S.shape.sliders === "inplace" ? "Go to SetSliders" : "Edit SetSliders…"}</button><button data-act="open" data-wf="rename" id="insRename">Rename${S.shape.rename === "dialog" ? "…" : ""}</button><button data-act="noop">Duplicate</button><button data-act="open" data-wf="bos" id="insBos">View BoS JSON${S.shape.bos === "dialog" ? "…" : ""}</button><button class="danger" data-act="remove-preset">Remove</button></div></div>`;
+}
+function morphsEditor() { const bars = paneInfobars(); return `<header><h2 class="grow">NPC Morph Assignments</h2>${jobInline()}</header><div class="body">${bars ? `<div style="padding:8px 8px 0;display:flex;flex-direction:column;gap:6px">${bars}</div>` : ""}${npcTable("tvNpc")}</div>`; }
+function morphsInspector() {
+  if (S.wf === "fill" && S.shape.fill === "inspector") return `<header><h3 class="grow">Fill empty NPCs</h3>${shapeTag("fill")}<button class="subtle icon" data-act="close-wf" aria-label="Close">✕</button></header><div class="body">${fillPanel("inspector")}</div>`;
+  const t = curTarget(), npc = S.morphFocus === "npcs";
+  return `<header><h3 class="grow">Inspector</h3></header><div class="body">${npc && S.shape.image === "inspector" ? portraitBlock(t) : ""}${presetsForTarget(t)}${npc ? npcFacts(t) : ""}</div>`;
+}
+function dbSources() {
+  const srcs = [...new Set(S.npcdb.map(n => n.src))];
+  return `<header><h2 class="grow">Sources</h2><span class="badge">${S.npcdb.length}</span></header><div class="body">${srcs.map(s => `<div class="src-item"><span aria-hidden="true">▤</span><span class="grow">${esc(s)}</span><span class="muted mono">${S.npcdb.filter(n => n.src === s).length}</span></div>`).join("")}<p class="muted" style="padding:10px;font-size:12px">Pipe-delimited text files: <span class="mono">mod|name|editorId|race|formId</span>. The database is session-scoped — it is not saved in the Project.</p></div><div class="row" style="padding:6px 8px;border-top:1px solid var(--border)"><button class="subtle" data-act="db-file" ${S.job ? "disabled" : ""}>＋ Add from file…</button></div>`;
+}
+function dbTable(id, compact) {
+  const rows = visDb(); if (S.db.sel >= rows.length) S.db.sel = Math.max(0, rows.length - 1);
+  const busy = S.job && S.job.kind === "importNpcTxt";
+  return `${S.db.info ? `<div style="padding:8px 8px 0">${infobar({ sev: S.db.info.sev, text: S.db.info.text }, `<button class="subtle icon" data-act="db-info-close" aria-label="Dismiss">✕</button>`)}</div>` : ""}${busy ? `<div style="padding:8px 8px 0">${infobar({ sev: "info", text: `${S.job.label}… ${Math.round(S.job.progress)}%. The list fills in when it finishes; you can keep working or close this.` })}</div>` : ""}<div class="filterrow"><input type="search" placeholder="Filter NPC Database" value="${esc(S.db.filter)}" data-input="dbFilter" aria-label="Filter NPC Database" id="dbFilter"><span class="muted">${rows.length} of ${S.npcdb.length}</span></div><div class="${busy ? "dim" : ""}" style="overflow:auto;flex:1 1 auto;min-height:0" id="tvDbWrap"><table id="${id}" role="grid" aria-label="NPC Database"><thead><tr><th>Name</th>${compact ? "" : `<th>Master</th>`}<th>Race</th>${compact ? "" : `<th>EditorID</th><th>FormID</th>`}<th></th></tr></thead><tbody>${rows.map((n, i) => `<tr role="row" data-db="${i}" aria-selected="${i === S.db.sel}" tabindex="${i === S.db.sel ? 0 : -1}"><td>${esc(n.name)}</td>${compact ? "" : `<td class="muted">${esc(n.master)}</td>`}<td>${esc(n.race)}</td>${compact ? "" : `<td class="mono">${esc(n.editorId)}</td><td class="mono muted">${esc(n.formId)}</td>`}<td class="muted">${inProject(n) ? "in Project" : ""}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">EMPTY</td></tr>`}</tbody></table></div>`;
+}
+function dbEditor() { return `<header><h2 class="grow">NPC Database</h2>${shapeTag("npcdb")}${jobInline()}</header><div class="body">${dbTable("tvDb", false)}</div>`; }
+function dbInspector() {
+  const n = visDb()[S.db.sel];
+  if (!n) return `<header><h3 class="grow">Inspector</h3></header><div class="body"><p class="muted" style="padding:10px">No NPC selected.</p></div>`;
+  return `<header><h3 class="grow">Inspector</h3></header><div class="body">${S.shape.image === "inspector" ? portraitBlock(n) : ""}${npcFacts(n)}<div class="inspector-actions">${inProject(n) ? `<span class="muted">Already in the Project.</span>` : `<button class="primary" data-act="db-add" id="insDbAdd">Add to Project${S.db.assignRandom ? " + random preset" : ""}</button>`}<button data-act="open" data-wf="image" id="insDbImage">View Image</button></div></div>`;
+}
+
+/* ═══════════════════════════ Fill / BoS / image pieces ═══════════════════════════ */
+function fillList() { return `<ul role="listbox" aria-multiselectable="true" id="fillList" class="multi" tabindex="0" aria-label="Slider Presets to fill from" data-list="fill">${S.presets.map((p, i) => `<li role="option" data-idx="${i}" tabindex="-1" aria-selected="${S.fill.sel.has(i)}" data-act="fill-toggle" data-i="${i}"><span class="cb" aria-hidden="true">${S.fill.sel.has(i) ? "✓" : ""}</span><span class="grow">${esc(p.name)}</span>${p.uunp ? `<span class="chip">UUNP</span>` : ""}</li>`).join("")}</ul>`; }
+function fillPanel(mode) {
+  const n = emptyNpcs().length, k = S.fill.sel.size;
+  const head = `<p class="muted" style="margin:0">${n} of the ${visNpcs().length} NPCs shown have no preset; each gets a random one from your selection.${S.npcFilter ? " A filter is active — only the NPCs displayed will be filled." : ""}</p>`;
+  const err = S.fill.err ? infobar({ sev: "error", text: S.fill.err }) : "";
+  const confirm = S.fill.confirming ? `<div class="infobar warning" role="alertdialog" aria-label="Confirm fill"><span class="ico" aria-hidden="true">!</span><span class="grow">Fill ${n} NPCs from ${k} presets?</span><button class="primary" id="fillConfirmYes" data-act="fill-confirm-yes" style="height:26px">Fill</button><button data-act="fill-confirm-no" style="height:26px">Cancel</button></div>` : "";
+  const list = `<div class="card" style="overflow:auto;flex:1 1 auto;min-height:0;${mode === "flyout" ? "max-height:240px" : ""}">${fillList()}</div>`;
+  if (mode === "dialog") return `${head}${err}${list}<span class="muted">${k} selected</span>`;
+  const tools = `<div class="row" style="flex-wrap:wrap"><button class="subtle" data-act="fill-all" style="height:26px">Select All</button><button class="subtle" data-act="fill-invert" style="height:26px">Invert</button><span class="grow"></span><span class="muted">${k} selected</span></div>`;
+  const go = mode === "inspector" ? `<div class="row"><button class="primary" id="fillGo" data-act="fill-go" ${S.fill.confirming ? "disabled" : ""}>Fill ${n} NPCs</button><button data-act="close-wf">Cancel</button></div>` : "";
+  return `<div style="padding:${mode === "inspector" ? "10px" : "0"};display:flex;flex-direction:column;gap:8px;min-height:0">${head}${err}${confirm}${list}${tools}${go}</div>`;
+}
+function bosBody(p, ctx) {
+  const busy = S.job && S.job.kind === "exportBos";
+  return `<div class="row"><span class="muted grow mono">${esc(p.name)}.json${S.omit ? " · redundant sliders omitted" : ""}</span>${ctx !== "dialog" ? shapeTag("bos") : ""}</div><textarea readonly id="bosText" aria-label="BodyTypes of Skyrim JSON" style="min-height:${ctx === "dialog" ? "240px" : "120px"};flex:1 1 auto">${esc(bosJson(p))}</textarea>${ctx !== "dialog" ? `<div class="row"><button data-act="bos-export" ${S.job ? "disabled" : ""}>Export…</button><button data-act="bos-copy">Copy</button>${busy ? jobInline() : ""}</div>` : ""}`;
+}
+function companion() { const n = imageSubject(); return `<div class="companion" role="complementary" aria-label="NPC image"><header><span class="grow" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n ? n.name : "No NPC selected")}</span><button class="subtle icon" data-act="image-close" aria-label="Close" style="height:24px;width:24px">✕</button></header><div class="body"><div class="row" style="margin-bottom:6px"><span class="muted grow" style="font-size:11px">always on top · follows selection</span>${shapeTag("image")}</div>${imageBody(n)}</div></div>`; }
+
+/* ═══════════════════════════ Shell pieces ═══════════════════════════ */
+function railA() {
+  const it = (id, ico, label, cur, extra = "") => `<button class="rail-item" id="rail-${id}" data-act="rail" data-id="${id}" aria-current="${cur ? "page" : "false"}" aria-label="${label}" title="${label}">${ico}${extra}</button>`;
+  return `<nav class="rail" aria-label="Areas">${it("templates", "▤", "Templates (Ctrl+1)", S.area === "templates")}${it("morphs", "☺", "Morphs (Ctrl+2)", S.area === "morphs")}${it("npcdb", "≡", "NPC Database (Ctrl+3)", S.area === "npcdb" || S.wf === "npcdb")}<span class="spacer"></span>${it("output", "⤓", "Output drawer (Ctrl+`)", S.drawer, S.output.stale && S.output.templates ? `<span class="dot" style="position:absolute;top:6px;right:6px;background:var(--warning)"></span>` : "")}${it("settings", "⚙", "Settings", false)}</nav>`;
+}
+const outputText = kind => S.output[kind] || `; nothing generated yet — press Generate ${kind === "templates" ? "Templates" : "Morphs"} (Ctrl+G)`;
+function drawerA() {
+  const bosTab = S.shape.bos === "drawer", p = curPreset();
+  const tabs = bosTab ? `<div class="tabs" role="tablist"><button role="tab" aria-selected="${S.outTab === "ini"}" data-act="outtab" data-t="ini">INIs</button><button role="tab" aria-selected="${S.outTab === "bos"}" data-act="outtab" data-t="bos">BoS JSON · ${esc(p.name)}</button></div>` : "";
+  const body = bosTab && S.outTab === "bos" ? `<div class="body single"><div>${bosBody(p, "drawer")}</div></div>` : `<div class="body"><div><span class="muted">templates.ini</span><textarea readonly aria-label="templates.ini">${esc(outputText("templates"))}</textarea></div><div><span class="muted">morphs.ini</span><textarea readonly aria-label="morphs.ini">${esc(outputText("morphs"))}</textarea></div></div>`;
+  return `<section class="drawer ${S.drawer ? "" : "closed"}" aria-label="Output"><header><button class="subtle" id="drawerToggle" data-act="toggle-drawer" aria-expanded="${S.drawer}" style="height:26px;padding:0 6px">${S.drawer ? "▾" : "▴"} <b>Output</b></button>${tabs}<span class="muted">${S.output.at ? `generated ${fmtTime(S.output.at)}` : "not generated"}${S.output.stale && S.output.at ? " · stale" : ""}</span><span class="grow"></span>${S.job ? `<span class="ring" aria-hidden="true"></span>` : ""}<button class="subtle" data-act="copy" style="height:24px">Copy</button><button class="subtle" data-act="job" data-kind="exportIni" style="height:24px" ${S.job ? "disabled" : ""}>Export…</button></header>${body}</section>`;
+}
+function activityPanel() { return `<div class="scrim" data-act="close-overlay"></div><div class="side-overlay right" role="dialog" aria-label="Activity" style="width:380px"><header><h2 class="grow">Activity</h2><button class="subtle" data-act="clear-notes">Clear</button><button class="subtle icon" data-act="close-overlay" aria-label="Close">✕</button></header><div class="body"><ul style="list-style:none;margin:0;padding:0">${S.notes.map(n => `<li style="display:grid;grid-template-columns:64px 16px 1fr;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)"><span class="muted mono">${fmtTime(n.time)}</span><span aria-hidden="true">${ICO[n.sev]}</span><span>${esc(n.text)}</span></li>`).join("") || `<li class="muted" style="padding:10px">No activity yet.</li>`}</ul></div></div>`; }
+function confirmDialog() { return S.pendingConfirm ? `<div class="modal-scrim top"><div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="ct" style="width:420px"><header id="ct">Confirm Action</header><div class="body"><p style="margin:0;white-space:pre-line">${esc(S.pendingConfirm.text)}</p></div><footer><span class="grow"></span><button class="primary" id="confirmYes" data-act="confirm-yes">${esc(S.pendingConfirm.okLabel)}</button><button data-act="confirm-no">Cancel</button></footer></div></div>` : ""; }
+function errorDialog() { return S.errorModal ? `<div class="modal-scrim top"><div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="et" style="width:460px"><header id="et" style="color:var(--error)">✕ Error</header><div class="body"><p style="margin:0;white-space:pre-line" class="mono">${esc(S.errorModal)}</p><p class="muted" style="margin:0">Job failures are the one message that stays modal (#67).</p></div><footer><span class="grow"></span><button class="primary" id="errOk" data-act="err-ok">OK</button></footer></div></div>` : ""; }
+
+/* Transient workflow surfaces. They are children of the shell so they are clipped by it (#67). */
+function surfaces() {
+  let h = ""; const p = curPreset();
+  if (S.wf === "sliders") {
+    const inner = `<div class="grid-wrap"><div style="display:flex;flex-direction:column;min-height:0;gap:6px"><textarea readonly id="tplLine" aria-label="Template line" style="height:52px;flex:0 0 auto">${esc(lineOf(p, S.omit))}</textarea>${sliderGrid(p)}</div>${gangPanel()}</div>`;
+    if (S.shape.sliders === "dialog") h += `<div class="modal-scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="slT" style="width:660px;height:600px"><header><span id="slT" class="grow">SetSliders: ${esc(p.name)}</span>${shapeTag("sliders")}</header><div class="body">${inner}</div><footer><span class="muted grow">Every gesture writes through — Back only closes (as today).</span><button id="btnSlidersBack" data-act="close-wf">Back</button></footer></div></div>`;
+    else h += `<div class="scrim" data-act="close-wf"></div><div class="side-overlay right" role="dialog" aria-modal="true" aria-label="SetSliders" style="width:660px;max-width:calc(100% - 48px)"><header><h2 class="grow">SetSliders: ${esc(p.name)}</h2>${shapeTag("sliders")}<button class="subtle icon" id="btnSlidersBack" data-act="close-wf" aria-label="Close">✕</button></header><div class="body" style="padding:10px;gap:6px">${inner}</div></div>`;
+  }
+  if (S.wf === "npcdb") {
+    if (S.shape.npcdb === "dialog") h += `<div class="modal-scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="dbT" style="width:740px;height:540px"><header><span id="dbT" class="grow">NPC Database</span><span class="muted">(${S.npcdb.length})</span>${shapeTag("npcdb")}</header><div class="body" style="padding:0;gap:0">${dbTable("tvDb", false)}</div><footer style="flex-wrap:wrap">${dbButtons("dialog")}<span class="grow"></span><button id="btnDbBack" data-act="close-wf">Back</button></footer></div></div>`;
+    else h += `<div class="side-overlay" role="dialog" aria-label="NPC Database" style="left:48px;width:470px;max-width:calc(100% - 48px)"><header><h2 class="grow">NPC Database</h2><span class="muted">(${S.npcdb.length})</span>${shapeTag("npcdb")}<button class="subtle icon" id="btnDbBack" data-act="close-wf" aria-label="Close">✕</button></header><div class="body">${dbTable("tvDb", true)}</div><div class="row" style="padding:6px 8px;border-top:1px solid var(--border);flex-wrap:wrap">${dbButtons("overlay")}</div></div>`;
+  }
+  if (S.wf === "fill") {
+    if (S.shape.fill === "dialog") h += `<div class="modal-scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="fiT" style="width:430px;height:480px"><header><span id="fiT" class="grow">Slider Presets</span>${shapeTag("fill")}</header><div class="body">${fillPanel("dialog")}</div><footer style="flex-wrap:wrap"><button class="primary" id="fillGo" data-act="fill-go">Fill</button><button data-act="fill-all">Select All</button><button data-act="fill-invert">Invert Selection</button><span class="grow"></span><button id="fillBack" data-act="close-wf">Back</button></footer></div></div>`;
+    else if (S.shape.fill === "flyout") h += `<div class="light-scrim" data-act="close-wf"></div><div class="flyout" id="fillFlyout" role="dialog" aria-label="Fill empty NPCs" data-anchor="#btnFill" style="width:380px"><header><b class="grow">Fill empty NPCs</b>${shapeTag("fill")}</header><div class="body">${fillPanel("flyout")}</div><footer><button class="primary" id="fillGo" data-act="fill-go" ${S.fill.sel.size ? "" : "disabled"}>Fill ${emptyNpcs().length} NPCs from ${S.fill.sel.size} presets</button><span class="grow"></span><button data-act="close-wf">Cancel</button></footer></div>`;
+  }
+  if (S.wf === "bos") h += `<div class="modal-scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="bosT" style="width:640px;height:440px"><header><span id="bosT" class="grow">BodyTypes of Skyrim JSON: ${esc(p.name)}</span>${shapeTag("bos")}</header><div class="body">${bosBody(p, "dialog")}</div><footer><button data-act="bos-export" ${S.job ? "disabled" : ""}>Export…</button>${S.job && S.job.kind === "exportBos" ? jobInline() : ""}<span class="grow"></span><button data-act="bos-copy">Copy</button><button id="btnBosBack" data-act="close-wf">Back</button></footer></div></div>`;
+  if (S.wf === "rename") h += `<div class="modal-scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="rnT" style="width:400px"><header><span id="rnT" class="grow">Rename: ${esc(p.name)}</span>${shapeTag("rename")}</header><div class="body"><label for="renameField">Enter new name:</label><input type="text" id="renameField" class="mono ${S.rename.err ? "invalid" : ""}" value="${esc(S.rename.draft)}" data-input="renameDraft" aria-invalid="${!!S.rename.err}" aria-describedby="renameErr"><div class="field-err" id="renameErr" role="alert">${esc(S.rename.err || "")}</div></div><footer><span class="grow"></span><button class="primary" data-act="rename-commit">Rename</button><button data-act="close-wf">Cancel</button></footer></div></div>`;
+  if (S.imageFly) { const n = imageSubject(); h += `<div class="light-scrim" data-act="image-close"></div><div class="flyout" id="imgFlyout" role="dialog" aria-label="NPC image" data-anchor="${S.wf === "npcdb" || S.area === "npcdb" ? "#btnDbImage" : "#btnImage"}" style="width:300px"><header><b class="grow">${esc(n ? n.name : "No NPC selected")}</b>${shapeTag("image")}<button class="subtle icon" id="imgClose" data-act="image-close" aria-label="Close" style="height:24px;width:24px">✕</button></header><div class="body">${imageBody(n)}</div></div>`; }
+  if (S.imageOpen && S.shape.image === "window") h += companion();
+  return h;
+}
+
+/* ═══════════════════════════ Variant A · Rail Studio ═══════════════════════════ */
+function renderA() {
+  const narrow = S.narrow, p = curPreset();
+  let cmd, listCol, editor, inspector;
+  if (S.area === "templates") {
+    cmd = templateCommands();
+    listCol = `<header><input type="search" placeholder="Search presets (Ctrl+K)" class="grow" value="${esc(S.search)}" data-input="search" aria-label="Search presets"></header><div class="body" id="lvPresetsBody">${presetList("lvPresets")}</div><div class="row" style="padding:6px 8px;border-top:1px solid var(--border)"><span class="muted grow">${visPresets().length} presets</span><button class="subtle" data-act="job" data-kind="importXml">＋ Add XML</button></div>`;
+    editor = templatesEditor(p); inspector = templatesInspector(p);
+  } else if (S.area === "morphs") { cmd = morphCommands(); listCol = morphsList(); editor = morphsEditor(); inspector = morphsInspector(); }
+  else { cmd = dbCommands(); listCol = dbSources(); editor = dbEditor(); inspector = dbInspector(); }
+  const tail = `${drawerA()}${surfaces()}${S.overlay === "activity" ? activityPanel() : ""}${confirmDialog()}${errorDialog()}`;
+  const shell = narrow
+    ? `<div class="shell narrow">${railA()}<div class="col" id="paneEditor">${editor}</div>${S.overlay === "list" ? `<div class="scrim" data-act="close-overlay"></div><div class="side-overlay" style="left:48px" role="dialog" aria-label="List" id="paneList">${listCol}</div>` : ""}${S.overlay === "inspector" ? `<div class="scrim" data-act="close-overlay"></div><div class="side-overlay right" role="dialog" aria-label="Inspector" id="paneInspector">${inspector}</div>` : ""}${tail}</div>`
+    : `<div class="shell">${railA()}<div class="col" id="paneList">${listCol}</div><div class="col" id="paneEditor">${editor}</div><div class="col" id="paneInspector">${inspector}</div>${tail}</div>`;
+  const sb = S.job ? `<span class="ring" aria-hidden="true"></span><span>${esc(S.job.label)}…</span><span class="prog"><progress value="${S.job.progress}" max="100"></progress></span><span class="mono">${Math.round(S.job.progress)}%</span><button class="subtle" data-act="cancel-job" style="height:22px">Cancel</button>` : `<span>${esc(S.statusText)}</span>`;
+  return `<div class="A" style="display:flex;flex-direction:column;height:100%"><div class="titlebar"><b>BS2BG</b><span class="muted">— MyBodies.jbs2bg${S.output.stale ? " •" : ""}</span><span class="grow"></span>${narrow ? `<button class="subtle" data-act="overlay" data-o="list">☰ List</button><button class="subtle" data-act="overlay" data-o="inspector">Inspector</button>` : ""}<button class="subtle" data-act="noop">File ▾</button><button class="subtle" data-act="noop">Help ▾</button></div><div class="cmdbar">${cmd}<span class="grow"></span>${generateCommands()}</div>${shell}<div class="statusbar">${sb}<span class="grow"></span><button class="subtle" data-act="open-activity" style="height:22px">Activity ${S.notes.length ? `<span class="badge">${S.notes.length}</span>` : ""}</button><span class="muted">${S.presets.length} presets · ${S.targets.length} targets · ${S.npcs.length} NPCs</span></div></div>`;
+}
+
+/* ═══════════════════════════ Design notes per shape (help panel) ═══════════════════════════ */
+const NOTES = {
+  sliders: { dialog: "660×600 modal over the workbench. Back is focused on open (as today); every gesture writes through; Back/Esc closes and focus returns to the launcher.", inplace: "No popup: the editor pane is the grid and the master gang controls move into the inspector. “Go to SetSliders” only moves focus. Nothing to close, nothing to restore.", overlay: "660px side overlay over editor + inspector with a scrim; first row focused. The preset list stays visible so you can switch presets while the grid is open (↑↓ in the list)." },
+  npcdb: { dialog: "740×540 modal. Add keeps it open (as today); Add All / Clear confirm modally on top. Import is a status-bar job and the dialog stays closable (today: pane disabled, WAIT cursor, close blocked).", area: "Its own rail area (Ctrl+3): Sources | table | inspector with facts, portrait, Add to Project. “Add NPCs…” navigates there; “← Back to Morphs” returns and restores focus to the launcher.", overlay: "Docked non-modal panel over the list column (no scrim). The NPC Morph Assignments table stays visible and rows appear as you Add. Esc or ✕ closes and restores focus." },
+  fill: { dialog: "430×480 modal multi-select; Fill opens a second modal confirm on top (as today). “You don't have a selection!” is an inline error instead of a CustomNotif.", inspector: "The inspector becomes the fill panel; Fill asks inline (warning InfoBar with Fill/Cancel) — no modal at all. The result InfoBar lands in the NPC editor.", flyout: "Light-dismiss flyout anchored to “Fill Empty…”. The button carries the count (“Fill 4 NPCs from 2 presets”) so there is no separate confirm." },
+  bos: { dialog: "640×440 modal with Export/Copy/Back (as today, Back focused). Copy reports through the status bar + Activity instead of a CustomNotif; Export is a status-bar job.", editor: "A tab in the editor pane next to the sliders, always current for the selected preset. Copy/Export sit under the text.", drawer: "A tab in the Output drawer next to the INIs — it is generated output, so it lives with the output; Ctrl+` reaches it." },
+  rename: { dialog: "400px modal: field prefilled and selected, warning under the field (as today). Enter renames, Esc cancels.", inline: "F2 or Rename turns the selected list item into a field. Enter commits, Esc cancels and restores focus; the error shows under the field.", inspector: "Name in the inspector is always editable: Enter or leaving the field commits, Esc reverts. “Rename” only focuses the field. There is no Cancel button." },
+  image: { window: "Non-modal companion pinned top-right of the workbench, above the panes; follows the selection in the NPC table and the NPC Database (as today). Does not take focus.", inspector: "Portrait at the top of the NPC inspector (and of the NPC Database inspector). “View Image” just focuses it. Nothing opens or closes.", flyout: "Light-dismiss flyout from “View Image” with the image at native size. Esc/✕ closes and restores focus." },
+};
+function helpHtml() {
+  const wfs = Object.keys(WF).map(wf => `<div class="wf"><b>${esc(WF[wf].label)}</b>${Object.keys(WF[wf].shapes).map(k => `<label><input type="radio" name="sh-${wf}" value="${k}" data-wf="${wf}" ${S.shape[wf] === k ? "checked" : ""}> ${esc(WF[wf].shapes[k])}<span class="n">${esc(NOTES[wf][k])}</span></label>`).join("")}</div>`).join("");
+  return `<h2>Secondary workflows · shapes</h2><p class="muted" style="margin:0 0 6px">Pick a shape per workflow, then launch it from the app (or the pink <b>Open</b> button). While a workflow is open, <kbd>←</kbd> <kbd>→</kbd> re-opens it in the next shape. The pink <span class="mono">focus ↩</span> readout shows where focus went after the last close.</p>${wfs}
+<h3>Reporting policy as prototyped</h3><ul><li>Per-gesture edits (one slider, one enable box, one Add) → status-bar text only, no Activity entry.</li><li>Bulk edits (gang controls), Add All, Fill, Rename, imports, exports → Activity entry; durable ones also an InfoBar in the pane that triggered them.</li><li>Validation (rename, empty selection) → inline in the surface, never a dialog.</li><li>Job failures → modal (per #67). Destructive actions → modal confirm.</li></ul>
+<h3>Questions to settle</h3><ul><li>Per workflow: which shape — or which mix (e.g. “inline rename but the dialog for SetSliders”)?</li><li>Focus on open: today SetSliders/BoS focus <i>Back</i>, Rename focuses the field. Keep? On close: back to the launcher, as shown?</li><li>Long work behind a surface (NPC import, BoS export): status-bar job with the surface still usable/closable, or today's disabled pane + blocked close?</li><li>Reporting tiers above — acceptable? Anything that must stay a dialog?</li><li>Import parse problems (skipped lines): warning InfoBar + Activity as shown, or silent as today?</li><li>Should the image retarget on selection changes while its surface is open (as today)? Should the companion take focus?</li><li>Rename stays presets-only (as today), or also Custom Morph Targets?</li></ul>
+<h3>Keys</h3><table><tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd></td><td>Templates / Morphs / NPC Database (in its shape)</td></tr><tr><td><kbd>F2</kbd></td><td>Rename selected preset (in its shape)</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>\`</kbd></td><td>Output drawer</td></tr><tr><td><kbd>F6</kbd> / <kbd>F7</kbd></td><td>Cycle panes / inspector overlay (narrow)</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Focus search / filter</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Generate / Export</td></tr><tr><td><kbd>↑</kbd><kbd>↓</kbd> <kbd>Space</kbd></td><td>Move in lists/tables; toggle in the fill list; Enter in the NPC Database adds</td></tr><tr><td><kbd>Esc</kbd></td><td>Cascade: confirm → flyout → surface → overlay → drawer</td></tr><tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Prototype: cycle the shape of the selected workflow</td></tr></table>`;
+}
+
+/* ═══════════════════════════ Render + prototype bar ═══════════════════════════ */
+const app = document.getElementById("app");
+function render() {
+  // Selections are indices into mutable lists; clamp them so a shrink (remove, clear) can never make a
+  // render throw — a presentation exception must not stall the job loop (#67).
+  S.selPreset = Math.max(0, Math.min(S.selPreset, S.presets.length - 1)); S.selTarget = Math.max(0, Math.min(S.selTarget, S.targets.length - 1)); S.selNpc = Math.max(0, Math.min(S.selNpc, S.npcs.length - 1));
+  if (S.morphFocus === "npcs" && !S.npcs.length) S.morphFocus = "targets";
+  const focused = document.activeElement, fid = focused && focused.id, fsel = focused && focused.getAttribute && focused.getAttribute("data-idx"), frole = focused && focused.getAttribute && focused.getAttribute("role");
+  // Full re-render on every change; keep scroll offsets of elements that carry an id.
+  const scrolls = [...app.querySelectorAll("[id]")].filter(e => e.scrollTop).map(e => [e.id, e.scrollTop]);
+  app.innerHTML = renderA();
+  scrolls.forEach(([id, t]) => { const e = document.getElementById(id); if (e) e.scrollTop = t; });
+  if (fid) { const e = document.getElementById(fid); if (e) e.focus({ preventScroll: true }); }
+  else if (fsel != null && frole) { const e = app.querySelector(`[role="${frole}"][data-idx="${fsel}"]`); if (e) e.focus({ preventScroll: true }); }
+  if (S.focusAfter) {
+    const f = S.focusAfter; S.focusAfter = null; const e = app.querySelector(f.sel);
+    if (e) { if (!e.hasAttribute("tabindex") && !/^(INPUT|BUTTON|SELECT|TEXTAREA|A)$/.test(e.tagName)) e.setAttribute("tabindex", "-1"); e.focus(); if (f.select && e.select) e.select(); }
+    if (f.restore) S.lastRestore = e ? f.sel : f.sel + " (gone)";
+  }
+  positionFlyouts(); syncBar();
+  const help = document.getElementById("help"); help.hidden = !S.help; if (S.help) help.innerHTML = helpHtml();
+}
+/* Flyouts anchor to their launcher; the launcher lives in the command bar above the shell, so the
+   flyout lands at the top of the shell under it (clamped inside the shell, like a Fluent Flyout). */
+function positionFlyouts() {
+  const shell = app.querySelector(".shell"); if (!shell) return; const sr = shell.getBoundingClientRect();
+  app.querySelectorAll(".flyout[data-anchor]").forEach(f => {
+    const a = app.querySelector(f.dataset.anchor), fr = f.getBoundingClientRect();
+    let left = 8, top = 8;
+    if (a) { const ar = a.getBoundingClientRect(); left = ar.left - sr.left; top = ar.bottom - sr.top + 4; }
+    left = Math.max(4, Math.min(left, sr.width - fr.width - 4)); top = Math.max(4, Math.min(top, sr.height - fr.height - 4));
+    f.style.left = left + "px"; f.style.top = top + "px";
+  });
+}
+function syncBar() {
+  const wf = S.barWf;
+  document.getElementById("pb-label").textContent = `${WF[wf].label}: ${WF[wf].shapes[S.shape[wf]]}`;
+  document.getElementById("pb-wf").value = wf;
+  document.getElementById("pb-theme").value = S.theme;
+  document.getElementById("pb-narrow").classList.toggle("on", S.narrow);
+  document.getElementById("pb-motion").classList.toggle("on", S.motion === "reduced");
+  document.getElementById("pb-fail").classList.toggle("on", S.failNext);
+  document.getElementById("pb-help").classList.toggle("on", S.help);
+  document.getElementById("pb-focus").textContent = S.lastRestore ? "focus ↩ " + S.lastRestore : "";
+  document.getElementById("stage").classList.toggle("narrow", S.narrow);
+  const sys = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.documentElement.dataset.theme = S.theme === "system" ? sys : S.theme;
+  document.documentElement.dataset.motion = S.motion === "reduced" || (S.motion === "auto" && matchMedia("(prefers-reduced-motion: reduce)").matches) ? "reduced" : "auto";
+  try { const u = new URL(location.href); Object.keys(WF).forEach(k => u.searchParams.set(k, S.shape[k])); history.replaceState(null, "", u); } catch (e) { /* file:// in some browsers refuses replaceState; the bar still works */ }
+}
+function setShape(wf, shape) {
+  if (!WF[wf].shapes[shape] || S.shape[wf] === shape) return;
+  const open = isOpen(wf); if (open) resetWf(wf);
+  S.shape[wf] = shape; S.barWf = wf;
+  if (open) openWf(wf, true); else { syncBar(); render(); }
+}
+function cycleShape(d) { const wf = S.barWf, ks = Object.keys(WF[wf].shapes); setShape(wf, ks[(ks.indexOf(S.shape[wf]) + d + ks.length) % ks.length]); }
+const pbWf = document.getElementById("pb-wf");
+pbWf.innerHTML = Object.keys(WF).map(k => `<option value="${k}">${WF[k].label}</option>`).join("");
+pbWf.onchange = e => { S.barWf = e.target.value; syncBar(); };
+document.getElementById("pb-prev").onclick = () => cycleShape(-1);
+document.getElementById("pb-next").onclick = () => cycleShape(1);
+document.getElementById("pb-open").onclick = () => { const wf = S.barWf; if (wf !== "npcdb" && wf !== "fill" && wf !== "image" && S.area !== "templates") { S.area = "templates"; } if ((wf === "fill" || wf === "image") && S.area !== "morphs") { S.area = "morphs"; if (wf === "image") S.morphFocus = "npcs"; } render(); const b = app.querySelector({ sliders: "#btnSliders", npcdb: "#btnNpcDb", fill: "#btnFill", bos: "#btnBos", rename: "#btnRename", image: "#btnImage" }[wf]); if (b) b.focus(); openWf(wf); };
+document.getElementById("pb-theme").onchange = e => { S.theme = e.target.value; syncBar(); };
+document.getElementById("pb-narrow").onclick = () => { S.narrow = !S.narrow; S.overlay = null; syncBar(); render(); };
+document.getElementById("pb-motion").onclick = () => { S.motion = S.motion === "reduced" ? "auto" : "reduced"; syncBar(); };
+document.getElementById("pb-fail").onclick = () => { S.failNext = !S.failNext; syncBar(); };
+document.getElementById("pb-help").onclick = () => { S.help = !S.help; syncBar(); render(); };
+document.getElementById("help").addEventListener("change", e => { if (e.target.dataset.wf) setShape(e.target.dataset.wf, e.target.value); });
+
+/* ═══════════════════════════ Domain actions ═══════════════════════════ */
+function validateRename(oldName, nw) {
+  const t = nw.trim();
+  if (!t) return "A Slider Preset name must not be empty.";
+  if (t.includes(".")) return "A Slider Preset name must not contain dots.";
+  if (t === oldName) return "Name needs to be different than the old one!";
+  if (S.presets.some(p => p.name.toLowerCase() === t.toLowerCase())) return "A Slider Preset with this name already exists.";
+  return null;
+}
+function commitRename(nw) {
+  const p = curPreset(), err = validateRename(p.name, nw), field = S.shape.rename === "dialog" ? "#renameField" : S.shape.rename === "inline" ? "#renameInline" : "#inspName";
+  if (err) { S.rename.err = err; S.rename.draft = nw; S.rename.active = true; S.focusAfter = { sel: field }; render(); return; }
+  const old = p.name, t = S.targets.filter(x => x.presets.includes(old)).length, n = S.npcs.filter(x => x.presets.includes(old)).length;
+  p.name = nw.trim(); S.targets.forEach(x => x.presets = x.presets.map(q => q === old ? p.name : q)); S.npcs.forEach(x => x.presets = x.presets.map(q => q === old ? p.name : q)); S.output.stale = true;
+  note("success", `Renamed "${old}" to "${p.name}" (${t} targets, ${n} NPCs updated).`);
+  if (S.shape.rename === "inspector") { S.rename = { active: false, draft: "", err: null }; render(); } else closeWf();
+}
+function cancelRename() {
+  S.rename = { active: false, draft: "", err: null };
+  if (S.wf === "rename") closeWf();
+  else if (S.shape.rename === "inline") { const op = S.wfOpener; S.wfOpener = null; if (op) S.focusAfter = { sel: op, restore: true }; render(); }
+  else render();   // inspector: revert in place, focus stays in the field
+}
+function applyGang(k, v) {
+  const p = curPreset();
+  p.choices.forEach(c => { if (!c.enabled) return; if (k === "all") { c.min = v; c.max = v; } else if (k === "min") { c.min = v; if (c.max < v) c.max = v; } else { c.max = v; if (c.min > v) c.min = v; } });
+  S.gang["v" + k[0].toUpperCase() + k.slice(1)] = v; S.output.stale = true;
+  note("info", `${p.name}: ${k === "all" ? "all sliders" : "all " + k + " values"} set to ${v}% (${p.choices.filter(c => c.enabled).length} sliders, one edit).`); render();
+}
+function patchRow(i) {   // live DOM patch while a range is being dragged; the full render happens on change
+  const c = curPreset().choices[i], set = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+  set(`sl-${i}-fmt`, c.enabled ? fmtChoice(c) : c.name + " (disabled)"); set(`sl-${i}-min-pct`, c.min + "%"); set(`sl-${i}-max-pct`, c.max + "%");
+  const mn = document.getElementById(`sl-${i}-min`), mx = document.getElementById(`sl-${i}-max`); if (mn) mn.value = c.min; if (mx) mx.value = c.max;
+  app.querySelectorAll("#tplLine").forEach(t => t.value = lineOf(curPreset(), S.omit));
+}
+function doFill() {
+  const sel = [...S.fill.sel].map(i => S.presets[i].name), empties = emptyNpcs();
+  empties.forEach(n => n.presets = [sel[Math.floor(Math.random() * sel.length)]]); S.output.stale = true;
+  note("success", `Filled ${empties.length} NPCs without presets from ${sel.length} selected presets.`, true); closeWf();
+}
+const randomPreset = () => S.presets.length ? [S.presets[Math.floor(Math.random() * S.presets.length)].name] : [];
+
+app.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act;
+  switch (act) {
+    case "rail": { const id = el.dataset.id; if (id === "output") S.drawer = !S.drawer; else if (id === "settings") status("Settings is out of scope for this prototype."); else if (id === "npcdb") { openWf("npcdb"); return; } else { S.area = id; S.overlay = null; } break; }
+    case "open": openWf(el.dataset.wf); return;
+    case "close-wf": closeWf(); return;
+    case "image-close": closeImage(); return;
+    case "area-back": { const op = S.wfOpener; S.area = "morphs"; S.wfOpener = null; if (op) S.focusAfter = { sel: op, restore: true }; break; }
+    case "editor-tab": S.editorTab = el.dataset.t; break;
+    case "outtab": S.outTab = el.dataset.t; break;
+    case "job": startJob(el.dataset.kind); return;
+    case "cancel-job": cancelJob(); return;
+    case "toggle-drawer": S.drawer = !S.drawer; break;
+    case "overlay": S.overlay = S.overlay === el.dataset.o ? null : el.dataset.o; break;
+    case "close-overlay": S.overlay = null; break;
+    case "open-activity": S.overlay = S.overlay === "activity" ? null : "activity"; break;
+    case "clear-notes": S.notes = []; break;
+    case "dismiss": { const n = S.notes.find(x => x.id == el.dataset.id); if (n) n.dismissed = true; break; }
+    case "uunp": S.uunp = !S.uunp; S.output.stale = true; S.selPreset = S.presets.findIndex(p => p.uunp === S.uunp); break;
+    case "omit": S.omit = !S.omit; S.output.stale = true; break;
+    case "copy": note(S.output.templates || S.output.morphs ? "success" : "warning", S.output.templates || S.output.morphs ? "Output copied to clipboard!" : "There is nothing in the output, generate first!"); break;
+    case "add-target": { const inp = app.querySelector('[data-input="newTarget"]'); const v = (inp && inp.value || "").trim(); if (!v) { status("Enter a target such as All|Female."); break; } if (S.targets.some(t => t.name.toLowerCase() === v.toLowerCase())) { note("error", `A Custom Morph Target named "${v}" already exists.`); break; } S.targets.push({ name: v, presets: [] }); S.selTarget = S.targets.length - 1; S.morphFocus = "targets"; S.output.stale = true; note("success", `Added ${v}.`); break; }
+    case "assign": { const sel = app.querySelector('[data-input="assignPick"]'); const v = sel && sel.value; if (!v) break; curTarget().presets.push(v); S.output.stale = true; status(`Added ${v} to ${curTarget().name}.`); break; }
+    case "assign-all": curTarget().presets = S.presets.map(p => p.name); S.output.stale = true; note("info", `Assigned every preset to ${curTarget().name}.`); break;
+    case "unassign": curTarget().presets = curTarget().presets.filter(p => p !== el.dataset.p); S.output.stale = true; status(`Removed ${el.dataset.p} from ${curTarget().name}.`); break;
+    case "clear-target": confirm2(`Clear all Slider Presets from ${curTarget().name}?`, () => { curTarget().presets = []; S.output.stale = true; note("info", `Cleared ${curTarget().name}.`); }, "Clear"); return;
+    case "clear-assignments": confirm2("Clear the Slider Presets of every NPC currently shown in the table?", () => { visNpcs().forEach(n => n.presets = []); S.output.stale = true; note("info", `${visNpcs().length} NPCs cleared.`); }, "Clear"); return;
+    case "remove-npc": { const n = curTarget(); confirm2(`Remove ${n.name} from NPC Morph Assignments?`, () => { S.npcs.splice(S.npcs.indexOf(n), 1); S.selNpc = Math.max(0, S.selNpc - 1); S.output.stale = true; note("info", `Removed ${n.name}.`); }, "Remove"); return; }
+    case "remove-preset": { const nm = curPreset().name; confirm2(`Remove "${nm}"? It is referenced by ${S.targets.filter(t => t.presets.includes(nm)).length} targets and ${S.npcs.filter(n => n.presets.includes(nm)).length} NPCs; those references will be removed too.`, () => { S.presets.splice(S.selPreset, 1); S.targets.forEach(t => t.presets = t.presets.filter(p => p !== nm)); S.npcs.forEach(n => n.presets = n.presets.filter(p => p !== nm)); S.selPreset = Math.max(0, S.selPreset - 1); S.output.stale = true; note("info", `Removed ${nm}.`); }, "Remove"); return; }
+    case "clear-presets": confirm2("Remove every Slider Preset from the Project?", () => status("(prototype) not actually cleared"), "Clear"); return;
+    case "confirm-yes": { const c = S.pendingConfirm; S.pendingConfirm = null; c.onOk(); break; }
+    case "confirm-no": S.pendingConfirm = null; break;
+    case "err-ok": S.errorModal = null; break;
+    /* SetSliders */
+    case "sl-enable": { const c = curPreset().choices[+el.dataset.s]; c.enabled = !c.enabled; S.output.stale = true; status(`${curPreset().name}: ${c.name} ${c.enabled ? "enabled" : "disabled"}.`); break; }
+    case "gang-cb": { const k = el.dataset.k, g = S.gang; g[k] = !g[k]; if (k === "all" && g.all) { g.min = g.max = false; } if ((k === "min" || k === "max") && g[k]) g.all = false; break; }
+    case "gang-set": applyGang(el.dataset.k, +el.dataset.v); return;
+    /* NPC Database */
+    case "db-add": { const n = visDb()[S.db.sel]; if (!n) break; if (inProject(n)) { S.db.info = { sev: "warning", text: `${n.name} is already in the Project.` }; break; } const rnd = S.db.assignRandom ? randomPreset() : []; S.npcs.push({ ...n, presets: rnd }); S.selNpc = S.npcs.length - 1; S.morphFocus = "npcs"; S.output.stale = true; status(`Added ${n.name} to NPC Morph Assignments${rnd.length ? " with " + rnd[0] : ""}.`); S.focusAfter = { sel: "#tvDb tr[aria-selected=true]" }; break; }
+    case "db-add-all": { const rows = visDb().filter(n => !inProject(n)); if (!visDb().length) break; confirm2("Add all NPCs from this database?\nIf filter is active, only the ones displayed will be added.", () => { rows.forEach(n => S.npcs.push({ ...n, presets: S.db.assignRandom ? randomPreset() : [] })); S.output.stale = true; note("success", `Added ${rows.length} NPCs to the Project (${visDb().length - rows.length} already present).`); }, "Add All"); return; }
+    case "db-clear": confirm2("Clear NPC database?\nThis will only clear the database, not the morph targets list.\nIf filter is active, only the ones displayed will be removed.", () => { const v = new Set(visDb()), k = v.size; S.npcdb = S.npcdb.filter(n => !v.has(n)); S.db.sel = 0; note("info", `Removed ${k} NPCs from the NPC Database (session only).`); }, "Clear"); return;
+    case "db-file": startJob("importNpcTxt"); return;
+    case "db-random": S.db.assignRandom = !S.db.assignRandom; break;
+    case "db-info-close": S.db.info = null; break;
+    /* Fill */
+    case "fill-toggle": { const i = +el.dataset.i; S.fill.sel.has(i) ? S.fill.sel.delete(i) : S.fill.sel.add(i); S.fill.err = null; break; }
+    case "fill-all": S.presets.forEach((p, i) => S.fill.sel.add(i)); S.fill.err = null; break;
+    case "fill-invert": S.presets.forEach((p, i) => S.fill.sel.has(i) ? S.fill.sel.delete(i) : S.fill.sel.add(i)); break;
+    case "fill-go": if (!S.fill.sel.size) { S.fill.err = "You don't have a selection!"; break; } S.fill.err = null; if (S.shape.fill === "dialog") { confirm2("Each NPC in the table without a preset will be given a random one from the selection.\nIf filter is active, only the ones displayed will be filled.", doFill, "Fill"); return; } if (S.shape.fill === "inspector") { S.fill.confirming = true; S.focusAfter = { sel: "#fillConfirmYes" }; break; } doFill(); return;
+    case "fill-confirm-yes": doFill(); return;
+    case "fill-confirm-no": S.fill.confirming = false; S.focusAfter = { sel: "#fillGo" }; break;
+    /* Rename / BoS */
+    case "rename-commit": commitRename((app.querySelector("#renameField") || {}).value || ""); return;
+    case "bos-copy": note("success", "JSON copied to clipboard!"); break;
+    case "bos-export": startJob("exportBos"); return;
+    case "noop": status(`"${el.textContent.trim().replace(/[…▾]$/, "").trim()}" is unchanged by this prototype.`); break;
+  }
+  render();
+});
+app.addEventListener("click", e => {
+  if (e.target.closest("[data-act]") && !e.target.closest("[data-act=fill-toggle]")) return;
+  const opt = e.target.closest("[role=option]"); if (opt && opt.parentElement.dataset.list !== "fill") { if (opt.querySelector("input")) return; selectFromList(opt.parentElement.dataset.list, +opt.dataset.idx); return; }
+  const tr = e.target.closest("tr[data-npc]"); if (tr) { S.selNpc = +tr.dataset.npc; S.morphFocus = "npcs"; render(); return; }
+  const db = e.target.closest("tr[data-db]"); if (db) { S.db.sel = +db.dataset.db; render(); }
+});
+app.addEventListener("input", e => {
+  const k = e.target.dataset.input; if (!k) return;
+  if (k === "search") { S.search = e.target.value; render(); }
+  if (k === "npcFilter") { S.npcFilter = e.target.value; render(); }
+  if (k === "dbFilter") { S.db.filter = e.target.value; S.db.sel = 0; render(); }
+  if (k === "renameDraft") { S.rename.draft = e.target.value; S.rename.active = true; if (S.rename.err) { S.rename.err = null; e.target.classList.remove("invalid"); const er = e.target.parentElement.querySelector(".field-err"); if (er) er.textContent = ""; } }
+  if (k === "sl") { const c = curPreset().choices[+e.target.dataset.s], v = +e.target.value; if (e.target.dataset.k === "min") { c.min = v; if (c.max < v) c.max = v; } else { c.max = v; if (c.min > v) c.min = v; } S.output.stale = true; patchRow(+e.target.dataset.s); }
+  if (k === "gang") { const id = "gang-" + e.target.dataset.k + "-pct"; document.getElementById(id).textContent = e.target.value + "%"; }
+});
+app.addEventListener("change", e => {
+  const k = e.target.dataset.input; if (!k) return;
+  if (k === "sl") { const c = curPreset().choices[+e.target.dataset.s]; status(`${curPreset().name}: ${fmtChoice(c)} (written through).`); render(); }
+  if (k === "gang") applyGang(e.target.dataset.k, +e.target.value);
+});
+app.addEventListener("focusout", e => {   // inspector-shape rename commits on leaving the field
+  if (e.target.id === "inspName" && S.rename.active && S.shape.rename === "inspector" && !S.rename.err && S.rename.draft !== curPreset().name) setTimeout(() => { if (document.activeElement !== e.target && S.rename.active) commitRename(S.rename.draft); }, 0);
+});
+function selectFromList(list, i) {
+  if (list === "presets") { if (S.rename.active) cancelRename(); S.selPreset = i; S.rename.err = null; }
+  if (list === "targets") { S.selTarget = i; S.morphFocus = "targets"; }
+  if (list === "npcs") { S.selNpc = i; S.morphFocus = "npcs"; }
+  render();
+}
+
+/* ═══════════════════════════ Keyboard ═══════════════════════════ */
+document.addEventListener("keydown", e => {
+  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
+  const isRange = e.target.type === "range";
+  const lb = e.target.closest && e.target.closest("[role=listbox]");
+  const row = e.target.closest && e.target.closest("tr[data-npc], tr[data-db]");
+  if (e.target.dataset && e.target.dataset.input === "renameDraft") {
+    if (e.key === "Enter") { e.preventDefault(); commitRename(e.target.value); return; }
+    if (e.key === "Escape") { e.preventDefault(); cancelRename(); return; }
+    return;
+  }
+  if (lb && lb.dataset.list === "fill") {
+    const opts = [...lb.querySelectorAll("[role=option]")]; const cur = opts.indexOf(e.target.closest("[role=option]"));
+    if (["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) { e.preventDefault(); const n = e.key === "Home" ? 0 : e.key === "End" ? opts.length - 1 : Math.max(0, Math.min(opts.length - 1, (cur < 0 ? -1 : cur) + (e.key === "ArrowDown" ? 1 : -1))); opts[n].focus(); return; }
+    if ((e.key === " " || e.key === "Enter") && cur >= 0) { e.preventDefault(); opts[cur].click(); const el = app.querySelector(`[data-list=fill] [data-idx="${opts[cur].dataset.idx}"]`); if (el) el.focus(); return; }
+  }
+  if (lb && ["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) {
+    e.preventDefault(); const list = lb.dataset.list; const opts = [...lb.querySelectorAll("[role=option]")]; const cur = opts.findIndex(o => o.getAttribute("aria-selected") === "true");
+    const n = e.key === "Home" ? 0 : e.key === "End" ? opts.length - 1 : Math.max(0, Math.min(opts.length - 1, cur + (e.key === "ArrowDown" ? 1 : -1)));
+    selectFromList(list, +opts[n].dataset.idx); const el = app.querySelector(`[data-list="${list}"] [role=option][data-idx="${opts[n].dataset.idx}"]`); if (el) { el.setAttribute("tabindex", "0"); el.focus(); el.scrollIntoView({ block: "nearest" }); } return;
+  }
+  if (row && ["ArrowUp", "ArrowDown"].includes(e.key)) {
+    e.preventDefault(); const key = row.dataset.npc != null ? "npc" : "db"; const rows = [...row.parentElement.querySelectorAll(`tr[data-${key}]`)]; const i = rows.indexOf(row); const nx = rows[Math.max(0, Math.min(rows.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))];
+    if (key === "npc") { S.selNpc = +nx.dataset.npc; S.morphFocus = "npcs"; } else S.db.sel = +nx.dataset.db;
+    render(); const el = app.querySelector(`tr[data-${key}="${nx.dataset[key]}"]`); if (el) { el.focus(); el.scrollIntoView({ block: "nearest" }); } return;
+  }
+  if (row && row.dataset.db != null && e.key === "Enter") { e.preventDefault(); const b = app.querySelector("[data-act=db-add]"); if (b) b.click(); return; }
+  if (e.target.matches && e.target.matches("[role=switch]") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.target.click(); return; }
+  if (e.key === "Escape") {
+    if (S.pendingConfirm) S.pendingConfirm = null;
+    else if (S.errorModal) S.errorModal = null;
+    else if (S.imageFly) { closeImage(); return; }
+    else if (S.fill.confirming) S.fill.confirming = false;
+    else if (S.wf) { closeWf(); return; }
+    else if (S.rename.active) { cancelRename(); return; }
+    else if (S.overlay) S.overlay = null;
+    else if (S.drawer) S.drawer = false;
+    else return;
+    render(); return;
+  }
+  if (e.ctrlKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === "`") { e.preventDefault(); S.drawer = !S.drawer; render(); return; }
+    if (k === "k") { e.preventDefault(); const s = app.querySelector("input[type=search]"); if (s) s.focus(); else if (S.narrow) { S.overlay = "list"; render(); } return; }
+    if (k === "g") { e.preventDefault(); startJob(S.area === "templates" ? "generateTemplates" : "generateMorphs"); return; }
+    if (k === "e") { e.preventDefault(); startJob("exportIni"); return; }
+    if (k === "1" || k === "2") { e.preventDefault(); S.area = k === "1" ? "templates" : "morphs"; S.overlay = null; render(); return; }
+    if (k === "3") { e.preventDefault(); openWf("npcdb"); return; }
+  }
+  if (e.key === "F2" && S.area === "templates" && !S.wf) { e.preventDefault(); openWf("rename"); return; }
+  if (e.key === "F6") {
+    e.preventDefault();
+    const sel = S.narrow ? ["[data-act=rail][aria-current=page]", "#paneEditor .body", "#drawerToggle"] : ["[data-act=rail][aria-current=page]", "#paneList [role=listbox], #paneList input, #paneList button", "#paneEditor [tabindex='0'], #paneEditor input, #paneEditor textarea, #paneEditor tr[tabindex='0']", "#paneInspector input, #paneInspector button, #paneInspector select", "#drawerToggle"];
+    const targets = sel.map(s => app.querySelector(s)).filter(Boolean);
+    const cur = targets.findIndex(t => t === document.activeElement || t.contains(document.activeElement));
+    const nx = targets[(cur + (e.shiftKey ? -1 : 1) + targets.length) % targets.length]; if (nx) { if (!nx.hasAttribute("tabindex") && !/^(INPUT|BUTTON|SELECT|TEXTAREA)$/.test(nx.tagName)) nx.setAttribute("tabindex", "-1"); nx.focus(); }
+    return;
+  }
+  if (e.key === "F7" && S.narrow) { e.preventDefault(); S.overlay = S.overlay === "inspector" ? null : "inspector"; render(); return; }
+  if (!inField && !isRange && !e.ctrlKey && !e.altKey) {
+    if (e.key === "ArrowLeft" && !lb && !row) { cycleShape(-1); return; }
+    if (e.key === "ArrowRight" && !lb && !row) { cycleShape(1); return; }
+    if (e.key === "?") { S.help = !S.help; syncBar(); render(); return; }
+  }
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncBar);
+
+/* Boot */
+(function () {
+  const q = new URLSearchParams(location.search);
+  Object.keys(WF).forEach(k => { const v = q.get(k); if (v && WF[k].shapes[v]) S.shape[k] = v; });
+  syncBar(); render();
+  note("info", "Project MyBodies.jbs2bg opened — 10 presets, 4 targets, 14 NPCs.");
+  render();
+})();
+</script>
+</body>
+</html>
