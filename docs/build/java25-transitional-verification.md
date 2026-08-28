@@ -76,11 +76,11 @@ Only the script verifies that the JDK behind that variable is the pinned Temurin
 
 ## Transitional scope
 
-`pom.xml` still restricts `maven-compiler-plugin` to `data/**`, `project/**`, and `presentation/**`. The JavaFX
-controllers, `controlsfx/table`, `etc/`, and `Main` remain excluded until the JavaFX 25 UI port (#81). The
-script's closing report and `transitional.completeApplicationGate=false` in the evidence file state this
+`pom.xml` still restricts `maven-compiler-plugin` to `data/**`, `project/**`, `presentation/**`, and `filtering/**`.
+The JavaFX controllers, `controlsfx/table`, `etc/`, and `Main` remain excluded until the JavaFX 25 UI port (#81).
+The script's closing report and `transitional.completeApplicationGate=false` in the evidence file state this
 explicitly; a green run proves the pinned toolchain and the JavaFX-independent `ProjectSession`, immutable
-snapshot, and package-private `Project` contracts only.
+snapshot, package-private `Project`, and `filtering` visible-set seam contracts only.
 
 ADR-0001's "preserving Java 8" clause predates the modernization and is marked superseded by ADR-0002, which
 governs the Project seam; the `--release 25` target here is consistent with the current ADRs.

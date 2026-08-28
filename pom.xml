@@ -257,6 +257,7 @@
                         <include>com/asdasfa/jbs2bg/data/**/*.java</include>
                         <include>com/asdasfa/jbs2bg/project/**/*.java</include>
                         <include>com/asdasfa/jbs2bg/presentation/**/*.java</include>
+                        <include>com/asdasfa/jbs2bg/filtering/**/*.java</include>
                     </includes>
                     <compilerArgs>
                         <arg>-sourcepath</arg>
