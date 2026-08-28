@@ -1,0 +1,725 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Not production code. Do not port line-by-line.
+
+  Question: which Fluent-inspired Templates/Morphs workbench behavior should become
+  BS2BG's UI specification? (GitHub issue #67 on map #62)
+
+  Three structurally different variants on one page, switchable with ?variant=A|B|C
+  or the floating bar / arrow keys. Same fake data, same fake job engine, same
+  theme tokens; each variant places rail, list/editor/inspector, output, progress,
+  and notifications differently so the differences are about STRUCTURE, not skin.
+
+    A  "Rail Studio"   — left rail, persistent list | editor | inspector, output as a bottom drawer
+    B  "Pivot Split"   — top Pivot, master-detail + properties strip, output as a persistent right pane
+    C  "Ledger Pages"  — expanded nav, single-column pages, inline-expanding rows, Output + Activity as pages
+
+  Run: double-click this file. No build, no server.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE · BS2BG Fluent workbench variants</title>
+<style>
+/* ───────────── Theme tokens ─────────────
+   In JavaFX these become looked-up colors in the app stylesheet, with the values
+   for "system" driven by Platform.getPreferences() (colorScheme, accent, high
+   contrast + system colors). The HC set is deliberately its own palette, not a
+   derivative of dark. */
+:root {
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: Consolas, "Cascadia Mono", monospace;
+  --radius: 4px;
+  --ctl-h: 32px;
+  --dur: 160ms;
+}
+:root, [data-theme="light"] {
+  --bg: #f3f3f3; --surface: #ffffff; --surface-2: #f9f9f9; --surface-3: #ededed;
+  --text: #1b1b1b; --text-2: #5c5c5c; --border: #d9d9d9; --border-strong: #8a8a8a;
+  --accent: #005fb8; --accent-hover: #1a6fc4; --accent-text: #ffffff;
+  --focus: #1b1b1b; --sel: #e5effa;
+  --success: #0f7b0f; --success-bg: #dff6dd; --warning: #9d5d00; --warning-bg: #fff4ce; --error: #c42b1c; --error-bg: #fde7e9;
+  --shadow: 0 4px 16px rgba(0,0,0,.14);
+}
+[data-theme="dark"] {
+  --bg: #202020; --surface: #2b2b2b; --surface-2: #323232; --surface-3: #3a3a3a;
+  --text: #ffffff; --text-2: #c5c5c5; --border: #3f3f3f; --border-strong: #7a7a7a;
+  --accent: #60cdff; --accent-hover: #7fd6ff; --accent-text: #000000;
+  --focus: #ffffff; --sel: #3a4a5a;
+  --success: #6ccb5f; --success-bg: #393d1b; --warning: #fce100; --warning-bg: #433519; --error: #ff99a4; --error-bg: #442726;
+  --shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+/* High contrast: modeled on a Windows 11 contrast theme. Every meaning is carried by
+   border + text, never by fill alone; fills are flat; accent is the HC highlight. */
+[data-theme="hc"] {
+  --bg: #000000; --surface: #000000; --surface-2: #000000; --surface-3: #000000;
+  --text: #ffffff; --text-2: #ffffff; --border: #ffffff; --border-strong: #ffffff;
+  --accent: #ffff00; --accent-hover: #ffff00; --accent-text: #000000;
+  --focus: #ffff00; --sel: #1aebff;
+  --success: #3ff23f; --success-bg: #000000; --warning: #ffff00; --warning-bg: #000000; --error: #ff8080; --error-bg: #000000;
+  --shadow: none;
+}
+[data-theme="hc"] .sel { color: #000 !important; }
+[data-theme="hc"] .card, [data-theme="hc"] .pane, [data-theme="hc"] button, [data-theme="hc"] input, [data-theme="hc"] .toast, [data-theme="hc"] .infobar { border-color: #fff !important; }
+[data-theme="hc"] .rail-item[aria-current="page"], [data-theme="hc"] .pivot [aria-selected="true"], [data-theme="hc"] .nav-item[aria-current="page"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (forced-colors: active) {
+  :root { --bg: Canvas; --surface: Canvas; --surface-2: Canvas; --surface-3: Canvas; --text: CanvasText; --text-2: CanvasText; --border: CanvasText; --border-strong: CanvasText; --accent: Highlight; --accent-text: HighlightText; --focus: Highlight; --sel: Highlight; }
+}
+[data-motion="reduced"] *, [data-motion="reduced"] *::before, [data-motion="reduced"] *::after { transition: none !important; animation: none !important; }
+
+/* ───────────── Base ───────────── */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { font: 13px/1.4 var(--font); color: var(--text); background: var(--bg); }
+#stage { position: fixed; inset: 0 0 0 0; padding: 0 0 56px 0; display: flex; justify-content: center; }
+#app { width: 100%; height: 100%; background: var(--bg); position: relative; overflow: hidden; display: flex; flex-direction: column; }
+#stage.narrow #app { width: 720px; border-left: 2px dashed var(--border-strong); border-right: 2px dashed var(--border-strong); }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+h2 { font-size: 14px; } h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { height: var(--ctl-h); padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: background var(--dur); }
+button:hover { background: var(--surface-3); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.primary:hover { background: var(--accent-hover); }
+button.subtle { border-color: transparent; background: transparent; }
+button.subtle:hover { background: var(--surface-3); }
+button.icon { width: var(--ctl-h); padding: 0; justify-content: center; }
+button.danger { color: var(--error); }
+input[type=text], input[type=search], select { height: var(--ctl-h); padding: 0 8px; border: 1px solid var(--border); border-bottom-color: var(--border-strong); border-radius: var(--radius); background: var(--surface); }
+textarea { width: 100%; height: 100%; resize: none; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 8px; font-family: var(--mono); font-size: 12px; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+[role=option]:focus-visible, tr:focus-visible, .rail-item:focus-visible, .nav-item:focus-visible { outline-offset: -2px; }
+kbd { font: 11px var(--mono); border: 1px solid var(--border-strong); border-radius: 3px; padding: 0 4px; background: var(--surface-2); }
+.muted { color: var(--text-2); }
+.row { display: flex; align-items: center; gap: 8px; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.pane { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.pane > header { padding: 6px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.pane > .body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 12px; background: var(--surface-3); border: 1px solid var(--border); font-size: 12px; }
+.chip button { height: 18px; width: 18px; padding: 0; border: 0; background: transparent; }
+.badge { display: inline-flex; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-text); font-size: 11px; align-items: center; justify-content: center; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+.cmdbar { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; min-height: 42px; }
+.cmdbar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-h); padding: 0 8px; }
+.toggle .sw { width: 36px; height: 18px; border-radius: 9px; border: 1px solid var(--border-strong); position: relative; background: var(--surface); }
+.toggle .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-2); transition: left var(--dur); }
+.toggle[aria-checked=true] .sw { background: var(--accent); border-color: var(--accent); }
+.toggle[aria-checked=true] .sw::after { left: 20px; background: var(--accent-text); }
+
+/* Lists / tables */
+[role=listbox] { list-style: none; margin: 0; padding: 4px; }
+[role=option] { padding: 6px 8px; border-radius: var(--radius); cursor: default; display: flex; align-items: center; gap: 8px; border-left: 3px solid transparent; }
+[role=option]:hover { background: var(--surface-3); }
+[role=option][aria-selected=true] { background: var(--sel); border-left-color: var(--accent); }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--surface-2); font-weight: 600; color: var(--text-2); z-index: 1; }
+th .flt { margin-left: 4px; font-size: 10px; color: var(--accent); }
+tbody tr { cursor: default; }
+tbody tr:hover { background: var(--surface-3); }
+tbody tr[aria-selected=true] { background: var(--sel); box-shadow: inset 3px 0 0 var(--accent); }
+tbody tr.warn td:last-child { color: var(--warning); font-weight: 600; }
+.filterrow { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex-wrap: wrap; }
+.filterrow input { height: 28px; }
+
+/* Status / notifications */
+.statusbar { height: 28px; border-top: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 12px; padding: 0 10px; font-size: 12px; }
+.statusbar .prog { width: 160px; }
+progress { width: 100%; height: 6px; accent-color: var(--accent); }
+.ring { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; }
+[data-motion="reduced"] .ring { border: 2px dashed var(--accent); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.infobar { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius); background: var(--surface-2); }
+.infobar.success { border-left-color: var(--success); background: var(--success-bg); }
+.infobar.error { border-left-color: var(--error); background: var(--error-bg); }
+.infobar.warning { border-left-color: var(--warning); background: var(--warning-bg); }
+.infobar.info { border-left-color: var(--accent); }
+.infobar .ico { font-weight: 700; width: 16px; text-align: center; }
+.toasts { position: absolute; top: 52px; right: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 30; width: 340px; max-width: calc(100% - 24px); }
+.toast { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px 10px; display: flex; gap: 8px; align-items: flex-start; animation: slidein var(--dur) ease-out; }
+.toast.success { border-left-color: var(--success); } .toast.error { border-left-color: var(--error); } .toast.warning { border-left-color: var(--warning); }
+@keyframes slidein { from { transform: translateX(16px); opacity: 0; } }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* Overlays / drawers */
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.35); z-index: 20; }
+[data-theme="hc"] .scrim { background: rgba(0,0,0,.7); }
+.drawer { position: absolute; left: 0; right: 0; bottom: 0; height: 42%; background: var(--surface); border-top: 2px solid var(--border-strong); box-shadow: var(--shadow); z-index: 21; display: flex; flex-direction: column; transition: transform var(--dur); }
+.drawer.closed { transform: translateY(calc(100% - 34px)); }
+.drawer > header { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
+.side-overlay { position: absolute; top: 0; bottom: 0; width: 300px; background: var(--surface); border-right: 1px solid var(--border); box-shadow: var(--shadow); z-index: 21; display: flex; flex-direction: column; }
+.side-overlay.right { right: 0; border-right: 0; border-left: 1px solid var(--border); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 55%; background: var(--surface); border-top: 2px solid var(--border-strong); box-shadow: var(--shadow); z-index: 21; display: flex; flex-direction: column; }
+dialog { border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); padding: 0; min-width: 360px; box-shadow: var(--shadow); }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+dialog .dbody { padding: 18px 20px 8px; } dialog .dfoot { padding: 12px 20px 18px; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ───────────── Variant A · Rail Studio ───────────── */
+.A .titlebar { height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.A .shell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 48px 260px 1fr 280px; grid-template-rows: minmax(0, 1fr); position: relative; overflow: hidden; }
+.A .drawer { left: 48px; } /* keep the rail reachable while the drawer is open */
+.A .shell.narrow { grid-template-columns: 48px 1fr; }
+.A .rail { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 6px 4px; gap: 2px; }
+.A .rail-item { height: 40px; width: 40px; border-radius: var(--radius); border: 0; background: transparent; display: flex; align-items: center; justify-content: center; font-size: 16px; position: relative; }
+.A .rail-item:hover { background: var(--surface-3); }
+.A .rail-item[aria-current="page"] { background: var(--sel); }
+.A .rail-item[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; background: var(--accent); border-radius: 2px; }
+.A .rail-item .badge { position: absolute; top: 4px; right: 4px; }
+.A .rail .spacer { flex: 1; }
+.A .col { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
+.A .col:last-child { border-right: 0; }
+.A .col > header { min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); }
+.A .col > .body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.A .editor-body { padding: 10px; gap: 10px; }
+.A .kv { display: grid; grid-template-columns: 110px 1fr; gap: 6px 10px; padding: 10px; font-size: 12px; }
+.A .kv dt { color: var(--text-2); } .A .kv dd { margin: 0; }
+.A .inspector-actions { padding: 10px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); }
+.A .inspector-actions button { justify-content: flex-start; }
+.A .drawer .body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; min-height: 0; }
+.A .drawer .body > div { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+
+/* ───────────── Variant B · Pivot Split ───────────── */
+.B .header { display: flex; align-items: center; gap: 16px; padding: 0 16px; height: 48px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.B .pivot { display: flex; gap: 4px; height: 100%; }
+.B .pivot button { height: 100%; border: 0; background: transparent; border-radius: 0; font-size: 14px; padding: 0 8px; border-bottom: 3px solid transparent; color: var(--text-2); }
+.B .pivot button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.B .shell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr 380px; grid-template-rows: minmax(0, 1fr); position: relative; }
+.B .shell.nooutput { grid-template-columns: 1fr; }
+.B .shell.narrow { grid-template-columns: 1fr; }
+.B .main { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: minmax(0, 1fr); min-height: 0; min-width: 0; }
+.B .main.narrow { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+.B .master { border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; min-height: 0; }
+.B .master > header { padding: 8px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; }
+.B .master > .body { flex: 1; overflow: auto; }
+.B .master .actions { padding: 6px 8px; border-top: 1px solid var(--border); display: flex; gap: 4px; flex-wrap: wrap; }
+.B .picker { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.B .detail { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.B .props { display: flex; gap: 18px; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
+.B .props .p { display: flex; flex-direction: column; gap: 2px; } .B .props .p b { font-weight: 600; } .B .props .p span { color: var(--text-2); font-size: 11px; }
+.B .detail .work { flex: 1; min-height: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.B .outpane { background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; position: relative; }
+.B .outpane > header { display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 42px; border-bottom: 1px solid var(--border); }
+.B .outpane .tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); }
+.B .outpane .tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; border-radius: 0; height: 28px; }
+.B .outpane .tabs button[aria-selected=true] { border-bottom-color: var(--accent); font-weight: 600; }
+.B .outpane .body { flex: 1; min-height: 0; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.B .skeleton { position: absolute; inset: 42px 0 0 0; background: color-mix(in srgb, var(--surface) 80%, transparent); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; z-index: 2; }
+.B .hjob { display: flex; align-items: center; gap: 8px; }
+.B .menu { position: absolute; top: 48px; right: 12px; width: 360px; max-height: 60%; overflow: auto; z-index: 25; box-shadow: var(--shadow); }
+.B .menu ul { list-style: none; margin: 0; padding: 4px; } .B .menu li { padding: 6px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+
+/* ───────────── Variant C · Ledger Pages ───────────── */
+.C .shell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 200px 1fr; grid-template-rows: minmax(0, 1fr); position: relative; }
+.C .shell.narrow { grid-template-columns: 1fr; }
+.C .nav { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 8px; gap: 2px; }
+.C .nav .brand { font-weight: 600; padding: 8px 10px 12px; font-size: 14px; }
+.C .nav-item { height: 36px; border: 0; background: transparent; justify-content: flex-start; padding: 0 10px; border-radius: var(--radius); width: 100%; position: relative; }
+.C .nav-item[aria-current="page"] { background: var(--sel); font-weight: 600; }
+.C .nav-item[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; background: var(--accent); border-radius: 2px; }
+.C .nav-item .badge { margin-left: auto; }
+.C .nav .spacer { flex: 1; }
+.C .page { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.C .page > .cmdbar { position: sticky; top: 0; z-index: 3; }
+.C .page > .content { flex: 1; overflow: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.C .content > * { max-width: 1100px; width: 100%; }
+.C .exp { background: var(--surface-2); }
+.C .exp td { padding: 10px 12px 12px; white-space: normal; }
+.C .exp .grid { display: grid; grid-template-columns: 1fr 260px; gap: 12px; }
+.C .exp .grid.narrow { grid-template-columns: 1fr; }
+.C .exp .kv { display: grid; grid-template-columns: 90px 1fr; gap: 4px 8px; font-size: 12px; margin: 0; }
+.C .exp .kv dt { color: var(--text-2); } .C .exp .kv dd { margin: 0; }
+.C .exp .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.C .chev { display: inline-block; width: 14px; transition: transform var(--dur); }
+.C tr[aria-expanded=true] .chev { transform: rotate(90deg); }
+.C .outgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 320px; }
+.C .outgrid.narrow { grid-template-columns: 1fr; }
+.C .outgrid .pane { height: 360px; }
+.C .activity li { display: grid; grid-template-columns: 70px 20px 1fr auto; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); align-items: center; }
+.C .activity ul { list-style: none; margin: 0; padding: 0; }
+.C .hamb { display: none; }
+.C .shell.narrow .hamb { display: inline-flex; }
+
+/* ───────────── Prototype switcher bar (not part of the design) ───────────── */
+#proto-bar { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 1000; background: #111; color: #fff; border: 2px solid #ff4fd8; border-radius: 999px; padding: 6px 10px; display: flex; align-items: center; gap: 8px; font: 12px/1 var(--font); box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+#proto-bar button, #proto-bar select { height: 26px; background: #222; color: #fff; border: 1px solid #555; border-radius: 999px; padding: 0 10px; font-size: 12px; }
+#proto-bar button.on { background: #ff4fd8; color: #000; border-color: #ff4fd8; }
+#proto-bar .lbl { font-weight: 700; min-width: 150px; text-align: center; }
+#proto-bar .sep { width: 1px; height: 18px; background: #444; }
+#help { position: fixed; right: 12px; bottom: 60px; width: 420px; max-height: 70vh; overflow: auto; z-index: 999; background: var(--surface); border: 2px solid #ff4fd8; border-radius: 8px; padding: 14px 16px; box-shadow: var(--shadow); }
+#help h2 { margin-bottom: 6px; } #help h3 { margin: 12px 0 4px; } #help ul { margin: 0; padding-left: 18px; } #help li { margin: 2px 0; }
+#help table { font-size: 12px; } #help td { border: 0; padding: 2px 6px 2px 0; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="app" tabindex="-1"></div></div>
+<div id="proto-bar" aria-label="Prototype controls (not part of the design)">
+  <button id="pb-prev" title="Previous variant (←)">←</button>
+  <span class="lbl" id="pb-label">A</span>
+  <button id="pb-next" title="Next variant (→)">→</button>
+  <span class="sep"></span>
+  <select id="pb-theme" title="Theme"><option value="system">Theme: system</option><option value="light">Light</option><option value="dark">Dark</option><option value="hc">High contrast</option></select>
+  <button id="pb-narrow" title="Constrain the window to 720px to see narrow-window behavior">Narrow</button>
+  <button id="pb-motion" title="Simulate Windows 'animation effects off'">Reduce motion</button>
+  <button id="pb-fail" title="Make the next job fail, to see the error path">Fail next job</button>
+  <span class="sep"></span>
+  <button id="pb-help" title="Design notes + keyboard map for this variant (?)">?</button>
+</div>
+<div id="help" hidden></div>
+<div class="sr" aria-live="polite" id="live"></div>
+
+<script>
+/* ═══════════════════════════ Fake domain data ═══════════════════════════ */
+const PRESETS = [
+  { name: "CBBE Curvy", sliders: 62, uunp: false, line: "CBBE Curvy=Breasts@40:60, BreastsSmall@20, Butt@55, Hips@45:65, Waist@30, Thighs@50, Calves@40" },
+  { name: "CBBE Slim", sliders: 62, uunp: false, line: "CBBE Slim=Breasts@15:25, Butt@30, Hips@30, Waist@10, Thighs@35, Calves@30" },
+  { name: "CBBE Vanilla", sliders: 62, uunp: false, line: "CBBE Vanilla=Breasts@35, Butt@40, Hips@40, Waist@30" },
+  { name: "Athletic", sliders: 58, uunp: false, line: "Athletic=Breasts@25, Butt@35, Hips@30, Waist@5:15, Thighs@45, Calves@45, ShoulderWidth@60" },
+  { name: "Pear", sliders: 61, uunp: false, line: "Pear=Breasts@20, Butt@70:85, Hips@75, Waist@25, Thighs@70" },
+  { name: "Top Heavy", sliders: 60, uunp: false, line: "Top Heavy=Breasts@75:90, BreastsSmall@0, Butt@30, Hips@35, Waist@20" },
+  { name: "Petite", sliders: 55, uunp: false, line: "Petite=Breasts@10, Butt@20, Hips@20, Waist@0, Thighs@25, Calves@20" },
+  { name: "Mature", sliders: 63, uunp: false, line: "Mature=Breasts@45:55, BreastsSag@30, Butt@50, Hips@55, Waist@45, Belly@30" },
+  { name: "UUNP Slim", sliders: 71, uunp: true, line: "UUNP Slim=Breasts@20, Butt@30, Hips@30, Waist@15, Thighs@35" },
+  { name: "UUNP Curvy", sliders: 71, uunp: true, line: "UUNP Curvy=Breasts@50:65, Butt@60, Hips@55, Waist@35, Thighs@55" },
+];
+const TARGETS = [
+  { name: "All|Female", presets: ["CBBE Curvy", "CBBE Slim", "CBBE Vanilla", "Athletic"] },
+  { name: "Nord|Female", presets: ["Athletic", "Top Heavy"] },
+  { name: "Breton|Female", presets: ["Petite", "CBBE Slim"] },
+  { name: "Elder|Female", presets: [] },
+];
+const NPCS = [
+  ["Lydia", "Skyrim.esm", "Nord", "HousecarlWhiterun", "000A2C8E", ["Athletic"]],
+  ["Aela the Huntress", "Skyrim.esm", "Nord", "Aela", "0001A696", ["Athletic", "CBBE Curvy"]],
+  ["Serana", "Dawnguard.esm", "Nord", "DLC1Serana", "02002B74", ["CBBE Slim"]],
+  ["Jordis the Sword-Maiden", "Skyrim.esm", "Nord", "HousecarlSolitude", "000A2C90", ["Athletic"]],
+  ["Mjoll the Lioness", "Skyrim.esm", "Nord", "Mjoll", "00019DF9", ["Top Heavy"]],
+  ["Uthgerd the Unbroken", "Skyrim.esm", "Nord", "Uthgerd", "00013BAA", []],
+  ["Ysolda", "Skyrim.esm", "Nord", "Ysolda", "0001A6AB", ["Pear"]],
+  ["Camilla Valerius", "Skyrim.esm", "Imperial", "CamillaValerius", "00013481", ["CBBE Curvy"]],
+  ["Carlotta Valentia", "Skyrim.esm", "Imperial", "CarlottaValentia", "00013BA5", []],
+  ["Sapphire", "Skyrim.esm", "Nord", "Sapphire", "0001CB33", ["CBBE Slim"]],
+  ["Vex", "Skyrim.esm", "Imperial", "Vex", "0001CB35", ["Petite"]],
+  ["Karliah", "Skyrim.esm", "Dark Elf", "Karliah", "00058F1A", ["CBBE Slim", "Petite"]],
+  ["Delphine", "Skyrim.esm", "Breton", "Delphine", "00013478", ["Mature"]],
+  ["Elisif the Fair", "Skyrim.esm", "Nord", "Elisif", "00013BB9", []],
+].map(([name, master, race, editorId, formId, presets]) => ({ name, master, race, editorId, formId, presets }));
+
+/* ═══════════════════════════ State ═══════════════════════════ */
+const S = {
+  variant: "A", area: "templates",            // templates | morphs
+  presets: PRESETS.map(p => ({ ...p })), targets: TARGETS.map(t => ({ ...t, presets: [...t.presets] })), npcs: NPCS.map(n => ({ ...n, presets: [...n.presets] })),
+  selPreset: 0, selTarget: 0, selNpc: 0, morphFocus: "targets", // targets | npcs (which morph list the inspector follows)
+  uunp: false, omit: true, search: "", npcFilter: "",
+  output: { templates: "", morphs: "", stale: true, at: null },
+  job: null, failNext: false,
+  notes: [], toasts: [],                        // notes = durable history; toasts = transient
+  drawer: false,                                // A bottom drawer / B right pane / B narrow sheet
+  outTab: "templates",
+  page: "templates",                            // C: templates | morphs | npcs | output | activity
+  expanded: 0,                                  // C: expanded row
+  overlay: null,                                // A narrow: list | inspector ; B: activity menu
+  narrow: false, theme: "system", motion: "auto", help: false,
+  pendingConfirm: null, showBos: false,
+};
+const VARIANTS = { A: "Rail Studio", B: "Pivot Split", C: "Ledger Pages" };
+
+/* ═══════════════════════════ Fake job engine ═══════════════════════════
+   Mirrors MainController.scheduleBackgroundTask: one job at a time, cancellable, with
+   success / failure / cancelled outcomes. Variants differ only in how they SHOW it. */
+function startJob(kind) {
+  if (S.job) return toast("warning", "A job is already running.");
+  const labels = { generateTemplates: "Generating templates", generateMorphs: "Generating morphs", exportIni: "Exporting BodyGen INIs", exportBos: "Exporting BoS JSON", importXml: "Importing BodySlide XML presets" };
+  S.job = { kind, label: labels[kind], progress: 0, cancelled: false };
+  announce(S.job.label + " started.");
+  const tick = () => {
+    if (!S.job || S.job.cancelled) return;
+    S.job.progress = Math.min(100, S.job.progress + 4 + Math.random() * 8);
+    if (S.job.progress >= 100) {
+      const j = S.job; S.job = null;
+      if (S.failNext) { S.failNext = false; syncBar(); finishJob(j, false); }
+      else finishJob(j, true);
+    } else { render(); setTimeout(tick, 120); }
+  };
+  render(); setTimeout(tick, 200);
+}
+function cancelJob() { if (!S.job) return; const j = S.job; j.cancelled = true; S.job = null; note("info", j.label + " cancelled."); render(); }
+function finishJob(j, ok) {
+  if (!ok) { note("error", j.label + " failed unexpectedly.", true); render(); return; }
+  if (j.kind === "generateTemplates" || j.kind === "generateMorphs" || j.kind === "exportIni") {
+    const tpl = S.presets.filter(p => S.uunp === p.uunp).map(p => S.omit ? p.line.replace(/, \w+@0(?=,|$)/g, "") : p.line).join("\n");
+    const mor = S.targets.map(t => `${t.name}=${t.presets.join("|")}`).concat(S.npcs.map(n => `${n.master}|${n.formId}=${n.presets.join("|")}`)).join("\n");
+    if (j.kind !== "generateMorphs") S.output.templates = tpl;
+    if (j.kind !== "generateTemplates") S.output.morphs = mor;
+    S.output.stale = false; S.output.at = new Date();
+  }
+  const msgs = { generateTemplates: "Templates generated.", generateMorphs: "Morphs generated.", exportIni: "Templates and Morphs INI exported to D:\\Mods\\BodyGen\\", exportBos: "BodyTypes of Skyrim JSON files exported!", importXml: "3 presets imported, 1 renamed (dots → spaces)." };
+  const empties = S.npcs.filter(n => !n.presets.length).length + S.targets.filter(t => !t.presets.length).length;
+  if ((j.kind === "generateMorphs" || j.kind === "exportIni") && empties) note("warning", `${empties} targets have no assigned presets and were skipped.`, true);
+  note("success", msgs[j.kind]);
+  // Variant policy on completion: A opens the drawer, B already shows the pane, C badges the Output page.
+  if (S.variant === "A" && j.kind.startsWith("generate")) S.drawer = true;
+  if (S.variant === "B") S.drawer = true;
+  if (S.variant === "C") S.outputBadge = true;
+  render();
+}
+
+/* Notification model: every message gets a durable history entry; only some also get a
+   transient toast. Errors are durable + require dismiss (never auto-dismiss). */
+let nid = 0;
+function note(sev, text, durable = sev === "error") {
+  const n = { id: ++nid, sev, text, time: new Date(), durable, dismissed: false };
+  S.notes.unshift(n); announce(text);
+  if (sev !== "error") { S.toasts.push(n); if (!durable) setTimeout(() => { S.toasts = S.toasts.filter(t => t !== n); render(); }, 5000); }
+  else S.toasts.push(n);
+  return n;
+}
+function toast(sev, text) { note(sev, text); render(); }
+function dismissToast(id) { S.toasts = S.toasts.filter(t => t.id !== id); render(); }
+function announce(t) { const l = document.getElementById("live"); l.textContent = ""; setTimeout(() => l.textContent = t, 30); }
+function confirm2(text, onOk) { S.pendingConfirm = { text, onOk }; render(); }
+
+/* ═══════════════════════════ Shared helpers ═══════════════════════════ */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ICO = { success: "✓", error: "✕", warning: "!", info: "i" };
+const visPresets = () => S.presets.filter(p => p.name.toLowerCase().includes(S.search.toLowerCase()));
+const visNpcs = () => S.npcs.filter(n => [n.name, n.master, n.race, n.editorId].join(" ").toLowerCase().includes(S.npcFilter.toLowerCase()));
+const curPreset = () => S.presets[S.selPreset];
+const curTarget = () => S.morphFocus === "targets" ? S.targets[S.selTarget] : S.npcs[S.selNpc];
+const fmtTime = d => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+function infobar(n, extra = "") { return `<div class="infobar ${n.sev}" role="${n.sev === "error" ? "alert" : "status"}"><span class="ico" aria-hidden="true">${ICO[n.sev]}</span><span class="grow">${esc(n.text)}</span>${extra}<button class="subtle icon" data-act="dismiss" data-id="${n.id}" aria-label="Dismiss">✕</button></div>`; }
+function toastsHtml() { return `<div class="toasts">${S.toasts.map(t => `<div class="toast ${t.sev}" role="${t.sev === "error" ? "alert" : "status"}"><span class="ico" aria-hidden="true">${ICO[t.sev]}</span><span class="grow">${esc(t.text)}</span>${t.sev === "error" ? `<button class="subtle" data-act="open-activity">Details</button>` : ""}<button class="subtle icon" data-act="dismiss" data-id="${t.id}" aria-label="Dismiss">✕</button></div>`).join("")}</div>`; }
+function jobInline(compact = false) {
+  if (!S.job) return "";
+  return `<span class="row" role="status"><span class="ring" aria-hidden="true"></span>${compact ? "" : `<span>${esc(S.job.label)}…</span>`}<progress value="${S.job.progress}" max="100" style="width:${compact ? 80 : 140}px" aria-label="${esc(S.job.label)}"></progress><span class="mono">${Math.round(S.job.progress)}%</span><button class="subtle" data-act="cancel-job">Cancel</button></span>`;
+}
+function presetList(id, extra = "") {
+  const list = visPresets();
+  return `<ul role="listbox" id="${id}" aria-label="Slider Presets" tabindex="0" data-list="presets">${list.map(p => { const i = S.presets.indexOf(p); return `<li role="option" data-idx="${i}" aria-selected="${i === S.selPreset}" ${i === S.selPreset ? 'tabindex="0"' : ""}><span class="grow">${esc(p.name)}</span>${p.uunp ? `<span class="chip">UUNP</span>` : ""}<span class="muted mono">${p.sliders}</span></li>`; }).join("")}${extra}</ul>`;
+}
+function targetList(id) {
+  return `<ul role="listbox" id="${id}" aria-label="Custom Morph Targets" tabindex="0" data-list="targets">${S.targets.map((t, i) => `<li role="option" data-idx="${i}" aria-selected="${S.morphFocus === "targets" && i === S.selTarget}"><span class="grow mono">${esc(t.name)}</span>${t.presets.length ? `<span class="badge">${t.presets.length}</span>` : `<span class="chip" style="color:var(--warning)">empty</span>`}</li>`).join("")}</ul>`;
+}
+function npcTable(id, withFilter = true, cols = 6) {
+  const rows = visNpcs();
+  const filterRow = withFilter ? `<div class="filterrow"><input type="search" placeholder="Filter NPCs (Ctrl+K)" value="${esc(S.npcFilter)}" data-input="npcFilter" aria-label="Filter NPCs"><span class="muted row">${rows.length} of ${S.npcs.length}</span><span class="grow"></span><button class="subtle" data-act="fill-empty">Fill Empty</button><button class="subtle danger" data-act="clear-assignments">Clear Assignments</button></div>` : "";
+  const hdr = S.narrow && cols === 6 ? `<tr><th>Name</th><th>Race</th><th>Slider Presets</th></tr>` : `<tr><th>Name<span class="flt" aria-label="filter active">▼</span></th><th>Master</th><th>Race<span class="flt">▼</span></th><th>EditorID</th><th>FormID</th><th>Slider Presets</th></tr>`;
+  return `${filterRow}<table id="${id}" role="grid" aria-label="NPC Morph Assignments"><thead>${hdr}</thead><tbody>${rows.map(n => { const i = S.npcs.indexOf(n); const sel = S.morphFocus === "npcs" && i === S.selNpc; return `<tr role="row" data-npc="${i}" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" class="${n.presets.length ? "" : "warn"}">${S.narrow && cols === 6 ? `<td>${esc(n.name)}</td><td>${esc(n.race)}</td>` : `<td>${esc(n.name)}</td><td class="muted">${esc(n.master)}</td><td>${esc(n.race)}</td><td class="mono">${esc(n.editorId)}</td><td class="mono muted">${esc(n.formId)}</td>`}<td>${n.presets.length ? esc(n.presets.join(" | ")) : "— none —"}</td></tr>`; }).join("")}</tbody></table>`;
+}
+function presetsForTarget(tgt, compact = false) {
+  const available = S.presets.filter(p => !tgt.presets.includes(p.name));
+  return `<div class="row" style="padding:8px 10px;border-bottom:1px solid var(--border)"><span class="grow"><span class="muted">Slider presets for</span> <b class="mono">${esc(tgt.name)}</b></span><span class="badge" aria-label="count">${tgt.presets.length}</span></div>
+    <div style="padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px">${tgt.presets.map(p => `<span class="chip">${esc(p)}<button data-act="unassign" data-p="${esc(p)}" aria-label="Remove ${esc(p)}">✕</button></span>`).join("") || `<span class="muted">No presets assigned — this target will be skipped by Generate Morphs.</span>`}</div>
+    <div class="row" style="padding:0 10px 8px;flex-wrap:wrap"><select data-input="assignPick" aria-label="Preset to add"><option value="">Add preset…</option>${available.map(p => `<option>${esc(p.name)}</option>`).join("")}</select><button data-act="assign">Add</button><button data-act="assign-all">Add All</button><button class="danger" data-act="clear-target">Clear</button></div>`;
+}
+function outputText(kind) { const t = S.output[kind]; return t || `; nothing generated yet — press Generate ${kind === "templates" ? "Templates" : "Morphs"} (Ctrl+G)`; }
+function confirmDialog() { return S.pendingConfirm ? `<dialog open id="confirm" aria-labelledby="ct"><div class="dbody"><h2 id="ct">Are you sure?</h2><p>${esc(S.pendingConfirm.text)}</p></div><div class="dfoot"><button data-act="confirm-no">Cancel</button><button class="primary" data-act="confirm-yes" autofocus>Yes</button></div></dialog>` : ""; }
+function templateCommands() {
+  return `<button data-act="job" data-kind="importXml">＋ Add BodySlide XML Presets</button><span class="sep"></span><button class="subtle" data-act="noop">Rename</button><button class="subtle" data-act="noop">Duplicate</button><button class="subtle danger" data-act="remove-preset">Remove</button><button class="subtle danger" data-act="clear-presets">Clear</button><span class="sep"></span><button class="subtle" data-act="noop">Edit SetSliders…</button><button class="subtle" data-act="toggle-bos">View BoS JSON</button><span class="sep"></span><span class="toggle" role="switch" aria-checked="${S.uunp}" data-act="uunp" tabindex="0"><span class="sw" aria-hidden="true"></span>UUNP</span>`;
+}
+function morphCommands() {
+  return `<input type="text" placeholder="Custom target, e.g. All|Female" data-input="newTarget" aria-label="New custom morph target" style="width:200px"><button data-act="add-target">Add</button><span class="sep"></span><button class="subtle" data-act="noop">＋ Add NPCs…</button><button class="subtle" data-act="noop">View Image</button><button class="subtle danger" data-act="noop">Remove</button><span class="sep"></span><button class="subtle" data-act="fill-empty">Fill Empty…</button>`;
+}
+function generateCommands() {
+  const kind = S.area === "templates" ? "generateTemplates" : "generateMorphs";
+  return `<span class="toggle" role="switch" aria-checked="${S.omit}" data-act="omit" tabindex="0"><span class="sw" aria-hidden="true"></span>Omit redundant sliders</span><button class="primary" data-act="job" data-kind="${kind}" ${S.job ? "disabled" : ""}>▶ Generate ${S.area === "templates" ? "Templates" : "Morphs"}</button><button data-act="job" data-kind="exportIni" ${S.job ? "disabled" : ""}>Export INIs…</button><button class="subtle" data-act="copy">Copy</button>`;
+}
+
+/* ═══════════════════════════ Variant A · Rail Studio ═══════════════════════════ */
+function renderA() {
+  const narrow = S.narrow;
+  const p = curPreset();
+  const listCol = S.area === "templates"
+    ? `<header><input type="search" placeholder="Search presets (Ctrl+K)" class="grow" value="${esc(S.search)}" data-input="search" aria-label="Search presets"></header><div class="body">${presetList("lvPresets")}</div><div class="row" style="padding:6px 8px;border-top:1px solid var(--border)"><span class="muted grow">${visPresets().length} presets</span><button class="subtle" data-act="job" data-kind="importXml">＋ Add XML</button></div>`
+    : `<header><h2 class="grow">Custom Targets</h2><span class="badge">${S.targets.length}</span></header><div class="body" style="flex:0 0 auto;max-height:45%">${targetList("lvTargets")}</div><div class="row" style="padding:6px 8px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)"><input type="text" placeholder="All|Female" data-input="newTarget" class="grow" aria-label="New custom morph target"><button data-act="add-target">Add</button></div><header><h2 class="grow">NPCs</h2><span class="badge">${S.npcs.length}</span></header><div class="body"><ul role="listbox" aria-label="NPC Morph Assignments" tabindex="0" data-list="npcs">${visNpcs().map(n => { const i = S.npcs.indexOf(n); return `<li role="option" data-idx="${i}" aria-selected="${S.morphFocus === "npcs" && i === S.selNpc}"><span class="grow">${esc(n.name)}</span>${n.presets.length ? `<span class="muted mono">${n.presets.length}</span>` : `<span style="color:var(--warning)" aria-label="no presets">!</span>`}</li>`; }).join("")}</ul></div>`;
+
+  const editor = S.area === "templates"
+    ? `<header><h2 class="grow">${esc(p.name)}</h2>${jobInline(true)}</header><div class="body editor-body">${S.notes.filter(n => n.durable && !n.dismissed).slice(0, 2).map(n => infobar(n)).join("")}<div class="muted">Template line (read-only preview; edit via SetSliders)</div><textarea readonly aria-label="Template line" style="height:96px;flex:0 0 auto">${esc(S.omit ? p.line.replace(/, \w+@0(?=,|$)/g, "") : p.line)}</textarea>${S.showBos ? `<div class="muted">BodyTypes of Skyrim JSON</div><textarea readonly aria-label="BoS JSON">{\n  "${esc(p.name)}": {\n    "Breasts": 50, "Butt": 55, "Hips": 55\n  }\n}</textarea>` : `<div class="muted">SetSliders</div><div class="card" style="padding:10px;flex:1;overflow:auto"><table><thead><tr><th>Slider</th><th>Min</th><th>Max</th><th>Enabled</th></tr></thead><tbody>${p.line.split("=")[1].split(", ").map(s => { const [n, v] = s.split("@"); const [a, b] = v.split(":"); return `<tr><td>${esc(n)}</td><td class="mono">${a}%</td><td class="mono">${b || a}%</td><td>☑</td></tr>`; }).join("")}</tbody></table></div>`}</div>`
+    : `<header><h2 class="grow">NPC Morph Assignments</h2>${jobInline(true)}</header><div class="body">${S.notes.filter(n => n.durable && !n.dismissed).slice(0, 2).map(n => `<div style="padding:8px 8px 0">${infobar(n)}</div>`).join("")}${npcTable("tvNpc")}</div>`;
+
+  const inspector = S.area === "templates"
+    ? `<header><h3 class="grow">Inspector</h3></header><div class="body"><dl class="kv"><dt>Name</dt><dd>${esc(p.name)}</dd><dt>Sliders</dt><dd>${p.sliders} (${p.line.split(", ").length} non-zero)</dd><dt>Body</dt><dd>${p.uunp ? "UUNP" : "CBBE"}</dd><dt>Used by</dt><dd>${S.targets.filter(t => t.presets.includes(p.name)).length} targets, ${S.npcs.filter(n => n.presets.includes(p.name)).length} NPCs</dd><dt>Status</dt><dd>${S.output.stale ? '<span style="color:var(--warning)">Output stale</span>' : '<span style="color:var(--success)">In output</span>'}</dd></dl><div class="inspector-actions"><button data-act="noop">Edit SetSliders…</button><button data-act="noop">Rename…</button><button data-act="noop">Duplicate</button><button data-act="toggle-bos">${S.showBos ? "Hide" : "View"} BoS JSON</button><button class="danger" data-act="remove-preset">Remove</button></div></div>`
+    : `<header><h3 class="grow">Inspector</h3></header><div class="body">${presetsForTarget(curTarget())}</div>`;
+
+  const shell = narrow
+    ? `<div class="shell narrow">${railA()}<div class="col">${editor}</div>
+        ${S.overlay === "list" ? `<div class="scrim" data-act="close-overlay"></div><div class="side-overlay" style="left:48px" role="dialog" aria-label="List">${listCol}</div>` : ""}
+        ${S.overlay === "inspector" ? `<div class="scrim" data-act="close-overlay"></div><div class="side-overlay right" role="dialog" aria-label="Inspector">${inspector}</div>` : ""}
+        ${drawerA()}</div>`
+    : `<div class="shell">${railA()}<div class="col" id="paneList">${listCol}</div><div class="col" id="paneEditor">${editor}</div><div class="col" id="paneInspector">${inspector}</div>${drawerA()}</div>`;
+
+  return `<div class="A" style="display:flex;flex-direction:column;height:100%">
+    <div class="titlebar"><b>BS2BG</b><span class="muted">— MyBodies.jbs2bg${S.output.stale ? " •" : ""}</span><span class="grow"></span>${narrow ? `<button class="subtle" data-act="overlay" data-o="list">☰ List</button><button class="subtle" data-act="overlay" data-o="inspector">Inspector</button>` : ""}<button class="subtle" data-act="noop">File ▾</button><button class="subtle" data-act="noop">Help ▾</button></div>
+    <div class="cmdbar">${S.area === "templates" ? templateCommands() : morphCommands()}<span class="grow"></span>${generateCommands()}</div>
+    ${shell}
+    <div class="statusbar">${S.job ? `<span class="ring" aria-hidden="true"></span><span>${esc(S.job.label)}…</span><span class="prog"><progress value="${S.job.progress}" max="100"></progress></span><span class="mono">${Math.round(S.job.progress)}%</span><button class="subtle" data-act="cancel-job" style="height:22px">Cancel</button>` : `<span>${S.notes[0] ? `${ICO[S.notes[0].sev]} ${esc(S.notes[0].text)}` : "Ready"}</span>`}<span class="grow"></span><button class="subtle" data-act="open-activity" style="height:22px">Activity ${S.notes.length ? `<span class="badge">${S.notes.length}</span>` : ""}</button><span class="muted">${S.presets.length} presets · ${S.targets.length} targets · ${S.npcs.length} NPCs</span></div>
+    ${S.overlay === "activity" ? activityPanel() : ""}${confirmDialog()}</div>`;
+}
+function railA() {
+  const it = (id, ico, label, cur, extra = "") => `<button class="rail-item" data-act="rail" data-id="${id}" aria-current="${cur ? "page" : "false"}" aria-label="${label}" title="${label}">${ico}${extra}</button>`;
+  return `<nav class="rail" aria-label="Areas">${it("templates", "▤", "Templates (Ctrl+1)", S.area === "templates")}${it("morphs", "☺", "Morphs (Ctrl+2)", S.area === "morphs")}<span class="spacer"></span>${it("output", "⤓", "Output drawer (Ctrl+`)", S.drawer, S.output.stale && S.output.templates ? `<span class="dot" style="position:absolute;top:6px;right:6px;background:var(--warning)"></span>` : "")}${it("settings", "⚙", "Settings", false)}</nav>`;
+}
+function drawerA() {
+  return `<section class="drawer ${S.drawer ? "" : "closed"}" aria-label="Output"><header data-act="toggle-drawer" role="button" tabindex="0" aria-expanded="${S.drawer}"><span>${S.drawer ? "▾" : "▴"}</span><b>Output</b><span class="muted">${S.output.at ? `generated ${fmtTime(S.output.at)}` : "not generated"}${S.output.stale && S.output.at ? " · stale" : ""}</span><span class="grow"></span>${S.job ? `<span class="ring" aria-hidden="true"></span>` : ""}<button class="subtle" data-act="copy" style="height:24px">Copy</button><button class="subtle" data-act="job" data-kind="exportIni" style="height:24px">Export…</button></header><div class="body"><div><span class="muted">templates.ini</span><textarea readonly aria-label="templates.ini">${esc(outputText("templates"))}</textarea></div><div><span class="muted">morphs.ini</span><textarea readonly aria-label="morphs.ini">${esc(outputText("morphs"))}</textarea></div></div></section>`;
+}
+function activityPanel() {
+  return `<div class="scrim" data-act="close-overlay"></div><div class="side-overlay right" role="dialog" aria-label="Activity" style="width:380px"><header class="row" style="padding:8px 10px;border-bottom:1px solid var(--border)"><h2 class="grow">Activity</h2><button class="subtle" data-act="clear-notes">Clear</button><button class="subtle icon" data-act="close-overlay" aria-label="Close">✕</button></header><div class="body" style="overflow:auto"><ul class="activity" style="list-style:none;margin:0;padding:0">${S.notes.map(n => `<li style="display:grid;grid-template-columns:64px 16px 1fr;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)"><span class="muted mono">${fmtTime(n.time)}</span><span aria-hidden="true">${ICO[n.sev]}</span><span>${esc(n.text)}</span></li>`).join("") || `<li class="muted" style="padding:10px">No activity yet.</li>`}</ul></div></div>`;
+}
+
+/* ═══════════════════════════ Variant B · Pivot Split ═══════════════════════════ */
+function renderB() {
+  const narrow = S.narrow, p = curPreset();
+  const master = S.area === "templates"
+    ? `<header><input type="search" class="grow" placeholder="Search (Ctrl+K)" value="${esc(S.search)}" data-input="search" aria-label="Search presets"></header><div class="body">${presetList("lvPresets")}</div><div class="actions"><button class="subtle" data-act="job" data-kind="importXml">＋ Add XML</button><button class="subtle" data-act="noop">Rename</button><button class="subtle" data-act="noop">Duplicate</button><button class="subtle danger" data-act="remove-preset">Remove</button></div>`
+    : `<header><h2 class="grow">Targets</h2></header><div class="body">${targetList("lvTargets")}<div style="padding:6px 8px" class="row"><input type="text" class="grow" placeholder="All|Female" data-input="newTarget" aria-label="New target"><button data-act="add-target">Add</button></div><h3 style="padding:8px 8px 4px">NPCs <span class="badge">${S.npcs.length}</span></h3><ul role="listbox" aria-label="NPCs" tabindex="0" data-list="npcs">${visNpcs().map(n => { const i = S.npcs.indexOf(n); return `<li role="option" data-idx="${i}" aria-selected="${S.morphFocus === "npcs" && i === S.selNpc}"><span class="grow">${esc(n.name)}</span>${n.presets.length ? "" : `<span style="color:var(--warning)">!</span>`}</li>`; }).join("")}</ul></div><div class="actions"><button class="subtle" data-act="noop">＋ Add NPCs…</button><button class="subtle" data-act="fill-empty">Fill Empty</button></div>`;
+
+  const picker = S.area === "templates"
+    ? `<div class="picker"><label for="pick">Preset</label><select id="pick" class="grow" data-input="pickPreset">${S.presets.map((x, i) => `<option value="${i}" ${i === S.selPreset ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select><button class="subtle" data-act="job" data-kind="importXml">＋</button></div>`
+    : `<div class="picker"><label for="pick">Target</label><select id="pick" class="grow" data-input="pickTarget">${S.targets.map((x, i) => `<option value="t${i}" ${S.morphFocus === "targets" && i === S.selTarget ? "selected" : ""}>${esc(x.name)}</option>`).join("")}${S.npcs.map((x, i) => `<option value="n${i}" ${S.morphFocus === "npcs" && i === S.selNpc ? "selected" : ""}>NPC · ${esc(x.name)}</option>`).join("")}</select></div>`;
+
+  const detail = S.area === "templates"
+    ? `<div class="props"><div class="p"><b>${esc(p.name)}</b><span>Slider Preset</span></div><div class="p"><b>${p.uunp ? "UUNP" : "CBBE"}</b><span>body</span></div><div class="p"><b>${p.sliders}</b><span>sliders</span></div><div class="p"><b>${S.targets.filter(t => t.presets.includes(p.name)).length + S.npcs.filter(n => n.presets.includes(p.name)).length}</b><span>assignments</span></div><span class="grow"></span><button data-act="noop">Edit SetSliders…</button><button class="subtle" data-act="toggle-bos">BoS JSON</button></div>
+       <div class="work">${S.notes.filter(n => n.durable && !n.dismissed).slice(0, 1).map(n => infobar(n)).join("")}<div class="muted">Template line</div><textarea readonly style="height:80px;flex:0 0 auto" aria-label="Template line">${esc(p.line)}</textarea><div class="muted">SetSliders</div><div class="card" style="flex:1;overflow:auto"><table><thead><tr><th>Slider</th><th>Min</th><th>Max</th></tr></thead><tbody>${p.line.split("=")[1].split(", ").map(s => { const [n, v] = s.split("@"); const [a, b] = v.split(":"); return `<tr><td>${esc(n)}</td><td class="mono">${a}%</td><td class="mono">${b || a}%</td></tr>`; }).join("")}</tbody></table></div></div>`
+    : `<div class="props"><div class="p"><b class="mono">${esc(curTarget().name)}</b><span>${S.morphFocus === "targets" ? "Custom Morph Target" : `NPC · ${esc(curTarget().master)} · ${esc(curTarget().race)}`}</span></div><div class="p"><b>${curTarget().presets.length}</b><span>presets</span></div><span class="grow"></span>${S.morphFocus === "targets" ? `<button class="subtle danger" data-act="noop">Remove target</button>` : `<button class="subtle" data-act="noop">View Image</button>`}</div>
+       <div class="work">${S.notes.filter(n => n.durable && !n.dismissed).slice(0, 1).map(n => infobar(n)).join("")}<div class="card">${presetsForTarget(curTarget())}</div><div class="muted">All NPC assignments</div><div class="card" style="flex:1;overflow:auto">${npcTable("tvNpc", true)}</div></div>`;
+
+  const outpane = `<aside class="outpane" aria-label="Output"><header><b>Output</b><span class="muted">${S.output.at ? fmtTime(S.output.at) : ""}${S.output.stale && S.output.at ? " · stale" : ""}</span><span class="grow"></span><button class="subtle" data-act="copy" style="height:26px">Copy</button><button class="subtle" data-act="job" data-kind="exportIni" style="height:26px" ${S.job ? "disabled" : ""}>Export…</button>${narrow ? `<button class="subtle icon" data-act="toggle-drawer" aria-label="Close">✕</button>` : ""}</header><div class="tabs" role="tablist"><button role="tab" aria-selected="${S.outTab === "templates"}" data-act="outtab" data-t="templates">templates.ini</button><button role="tab" aria-selected="${S.outTab === "morphs"}" data-act="outtab" data-t="morphs">morphs.ini</button></div><div class="body"><textarea readonly aria-label="${S.outTab}.ini">${esc(outputText(S.outTab))}</textarea></div>${S.job && S.job.kind !== "importXml" ? `<div class="skeleton" role="status"><span class="ring" aria-hidden="true"></span><span>${esc(S.job.label)}…</span><progress value="${S.job.progress}" max="100" style="width:200px"></progress><button class="subtle" data-act="cancel-job">Cancel</button></div>` : ""}</aside>`;
+
+  return `<div class="B" style="display:flex;flex-direction:column;height:100%">
+    <div class="header"><b>BS2BG</b><div class="pivot" role="tablist" aria-label="Areas"><button role="tab" aria-selected="${S.area === "templates"}" data-act="rail" data-id="templates">Templates</button><button role="tab" aria-selected="${S.area === "morphs"}" data-act="rail" data-id="morphs">Morphs</button></div><span class="grow"></span>
+      <div class="hjob">${S.job ? `<span class="ring" aria-hidden="true"></span><span class="muted">${esc(S.job.label)}… ${Math.round(S.job.progress)}%</span><button class="subtle" data-act="cancel-job">Cancel</button>` : ""}</div>
+      <span class="toggle" role="switch" aria-checked="${S.uunp}" data-act="uunp" tabindex="0"><span class="sw" aria-hidden="true"></span>UUNP</span>
+      <button class="primary" data-act="job" data-kind="${S.area === "templates" ? "generateTemplates" : "generateMorphs"}" ${S.job ? "disabled" : ""}>▶ Generate</button>
+      <button class="subtle" data-act="toggle-drawer" aria-pressed="${S.drawer}" title="Output (Ctrl+\`)">Output</button>
+      <button class="subtle" data-act="open-activity" aria-label="Activity">🔔${S.notes.length ? `<span class="badge">${S.notes.length}</span>` : ""}</button><button class="subtle" data-act="noop">⋯</button></div>
+    <div class="shell ${narrow ? "narrow" : S.drawer ? "" : "nooutput"}">
+      <div class="main ${narrow ? "narrow" : ""}">${narrow ? picker : `<div class="master">${master}</div>`}<div class="detail">${detail}</div></div>
+      ${narrow ? (S.drawer ? `<div class="scrim" data-act="toggle-drawer"></div><div class="sheet">${outpane}</div>` : "") : (S.drawer ? outpane : "")}
+      ${S.overlay === "activity" ? `<div class="menu card"><div class="row" style="padding:6px 8px;border-bottom:1px solid var(--border)"><b class="grow">Activity</b><button class="subtle" data-act="clear-notes">Clear</button><button class="subtle icon" data-act="close-overlay" aria-label="Close">✕</button></div><ul>${S.notes.map(n => `<li><span class="muted mono">${fmtTime(n.time)}</span><span aria-hidden="true">${ICO[n.sev]}</span><span>${esc(n.text)}</span></li>`).join("") || `<li class="muted">No activity yet.</li>`}</ul></div>` : ""}
+    </div>
+    ${toastsHtml()}${confirmDialog()}</div>`;
+}
+
+/* ═══════════════════════════ Variant C · Ledger Pages ═══════════════════════════ */
+function renderC() {
+  const narrow = S.narrow;
+  const nav = (id, label, badge = "") => `<button class="nav-item" data-act="page" data-id="${id}" aria-current="${S.page === id ? "page" : "false"}">${label}${badge}</button>`;
+  const navHtml = `<nav class="nav" aria-label="Pages"><div class="brand">BS2BG</div>${nav("templates", "▤ Templates")}${nav("morphs", "☺ Morphs")}${nav("npcs", "≡ NPC Assignments", S.npcs.filter(n => !n.presets.length).length ? `<span class="badge" style="background:var(--warning);color:#000" title="NPCs without presets">${S.npcs.filter(n => !n.presets.length).length}</span>` : "")}${nav("output", "⤓ Output", S.outputBadge ? `<span class="dot"></span>` : "")}${nav("activity", "🔔 Activity", S.notes.length ? `<span class="badge">${S.notes.length}</span>` : "")}<span class="spacer"></span>${nav("settings", "⚙ Settings")}</nav>`;
+
+  const sticky = S.job ? `<div class="infobar info" role="status" style="border-radius:0;border-left-width:4px"><span class="ring" aria-hidden="true"></span><span class="grow">${esc(S.job.label)}…</span><progress value="${S.job.progress}" max="100" style="width:200px"></progress><span class="mono">${Math.round(S.job.progress)}%</span><button class="subtle" data-act="cancel-job">Cancel</button></div>` : (S.notes[0] && !S.notes[0].dismissed && (Date.now() - S.notes[0].time < 8000 || S.notes[0].durable) ? infobar(S.notes[0], S.notes[0].sev === "error" ? `<button class="subtle" data-act="page" data-id="activity">Details</button>` : "") : "");
+
+  let page;
+  if (S.page === "templates") {
+    page = `<div class="cmdbar">${narrow ? `<button class="subtle icon hamb" data-act="overlay" data-o="nav" aria-label="Menu">☰</button>` : ""}<h2 style="margin-right:8px">Templates</h2>${templateCommands()}<span class="grow"></span><input type="search" placeholder="Search (Ctrl+K)" value="${esc(S.search)}" data-input="search" aria-label="Search presets"><button class="primary" data-act="job" data-kind="generateTemplates" ${S.job ? "disabled" : ""}>▶ Generate</button></div>${sticky}
+      <div class="content"><div class="card"><table role="grid" aria-label="Slider Presets"><thead><tr><th style="width:24px"></th><th>Name</th>${narrow ? "" : `<th>Body</th><th>Sliders</th><th>Used by</th>`}<th>Template line</th></tr></thead><tbody>${visPresets().map(p => { const i = S.presets.indexOf(p); const ex = S.expanded === i; return `<tr role="row" data-idx="${i}" data-list="presets" aria-selected="${i === S.selPreset}" aria-expanded="${ex}" tabindex="${i === S.selPreset ? 0 : -1}" data-act="expand"><td><span class="chev" aria-hidden="true">▸</span></td><td><b>${esc(p.name)}</b></td>${narrow ? "" : `<td>${p.uunp ? "UUNP" : "CBBE"}</td><td class="mono">${p.sliders}</td><td class="mono">${S.targets.filter(t => t.presets.includes(p.name)).length + S.npcs.filter(n => n.presets.includes(p.name)).length}</td>`}<td class="mono muted" style="max-width:420px;overflow:hidden;text-overflow:ellipsis">${esc(p.line.split("=")[1])}</td></tr>${ex ? `<tr class="exp"><td colspan="${narrow ? 3 : 6}"><div class="grid ${narrow ? "narrow" : ""}"><div><div class="muted">Template line</div><textarea readonly style="height:72px" aria-label="Template line">${esc(p.line)}</textarea><div class="acts"><button data-act="noop">Edit SetSliders…</button><button class="subtle" data-act="noop">Rename…</button><button class="subtle" data-act="noop">Duplicate</button><button class="subtle" data-act="toggle-bos">BoS JSON</button><button class="subtle danger" data-act="remove-preset">Remove</button></div></div><dl class="kv"><dt>Body</dt><dd>${p.uunp ? "UUNP" : "CBBE"}</dd><dt>Sliders</dt><dd>${p.sliders}</dd><dt>Targets</dt><dd>${S.targets.filter(t => t.presets.includes(p.name)).map(t => `<span class="chip mono">${esc(t.name)}</span>`).join(" ") || "—"}</dd><dt>NPCs</dt><dd>${S.npcs.filter(n => n.presets.includes(p.name)).length}</dd></dl></div></td></tr>` : ""}`; }).join("")}</tbody></table></div></div>`;
+  } else if (S.page === "morphs") {
+    page = `<div class="cmdbar">${narrow ? `<button class="subtle icon hamb" data-act="overlay" data-o="nav" aria-label="Menu">☰</button>` : ""}<h2 style="margin-right:8px">Morphs</h2>${morphCommands()}<span class="grow"></span><button class="primary" data-act="job" data-kind="generateMorphs" ${S.job ? "disabled" : ""}>▶ Generate</button></div>${sticky}
+      <div class="content"><h3>Custom Morph Targets</h3><div class="card"><table role="grid" aria-label="Custom Morph Targets"><thead><tr><th style="width:24px"></th><th>Target</th><th>Slider Presets</th><th style="width:60px">Count</th></tr></thead><tbody>${S.targets.map((t, i) => { const ex = S.expanded === i && S.morphFocus === "targets"; return `<tr role="row" data-idx="${i}" data-list="targets" aria-selected="${S.morphFocus === "targets" && i === S.selTarget}" aria-expanded="${ex}" tabindex="${i === S.selTarget ? 0 : -1}" data-act="expand"><td><span class="chev" aria-hidden="true">▸</span></td><td class="mono"><b>${esc(t.name)}</b></td><td>${t.presets.map(p => `<span class="chip">${esc(p)}</span>`).join(" ") || `<span style="color:var(--warning)">— no presets, will be skipped —</span>`}</td><td class="mono">${t.presets.length}</td></tr>${ex ? `<tr class="exp"><td colspan="4"><div class="card">${presetsForTarget(t)}</div></td></tr>` : ""}`; }).join("")}</tbody></table></div><p class="muted">Individual NPCs live on their own page — <button class="subtle" data-act="page" data-id="npcs" style="height:24px">NPC Assignments →</button></p></div>`;
+  } else if (S.page === "npcs") {
+    page = `<div class="cmdbar">${narrow ? `<button class="subtle icon hamb" data-act="overlay" data-o="nav" aria-label="Menu">☰</button>` : ""}<h2 style="margin-right:8px">NPC Assignments</h2><button data-act="noop">＋ Add NPCs…</button><button class="subtle" data-act="noop">View Image</button><button class="subtle danger" data-act="noop">Remove</button><button class="subtle danger" data-act="noop">Clear</button><span class="grow"></span><button class="primary" data-act="job" data-kind="generateMorphs" ${S.job ? "disabled" : ""}>▶ Generate Morphs</button></div>${sticky}
+      <div class="content"><div class="card">${npcTable("tvNpc", true)}</div>${S.morphFocus === "npcs" ? `<div class="card">${presetsForTarget(curTarget())}</div>` : `<p class="muted">Select an NPC row to edit its presets below the table.</p>`}</div>`;
+  } else if (S.page === "output") {
+    S.outputBadge = false;
+    page = `<div class="cmdbar">${narrow ? `<button class="subtle icon hamb" data-act="overlay" data-o="nav" aria-label="Menu">☰</button>` : ""}<h2 style="margin-right:8px">Output</h2><span class="toggle" role="switch" aria-checked="${S.omit}" data-act="omit" tabindex="0"><span class="sw" aria-hidden="true"></span>Omit redundant sliders</span><span class="sep"></span><button data-act="job" data-kind="generateTemplates" ${S.job ? "disabled" : ""}>▶ Generate Templates</button><button data-act="job" data-kind="generateMorphs" ${S.job ? "disabled" : ""}>▶ Generate Morphs</button><span class="grow"></span><button class="subtle" data-act="copy">Copy</button><button class="primary" data-act="job" data-kind="exportIni" ${S.job ? "disabled" : ""}>Export INIs…</button><button data-act="job" data-kind="exportBos" ${S.job ? "disabled" : ""}>Export BoS JSON…</button></div>${sticky}
+      <div class="content">${S.output.stale && S.output.at ? infobar({ id: 0, sev: "warning", text: "The Project changed after this output was generated. Regenerate before exporting." }) : ""}<div class="outgrid ${narrow ? "narrow" : ""}"><div class="pane"><header><b>templates.ini</b><span class="muted">${S.output.templates ? S.output.templates.split("\n").length + " lines" : ""}</span></header><div class="body" style="padding:6px"><textarea readonly aria-label="templates.ini">${esc(outputText("templates"))}</textarea></div></div><div class="pane"><header><b>morphs.ini</b><span class="muted">${S.output.morphs ? S.output.morphs.split("\n").length + " lines" : ""}</span></header><div class="body" style="padding:6px"><textarea readonly aria-label="morphs.ini">${esc(outputText("morphs"))}</textarea></div></div></div></div>`;
+  } else if (S.page === "activity") {
+    page = `<div class="cmdbar">${narrow ? `<button class="subtle icon hamb" data-act="overlay" data-o="nav" aria-label="Menu">☰</button>` : ""}<h2 style="margin-right:8px">Activity</h2><span class="grow"></span><button class="subtle" data-act="clear-notes">Clear history</button></div>${S.job ? sticky : ""}
+      <div class="content"><div class="card activity"><ul>${S.notes.map(n => `<li><span class="muted mono">${fmtTime(n.time)}</span><span aria-hidden="true">${ICO[n.sev]}</span><span>${esc(n.text)}</span>${n.sev === "error" ? `<button class="subtle" data-act="noop">Copy diagnostics</button>` : ""}</li>`).join("") || `<li class="muted">No activity yet. Jobs, imports, warnings, and errors are recorded here so nothing important lives only in a toast.</li>`}</ul></div></div>`;
+  } else {
+    page = `<div class="cmdbar"><h2>Settings</h2></div><div class="content"><div class="card" style="padding:14px"><p class="muted">Theme: follow Windows / Light / Dark. High contrast always follows Windows.</p></div></div>`;
+  }
+  return `<div class="C" style="display:flex;flex-direction:column;height:100%"><div class="shell ${narrow ? "narrow" : ""}">${narrow ? "" : navHtml}<div class="page">${page}</div>${narrow && S.overlay === "nav" ? `<div class="scrim" data-act="close-overlay"></div><div class="side-overlay" role="dialog" aria-label="Menu">${navHtml}</div>` : ""}</div>${confirmDialog()}</div>`;
+}
+
+/* ═══════════════════════════ Help / design notes per variant ═══════════════════════════ */
+const HELP = {
+  A: `<h2>A · Rail Studio</h2><p><b>Argument:</b> the modder works on one preset/target at a time, so give it three persistent panes — list, editor, inspector — and keep the output out of the way in a bottom drawer that surfaces when a job finishes.</p>
+<h3>Structure</h3><ul><li>48px icon rail: Templates, Morphs, Output (drawer toggle), Settings. Rail item badges = attention.</li><li>Command bar changes with the area; Generate/Export always at the right end.</li><li>Inspector = read-only facts + the actions that apply to the selection (SetSliders, Rename, Remove; for morphs: presets-for-target editor).</li><li>Output drawer shows both INIs side by side; header stays visible when collapsed.</li></ul>
+<h3>Narrow (&lt;~900px)</h3><ul><li>List and Inspector become side overlays opened from the title bar (or F6/F7). Editor keeps full width.</li></ul>
+<h3>Progress &amp; notifications</h3><ul><li>Progress lives in the <b>status bar</b> (label, bar, %, Cancel) plus a ring in the editor header.</li><li>Transient messages replace the status-bar text; durable warnings/errors are InfoBars at the top of the editor; everything is kept in Activity (status bar button).</li><li>Confirmations stay modal (dialog).</li></ul>
+<h3>Keys</h3><table><tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd>/<kbd>2</kbd></td><td>Templates / Morphs</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>\`</kbd></td><td>Toggle output drawer</td></tr><tr><td><kbd>F6</kbd></td><td>Cycle list → editor → inspector</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Focus search/filter</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Generate / Export</td></tr><tr><td><kbd>↑</kbd><kbd>↓</kbd> <kbd>Home</kbd> <kbd>End</kbd></td><td>Move in lists/tables</td></tr><tr><td><kbd>Esc</kbd></td><td>Close drawer / overlay / toast / dialog</td></tr></table>`,
+  B: `<h2>B · Pivot Split</h2><p><b>Argument:</b> the generated INI text <i>is</i> the deliverable, so keep it permanently visible as a right pane and treat editing as master-detail on the left. No separate inspector — facts become a properties strip above the editor.</p>
+<h3>Structure</h3><ul><li>Top Pivot (Templates | Morphs) in the header; Generate, UUNP, Output toggle and Activity bell live in the header too, so they never move.</li><li>Master list (240px) with its own action row; detail = properties strip + work area.</li><li>Output pane (380px) with templates.ini / morphs.ini tabs, Copy/Export in its header; collapsible.</li></ul>
+<h3>Narrow</h3><ul><li>Master list becomes a ComboBox picker above the detail; output pane becomes a bottom sheet (Output button / Ctrl+\`).</li></ul>
+<h3>Progress &amp; notifications</h3><ul><li>Progress = ring + % in the header <i>and</i> a skeleton overlay on the output pane (the thing being produced).</li><li><b>Toasts</b> top-right: info/success auto-dismiss in 5s; errors persist with Details → Activity flyout (bell).</li><li>Durable warnings also render as an InfoBar in the detail area.</li></ul>
+<h3>Keys</h3><table><tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd>/<kbd>2</kbd></td><td>Pivot</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>\`</kbd></td><td>Show/hide output pane</td></tr><tr><td><kbd>F6</kbd></td><td>Cycle master → detail → output</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Search</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Generate / Export</td></tr><tr><td><kbd>Esc</kbd></td><td>Dismiss newest toast / flyout / sheet</td></tr></table>`,
+  C: `<h2>C · Ledger Pages</h2><p><b>Argument:</b> drop persistent panes altogether. Each concern is a page reached from an expanded nav; rows expand inline to edit; Output and Activity are pages so nothing has to fit in a drawer or a toast. Narrow windows need no special mode.</p>
+<h3>Structure</h3><ul><li>Expanded 200px nav: Templates, Morphs, NPC Assignments (badge = NPCs without presets), Output (dot = fresh result), Activity (badge = entries), Settings.</li><li>Every page: sticky command bar → optional sticky InfoBar → single scrolling column (max 1100px).</li><li>Rows expand in place (Enter/Space/click) to reveal the editor + facts; only one expanded at a time.</li><li>NPCs get their own page with the filter row and a presets editor under the table.</li></ul>
+<h3>Narrow</h3><ul><li>Nav collapses to a ☰ menu; tables drop secondary columns; output panes stack.</li></ul>
+<h3>Progress &amp; notifications</h3><ul><li>Progress = sticky InfoBar under the command bar with Cancel. Nothing floats.</li><li>Latest message shows in the same InfoBar slot (auto-clears after 8s unless durable); the full history is the Activity page.</li><li>Completion badges the Output nav item instead of pulling the user there.</li></ul>
+<h3>Keys</h3><table><tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd>…<kbd>5</kbd></td><td>Pages</td></tr><tr><td><kbd>F6</kbd></td><td>Nav ↔ command bar ↔ content</td></tr><tr><td><kbd>Enter</kbd>/<kbd>Space</kbd></td><td>Expand / collapse row</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Search</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Generate / Export</td></tr><tr><td><kbd>Esc</kbd></td><td>Collapse row / close menu</td></tr></table>`,
+};
+const HELP_COMMON = `<h3>Questions to settle (react to any variant, or mix)</h3><ul><li>Navigation: icon rail (A) vs Pivot tabs (B) vs expanded nav with pages (C)?</li><li>Inspector: persistent pane (A) vs properties strip (B) vs inline expansion (C)?</li><li>Output: drawer (A) vs always-visible pane (B) vs page (C)? Should Generate auto-reveal it?</li><li>Progress: status bar (A) vs header ring + skeleton (B) vs sticky InfoBar (C)?</li><li>Notifications: which of the current CustomNotif messages are toast-worthy, which need an InfoBar, which need a modal? Is a durable Activity history wanted?</li><li>Narrow mode: overlays (A), picker + sheet (B), or no special mode (C)?</li><li>Theme: is the HC token set (flat fills, borders carry meaning, yellow highlight) acceptable as the contract? Should the app offer a manual light/dark override?</li></ul><p class="muted">Try: <b>Fail next job</b> then Generate; <b>Narrow</b>; theme <b>High contrast</b>; Tab through a variant with the mouse untouched.</p>`;
+
+/* ═══════════════════════════ Render + wiring ═══════════════════════════ */
+const app = document.getElementById("app");
+function render() {
+  const focused = document.activeElement, fid = focused && focused.id, fsel = focused && focused.getAttribute && focused.getAttribute("data-idx");
+  // Full re-render on every change; keep scroll offsets of scrollable regions that carry an id
+  // (elements without one are skipped — a bare "#" selector would throw and stall the job loop).
+  const scrolls = [...app.querySelectorAll("[id].body, [id].content, [id][role=listbox]")].map(e => [e.id, e.scrollTop]);
+  app.innerHTML = { A: renderA, B: renderB, C: renderC }[S.variant]();
+  document.title = `PROTOTYPE · ${S.variant} ${VARIANTS[S.variant]} · BS2BG workbench`;
+  scrolls.forEach(([id, t]) => { const e = document.getElementById(id); if (e) e.scrollTop = t; });
+  if (fid) { const e = document.getElementById(fid); if (e) e.focus({ preventScroll: true }); }
+  else if (fsel != null && focused.getAttribute("role")) { const e = app.querySelector(`[role="${focused.getAttribute("role")}"][data-idx="${fsel}"]`); if (e) e.focus({ preventScroll: true }); }
+  const help = document.getElementById("help"); help.hidden = !S.help; help.innerHTML = HELP[S.variant] + HELP_COMMON;
+}
+function setVariant(v) { S.variant = v; S.overlay = null; S.drawer = v === "B"; try { const u = new URL(location.href); u.searchParams.set("variant", v); history.replaceState(null, "", u); } catch (e) { /* file:// in some browsers refuses replaceState; the bar still works */ } syncBar(); render(); }
+function syncBar() {
+  document.getElementById("pb-label").textContent = `${S.variant} (${VARIANTS[S.variant]})`;
+  document.getElementById("pb-theme").value = S.theme;
+  document.getElementById("pb-narrow").classList.toggle("on", S.narrow);
+  document.getElementById("pb-motion").classList.toggle("on", S.motion === "reduced");
+  document.getElementById("pb-fail").classList.toggle("on", S.failNext);
+  document.getElementById("pb-help").classList.toggle("on", S.help);
+  document.getElementById("stage").classList.toggle("narrow", S.narrow);
+  const sys = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.documentElement.dataset.theme = S.theme === "system" ? sys : S.theme;
+  document.documentElement.dataset.motion = S.motion === "reduced" || (S.motion === "auto" && matchMedia("(prefers-reduced-motion: reduce)").matches) ? "reduced" : "auto";
+}
+const cycle = d => { const ks = Object.keys(VARIANTS); setVariant(ks[(ks.indexOf(S.variant) + d + ks.length) % ks.length]); };
+document.getElementById("pb-prev").onclick = () => cycle(-1);
+document.getElementById("pb-next").onclick = () => cycle(1);
+document.getElementById("pb-theme").onchange = e => { S.theme = e.target.value; syncBar(); };
+document.getElementById("pb-narrow").onclick = () => { S.narrow = !S.narrow; S.overlay = null; syncBar(); render(); };
+document.getElementById("pb-motion").onclick = () => { S.motion = S.motion === "reduced" ? "auto" : "reduced"; syncBar(); };
+document.getElementById("pb-fail").onclick = () => { S.failNext = !S.failNext; syncBar(); };
+document.getElementById("pb-help").onclick = () => { S.help = !S.help; syncBar(); render(); };
+
+/* Actions — every variant emits the same data-act vocabulary so behavior is shared. */
+app.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act;
+  const opt = e.target.closest("[role=option]");
+  if (opt && !act) return;
+  switch (act) {
+    case "rail": if (el.dataset.id === "output") { S.drawer = !S.drawer; } else if (el.dataset.id === "settings") { toast("info", "Settings is out of scope for this prototype."); } else { S.area = el.dataset.id; S.overlay = null; } break;
+    case "page": S.page = el.dataset.id; S.overlay = null; if (el.dataset.id === "npcs") S.morphFocus = "npcs"; if (el.dataset.id === "morphs") S.morphFocus = "targets"; if (el.dataset.id === "activity") S.notes.forEach(n => n.dismissed = true); break;
+    case "job": startJob(el.dataset.kind); return;
+    case "cancel-job": cancelJob(); return;
+    case "toggle-drawer": S.drawer = !S.drawer; break;
+    case "outtab": S.outTab = el.dataset.t; break;
+    case "overlay": S.overlay = S.overlay === el.dataset.o ? null : el.dataset.o; break;
+    case "close-overlay": S.overlay = null; break;
+    case "open-activity": S.overlay = S.overlay === "activity" ? null : "activity"; S.toasts = S.toasts.filter(t => t.sev !== "error"); break;
+    case "clear-notes": S.notes = []; S.toasts = []; break;
+    case "dismiss": { const n = S.notes.find(x => x.id == el.dataset.id); if (n) n.dismissed = true; S.toasts = S.toasts.filter(t => t.id != el.dataset.id); break; }
+    case "uunp": S.uunp = !S.uunp; S.output.stale = true; S.selPreset = S.presets.findIndex(p => p.uunp === S.uunp); break;
+    case "omit": S.omit = !S.omit; S.output.stale = true; break;
+    case "toggle-bos": S.showBos = !S.showBos; break;
+    case "copy": toast(S.output.templates || S.output.morphs ? "success" : "warning", S.output.templates || S.output.morphs ? "Output copied to clipboard!" : "There is nothing in the output, generate first!"); return;
+    case "expand": { const i = +el.dataset.idx; S.expanded = S.expanded === i ? null : i; if (el.dataset.list === "presets") S.selPreset = i; else { S.selTarget = i; S.morphFocus = "targets"; } break; }
+    case "add-target": { const inp = app.querySelector('[data-input="newTarget"]'); const v = (inp && inp.value || "").trim(); if (!v) { toast("warning", "Enter a target such as All|Female."); return; } if (S.targets.some(t => t.name.toLowerCase() === v.toLowerCase())) { toast("error", `A Custom Morph Target named "${v}" already exists.`); return; } S.targets.push({ name: v, presets: [] }); S.selTarget = S.targets.length - 1; S.morphFocus = "targets"; S.output.stale = true; note("success", `Added ${v}.`); break; }
+    case "assign": { const sel = app.querySelector('[data-input="assignPick"]'); const v = sel && sel.value; if (!v) return; curTarget().presets.push(v); S.output.stale = true; break; }
+    case "assign-all": curTarget().presets = S.presets.map(p => p.name); S.output.stale = true; break;
+    case "unassign": curTarget().presets = curTarget().presets.filter(p => p !== el.dataset.p); S.output.stale = true; break;
+    case "clear-target": confirm2(`Clear all Slider Presets from ${curTarget().name}?`, () => { curTarget().presets = []; S.output.stale = true; }); return;
+    case "clear-assignments": confirm2("Clear the Slider Presets of every NPC currently shown in the table?", () => { visNpcs().forEach(n => n.presets = []); S.output.stale = true; note("info", `${visNpcs().length} NPCs cleared.`); }); return;
+    case "fill-empty": { const empty = S.npcs.filter(n => !n.presets.length); if (!empty.length) { toast("info", "No NPC in the table is empty!"); return; } confirm2(`Assign a random Slider Preset to ${empty.length} NPCs without presets?`, () => { empty.forEach(n => n.presets = [S.presets[Math.floor(Math.random() * 8)].name]); S.output.stale = true; note("success", `${empty.length} NPCs filled.`); }); return; }
+    case "remove-preset": confirm2(`Remove "${curPreset().name}"? It is referenced by ${S.targets.filter(t => t.presets.includes(curPreset().name)).length} targets and ${S.npcs.filter(n => n.presets.includes(curPreset().name)).length} NPCs; those references will be removed too.`, () => { const nm = curPreset().name; S.presets.splice(S.selPreset, 1); S.targets.forEach(t => t.presets = t.presets.filter(p => p !== nm)); S.npcs.forEach(n => n.presets = n.presets.filter(p => p !== nm)); S.selPreset = Math.max(0, S.selPreset - 1); S.output.stale = true; note("info", `Removed ${nm}.`); }); return;
+    case "clear-presets": confirm2("Remove every Slider Preset from the Project?", () => toast("info", "(prototype) not actually cleared")); return;
+    case "confirm-yes": { const c = S.pendingConfirm; S.pendingConfirm = null; c.onOk(); break; }
+    case "confirm-no": S.pendingConfirm = null; break;
+    case "noop": toast("info", `"${el.textContent.trim().replace(/…$/, "")}" opens the existing popup flow — unchanged by this prototype.`); return;
+  }
+  render();
+});
+app.addEventListener("click", e => {
+  const opt = e.target.closest("[role=option]"); if (opt) { selectFromList(opt.parentElement.dataset.list, +opt.dataset.idx); return; }
+  const tr = e.target.closest("tr[data-npc]"); if (tr) { S.selNpc = +tr.dataset.npc; S.morphFocus = "npcs"; render(); }
+});
+app.addEventListener("input", e => {
+  const k = e.target.dataset.input; if (!k) return;
+  if (k === "search") { S.search = e.target.value; render(); }
+  if (k === "npcFilter") { S.npcFilter = e.target.value; render(); }
+});
+app.addEventListener("change", e => {
+  const k = e.target.dataset.input; if (!k) return;
+  if (k === "pickPreset") { S.selPreset = +e.target.value; render(); }
+  if (k === "pickTarget") { const v = e.target.value; S.morphFocus = v[0] === "t" ? "targets" : "npcs"; if (v[0] === "t") S.selTarget = +v.slice(1); else S.selNpc = +v.slice(1); render(); }
+});
+function selectFromList(list, i) {
+  if (list === "presets") S.selPreset = i;
+  if (list === "targets") { S.selTarget = i; S.morphFocus = "targets"; }
+  if (list === "npcs") { S.selNpc = i; S.morphFocus = "npcs"; }
+  render();
+}
+
+/* Keyboard: list/table arrows, F6 pane cycling, accelerators, Esc, and ←/→ for the switcher. */
+document.addEventListener("keydown", e => {
+  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
+  const lb = e.target.closest && e.target.closest("[role=listbox]");
+  const row = e.target.closest && e.target.closest("tr[data-npc], tr[data-act=expand]");
+  if (lb && ["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) {
+    e.preventDefault(); const list = lb.dataset.list; const opts = [...lb.querySelectorAll("[role=option]")]; const cur = opts.findIndex(o => o.getAttribute("aria-selected") === "true");
+    const n = e.key === "Home" ? 0 : e.key === "End" ? opts.length - 1 : Math.max(0, Math.min(opts.length - 1, cur + (e.key === "ArrowDown" ? 1 : -1)));
+    selectFromList(list, +opts[n].dataset.idx); const el = app.querySelector(`[data-list="${list}"] [role=option][data-idx="${opts[n].dataset.idx}"]`); if (el) { el.setAttribute("tabindex", "0"); el.focus(); el.scrollIntoView({ block: "nearest" }); } return;
+  }
+  if (row && ["ArrowUp", "ArrowDown"].includes(e.key)) {
+    e.preventDefault(); const rows = [...row.parentElement.querySelectorAll("tr[data-npc], tr[data-act=expand]")]; const i = rows.indexOf(row); const nx = rows[Math.max(0, Math.min(rows.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))];
+    if (nx.dataset.npc != null) { S.selNpc = +nx.dataset.npc; S.morphFocus = "npcs"; render(); const el = app.querySelector(`tr[data-npc="${nx.dataset.npc}"]`); el && el.focus(); }
+    else { const li = nx.dataset.list, ix = +nx.dataset.idx; if (li === "presets") S.selPreset = ix; else S.selTarget = ix; render(); const el = app.querySelector(`tr[data-list="${li}"][data-idx="${ix}"]`); el && el.focus(); }
+    return;
+  }
+  if (row && (e.key === "Enter" || e.key === " ") && row.dataset.act === "expand") { e.preventDefault(); row.click(); const el = app.querySelector(`tr[data-list="${row.dataset.list}"][data-idx="${row.dataset.idx}"]`); el && el.focus(); return; }
+  if (e.target.matches && e.target.matches("[role=switch], .drawer > header") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.target.click(); return; }
+  if (e.key === "Escape") {
+    if (S.pendingConfirm) S.pendingConfirm = null;
+    else if (S.overlay) S.overlay = null;
+    else if (S.toasts.length) S.toasts.pop();
+    else if (S.variant === "C" && S.expanded != null) S.expanded = null;
+    else if (S.drawer && S.variant !== "B") S.drawer = false;
+    else if (S.variant === "B" && S.narrow && S.drawer) S.drawer = false;
+    else return; render(); return;
+  }
+  if (e.ctrlKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === "`") { e.preventDefault(); S.drawer = !S.drawer; render(); return; }
+    if (k === "k") { e.preventDefault(); const s = app.querySelector('input[type=search]'); if (s) s.focus(); else { if (S.variant === "A" && S.narrow) { S.overlay = "list"; render(); } } return; }
+    if (k === "g") { e.preventDefault(); startJob(S.area === "templates" && S.page !== "npcs" && S.page !== "morphs" ? "generateTemplates" : "generateMorphs"); return; }
+    if (k === "e") { e.preventDefault(); startJob("exportIni"); return; }
+    if (/^[1-5]$/.test(k)) {
+      e.preventDefault();
+      if (S.variant === "C") { S.page = ["templates", "morphs", "npcs", "output", "activity"][+k - 1]; if (S.page === "npcs") S.morphFocus = "npcs"; }
+      else if (k === "1" || k === "2") S.area = k === "1" ? "templates" : "morphs";
+      S.overlay = null; render(); return;
+    }
+  }
+  if (e.key === "F6") {
+    e.preventDefault();
+    const sel = S.variant === "A" ? (S.narrow ? ["[data-act=rail]", ".col .body", ".drawer > header"] : ["[data-act=rail][aria-current=page]", "#paneList [role=listbox], #paneList input", "#paneEditor textarea, #paneEditor table", "#paneInspector button, #paneInspector select", ".drawer > header"])
+      : S.variant === "B" ? ["[role=tab][aria-selected=true]", ".master [role=listbox], .picker select", ".detail textarea, .detail select, .detail button", ".outpane textarea"]
+      : [".nav-item[aria-current=page], .hamb", ".cmdbar button", ".content [tabindex='0'], .content textarea, .content button"];
+    const targets = sel.map(s => app.querySelector(s)).filter(Boolean);
+    const cur = targets.findIndex(t => t === document.activeElement || t.contains(document.activeElement));
+    const nx = targets[(cur + (e.shiftKey ? -1 : 1) + targets.length) % targets.length]; if (nx) { if (nx.tagName === "UL") nx.setAttribute("tabindex", "0"); nx.focus(); }
+    return;
+  }
+  if (e.key === "F7" && S.variant === "A" && S.narrow) { e.preventDefault(); S.overlay = S.overlay === "inspector" ? null : "inspector"; render(); return; }
+  if (!inField && !e.ctrlKey && !e.altKey) {
+    if (e.key === "ArrowLeft" && !lb && !row) { cycle(-1); return; }
+    if (e.key === "ArrowRight" && !lb && !row) { cycle(1); return; }
+    if (e.key === "?") { S.help = !S.help; syncBar(); render(); return; }
+  }
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncBar);
+
+/* Boot */
+(function () {
+  const v = new URLSearchParams(location.search).get("variant") || (location.hash || "").replace("#", "");
+  S.variant = VARIANTS[v] ? v : "A"; S.drawer = S.variant === "B";
+  syncBar(); render();
+  note("info", "Project MyBodies.jbs2bg opened — 10 presets, 4 targets, 14 NPCs.");
+  render();
+})();
+</script>
+</body>
+</html>
