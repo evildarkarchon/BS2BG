@@ -31,11 +31,16 @@ import java.util.function.Function;
  * Morph Assignment the Project lacks are a caller error (the session looks up
  * first) and throw rather than diagnose; a <em>reference</em> to a Slider Preset
  * the catalog lacks, supplied through {@link #assignSliderPreset}, is a modder
- * mistake and is diagnosed.
+ * mistake and is diagnosed. Two operations over caller-filtered batches relax
+ * the throw: {@link #fillEmptyNpcMorphAssignments}, whose choices reference NPCs
+ * as well as Slider Presets, diagnoses both so its diagnostics stay in choice
+ * order; and {@link #removeNpcMorphAssignments}, which treats its selection as a
+ * set to subtract and ignores an identity that names nothing.
  *
  * <p>Relationship operations (assign, unassign, clear) are written once over a
  * {@link ReferrerKey}, which names either referencing kind, so the two kinds
- * cannot drift apart.
+ * cannot drift apart. NPC Morph Assignment promotion and fill-empty build on
+ * them rather than resolving Slider Preset names a second time.
  */
 final class Project {
 
@@ -77,6 +82,10 @@ final class Project {
     /** Stable edit-request location for Custom Morph Target name rule violations. */
     private static final SourceLocation CUSTOM_MORPH_TARGET_NAME_LOCATION = new SourceLocation(
             Optional.<Path>empty(), Optional.of("custom-morph-target.name"), OptionalInt.empty(),
+            OptionalInt.empty());
+    /** Stable edit-request location for NPC Morph Assignment identity rule violations. */
+    private static final SourceLocation NPC_MORPH_ASSIGNMENT_IDENTITY_LOCATION = new SourceLocation(
+            Optional.<Path>empty(), Optional.of("npc-morph-assignment.identity"), OptionalInt.empty(),
             OptionalInt.empty());
 
     private static final Referrer<CustomMorphTargetSnapshot> CUSTOM_MORPH_TARGET_REFERRER = new Referrer<>(
@@ -136,7 +145,7 @@ final class Project {
         }
         Set<NpcMorphAssignmentIdentity> identities = new HashSet<>();
         for (NpcMorphAssignmentSnapshot npc : npcs) {
-            if (!identities.add(new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId())))
+            if (!identities.add(identityOf(npc)))
                 throw new IllegalArgumentException("NPC Morph Assignment identities must be unique: "
                         + npc.getPluginName() + "/" + npc.getEditorId());
             requireKnownPresets(presetNames, npc.getSliderPresetNames(),
@@ -388,6 +397,156 @@ final class Project {
     }
 
     /**
+     * Promotes one NPC Morph Assignment from copied source values. The stored value
+     * is an independent copy of the source. Its Slider Preset names are caller
+     * choices, so unlike {@link #addCustomMorphTarget} they are resolved through
+     * {@link #assignSliderPresets}: each is stored in the catalog's casing, repeats
+     * collapse, and an unknown name is diagnosed rather than thrown. The duplicate
+     * identity rule is checked first, so that diagnostic wins over a missing preset.
+     *
+     * @param source complete source value to copy
+     * @return the next aggregate, a duplicate-identity diagnostic when an NPC Morph
+     *         Assignment already has this identity, or the first not-found
+     *         diagnostic for a Slider Preset the catalog lacks
+     */
+    Result addNpcMorphAssignment(NpcMorphAssignmentSnapshot source) {
+        Objects.requireNonNull(source, "source");
+        NpcMorphAssignmentIdentity identity = identityOf(source);
+        if (indexOfNpcMorphAssignment(identity) >= 0)
+            return Result.rejected(duplicateNpcMorphAssignmentIdentity(
+                    "An NPC Morph Assignment with this plugin name and editor ID already exists."));
+        List<NpcMorphAssignmentSnapshot> npcs = new ArrayList<>(npcMorphAssignments);
+        npcs.add(NPC_MORPH_ASSIGNMENT_REFERRER.copyWithNames(source, Collections.<String>emptyList()));
+        Project added = new Project(sliderPresets, customMorphTargets,
+                sorted(npcs, NPC_MORPH_ASSIGNMENT_IDENTITY_ORDER));
+        return added.assignSliderPresets(ReferrerKey.npcMorphAssignment(identity), source.getSliderPresetNames());
+    }
+
+    /**
+     * Promotes several NPC Morph Assignments as one fold over {@link
+     * #addNpcMorphAssignment}. A source whose identity the Project already holds
+     * is skipped, because a filtered selection may include NPCs promoted earlier;
+     * an identity repeated within the batch, or a member naming a Slider Preset
+     * the catalog lacks, rejects the whole batch with that one diagnostic and
+     * nothing is applied. The batch is a no-op exactly when nothing new was added.
+     *
+     * @param sources caller-filtered source values, in any order
+     * @return the next aggregate, {@code this} when every member was already
+     *         present, or the first diagnostic
+     */
+    Result addNpcMorphAssignments(List<NpcMorphAssignmentSnapshot> sources) {
+        Objects.requireNonNull(sources, "sources");
+        Project next = this;
+        for (NpcMorphAssignmentSnapshot source : sources) {
+            NpcMorphAssignmentIdentity identity = identityOf(source);
+            if (indexOfNpcMorphAssignment(identity) >= 0)
+                continue;
+            // Absent from this aggregate but present in the fold so far means the
+            // batch itself repeats the identity, which has its own message.
+            if (next.indexOfNpcMorphAssignment(identity) >= 0)
+                return Result.rejected(duplicateNpcMorphAssignmentIdentity(
+                        "A filtered NPC batch contains duplicate plugin-name/editor-ID identity."));
+            Result step = next.addNpcMorphAssignment(source);
+            if (step.isRejected())
+                return step;
+            next = step.getProject();
+        }
+        return Result.of(next);
+    }
+
+    /**
+     * Removes one NPC Morph Assignment. Nothing references an NPC Morph Assignment,
+     * so there is no cascade.
+     *
+     * @param identity existing identity
+     * @return the next aggregate
+     * @throws IllegalArgumentException when no NPC Morph Assignment has that identity
+     */
+    Project removeNpcMorphAssignment(NpcMorphAssignmentIdentity identity) {
+        int index = requireNpcMorphAssignment(identity);
+        List<NpcMorphAssignmentSnapshot> npcs = new ArrayList<>(npcMorphAssignments);
+        npcs.remove(index);
+        // Removing an element keeps the remaining order, so no re-sort is needed.
+        return new Project(sliderPresets, customMorphTargets, Collections.unmodifiableList(npcs));
+    }
+
+    /**
+     * Removes every NPC Morph Assignment whose identity is in a caller-filtered
+     * selection. The selection is a set to subtract rather than a lookup, so an
+     * identity that names nothing, or is repeated, is harmless; this is why, unlike
+     * {@link #removeNpcMorphAssignment}, it does not throw.
+     *
+     * @param identities caller-selected identities
+     * @return the next aggregate, or {@code this} when no identity matched
+     */
+    Project removeNpcMorphAssignments(List<NpcMorphAssignmentIdentity> identities) {
+        Objects.requireNonNull(identities, "identities");
+        Set<NpcMorphAssignmentIdentity> selected = new HashSet<>(identities);
+        List<NpcMorphAssignmentSnapshot> remaining = new ArrayList<>(npcMorphAssignments.size());
+        for (NpcMorphAssignmentSnapshot npc : npcMorphAssignments) {
+            if (!selected.contains(identityOf(npc)))
+                remaining.add(npc);
+        }
+        if (remaining.size() == npcMorphAssignments.size())
+            return this;
+        // Filtering keeps the remaining order, so no re-sort is needed.
+        return new Project(sliderPresets, customMorphTargets, Collections.unmodifiableList(remaining));
+    }
+
+    /**
+     * Removes every NPC Morph Assignment.
+     *
+     * @return the next aggregate, or {@code this} when there are none
+     */
+    Project clearNpcMorphAssignments() {
+        if (npcMorphAssignments.isEmpty())
+            return this;
+        return new Project(sliderPresets, customMorphTargets, Collections.<NpcMorphAssignmentSnapshot>emptyList());
+    }
+
+    /**
+     * Assigns one Slider Preset to each NPC Morph Assignment that has none, from
+     * explicit caller decisions, as one fold over {@link #assignSliderPreset}. Every
+     * choice is checked in order (repeated identity, then unknown NPC, then unknown
+     * Slider Preset) and the first problem rejects the whole batch with that one
+     * diagnostic; the Slider Preset of a choice for an occupied NPC is still
+     * validated even though the NPC keeps its assignments. Unlike the single-NPC
+     * operations, an unknown NPC here is diagnosed rather than thrown, because the
+     * choices are a caller-owned batch of references and the session cannot look
+     * them up without repeating this order.
+     *
+     * @param choices caller-owned identity/Slider Preset decisions
+     * @return the next aggregate, {@code this} when every chosen NPC was occupied,
+     *         or the first diagnostic
+     */
+    Result fillEmptyNpcMorphAssignments(List<NpcSliderPresetChoice> choices) {
+        Objects.requireNonNull(choices, "choices");
+        Set<NpcMorphAssignmentIdentity> decided = new HashSet<>();
+        Project next = this;
+        for (NpcSliderPresetChoice choice : choices) {
+            if (!decided.add(choice.getIdentity()))
+                return Result.rejected(duplicateNpcMorphAssignmentIdentity(
+                        "Fill-empty contains more than one choice for the same NPC identity."));
+            int index = indexOfNpcMorphAssignment(choice.getIdentity());
+            if (index < 0)
+                return Result.rejected(npcMorphAssignmentNotFound());
+            // Occupancy is read from this aggregate: a fill never empties an NPC,
+            // and the duplicate rule above means no NPC is decided twice.
+            if (!npcMorphAssignments.get(index).getSliderPresetNames().isEmpty()) {
+                if (indexOfSliderPreset(choice.getSliderPresetName()) < 0)
+                    return Result.rejected(sliderPresetNotFound());
+                continue;
+            }
+            Result step = next.assignSliderPreset(ReferrerKey.npcMorphAssignment(choice.getIdentity()),
+                    choice.getSliderPresetName());
+            if (step.isRejected())
+                return step;
+            next = step.getProject();
+        }
+        return Result.of(next);
+    }
+
+    /**
      * Assigns one Slider Preset to a referrer. The requested name is resolved to
      * the catalog's display casing before it is stored, so a referrer never holds
      * a casing the catalog does not, and a name already assigned in any casing is
@@ -464,6 +623,24 @@ final class Project {
      */
     Project clearSliderPresetAssignments(ReferrerKey key) {
         return rewriteReferrer(key, clearedNames());
+    }
+
+    /**
+     * Removes every Slider Preset assignment from several referrers as one fold
+     * over {@link #clearSliderPresetAssignments(ReferrerKey)}. A repeated key is
+     * harmless; a key naming no referrer throws, and because the aggregate is
+     * immutable nothing partial is observable when it does.
+     *
+     * @param keys referrers the caller has already looked up
+     * @return the next aggregate, or {@code this} when none had assignments
+     * @throws IllegalArgumentException when a key names no referrer
+     */
+    Project clearSliderPresetAssignments(List<ReferrerKey> keys) {
+        Objects.requireNonNull(keys, "keys");
+        Project next = this;
+        for (ReferrerKey key : keys)
+            next = next.clearSliderPresetAssignments(key);
+        return next;
     }
 
     /**
@@ -637,11 +814,15 @@ final class Project {
         if (identity == null)
             return -1;
         for (int index = 0; index < npcMorphAssignments.size(); index++) {
-            NpcMorphAssignmentSnapshot npc = npcMorphAssignments.get(index);
-            if (identity.equals(new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId())))
+            if (identity.equals(identityOf(npcMorphAssignments.get(index))))
                 return index;
         }
         return -1;
+    }
+
+    /** Extracts the case-insensitive plugin-name/editor-ID identity an NPC Morph Assignment carries. */
+    private static NpcMorphAssignmentIdentity identityOf(NpcMorphAssignmentSnapshot npc) {
+        return new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId());
     }
 
     /**
@@ -668,6 +849,29 @@ final class Project {
         return new ProjectDiagnostic(ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_DUPLICATE,
                 DiagnosticSeverity.ERROR, CUSTOM_MORPH_TARGET_NAME_LOCATION,
                 "A Custom Morph Target with this name already exists.");
+    }
+
+    /**
+     * Builds a duplicate-identity diagnostic at the NPC identity location. The
+     * code and location are the same for every way an identity can repeat; only
+     * the message differs, because the modder needs to know whether the Project
+     * already held the NPC, the promotion batch repeated it, or a fill decided it
+     * twice.
+     */
+    private static ProjectDiagnostic duplicateNpcMorphAssignmentIdentity(String message) {
+        return new ProjectDiagnostic(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE, DiagnosticSeverity.ERROR,
+                NPC_MORPH_ASSIGNMENT_IDENTITY_LOCATION, message);
+    }
+
+    /**
+     * Builds the diagnostic for a fill-empty choice naming an NPC Morph Assignment
+     * the Project lacks. It is the same code, location, and message the session
+     * reports when an edit names a missing NPC directly, so callers see one
+     * vocabulary.
+     */
+    private static ProjectDiagnostic npcMorphAssignmentNotFound() {
+        return new ProjectDiagnostic(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND, DiagnosticSeverity.ERROR,
+                NPC_MORPH_ASSIGNMENT_IDENTITY_LOCATION, "The requested NPC Morph Assignment does not exist.");
     }
 
     /**
@@ -822,6 +1026,19 @@ final class Project {
         private Referrer(Function<T, List<String>> names, BiFunction<T, List<String>, T> withNames) {
             this.names = names;
             this.withNames = withNames;
+        }
+
+        /**
+         * Rebuilds a value with a different name list. The result is always a new
+         * instance, which is what makes a promoted NPC Morph Assignment independent
+         * of the caller's source value.
+         *
+         * @param value value whose other fields are copied
+         * @param names names the copy carries
+         * @return a new value of the same kind
+         */
+        T copyWithNames(T value, List<String> names) {
+            return withNames.apply(value, names);
         }
 
         /**

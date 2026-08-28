@@ -67,6 +67,40 @@ class ProjectTest {
         assertSame(project.getNpcMorphAssignments(), assigned.getNpcMorphAssignments());
         assertSame(project.getCustomMorphTargets().get(0), assigned.getCustomMorphTargets().get(0));
         assertSame(project.getCustomMorphTargets(), cleared.getCustomMorphTargets());
+
+        // NPC Morph Assignment collection operations: a bulk promotion whose every
+        // member is already present (in any casing), a bulk removal that matches
+        // nothing, clearing an empty collection, clearing assignments that are
+        // already empty, and a fill whose every NPC is occupied are no-ops.
+        assertSame(project, project.addNpcMorphAssignments(Arrays.asList(
+                npc("Other", "SKYRIM.ESM", "housecarlwhiterun", Collections.<String>emptyList()))).getProject());
+        assertSame(project, project.addNpcMorphAssignments(Collections.<NpcMorphAssignmentSnapshot>emptyList())
+                .getProject());
+        assertSame(project, project.removeNpcMorphAssignments(Arrays.asList(
+                new NpcMorphAssignmentIdentity("Missing.esp", "Missing"))));
+        assertSame(project, project.removeNpcMorphAssignments(Collections.<NpcMorphAssignmentIdentity>emptyList()));
+        assertSame(empty, empty.clearNpcMorphAssignments());
+        assertNotSame(project, project.clearNpcMorphAssignments());
+        assertSame(cleared, cleared.clearSliderPresetAssignments(Arrays.asList(serana)));
+        assertSame(project, project.clearSliderPresetAssignments(Collections.<Project.ReferrerKey>emptyList()));
+        assertSame(project, project.fillEmptyNpcMorphAssignments(Arrays.asList(new NpcSliderPresetChoice(
+                new NpcMorphAssignmentIdentity("dawnguard.esm", "serana"), "Beta"))).getProject());
+        assertSame(project, project.fillEmptyNpcMorphAssignments(Collections.<NpcSliderPresetChoice>emptyList())
+                .getProject());
+
+        // An NPC collection edit copies only the NPC collection, and the promoted
+        // value is a distinct copy of the source.
+        NpcMorphAssignmentSnapshot source = npc("Aela", "Skyrim.esm", "Aela", Arrays.asList("beta"));
+        Project promoted = project.addNpcMorphAssignment(source).getProject();
+        assertSame(project.getSliderPresets(), promoted.getSliderPresets());
+        assertSame(project.getCustomMorphTargets(), promoted.getCustomMorphTargets());
+        assertNotSame(source, promoted.findNpcMorphAssignment(new NpcMorphAssignmentIdentity("skyrim.esm", "AELA"))
+                .get());
+        assertSame(project.getNpcMorphAssignments().get(0), promoted.getNpcMorphAssignments().get(0));
+        Project removed = promoted.removeNpcMorphAssignment(new NpcMorphAssignmentIdentity("skyrim.esm", "AELA"));
+        assertSame(promoted.getSliderPresets(), removed.getSliderPresets());
+        assertSame(promoted.getCustomMorphTargets(), removed.getCustomMorphTargets());
+        assertEquals(project.getNpcMorphAssignments(), removed.getNpcMorphAssignments());
     }
 
     /**
@@ -184,6 +218,46 @@ class ProjectTest {
         assertEquals(Arrays.asList("Alpha", "beta"), targetNames(targets.getCustomMorphTargets()));
         assertTrue(targets.clearCustomMorphTargets().getCustomMorphTargets().isEmpty());
         assertEquals(1, targets.clearCustomMorphTargets().getNpcMorphAssignments().size());
+
+        // NPC Morph Assignment collection operations: the collection stays in
+        // plugin-then-editor-ID order however NPCs are promoted, each promoted
+        // NPC's names are stored in the catalog's casing and canonical order, a
+        // fill stores the catalog's casing, and removals keep the remaining order.
+        Project npcs = targets.addNpcMorphAssignment(npc("Zulu", "Skyrim.esm", "ZuluEditor",
+                Arrays.asList("ECHO", "alpha", "echo"))).getProject();
+        npcs = npcs.addNpcMorphAssignments(Arrays.asList(
+                npc("Dawnguard", "Dawnguard.esm", "ZuluEditor", Collections.<String>emptyList()),
+                npc("Alpha", "skyrim.ESM", "AlphaEditor", Arrays.asList("zulu")))).getProject();
+        assertEquals(Arrays.asList("Dawnguard.esm/ZuluEditor", "Plugin.esp/Editor", "skyrim.ESM/AlphaEditor",
+                "Skyrim.esm/ZuluEditor"), identities(npcs.getNpcMorphAssignments()));
+        assertEquals(Arrays.asList("alpha", "Echo"), npcs.getNpcMorphAssignments().get(3).getSliderPresetNames());
+        assertEquals(Arrays.asList("Zulu"), npcs.getNpcMorphAssignments().get(2).getSliderPresetNames());
+
+        npcs = npcs.fillEmptyNpcMorphAssignments(Arrays.asList(
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("DAWNGUARD.ESM", "zuluEditor"), "ECHO"),
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("skyrim.esm", "alphaeditor"), "alpha")))
+                .getProject();
+        assertEquals(Arrays.asList("Echo"), npcs.getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("Zulu"), npcs.getNpcMorphAssignments().get(2).getSliderPresetNames(),
+                "an occupied NPC must keep its assignments");
+
+        npcs = npcs.clearSliderPresetAssignments(Arrays.asList(
+                Project.ReferrerKey.npcMorphAssignment(new NpcMorphAssignmentIdentity("skyrim.esm", "ALPHAEDITOR")),
+                Project.ReferrerKey.npcMorphAssignment(new NpcMorphAssignmentIdentity("Plugin.esp", "Editor"))));
+        assertTrue(npcs.getNpcMorphAssignments().get(1).getSliderPresetNames().isEmpty());
+        assertTrue(npcs.getNpcMorphAssignments().get(2).getSliderPresetNames().isEmpty());
+        assertEquals(Arrays.asList("Echo"), npcs.getNpcMorphAssignments().get(0).getSliderPresetNames());
+
+        npcs = npcs.removeNpcMorphAssignment(new NpcMorphAssignmentIdentity("plugin.ESP", "EDITOR"));
+        assertEquals(Arrays.asList("Dawnguard.esm/ZuluEditor", "skyrim.ESM/AlphaEditor", "Skyrim.esm/ZuluEditor"),
+                identities(npcs.getNpcMorphAssignments()));
+        npcs = npcs.removeNpcMorphAssignments(Arrays.asList(
+                new NpcMorphAssignmentIdentity("SKYRIM.ESM", "zulueditor"),
+                new NpcMorphAssignmentIdentity("Missing.esm", "Missing")));
+        assertEquals(Arrays.asList("Dawnguard.esm/ZuluEditor", "skyrim.ESM/AlphaEditor"),
+                identities(npcs.getNpcMorphAssignments()));
+        assertTrue(npcs.clearNpcMorphAssignments().getNpcMorphAssignments().isEmpty());
+        assertEquals(2, npcs.clearNpcMorphAssignments().getCustomMorphTargets().size());
     }
 
     /**
@@ -259,6 +333,59 @@ class ProjectTest {
         assertThrows(IllegalArgumentException.class, () -> project.unassignSliderPreset(missingNpc, "Alpha"));
         assertThrows(IllegalArgumentException.class, () -> project.clearSliderPresetAssignments(missingTarget));
         assertThrows(IllegalArgumentException.class, () -> project.removeCustomMorphTarget("Missing"));
+
+        // A duplicate NPC identity is a diagnostic at the identity location; a bulk
+        // promotion is refused as a whole by an identity repeated within the batch
+        // or by a member naming a Slider Preset the catalog lacks, while a member
+        // already in the Project is skipped rather than refused.
+        Project.Result duplicateNpc = project.addNpcMorphAssignment(
+                npc("Other", "skyrim.ESM", "HOUSECARLWHITERUN", Collections.<String>emptyList()));
+        assertTrue(duplicateNpc.isRejected());
+        assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE, duplicateNpc.getDiagnostic().getCode());
+        assertEquals("npc-morph-assignment.identity",
+                duplicateNpc.getDiagnostic().getSourceLocation().getElement().get());
+        Project.Result unknownPresetOnAdd = project.addNpcMorphAssignment(
+                npc("Bad", "Skyrim.esm", "Bad", Arrays.asList("Gamma")));
+        assertTrue(unknownPresetOnAdd.isRejected());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, unknownPresetOnAdd.getDiagnostic().getCode());
+        Project.Result repeatedInBatch = project.addNpcMorphAssignments(Arrays.asList(
+                npc("New", "Skyrim.esm", "New", Collections.<String>emptyList()),
+                npc("Again", "SKYRIM.ESM", "NEW", Collections.<String>emptyList())));
+        assertTrue(repeatedInBatch.isRejected());
+        assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE,
+                repeatedInBatch.getDiagnostic().getCode());
+        Project.Result partialBatch = project.addNpcMorphAssignments(Arrays.asList(
+                npc("Lydia", "Skyrim.esm", "HousecarlWhiterun", Arrays.asList("Gamma")),
+                npc("New", "Skyrim.esm", "New", Arrays.asList("Alpha")),
+                npc("Bad", "Skyrim.esm", "Bad", Arrays.asList("Gamma"))));
+        assertTrue(partialBatch.isRejected());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, partialBatch.getDiagnostic().getCode());
+
+        // Fill-empty is a batch of caller decisions, so a repeated identity, an
+        // unknown NPC, and an unknown Slider Preset are each diagnosed in choice
+        // order, and an unknown Slider Preset is refused even for an occupied NPC.
+        NpcMorphAssignmentIdentity lydia = new NpcMorphAssignmentIdentity("Skyrim.esm", "HousecarlWhiterun");
+        Project.Result repeatedChoice = project.fillEmptyNpcMorphAssignments(Arrays.asList(
+                new NpcSliderPresetChoice(lydia, "Alpha"),
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("SKYRIM.ESM", "housecarlwhiterun"), "Beta")));
+        assertTrue(repeatedChoice.isRejected());
+        assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE, repeatedChoice.getDiagnostic().getCode());
+        Project.Result unknownNpc = project.fillEmptyNpcMorphAssignments(Arrays.asList(
+                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("Missing.esp", "Missing"), "Alpha")));
+        assertTrue(unknownNpc.isRejected());
+        assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND, unknownNpc.getDiagnostic().getCode());
+        assertEquals("npc-morph-assignment.identity",
+                unknownNpc.getDiagnostic().getSourceLocation().getElement().get());
+        Project.Result occupiedUnknownPreset = project.fillEmptyNpcMorphAssignments(Arrays.asList(
+                new NpcSliderPresetChoice(lydia, "Gamma")));
+        assertTrue(occupiedUnknownPreset.isRejected());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, occupiedUnknownPreset.getDiagnostic().getCode());
+
+        // Removing or clearing an NPC the caller never looked up throws.
+        assertThrows(IllegalArgumentException.class,
+                () -> project.removeNpcMorphAssignment(new NpcMorphAssignmentIdentity("Missing.esp", "Missing")));
+        assertThrows(IllegalArgumentException.class,
+                () -> project.clearSliderPresetAssignments(Arrays.asList(missingNpc)));
     }
 
     /**
@@ -309,5 +436,13 @@ class ProjectTest {
         for (CustomMorphTargetSnapshot target : targets)
             names.add(target.getName());
         return names;
+    }
+
+    /** Renders each NPC Morph Assignment's identity as {@code plugin/editorId} in collection order. */
+    private static List<String> identities(List<NpcMorphAssignmentSnapshot> npcs) {
+        List<String> identities = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot npc : npcs)
+            identities.add(npc.getPluginName() + "/" + npc.getEditorId());
+        return identities;
     }
 }
