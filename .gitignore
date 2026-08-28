@@ -454,3 +454,4 @@ graphify-out/
 /target/
 .claude/settings.json
 .codex/hooks.json
+.playwright-mcp/
