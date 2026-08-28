@@ -27,8 +27,15 @@ import java.util.function.Function;
  * <p>Every operation that changes nothing returns {@code this}, so callers can
  * detect a no-op by instance identity. An operation that can violate a Project
  * rule returns a {@link Result}; one that cannot fail returns the next aggregate
- * directly. Operations on a Slider Preset name that is not in the catalog are a
- * caller error (the session looks up first) and throw rather than diagnose.
+ * directly. Operations <em>on</em> a Slider Preset, Custom Morph Target, or NPC
+ * Morph Assignment the Project lacks are a caller error (the session looks up
+ * first) and throw rather than diagnose; a <em>reference</em> to a Slider Preset
+ * the catalog lacks, supplied through {@link #assignSliderPreset}, is a modder
+ * mistake and is diagnosed.
+ *
+ * <p>Relationship operations (assign, unassign, clear) are written once over a
+ * {@link ReferrerKey}, which names either referencing kind, so the two kinds
+ * cannot drift apart.
  */
 final class Project {
 
@@ -67,6 +74,10 @@ final class Project {
     /** Stable edit-request location for Slider Preset name rule violations. */
     private static final SourceLocation SLIDER_PRESET_NAME_LOCATION = new SourceLocation(Optional.<Path>empty(),
             Optional.of("slider-preset.name"), OptionalInt.empty(), OptionalInt.empty());
+    /** Stable edit-request location for Custom Morph Target name rule violations. */
+    private static final SourceLocation CUSTOM_MORPH_TARGET_NAME_LOCATION = new SourceLocation(
+            Optional.<Path>empty(), Optional.of("custom-morph-target.name"), OptionalInt.empty(),
+            OptionalInt.empty());
 
     private static final Referrer<CustomMorphTargetSnapshot> CUSTOM_MORPH_TARGET_REFERRER = new Referrer<>(
             CustomMorphTargetSnapshot::getSliderPresetNames,
@@ -183,14 +194,8 @@ final class Project {
      * @return the value, or empty when no logical Custom Morph Target matches
      */
     Optional<CustomMorphTargetSnapshot> findCustomMorphTarget(String name) {
-        if (name == null)
-            return Optional.empty();
-        String normalizedName = name.trim();
-        for (CustomMorphTargetSnapshot target : customMorphTargets) {
-            if (target.getName().equalsIgnoreCase(normalizedName))
-                return Optional.of(target);
-        }
-        return Optional.empty();
+        int index = indexOfCustomMorphTarget(name);
+        return index < 0 ? Optional.<CustomMorphTargetSnapshot>empty() : Optional.of(customMorphTargets.get(index));
     }
 
     /**
@@ -200,13 +205,8 @@ final class Project {
      * @return the value, or empty when no assignment has that identity
      */
     Optional<NpcMorphAssignmentSnapshot> findNpcMorphAssignment(NpcMorphAssignmentIdentity identity) {
-        if (identity == null)
-            return Optional.empty();
-        for (NpcMorphAssignmentSnapshot npc : npcMorphAssignments) {
-            if (identity.equals(new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId())))
-                return Optional.of(npc);
-        }
-        return Optional.empty();
+        int index = indexOfNpcMorphAssignment(identity);
+        return index < 0 ? Optional.<NpcMorphAssignmentSnapshot>empty() : Optional.of(npcMorphAssignments.get(index));
     }
 
     /**
@@ -333,6 +333,191 @@ final class Project {
     }
 
     /**
+     * Adds a Custom Morph Target. The name is stored exactly as carried by the
+     * value, so trimming and the non-empty rule are the caller's; the duplicate
+     * check ignores surrounding whitespace like every lookup does. The value's
+     * Slider Preset names are adopted as given, so a caller that wants them
+     * resolved to catalog casing adds an empty target and then {@link
+     * #assignSliderPresets assigns}.
+     *
+     * @param target complete value to add
+     * @return the next aggregate, or a duplicate-name diagnostic when another
+     *         Custom Morph Target already has this name without regard to case
+     * @throws IllegalArgumentException when the value names a Slider Preset the
+     *         catalog lacks
+     */
+    Result addCustomMorphTarget(CustomMorphTargetSnapshot target) {
+        Objects.requireNonNull(target, "target");
+        if (indexOfCustomMorphTarget(target.getName()) >= 0)
+            return Result.rejected(duplicateCustomMorphTargetName());
+        Set<String> presetNames = new TreeSet<>(ASSIGNMENT_NAME_ORDER);
+        for (SliderPresetSnapshot preset : sliderPresets)
+            presetNames.add(preset.getName());
+        requireKnownPresets(presetNames, target.getSliderPresetNames(), "Custom Morph Target " + target.getName());
+        List<CustomMorphTargetSnapshot> targets = new ArrayList<>(customMorphTargets);
+        targets.add(target);
+        return Result.of(new Project(sliderPresets, sorted(targets, CUSTOM_MORPH_TARGET_NAME_ORDER),
+                npcMorphAssignments));
+    }
+
+    /**
+     * Removes a Custom Morph Target. Nothing references a Custom Morph Target, so
+     * there is no cascade.
+     *
+     * @param name existing logical Custom Morph Target name
+     * @return the next aggregate
+     * @throws IllegalArgumentException when no Custom Morph Target has that name
+     */
+    Project removeCustomMorphTarget(String name) {
+        int index = requireCustomMorphTarget(name);
+        List<CustomMorphTargetSnapshot> targets = new ArrayList<>(customMorphTargets);
+        targets.remove(index);
+        // Removing an element keeps the remaining order, so no re-sort is needed.
+        return new Project(sliderPresets, Collections.unmodifiableList(targets), npcMorphAssignments);
+    }
+
+    /**
+     * Removes every Custom Morph Target.
+     *
+     * @return the next aggregate, or {@code this} when there are none
+     */
+    Project clearCustomMorphTargets() {
+        if (customMorphTargets.isEmpty())
+            return this;
+        return new Project(sliderPresets, Collections.<CustomMorphTargetSnapshot>emptyList(), npcMorphAssignments);
+    }
+
+    /**
+     * Assigns one Slider Preset to a referrer. The requested name is resolved to
+     * the catalog's display casing before it is stored, so a referrer never holds
+     * a casing the catalog does not, and a name already assigned in any casing is
+     * a no-op.
+     *
+     * @param key referrer the caller has already looked up
+     * @param sliderPresetName requested Slider Preset name, optionally surrounded
+     *        by whitespace; null resolves to nothing
+     * @return the next aggregate, {@code this} when the name was already assigned,
+     *         or a not-found diagnostic when no Slider Preset has that name
+     * @throws IllegalArgumentException when the key names no referrer
+     */
+    Result assignSliderPreset(ReferrerKey key, String sliderPresetName) {
+        // Checked before the preset so a missing referrer always throws, even when
+        // the preset is unknown too; the referrer is the caller's lookup, the
+        // preset is the modder's choice.
+        requireReferrer(key);
+        int index = indexOfSliderPreset(sliderPresetName);
+        if (index < 0)
+            return Result.rejected(sliderPresetNotFound());
+        return Result.of(rewriteReferrer(key, withName(sliderPresets.get(index).getName())));
+    }
+
+    /**
+     * Assigns several Slider Presets to a referrer as one fold over {@link
+     * #assignSliderPreset}: the first unknown name rejects the whole batch with
+     * that one diagnostic and nothing is applied, and the batch is a no-op exactly
+     * when every member was already assigned.
+     *
+     * @param key referrer the caller has already looked up
+     * @param sliderPresetNames requested Slider Preset names; duplicates within the
+     *        batch are harmless
+     * @return the next aggregate, {@code this} when nothing new was assigned, or
+     *         the first not-found diagnostic
+     * @throws IllegalArgumentException when the key names no referrer
+     */
+    Result assignSliderPresets(ReferrerKey key, List<String> sliderPresetNames) {
+        Objects.requireNonNull(sliderPresetNames, "sliderPresetNames");
+        // Checked up front so an empty batch still fails loudly on a referrer the
+        // caller never looked up.
+        requireReferrer(key);
+        Project next = this;
+        for (String sliderPresetName : sliderPresetNames) {
+            Result step = next.assignSliderPreset(key, sliderPresetName);
+            if (step.isRejected())
+                return step;
+            next = step.getProject();
+        }
+        return Result.of(next);
+    }
+
+    /**
+     * Removes one Slider Preset assignment from a referrer without regard to case.
+     * Unlike catalog removal there is no cascade and no rule to violate, so an
+     * unknown or absent name is simply a no-op.
+     *
+     * @param key referrer the caller has already looked up
+     * @param sliderPresetName assigned name, optionally surrounded by whitespace;
+     *        null matches nothing
+     * @return the next aggregate, or {@code this} when the name was not assigned
+     * @throws IllegalArgumentException when the key names no referrer
+     */
+    Project unassignSliderPreset(ReferrerKey key, String sliderPresetName) {
+        String normalizedName = sliderPresetName == null ? "" : sliderPresetName.trim();
+        return rewriteReferrer(key, withoutName(normalizedName));
+    }
+
+    /**
+     * Removes every Slider Preset assignment from a referrer.
+     *
+     * @param key referrer the caller has already looked up
+     * @return the next aggregate, or {@code this} when it had no assignments
+     * @throws IllegalArgumentException when the key names no referrer
+     */
+    Project clearSliderPresetAssignments(ReferrerKey key) {
+        return rewriteReferrer(key, clearedNames());
+    }
+
+    /**
+     * Builds the next aggregate by applying one name-list rewrite to the single
+     * referrer a key identifies. This is the only place that branches on the
+     * referrer kind, so assign, unassign, and clear behave identically for both.
+     * Only the keyed collection is copied, and only when the value changed; its
+     * order is by name or identity, which a rewrite never touches.
+     *
+     * @throws IllegalArgumentException when the key names no referrer
+     */
+    private Project rewriteReferrer(ReferrerKey key, Function<List<String>, List<String>> rewriteNames) {
+        Objects.requireNonNull(key, "key");
+        if (key.customMorphTargetName != null) {
+            int index = requireCustomMorphTarget(key.customMorphTargetName);
+            List<CustomMorphTargetSnapshot> targets = CUSTOM_MORPH_TARGET_REFERRER.rewriteAt(customMorphTargets,
+                    index, rewriteNames);
+            return targets == customMorphTargets ? this : new Project(sliderPresets, targets, npcMorphAssignments);
+        }
+        int index = requireNpcMorphAssignment(key.npcMorphAssignmentIdentity);
+        List<NpcMorphAssignmentSnapshot> npcs = NPC_MORPH_ASSIGNMENT_REFERRER.rewriteAt(npcMorphAssignments, index,
+                rewriteNames);
+        return npcs == npcMorphAssignments ? this : new Project(sliderPresets, customMorphTargets, npcs);
+    }
+
+    /**
+     * Locates the referrer a key identifies without changing it, by applying the
+     * identity rewrite: {@link #rewriteReferrer} still resolves the key (and throws
+     * when it names nothing) but returns {@code this} because no names changed, so
+     * the kind branch is not repeated here.
+     *
+     * @throws IllegalArgumentException when the key names no referrer
+     */
+    private void requireReferrer(ReferrerKey key) {
+        rewriteReferrer(key, names -> names);
+    }
+
+    /**
+     * Name-list rewrite for an assignment: a list already holding the name in any
+     * casing is unchanged; otherwise the canonical name is added and the list is
+     * re-sorted, because the new name may belong at any position.
+     */
+    private static Function<List<String>, List<String>> withName(String canonicalName) {
+        return names -> {
+            if (containsIgnoreCase(names, canonicalName))
+                return names;
+            List<String> rewritten = new ArrayList<>(names.size() + 1);
+            rewritten.addAll(names);
+            rewritten.add(canonicalName);
+            return sorted(rewritten, ASSIGNMENT_NAME_ORDER);
+        };
+    }
+
+    /**
      * Builds the next aggregate from an already-canonical catalog and one
      * name-list rewrite applied to every referrer of both kinds. Referrer
      * collections are only copied when at least one of their values changes;
@@ -415,10 +600,84 @@ final class Project {
         return index;
     }
 
+    /**
+     * Locates a Custom Morph Target by case-insensitive logical name after trimming.
+     *
+     * @return the collection index, or -1 when absent or when name is null
+     */
+    private int indexOfCustomMorphTarget(String name) {
+        if (name == null)
+            return -1;
+        String normalizedName = name.trim();
+        for (int index = 0; index < customMorphTargets.size(); index++) {
+            if (customMorphTargets.get(index).getName().equalsIgnoreCase(normalizedName))
+                return index;
+        }
+        return -1;
+    }
+
+    /**
+     * Locates a Custom Morph Target the caller has already looked up.
+     *
+     * @throws IllegalArgumentException when no Custom Morph Target has that name
+     */
+    private int requireCustomMorphTarget(String name) {
+        int index = indexOfCustomMorphTarget(name);
+        if (index < 0)
+            throw new IllegalArgumentException("No Custom Morph Target is named: " + name);
+        return index;
+    }
+
+    /**
+     * Locates an NPC Morph Assignment by its complete case-insensitive identity.
+     *
+     * @return the collection index, or -1 when absent or when identity is null
+     */
+    private int indexOfNpcMorphAssignment(NpcMorphAssignmentIdentity identity) {
+        if (identity == null)
+            return -1;
+        for (int index = 0; index < npcMorphAssignments.size(); index++) {
+            NpcMorphAssignmentSnapshot npc = npcMorphAssignments.get(index);
+            if (identity.equals(new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId())))
+                return index;
+        }
+        return -1;
+    }
+
+    /**
+     * Locates an NPC Morph Assignment the caller has already looked up.
+     *
+     * @throws IllegalArgumentException when no NPC Morph Assignment has that identity
+     */
+    private int requireNpcMorphAssignment(NpcMorphAssignmentIdentity identity) {
+        int index = indexOfNpcMorphAssignment(identity);
+        if (index < 0)
+            throw new IllegalArgumentException("No NPC Morph Assignment has the identity: "
+                    + (identity == null ? null : identity.getPluginName() + "/" + identity.getEditorId()));
+        return index;
+    }
+
     /** Builds the duplicate-name diagnostic shared by add and rename. */
     private static ProjectDiagnostic duplicateSliderPresetName() {
         return new ProjectDiagnostic(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_DUPLICATE, DiagnosticSeverity.ERROR,
                 SLIDER_PRESET_NAME_LOCATION, "A Slider Preset with this name already exists.");
+    }
+
+    /** Builds the duplicate-name diagnostic for adding a Custom Morph Target. */
+    private static ProjectDiagnostic duplicateCustomMorphTargetName() {
+        return new ProjectDiagnostic(ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_DUPLICATE,
+                DiagnosticSeverity.ERROR, CUSTOM_MORPH_TARGET_NAME_LOCATION,
+                "A Custom Morph Target with this name already exists.");
+    }
+
+    /**
+     * Builds the diagnostic for assigning a Slider Preset the catalog lacks. It is
+     * the same code, location, and message the session reports when an edit names
+     * a missing Slider Preset directly, so callers see one vocabulary.
+     */
+    private static ProjectDiagnostic sliderPresetNotFound() {
+        return new ProjectDiagnostic(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, DiagnosticSeverity.ERROR,
+                SLIDER_PRESET_NAME_LOCATION, "The requested Slider Preset does not exist.");
     }
 
     /**
@@ -519,6 +778,38 @@ final class Project {
     }
 
     /**
+     * Identifies one value that references Slider Presets by name: a Custom Morph
+     * Target by its case-insensitive name, or an NPC Morph Assignment by its
+     * identity. Relationship operations take a key rather than a value so they
+     * are written once for both referencing kinds. A key does not promise the
+     * referrer exists; operations throw when it does not, because the session
+     * looks up before it delegates.
+     */
+    static final class ReferrerKey {
+        /** Exactly one of the two fields is non-null. */
+        private final String customMorphTargetName;
+        private final NpcMorphAssignmentIdentity npcMorphAssignmentIdentity;
+
+        private ReferrerKey(String customMorphTargetName, NpcMorphAssignmentIdentity npcMorphAssignmentIdentity) {
+            this.customMorphTargetName = customMorphTargetName;
+            this.npcMorphAssignmentIdentity = npcMorphAssignmentIdentity;
+        }
+
+        /**
+         * Keys a Custom Morph Target by its logical name, compared without regard to
+         * case or surrounding whitespace.
+         */
+        static ReferrerKey customMorphTarget(String name) {
+            return new ReferrerKey(Objects.requireNonNull(name, "name"), null);
+        }
+
+        /** Keys an NPC Morph Assignment by its complete case-insensitive identity. */
+        static ReferrerKey npcMorphAssignment(NpcMorphAssignmentIdentity identity) {
+            return new ReferrerKey(null, Objects.requireNonNull(identity, "identity"));
+        }
+    }
+
+    /**
      * One kind of value that references Slider Presets by name, described by how
      * to read its names and how to rebuild it with new names. Rename, remove, and
      * clear cascades are written once over this and applied to both kinds, so the
@@ -559,6 +850,27 @@ final class Project {
                 rewritten.add(withNames.apply(value, changedNames));
             }
             return rewritten == null ? values : Collections.unmodifiableList(rewritten);
+        }
+
+        /**
+         * Applies a name-list rewrite to the one value at an index, following the
+         * same "unchanged means the same list" convention as {@link #rewrite}.
+         *
+         * @param values current canonical collection
+         * @param index position of the value to rewrite
+         * @param rewriteNames pure rewrite of that value's names
+         * @return the same list when the value's names did not change, otherwise a
+         *         new unmodifiable list with every other value carried over by reference
+         */
+        List<T> rewriteAt(List<T> values, int index, Function<List<String>, List<String>> rewriteNames) {
+            T value = values.get(index);
+            List<String> currentNames = names.apply(value);
+            List<String> changedNames = rewriteNames.apply(currentNames);
+            if (changedNames == currentNames)
+                return values;
+            List<T> rewritten = new ArrayList<>(values);
+            rewritten.set(index, withNames.apply(value, changedNames));
+            return Collections.unmodifiableList(rewritten);
         }
     }
 }

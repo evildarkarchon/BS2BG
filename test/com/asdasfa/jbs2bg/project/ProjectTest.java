@@ -41,6 +41,32 @@ class ProjectTest {
         Project empty = Project.from(ProjectSnapshot.empty());
         assertSame(empty, empty.clearSliderPresets());
         assertNotSame(project, project.clearSliderPresets());
+
+        // Relationship operations: an assignment that is already present (in any
+        // casing), an absent unassignment, and clearing an already-empty referrer
+        // are no-ops for both referrer kinds.
+        Project.ReferrerKey both = Project.ReferrerKey.customMorphTarget("BOTH");
+        Project.ReferrerKey serana = Project.ReferrerKey.npcMorphAssignment(
+                new NpcMorphAssignmentIdentity("dawnguard.ESM", "SERANA"));
+        assertSame(project, project.assignSliderPreset(both, "ALPHA").getProject());
+        assertSame(project, project.assignSliderPresets(both, Arrays.asList("alpha", "BETA")).getProject());
+        assertSame(project, project.assignSliderPreset(serana, " beta ").getProject());
+        assertSame(project, project.assignSliderPresets(serana, Collections.<String>emptyList()).getProject());
+        assertSame(project, project.unassignSliderPreset(both, "Gamma"));
+        assertSame(project, project.unassignSliderPreset(Project.ReferrerKey.customMorphTarget("OnlyBeta"), "Alpha"));
+        Project cleared = project.clearSliderPresetAssignments(serana);
+        assertNotSame(project, cleared);
+        assertSame(cleared, cleared.clearSliderPresetAssignments(serana));
+        assertSame(empty, empty.clearCustomMorphTargets());
+        assertNotSame(project, project.clearCustomMorphTargets());
+
+        // A relationship edit copies only the collection it touched.
+        Project assigned = project.assignSliderPreset(Project.ReferrerKey.customMorphTarget("OnlyBeta"), "alpha")
+                .getProject();
+        assertSame(project.getSliderPresets(), assigned.getSliderPresets());
+        assertSame(project.getNpcMorphAssignments(), assigned.getNpcMorphAssignments());
+        assertSame(project.getCustomMorphTargets().get(0), assigned.getCustomMorphTargets().get(0));
+        assertSame(project.getCustomMorphTargets(), cleared.getCustomMorphTargets());
     }
 
     /**
@@ -124,6 +150,40 @@ class ProjectTest {
         assertEquals(Arrays.asList("Alpha", "zulu"), names(unsorted.getSliderPresets()));
         assertEquals("A", unsorted.getCustomMorphTargets().get(0).getName());
         assertEquals("One", unsorted.getNpcMorphAssignments().get(0).getDisplayName());
+
+        // Custom Morph Target and relationship operations: the target list stays
+        // canonical, and every assigned name is stored in the catalog's casing and
+        // in canonical order however it was requested.
+        Project targets = renamed;
+        targets = targets.addCustomMorphTarget(new CustomMorphTargetSnapshot("beta", Collections.<String>emptyList()))
+                .getProject();
+        targets = targets.addCustomMorphTarget(new CustomMorphTargetSnapshot("Alpha", Collections.<String>emptyList()))
+                .getProject();
+        assertEquals(Arrays.asList("Alpha", "beta", "Target"), targetNames(targets.getCustomMorphTargets()));
+
+        Project.ReferrerKey beta = Project.ReferrerKey.customMorphTarget("BETA");
+        targets = targets.assignSliderPreset(beta, "ZULU").getProject();
+        assertEquals(Arrays.asList("Zulu"), targets.getCustomMorphTargets().get(1).getSliderPresetNames());
+        targets = targets.assignSliderPresets(beta, Arrays.asList("echo", " ALPHA ", "zulu", "Echo")).getProject();
+        assertEquals(Arrays.asList("alpha", "Echo", "Zulu"), targets.getCustomMorphTargets().get(1).getSliderPresetNames());
+
+        Project.ReferrerKey editor = Project.ReferrerKey.npcMorphAssignment(
+                new NpcMorphAssignmentIdentity("PLUGIN.ESP", "editor"));
+        targets = targets.assignSliderPreset(editor, "ECHO").getProject();
+        assertEquals(Arrays.asList("alpha", "delta", "Echo", "Zulu"),
+                targets.getNpcMorphAssignments().get(0).getSliderPresetNames());
+
+        targets = targets.unassignSliderPreset(beta, " echo ");
+        assertEquals(Arrays.asList("alpha", "Zulu"), targets.getCustomMorphTargets().get(1).getSliderPresetNames());
+        targets = targets.unassignSliderPreset(editor, "DELTA");
+        assertEquals(Arrays.asList("alpha", "Echo", "Zulu"), targets.getNpcMorphAssignments().get(0).getSliderPresetNames());
+        targets = targets.clearSliderPresetAssignments(beta);
+        assertTrue(targets.getCustomMorphTargets().get(1).getSliderPresetNames().isEmpty());
+
+        targets = targets.removeCustomMorphTarget("target");
+        assertEquals(Arrays.asList("Alpha", "beta"), targetNames(targets.getCustomMorphTargets()));
+        assertTrue(targets.clearCustomMorphTargets().getCustomMorphTargets().isEmpty());
+        assertEquals(1, targets.clearCustomMorphTargets().getNpcMorphAssignments().size());
     }
 
     /**
@@ -165,6 +225,40 @@ class ProjectTest {
         assertTrue(renamed.isRejected());
         assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_DUPLICATE, renamed.getDiagnostic().getCode());
         assertFalse(project.addSliderPreset(preset("Gamma")).isRejected());
+
+        // A duplicate Custom Morph Target name is a diagnostic; an assignment to a
+        // Slider Preset the catalog lacks is a diagnostic, and a batch containing
+        // one is refused as a whole; a referrer the caller did not look up throws.
+        Project.Result duplicateTarget = project.addCustomMorphTarget(
+                new CustomMorphTargetSnapshot("BOTH", Collections.<String>emptyList()));
+        assertTrue(duplicateTarget.isRejected());
+        assertEquals(ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_DUPLICATE,
+                duplicateTarget.getDiagnostic().getCode());
+        assertEquals("custom-morph-target.name",
+                duplicateTarget.getDiagnostic().getSourceLocation().getElement().get());
+
+        Project.ReferrerKey onlyBeta = Project.ReferrerKey.customMorphTarget("OnlyBeta");
+        Project.Result unknown = project.assignSliderPreset(onlyBeta, "Gamma");
+        assertTrue(unknown.isRejected());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, unknown.getDiagnostic().getCode());
+        assertEquals("slider-preset.name", unknown.getDiagnostic().getSourceLocation().getElement().get());
+        Project.Result partial = project.assignSliderPresets(onlyBeta, Arrays.asList("Alpha", "Gamma"));
+        assertTrue(partial.isRejected());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, partial.getDiagnostic().getCode());
+        assertTrue(project.assignSliderPreset(onlyBeta, null).isRejected());
+        assertEquals(Arrays.asList("Beta"), project.getCustomMorphTargets().get(1).getSliderPresetNames());
+
+        Project.ReferrerKey missingTarget = Project.ReferrerKey.customMorphTarget("Missing");
+        Project.ReferrerKey missingNpc = Project.ReferrerKey.npcMorphAssignment(
+                new NpcMorphAssignmentIdentity("Missing.esp", "Missing"));
+        assertThrows(IllegalArgumentException.class, () -> project.assignSliderPreset(missingTarget, "Alpha"));
+        // A missing referrer is a caller error even when the preset is unknown too.
+        assertThrows(IllegalArgumentException.class, () -> project.assignSliderPreset(missingTarget, "Gamma"));
+        assertThrows(IllegalArgumentException.class,
+                () -> project.assignSliderPresets(missingNpc, Collections.<String>emptyList()));
+        assertThrows(IllegalArgumentException.class, () -> project.unassignSliderPreset(missingNpc, "Alpha"));
+        assertThrows(IllegalArgumentException.class, () -> project.clearSliderPresetAssignments(missingTarget));
+        assertThrows(IllegalArgumentException.class, () -> project.removeCustomMorphTarget("Missing"));
     }
 
     /**
@@ -207,6 +301,13 @@ class ProjectTest {
         List<String> names = new ArrayList<>();
         for (SliderPresetSnapshot preset : presets)
             names.add(preset.getName());
+        return names;
+    }
+
+    private static List<String> targetNames(List<CustomMorphTargetSnapshot> targets) {
+        List<String> names = new ArrayList<>();
+        for (CustomMorphTargetSnapshot target : targets)
+            names.add(target.getName());
         return names;
     }
 }
