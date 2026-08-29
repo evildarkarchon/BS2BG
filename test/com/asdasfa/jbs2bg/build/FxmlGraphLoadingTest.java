@@ -60,7 +60,7 @@ class FxmlGraphLoadingTest {
     @TempDir
     Path temporaryDirectory;
 
-    /** The sole root graph binds to WorkbenchController and exposes every placeholder Area by semantic name. */
+    /** The sole root graph binds to WorkbenchController and exposes every typed destination by semantic name. */
     @Test
     void rootWindowGraphLoadsWithItsController() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {

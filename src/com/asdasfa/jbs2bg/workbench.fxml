@@ -7,15 +7,16 @@
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
 <?import javafx.scene.control.SeparatorMenuItem?>
+<?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.ToggleButton?>
-<?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
-<BorderPane fx:id="workbenchRoot" accessibleText="BS2BG Workbench" prefHeight="600.0" prefWidth="900.0"
+<BorderPane fx:id="workbenchRoot" accessibleText="BS2BG Workbench" prefHeight="800.0" prefWidth="1300.0"
         xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1"
         fx:controller="com.asdasfa.jbs2bg.workbench.WorkbenchController">
     <top>
@@ -35,7 +36,8 @@
         </MenuBar>
     </top>
     <left>
-        <VBox alignment="TOP_CENTER" prefWidth="144.0" spacing="8.0" BorderPane.alignment="CENTER">
+        <VBox fx:id="navigationRail" accessibleText="Workbench navigation" alignment="TOP_CENTER"
+                prefWidth="144.0" spacing="8.0" styleClass="navigation-rail" BorderPane.alignment="CENTER">
             <padding>
                 <Insets bottom="12.0" left="8.0" right="8.0" top="12.0" />
             </padding>
@@ -49,43 +51,101 @@
         </VBox>
     </left>
     <center>
-        <VBox spacing="12.0" BorderPane.alignment="CENTER">
-            <padding>
-                <Insets bottom="12.0" left="16.0" right="16.0" top="12.0" />
-            </padding>
+        <VBox BorderPane.alignment="CENTER">
             <children>
-                <HBox alignment="CENTER_LEFT" spacing="12.0">
+                <StackPane fx:id="contentStack" VBox.vgrow="ALWAYS">
                     <children>
-                        <Label fx:id="areaTitle" styleClass="title" text="Templates" />
-                        <Region HBox.hgrow="ALWAYS" />
-                        <Label fx:id="projectStatusText" accessibleText="Project status" text="Untitled Project" />
+                        <VBox fx:id="areaSurface" spacing="12.0">
+                            <padding>
+                                <Insets bottom="12.0" left="16.0" right="16.0" top="12.0" />
+                            </padding>
+                            <children>
+                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                    <children>
+                                        <Label fx:id="areaTitle" accessibleText="Active Workbench Area" styleClass="title" text="Templates" />
+                                        <Button fx:id="showPrimaryOverlayButton" accessibleText="Open Templates list"
+                                                managed="false" text="List" visible="false" />
+                                        <Button fx:id="showInspectorOverlayButton" accessibleText="Open Templates inspector"
+                                                managed="false" text="Inspector" visible="false" />
+                                        <Region HBox.hgrow="ALWAYS" />
+                                        <Label fx:id="projectStatusText" accessibleText="Project status" text="Untitled Project" />
+                                    </children>
+                                </HBox>
+                                <StackPane fx:id="paneHost" VBox.vgrow="ALWAYS">
+                                    <children>
+                                        <HBox fx:id="areaPanes" spacing="12.0">
+                                            <children>
+                                                <VBox fx:id="primaryPane" accessibleText="Templates primary content"
+                                                        minWidth="160.0" prefWidth="220.0" spacing="8.0"
+                                                        styleClass="placeholder-pane">
+                                                    <children>
+                                                        <Label text="List" />
+                                                        <Button fx:id="primaryContentButton" accessibleText="Templates primary content"
+                                                                maxWidth="Infinity" text="Focus Templates list" />
+                                                    </children>
+                                                </VBox>
+                                                <StackPane fx:id="editorPane" accessibleText="Templates editor"
+                                                        styleClass="placeholder-pane" HBox.hgrow="ALWAYS">
+                                                    <children>
+                                                        <Button fx:id="editorButton" accessibleText="Templates editor"
+                                                                text="Templates Area — Workbench placeholder" />
+                                                    </children>
+                                                </StackPane>
+                                                <VBox fx:id="inspectorPane" accessibleText="Templates inspector"
+                                                        minWidth="180.0" prefWidth="240.0" spacing="8.0"
+                                                        styleClass="placeholder-pane">
+                                                    <children>
+                                                        <Label text="Inspector" />
+                                                        <Button fx:id="inspectorButton" accessibleText="Templates inspector"
+                                                                maxWidth="Infinity" text="Focus Templates inspector" />
+                                                    </children>
+                                                </VBox>
+                                            </children>
+                                        </HBox>
+                                        <StackPane fx:id="overlayLayer" accessibleText="Workbench side overlay"
+                                                managed="false" mouseTransparent="true" visible="false"
+                                                styleClass="overlay-layer" />
+                                    </children>
+                                </StackPane>
+                                <Label text="Project diagnostics" />
+                                <TextArea fx:id="diagnosticsText" accessibleText="Project diagnostics" editable="false"
+                                        focusTraversable="true" prefRowCount="4" wrapText="true" />
+                            </children>
+                        </VBox>
+                        <VBox fx:id="outputDrawer" accessibleText="Output" alignment="TOP_LEFT"
+                                managed="false" prefHeight="220.0" spacing="8.0" styleClass="output-drawer"
+                                visible="false" StackPane.alignment="BOTTOM_CENTER">
+                            <padding>
+                                <Insets bottom="10.0" left="12.0" right="12.0" top="10.0" />
+                            </padding>
+                            <children>
+                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                    <children>
+                                        <Label fx:id="outputFocusTarget" accessibleText="Output generated text"
+                                                focusTraversable="true" styleClass="title output-focus-target"
+                                                text="Output" />
+                                        <Region HBox.hgrow="ALWAYS" />
+                                        <Label text="Drawer height" />
+                                        <Slider fx:id="outputDrawerHeight" accessibleText="Output drawer height"
+                                                blockIncrement="20.0" majorTickUnit="40.0" max="360.0" min="140.0"
+                                                prefWidth="180.0" value="220.0" />
+                                    </children>
+                                </HBox>
+                                <TextArea fx:id="outputText" accessibleText="Output generated text" editable="false"
+                                        focusTraversable="true" text="Generated output will appear here."
+                                        wrapText="false" VBox.vgrow="ALWAYS" />
+                            </children>
+                        </VBox>
+                    </children>
+                </StackPane>
+                <HBox fx:id="statusBar" accessibleText="Workbench status bar" alignment="CENTER_LEFT"
+                        spacing="8.0" styleClass="status-bar">
+                    <padding><Insets bottom="8.0" left="12.0" right="12.0" top="8.0" /></padding>
+                    <children>
+                        <Label fx:id="statusText" accessibleText="Workbench status" focusTraversable="true" text="Ready" />
                     </children>
                 </HBox>
-                <HBox spacing="12.0" VBox.vgrow="ALWAYS">
-                    <children>
-                        <VBox accessibleText="List placeholder" minWidth="160.0" prefWidth="220.0" styleClass="placeholder-pane">
-                            <children><Label text="List" /></children>
-                        </VBox>
-                        <StackPane accessibleText="Editor placeholder" styleClass="placeholder-pane" HBox.hgrow="ALWAYS">
-                            <children><Label fx:id="placeholderText" text="Templates Area — Workbench placeholder" /></children>
-                        </StackPane>
-                        <VBox accessibleText="Inspector placeholder" minWidth="180.0" prefWidth="240.0" styleClass="placeholder-pane">
-                            <children><Label text="Inspector" /></children>
-                        </VBox>
-                    </children>
-                </HBox>
-                <Label text="Project diagnostics" />
-                <TextArea fx:id="diagnosticsText" editable="false"
-                        focusTraversable="true" prefRowCount="4" wrapText="true" />
             </children>
         </VBox>
     </center>
-    <bottom>
-        <HBox alignment="CENTER_LEFT" spacing="8.0" BorderPane.alignment="CENTER">
-            <padding><Insets bottom="8.0" left="12.0" right="12.0" top="8.0" /></padding>
-            <children>
-                <Label fx:id="statusText" accessibleText="Workbench status" text="Ready" />
-            </children>
-        </HBox>
-    </bottom>
 </BorderPane>

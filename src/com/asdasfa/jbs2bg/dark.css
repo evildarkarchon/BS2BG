@@ -138,3 +138,43 @@
 .filter-indicator {
 	-fx-fill: -fx-light-text-color;
 }
+
+/* Workbench shell: borders keep pane and focus boundaries meaningful without depending on fill color alone. */
+.navigation-rail,
+.status-bar,
+.placeholder-pane,
+.output-drawer {
+	-fx-border-color: derive(-fx-base, 55%);
+	-fx-border-width: 1px;
+}
+
+.navigation-rail {
+	-fx-background-color: derive(-fx-base, 8%);
+}
+
+.placeholder-pane {
+	-fx-padding: 12px;
+	-fx-background-color: derive(-fx-base, 4%);
+}
+
+.output-drawer {
+	-fx-background-color: derive(-fx-base, 12%);
+	-fx-border-width: 2px 1px 1px 1px;
+}
+
+/* The focusable Output landmark needs a visible keyboard cue even though its semantic role remains a heading. */
+.output-focus-target:focused {
+	-fx-border-color: -fx-focus-color;
+	-fx-border-width: 2px;
+	-fx-padding: 2px;
+}
+
+/* The overlay stays transparent so only the reparented side pane obscures the inline editor. */
+.overlay-layer {
+	-fx-padding: 8px;
+}
+
+.title {
+	-fx-font-size: 1.25em;
+	-fx-font-weight: bold;
+}

@@ -12,6 +12,7 @@ import com.asdasfa.jbs2bg.presentation.ProjectPresentation;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.workbench.WorkbenchController;
+import com.asdasfa.jbs2bg.workbench.WorkbenchGeometry;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 import javafx.application.Application;
@@ -80,18 +81,29 @@ public class Main extends Application {
 		try {
 			FXMLLoader loader = new FXMLLoader(getClass().getResource("workbench.fxml"));
 			Parent root = loader.load();
-			Scene scene = new Scene(root, 1100, 720);
+			Scene scene = new Scene(root, 1300, 800);
 			scene.getStylesheets().add(style);
 			primaryStage.setScene(scene);
-			primaryStage.setMinWidth(830);
-			primaryStage.setMinHeight(640);
 			primaryStage.setResizable(true);
 			WorkbenchController controller = loader.getController();
 			controller.attach(workbenchProjectFlow, primaryStage);
 			primaryStage.show();
+			applyMeasuredClientMinimum(primaryStage, scene);
 		} catch (java.io.IOException exception) {
 			throw new IllegalStateException("Could not load the Workbench root graph", exception);
 		}
+	}
+
+	/**
+	 * Enforces the accepted 800x600 logical client minimum from live Stage and Scene measurements, avoiding fixed
+	 * decoration guesses that drift across Windows themes and DPI scales.
+	 *
+	 * @param stage shown Workbench window whose non-client inset is measurable
+	 * @param scene Workbench client scene expressed in JavaFX logical pixels
+	 */
+	private static void applyMeasuredClientMinimum(Stage stage, Scene scene) {
+		stage.setMinWidth(WorkbenchGeometry.minimumWindowWidth(stage.getWidth(), scene.getWidth()));
+		stage.setMinHeight(WorkbenchGeometry.minimumWindowHeight(stage.getHeight(), scene.getHeight()));
 	}
 	
 	public static void main(String[] args) {

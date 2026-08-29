@@ -1,14 +1,15 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG Preview Workbench through its complete Project lifecycle (issue #98).
+    Drives the packaged BS2BG Preview Workbench through its Project lifecycle and shell contract (issues #98/#99).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
     discovery path, proves that the launcher process hosts the bundled JVM, and drives the Workbench through
-    Windows UI Automation by accessible role and name. The run covers startup, every placeholder Area, New,
-    Open, Save, Save As, Project recovery diagnostics, malformed/failed operation preservation, retry, dirty
-    shutdown cancellation, final discard, and bounded process exit.
+    Windows UI Automation by accessible role and name. The run covers typed navigation, focus cycling and return,
+    Output drawer interaction, responsive/minimum geometry, startup, New, Open, Save, Save As, Project recovery
+    diagnostics, malformed/failed operation preservation, retry, dirty shutdown cancellation, final discard, and
+    bounded process exit.
 #>
 [CmdletBinding()]
 param(
@@ -23,6 +24,7 @@ param(
     [int]$StartupTimeoutSeconds = 90,
     [int]$StepTimeoutSeconds = 30,
     [int]$ExitTimeoutSeconds = 30,
+    [int]$ExpectedDpiPercent = 0,
     [switch]$KeepWorkRoot
 )
 
@@ -309,6 +311,84 @@ function Find-OuterControl {
 
 <#
 .SYNOPSIS
+    Returns one exact Workbench rail button and requires its standard Toggle pattern.
+#>
+function Get-AreaButton {
+    param([Parameter(Mandatory)] [string]$Name)
+    $condition = New-Object System.Windows.Automation.OrCondition(@(
+            (New-UiaCondition -ControlType 'Button' -Name $Name),
+            (New-UiaCondition -ControlType 'CheckBox' -Name $Name)))
+    $button = Wait-UiaElement -Root $script:mainWindow -Condition $condition -Description "'$Name' navigation button" `
+        -TimeoutSeconds $StepTimeoutSeconds
+    Get-UiaToggleState -Element $button | Out-Null
+    return $button
+}
+
+<#
+.SYNOPSIS
+    Waits for one Area button to expose ToggleState.On.
+#>
+function Wait-AreaSelected {
+    param([Parameter(Mandatory)] [string]$Name)
+    return Wait-UiaCondition -Description "'$Name' Area selected" -TimeoutSeconds $StepTimeoutSeconds -Test {
+        $button = Get-AreaButton -Name $Name
+        if ((Get-UiaToggleState -Element $button) -eq 'On') { $button }
+    }
+}
+
+<#
+.SYNOPSIS
+    Locates one semantic control and waits until it owns keyboard focus.
+#>
+function Wait-FocusedControl {
+    param([Parameter(Mandatory)] [string]$ControlType, [Parameter(Mandatory)] [string]$Name)
+    $element = Find-OuterControl -ControlType $ControlType -Name $Name
+    Wait-UiaKeyboardFocus -Element $element -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+    return $element
+}
+
+<#
+.SYNOPSIS
+    Converts native window metrics to stable JSON evidence fields.
+#>
+function ConvertTo-WindowMetricsEvidence {
+    param([Parameter(Mandatory)] $Metrics)
+    return [ordered]@{
+        dpi = $Metrics.Dpi
+        scalePercent = [math]::Round($Metrics.Dpi * 100.0 / 96.0)
+        windowPhysical = [ordered]@{
+            left = $Metrics.WindowLeft; top = $Metrics.WindowTop
+            width = $Metrics.WindowWidth; height = $Metrics.WindowHeight
+        }
+        clientPhysical = [ordered]@{
+            left = $Metrics.ClientLeft; top = $Metrics.ClientTop
+            width = $Metrics.ClientWidth; height = $Metrics.ClientHeight
+        }
+        clientLogical = [ordered]@{
+            width = [math]::Round($Metrics.LogicalClientWidth, 2)
+            height = [math]::Round($Metrics.LogicalClientHeight, 2)
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    Requires one visible UIA control to stay inside the measured client rectangle.
+#>
+function Assert-ControlInsideClient {
+    param([Parameter(Mandatory)] $Element, [Parameter(Mandatory)] $Metrics)
+    if ($Element.Current.IsOffscreen) { throw "'$($Element.Current.Name)' is offscreen." }
+    $bounds = $Element.Current.BoundingRectangle
+    $clientRight = $Metrics.ClientLeft + $Metrics.ClientWidth
+    $clientBottom = $Metrics.ClientTop + $Metrics.ClientHeight
+    if ($bounds.Left -lt ($Metrics.ClientLeft - 1) -or $bounds.Top -lt ($Metrics.ClientTop - 1) -or
+            $bounds.Right -gt ($clientRight + 1) -or $bounds.Bottom -gt ($clientBottom + 1)) {
+        throw "'$($Element.Current.Name)' bounds $bounds escape client [$($Metrics.ClientLeft),$($Metrics.ClientTop),$clientRight,$clientBottom]."
+    }
+}
+
+<#
+.SYNOPSIS
     Finds the nearest following sibling with the requested UIA role.
 .PARAMETER Element
     Semantic launcher/label element.
@@ -483,10 +563,7 @@ try {
 
     Invoke-SmokeStep -Name 'verify-workbench-shell-and-first-run-settings' -Action {
         foreach ($area in @('Templates', 'Morphs', 'NPC Database', 'Output', 'Settings')) {
-            $role = New-Object System.Windows.Automation.OrCondition(@(
-                (New-UiaCondition -ControlType 'Button' -Name $area),
-                (New-UiaCondition -ControlType 'CheckBox' -Name $area)))
-            Wait-UiaElement -Root $script:mainWindow -Condition $role -Description "'$area' Workbench Area" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+            Get-AreaButton -Name $area | Out-Null
         }
         foreach ($settingsName in @('settings.json', 'settings_UUNP.json')) {
             if (-not (Test-Path -LiteralPath (Join-Path $workDir $settingsName) -PathType Leaf)) {
@@ -496,7 +573,148 @@ try {
         Get-UiaTree -Element $script:mainWindow |
             Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-workbench.txt') -Encoding utf8
         $observations['workbenchAreas'] = @('Templates', 'Morphs', 'NPC Database', 'Output', 'Settings')
-        'five placeholder Areas and the canonical Settings pair are accessible'
+        'five typed navigation destinations and the canonical Settings pair are accessible'
+    }
+
+    Invoke-SmokeStep -Name 'verify-keyboard-navigation-focus-and-output-drawer' -Action {
+        $outputLauncher = Get-AreaButton -Name 'Output'
+        $outputLauncher.SetFocus()
+        Wait-UiaKeyboardFocus -Element $outputLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $outputLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $areaShortcuts = [ordered]@{
+            '^1' = 'Templates'
+            '^2' = 'Morphs'
+            '^3' = 'NPC Database'
+            '^5' = 'Settings'
+        }
+        $areaEvidence = @()
+        foreach ($entry in $areaShortcuts.GetEnumerator()) {
+            Send-UiaKeys -ProcessId $script:app.Id -Keys $entry.Key -TimeoutSeconds $StepTimeoutSeconds
+            Wait-AreaSelected -Name $entry.Value | Out-Null
+            Wait-FocusedControl -ControlType 'Button' -Name "$($entry.Value) primary content" | Out-Null
+            $areaEvidence += $entry.Value
+        }
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+        Wait-AreaSelected -Name 'Output' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
+
+        $drawerSlider = Find-OuterControl -ControlType 'Slider' -Name 'Output drawer height'
+        $drawerBefore = Get-UiaRangeValue -Element $drawerSlider
+        Send-UiaKeysToElement -Element $drawerSlider -Keys '{RIGHT}' -TimeoutSeconds $StepTimeoutSeconds
+        $drawerAfter = Wait-UiaCondition -Description 'keyboard output drawer resize' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $value = Get-UiaRangeValue -Element $drawerSlider
+            if ($value -gt $drawerBefore) { $value }
+        }
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs primary content' | Out-Null
+        if ((Get-UiaToggleState -Element (Get-AreaButton -Name 'Output')) -ne 'Off') {
+            throw 'Escape did not close the Output drawer.'
+        }
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{F6}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs editor' | Out-Null
+        $ctrlBackquote = '^' + [char]96
+        Send-UiaKeys -ProcessId $script:app.Id -Keys $ctrlBackquote -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys $ctrlBackquote -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs editor' | Out-Null
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
+
+        $morphsRail = Get-AreaButton -Name 'Morphs'
+        $morphsRail.SetFocus()
+        Wait-UiaKeyboardFocus -Element $morphsRail -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $focusCycle = @(
+            @{ Role = 'Button'; Name = 'Morphs primary content' },
+            @{ Role = 'Button'; Name = 'Morphs editor' },
+            @{ Role = 'Button'; Name = 'Morphs inspector' },
+            @{ Role = 'Text'; Name = 'Output generated text' },
+            @{ Role = 'Text'; Name = 'Workbench status' },
+            @{ Role = 'Button'; Name = 'Morphs' }
+        )
+        foreach ($target in $focusCycle) {
+            Send-UiaKeys -ProcessId $script:app.Id -Keys '{F6}' -TimeoutSeconds $StepTimeoutSeconds
+            Wait-FocusedControl -ControlType $target.Role -Name $target.Name | Out-Null
+        }
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs editor' | Out-Null
+        $observations['keyboardNavigation'] = [ordered]@{
+            areas = $areaEvidence
+            outputPreservedArea = 'Morphs'
+            drawerRange = [ordered]@{ before = $drawerBefore; after = $drawerAfter }
+            focusCycle = @($focusCycle | ForEach-Object { $_.Name })
+        }
+        'typed shortcuts, semantic focus return, drawer resize, alias, and F6 cycle passed through packaged UIA'
+    }
+
+    Invoke-SmokeStep -Name 'verify-responsive-layout-and-minimum-geometry' -Action {
+        $initialMetrics = Get-UiaWindowMetrics -Window $script:mainWindow
+        $initialScale = [math]::Round($initialMetrics.Dpi * 100.0 / 96.0)
+        if ($ExpectedDpiPercent -gt 0 -and $initialScale -ne $ExpectedDpiPercent) {
+            throw "Expected $ExpectedDpiPercent% display scale, but the packaged window reports $initialScale%."
+        }
+        if (@(100, 125, 150) -notcontains $initialScale) {
+            throw "Packaged Workbench smoke requires an accepted 100%, 125%, or 150% display scale; observed $initialScale%."
+        }
+
+        $narrowMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
+            -TimeoutSeconds $StepTimeoutSeconds
+        $listLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open Morphs list'
+        $inspectorLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open Morphs inspector'
+        Assert-ControlInsideClient -Element $listLauncher -Metrics $narrowMetrics
+        Assert-ControlInsideClient -Element $inspectorLauncher -Metrics $narrowMetrics
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs inspector' | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs primary content' | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element (Get-AreaButton -Name 'Morphs') -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $minimumMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 700 -LogicalHeight 500 `
+            -AllowMinimumClamp -TimeoutSeconds $StepTimeoutSeconds
+        if ([math]::Abs($minimumMetrics.LogicalClientWidth - 800.0) -gt 2.0 -or
+                [math]::Abs($minimumMetrics.LogicalClientHeight - 600.0) -gt 2.0) {
+            throw "Workbench minimum client geometry did not settle at 800x600: $($minimumMetrics.LogicalClientWidth)x$($minimumMetrics.LogicalClientHeight)."
+        }
+        $editor = Find-OuterControl -ControlType 'Button' -Name 'Morphs editor'
+        Assert-ControlInsideClient -Element $editor -Metrics $minimumMetrics
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+        $minimumDrawer = Find-OuterControl -ControlType 'Slider' -Name 'Output drawer height'
+        Assert-ControlInsideClient -Element $minimumDrawer -Metrics $minimumMetrics
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+
+        $wideMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1200 -LogicalHeight 700 `
+            -TimeoutSeconds $StepTimeoutSeconds
+        $launcherCondition = New-UiaCondition -ControlType 'Button' -Name 'Open Morphs list'
+        $visibleLauncher = Find-UiaElement -Root $script:mainWindow -Condition $launcherCondition
+        if ($null -ne $visibleLauncher -and -not $visibleLauncher.Current.IsOffscreen) {
+            throw 'Workbench remained in narrow overlay mode at the accepted 1200-pixel breakpoint.'
+        }
+        Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1300 -LogicalHeight 800 -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Get-UiaTree -Element $script:mainWindow |
+            Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-workbench-responsive.txt') -Encoding utf8
+        $observations['responsiveLayout'] = [ordered]@{
+            expectedScalePercent = $(if ($ExpectedDpiPercent -gt 0) { $ExpectedDpiPercent } else { $null })
+            initial = ConvertTo-WindowMetricsEvidence -Metrics $initialMetrics
+            narrow = ConvertTo-WindowMetricsEvidence -Metrics $narrowMetrics
+            minimum = ConvertTo-WindowMetricsEvidence -Metrics $minimumMetrics
+            wide = ConvertTo-WindowMetricsEvidence -Metrics $wideMetrics
+        }
+        'narrow overlays, semantic restoration, 800x600 minimum, breakpoint, and live-DPI geometry passed'
     }
 
     Invoke-SmokeStep -Name 'save-as-new-project' -Action {
@@ -651,7 +869,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/6'
+        schema = 'bs2bg.windows-app-image-smoke/7'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion
@@ -660,6 +878,7 @@ finally {
             startupSeconds = $StartupTimeoutSeconds
             stepSeconds = $StepTimeoutSeconds
             exitSeconds = $ExitTimeoutSeconds
+            expectedDpiPercent = $ExpectedDpiPercent
         }
         steps = $steps
         observations = $observations
@@ -681,6 +900,7 @@ finally {
             stderrExcerpt = @($stderr -split '\r?\n' | Where-Object { $_ } | Select-Object -First 20)
             nativeAccessWarnings = $restricted
             workbenchTree = 'smoke-diagnostics/uia-tree-workbench.txt'
+            responsiveWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-responsive.txt'
         }
         workRoot = $WorkRoot
         workRootKept = [bool]$KeepWorkRoot

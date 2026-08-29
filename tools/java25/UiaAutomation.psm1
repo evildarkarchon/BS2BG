@@ -37,8 +37,25 @@ public sealed class BS2BGTopLevelWindow
     public string Title;
 }
 
+public sealed class BS2BGWindowMetrics
+{
+    public uint Dpi;
+    public int WindowLeft;
+    public int WindowTop;
+    public int WindowWidth;
+    public int WindowHeight;
+    public int ClientLeft;
+    public int ClientTop;
+    public int ClientWidth;
+    public int ClientHeight;
+    public double LogicalClientWidth;
+    public double LogicalClientHeight;
+}
+
 public static class BS2BGWindows
 {
+    [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
@@ -46,14 +63,77 @@ public static class BS2BGWindows
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool PostMessageW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hWnd);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
     private const uint BM_CLICK = 0x00F5;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
 
     // Standard Win32 button activation: the same message the control receives from a mouse click, delivered to
     // the button window itself, so no screen position is involved.
     public static bool ClickButton(IntPtr hWnd)
     {
         return PostMessageW(hWnd, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    /// <summary>
+    /// Measures the real client rectangle and window DPI while leaving logical Scene mapping to JavaFX.
+    /// </summary>
+    /// <param name="hWnd">Native handle of the packaged Workbench window.</param>
+    /// <returns>Physical window/client bounds plus client dimensions converted to logical pixels.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Win32 cannot measure or map the window.</exception>
+    public static BS2BGWindowMetrics Metrics(IntPtr hWnd)
+    {
+        RECT window;
+        RECT client;
+        if (!GetWindowRect(hWnd, out window) || !GetClientRect(hWnd, out client))
+            throw new InvalidOperationException("Could not read window/client bounds.");
+        var origin = new POINT { X = 0, Y = 0 };
+        if (!ClientToScreen(hWnd, ref origin))
+            throw new InvalidOperationException("Could not map the client origin to the desktop.");
+        uint dpi = GetDpiForWindow(hWnd);
+        if (dpi == 0) dpi = 96;
+        int clientWidth = client.Right - client.Left;
+        int clientHeight = client.Bottom - client.Top;
+        return new BS2BGWindowMetrics {
+            Dpi = dpi,
+            WindowLeft = window.Left,
+            WindowTop = window.Top,
+            WindowWidth = window.Right - window.Left,
+            WindowHeight = window.Bottom - window.Top,
+            ClientLeft = origin.X,
+            ClientTop = origin.Y,
+            ClientWidth = clientWidth,
+            ClientHeight = clientHeight,
+            LogicalClientWidth = clientWidth * 96.0 / dpi,
+            LogicalClientHeight = clientHeight * 96.0 / dpi
+        };
+    }
+
+    /// <summary>
+    /// Resizes to a requested logical client size using the live DPI and non-client inset.
+    /// </summary>
+    /// <param name="hWnd">Native handle of the packaged Workbench window.</param>
+    /// <param name="logicalWidth">Requested logical client width.</param>
+    /// <param name="logicalHeight">Requested logical client height.</param>
+    /// <returns>True when Win32 accepted the resize request; otherwise false.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the current window metrics cannot be read.</exception>
+    public static bool ResizeClient(IntPtr hWnd, double logicalWidth, double logicalHeight)
+    {
+        var current = Metrics(hWnd);
+        int desiredClientWidth = (int)Math.Round(logicalWidth * current.Dpi / 96.0);
+        int desiredClientHeight = (int)Math.Round(logicalHeight * current.Dpi / 96.0);
+        int nonClientWidth = current.WindowWidth - current.ClientWidth;
+        int nonClientHeight = current.WindowHeight - current.ClientHeight;
+        return SetWindowPos(hWnd, IntPtr.Zero, 0, 0,
+            desiredClientWidth + nonClientWidth,
+            desiredClientHeight + nonClientHeight,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     public static List<BS2BGTopLevelWindow> List(uint processId)
@@ -422,6 +502,107 @@ function Get-UiaText {
 
 <#
 .SYNOPSIS
+    Waits until the exact UIA element owns keyboard focus.
+.PARAMETER Element
+    Semantic role/name-located element expected to receive focus.
+#>
+function Wait-UiaKeyboardFocus {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Element, [int]$TimeoutSeconds = 10)
+    Wait-UiaCondition -Description "keyboard focus on '$($Element.Current.Name)'" -TimeoutSeconds $TimeoutSeconds -Test {
+        if ($Element.Current.HasKeyboardFocus) { $Element }
+    }
+}
+
+<#
+.SYNOPSIS
+    Sends keys without resetting the focused control inside the target process.
+.PARAMETER ProcessId
+    Process that must already own keyboard focus.
+.PARAMETER Keys
+    System.Windows.Forms.SendKeys sequence.
+#>
+function Send-UiaKeys {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [int]$ProcessId,
+        [Parameter(Mandatory)] [string]$Keys,
+        [int]$TimeoutSeconds = 10
+    )
+    Add-Type -AssemblyName System.Windows.Forms
+    Wait-UiaCondition -Description "keyboard focus in process $ProcessId before sending '$Keys'" -TimeoutSeconds $TimeoutSeconds -Test {
+        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+        if ($null -ne $focused -and $focused.Current.ProcessId -eq $ProcessId) { $true }
+    } | Out-Null
+    [System.Windows.Forms.SendKeys]::SendWait($Keys)
+}
+
+<#
+.SYNOPSIS
+    Reads the standard UIA Toggle state exposed by a toggle button.
+#>
+function Get-UiaToggleState {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Element)
+    return (Get-UiaPattern -Element $Element -PatternType 'TogglePattern').Current.ToggleState.ToString()
+}
+
+<#
+.SYNOPSIS
+    Reads the standard UIA RangeValue value exposed by a keyboard-resizable control.
+#>
+function Get-UiaRangeValue {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Element)
+    return [double](Get-UiaPattern -Element $Element -PatternType 'RangeValuePattern').Current.Value
+}
+
+<#
+.SYNOPSIS
+    Measures a UIA window's native DPI and physical/logical client rectangle.
+#>
+function Get-UiaWindowMetrics {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Window)
+    $handle = [IntPtr]$Window.Current.NativeWindowHandle
+    if ($handle -eq [IntPtr]::Zero) { throw "Window '$($Window.Current.Name)' has no native handle." }
+    return [BS2BGWindows]::Metrics($handle)
+}
+
+<#
+.SYNOPSIS
+    Resizes a UIA window to a logical client size using its live DPI and non-client inset.
+.PARAMETER AllowMinimumClamp
+    Accepts a larger settled size when the application enforces a minimum above the request.
+#>
+function Resize-UiaClient {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Window,
+        [Parameter(Mandatory)] [double]$LogicalWidth,
+        [Parameter(Mandatory)] [double]$LogicalHeight,
+        [switch]$AllowMinimumClamp,
+        [int]$TimeoutSeconds = 10
+    )
+    $handle = [IntPtr]$Window.Current.NativeWindowHandle
+    if ($handle -eq [IntPtr]::Zero) { throw "Window '$($Window.Current.Name)' has no native handle." }
+    if (-not [BS2BGWindows]::ResizeClient($handle, $LogicalWidth, $LogicalHeight)) {
+        throw "Could not resize '$($Window.Current.Name)' to $($LogicalWidth)x$($LogicalHeight) logical client pixels."
+    }
+    return Wait-UiaCondition -Description "$($LogicalWidth)x$($LogicalHeight) logical client resize" -TimeoutSeconds $TimeoutSeconds -Test {
+        $metrics = [BS2BGWindows]::Metrics($handle)
+        if ($AllowMinimumClamp) {
+            if ($metrics.LogicalClientWidth -ge ($LogicalWidth - 1.0) -and
+                    $metrics.LogicalClientHeight -ge ($LogicalHeight - 1.0)) { $metrics }
+        } elseif ([math]::Abs($metrics.LogicalClientWidth - $LogicalWidth) -le 2.0 -and
+                [math]::Abs($metrics.LogicalClientHeight - $LogicalHeight) -le 2.0) {
+            $metrics
+        }
+    }
+}
+
+<#
+.SYNOPSIS
     Asks a window to close through its Window pattern (the same WM_CLOSE a user's close button sends).
 #>
 function Close-UiaWindow {
@@ -502,6 +683,12 @@ Export-ModuleMember -Function @(
     'Expand-UiaElement',
     'Set-UiaValue',
     'Get-UiaText',
+    'Wait-UiaKeyboardFocus',
+    'Send-UiaKeys',
+    'Get-UiaToggleState',
+    'Get-UiaRangeValue',
+    'Get-UiaWindowMetrics',
+    'Resize-UiaClient',
     'Close-UiaWindow',
     'Get-UiaTree',
     'Get-UiaParent'
