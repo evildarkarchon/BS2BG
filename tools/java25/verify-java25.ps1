@@ -204,6 +204,7 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.project.ProjectSessionSaveTest',
     'com.asdasfa.jbs2bg.project.ProjectSessionImportTest',
     'com.asdasfa.jbs2bg.project.ProjectSessionSliderChoiceTest',
+    'com.asdasfa.jbs2bg.project.ProjectJacksonCompatibilityTest',
     'com.asdasfa.jbs2bg.project.ProjectTest',
     'com.asdasfa.jbs2bg.data.ProjectPersistenceCompatibilityTest'
 )

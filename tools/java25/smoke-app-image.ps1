@@ -1,8 +1,8 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG launcher through Settings recovery plus the representative Project, BoS, Templates,
-    and Morphs workflows from a clean extracted image and proves that it exits cleanly (issues #83, #84, and #97).
+    Drives the packaged BS2BG launcher through Project writing, Settings recovery, and representative output
+    workflows from a clean extracted image, then proves that every lifecycle exits cleanly (issues #83-#85 and #97).
 
 .DESCRIPTION
     The archive produced by tools/java25/package-java25.ps1 is extracted to a fresh location and its launcher is
@@ -21,10 +21,11 @@
       - nothing is located by screen coordinates, row index, generated automation id, CSS, or JavaFX internals;
       - native file dialogs owned by the JavaFX window are reached by their title and driven by role and name.
 
-    Workflow: launch once from an empty directory and validate the canonical Settings pair; exit; replace that pair
-    with the checked-in legacy Settings fixtures; relaunch and drive the representative Project, BoS, Templates,
-    Morphs, and Save As workflows; exit; assemble an interrupted paired Settings publication; relaunch and require
-    recovery of the exact prior pair before reopening the saved Project and regenerating its Settings-dependent
+    Workflow: launch once from an empty directory, validate the canonical Settings pair, and recover then Save a
+    Project with missing relationships; exit; replace Settings with the checked-in legacy
+    fixtures; relaunch and drive the representative Project, BoS, Templates, Morphs, Save As, failed overwrite,
+    and successful Save retry workflows; exit; assemble an interrupted paired Settings publication; relaunch,
+    require recovery of the exact prior pair, reopen the saved Project, and regenerate its Settings-dependent
     output; then close the window and require all three launcher processes to exit with code 0 within bounded waits.
 
     Every step is recorded with its duration and observations in the evidence file; the first failure captures the
@@ -34,6 +35,8 @@
     The BS2BG-<version>-windows-x64.zip produced by the packaging script.
 .PARAMETER FixtureProject
     A checked-in .jbs2bg Project to open (test-resources/projects/legacy-project-semantics.jbs2bg).
+.PARAMETER FixtureRecoveryProject
+    A checked-in .jbs2bg Project with recoverable missing relationships.
 .PARAMETER FixtureStandardSettings
     The checked-in legacy Standard Settings JSON document to install after first-run creation.
 .PARAMETER FixtureUunpSettings
@@ -52,6 +55,7 @@ param(
     [Parameter(Mandatory)] [string]$ArchivePath,
     [string]$LauncherName = 'BS2BG',
     [Parameter(Mandatory)] [string]$FixtureProject,
+    [Parameter(Mandatory)] [string]$FixtureRecoveryProject,
     [Parameter(Mandatory)] [string]$FixtureStandardSettings,
     [Parameter(Mandatory)] [string]$FixtureUunpSettings,
     [Parameter(Mandatory)] [string]$EvidencePath,
@@ -86,7 +90,10 @@ $fixtureCustomTarget = 'All|Female'
 $fixtureNpcEditorId = 'HousecarlWhiterun'
 $fixtureNpcMod = 'Skyrim.esm'
 $newCustomTarget = 'All|Female|NordRace'
+$saveRecoveryTarget = 'All|Female|SaveRetry'
+$discardedTarget = 'All|Female|Discarded'
 $openedProjectName = 'representative.jbs2bg'
+$recoveryProjectName = 'recovery-source.jbs2bg'
 $savedProjectName = 'smoke-output.jbs2bg'
 $bosExportName = 'smoke-bos.json'
 $expectedCbbeTemplate = 'CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0'
@@ -230,11 +237,11 @@ function Get-ImageLauncherProcesses {
     A UIA Invoke of a JavaFX menu item runs the command inside the UIA callback on the application thread, and
     the modal FileChooser it opens then cannot be automated by any client until it closes (see Invoke-UiaElement).
     The accelerators are the ones MainController.setupKeyCombinations binds: New Ctrl+N, Open Ctrl+O,
-    Save As Ctrl+Alt+S. The menu items themselves are still verified to exist by role and name.
+    Save Ctrl+S, and Save As Ctrl+Alt+S. The menu items themselves are still verified to exist by role and name.
 #>
 function Send-FileCommand {
     param([string]$Item, [string]$DialogTitle = '')
-    $accelerators = @{ 'New' = '^n'; 'Open…' = '^o'; 'Save As…' = '^%s' }
+    $accelerators = @{ 'New' = '^n'; 'Open…' = '^o'; 'Save' = '^s'; 'Save As…' = '^%s' }
     if (-not $accelerators.ContainsKey($Item)) { throw "No accelerator is known for File > $Item" }
     $fileMenu = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'MenuItem' -Name 'File') -Description "'File' menu" -TimeoutSeconds $StepTimeoutSeconds
     Invoke-UiaElement -Element $fileMenu
@@ -302,6 +309,17 @@ function Wait-ListItems {
         $missing = @($Expected | Where-Object { $names -cnotcontains $_ })
         if ($missing.Count -eq 0) { , $names }
     }
+}
+
+<#
+.SYNOPSIS
+    Waits until the named list exposes no items, returning a non-null sentinel when empty.
+#>
+function Wait-EmptyList {
+    param([string]$ListName)
+    Wait-UiaCondition -Description "'$ListName' to be empty" -TimeoutSeconds $StepTimeoutSeconds -Test {
+        if (@(Get-ListItemNames -ListName $ListName).Count -eq 0) { $true }
+    } | Out-Null
 }
 
 <#
@@ -422,6 +440,23 @@ function Assert-NpcRow {
     return "row exposes '$fixtureNpcEditorId' ($($editorIdCell.Current.ControlType.ProgrammaticName)) and '$fixtureNpcMod'"
 }
 
+<#
+.SYNOPSIS
+    Creates one Custom Morph Target through the same field and Add button a keyboard user reaches.
+.OUTPUTS
+    The complete Custom Morph Target names exposed after the add completes.
+#>
+function Add-CustomMorphTargetThroughUi {
+    param([Parameter(Mandatory)] [string]$Name, [Parameter(Mandatory)] [string[]]$ExpectedNames)
+    $label = Find-OuterControl -ControlType 'Text' -Name 'Custom Target:'
+    # The Custom Target field is the edit that follows its label; the Add button is the button that follows the field.
+    $field = Get-FollowingControl -Element $label -ControlType 'Edit'
+    Set-UiaValue -Element $field -Value $Name
+    $add = Get-FollowingControl -Element $field -ControlType 'Button' -Name 'Add'
+    Invoke-UiaElement -Element $add
+    return @(Wait-ListItems -ListName $customTargetsList -Expected $ExpectedNames)
+}
+
 $passed = $false
 try {
 
@@ -441,13 +476,14 @@ Invoke-Step -Name 'extract-clean-image' -Action {
         throw "Extracted launcher configuration does not stamp app version $ExpectedAppVersion."
     }
     Copy-Item -LiteralPath $FixtureProject -Destination (Join-Path $workDir $openedProjectName)
+    Copy-Item -LiteralPath $FixtureRecoveryProject -Destination (Join-Path $workDir $recoveryProjectName)
     $observations['extractedImage'] = Join-Path $imageRoot $LauncherName
     $observations['launcher'] = $launcherPath
     $observations['launcherSha256'] = (Get-FileHash -LiteralPath $launcherPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $observations['expectedProcessModel'] = 'single-launcher-process'
     $observations['workingDirectory'] = $workDir
     $observations['archiveSha256'] = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    "extracted $ArchivePath to $imageRoot; working directory $workDir holds only $openedProjectName"
+    "extracted $ArchivePath to $imageRoot; working directory $workDir holds $openedProjectName and $recoveryProjectName"
 }
 
 <#
@@ -608,8 +644,52 @@ Invoke-Step -Name 'verify-first-run-canonical-settings-pair' -Action {
     "created canonical UTF-8 pair $($settingsFiles -join ', ') with no transaction state"
 }
 
-Invoke-Step -Name 'exit-after-first-run-settings-creation' -Action {
-    Stop-PackagedApplication -ObservationKey 'exitAfterFirstRunSettingsCreation'
+Invoke-Step -Name 'open-recoverable-project' -Action {
+    Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+    Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $recoveryProjectName) -ConfirmButton 'Open'
+    $notification = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title 'Notification' -TimeoutSeconds $StepTimeoutSeconds
+    $recoveryText = @(
+        Find-UiaElements -Root $notification -Condition (New-UiaCondition -ControlType 'Text') |
+            ForEach-Object { $_.Current.Name } |
+            Where-Object { $_ } |
+            Select-Object -Unique) -join "`n"
+    if ([regex]::Matches($recoveryText, 'SLIDER_PRESET_ASSIGNMENT_MISSING').Count -lt 2 -or
+        -not $recoveryText.Contains('Missing Target') -or -not $recoveryText.Contains('Missing NPC')) {
+        throw "Recovery notification did not expose both ordered missing relationships: $recoveryText"
+    }
+    $ok = Wait-UiaElement -Root $notification -Condition (New-UiaCondition -ControlType 'Button' -Name 'OK') -Description "'OK' button in Project recovery notification" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $ok
+    Wait-MainWindow -Title "$applicationTitle - *$recoveryProjectName" | Out-Null
+    $observations['recoveredProject'] = [ordered]@{
+        file = $recoveryProjectName
+        title = $script:mainWindow.Current.Name
+        diagnostics = $recoveryText
+    }
+    "opened $recoveryProjectName as dirty/recovered with both ordered missing-relationship diagnostics"
+}
+
+Invoke-Step -Name 'save-recovered-project' -Action {
+    $recoveryPath = Join-Path $workDir $recoveryProjectName
+    Send-FileCommand -Item 'Save'
+    Wait-MainWindow -Title "$applicationTitle - $recoveryProjectName" | Out-Null
+    $json = Get-Content -LiteralPath $recoveryPath -Raw | ConvertFrom-Json
+    $targetPresets = @($json.CustomMorphTargets.Target.SliderPresets)
+    $npcPresets = @($json.MorphedNPCs.NPC.SliderPresets)
+    if (($targetPresets -join '|') -cne 'Alpha|Beta' -or ($npcPresets -join '|') -cne 'Beta') {
+        throw "Recovered Project did not persist canonical surviving relationships (Target: $($targetPresets -join ', '); NPC: $($npcPresets -join ', '))."
+    }
+    $observations['savedRecoveredProject'] = [ordered]@{
+        file = $recoveryProjectName
+        sha256 = (Get-FileHash -LiteralPath $recoveryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        targetSliderPresets = $targetPresets
+        npcSliderPresets = $npcPresets
+        cleanTitle = $script:mainWindow.Current.Name
+    }
+    "saved recovered $recoveryProjectName through its adopted identity and retained only Alpha/Beta relationships"
+}
+
+Invoke-Step -Name 'exit-after-project-recovery' -Action {
+    Stop-PackagedApplication -ObservationKey 'exitAfterProjectRecovery'
 }
 
 Invoke-Step -Name 'install-legacy-settings-edit' -Action {
@@ -763,13 +843,7 @@ Invoke-Step -Name 'load-representative-morph-content' -Action {
 }
 
 Invoke-Step -Name 'create-custom-morph-target' -Action {
-    $label = Find-OuterControl -ControlType 'Text' -Name 'Custom Target:'
-    # The Custom Target field is the edit that follows its label; the Add button is the button that follows the field.
-    $field = Get-FollowingControl -Element $label -ControlType 'Edit'
-    Set-UiaValue -Element $field -Value $newCustomTarget
-    $add = Get-FollowingControl -Element $field -ControlType 'Button' -Name 'Add'
-    Invoke-UiaElement -Element $add
-    $targets = Wait-ListItems -ListName $customTargetsList -Expected @($fixtureCustomTarget, $newCustomTarget)
+    $targets = Add-CustomMorphTargetThroughUi -Name $newCustomTarget -ExpectedNames @($fixtureCustomTarget, $newCustomTarget)
     Wait-MainWindow -Title "$applicationTitle - *$openedProjectName" | Out-Null
     $observations['createdCustomMorphTarget'] = $newCustomTarget
     "$customTargetsList lists $($targets -join ', '); title shows the unsaved marker"
@@ -822,8 +896,122 @@ Invoke-Step -Name 'save-project-as' -Action {
     "saved $savedProjectName (title clean); Custom Morph Targets $($savedTargets -join ', '); NPCs $($savedNpcs -join ', ')"
 }
 
-Invoke-Step -Name 'exit-after-save' -Action {
-    Stop-PackagedApplication -ObservationKey 'exitAfterSave'
+Invoke-Step -Name 'prepare-project-save-overwrite' -Action {
+    $targets = Add-CustomMorphTargetThroughUi -Name $saveRecoveryTarget -ExpectedNames @(
+        $fixtureCustomTarget, $newCustomTarget, $saveRecoveryTarget)
+    Wait-MainWindow -Title "$applicationTitle - *$savedProjectName" | Out-Null
+    $observations['projectSavePending'] = [ordered]@{
+        target = $saveRecoveryTarget
+        customMorphTargets = $targets
+        dirtyTitle = $script:mainWindow.Current.Name
+    }
+    "added '$saveRecoveryTarget' after Save As; title remains dirty until ordinary Save publishes it"
+}
+
+Invoke-Step -Name 'failed-project-save-preserves-destination-and-lifecycle' -Action {
+    $savedPath = Join-Path $workDir $savedProjectName
+    $beforeBytes = [System.IO.File]::ReadAllBytes($savedPath)
+    $beforeHash = (Get-FileHash -LiteralPath $savedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $targetLock = [System.IO.File]::Open($savedPath, [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+    try {
+        Send-FileCommand -Item 'Save'
+        $errorWindow = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title 'Error' -TimeoutSeconds $StepTimeoutSeconds
+        $errorText = @(
+            Find-UiaElements -Root $errorWindow -Condition (New-UiaCondition -ControlType 'Text') |
+                ForEach-Object { $_.Current.Name } |
+                Where-Object { $_ } |
+                Select-Object -Unique) -join "`n"
+        if (-not $errorText.Contains('PROJECT_FILE_WRITE_FAILED')) {
+            throw "Locked overwrite did not report PROJECT_FILE_WRITE_FAILED: $errorText"
+        }
+        Wait-MainWindow -Title "$applicationTitle - *$savedProjectName" | Out-Null
+        $afterBytes = [System.IO.File]::ReadAllBytes($savedPath)
+        if ([Convert]::ToBase64String($afterBytes) -cne [Convert]::ToBase64String($beforeBytes)) {
+            throw 'Failed locked overwrite changed the pre-command Project destination bytes.'
+        }
+        $staging = @(Get-ChildItem -LiteralPath $workDir -File -Force |
+            Where-Object { $_.Name -like ".$savedProjectName-*.tmp" })
+        if ($staging.Count -ne 0) {
+            throw "Failed locked overwrite left staging files: $($staging.Name -join ', ')."
+        }
+        $ok = Wait-UiaElement -Root $errorWindow -Condition (New-UiaCondition -ControlType 'Button' -Name 'OK') -Description "'OK' button in Project Save failure" -TimeoutSeconds $StepTimeoutSeconds
+        Invoke-UiaElement -Element $ok
+        $observations['failedProjectSave'] = [ordered]@{
+            file = $savedProjectName
+            preservedSha256 = $beforeHash
+            preservedDirtyTitle = $script:mainWindow.Current.Name
+            diagnostic = $errorText
+            stagingFiles = @()
+        }
+        "locked overwrite failed with PROJECT_FILE_WRITE_FAILED; destination hash $beforeHash, dirty title, and zero staging files were preserved"
+    }
+    finally {
+        $targetLock.Dispose()
+    }
+}
+
+Invoke-Step -Name 'retry-project-save-after-overwrite-failure' -Action {
+    $savedPath = Join-Path $workDir $savedProjectName
+    $priorHash = $observations['failedProjectSave'].preservedSha256
+    Send-FileCommand -Item 'Save'
+    Wait-MainWindow -Title "$applicationTitle - $savedProjectName" | Out-Null
+    $json = Get-Content -LiteralPath $savedPath -Raw | ConvertFrom-Json
+    $savedTargets = @($json.CustomMorphTargets.PSObject.Properties.Name)
+    if ($savedTargets -cnotcontains $saveRecoveryTarget) {
+        throw "Successful Save retry lacks '$saveRecoveryTarget' (has: $($savedTargets -join ', '))."
+    }
+    $savedHash = (Get-FileHash -LiteralPath $savedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($savedHash -ceq $priorHash) {
+        throw 'Successful Save retry did not replace the prior destination bytes.'
+    }
+    $observations['retriedProjectSave'] = [ordered]@{
+        file = $savedProjectName
+        priorSha256 = $priorHash
+        savedSha256 = $savedHash
+        customMorphTargets = $savedTargets
+        cleanTitle = $script:mainWindow.Current.Name
+    }
+    "ordinary Save retry replaced the destination with '$saveRecoveryTarget' and restored the clean title"
+}
+
+Invoke-Step -Name 'prepare-unsaved-project-for-new' -Action {
+    $targets = Add-CustomMorphTargetThroughUi -Name $discardedTarget -ExpectedNames @(
+        $fixtureCustomTarget, $newCustomTarget, $saveRecoveryTarget, $discardedTarget)
+    Wait-MainWindow -Title "$applicationTitle - *$savedProjectName" | Out-Null
+    $observations['newProjectPendingDiscard'] = [ordered]@{
+        target = $discardedTarget
+        customMorphTargets = $targets
+        dirtyTitle = $script:mainWindow.Current.Name
+    }
+    "added '$discardedTarget' without saving so New must confirm the discard boundary"
+}
+
+Invoke-Step -Name 'new-project-discards-confirmed-changes' -Action {
+    Send-FileCommand -Item 'New'
+    $confirmation = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title 'Confirm Action' -TimeoutSeconds $StepTimeoutSeconds
+    $newButton = Wait-UiaElement -Root $confirmation -Condition (New-UiaCondition -ControlType 'Button' -Name 'New') -Description "'New' button in discard confirmation" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $newButton
+    Wait-MainWindow -Title $applicationTitle | Out-Null
+    Wait-EmptyList -ListName $customTargetsList
+    $templatesTab = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'TabItem' -Name 'Templates') -Description "'Templates' tab after New" -TimeoutSeconds $StepTimeoutSeconds
+    Select-UiaElement -Element $templatesTab
+    Wait-EmptyList -ListName $sliderPresetsList
+    $savedJson = Get-Content -LiteralPath (Join-Path $workDir $savedProjectName) -Raw | ConvertFrom-Json
+    if (@($savedJson.CustomMorphTargets.PSObject.Properties.Name) -ccontains $discardedTarget) {
+        throw "New Project leaked discarded target '$discardedTarget' into the previously saved destination."
+    }
+    $observations['newProject'] = [ordered]@{
+        title = $script:mainWindow.Current.Name
+        discardedTarget = $discardedTarget
+        sliderPresetCount = 0
+        customMorphTargetCount = 0
+    }
+    "confirmed New after a dirty edit; the untitled Project is empty and '$discardedTarget' remains absent from saved bytes"
+}
+
+Invoke-Step -Name 'exit-after-new' -Action {
+    Stop-PackagedApplication -ObservationKey 'exitAfterNew'
 }
 
 Invoke-Step -Name 'prepare-interrupted-settings-publication' -Action {
@@ -872,7 +1060,8 @@ Invoke-Step -Name 'recover-settings-relaunch-and-reopen-saved-project' -Action {
     }
     $tab = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') -Description "'Morphs' tab" -TimeoutSeconds $StepTimeoutSeconds
     Select-UiaElement -Element $tab
-    $targets = Wait-ListItems -ListName $customTargetsList -Expected @($fixtureCustomTarget, $newCustomTarget)
+    $targets = Wait-ListItems -ListName $customTargetsList -Expected @(
+        $fixtureCustomTarget, $newCustomTarget, $saveRecoveryTarget)
     $npc = Assert-NpcRow
     Select-ListItem -ListName $customTargetsList -ItemName $newCustomTarget
     $assigned = Wait-ListItems -ListName $targetPresetsList -Expected $fixturePresets
@@ -935,7 +1124,7 @@ finally {
 
     $restricted = @($stderr -split "`r?`n" | Where-Object { $_ -match 'restricted method|native access|--enable-native-access' })
     $evidence = [ordered]@{
-        schema           = 'bs2bg.windows-app-image-smoke/3'
+        schema           = 'bs2bg.windows-app-image-smoke/4'
         recordedAtUtc    = $startedAt.ToString('o')
         passed           = $passed
         expectedAppVersion = $ExpectedAppVersion

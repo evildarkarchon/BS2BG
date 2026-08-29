@@ -33,9 +33,9 @@ import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.TokenStreamLocation;
 
 /**
- * Non-production Jackson streaming adapter used by the permanent Project
- * compatibility oracle. Production routing remains on {@link ProjectFileLoader}
- * and {@link ProjectFileWriter} until their dedicated cutover slices.
+ * Owned Jackson streaming adapter for Project persistence. Writing is the sole
+ * production route through {@link ProjectFileWriter}; reading remains a
+ * compatibility oracle until its dedicated cutover slice.
  */
 final class ProjectJacksonAdapter {
 

@@ -21,6 +21,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
@@ -85,6 +87,36 @@ class ProjectPersistenceCompatibilityTest {
 		assertFalse(saved.getSnapshot().isDirty());
 		assertEquals(savedProject.toAbsolutePath().normalize(), saved.getSnapshot().getFileIdentity().get());
 		assertSavedProjectSemantics(readJson(savedProject.toFile()));
+		ProjectSnapshot reopened = ProjectSessions.create().open(savedProject).getSnapshot();
+		assertProjectSnapshotSemantics(opened, reopened);
+	}
+
+	/**
+	 * Routes every permanently writable Project oracle through the production
+	 * session without treating JSON whitespace or member order as compatibility.
+	 *
+	 * @param fixtureName Project oracle filename beneath json-oracles/project
+	 * @throws Exception when the fixture cannot be opened, saved, or reopened
+	 */
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {
+			"semantic-equivalence.jbs2bg",
+			"canonical-ordering.jbs2bg",
+			"member-order-uunp.jbs2bg",
+			"legal-repeated-npc-display-name.jbs2bg",
+			"unicode-content.jbs2bg",
+			"integer-bounds-valid.jbs2bg",
+			"recovery-ordered-diagnostics.jbs2bg"
+	})
+	void projectSessionRoundTripsThePermanentWritableCorpus(String fixtureName) throws Exception {
+		Path source = fixtureFile("json-oracles/project/" + fixtureName).toPath();
+		ProjectSession session = ProjectSessions.create();
+		ProjectSnapshot opened = session.open(source).getSnapshot();
+		Path savedProject = tempDirectory.resolve(fixtureName);
+
+		ProjectOutcome saved = session.saveAs(savedProject);
+
+		assertFalse(saved.getSnapshot().isDirty());
 		ProjectSnapshot reopened = ProjectSessions.create().open(savedProject).getSnapshot();
 		assertProjectSnapshotSemantics(opened, reopened);
 	}

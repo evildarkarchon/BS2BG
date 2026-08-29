@@ -49,6 +49,17 @@ final class JacksonDependencyPolicyTest {
         }
     }
 
+    /** Verifies Project publication has one owned writer route and no dormant minimal-json serializer. */
+    @Test
+    void projectPublicationUsesOnlyTheOwnedJacksonWriter() throws IOException {
+        String publisher = Files.readString(
+                Path.of("src/com/asdasfa/jbs2bg/project/ProjectFileWriter.java"));
+
+        assertTrue(publisher.contains("ProjectJacksonAdapter.write(snapshot)"));
+        assertFalse(publisher.contains("com.eclipsesource.json"));
+        assertFalse(publisher.contains("WriterConfig"));
+    }
+
     /**
      * Enforces the friend-package boundary that Java source visibility cannot express:
      * only the three owned adapters may call the public internal support class.

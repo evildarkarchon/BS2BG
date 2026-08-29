@@ -2,9 +2,9 @@
 
 Status: packaging checkpoint on top of the complete application gate (issue #97, parent #81). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
-starts from a clean extracted location without any system Java, completes the representative Project, BoS,
-Templates, and Morphs workflows through its packaged launcher, and exits cleanly. ADR-0003 records the Java 25
-baseline this checkpoint ships.
+starts from a clean extracted location without any system Java, exercises Project New/Save/Save As/recovery and
+failed-overwrite preservation plus the representative BoS, Templates, and Morphs workflows, and exits cleanly.
+ADR-0003 records the Java 25 baseline this checkpoint ships.
 
 ## One command
 
@@ -94,40 +94,53 @@ located by relationship instead.
 Workflow steps (each recorded with duration and observations in the evidence):
 
 1. `extract-clean-image` — extract the archive; verify the launcher, its stamped version, and its single-process
-   setting; copy the checked-in `test-resources/projects/legacy-project-semantics.jbs2bg` into the working directory.
+   setting; copy the representative and recoverable checked-in Project fixtures into the working directory.
 2. `launch-packaged-launcher-without-system-java` — start the launcher, wait for the `jBS2BG` window, require it to
    be the image's only BS2BG process, check the loaded runtime libraries, and note the settings files created in its
    working directory.
 3. `verify-first-run-canonical-settings-pair` — require both Settings filenames, canonical UTF-8 bytes without a
    BOM and with a final LF, the accepted built-in Standard/UUNP defaults and inversion families, and no transaction
    directory.
-4. `exit-after-first-run-settings-creation` — close the first-run window; require exit code 0 within the bound.
-5. `install-legacy-settings-edit` — replace both files with the checked-in legacy Settings oracles and retain their
+4. `open-recoverable-project` — open the checked-in missing-relationship oracle and require both ordered
+   `SLIDER_PRESET_ASSIGNMENT_MISSING` diagnostics plus the dirty/recovered title.
+5. `save-recovered-project` — invoke ordinary Save through the adopted identity, require a clean title, and parse
+   the canonical file to prove that Alpha/Beta survive while both missing relationships are omitted.
+6. `exit-after-project-recovery` — close the first window; require exit code 0 within the bound.
+7. `install-legacy-settings-edit` — replace both files with the checked-in legacy Settings oracles and retain their
    exact SHA-256 values as the prior pair for later recovery.
-6. `launch-after-legacy-settings-edit` — relaunch the package and require the edited pair to remain byte-identical.
-7. `open-representative-project` — File › Open…, the native dialog, the file path, Open; the title becomes
+8. `launch-after-legacy-settings-edit` — relaunch the package and require the edited pair to remain byte-identical.
+9. `open-representative-project` — File › Open…, the native dialog, the file path, Open; the title becomes
    `jBS2BG - representative.jbs2bg` and `Slider Presets` lists `CBBE Curvy` and `UUNP Athletic`.
-8. `generate-preview-copy-and-export-bos-artifact` — select `CBBE Curvy`, open `View BoS JSON`, parse the
+10. `generate-preview-copy-and-export-bos-artifact` — select `CBBE Curvy`, open `View BoS JSON`, parse the
    preview, require its Waist values to reflect the imported inversion, require clipboard content to match it after
    normalizing Windows `CF_UNICODETEXT` CRLF line endings, export through the native save dialog, and require the
    exported UTF-8 bytes to equal that same preview exactly without a BOM or final newline.
-9. `generate-templates-output` — require the exact Settings-dependent legacy lines
+11. `generate-templates-output` — require the exact Settings-dependent legacy lines
    `CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0` and `UUNP Athletic=Arms@0.25:0.75`.
-10. `load-representative-morph-content` — the Morphs tab lists `All|Female` and the NPC row for
+12. `load-representative-morph-content` — the Morphs tab lists `All|Female` and the NPC row for
    `Skyrim.esm / HousecarlWhiterun`.
-11. `create-custom-morph-target` — `All|Female|NordRace` is added; the title shows the unsaved marker.
-12. `assign-slider-presets-to-target` — Add All; `Target Slider Presets` lists both presets and the counter reads 2.
-13. `generate-morphs-output` — the Morphs output names both Custom Morph Targets and the NPC.
-14. `save-project-as` — File › Save As… to `smoke-output.jbs2bg`; the title is clean; the file is parsed and must
+13. `create-custom-morph-target` — `All|Female|NordRace` is added; the title shows the unsaved marker.
+14. `assign-slider-presets-to-target` — Add All; `Target Slider Presets` lists both presets and the counter reads 2.
+15. `generate-morphs-output` — the Morphs output names both Custom Morph Targets and the NPC.
+16. `save-project-as` — File › Save As… to `smoke-output.jbs2bg`; the title is clean; the file is parsed and must
    contain the new target with both presets and the NPC.
-15. `exit-after-save` — close the second window; the launcher process must exit with code 0 within the bound.
-16. `prepare-interrupted-settings-publication` — move the edited pair into the transaction's backups, install only
+17. `prepare-project-save-overwrite` — add `All|Female|SaveRetry` after Save As and require the dirty title.
+18. `failed-project-save-preserves-destination-and-lifecycle` — hold the destination open without write/delete
+    sharing, invoke Save, require `PROJECT_FILE_WRITE_FAILED`, exact prior bytes and dirty title, and no sibling
+    staging file; dismiss the error and release the lock.
+19. `retry-project-save-after-overwrite-failure` — invoke ordinary Save again, require the new target in the
+    canonical file, a changed hash, and the clean title.
+20. `prepare-unsaved-project-for-new` — add `All|Female|Discarded` without saving and require the dirty title.
+21. `new-project-discards-confirmed-changes` — invoke New, confirm the discard through the owned dialog, require
+    an empty untitled Project, and prove the discarded target was not written into the prior destination.
+22. `exit-after-new` — close the second window; the launcher process must exit with code 0 within the bound.
+23. `prepare-interrupted-settings-publication` — move the edited pair into the transaction's backups, install only
     a replacement Standard member, and leave the staged UUNP member to model interruption between installs.
-17. `recover-settings-relaunch-and-reopen-saved-project` — relaunch, require the exact prior Settings hashes and no
+24. `recover-settings-relaunch-and-reopen-saved-project` — relaunch, require the exact prior Settings hashes and no
     remaining transaction state, reopen the saved Project, regenerate the exact Settings-dependent Templates lines,
-    and verify the Slider Presets, both Custom Morph Targets, the NPC row, and the new target's presets.
-18. `close-and-exit` — close the third window; require exit code 0 within the bound.
-19. `verify-settings-recovery-diagnostic` — require the stable `SETTINGS_PUBLICATION_RECOVERED` diagnostic in the
+    and verify the Slider Presets, all three Custom Morph Targets, the NPC row, and the assigned target's presets.
+25. `close-and-exit` — close the third window; require exit code 0 within the bound.
+26. `verify-settings-recovery-diagnostic` — require the stable `SETTINGS_PUBLICATION_RECOVERED` diagnostic in the
     packaged launcher's captured stderr.
 
 Two behaviours of the platform shaped the harness and are worth knowing before changing it:
@@ -135,9 +148,9 @@ Two behaviours of the platform shaped the harness and are worth knowing before c
 - A UIA `Invoke` of a JavaFX menu item runs the command inside the UIA callback on the application thread. When
   the command opens a modal `FileChooser`, the dialog's nested event loop runs inside that pending callback and the
   application serves no UIA request for any of its windows until the dialog closes (a `FromHandle` on the dialog
-  times out, from any client process). The two commands that open file dialogs are therefore triggered through the
-  accelerators the application declares in `MainController.setupKeyCombinations` (Open `Ctrl+O`, Save As
-  `Ctrl+Alt+S`) after the menu item has been verified to exist by role and name; keyboard focus is
+  times out, from any client process). File commands are therefore triggered through the accelerators declared in
+  `MainController.setupKeyCombinations` (New `Ctrl+N`, Open `Ctrl+O`, Save `Ctrl+S`, Save As `Ctrl+Alt+S`) after
+  each menu item has been verified to exist by role and name; keyboard focus is
   confirmed to be in the application process before the keys are sent, and one bounded re-send is allowed. This
   is a limitation, not an equivalent: the accelerator is the app's own published binding and no locator rule is
   broken, but activation does not go through the located menu item, so a broken menu-to-command wiring would not
@@ -150,8 +163,8 @@ Two behaviours of the platform shaped the harness and are worth knowing before c
   only a fully formed window. Its Open/Save control is exposed as a bare `Pane` without patterns, so after being
   located by name it is activated with the Win32 `BM_CLICK` message on its own window handle.
 - A JavaFX `ListView` that is emptied (New) and refilled (Open) within one process renders its items but no longer
-  publishes its cells to UI Automation; the reopen is therefore verified in a fresh process, which is also the
-  stronger proof that the saved Project survives an exit/relaunch of the packaged executable.
+  publishes its cells to UI Automation. New therefore ends the second lifecycle, and the saved Project's lists are
+  verified after a fresh-process reopen, which is also stronger proof that it survives exit/relaunch.
 
 Every wait is bounded (`-StartupTimeoutSeconds 90`, `-StepTimeoutSeconds 30`, `-ExitTimeoutSeconds 30`). The
 first failing step captures the process's window list, the UIA tree of every visible window, a screenshot, and
@@ -178,10 +191,11 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, and the notices components.
-- `smoke`: the complete smoke evidence (steps with durations, first-run/edited/recovered Settings hashes and exact
-  output, expected and observed process models, the three sequential process lifecycles with exit codes and exit
-  wait times, environment scrubbing, diagnostics summary including any native-access warning lines from stderr,
-  which must be none).
+- `smoke`: the complete smoke evidence (schema `bs2bg.windows-app-image-smoke/4`; steps with durations; Project
+  New, recovered Save, Save As, failed-overwrite preservation, retry, and reopen observations; first-run/edited/
+  recovered Settings hashes and exact output; expected and observed process models; the three sequential process
+  lifecycles with exit codes and exit wait times; environment scrubbing; diagnostics summary including any
+  native-access warning lines from stderr, which must be none).
 
 Beside it: `app-image-jdeps-output.txt`, `app-image-jlink-output.txt`, `app-image-jpackage-output.txt`
 (`--verbose`), `app-image-module-resolution.txt`, `app-image-sha256.txt`, `windows-app-image-smoke.json`, and
@@ -208,6 +222,18 @@ The issue #84 Settings cutover checkpoint is retained separately under
 `docs/build/evidence/windows-app-image-2026-08-28-settings-cutover/`. Its smoke evidence records first-run canonical
 pair creation, byte-identical legacy editing, exact Standard/UUNP output consumption, interrupted-publication
 recovery, the stable recovery diagnostic, and all three clean launcher lifecycles.
+
+The issue #85 Project writer cutover checkpoint is retained separately under
+`docs/build/evidence/windows-app-image-2026-08-29-project-writer-cutover/`. Its smoke evidence records New,
+recovered-Project Save, canonical Save As, locked overwrite failure with destination/lifecycle preservation,
+successful Save retry, fresh-process reopen, and all three clean launcher lifecycles.
+
+## Reverting the Project writer cutover
+
+The production Project writer route, permanent corpus routing evidence, packaged smoke, documentation, and
+retained evidence land together in the single issue #85 commit. Reverting that commit restores the prior
+minimal-json Project writer and the previous packaging checkpoint. Saved Projects remain semantically compatible
+JSON and need no data migration or external-state cleanup.
 
 ## Reverting the Settings persistence cutover
 

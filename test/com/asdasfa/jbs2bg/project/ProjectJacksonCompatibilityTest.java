@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.stream.Stream;
 
@@ -25,7 +26,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 
-/** Locks Project semantics behind the non-production, package-owned Jackson adapter. */
+/** Locks Project semantics behind the package-owned Jackson persistence adapter. */
 final class ProjectJacksonCompatibilityTest {
 
     private static final Path FIXTURE_ROOT = Path.of("test-resources", "json-oracles", "project");
@@ -68,10 +69,6 @@ final class ProjectJacksonCompatibilityTest {
         assertProjectContentEquals(jackson.snapshot(), reopened.snapshot());
         assertProjectContentEquals(jackson.snapshot(), ProjectFileLoader.load(canonical).getSnapshot());
         assertTrue(reopened.diagnostics().isEmpty());
-
-        Path legacyCanonical = temporaryDirectory.resolve("legacy-canonical.jbs2bg");
-        ProjectFileWriter.write(jackson.snapshot(), legacyCanonical);
-        assertProjectContentEquals(jackson.snapshot(), ProjectJacksonAdapter.read(legacyCanonical).snapshot());
     }
 
     /** Reader and writer both expose deterministic domain and fixed-field ordering. */
@@ -150,6 +147,22 @@ final class ProjectJacksonCompatibilityTest {
         assertTrue(canonical.contains("\"valueSmall\":null"));
         assertTrue(canonical.contains("\"valueBig\":null"));
         assertFalse(canonical.contains("\"name\":\"Arms\""));
+    }
+
+    /** Canonical writing re-enters the package-private Project integrity authority before bytes exist. */
+    @Test
+    void canonicalWriterRejectsAProjectWithDanglingRelationships() {
+        ProjectSnapshot invalid = new ProjectSnapshot(
+                List.of(new SliderPresetSnapshot("Alpha", false, List.of())),
+                List.of(new CustomMorphTargetSnapshot("Target", List.of("Missing"))),
+                List.of(), Optional.empty(), true, ProjectLifecycleStatus.UNTITLED);
+
+        ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
+                ProjectJacksonAdapter.ProjectFormatException.class,
+                () -> ProjectJacksonAdapter.write(invalid));
+
+        assertEquals(ProjectDiagnosticCodes.PROJECT_STRUCTURE_INVALID, exception.code());
+        assertEquals("/", exception.path());
     }
 
     /** Ordinary Unicode and escaped path characters retain display casing through canonical writing. */

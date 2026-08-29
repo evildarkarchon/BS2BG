@@ -48,14 +48,14 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | Every production resource in the artifact | `Java25ToolchainGuardTest.everyProductionResourceIsInTheBuildOutput` (`target/classes` and classpath) and `Assert-JarContainsProductionResources` on the packaged jar |
 | Representative FXML/controller graphs load | `FxmlGraphLoadingTest`: `main.fxml` (root), every `popup_*.fxml` (popups), `custom_notif.fxml` / `custom_confirm.fxml` / `setslider_control.fxml` (custom roots), on the JavaFX toolkit started through `Platform.startup` with a 30 s per-body timeout; Surefire's `forkedProcessTimeoutInSeconds` bounds the whole fork so a toolkit hang cannot hang the build |
 | Logical visible-set behavior preserved | `FilteredViewTest`, `VisibleScopeCommandsTest` (seam), `FilteredTableAdapterTest` (public-JavaFX adapter: AND filtering, sort through `TableView.sortOrder`, identity-stable selection, frozen bulk scope, detach) |
-| Existing Project contracts | `ProjectSession*Test`, `ProjectTest`, `ProjectPersistenceCompatibilityTest` unchanged and required by the script |
+| Existing Project contracts | `ProjectSession*Test`, `ProjectJacksonCompatibilityTest`, `ProjectTest`, and `ProjectPersistenceCompatibilityTest` required by the script |
 
 The required suites the script asserts (report present, at least one test, zero failures/errors):
 `Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxmlGraphLoadingTest`, `LauncherTest`,
 `WindowsAppImageGateTest`, `FilteredTableAdapterTest`,
 `DialogGraphicsTest`, `FilteredViewTest`, `VisibleScopeCommandsTest`, `ProjectSessionTest`,
 `ProjectSessionOpenTest`, `ProjectSessionSaveTest`, `ProjectSessionImportTest`, `ProjectSessionSliderChoiceTest`,
-`ProjectTest`, `ProjectPersistenceCompatibilityTest`.
+`ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`.
 
 ## Public-JavaFX replacements made for this gate
 

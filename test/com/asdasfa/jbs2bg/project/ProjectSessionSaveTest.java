@@ -219,6 +219,11 @@ class ProjectSessionSaveTest {
                 outcome.getDiagnostics().get(0).getCode());
         assertEquals(blockedTarget.toAbsolutePath().normalize(),
                 outcome.getDiagnostics().get(0).getSourceLocation().getPath().get());
+        try (var siblings = Files.list(tempDirectory)) {
+            assertFalse(siblings.anyMatch(path -> path.getFileName().toString()
+                    .startsWith(".blocked-target.jbs2bg-")),
+                    "failed replacement must not leave a sibling staging file");
+        }
     }
 
     /**
