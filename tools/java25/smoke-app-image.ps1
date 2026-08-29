@@ -830,11 +830,10 @@ try {
             [regex]::Matches($value, 'SLIDER_PRESET_ASSIGNMENT_MISSING').Count -ge 2 -and
                 $value.Contains('Missing Target') -and $value.Contains('Missing NPC')
         }
-        $infoBar = Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Group' -Name 'Workbench notification') `
-            -Description 'warning InfoBar region' -TimeoutSeconds $StepTimeoutSeconds
-        if ($infoBar.Current.HelpText -cne 'Warning: Project opened with 2 diagnostics.') {
-            throw "Warning InfoBar did not expose severity and message: '$($infoBar.Current.HelpText)'"
+        $warningCue = Find-OuterControl -ControlType 'Text' -Name 'Warning'
+        $warningMessage = Get-FollowingControl -Element $warningCue -ControlType 'Text'
+        if ($warningMessage.Current.Name -cne 'Project opened with 2 diagnostics.') {
+            throw "Warning InfoBar did not expose its related message: '$($warningMessage.Current.Name)'"
         }
         $activityRecord = Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'ListItem' `
@@ -887,11 +886,10 @@ try {
         $text = Wait-ProjectDiagnostics -Description 'malformed Project diagnostic' -Predicate {
             param($value) $value.Contains('PROJECT_JSON_MALFORMED')
         }
-        $failureInfoBar = Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Group' -Name 'Workbench notification') `
-            -Description 'failure InfoBar region' -TimeoutSeconds $StepTimeoutSeconds
-        if ($failureInfoBar.Current.HelpText -cne 'Failure: Open Project failed with 1 diagnostic.') {
-            throw "Failed Open did not expose its failure InfoBar: '$($failureInfoBar.Current.HelpText)'"
+        $failureCue = Find-OuterControl -ControlType 'Text' -Name 'Failure'
+        $failureMessage = Get-FollowingControl -Element $failureCue -ControlType 'Text'
+        if ($failureMessage.Current.Name -cne 'Open Project failed with 1 diagnostic.') {
+            throw "Failed Open did not expose its related failure message: '$($failureMessage.Current.Name)'"
         }
         Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'ListItem' `
