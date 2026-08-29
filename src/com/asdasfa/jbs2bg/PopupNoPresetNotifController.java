@@ -3,11 +3,13 @@ package com.asdasfa.jbs2bg;
 import java.net.URL;
 import java.util.ResourceBundle;
 
-import com.asdasfa.jbs2bg.controlsfx.table.TableFilter;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
-import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.filtering.NpcTableColumns;
+import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
+import com.asdasfa.jbs2bg.fx.FilteredTableAdapter;
 import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 
 import javafx.collections.FXCollections;
@@ -43,15 +45,17 @@ public class PopupNoPresetNotifController extends CustomController {
 	@FXML
 	private TableColumn<NpcMorphAssignmentSnapshot, String> tcFormId;
 	
-	private TableFilter<NpcMorphAssignmentSnapshot> noPresetTableFilter;
-	
+	private FilteredTableAdapter<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> noPresetTable;
+
 	private final ObservableList<CustomMorphTargetSnapshot> customMorphTargets = FXCollections.observableArrayList();
 	private final ObservableList<NpcMorphAssignmentSnapshot> morphedNpcs = FXCollections.observableArrayList();
 	
 	@Override
 	public void initialize(URL location, ResourceBundle resources) {
+		noPresetTable = FilteredTableAdapter.attach(tvNoPreset, NpcTableColumns.npcMorphAssignments(),
+				ProjectIdentities::npcMorphAssignment);
 	}
-	
+
 	@Override
 	protected void onPostInit() {
 		lvNoPreset.setOnKeyTyped(new KeyNavigationListener() {
@@ -66,11 +70,9 @@ public class PopupNoPresetNotifController extends CustomController {
 						}
 						lvNoPreset.getSelectionModel().select(i);
 						lvNoPreset.getFocusModel().focus(i);
-						
-						boolean indexVisible = MyUtils.isIndexVisible(lvNoPreset, i);
-						if (!indexVisible)
-							lvNoPreset.scrollTo(i);
-						
+						// scrollTo is the minimal scroll in JavaFX 25: a no-op when the row is already visible.
+						lvNoPreset.scrollTo(i);
+
 						found = true;
 						break;
 					}
@@ -98,9 +100,10 @@ public class PopupNoPresetNotifController extends CustomController {
 		tvNoPreset.setOnKeyTyped(new KeyNavigationListener() {
 			@Override
 			public void test() {
-				for (int i = 0; i < noPresetTableFilter.getFilteredList().size(); i++) {
-					NpcMorphAssignmentSnapshot npc = noPresetTableFilter.getFilteredList().get(i);
-					if (npc.getDisplayName().toUpperCase().startsWith(searchText.toUpperCase())) {
+				TableColumn<NpcMorphAssignmentSnapshot, ?> leadingColumn = tvNoPreset.getColumns().get(0);
+				for (NpcMorphAssignmentSnapshot npc : tvNoPreset.getItems()) {
+					String text = noPresetTable.cellTextOf(leadingColumn, npc);
+					if (text.toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;
 							continue;
@@ -116,20 +119,15 @@ public class PopupNoPresetNotifController extends CustomController {
 		
 		tvNoPreset.setPlaceholder(new Label("EMPTY"));
 		tvNoPreset.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-		tvNoPreset.setOnSort(e -> {
-			NpcMorphAssignmentSnapshot npc = tvNoPreset.getSelectionModel().getSelectedItem();
-			if (npc != null)
-				tvNoPreset.scrollTo(npc);
-		});
+		// Sorting re-renders through the adapter, which reveals the selected row afterwards.
 		tcName.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("displayName"));
 		tcMaster.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("pluginName"));
 		tcRace.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("race"));
 		tcEditorId.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("editorId"));
 		tcFormId.setCellValueFactory(new PropertyValueFactory<NpcMorphAssignmentSnapshot, String>("formId"));
 		
-		tvNoPreset.setItems(morphedNpcs);
-		noPresetTableFilter = TableFilter.forTableView(tvNoPreset).lazy(true).apply();
-		
+		noPresetTable.setSource(morphedNpcs);
+
 		stage.setOnHidden(e -> {
 			customMorphTargets.clear();
 			morphedNpcs.clear();

@@ -10,11 +10,11 @@
     <name>jBS2BG</name>
 
     <!--
-        Transitional Java 25 verification build (issue #94).
+        Java 25 / JavaFX 25 application build (issues #94 and #96, parent #81).
 
-        This POM is a prefactoring checkpoint, NOT the complete application gate: the compiler plugin below still
-        admits only the packages that compile without JavaFX 8 skin internals (data, project, presentation) until
-        the JavaFX 25 UI port removes the source exclusions (#81).
+        This POM is the complete application gate: every production source under src/ compiles for release 25
+        with full lint enforcement, every resource under src/ and assets/ is packaged, and the test phase loads
+        the FXML/controller graphs on the pinned toolkit. No source include list may be reintroduced.
         Every version here is pinned on purpose. Run tools/java25/verify-java25.ps1 for the reproducible run; it
         provisions the checksum-verified Temurin 25 toolchain that .mvn/toolchains.xml points at and fails closed
         on any drift. The Maven host JDK may be newer (e.g. JDK 26) but compilation and tests always fork the
@@ -189,7 +189,7 @@
                                 <requireOS>
                                     <family>windows</family>
                                     <arch>amd64</arch>
-                                    <message>The transitional Java 25 checkpoint is pinned to Windows x64.</message>
+                                    <message>The Java 25 baseline is pinned to Windows x64.</message>
                                 </requireOS>
                                 <requirePluginVersions>
                                     <banLatest>true</banLatest>
@@ -206,7 +206,7 @@
                                     <excludes>
                                         <exclude>org.openjfx:javafx-incubator-*</exclude>
                                     </excludes>
-                                    <message>JavaFX incubator modules stay disabled in the transitional build.</message>
+                                    <message>JavaFX incubator modules stay disabled.</message>
                                 </bannedDependencies>
                             </rules>
                             <fail>true</fail>
@@ -246,30 +246,35 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <!--
-                    TRANSITIONAL: the verification build excludes JavaFX 8 skin internals until the JavaFX 25 UI
-                    port (#81). Only the packages listed below are compiled, so a green run here is not evidence
-                    that the complete application builds. Preview features stay disabled: no enable-preview flag
-                    may be added to compilerArgs or to the Surefire argLine.
+                    Every production source compiles, for release 25, with every lint category enabled and
+                    promoted to an error. No include/exclude list and no sourcepath override may be added here:
+                    ProductionSourceGateTest and tools/java25 fail closed if one appears, because a source-filtered
+                    build is not the application gate. Preview features stay disabled: no enable-preview flag may
+                    be added to compilerArgs or to the Surefire argLine.
                 -->
                 <configuration>
-                    <implicit>none</implicit>
-                    <includes>
-                        <include>com/asdasfa/jbs2bg/data/**/*.java</include>
-                        <include>com/asdasfa/jbs2bg/project/**/*.java</include>
-                        <include>com/asdasfa/jbs2bg/presentation/**/*.java</include>
-                        <include>com/asdasfa/jbs2bg/filtering/**/*.java</include>
-                    </includes>
+                    <showWarnings>true</showWarnings>
                     <compilerArgs>
-                        <arg>-sourcepath</arg>
-                        <arg>${project.build.directory}/empty-sourcepath</arg>
+                        <arg>-Xlint:all</arg>
+                        <arg>-Werror</arg>
                     </compilerArgs>
                 </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <!-- No argLine: adding enable-preview here would silently reopen preview features for the tests. -->
+                <!--
+                    The argLine carries exactly one flag: JavaFX loads its native glass/prism libraries through
+                    System.load, which JDK 25 warns about and a later release will refuse without native access.
+                    It is not a preview flag; adding enable-preview here would silently reopen preview features
+                    for the tests, and Java25ToolchainGuardTest asserts it never reaches the JVM.
+                    The two timeouts keep a hung JavaFX toolkit (or a modal dialog opened by mistake) from hanging
+                    the build: the fork is killed after the first bound and its exit is forced after the second.
+                -->
                 <configuration>
+                    <argLine>--enable-native-access=ALL-UNNAMED</argLine>
+                    <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
                     <systemPropertyVariables>
                         <bs2bg.toolchain.jdk.runtimeVersion>${bs2bg.toolchain.jdk.runtimeVersion}</bs2bg.toolchain.jdk.runtimeVersion>
                     </systemPropertyVariables>

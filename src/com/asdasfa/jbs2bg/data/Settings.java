@@ -140,7 +140,7 @@ public class Settings {
 		
 		for (Map.Entry<String, DefaultSliderValue> entry : DEFAULTS.entrySet()) {
 			String key = entry.getKey();
-			DefaultSliderValue dsl = (DefaultSliderValue) entry.getValue();
+			DefaultSliderValue dsl = entry.getValue();
 			joDefaults.add(key, newJsonObjectDefault(dsl.getValueSmall(), dsl.getValueBig()));
 		}
 		
@@ -179,7 +179,7 @@ public class Settings {
 		
 		for (Map.Entry<String, DefaultSliderValue> entry : DEFAULTS_UUNP.entrySet()) {
 			String key = entry.getKey();
-			DefaultSliderValue dsl = (DefaultSliderValue) entry.getValue();
+			DefaultSliderValue dsl = entry.getValue();
 			joDefaults.add(key, newJsonObjectDefault(dsl.getValueSmall(), dsl.getValueBig()));
 		}
 		

@@ -6,8 +6,8 @@
 .DESCRIPTION
     The download path is exercised only by running tools/java25/verify-java25.ps1 end to end; everything that
     decides whether an input is accepted (hash comparison, JDK release metadata, jmod version, wrapper pins,
-    archive extraction, transitional source scope) is covered here so a lock change is caught before any bytes
-    are downloaded.
+    archive extraction, complete compiler scope, artifact contents, required suites) is covered here so a lock
+    or pom change is caught before any bytes are downloaded.
 
     Run with:  Invoke-Pester -Path tools/java25 -Output Detailed
 #>
@@ -230,37 +230,172 @@ Describe 'Expand-LockedArchive' {
     }
 }
 
-Describe 'Get-TransitionalSourceScope' {
+Describe 'Assert-CompleteSourceScope' {
     BeforeAll {
-        $script:Scope = Get-TransitionalSourceScope -RepoRoot $script:RepoRoot
+        # Writes a minimal repository (pom.xml plus one source) whose compiler configuration is the given XML.
+        function New-ScopedRepo {
+            param([string]$Name, [string]$CompilerConfiguration)
+            $root = Join-Path $TestDrive "scope\$Name"
+            New-Item -ItemType Directory -Path (Join-Path $root 'src\com\example') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $root 'src\com\example\App.java') -Value 'package com.example; class App {}'
+            $pom = @"
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <build>
+    <sourceDirectory>src</sourceDirectory>
+    <plugins>
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>$CompilerConfiguration</configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+"@
+            Set-Content -LiteralPath (Join-Path $root 'pom.xml') -Value $pom
+            return $root
+        }
+        $script:FullLint = '<compilerArgs><arg>-Xlint:all</arg><arg>-Werror</arg></compilerArgs>'
     }
 
-    It 'reads the admitted include patterns from the compiler plugin configuration' {
-        $script:Scope.AdmittedPatterns | Should -Contain 'com/asdasfa/jbs2bg/project/**/*.java'
-        $script:Scope.AdmittedPatterns | Should -Contain 'com/asdasfa/jbs2bg/data/**/*.java'
-        $script:Scope.AdmittedPatterns | Should -Contain 'com/asdasfa/jbs2bg/presentation/**/*.java'
+    It 'accepts the committed pom and lists every production source' {
+        $scope = Assert-CompleteSourceScope -RepoRoot $script:RepoRoot
+        $scope.CompleteApplicationGate | Should -BeTrue
+        $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/MainController.java'
+        $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/project/Project.java'
+        $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/fx/FilteredTableAdapter.java'
+        $scope.ProductionSources | Should -Not -Contain 'com/asdasfa/jbs2bg/controlsfx/table/TableFilter.java'
+        $scope.ProductionSources.Count | Should -BeGreaterThan 40
+        $scope.CompilerArgs | Should -Contain '-Xlint:all'
+        $scope.CompilerArgs | Should -Contain '-Werror'
     }
 
-    It 'classifies the Project aggregate as admitted and the JavaFX controllers as excluded' {
-        $script:Scope.AdmittedSources | Should -Contain 'com/asdasfa/jbs2bg/project/Project.java'
-        $script:Scope.ExcludedSources | Should -Contain 'com/asdasfa/jbs2bg/MainController.java'
-        $script:Scope.ExcludedSources | Should -Contain 'com/asdasfa/jbs2bg/controlsfx/table/TableFilter.java'
-        $script:Scope.ExcludedSources | Should -Not -Contain 'com/asdasfa/jbs2bg/project/Project.java'
+    It 'accepts a minimal pom with full lint and no filter' {
+        $root = New-ScopedRepo 'clean' $script:FullLint
+        (Assert-CompleteSourceScope -RepoRoot $root).ProductionSources | Should -Be @('com/example/App.java')
     }
 
-    It 'never claims to be the complete application gate while any source is excluded' {
-        $script:Scope.ExcludedSources.Count | Should -BeGreaterThan 0
-        $script:Scope.CompleteApplicationGate | Should -BeFalse
+    It 'rejects a compiler include list' {
+        $root = New-ScopedRepo 'includes' "<includes><include>com/example/**/*.java</include></includes>$($script:FullLint)"
+        { Assert-CompleteSourceScope -RepoRoot $root } | Should -Throw -ExpectedMessage '*<includes>*'
+    }
+
+    It 'rejects an exclude list and an implicit setting' {
+        $root = New-ScopedRepo 'excludes' "<excludes><exclude>**/Ui*.java</exclude></excludes>$($script:FullLint)"
+        { Assert-CompleteSourceScope -RepoRoot $root } | Should -Throw -ExpectedMessage '*<excludes>*'
+        $root = New-ScopedRepo 'implicit' "<implicit>none</implicit>$($script:FullLint)"
+        { Assert-CompleteSourceScope -RepoRoot $root } | Should -Throw -ExpectedMessage '*<implicit>*'
+    }
+
+    It 'rejects an include list hidden in an execution or pluginManagement configuration' {
+        $root = New-ScopedRepo 'execution' "$($script:FullLint)</configuration><executions><execution><id>x</id><configuration><includes><include>a/**</include></includes></configuration></execution></executions><configuration>"
+        { Assert-CompleteSourceScope -RepoRoot $root } | Should -Throw -ExpectedMessage '*<includes>*'
+        $root = Join-Path $TestDrive 'scope\management'
+        New-Item -ItemType Directory -Path (Join-Path $root 'src') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $root 'src\App.java') -Value 'class App {}'
+        Set-Content -LiteralPath (Join-Path $root 'pom.xml') -Value @"
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <build>
+    <sourceDirectory>src</sourceDirectory>
+    <pluginManagement><plugins><plugin><artifactId>maven-compiler-plugin</artifactId>
+      <configuration><excludes><exclude>**/Ui*.java</exclude></excludes></configuration></plugin></plugins></pluginManagement>
+    <plugins><plugin><artifactId>maven-compiler-plugin</artifactId><configuration>$($script:FullLint)</configuration></plugin></plugins>
+  </build>
+</project>
+"@
+        { Assert-CompleteSourceScope -RepoRoot $root } | Should -Throw -ExpectedMessage '*<excludes>*'
+    }
+
+    It 'rejects a sourcepath override' {
+        $root = New-ScopedRepo 'sourcepath' '<compilerArgs><arg>-Xlint:all</arg><arg>-Werror</arg><arg>-sourcepath</arg><arg>empty</arg></compilerArgs>'
+        { Assert-CompleteSourceScope -RepoRoot $root } | Should -Throw -ExpectedMessage '*-sourcepath*'
+    }
+
+    It 'rejects missing or narrowed lint enforcement' {
+        $root = New-ScopedRepo 'no-werror' '<compilerArgs><arg>-Xlint:all</arg></compilerArgs>'
+        { Assert-CompleteSourceScope -RepoRoot $root } | Should -Throw -ExpectedMessage '*-Werror*'
+        $root = New-ScopedRepo 'narrowed' '<compilerArgs><arg>-Xlint:all</arg><arg>-Xlint:-this-escape</arg><arg>-Werror</arg></compilerArgs>'
+        { Assert-CompleteSourceScope -RepoRoot $root } | Should -Throw -ExpectedMessage '*narrows lint*'
+        $root = New-ScopedRepo 'preview' '<compilerArgs><arg>-Xlint:all</arg><arg>-Werror</arg><arg>--enable-preview</arg></compilerArgs>'
+        { Assert-CompleteSourceScope -RepoRoot $root } | Should -Throw -ExpectedMessage '*preview*'
     }
 }
 
-Describe 'Format-TransitionalReport' {
-    It 'states plainly that the run is not the complete application gate and counts the exclusions' {
-        $scope = Get-TransitionalSourceScope -RepoRoot $script:RepoRoot
-        $report = (Format-TransitionalReport -Scope $scope) -join "`n"
-        $report | Should -Match 'NOT the complete application gate'
-        $report | Should -Match "$($scope.ExcludedSources.Count) source file"
-        $report | Should -Match 'MainController\.java'
+Describe 'Assert-JarContainsProductionResources' {
+    BeforeAll {
+        # A repository with one source and two resources, and jars built from staging trees.
+        $script:JarRepo = Join-Path $TestDrive 'jar\repo'
+        New-Item -ItemType Directory -Path (Join-Path $script:JarRepo 'src\com\example') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $script:JarRepo 'assets\res') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:JarRepo 'src\com\example\App.java') -Value 'class App {}'
+        Set-Content -LiteralPath (Join-Path $script:JarRepo 'src\com\example\main.fxml') -Value '<x/>'
+        Set-Content -LiteralPath (Join-Path $script:JarRepo 'assets\res\icon.png') -Value 'png'
+
+        # Builds a jar (zip) whose entries are the given relative paths, each holding placeholder content.
+        function New-Jar {
+            param([string]$Name, [string[]]$Entries)
+            $stage = Join-Path $TestDrive "jar\stage-$Name"
+            foreach ($entry in $Entries) {
+                $path = Join-Path $stage $entry
+                New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+                Set-Content -LiteralPath $path -Value 'x'
+            }
+            $jar = Join-Path $TestDrive "jar\$Name.jar"
+            Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $jar
+            return $jar
+        }
+    }
+
+    It 'accepts a jar holding every class and resource' {
+        $jar = New-Jar 'complete' @('com/example/App.class', 'com/example/main.fxml', 'res/icon.png')
+        $result = Assert-JarContainsProductionResources -RepoRoot $script:JarRepo -JarPath $jar
+        $result.ClassCount | Should -Be 1
+        $result.ResourceCount | Should -Be 2
+        $result.Resources | Should -Contain 'res/icon.png'
+    }
+
+    It 'fails closed when a resource is missing from the jar' {
+        $jar = New-Jar 'no-fxml' @('com/example/App.class', 'res/icon.png')
+        { Assert-JarContainsProductionResources -RepoRoot $script:JarRepo -JarPath $jar } |
+            Should -Throw -ExpectedMessage '*com/example/main.fxml*'
+    }
+
+    It 'fails closed when a source has no class in the jar' {
+        $jar = New-Jar 'no-class' @('com/example/main.fxml', 'res/icon.png')
+        { Assert-JarContainsProductionResources -RepoRoot $script:JarRepo -JarPath $jar } |
+            Should -Throw -ExpectedMessage '*com/example/App.class*'
+    }
+
+    It 'fails closed when the jar does not exist' {
+        { Assert-JarContainsProductionResources -RepoRoot $script:JarRepo -JarPath (Join-Path $TestDrive 'jar\missing.jar') } |
+            Should -Throw -ExpectedMessage '*not found*'
+    }
+}
+
+Describe 'Assert-RequiredSurefireSuites' {
+    BeforeAll {
+        $reports = Join-Path $TestDrive 'required\target\surefire-reports'
+        New-Item -ItemType Directory -Path $reports -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $reports 'TEST-a.Gate.xml') -Value '<?xml version="1.0"?><testsuite name="a.Gate" tests="3" failures="0" errors="0" skipped="0"/>'
+        Set-Content -LiteralPath (Join-Path $reports 'TEST-a.Empty.xml') -Value '<?xml version="1.0"?><testsuite name="a.Empty" tests="0" failures="0" errors="0" skipped="0"/>'
+        Set-Content -LiteralPath (Join-Path $reports 'TEST-a.Red.xml') -Value '<?xml version="1.0"?><testsuite name="a.Red" tests="2" failures="1" errors="0" skipped="0"/>'
+        $script:RequiredRoot = Join-Path $TestDrive 'required'
+    }
+
+    It 'returns the test count of every required suite that ran green' {
+        $counts = Assert-RequiredSurefireSuites -RepoRoot $script:RequiredRoot -Suites @('a.Gate')
+        $counts['a.Gate'] | Should -Be 3
+    }
+
+    It 'fails closed when a required suite has no report' {
+        { Assert-RequiredSurefireSuites -RepoRoot $script:RequiredRoot -Suites @('a.Gate', 'a.Missing') } |
+            Should -Throw -ExpectedMessage '*a.Missing*'
+    }
+
+    It 'fails closed when a required suite ran zero tests or was not green' {
+        { Assert-RequiredSurefireSuites -RepoRoot $script:RequiredRoot -Suites @('a.Empty') } |
+            Should -Throw -ExpectedMessage '*0 tests*'
+        { Assert-RequiredSurefireSuites -RepoRoot $script:RequiredRoot -Suites @('a.Red') } |
+            Should -Throw -ExpectedMessage '*1 failure*'
     }
 }
 

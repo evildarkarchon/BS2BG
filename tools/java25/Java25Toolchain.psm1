@@ -1,11 +1,11 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Deterministic helpers for the transitional Java 25 verification run (issue #94).
+    Deterministic helpers for the Java 25 application verification run (issues #94 and #96).
 
 .DESCRIPTION
-    Every function here either reads a pinned value, verifies an input against it, or reports the transitional
-    build scope. Network access is confined to Install-LockedArchive so that everything that decides whether an
+    Every function here either reads a pinned value, verifies an input against it, or verifies that the build
+    definition and artifact cover the complete application. Network access is confined to Install-LockedArchive so that everything that decides whether an
     input is accepted can be unit tested with Pester (see Java25Toolchain.Tests.ps1). All verification functions
     fail closed: a mismatch throws with the expected and actual values instead of warning.
 #>
@@ -317,28 +317,17 @@ function Install-LockedArchive {
 
 <#
 .SYNOPSIS
-    Converts an Ant-style include pattern (as used by maven-compiler-plugin) to an anchored regex.
-#>
-function ConvertTo-AntPatternRegex {
-    [CmdletBinding()]
-    param([Parameter(Mandatory)] [string]$Pattern)
-
-    $regex = [regex]::Escape($Pattern.Replace('\', '/'))
-    # Escape() turns '**/' into '\*\*/' and '*' into '\*'; expand the doubled form first so it is not eaten by the single one.
-    $regex = $regex.Replace('\*\*/', '(?:.*/)?').Replace('\*\*', '.*').Replace('\*', '[^/]*')
-    return "^$regex$"
-}
-
-<#
-.SYNOPSIS
-    Reports which production sources the transitional compiler configuration admits and which it still excludes.
+    Asserts that pom.xml compiles every production source with full lint enforcement, and lists those sources.
 .OUTPUTS
-    PSCustomObject with AdmittedPatterns, AdmittedSources, ExcludedSources (repo-relative, forward slashes,
-    relative to the source directory) and CompleteApplicationGate ($true only when nothing is excluded).
+    PSCustomObject with SourceDirectory, ProductionSources (repo-relative to the source directory, forward
+    slashes, sorted), CompilerArgs, and CompleteApplicationGate ($true; the function throws otherwise).
 .NOTES
-    Reads pom.xml directly so the report always reflects the committed include list rather than a copy of it.
+    Fails closed on every transitional escape hatch: an include/exclude list on maven-compiler-plugin, an
+    <implicit> setting, a -sourcepath/--source-path/-implicit compiler argument, a narrowed lint category
+    (-Xlint:-x), or a missing -Xlint:all / -Werror pair. This is what makes "a source-filtered build cannot be
+    reported or invoked as the complete gate" a checked fact before any Maven goal runs.
 #>
-function Get-TransitionalSourceScope {
+function Assert-CompleteSourceScope {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string]$RepoRoot)
 
@@ -350,59 +339,165 @@ function Get-TransitionalSourceScope {
     $sourceRoot = Join-Path $RepoRoot ($(if ($sourceDirectory) { $sourceDirectory.InnerText } else { 'src/main/java' }))
 
     $compilerPlugin = $pom.SelectSingleNode("/m:project/m:build/m:plugins/m:plugin[m:artifactId='maven-compiler-plugin']", $namespace)
-    $patterns = @()
-    if ($compilerPlugin) {
-        $patterns = @($compilerPlugin.SelectNodes('m:configuration/m:includes/m:include', $namespace) | ForEach-Object { $_.InnerText.Trim() })
+    if (-not $compilerPlugin) {
+        throw 'pom.xml must configure maven-compiler-plugin under build/plugins.'
     }
-    $regexes = @($patterns | ForEach-Object { ConvertTo-AntPatternRegex -Pattern $_ })
+    # Every compiler-plugin configuration anywhere in the pom counts: an <execution>, <pluginManagement>, or
+    # <profile> configuration would otherwise filter sources while the top-level configuration looked clean.
+    $compilerConfigurations = @($pom.SelectNodes("//m:plugin[m:artifactId='maven-compiler-plugin']//m:configuration", $namespace))
+    foreach ($configuration in $compilerConfigurations) {
+        foreach ($escapeHatch in @('includes', 'excludes', 'testIncludes', 'testExcludes', 'implicit', 'compileSourceRoots')) {
+            if ($configuration.SelectSingleNode("m:$escapeHatch", $namespace)) {
+                throw "pom.xml maven-compiler-plugin configures <$escapeHatch>; a source-filtered build is not the application gate."
+            }
+        }
+    }
+    $compilerArgs = @($compilerConfigurations | ForEach-Object { $_.SelectNodes('m:compilerArgs/m:arg', $namespace) } | ForEach-Object { $_.InnerText.Trim() })
+    foreach ($arg in $compilerArgs) {
+        if ($arg -match '^(-sourcepath|--source-path|-implicit)') {
+            throw "pom.xml maven-compiler-plugin passes '$arg'; the source path may not be overridden."
+        }
+        if ($arg -like '-Xlint:-*') {
+            throw "pom.xml maven-compiler-plugin narrows lint with '$arg'."
+        }
+        if ($arg -like '*enable-preview*') {
+            throw "pom.xml maven-compiler-plugin passes '$arg'; preview features stay disabled."
+        }
+    }
+    if (-not ($compilerArgs -ccontains '-Xlint:all')) {
+        throw "pom.xml maven-compiler-plugin must pass -Xlint:all (found: $($compilerArgs -join ' '))."
+    }
+    if (-not ($compilerArgs -ccontains '-Werror')) {
+        throw "pom.xml maven-compiler-plugin must pass -Werror (found: $($compilerArgs -join ' '))."
+    }
 
     $sourceRootResolved = (Resolve-Path -LiteralPath $sourceRoot).Path
-    $sources = Get-ChildItem -LiteralPath $sourceRootResolved -Recurse -File -Filter '*.java' | ForEach-Object {
+    $sources = @(Get-ChildItem -LiteralPath $sourceRootResolved -Recurse -File -Filter '*.java' | ForEach-Object {
         $_.FullName.Substring($sourceRootResolved.Length).TrimStart('\', '/').Replace('\', '/')
-    } | Sort-Object
-
-    $admitted = New-Object System.Collections.Generic.List[string]
-    $excluded = New-Object System.Collections.Generic.List[string]
-    foreach ($source in $sources) {
-        # No include patterns means Maven compiles everything; otherwise a source must match at least one pattern.
-        $isAdmitted = ($regexes.Count -eq 0) -or (($regexes | Where-Object { $source -match $_ }) | Measure-Object).Count -gt 0
-        if ($isAdmitted) { $admitted.Add($source) } else { $excluded.Add($source) }
+    } | Sort-Object)
+    if ($sources.Count -eq 0) {
+        throw "No production sources found under $sourceRootResolved."
     }
 
     return [pscustomobject]@{
         SourceDirectory         = $sourceRootResolved
-        AdmittedPatterns        = $patterns
-        AdmittedSources         = $admitted.ToArray()
-        ExcludedSources         = $excluded.ToArray()
-        CompleteApplicationGate = ($excluded.Count -eq 0)
+        ProductionSources       = $sources
+        CompilerArgs            = $compilerArgs
+        CompleteApplicationGate = $true
     }
 }
 
 <#
 .SYNOPSIS
-    Produces the human-readable transitional-scope report printed at the end of the verification run.
+    Asserts that the built jar contains a class for every production source and every production resource.
+.PARAMETER ResourceDirectories
+    Directories whose non-Java files are packaged at the jar root (pom.xml <resources>); defaults to src and assets.
 .OUTPUTS
-    String array, one line each.
+    PSCustomObject with Jar, ClassCount, ResourceCount, and Resources (jar entry names); the function throws
+    when any expected entry is missing.
+.NOTES
+    Reads the zip directory only. A source whose class is missing or a resource that the resources plugin
+    dropped fails the run, so "every production resource is present in the build artifact" is verified on the
+    artifact itself rather than on target/classes.
 #>
-function Format-TransitionalReport {
+function Assert-JarContainsProductionResources {
     [CmdletBinding()]
-    param([Parameter(Mandatory)] $Scope)
+    param(
+        [Parameter(Mandatory)] [string]$RepoRoot,
+        [Parameter(Mandatory)] [string]$JarPath,
+        [string[]]$ResourceDirectories = @('src', 'assets')
+    )
 
-    $lines = New-Object System.Collections.Generic.List[string]
-    if ($Scope.CompleteApplicationGate) {
-        $lines.Add('Source scope: every production source was compiled; this run is a complete application build.')
-        return $lines.ToArray()
+    if (-not (Test-Path -LiteralPath $JarPath)) {
+        throw "Build artifact not found: $JarPath"
+    }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $entries = New-Object 'System.Collections.Generic.HashSet[string]'
+    $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $JarPath).Path)
+    try {
+        foreach ($entry in $zip.Entries) { [void]$entries.Add($entry.FullName) }
+    }
+    finally {
+        $zip.Dispose()
     }
 
-    $lines.Add('=====================================================================================')
-    $lines.Add('TRANSITIONAL RESULT - NOT the complete application gate')
-    $lines.Add("This run compiled $($Scope.AdmittedSources.Count) admitted source file(s) matching:")
-    foreach ($pattern in $Scope.AdmittedPatterns) { $lines.Add("  + $pattern") }
-    $lines.Add("It still EXCLUDES $($Scope.ExcludedSources.Count) source file(s) until the JavaFX 25 UI port (#81):")
-    foreach ($source in $Scope.ExcludedSources) { $lines.Add("  - $source") }
-    $lines.Add('A green result here proves the pinned Java 25 toolchain and the JavaFX-independent contracts only.')
-    $lines.Add('=====================================================================================')
-    return $lines.ToArray()
+    $expectedClasses = New-Object System.Collections.Generic.List[string]
+    $expectedResources = New-Object System.Collections.Generic.List[string]
+    foreach ($directory in $ResourceDirectories) {
+        $root = Join-Path $RepoRoot $directory
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        $rootResolved = (Resolve-Path -LiteralPath $root).Path
+        foreach ($file in Get-ChildItem -LiteralPath $rootResolved -Recurse -File) {
+            $relative = $file.FullName.Substring($rootResolved.Length).TrimStart('\', '/').Replace('\', '/')
+            if ($relative -like '*.java') {
+                $expectedClasses.Add($relative.Substring(0, $relative.Length - 5) + '.class')
+            }
+            else {
+                $expectedResources.Add($relative)
+            }
+        }
+    }
+    if ($expectedResources.Count -eq 0) {
+        throw "No production resources found under $($ResourceDirectories -join ', ') in $RepoRoot."
+    }
+
+    $missing = @(@($expectedClasses) + @($expectedResources) | Where-Object { -not $entries.Contains($_) })
+    if ($missing.Count -gt 0) {
+        throw "Build artifact $JarPath is missing $($missing.Count) production entries:`n  $($missing -join "`n  ")"
+    }
+
+    return [pscustomobject]@{
+        Jar           = $JarPath
+        ClassCount    = $expectedClasses.Count
+        ResourceCount = $expectedResources.Count
+        Resources     = $expectedResources.ToArray()
+    }
+}
+
+<#
+.SYNOPSIS
+    Asserts that every named Surefire suite ran, executed at least one test, and recorded no failure or error.
+.PARAMETER Suites
+    Fully qualified test class names whose TEST-<name>.xml reports must exist.
+.OUTPUTS
+    Ordered hashtable of suite name to its test count.
+.NOTES
+    Surefire totals alone cannot show that the gate suites (toolchain guard, source gate, FXML harness, seam
+    tests) were part of the run; a -Dtest= filter or a deleted test class would otherwise pass unnoticed.
+#>
+function Assert-RequiredSurefireSuites {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string]$RepoRoot,
+        [Parameter(Mandatory)] [string[]]$Suites
+    )
+
+    $reportDir = Join-Path $RepoRoot 'target\surefire-reports'
+    $counts = [ordered]@{}
+    $problems = @()
+    foreach ($suite in $Suites) {
+        $report = Join-Path $reportDir "TEST-$suite.xml"
+        if (-not (Test-Path -LiteralPath $report)) {
+            $problems += "  ${suite}: no report at $report"
+            continue
+        }
+        [xml]$xml = Get-Content -LiteralPath $report -Raw
+        $root = $xml.DocumentElement
+        $tests = [int]$root.GetAttribute('tests')
+        $failures = [int]$root.GetAttribute('failures')
+        $errors = [int]$root.GetAttribute('errors')
+        if ($tests -le 0) {
+            $problems += "  ${suite}: ran 0 tests"
+        }
+        elseif ($failures -ne 0 -or $errors -ne 0) {
+            $problems += "  ${suite}: $failures failure(s), $errors error(s)"
+        }
+        $counts[$suite] = $tests
+    }
+    if ($problems.Count -gt 0) {
+        throw "Required test suites did not all run green:`n$($problems -join "`n")"
+    }
+    return $counts
 }
 
 <#
@@ -495,6 +590,7 @@ Export-ModuleMember -Function @(
     'Test-ProvisionedArchive',
     'Expand-LockedArchive',
     'Install-LockedArchive',
-    'Get-TransitionalSourceScope',
-    'Format-TransitionalReport'
+    'Assert-CompleteSourceScope',
+    'Assert-JarContainsProductionResources',
+    'Assert-RequiredSurefireSuites'
 )

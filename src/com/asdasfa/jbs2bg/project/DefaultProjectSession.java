@@ -108,7 +108,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private RejectedOutcome rejectedMalformedJson(Path source, ParseException exception) {
         SourceLocation location = new SourceLocation(Optional.of(source), Optional.of("/"),
-                OptionalInt.of(exception.getLine()), OptionalInt.of(exception.getColumn()));
+                OptionalInt.of(exception.getLocation().line), OptionalInt.of(exception.getLocation().column));
         return rejected(ProjectDiagnosticCodes.PROJECT_JSON_MALFORMED, location,
                 "The Project file contains malformed JSON: " + exception.getMessage());
     }

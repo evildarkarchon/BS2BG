@@ -2,6 +2,8 @@ package com.asdasfa.jbs2bg;
 
 import java.io.IOException;
 
+import com.asdasfa.jbs2bg.fx.DialogGraphics;
+
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Rectangle2D;
@@ -21,7 +23,7 @@ import javafx.stage.Window;
  * @author Totiman
  */
 public class CustomConfirm extends VBox {
-	
+
 	private Stage stage;
 	
 	@FXML
@@ -36,9 +38,23 @@ public class CustomConfirm extends VBox {
 	private Button btnCancel;
 	
 	public CustomConfirm(Main main) {
+		this(main.style, main.primaryStage);
+	}
+
+	/**
+	 * Loads the confirmation graph as a custom FXML root owned by this control.
+	 *
+	 * @param stylesheet stylesheet URL applied to the dialog scene
+	 * @param owner owning window, or null for an unowned dialog
+	 * @throws RuntimeException when the FXML graph cannot be loaded
+	 */
+	// The custom-root FXML idiom hands `this` to the loader before construction completes; the
+	// anonymous subclasses only override ok()/cancel(), which the loader never calls, so the
+	// escape is deliberate.
+	@SuppressWarnings("this-escape")
+	public CustomConfirm(String stylesheet, Window owner) {
 		try {
-			String iconPath = "/com/sun/javafx/scene/control/skin/modena/dialog-confirm.png";
-			Image icon = new Image(getClass().getResourceAsStream(iconPath));
+			Image icon = DialogGraphics.image(DialogGraphics.Semantic.CONFIRMATION, DialogGraphics.ICON_SIZE);
 			
 			stage = new Stage();
 			stage.getIcons().add(icon);
@@ -50,11 +66,11 @@ public class CustomConfirm extends VBox {
 			loader.load();
 			
 			Scene scene = new Scene(loader.getRoot(), 400, 220);
-			scene.getStylesheets().add(main.style);
+			scene.getStylesheets().add(stylesheet);
 			stage.setScene(scene);
-	        
+
 			stage.initModality(Modality.APPLICATION_MODAL);
-			stage.initOwner(main.primaryStage);
+			stage.initOwner(owner);
 			stage.setResizable(false);
 			
 			ivIcon.setImage(icon);

@@ -4,7 +4,6 @@ import java.net.URL;
 import java.util.ResourceBundle;
 
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
-import com.asdasfa.jbs2bg.etc.MyUtils;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
@@ -36,11 +35,9 @@ public class PopupSliderPresetsController extends CustomController {
 						}
 						lvPresets.getSelectionModel().select(i);
 						lvPresets.getFocusModel().focus(i);
-						
-						boolean indexVisible = MyUtils.isIndexVisible(lvPresets, i);
-						if (!indexVisible)
-							lvPresets.scrollTo(i);
-						
+						// scrollTo is the minimal scroll in JavaFX 25: a no-op when the row is already visible.
+						lvPresets.scrollTo(i);
+
 						found = true;
 						break;
 					}
@@ -70,10 +67,7 @@ public class PopupSliderPresetsController extends CustomController {
 			SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
 			if (preset != null) {
 				int index = lvPresets.getItems().indexOf(preset);
-				boolean indexVisible = MyUtils.isIndexVisible(lvPresets, index);
-				
-				if (!indexVisible)
-					lvPresets.scrollTo(index);
+				lvPresets.scrollTo(index);
 			} else {
 			}
 		});

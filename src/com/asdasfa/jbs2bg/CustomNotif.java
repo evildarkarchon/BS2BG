@@ -2,6 +2,8 @@ package com.asdasfa.jbs2bg;
 
 import java.io.IOException;
 
+import com.asdasfa.jbs2bg.fx.DialogGraphics;
+
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Rectangle2D;
@@ -21,7 +23,7 @@ import javafx.stage.Window;
  * @author Totiman
  */
 public class CustomNotif extends VBox {
-	
+
 	private Stage stage;
 	
 	@FXML
@@ -35,9 +37,23 @@ public class CustomNotif extends VBox {
 	private Image iconError;
 	
 	public CustomNotif(Main main) {
+		this(main.style, main.primaryStage);
+	}
+
+	/**
+	 * Loads the notification graph as a custom FXML root owned by this control.
+	 *
+	 * @param stylesheet stylesheet URL applied to the dialog scene
+	 * @param owner owning window, or null for an unowned dialog
+	 * @throws RuntimeException when the FXML graph cannot be loaded
+	 */
+	// The custom-root FXML idiom hands `this` to the loader before construction completes; the
+	// subclass (if any) adds no state the loader could observe, so the escape is deliberate.
+	@SuppressWarnings("this-escape")
+	public CustomNotif(String stylesheet, Window owner) {
 		try {
-			iconInfo = new Image(getClass().getResourceAsStream("/com/sun/javafx/scene/control/skin/modena/dialog-information.png"));
-			iconError = new Image(getClass().getResourceAsStream("/com/sun/javafx/scene/control/skin/modena/dialog-error.png"));
+			iconInfo = DialogGraphics.image(DialogGraphics.Semantic.INFORMATION, DialogGraphics.ICON_SIZE);
+			iconError = DialogGraphics.image(DialogGraphics.Semantic.ERROR, DialogGraphics.ICON_SIZE);
 			
 			stage = new Stage();
 			stage.getIcons().add(iconInfo);
@@ -49,11 +65,11 @@ public class CustomNotif extends VBox {
 			loader.load();
 			
 			Scene scene = new Scene(loader.getRoot(), 400, 150);
-			scene.getStylesheets().add(main.style);
+			scene.getStylesheets().add(stylesheet);
 			stage.setScene(scene);
-	        
+
 			stage.initModality(Modality.APPLICATION_MODAL);
-			stage.initOwner(main.primaryStage);
+			stage.initOwner(owner);
 			stage.setResizable(false);
 			stage.setAlwaysOnTop(true);
 		} catch (IOException exception) {

@@ -123,3 +123,18 @@
 .textColor3 {
 	-fx-text-fill: #0000d3;
 }
+
+/* Column filter checklist (FilteredTableAdapter / ColumnFilterMenu) */
+.column-filter .custom-menu-item:focused {
+	-fx-background-color: transparent;
+}
+.filter-panel {
+	-fx-spacing: 10px;
+}
+.filter-panel .list-view {
+	-fx-control-inner-background: rgb(5, 5, 5);
+	-fx-control-inner-background-alt: derive(-fx-control-inner-background, 5%);
+}
+.filter-indicator {
+	-fx-fill: -fx-light-text-color;
+}

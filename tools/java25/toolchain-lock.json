@@ -1,5 +1,5 @@
 {
-  "$comment": "Pinned inputs for the transitional Java 25 verification run (issue #94). Every value is an explicit reviewed lock; tools/java25/verify-java25.ps1 fails closed when an artifact hash, version string, or architecture differs. Update sources: Adoptium publishes the Temurin SHA-256 as a release asset; Gluon publishes no checksum, so the JavaFX value was recorded from the official artifact on 2026-08-28 (see docs/research/windows-portable-release-policy.md).",
+  "$comment": "Pinned inputs for the Java 25 application verification run (issues #94 and #96, parent #81). Every value is an explicit reviewed lock; tools/java25/verify-java25.ps1 fails closed when an artifact hash, version string, or architecture differs. Update sources: Adoptium publishes the Temurin SHA-256 as a release asset; Gluon publishes no checksum, so the JavaFX value was recorded from the official artifact on 2026-08-28 (see docs/research/windows-portable-release-policy.md).",
   "targetRelease": 25,
   "architecture": {
     "os": "Windows",

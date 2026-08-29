@@ -7,14 +7,10 @@ import java.util.ResourceBundle;
 
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
-import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
-import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
-import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
-import com.asdasfa.jbs2bg.project.NpcSliderPresetChoice;
+import com.asdasfa.jbs2bg.filtering.VisibleScopeCommands;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -48,11 +44,9 @@ public class PopupSliderPresetsFillController extends CustomController {
 						//lvPresets.getSelectionModel().select(i);
 						lvPresets.getSelectionModel().clearAndSelect(i);
 						lvPresets.getFocusModel().focus(i);
-						
-						boolean indexVisible = MyUtils.isIndexVisible(lvPresets, i);
-						if (!indexVisible)
-							lvPresets.scrollTo(i);
-						
+						// scrollTo is the minimal scroll in JavaFX 25: a no-op when the row is already visible.
+						lvPresets.scrollTo(i);
+
 						found = true;
 						break;
 					}
@@ -89,8 +83,8 @@ public class PopupSliderPresetsFillController extends CustomController {
 		
 		confirmFillEmpty = new CustomConfirm(main) {
 			/**
-			 * Freezes the current filter and selection into explicit random choices, then
-			 * submits one atomic fill edit.
+			 * Freezes the visible NPC scope and the preset selection into explicit random
+			 * choices, then submits one atomic fill edit.
 			 */
 			@Override
 			public void ok() {
@@ -98,12 +92,15 @@ public class PopupSliderPresetsFillController extends CustomController {
 				if (selectedPresets.size() <= 0) {
 					return;
 				}
-				
-				FilteredList<NpcMorphAssignmentSnapshot> filteredNpcs = main.mainController.npcTableFilter.getFilteredList();
-				List<NpcSliderPresetChoice> choices = choosePresetsForEmptyNpcs(filteredNpcs, selectedPresets);
-				
-				main.mainController.applyProjectEdit(NpcMorphAssignmentEdits.fillEmpty(choices));
-				
+
+				List<String> selectedNames = new ArrayList<>();
+				for (SliderPresetSnapshot preset : selectedPresets)
+					selectedNames.add(preset.getName());
+				// Random choices are completed here, on the JavaFX thread, so the edit is plain immutable data;
+				// MyUtils.random uses inclusive bounds while the command asks for an index in [0, bound).
+				main.mainController.applyProjectEdit(VisibleScopeCommands.fillEmpty(
+						main.mainController.npcTable.visibleSet(), selectedNames, bound -> MyUtils.random(0, bound - 1)));
+
 				stage.hide();
 			}
 		};
@@ -117,30 +114,6 @@ public class PopupSliderPresetsFillController extends CustomController {
 		confirmFillEmpty.setCancelButtonText("Cancel");
 	}
 
-	/**
-	 * Completes every random fill choice on the JavaFX thread before immutable
-	 * request data crosses the ProjectSession seam.
-	 *
-	 * @param filteredNpcs immutable NPC assignments included by the active table filter
-	 * @param selectedPresets caller-selected immutable Slider Presets
-	 * @return explicit choices for currently empty filtered NPCs
-	 */
-	private List<NpcSliderPresetChoice> choosePresetsForEmptyNpcs(List<NpcMorphAssignmentSnapshot> filteredNpcs,
-			List<SliderPresetSnapshot> selectedPresets) {
-		List<NpcSliderPresetChoice> choices = new ArrayList<>();
-		for (int i = 0; i < filteredNpcs.size(); i++) {
-			NpcMorphAssignmentSnapshot npc = filteredNpcs.get(i);
-			if (npc.getSliderPresetNames().isEmpty()) { // Empty
-				// Give a random preset; MyUtils.random uses inclusive minimum and maximum bounds.
-				int random = MyUtils.random(0, selectedPresets.size()-1);
-				SliderPresetSnapshot preset = selectedPresets.get(random);
-				NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId());
-				choices.add(new NpcSliderPresetChoice(identity, preset.getName()));
-			}
-		}
-		return choices;
-	}
-	
 	protected void connectViews() {
 		lvPresets.setItems(main.projectPresentation.getSliderPresets());
 	}

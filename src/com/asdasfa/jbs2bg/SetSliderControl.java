@@ -63,6 +63,9 @@ public class SetSliderControl extends VBox {
 	 *        or {@code null} when the logical preset no longer exists
 	 * @throws RuntimeException when the FXML control cannot be loaded
 	 */
+	// The custom-root FXML idiom hands `this` to the loader before construction completes; nothing
+	// subclasses this control, so the escape is deliberate.
+	@SuppressWarnings("this-escape")
 	public SetSliderControl(Main main, String presetName, boolean uunp, SliderChoiceSnapshot choice,
 			Consumer<SliderPresetSnapshot> publishedPresetConsumer) {
 		this.main = main;

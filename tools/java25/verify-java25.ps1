@@ -1,21 +1,27 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    One repository-owned command that produces the reproducible, transitional Java 25 verification run (issue #94).
+    One repository-owned command that produces the reproducible Java 25 application verification run
+    (issues #94 and #96, parent #81).
 
 .DESCRIPTION
     From a clean Windows x64 checkout with no installed JDK 25, this script:
 
-      1. Loads tools/java25/toolchain-lock.json and cross-checks the committed Maven Wrapper pins against it.
+      1. Loads tools/java25/toolchain-lock.json, cross-checks the committed Maven Wrapper pins against it, and
+         asserts that pom.xml compiles every production source with full lint enforcement (no include list,
+         no sourcepath override), so a source-filtered build cannot be invoked as the gate.
       2. Checksum-provisions Eclipse Temurin 25 (JDK) and the Gluon JavaFX 25 Windows x64 JMODs into a
          versioned cache, verifying SHA-256 before extraction and the JDK release metadata / jmod versions after.
       3. Exports BS2BG_JDK25_HOME for .mvn/toolchains.xml and runs the committed Maven Wrapper (which verifies
          the pinned Apache Maven distribution itself) so maven-toolchains-plugin forks the provisioned JDK for
          compilation and tests, whichever JDK bootstraps Maven.
-      4. Writes reproducibility evidence to target/reproducibility/ (Maven, JDK, JavaFX, architecture, target
-         release, resolved dependency graph, resolved classpath hashes).
-      5. Prints a transitional-scope report: the build still excludes the JavaFX UI sources, so a green run is
-         NOT the complete application gate.
+      4. Verifies the gate itself: the required Surefire suites (toolchain guard, structural source gate,
+         public-JavaFX FXML harness, and the ProjectSession / Project / filtering seam tests) all ran green on the
+         pinned runtime, and the built jar contains a class for every production source and every production
+         resource.
+      5. Writes reproducibility evidence to target/reproducibility/ (Maven, JDK, JavaFX, architecture, target
+         release, gate coverage, resolved dependency graph, resolved classpath hashes) and prints the gate
+         report.
 
     Every unexpected version, checksum, or architecture fails closed with a non-zero exit code.
 
@@ -29,7 +35,9 @@
 
 .PARAMETER MavenGoals
     Lifecycle goals to run. Defaults to 'clean verify'. 'clean' is deliberate: stale class files from a previous
-    release target would otherwise survive Maven's incremental compilation and pollute the evidence.
+    release target would otherwise survive Maven's incremental compilation and pollute the evidence. Arguments
+    that skip, filter, or ignore tests (skipTests, maven.test.skip, maven.test.failure.ignore, -Dtest=) are rejected:
+    the gate is the complete run.
 
 .PARAMETER SkipMaven
     Provision and verify the toolchain inputs only; do not run the Maven build.
@@ -96,10 +104,10 @@ $lock = Get-ToolchainLock
 
 $isWindowsHost = ($env:OS -eq 'Windows_NT')
 if (-not $isWindowsHost) {
-    throw "The transitional Java 25 checkpoint is pinned to $($lock.architecture.os) x64; this host is not Windows."
+    throw "The Java 25 baseline is pinned to $($lock.architecture.os) x64; this host is not Windows."
 }
 if ($env:PROCESSOR_ARCHITECTURE -ne $lock.architecture.processorArchitecture) {
-    throw "The transitional Java 25 checkpoint is pinned to $($lock.architecture.processorArchitecture); this host reports PROCESSOR_ARCHITECTURE=$($env:PROCESSOR_ARCHITECTURE)."
+    throw "The Java 25 baseline is pinned to $($lock.architecture.processorArchitecture); this host reports PROCESSOR_ARCHITECTURE=$($env:PROCESSOR_ARCHITECTURE)."
 }
 
 $wrapperProperties = Read-PropertiesFile -Path (Join-Path $repoRoot '.mvn\wrapper\maven-wrapper.properties')
@@ -116,6 +124,16 @@ if ([int]$pomRelease -ne [int]$lock.targetRelease) {
     throw "pom.xml maven.compiler.release ('$pomRelease') differs from the lock's targetRelease ('$($lock.targetRelease)')."
 }
 Write-Host "pom.xml pins release $pomRelease and toolchain runtime $pomRuntimeVersion (matches the lock)"
+
+# The compiler scope is asserted before any download: an include list or sourcepath override in pom.xml means
+# this script would be reporting a partial build, which is exactly what it must never do.
+$scope = Assert-CompleteSourceScope -RepoRoot $repoRoot
+Write-Host "pom.xml compiles all $($scope.ProductionSources.Count) production sources ($($scope.CompilerArgs -join ' '))"
+foreach ($goal in $MavenGoals) {
+    if ($goal -match 'skipTests|maven\.test\.skip|maven\.test\.failure\.ignore|testFailureIgnore|^-Dtest=|failIfNoSpecifiedTests') {
+        throw "Maven argument '$goal' would skip or filter the test phase; the application gate runs every suite."
+    }
+}
 
 # ---------------------------------------------------------------------------------------------------------------
 # 2. Provision and verify Temurin 25
@@ -181,15 +199,36 @@ Write-Host "Toolchain for compile/test: $jdkHome"
 # Process-local only: nothing here changes the user's environment or any global JDK installation.
 $env:JAVA_HOME = $MavenJavaHome
 $env:BS2BG_JDK25_HOME = $jdkHome
-# Not consumed by this transitional Maven run (it resolves JavaFX jars from Maven Central); exported for the
-# jlink/jpackage checkpoints that follow (#81), which need the verified JMOD directory on the module path.
+# Not consumed by this Maven run (it resolves JavaFX jars from Maven Central); exported for the jlink/jpackage
+# checkpoints that follow (#81), which need the verified JMOD directory on the module path.
 $env:BS2BG_JAVAFX_JMODS = $javafxJmods
 
-$scope = Get-TransitionalSourceScope -RepoRoot $repoRoot
 $mavenVersionOutput = @()
 $mavenExitCode = $null
 $classpathHashes = @()
 $surefire = $null
+$requiredSuiteCounts = $null
+$artifact = $null
+
+# Suites whose presence and green result the gate requires, beyond the Surefire totals: the toolchain witness,
+# the structural source/pom gate, the FXML/controller harness, the public-JavaFX table adapter, and the
+# ProjectSession, Project, filtering-seam, and persistence-compatibility contracts.
+$requiredSuites = @(
+    'com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest',
+    'com.asdasfa.jbs2bg.build.ProductionSourceGateTest',
+    'com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest',
+    'com.asdasfa.jbs2bg.fx.FilteredTableAdapterTest',
+    'com.asdasfa.jbs2bg.fx.DialogGraphicsTest',
+    'com.asdasfa.jbs2bg.filtering.FilteredViewTest',
+    'com.asdasfa.jbs2bg.filtering.VisibleScopeCommandsTest',
+    'com.asdasfa.jbs2bg.project.ProjectSessionTest',
+    'com.asdasfa.jbs2bg.project.ProjectSessionOpenTest',
+    'com.asdasfa.jbs2bg.project.ProjectSessionSaveTest',
+    'com.asdasfa.jbs2bg.project.ProjectSessionImportTest',
+    'com.asdasfa.jbs2bg.project.ProjectSessionSliderChoiceTest',
+    'com.asdasfa.jbs2bg.project.ProjectTest',
+    'com.asdasfa.jbs2bg.data.ProjectPersistenceCompatibilityTest'
+)
 
 if (-not $SkipMaven) {
     # -----------------------------------------------------------------------------------------------------------
@@ -242,6 +281,16 @@ if (-not $SkipMaven) {
         throw "Surefire reports were produced by runtime '$($surefire.observedJavaRuntimeVersion -join ', ')', expected '$($lock.jdk.release.JAVA_RUNTIME_VERSION)'."
     }
     Write-Host "Surefire: $($surefire.tests) tests in $($surefire.suites) suites on $($surefire.observedJavaVendor -join ', ') $($surefire.observedJavaRuntimeVersion -join ', ')"
+    $requiredSuiteCounts = Assert-RequiredSurefireSuites -RepoRoot $repoRoot -Suites $requiredSuites
+    Write-Host "Required gate suites present and green: $($requiredSuites.Count)"
+
+    # The artifact is the thing that ships; verify the resources on it, not only on target/classes.
+    $jars = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'target') -File -Filter '*.jar' | Where-Object { $_.Name -notmatch '-(sources|javadoc|tests)\.jar$' })
+    if ($jars.Count -ne 1) {
+        throw "Expected exactly one build artifact under target/, found $($jars.Count): $(($jars | ForEach-Object { $_.Name }) -join ', '). The gate requires the package phase (run 'clean verify')."
+    }
+    $artifact = Assert-JarContainsProductionResources -RepoRoot $repoRoot -JarPath $jars[0].FullName
+    Write-Host "Artifact $($jars[0].Name): $($artifact.ClassCount) production classes and $($artifact.ResourceCount) resources present"
 
     $classpathFile = Join-Path $evidenceDir 'test-classpath.txt'
     if (Test-Path -LiteralPath $classpathFile) {
@@ -267,16 +316,26 @@ $evidence = [ordered]@{
     # git may be absent from PATH or the checkout may be an exported tree; the commit is informational, so either
     # case records null rather than failing a run whose build evidence is otherwise complete.
     gitCommit               = $(try { (& git -C $repoRoot rev-parse HEAD 2>$null) } catch { $null })
-    transitional            = [ordered]@{
+    applicationGate         = [ordered]@{
         completeApplicationGate = $scope.CompleteApplicationGate
-        admittedPatterns        = $scope.AdmittedPatterns
-        admittedSourceCount     = $scope.AdmittedSources.Count
-        excludedSources         = $scope.ExcludedSources
+        productionSourceCount   = $scope.ProductionSources.Count
+        compilerArgs            = $scope.CompilerArgs
+        requiredSuites          = $requiredSuiteCounts
+        artifact                = $(if ($artifact) {
+            [ordered]@{
+                jar           = [System.IO.Path]::GetFileName($artifact.Jar)
+                classCount    = $artifact.ClassCount
+                resourceCount = $artifact.ResourceCount
+                resources     = $artifact.Resources
+            }
+        } else { $null })
+        structuralGate          = 'ProductionSourceGateTest (sources, resources, pom) and Java25ToolchainGuardTest (every emitted class file)'
+        fxmlHarness             = 'FxmlGraphLoadingTest (root, popup, and custom-root FXML/controller graphs on the pinned toolkit)'
     }
     targetRelease           = [ordered]@{
         pinned      = $lock.targetRelease
         pomProperty = $pomRelease
-        witnessedBy = 'Java25ToolchainGuardTest.admittedSourcesAreCompiledForRelease25WithoutPreview (class-file major 69, minor 0)'
+        witnessedBy = 'Java25ToolchainGuardTest.everyProductionClassIsCompiledForRelease25WithoutPreview (every class file: major 69, minor 0)'
     }
     previewFeaturesEnabled  = $false
     javafxIncubatorModules  = 'disabled (enforcer bans org.openjfx:javafx-incubator-*; guard test scans the classpath and boot layer)'
@@ -339,13 +398,22 @@ $evidence | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $evidencePath -En
 Write-Host "Evidence written to $evidencePath"
 
 # ---------------------------------------------------------------------------------------------------------------
-# 7. Transitional scope report
+# 7. Gate report
 # ---------------------------------------------------------------------------------------------------------------
 Write-Host ''
-$reportColor = $(if ($scope.CompleteApplicationGate) { 'Green' } else { 'Yellow' })
-Format-TransitionalReport -Scope $scope | ForEach-Object { Write-Host $_ -ForegroundColor $reportColor }
-Write-Host ''
-Write-Host "Java 25 transitional verification $($(if ($SkipMaven) { 'provisioning' } else { 'run' })) completed successfully." -ForegroundColor Green
+if ($SkipMaven) {
+    Write-Host "Toolchain provisioning completed; the Maven run was skipped (-SkipMaven), so this is NOT a gate result." -ForegroundColor Yellow
+}
+else {
+    Write-Host '=====================================================================================' -ForegroundColor Green
+    Write-Host 'COMPLETE APPLICATION GATE: green' -ForegroundColor Green
+    Write-Host "  compiled $($scope.ProductionSources.Count) production sources for release $pomRelease ($($scope.CompilerArgs -join ' '))" -ForegroundColor Green
+    Write-Host "  packaged $($artifact.ClassCount) classes and $($artifact.ResourceCount) resources into $([System.IO.Path]::GetFileName($artifact.Jar))" -ForegroundColor Green
+    Write-Host "  ran $($surefire.tests) tests in $($surefire.suites) suites on $($surefire.observedJavaVendor -join ', ') $($surefire.observedJavaRuntimeVersion -join ', '), including the $($requiredSuites.Count) required gate suites" -ForegroundColor Green
+    Write-Host '=====================================================================================' -ForegroundColor Green
+    Write-Host ''
+    Write-Host 'Java 25 application verification run completed successfully.' -ForegroundColor Green
+}
 exit 0
 
 }

@@ -15,9 +15,13 @@ import java.util.logging.Logger;
 
 import org.apache.commons.io.FileUtils;
 
-import com.asdasfa.jbs2bg.controlsfx.table.TableFilter;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.filtering.NpcTableColumns;
+import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
+import com.asdasfa.jbs2bg.filtering.VisibleScopeCommands;
+import com.asdasfa.jbs2bg.fx.DialogGraphics;
+import com.asdasfa.jbs2bg.fx.FilteredTableAdapter;
 import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.presentation.ProjectPresentationUpdate;
@@ -43,7 +47,6 @@ import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -63,7 +66,6 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.image.Image;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyCode;
@@ -143,8 +145,13 @@ public class MainController extends CustomController {
 	private TextArea taMorphsGen;
 	// ^ Morphs ^
 	
-	protected TableFilter<NpcMorphAssignmentSnapshot> npcTableFilter;
-	
+	/**
+	 * Public-JavaFX adapter over the NPC Morph Assignment table; every bulk
+	 * command freezes its scope through {@link FilteredTableAdapter#visibleSet()}.
+	 * Package-visible because the Fill Empty popup freezes the same scope.
+	 */
+	FilteredTableAdapter<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> npcTable;
+
 	// Confirm Dialogs
 	private CustomConfirm confirmNewFile;
 	private CustomConfirm confirmOpenFile;
@@ -209,11 +216,14 @@ public class MainController extends CustomController {
 	public MainController() {
 	}
 	
-	@Override
 	/**
 	 * Called AFTER all FXML fields are injected.
 	 */
+	@Override
 	public void initialize(URL url, ResourceBundle rb) {
+		// The adapter needs the injected table and columns; the source list is connected in connectViews.
+		npcTable = FilteredTableAdapter.attach(tvNpc, NpcTableColumns.npcMorphAssignments(),
+				ProjectIdentities::npcMorphAssignment);
 		setupKeyNavigation();
 		setupKeyCombinations();
 		setupTooltips();
@@ -446,11 +456,7 @@ public class MainController extends CustomController {
 		
 		tvNpc.setPlaceholder(new Label("EMPTY"));
 		tvNpc.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-		tvNpc.setOnSort(e -> {
-			NpcMorphAssignmentSnapshot npc = tvNpc.getSelectionModel().getSelectedItem();
-			if (npc != null)
-				tvNpc.scrollTo(npc);
-		});
+		// Sorting re-renders through the adapter, which reveals the selected row afterwards.
 		tvNpc.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
 			if (newSelection != null) {
 				lvCustomTargets.getSelectionModel().clearSelection();
@@ -488,9 +494,8 @@ public class MainController extends CustomController {
 	private void connectViews() {
 		lvPresets.setItems(main.projectPresentation.getSliderPresets());
 		
-		tvNpc.setItems(main.projectPresentation.getNpcMorphAssignments());
-		npcTableFilter = TableFilter.forTableView(tvNpc).lazy(true).apply();
-		
+		npcTable.setSource(main.projectPresentation.getNpcMorphAssignments());
+
 		lvCustomTargets.setItems(main.projectPresentation.getCustomMorphTargets());
 		
 		popupSliderPresetsController.connectViews();
@@ -574,16 +579,11 @@ public class MainController extends CustomController {
 		}
 	}
 
-	/** Restores an NPC Morph Assignment selection by its logical identity. */
+	/** Restores an NPC Morph Assignment selection by its logical identity, if it is visible. */
 	void selectNpc(NpcMorphAssignmentIdentity identity) {
 		if (identity == null)
 			return;
-		for (NpcMorphAssignmentSnapshot npc : main.projectPresentation.getNpcMorphAssignments()) {
-			if (identity.equals(identityOf(npc))) {
-				tvNpc.getSelectionModel().select(npc);
-				return;
-			}
-		}
+		npcTable.select(identity);
 	}
 
 	/** Restores an assigned Slider Preset selection after its target is restored. */
@@ -595,8 +595,8 @@ public class MainController extends CustomController {
 				int index = lvTargetPresets.getItems().indexOf(preset);
 				lvTargetPresets.getSelectionModel().select(index);
 				lvTargetPresets.getFocusModel().focus(index);
-				if (!MyUtils.isIndexVisible(lvTargetPresets, index))
-					lvTargetPresets.scrollTo(index);
+				// scrollTo is the minimal scroll in JavaFX 25: a no-op when the row is already visible.
+				lvTargetPresets.scrollTo(index);
 				return;
 			}
 		}
@@ -605,14 +605,6 @@ public class MainController extends CustomController {
 	/** Builds the stable identity used by every NPC edit and selection restoration. */
 	private static NpcMorphAssignmentIdentity identityOf(NpcMorphAssignmentSnapshot npc) {
 		return npc == null ? null : new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId());
-	}
-
-	/** Copies the logical identities selected by a filtered table before an atomic edit rebuilds it. */
-	private static List<NpcMorphAssignmentIdentity> identitiesOf(Iterable<NpcMorphAssignmentSnapshot> npcs) {
-		List<NpcMorphAssignmentIdentity> identities = new ArrayList<>();
-		for (NpcMorphAssignmentSnapshot npc : npcs)
-			identities.add(identityOf(npc));
-		return identities;
 	}
 
 	/**
@@ -812,11 +804,10 @@ public class MainController extends CustomController {
 		confirmClearCustomTargets.setCancelButtonText("Cancel");
 		
 		confirmClearNpcs = new CustomConfirm(main) {
-			/** Removes the identities captured by the active NPC table filter atomically. */
+			/** Removes the frozen visible NPC Morph Assignments atomically. */
 			@Override
 			public void ok() {
-				FilteredList<NpcMorphAssignmentSnapshot> items = npcTableFilter.getFilteredList();
-				applyProjectEdit(NpcMorphAssignmentEdits.removeNpcs(identitiesOf(items)));
+				applyProjectEdit(VisibleScopeCommands.clearNpcMorphAssignments(npcTable.visibleSet()));
 			}
 		};
 		confirmClearNpcs.setTitle("Confirm Action");
@@ -829,12 +820,10 @@ public class MainController extends CustomController {
 		confirmClearNpcs.setCancelButtonText("Cancel");
 		
 		confirmClearAssignments = new CustomConfirm(main) {
-			/** Clears assignments for the identities captured by the active filter atomically. */
+			/** Clears assignments for the frozen visible NPC Morph Assignments atomically. */
 			@Override
 			public void ok() {
-				FilteredList<NpcMorphAssignmentSnapshot> items = npcTableFilter.getFilteredList();
-				ProjectOutcome outcome = applyProjectEdit(
-						NpcMorphAssignmentEdits.clearSliderPresetsForNpcs(identitiesOf(items)));
+				ProjectOutcome outcome = applyProjectEdit(VisibleScopeCommands.clearAssignments(npcTable.visibleSet()));
 				if (!(outcome instanceof ChangedOutcome)) { // No NPC in the table was cleared
 					notif.show("No NPC in the table was cleared!");
 				}
@@ -1046,7 +1035,7 @@ public class MainController extends CustomController {
 	private void setupPopupNoPresetNotif() {
 		try {
 			popupNoPresetNotif = new Stage();
-			popupNoPresetNotif.getIcons().add(new Image(getClass().getResourceAsStream("/com/sun/javafx/scene/control/skin/modena/dialog-warning.png")));
+			popupNoPresetNotif.getIcons().add(DialogGraphics.image(DialogGraphics.Semantic.WARNING, DialogGraphics.ICON_SIZE));
 			
 			FXMLLoader loader = new FXMLLoader(getClass().getResource("popup_nopresetnotif.fxml"));
 			Parent root = loader.load();
@@ -1337,9 +1326,7 @@ public class MainController extends CustomController {
 			return;
 		
 		boolean hasEmpty = false;
-		FilteredList<NpcMorphAssignmentSnapshot> filteredNpcs = npcTableFilter.getFilteredList();
-		for (int i = 0; i < filteredNpcs.size(); i++) {
-			NpcMorphAssignmentSnapshot npc = filteredNpcs.get(i);
+		for (NpcMorphAssignmentSnapshot npc : npcTable.visibleSet().getRows()) {
 			if (npc.getSliderPresetNames().isEmpty()) { // Empty
 				hasEmpty = true;
 				break;
@@ -2000,11 +1987,9 @@ public class MainController extends CustomController {
 						}
 						lvPresets.getSelectionModel().select(i);
 						lvPresets.getFocusModel().focus(i);
-						
-						boolean indexVisible = MyUtils.isIndexVisible(lvPresets, i);
-						if (!indexVisible)
-							lvPresets.scrollTo(i);
-						
+						// scrollTo is the minimal scroll in JavaFX 25: a no-op when the row is already visible.
+						lvPresets.scrollTo(i);
+
 						found = true;
 						break;
 					}
@@ -2024,11 +2009,8 @@ public class MainController extends CustomController {
 						}
 						lvCustomTargets.getSelectionModel().select(i);
 						lvCustomTargets.getFocusModel().focus(i);
-						
-						boolean indexVisible = MyUtils.isIndexVisible(lvCustomTargets, i);
-						if (!indexVisible)
-							lvCustomTargets.scrollTo(i);
-						
+						lvCustomTargets.scrollTo(i);
+
 						found = true;
 						break;
 					}
@@ -2039,27 +2021,13 @@ public class MainController extends CustomController {
 		tvNpc.setOnKeyTyped(new KeyNavigationListener() {
 			@Override
 			public void test() {
-				String colName = tvNpc.getColumns().get(0).getText(); // Use the first column's data for searching
-				
-				for (int i = 0; i < npcTableFilter.getFilteredList().size(); i++) {
-					NpcMorphAssignmentSnapshot npc = npcTableFilter.getFilteredList().get(i);
-					String text = npc.getDisplayName();
-					if (colName.equalsIgnoreCase("Name")) {
-						text = npc.getDisplayName();
-					} else if (colName.equalsIgnoreCase("Master")) {
-						text = npc.getPluginName();
-					} else if (colName.equalsIgnoreCase("Race")) {
-						text = npc.getRace();
-					} else if (colName.equalsIgnoreCase("EditorID")) {
-						text = npc.getEditorId();
-					} else if (colName.equalsIgnoreCase("FormID")) {
-						text = npc.getFormId();
-					} else if (colName.equalsIgnoreCase("Slider Presets")) {
-						text = String.join("|", npc.getSliderPresetNames());
-					} else {
-						text = npc.getDisplayName();
-					}
-					
+				// Use the first (leftmost, possibly reordered) column's data for searching; the
+				// adapter derives the same cell text the column renders and the filter sees.
+				TableColumn<NpcMorphAssignmentSnapshot, ?> leadingColumn = tvNpc.getColumns().get(0);
+
+				for (NpcMorphAssignmentSnapshot npc : tvNpc.getItems()) {
+					String text = npcTable.cellTextOf(leadingColumn, npc);
+
 					if (text.toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;
@@ -2086,11 +2054,8 @@ public class MainController extends CustomController {
 						}
 						lvTargetPresets.getSelectionModel().select(i);
 						lvTargetPresets.getFocusModel().focus(i);
-						
-						boolean indexVisible = MyUtils.isIndexVisible(lvTargetPresets, i);
-						if (!indexVisible)
-							lvTargetPresets.scrollTo(i);
-						
+						lvTargetPresets.scrollTo(i);
+
 						found = true;
 						break;
 					}

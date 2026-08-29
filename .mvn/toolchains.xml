@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    Repository-owned toolchain definition for the transitional Java 25 build.
+    Repository-owned toolchain definition for the Java 25 application build.
 
     BS2BG_JDK25_HOME is exported by tools/java25/verify-java25.ps1 after it checksum-provisions and verifies the
     pinned Eclipse Temurin 25 JDK. The vendor/version pair here must match the <toolchains> requirement in pom.xml;

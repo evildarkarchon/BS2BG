@@ -9,10 +9,13 @@ import java.util.ResourceBundle;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.asdasfa.jbs2bg.controlsfx.table.TableFilter;
 import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
+import com.asdasfa.jbs2bg.filtering.NpcTableColumns;
+import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
+import com.asdasfa.jbs2bg.filtering.VisibleScopeCommands;
+import com.asdasfa.jbs2bg.fx.FilteredTableAdapter;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
@@ -21,7 +24,6 @@ import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
 import javafx.beans.binding.Bindings;
-import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.Cursor;
@@ -60,8 +62,8 @@ public class PopupNpcDatabaseController extends CustomController {
 	@FXML
 	private CheckBox cbAssignRandom;
 	
-	private TableFilter<NPC> npcDatabaseTableFilter;
-	
+	private FilteredTableAdapter<NPC, NpcMorphAssignmentIdentity> npcDatabaseTable;
+
 	private CustomConfirm confirmAddAllNpcs;
 	private CustomConfirm confirmClearNpcDatabase;
 	
@@ -70,32 +72,21 @@ public class PopupNpcDatabaseController extends CustomController {
 	
 	@Override
 	public void initialize(URL location, ResourceBundle resources) {
+		npcDatabaseTable = FilteredTableAdapter.attach(tvNpcDatabase, NpcTableColumns.npcDatabase(),
+				ProjectIdentities::npcDatabaseEntry);
 	}
-	
+
 	@Override
 	protected void onPostInit() {
 		tvNpcDatabase.setOnKeyTyped(new KeyNavigationListener() {
 			@Override
 			public void test() {
-				String colName = tvNpcDatabase.getColumns().get(0).getText(); // Use the first column's data for searching
-				
-				for (int i = 0; i < npcDatabaseTableFilter.getFilteredList().size(); i++) {
-					NPC npc = npcDatabaseTableFilter.getFilteredList().get(i);
-					String text = npc.getName();
-					if (colName.equalsIgnoreCase("Name")) {
-						text = npc.getName();
-					} else if (colName.equalsIgnoreCase("Master")) {
-						text = npc.getMod();
-					} else if (colName.equalsIgnoreCase("Race")) {
-						text = npc.getRace();
-					} else if (colName.equalsIgnoreCase("EditorID")) {
-						text = npc.getEditorId();
-					} else if (colName.equalsIgnoreCase("FormID")) {
-						text = npc.getFormId();
-					} else {
-						text = npc.getName();
-					}
-					
+				// Use the first (leftmost, possibly reordered) column's data for searching.
+				TableColumn<NPC, ?> leadingColumn = tvNpcDatabase.getColumns().get(0);
+
+				for (NPC npc : tvNpcDatabase.getItems()) {
+					String text = npcDatabaseTable.cellTextOf(leadingColumn, npc);
+
 					if (text.toUpperCase().startsWith(searchText.toUpperCase())) {
 						if (searchTextSkip > skipped) {
 							skipped++;
@@ -112,11 +103,7 @@ public class PopupNpcDatabaseController extends CustomController {
 		
 		tvNpcDatabase.setPlaceholder(new Label("EMPTY"));
 		tvNpcDatabase.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-		tvNpcDatabase.setOnSort(e -> {
-			NPC npc = tvNpcDatabase.getSelectionModel().getSelectedItem();
-			if (npc != null)
-				tvNpcDatabase.scrollTo(npc);
-		});
+		// Sorting re-renders through the adapter, which reveals the selected row afterwards.
 		tvNpcDatabase.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
 			if (newSelection != null) {
 				main.mainController.popupImageViewController.setTitle(newSelection.getName());
@@ -152,10 +139,10 @@ public class PopupNpcDatabaseController extends CustomController {
 		confirmAddAllNpcs.setOwner(stage);
 		
 		confirmClearNpcDatabase = new CustomConfirm(main) {
+			/** Removes the frozen visible entries; the live list is never iterated while it mutates. */
 			@Override
 			public void ok() {
-				FilteredList<NPC> items = npcDatabaseTableFilter.getFilteredList();
-				main.data.npcDatabase.removeAll(items);
+				main.data.npcDatabase.removeAll(VisibleScopeCommands.clearNpcDatabase(npcDatabaseTable.visibleSet()));
 				updateNpcCounter();
 			}
 		};
@@ -208,12 +195,12 @@ public class PopupNpcDatabaseController extends CustomController {
 	}
 	
 	protected void connectViews() {
-		tvNpcDatabase.setItems(main.data.npcDatabase);
-		npcDatabaseTableFilter = TableFilter.forTableView(tvNpcDatabase).lazy(true).apply();
+		npcDatabaseTable.setSource(main.data.npcDatabase);
 	}
-	
+
+	/** Stops observing the NPC Database so a worker thread may append to it. */
 	protected void disconnectViews() {
-		tvNpcDatabase.setItems(null);
+		npcDatabaseTable.setSource(null);
 	}
 	
 	@FXML
@@ -299,15 +286,12 @@ public class PopupNpcDatabaseController extends CustomController {
 	}
 	
 	/**
-	 * Copies the currently filtered source rows, completes every optional random
+	 * Freezes the currently visible source rows, completes every optional random
 	 * choice, and submits one atomic Project edit.
 	 */
 	private void addAllNpcsToMorph() {
-		List<NPC> filteredSources = new ArrayList<>(npcDatabaseTableFilter.getFilteredList());
-		List<NpcMorphAssignmentSnapshot> copiedSources = new ArrayList<>(filteredSources.size());
-		for (NPC source : filteredSources)
-			copiedSources.add(copySource(source, chooseRandomPresetNames()));
-		main.mainController.applyProjectEdit(NpcMorphAssignmentEdits.addNpcs(copiedSources));
+		main.mainController.applyProjectEdit(
+				VisibleScopeCommands.addAllNpcs(npcDatabaseTable.visibleSet(), this::chooseRandomPresetNames));
 	}
 
 	/**
