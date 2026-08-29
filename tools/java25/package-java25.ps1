@@ -1,8 +1,8 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds, verifies, and smoke-tests the self-contained, non-modular Windows x64 application image (issue #97,
-    parent #81) from the complete Java 25 build.
+    Builds, verifies, and smoke-tests the self-contained, non-modular Windows x64 application image (issues #83-#86
+    and #97, parent #81) from the complete Java 25 build.
 
 .DESCRIPTION
     On top of the complete application gate (tools/java25/verify-java25.ps1, which this script runs first), the
@@ -22,8 +22,8 @@
          verifies the image layout and launcher configuration; hashes every file into one image digest; and
          archives the image as BS2BG-<version>-windows-x64.zip.
       6. Extracts that archive to a clean temporary location and runs tools/java25/smoke-app-image.ps1: the
-         packaged launcher starts with every host-Java discovery path scrubbed; Project New, recovered Save,
-         Save As, failed overwrite, retry, and reopen; first-run Settings creation, legacy Settings editing and
+         packaged launcher starts with every host-Java discovery path scrubbed; Project Open cancellation,
+         malformed rejection, New, recovered Save, Save As, failed overwrite, retry, and reopen; first-run Settings creation, legacy Settings editing and
          interrupted-publication recovery; and the representative BoS, Templates, and Morphs workflows are
          exercised; every process must exit with code 0 within a bounded timeout.
       7. Writes target/reproducibility/windows-app-image.json (toolchain, runtime, package, workflow, and exit
@@ -81,7 +81,7 @@ $launcherJavaOptions = @('--enable-native-access=javafx.graphics')
 
 # Modules jdeps cannot measure. Each entry is a reviewed decision with its reason recorded in the evidence.
 $explicitModules = [ordered]@{
-    # ProjectFileLoader resolves whatever charset juniversalchardet detects through Charset.forName; the extended
+    # The owned Project reader resolves whatever charset juniversalchardet detects through Charset.forName; extended
     # charsets (Shift_JIS, GB18030, EUC-KR, ...) live in this service-provider module, which no static reference
     # names, so without it a detected legacy encoding would fail with UnsupportedCharsetException at runtime.
     'jdk.charsets' = 'CharsetProvider for extended charsets that Charset.forName resolves at runtime from juniversalchardet detections'
@@ -306,6 +306,7 @@ else {
         LauncherName   = $launcherName
         FixtureProject = Join-Path $repoRoot 'test-resources\projects\legacy-project-semantics.jbs2bg'
         FixtureRecoveryProject = Join-Path $repoRoot 'test-resources\json-oracles\project\recovery-ordered-diagnostics.jbs2bg'
+        FixtureMalformedProject = Join-Path $repoRoot 'test-resources\json-oracles\project\malformed-syntax.jbs2bg'
         FixtureStandardSettings = Join-Path $repoRoot 'test-resources\json-oracles\settings\standard.json'
         FixtureUunpSettings = Join-Path $repoRoot 'test-resources\json-oracles\settings\uunp.json'
         EvidencePath   = $smokeEvidencePath

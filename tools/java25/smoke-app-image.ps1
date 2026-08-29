@@ -1,8 +1,9 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG launcher through Project writing, Settings recovery, and representative output
-    workflows from a clean extracted image, then proves that every lifecycle exits cleanly (issues #83-#85 and #97).
+    Drives the packaged BS2BG launcher through Project reading/writing, Settings recovery, and representative
+    output workflows from a clean extracted image, then proves that every lifecycle exits cleanly (issues #83-#86
+    and #97).
 
 .DESCRIPTION
     The archive produced by tools/java25/package-java25.ps1 is extracted to a fresh location and its launcher is
@@ -23,8 +24,8 @@
 
     Workflow: launch once from an empty directory, validate the canonical Settings pair, and recover then Save a
     Project with missing relationships; exit; replace Settings with the checked-in legacy
-    fixtures; relaunch and drive the representative Project, BoS, Templates, Morphs, Save As, failed overwrite,
-    and successful Save retry workflows; exit; assemble an interrupted paired Settings publication; relaunch,
+    fixtures; relaunch and drive the representative Project, canceled and malformed Open, BoS, Templates, Morphs,
+    Save As, failed overwrite, and successful Save retry workflows; exit; assemble an interrupted paired Settings publication; relaunch,
     require recovery of the exact prior pair, reopen the saved Project, and regenerate its Settings-dependent
     output; then close the window and require all three launcher processes to exit with code 0 within bounded waits.
 
@@ -37,6 +38,8 @@
     A checked-in .jbs2bg Project to open (test-resources/projects/legacy-project-semantics.jbs2bg).
 .PARAMETER FixtureRecoveryProject
     A checked-in .jbs2bg Project with recoverable missing relationships.
+.PARAMETER FixtureMalformedProject
+    A checked-in malformed Project used to prove transactional rejection through the packaged reader.
 .PARAMETER FixtureStandardSettings
     The checked-in legacy Standard Settings JSON document to install after first-run creation.
 .PARAMETER FixtureUunpSettings
@@ -56,6 +59,7 @@ param(
     [string]$LauncherName = 'BS2BG',
     [Parameter(Mandatory)] [string]$FixtureProject,
     [Parameter(Mandatory)] [string]$FixtureRecoveryProject,
+    [Parameter(Mandatory)] [string]$FixtureMalformedProject,
     [Parameter(Mandatory)] [string]$FixtureStandardSettings,
     [Parameter(Mandatory)] [string]$FixtureUunpSettings,
     [Parameter(Mandatory)] [string]$EvidencePath,
@@ -94,6 +98,7 @@ $saveRecoveryTarget = 'All|Female|SaveRetry'
 $discardedTarget = 'All|Female|Discarded'
 $openedProjectName = 'representative.jbs2bg'
 $recoveryProjectName = 'recovery-source.jbs2bg'
+$malformedProjectName = 'malformed-project.jbs2bg'
 $savedProjectName = 'smoke-output.jbs2bg'
 $bosExportName = 'smoke-bos.json'
 $expectedCbbeTemplate = 'CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0'
@@ -290,6 +295,27 @@ function Complete-FileDialog {
 
 <#
 .SYNOPSIS
+    Cancels a native file dialog through its semantically named Cancel control.
+#>
+function Cancel-FileDialog {
+    param([string]$Title)
+    $dialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $StepTimeoutSeconds
+    $cancelRole = New-Object System.Windows.Automation.OrCondition(@(
+        (New-UiaCondition -ControlType 'Pane' -Name 'Cancel'),
+        (New-UiaCondition -ControlType 'SplitButton' -Name 'Cancel'),
+        (New-UiaCondition -ControlType 'Button' -Name 'Cancel')))
+    $cancel = Wait-UiaElement -Root $dialog -Condition $cancelRole -Description "'Cancel' control of '$Title'" -TimeoutSeconds $StepTimeoutSeconds
+    $invoke = $null
+    if ($cancel.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$invoke)) {
+        $invoke.Invoke()
+    }
+    else {
+        Invoke-UiaNativeButton -Element $cancel
+    }
+}
+
+<#
+.SYNOPSIS
     Names of the items currently exposed by the list with the given accessible name.
 #>
 function Get-ListItemNames {
@@ -477,13 +503,14 @@ Invoke-Step -Name 'extract-clean-image' -Action {
     }
     Copy-Item -LiteralPath $FixtureProject -Destination (Join-Path $workDir $openedProjectName)
     Copy-Item -LiteralPath $FixtureRecoveryProject -Destination (Join-Path $workDir $recoveryProjectName)
+    Copy-Item -LiteralPath $FixtureMalformedProject -Destination (Join-Path $workDir $malformedProjectName)
     $observations['extractedImage'] = Join-Path $imageRoot $LauncherName
     $observations['launcher'] = $launcherPath
     $observations['launcherSha256'] = (Get-FileHash -LiteralPath $launcherPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $observations['expectedProcessModel'] = 'single-launcher-process'
     $observations['workingDirectory'] = $workDir
     $observations['archiveSha256'] = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    "extracted $ArchivePath to $imageRoot; working directory $workDir holds $openedProjectName and $recoveryProjectName"
+    "extracted $ArchivePath to $imageRoot; working directory $workDir holds $openedProjectName, $recoveryProjectName, and $malformedProjectName"
 }
 
 <#
@@ -849,6 +876,73 @@ Invoke-Step -Name 'create-custom-morph-target' -Action {
     "$customTargetsList lists $($targets -join ', '); title shows the unsaved marker"
 }
 
+Invoke-Step -Name 'cancel-open-preserves-active-project' -Action {
+    Send-FileCommand -Item 'Open…'
+    $confirmation = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title 'Confirm Action' -TimeoutSeconds $StepTimeoutSeconds
+    $openAnother = Wait-UiaElement -Root $confirmation -Condition (New-UiaCondition -ControlType 'Button' -Name 'Open Another') -Description "'Open Another' button in dirty-Project confirmation" -TimeoutSeconds $StepTimeoutSeconds
+    # Enter lets the JavaFX callback return while the native modal chooser is automated.
+    Send-UiaKeysToElement -Element $openAnother -Keys '{ENTER}'
+    Cancel-FileDialog -Title $openDialogTitle
+
+    Wait-MainWindow -Title "$applicationTitle - *$openedProjectName" | Out-Null
+    $targets = Wait-ListItems -ListName $customTargetsList -Expected @($fixtureCustomTarget, $newCustomTarget)
+    $npc = Assert-NpcRow
+    # JavaFX omits inactive tab content from the UIA tree, so inspect each Project collection on its owning tab.
+    $templatesTab = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'TabItem' -Name 'Templates') -Description "'Templates' tab after canceled Open" -TimeoutSeconds $StepTimeoutSeconds
+    Select-UiaElement -Element $templatesTab
+    $presets = Wait-ListItems -ListName $sliderPresetsList -Expected $fixturePresets
+    $morphsTab = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') -Description "'Morphs' tab after canceled Open" -TimeoutSeconds $StepTimeoutSeconds
+    Select-UiaElement -Element $morphsTab
+    $observations['cancelledProjectOpen'] = [ordered]@{
+        title = $script:mainWindow.Current.Name
+        sliderPresets = $presets
+        customMorphTargets = $targets
+        npcMorphAssignment = "$fixtureNpcMod / $fixtureNpcEditorId"
+    }
+    "cancelled the native Open dialog; retained dirty $openedProjectName, $($presets.Count) presets, $($targets.Count) targets, and $npc"
+}
+
+Invoke-Step -Name 'malformed-open-rejects-transactionally' -Action {
+    Send-FileCommand -Item 'Open…'
+    $confirmation = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title 'Confirm Action' -TimeoutSeconds $StepTimeoutSeconds
+    $openAnother = Wait-UiaElement -Root $confirmation -Condition (New-UiaCondition -ControlType 'Button' -Name 'Open Another') -Description "'Open Another' button in dirty-Project confirmation" -TimeoutSeconds $StepTimeoutSeconds
+    Send-UiaKeysToElement -Element $openAnother -Keys '{ENTER}'
+    Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $malformedProjectName) -ConfirmButton 'Open'
+
+    $errorWindow = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title 'Error' -TimeoutSeconds $StepTimeoutSeconds
+    $errorText = @(
+        Find-UiaElements -Root $errorWindow -Condition (New-UiaCondition -ControlType 'Text') |
+            ForEach-Object { $_.Current.Name } |
+            Where-Object { $_ } |
+            Select-Object -Unique) -join "`n"
+    if (-not $errorText.Contains('PROJECT_JSON_MALFORMED') -or
+        -not $errorText.Contains($malformedProjectName) -or
+        -not $errorText.Contains('line') -or -not $errorText.Contains('column')) {
+        throw "Malformed Open did not expose stable code, source, line, and column: $errorText"
+    }
+    $ok = Wait-UiaElement -Root $errorWindow -Condition (New-UiaCondition -ControlType 'Button' -Name 'OK') -Description "'OK' button in malformed Project error" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $ok
+
+    Wait-MainWindow -Title "$applicationTitle - *$openedProjectName" | Out-Null
+    $targets = Wait-ListItems -ListName $customTargetsList -Expected @($fixtureCustomTarget, $newCustomTarget)
+    $npc = Assert-NpcRow
+    # JavaFX omits inactive tab content from the UIA tree, so inspect each Project collection on its owning tab.
+    $templatesTab = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'TabItem' -Name 'Templates') -Description "'Templates' tab after malformed Open" -TimeoutSeconds $StepTimeoutSeconds
+    Select-UiaElement -Element $templatesTab
+    $presets = Wait-ListItems -ListName $sliderPresetsList -Expected $fixturePresets
+    $morphsTab = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') -Description "'Morphs' tab after malformed Open" -TimeoutSeconds $StepTimeoutSeconds
+    Select-UiaElement -Element $morphsTab
+    $observations['malformedProjectOpen'] = [ordered]@{
+        source = $malformedProjectName
+        diagnostic = $errorText
+        preservedTitle = $script:mainWindow.Current.Name
+        sliderPresets = $presets
+        customMorphTargets = $targets
+        npcMorphAssignment = "$fixtureNpcMod / $fixtureNpcEditorId"
+    }
+    "rejected $malformedProjectName with source coordinates; retained dirty $openedProjectName, $($presets.Count) presets, $($targets.Count) targets, and $npc"
+}
+
 Invoke-Step -Name 'assign-slider-presets-to-target' -Action {
     Select-ListItem -ListName $customTargetsList -ItemName $newCustomTarget
     $addAll = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'Button' -Name 'Add All') -Description "'Add All' button" -TimeoutSeconds $StepTimeoutSeconds
@@ -1124,7 +1218,7 @@ finally {
 
     $restricted = @($stderr -split "`r?`n" | Where-Object { $_ -match 'restricted method|native access|--enable-native-access' })
     $evidence = [ordered]@{
-        schema           = 'bs2bg.windows-app-image-smoke/4'
+        schema           = 'bs2bg.windows-app-image-smoke/5'
         recordedAtUtc    = $startedAt.ToString('o')
         passed           = $passed
         expectedAppVersion = $ExpectedAppVersion

@@ -14,8 +14,6 @@ import javax.xml.parsers.ParserConfigurationException;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 
-import com.eclipsesource.json.ParseException;
-
 /**
  * Serializes Project operations and atomically publishes immutable snapshots.
  *
@@ -77,22 +75,17 @@ final class DefaultProjectSession implements ProjectSession {
                 ProjectFileLoader.LoadedProject loaded = ProjectFileLoader.load(source);
                 ProjectSnapshot loadedSnapshot = loaded.getSnapshot();
                 // Constructing the aggregate re-validates name uniqueness and dangling
-                // Slider Preset references. The loader already enforces both, so a
-                // violation here is a loader regression; it surfaces as a failed open
-                // through the boundary below instead of publishing a broken Project.
+                // Slider Preset references at the session publication boundary. The
+                // adapter already performs this check on its detached candidate, so a
+                // violation here is a cutover regression rather than publishable state.
                 Project opened = Project.from(loadedSnapshot);
                 return publish(opened, loadedSnapshot.getFileIdentity(), loadedSnapshot.isDirty(),
                         loadedSnapshot.getLifecycleStatus(), loaded.getDiagnostics());
-            } catch (IOException exception) {
-                return failedOpen(ProjectDiagnosticCodes.PROJECT_FILE_READ_FAILED, source,
-                        "The Project file could not be read: " + exception.getMessage());
-            } catch (ParseException exception) {
-                return rejectedMalformedJson(source, exception);
-            } catch (ProjectFileLoader.InvalidProjectFileException exception) {
-                return rejectedInvalidProject(source, exception);
+            } catch (ProjectJacksonAdapter.ProjectFormatException exception) {
+                return projectFormatFailure(source, exception);
             } catch (RuntimeException exception) {
                 // Known document failures are handled above; this boundary keeps an
-                // unexpected loader failure from escaping after callers entrusted state to Open.
+                // unexpected adapter failure from escaping after callers entrusted state to Open.
                 return failedOpen(ProjectDiagnosticCodes.PROJECT_OPEN_FAILED, source,
                         "The Project could not be opened: " + exception.getMessage());
             }
@@ -100,32 +93,24 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Reports JSON parser coordinates while preserving the active Project.
+     * Translates an owned adapter failure without publishing any part of its candidate.
      *
-     * @param source malformed Project file
-     * @param exception parser failure with one-based coordinates
-     * @return structured rejection carrying the unchanged snapshot
+     * @param source requested Project file
+     * @param exception codec-free failure with stable source diagnostics
+     * @return filesystem failure or document rejection carrying the unchanged snapshot
      */
-    private RejectedOutcome rejectedMalformedJson(Path source, ParseException exception) {
-        SourceLocation location = new SourceLocation(Optional.of(source), Optional.of("/"),
-                OptionalInt.of(exception.getLocation().line), OptionalInt.of(exception.getLocation().column));
-        return rejected(ProjectDiagnosticCodes.PROJECT_JSON_MALFORMED, location,
-                "The Project file contains malformed JSON: " + exception.getMessage());
-    }
-
-    /**
-     * Reports a stable schema or domain validation location while preserving the
-     * active Project.
-     *
-     * @param source invalid Project file
-     * @param exception structured candidate validation failure
-     * @return structured rejection carrying the unchanged snapshot
-     */
-    private RejectedOutcome rejectedInvalidProject(Path source,
-            ProjectFileLoader.InvalidProjectFileException exception) {
-        SourceLocation location = new SourceLocation(Optional.of(source), Optional.of(exception.getElement()),
-                OptionalInt.empty(), OptionalInt.empty());
-        return rejected(exception.getCode(), location, exception.getMessage());
+    private ProjectOutcome projectFormatFailure(Path source,
+            ProjectJacksonAdapter.ProjectFormatException exception) {
+        OptionalInt line = exception.line() > 0 ? OptionalInt.of(exception.line()) : OptionalInt.empty();
+        OptionalInt column = exception.column() > 0 ? OptionalInt.of(exception.column()) : OptionalInt.empty();
+        SourceLocation location = new SourceLocation(Optional.of(source.toAbsolutePath().normalize()),
+                Optional.of(exception.path()), line, column);
+        ProjectDiagnostic diagnostic = new ProjectDiagnostic(exception.code(), DiagnosticSeverity.ERROR,
+                location, exception.getMessage());
+        List<ProjectDiagnostic> diagnostics = Collections.singletonList(diagnostic);
+        return ProjectDiagnosticCodes.PROJECT_FILE_READ_FAILED.equals(exception.code())
+                ? new FailedOutcome(snapshot, diagnostics)
+                : new RejectedOutcome(snapshot, diagnostics);
     }
 
     /**

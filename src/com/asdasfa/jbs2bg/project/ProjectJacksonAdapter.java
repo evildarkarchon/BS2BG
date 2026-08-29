@@ -33,14 +33,11 @@ import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.TokenStreamLocation;
 
 /**
- * Owned Jackson streaming adapter for Project persistence. Writing is the sole
- * production route through {@link ProjectFileWriter}; reading remains a
- * compatibility oracle until its dedicated cutover slice.
+ * Owned Jackson streaming adapter for Project persistence. Production reading and
+ * writing reach it through {@link ProjectFileLoader} and {@link ProjectFileWriter}.
  */
 final class ProjectJacksonAdapter {
 
-    private static final String RESOURCE_LIMIT_CODE = "PROJECT_JSON_RESOURCE_LIMIT";
-    private static final String TRAILING_DATA_CODE = "PROJECT_JSON_TRAILING_DATA";
     private static final String WRITE_FAILED_CODE = "PROJECT_JSON_WRITE_FAILED";
     private static final Comparator<String> CASE_INSENSITIVE_ORDER = String::compareToIgnoreCase;
     private static final Set<String> ROOT_FIELDS = Set.of("SliderPresets", "CustomMorphTargets", "MorphedNPCs");
@@ -74,7 +71,7 @@ final class ProjectJacksonAdapter {
         // Refuse an oversized artifact before readAllBytes can allocate storage for it;
         // the post-read check below still closes a concurrent file-growth race.
         if (sourceSize > JacksonJson.projectMaximumDocumentBytes()) {
-            throw failure(RESOURCE_LIMIT_CODE, normalizedSource.toString(), "/", 1, 1,
+            throw failure(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, normalizedSource.toString(), "/", 1, 1,
                     "Project input exceeds the 64 MiB document limit.");
         }
         byte[] sourceBytes;
@@ -87,7 +84,7 @@ final class ProjectJacksonAdapter {
                     readableMessage(exception, "The Project source could not be read."));
         }
         if (sourceBytes.length > JacksonJson.projectMaximumDocumentBytes()) {
-            throw failure(RESOURCE_LIMIT_CODE, normalizedSource.toString(), "/", 1, 1,
+            throw failure(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, normalizedSource.toString(), "/", 1, 1,
                     "Project input exceeds the 64 MiB document limit.");
         }
 
@@ -107,7 +104,8 @@ final class ProjectJacksonAdapter {
             if (location == null && reader != null)
                 location = reader.location();
             String code = JacksonJson.isConstraintFailure(exception)
-                    ? RESOURCE_LIMIT_CODE : ProjectDiagnosticCodes.PROJECT_JSON_MALFORMED;
+                    ? ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT
+                    : ProjectDiagnosticCodes.PROJECT_JSON_MALFORMED;
             throw failure(code, normalizedSource.toString(), path, location, exception.getOriginalMessage());
         }
     }
@@ -173,7 +171,7 @@ final class ProjectJacksonAdapter {
         requirePresent(targets, reader, "/CustomMorphTargets", "CustomMorphTargets");
         requirePresent(npcMorphAssignments, reader, "/MorphedNPCs", "MorphedNPCs");
         if (reader.next("/") != null) {
-            throw reader.failure(TRAILING_DATA_CODE, "/",
+            throw reader.failure(ProjectDiagnosticCodes.PROJECT_JSON_TRAILING_DATA, "/",
                     "Project input contains data after the first complete document.");
         }
         return new ParsedProject(presets, targets, npcMorphAssignments);
@@ -659,7 +657,7 @@ final class ProjectJacksonAdapter {
     /** Enforces the accepted one-MiB UTF-8 limit for names and string values. */
     private static void requireTextLimit(Reader reader, String value, String path, String kind) {
         if (JacksonJson.exceedsTextLimit(value)) {
-            throw reader.failure(RESOURCE_LIMIT_CODE, path,
+            throw reader.failure(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, path,
                     "Project " + kind + " exceeds the 1 MiB UTF-8 limit.");
         }
     }

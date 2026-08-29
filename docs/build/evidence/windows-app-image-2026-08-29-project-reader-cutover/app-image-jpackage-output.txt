@@ -1,0 +1,7 @@
+jpackage --type app-image --name BS2BG --app-version 1.1.2 --vendor asdasfa --description jBS2BG: BodySlide Slider Presets to BodyGen and BodyTypes of Skyrim outputs --input D:\repos\BS2BG\target\app-image-input --main-jar jbs2bg-1.0-SNAPSHOT.jar --main-class com.asdasfa.jbs2bg.Launcher --runtime-image D:\repos\BS2BG\target\app-image-runtime --dest D:\repos\BS2BG\target\app-image --app-content D:\repos\BS2BG\target\app-image-notices\THIRD-PARTY-NOTICES.txt,D:\repos\BS2BG\target\app-image-notices\notices --verbose --java-options --enable-native-access=javafx.graphics
+
+[01:55:22.306] Creating app package: BS2BG in D:\repos\BS2BG\target\app-image
+[01:55:22.520] Using default package resource JavaApp.ico [icon] (add BS2BG.ico to the resource-dir to customize).
+[01:55:22.524] Using default package resource WinLauncher.template [Template for creating executable properties file] (add BS2BG.properties to the resource-dir to customize).
+[01:55:22.528] Warning: Windows Defender may prevent jpackage from functioning. If there is an issue, it can be addressed by either disabling realtime monitoring, or adding an exclusion for the directory "C:\Users\evild\AppData\Local\Temp\jdk.jpackage17057841538763020371".
+[01:55:22.530] Succeeded in building Windows Application Image package

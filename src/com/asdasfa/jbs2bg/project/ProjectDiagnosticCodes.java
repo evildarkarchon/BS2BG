@@ -15,6 +15,10 @@ public final class ProjectDiagnosticCodes {
     public static final String PROJECT_OPEN_FAILED = "PROJECT_OPEN_FAILED";
     /** A Project file contains syntactically malformed JSON. */
     public static final String PROJECT_JSON_MALFORMED = "PROJECT_JSON_MALFORMED";
+    /** A Project file contains non-whitespace data after its complete JSON value. */
+    public static final String PROJECT_JSON_TRAILING_DATA = "PROJECT_JSON_TRAILING_DATA";
+    /** A Project file exceeds an owned document, token, nesting, name, or value limit. */
+    public static final String PROJECT_JSON_RESOURCE_LIMIT = "PROJECT_JSON_RESOURCE_LIMIT";
     /** A Project file omits or mis-shapes required legacy structure. */
     public static final String PROJECT_STRUCTURE_INVALID = "PROJECT_STRUCTURE_INVALID";
     /** A legacy Project field has the wrong JSON value type. */

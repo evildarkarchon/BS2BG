@@ -61,6 +61,31 @@ final class JacksonDependencyPolicyTest {
     }
 
     /**
+     * Verifies Project loading has one owned streaming route and no packaged legacy codec fallback.
+     *
+     * @throws IOException when production sources cannot be inspected
+     */
+    @Test
+    void projectLoadingUsesOnlyTheOwnedJacksonReader() throws IOException {
+        String loader = Files.readString(
+                Path.of("src/com/asdasfa/jbs2bg/project/ProjectFileLoader.java"));
+
+        assertTrue(loader.contains("ProjectJacksonAdapter.read(source)"));
+        assertFalse(loader.contains("LegacyProjectFileLoader"));
+        assertFalse(loader.contains("com.eclipsesource.json"));
+        try (var sources = Files.walk(Path.of("src"))) {
+            List<String> legacyCodecImporters = sources
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .filter(JacksonDependencyPolicyTest::importsMinimalJson)
+                    .map(path -> path.toString().replace('\\', '/'))
+                    .sorted()
+                    .toList();
+            assertTrue(legacyCodecImporters.isEmpty(),
+                    () -> "Production sources still import minimal-json: " + legacyCodecImporters);
+        }
+    }
+
+    /**
      * Enforces the friend-package boundary that Java source visibility cannot express:
      * only the three owned adapters may call the public internal support class.
      */
@@ -82,6 +107,15 @@ final class JacksonDependencyPolicyTest {
     private static boolean importsJackson(Path source) {
         try {
             return Files.readString(source).contains("import tools.jackson.");
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not inspect source import policy: " + source, exception);
+        }
+    }
+
+    /** Reports whether one production source imports the retired JSON codec. */
+    private static boolean importsMinimalJson(Path source) {
+        try {
+            return Files.readString(source).contains("import com.eclipsesource.json");
         } catch (IOException exception) {
             throw new IllegalStateException("Could not inspect source import policy: " + source, exception);
         }

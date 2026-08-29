@@ -55,7 +55,7 @@ final class ProjectJacksonCompatibilityTest {
         Path fixture = FIXTURE_ROOT.resolve("semantic-equivalence.jbs2bg");
 
         ProjectJacksonAdapter.Candidate jackson = ProjectJacksonAdapter.read(fixture);
-        ProjectFileLoader.LoadedProject legacy = ProjectFileLoader.load(fixture);
+        LegacyProjectFileLoader.LoadedProject legacy = LegacyProjectFileLoader.load(fixture);
 
         assertProjectContentEquals(legacy.getSnapshot(), jackson.snapshot());
         assertEquals(legacy.getDiagnostics().size(), jackson.diagnostics().size());
@@ -67,7 +67,7 @@ final class ProjectJacksonCompatibilityTest {
         Files.write(canonical, ProjectJacksonAdapter.write(jackson.snapshot()));
         ProjectJacksonAdapter.Candidate reopened = ProjectJacksonAdapter.read(canonical);
         assertProjectContentEquals(jackson.snapshot(), reopened.snapshot());
-        assertProjectContentEquals(jackson.snapshot(), ProjectFileLoader.load(canonical).getSnapshot());
+        assertProjectContentEquals(jackson.snapshot(), LegacyProjectFileLoader.load(canonical).getSnapshot());
         assertTrue(reopened.diagnostics().isEmpty());
     }
 
@@ -96,7 +96,7 @@ final class ProjectJacksonCompatibilityTest {
         Path fixture = FIXTURE_ROOT.resolve("member-order-uunp.jbs2bg");
 
         ProjectJacksonAdapter.Candidate jackson = ProjectJacksonAdapter.read(fixture);
-        ProjectFileLoader.LoadedProject legacy = ProjectFileLoader.load(fixture);
+        LegacyProjectFileLoader.LoadedProject legacy = LegacyProjectFileLoader.load(fixture);
 
         assertProjectContentEquals(legacy.getSnapshot(), jackson.snapshot());
     }
@@ -107,7 +107,7 @@ final class ProjectJacksonCompatibilityTest {
         Path fixture = FIXTURE_ROOT.resolve("recovery-ordered-diagnostics.jbs2bg");
 
         ProjectJacksonAdapter.Candidate jackson = ProjectJacksonAdapter.read(fixture);
-        ProjectFileLoader.LoadedProject legacy = ProjectFileLoader.load(fixture);
+        LegacyProjectFileLoader.LoadedProject legacy = LegacyProjectFileLoader.load(fixture);
 
         assertProjectContentEquals(legacy.getSnapshot(), jackson.snapshot());
         assertEquals(ProjectLifecycleStatus.RECOVERED, jackson.snapshot().getLifecycleStatus());
@@ -133,7 +133,7 @@ final class ProjectJacksonCompatibilityTest {
         assertEquals(2, candidate.snapshot().getNpcMorphAssignments().size());
         assertEquals(2, countOccurrences(new String(canonical, StandardCharsets.UTF_8), "\"Guard\""));
         assertEquals(2, ProjectJacksonAdapter.read(written).snapshot().getNpcMorphAssignments().size());
-        assertEquals(2, ProjectFileLoader.load(written).getSnapshot().getNpcMorphAssignments().size());
+        assertEquals(2, LegacyProjectFileLoader.load(written).getSnapshot().getNpcMorphAssignments().size());
     }
 
     /** Explicit null endpoints serialize, while unchanged synthesized defaults remain omitted. */
@@ -202,7 +202,7 @@ final class ProjectJacksonCompatibilityTest {
         Path fixture = FIXTURE_ROOT.resolve("integer-bounds-valid.jbs2bg");
 
         ProjectJacksonAdapter.Candidate jackson = ProjectJacksonAdapter.read(fixture);
-        ProjectFileLoader.LoadedProject legacy = ProjectFileLoader.load(fixture);
+        LegacyProjectFileLoader.LoadedProject legacy = LegacyProjectFileLoader.load(fixture);
 
         assertProjectContentEquals(legacy.getSnapshot(), jackson.snapshot());
         SliderChoiceSnapshot choice = jackson.snapshot().getSliderPresets().get(0).getSliderChoices().get(0);
@@ -232,7 +232,7 @@ final class ProjectJacksonCompatibilityTest {
         ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
                 ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source));
 
-        assertEquals("PROJECT_JSON_RESOURCE_LIMIT", exception.code());
+        assertEquals(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, exception.code());
         assertEquals("/SliderPresets/Bounds/SetSliders/0/valueSmall", exception.path());
         assertTrue(exception.line() > 0);
         assertTrue(exception.column() > 0);
@@ -259,7 +259,7 @@ final class ProjectJacksonCompatibilityTest {
         ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
                 ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source));
 
-        assertEquals("PROJECT_JSON_RESOURCE_LIMIT", exception.code());
+        assertEquals(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, exception.code());
         assertEquals("/SliderPresets/Wide/SetSliders/0/name", exception.path());
     }
 
@@ -268,7 +268,7 @@ final class ProjectJacksonCompatibilityTest {
         return Stream.of(
                 new InvalidFixture("malformed-syntax.jbs2bg", ProjectDiagnosticCodes.PROJECT_JSON_MALFORMED,
                         "/SliderPresets"),
-                new InvalidFixture("trailing-data.jbs2bg", "PROJECT_JSON_TRAILING_DATA", "/"),
+                new InvalidFixture("trailing-data.jbs2bg", ProjectDiagnosticCodes.PROJECT_JSON_TRAILING_DATA, "/"),
                 new InvalidFixture("unknown-root-field.jbs2bg", ProjectDiagnosticCodes.PROJECT_FIELD_UNSUPPORTED,
                         "/Future~1~0Field"),
                 new InvalidFixture("duplicate-root-field.jbs2bg", ProjectDiagnosticCodes.PROJECT_MEMBER_DUPLICATE,

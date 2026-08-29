@@ -2,8 +2,9 @@
 
 Status: packaging checkpoint on top of the complete application gate (issue #97, parent #81). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
-starts from a clean extracted location without any system Java, exercises Project New/Save/Save As/recovery and
-failed-overwrite preservation plus the representative BoS, Templates, and Morphs workflows, and exits cleanly.
+starts from a clean extracted location without any system Java, exercises Project Open cancellation/malformed
+rejection/New/Save/Save As/recovery and failed-overwrite preservation plus the representative BoS, Templates, and
+Morphs workflows, and exits cleanly.
 ADR-0003 records the Java 25 baseline this checkpoint ships.
 
 ## One command
@@ -24,7 +25,7 @@ The script:
    JavaFX 25 JMODs. `jdeps` reads jars and exploded modules but not JMOD archives, so the pinned JMODs are first
    extracted with `jmod extract` into `target/app-image-measure/`. The measured closure is widened only by the
    explicit additions listed in the script, each with a recorded reason (currently `jdk.charsets`: the extended
-   charsets that `ProjectFileLoader` may resolve at runtime from a juniversalchardet detection).
+   charsets that the owned Project reader may resolve at runtime from a juniversalchardet detection).
 4. Links the runtime with `jlink` from the pinned Temurin 25 `jmods/` and the pinned JavaFX JMODs with the same
    four options jpackage applies by default (`--strip-debug --no-header-files --no-man-pages
    --strip-native-commands`), then verifies its `release` file (`JAVA_VERSION` = the lock's, every requested
@@ -94,7 +95,7 @@ located by relationship instead.
 Workflow steps (each recorded with duration and observations in the evidence):
 
 1. `extract-clean-image` — extract the archive; verify the launcher, its stamped version, and its single-process
-   setting; copy the representative and recoverable checked-in Project fixtures into the working directory.
+   setting; copy the representative, recoverable, and malformed checked-in Project fixtures into the working directory.
 2. `launch-packaged-launcher-without-system-java` — start the launcher, wait for the `jBS2BG` window, require it to
    be the image's only BS2BG process, check the loaded runtime libraries, and note the settings files created in its
    working directory.
@@ -120,27 +121,33 @@ Workflow steps (each recorded with duration and observations in the evidence):
 12. `load-representative-morph-content` — the Morphs tab lists `All|Female` and the NPC row for
    `Skyrim.esm / HousecarlWhiterun`.
 13. `create-custom-morph-target` — `All|Female|NordRace` is added; the title shows the unsaved marker.
-14. `assign-slider-presets-to-target` — Add All; `Target Slider Presets` lists both presets and the counter reads 2.
-15. `generate-morphs-output` — the Morphs output names both Custom Morph Targets and the NPC.
-16. `save-project-as` — File › Save As… to `smoke-output.jbs2bg`; the title is clean; the file is parsed and must
-   contain the new target with both presets and the NPC.
-17. `prepare-project-save-overwrite` — add `All|Female|SaveRetry` after Save As and require the dirty title.
-18. `failed-project-save-preserves-destination-and-lifecycle` — hold the destination open without write/delete
+14. `cancel-open-preserves-active-project` — choose Open Another from the dirty-Project confirmation, cancel the
+    native Open dialog, and require the active filename, dirty title, Slider Presets, Custom Morph Targets, and NPC
+    Morph Assignment to remain unchanged.
+15. `malformed-open-rejects-transactionally` — choose the malformed fixture, require
+    `PROJECT_JSON_MALFORMED` with source/line/column in the visible error, dismiss it, and require the same dirty
+    Project identity and content to remain active.
+16. `assign-slider-presets-to-target` — Add All; `Target Slider Presets` lists both presets and the counter reads 2.
+17. `generate-morphs-output` — the Morphs output names both Custom Morph Targets and the NPC.
+18. `save-project-as` — File › Save As… to `smoke-output.jbs2bg`; the title is clean; the file is parsed and must
+    contain the new target with both presets and the NPC.
+19. `prepare-project-save-overwrite` — add `All|Female|SaveRetry` after Save As and require the dirty title.
+20. `failed-project-save-preserves-destination-and-lifecycle` — hold the destination open without write/delete
     sharing, invoke Save, require `PROJECT_FILE_WRITE_FAILED`, exact prior bytes and dirty title, and no sibling
     staging file; dismiss the error and release the lock.
-19. `retry-project-save-after-overwrite-failure` — invoke ordinary Save again, require the new target in the
+21. `retry-project-save-after-overwrite-failure` — invoke ordinary Save again, require the new target in the
     canonical file, a changed hash, and the clean title.
-20. `prepare-unsaved-project-for-new` — add `All|Female|Discarded` without saving and require the dirty title.
-21. `new-project-discards-confirmed-changes` — invoke New, confirm the discard through the owned dialog, require
+22. `prepare-unsaved-project-for-new` — add `All|Female|Discarded` without saving and require the dirty title.
+23. `new-project-discards-confirmed-changes` — invoke New, confirm the discard through the owned dialog, require
     an empty untitled Project, and prove the discarded target was not written into the prior destination.
-22. `exit-after-new` — close the second window; the launcher process must exit with code 0 within the bound.
-23. `prepare-interrupted-settings-publication` — move the edited pair into the transaction's backups, install only
+24. `exit-after-new` — close the second window; the launcher process must exit with code 0 within the bound.
+25. `prepare-interrupted-settings-publication` — move the edited pair into the transaction's backups, install only
     a replacement Standard member, and leave the staged UUNP member to model interruption between installs.
-24. `recover-settings-relaunch-and-reopen-saved-project` — relaunch, require the exact prior Settings hashes and no
+26. `recover-settings-relaunch-and-reopen-saved-project` — relaunch, require the exact prior Settings hashes and no
     remaining transaction state, reopen the saved Project, regenerate the exact Settings-dependent Templates lines,
     and verify the Slider Presets, all three Custom Morph Targets, the NPC row, and the assigned target's presets.
-25. `close-and-exit` — close the third window; require exit code 0 within the bound.
-26. `verify-settings-recovery-diagnostic` — require the stable `SETTINGS_PUBLICATION_RECOVERED` diagnostic in the
+27. `close-and-exit` — close the third window; require exit code 0 within the bound.
+28. `verify-settings-recovery-diagnostic` — require the stable `SETTINGS_PUBLICATION_RECOVERED` diagnostic in the
     packaged launcher's captured stderr.
 
 Two behaviours of the platform shaped the harness and are worth knowing before changing it:
@@ -162,6 +169,9 @@ Two behaviours of the platform shaped the harness and are worth knowing before c
   JavaFX's own provider; it is located by title through `EnumWindows` and attached with `FromHandle`, accepting
   only a fully formed window. Its Open/Save control is exposed as a bare `Pane` without patterns, so after being
   located by name it is activated with the Win32 `BM_CLICK` message on its own window handle.
+- The canceled-Open checkpoint cancels the native chooser before a `ProjectSession` operation is admitted and proves
+  the dirty Project is untouched. Mid-parse cooperative cancellation remains owned by the later centralized job and
+  `ProjectOperationContext` checkpoint; the current JavaFX Task exposes no user-reachable Cancel command.
 - A JavaFX `ListView` that is emptied (New) and refilled (Open) within one process renders its items but no longer
   publishes its cells to UI Automation. New therefore ends the second lifecycle, and the saved Project's lists are
   verified after a fresh-process reopen, which is also stronger proof that it survives exit/relaunch.
@@ -191,8 +201,8 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, and the notices components.
-- `smoke`: the complete smoke evidence (schema `bs2bg.windows-app-image-smoke/4`; steps with durations; Project
-  New, recovered Save, Save As, failed-overwrite preservation, retry, and reopen observations; first-run/edited/
+- `smoke`: the complete smoke evidence (schema `bs2bg.windows-app-image-smoke/5`; steps with durations; Project
+  canceled/malformed Open preservation, New, recovered Save, Save As, failed-overwrite preservation, retry, and reopen observations; first-run/edited/
   recovered Settings hashes and exact output; expected and observed process models; the three sequential process
   lifecycles with exit codes and exit wait times; environment scrubbing; diagnostics summary including any
   native-access warning lines from stderr, which must be none).
@@ -227,6 +237,18 @@ The issue #85 Project writer cutover checkpoint is retained separately under
 `docs/build/evidence/windows-app-image-2026-08-29-project-writer-cutover/`. Its smoke evidence records New,
 recovered-Project Save, canonical Save As, locked overwrite failure with destination/lifecycle preservation,
 successful Save retry, fresh-process reopen, and all three clean launcher lifecycles.
+
+The issue #86 Project reader cutover checkpoint is retained separately under
+`docs/build/evidence/windows-app-image-2026-08-29-project-reader-cutover/`. Its smoke evidence records valid legacy
+and recovered Project reads, native Open cancellation, malformed input with source coordinates and transactional
+state preservation, save/reopen compatibility, and all three clean launcher lifecycles.
+
+## Reverting the Project reader cutover
+
+The production Project reader route, diagnostic translation, permanent corpus routing evidence, packaged smoke,
+documentation, and retained evidence land together in the single issue #86 commit. Reverting that commit restores
+the prior minimal-json reader and the previous packaging checkpoint. Projects remain semantically compatible JSON;
+no data migration or external-state cleanup is required.
 
 ## Reverting the Project writer cutover
 
