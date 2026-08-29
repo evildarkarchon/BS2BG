@@ -180,11 +180,15 @@ public static class BS2BGSystemPreferences
     [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     private static extern bool SystemParametersInfoBoolean(uint action, uint parameter, ref int value, uint flags);
 
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    private static extern bool SystemParametersInfoBooleanValue(uint action, uint parameter, IntPtr value, uint flags);
+
     private const uint SPI_GETHIGHCONTRAST = 0x0042;
     private const uint SPI_SETHIGHCONTRAST = 0x0043;
     private const uint SPI_GETCLIENTAREAANIMATION = 0x1042;
     private const uint SPI_SETCLIENTAREAANIMATION = 0x1043;
     private const uint HCF_HIGHCONTRASTON = 0x00000001;
+    private const uint SPIF_UPDATEINIFILE = 0x0001;
     private const uint SPIF_SENDCHANGE = 0x0002;
 
     /// <summary>
@@ -227,8 +231,10 @@ public static class BS2BGSystemPreferences
     /// <exception cref="System.ComponentModel.Win32Exception">Thrown when Windows rejects the change.</exception>
     public static void SetClientAreaAnimation(bool enabled)
     {
-        int value = enabled ? 1 : 0;
-        if (!SystemParametersInfoBoolean(SPI_SETCLIENTAREAANIMATION, 0, ref value, SPIF_SENDCHANGE))
+        IntPtr value = enabled ? new IntPtr(1) : IntPtr.Zero;
+        // Windows broadcasts WM_SETTINGCHANGE only after the profile update; Restore writes the captured value back.
+        if (!SystemParametersInfoBooleanValue(SPI_SETCLIENTAREAANIMATION, 0, value,
+                SPIF_UPDATEINIFILE | SPIF_SENDCHANGE))
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     }
 

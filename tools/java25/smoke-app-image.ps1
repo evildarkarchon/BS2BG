@@ -581,7 +581,8 @@ try {
     }
 
     Invoke-SmokeStep -Name 'verify-live-themes-high-contrast-reduced-motion-and-semantics' -Action {
-        $themeChoice = Find-OuterControl -ControlType 'ComboBox' -Name 'Theme choice'
+        $themeLabel = Find-OuterControl -ControlType 'Text' -Name 'Theme:'
+        $themeChoice = Get-FollowingControl -Element $themeLabel -ControlType 'ComboBox'
         $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
         $cancel = Find-OuterControl -ControlType 'Button' -Name 'Cancel current operation'
         if ($activity.Current.IsKeyboardFocusable -ne $true) { throw 'Activity is not keyboard reachable.' }
