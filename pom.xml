@@ -25,6 +25,7 @@
         <javafx.version>25.0.4</javafx.version>
         <maven.compiler.release>25</maven.compiler.release>
         <junit.version>5.11.4</junit.version>
+        <jackson-core.version>3.1.5</jackson-core.version>
 
         <!-- Pinned build inputs; tools/java25/toolchain-lock.json mirrors the Maven distribution and JDK pins. -->
         <bs2bg.maven.version>3.9.16</bs2bg.maven.version>
@@ -60,6 +61,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson-core.version}</version>
+        </dependency>
         <dependency>
             <groupId>com.eclipsesource.minimal-json</groupId>
             <artifactId>minimal-json</artifactId>

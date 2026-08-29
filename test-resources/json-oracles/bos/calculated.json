@@ -1,0 +1,16 @@
+{
+  "string": {
+    "bodyname": "Alpha",
+    "slidername1": "Breasts",
+    "slidername2": "OracleExponent"
+  },
+  "int": {
+    "slidersnumber": 2
+  },
+  "float": {
+    "highvalue1": 0,
+    "highvalue2": 1.0E8,
+    "lowvalue1": 1.13,
+    "lowvalue2": 2.5E7
+  }
+}

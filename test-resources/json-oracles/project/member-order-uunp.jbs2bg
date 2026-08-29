@@ -1,0 +1,19 @@
+{
+  "MorphedNPCs": {},
+  "CustomMorphTargets": {},
+  "SliderPresets": {
+    "UUNP Ordered": {
+      "SetSliders": [
+        {
+          "pctMax": 100,
+          "valueBig": null,
+          "name": "Arms",
+          "pctMin": 100,
+          "valueSmall": null,
+          "enabled": true
+        }
+      ],
+      "isUUNP": true
+    }
+  }
+}

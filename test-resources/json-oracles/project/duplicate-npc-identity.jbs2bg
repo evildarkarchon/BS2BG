@@ -1,0 +1,8 @@
+{
+  "SliderPresets": {},
+  "CustomMorphTargets": {},
+  "MorphedNPCs": {
+    "First": {"Mod":"Skyrim.esm","EditorId":"Lydia","Race":"NordRace","FormId":"A2C94","SliderPresets":[]},
+    "Second": {"Mod":"SKYRIM.ESM","EditorId":"lydia","Race":"NordRace","FormId":"A2C95","SliderPresets":[]}
+  }
+}

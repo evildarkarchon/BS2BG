@@ -1,0 +1,12 @@
+{
+  "SliderPresets": {
+    "Bounds": {
+      "isUUNP": false,
+      "SetSliders": [
+        {"name":"Bounds","enabled":true,"valueSmall":-2147483648,"valueBig":2147483647,"pctMin":-0,"pctMax":100}
+      ]
+    }
+  },
+  "CustomMorphTargets": {},
+  "MorphedNPCs": {}
+}

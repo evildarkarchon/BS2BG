@@ -1,0 +1,8 @@
+{
+  "SliderPresets": {
+    "Alpha": {"isUUNP": false, "SetSliders": []},
+    "alpha": {"isUUNP": false, "SetSliders": []}
+  },
+  "CustomMorphTargets": {},
+  "MorphedNPCs": {}
+}
