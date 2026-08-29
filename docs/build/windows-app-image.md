@@ -314,6 +314,14 @@ closure, per-file hashes, and smoke diagnostics describe the 238-file image with
 `8136fc033c9191cde2ca2d611af14e0246b7581483e8ccbb0e553c582e27c9e7` and archive SHA-256
 `f87d7527411704181156c0d7987f674e588718ef72a5f06627e613125d274303`.
 
+The issue #99 Workbench navigation checkpoint at 100% scale is retained under
+`docs/build/evidence/windows-app-image-2026-08-29-workbench-navigation-100-percent/`. It was built from the clean
+implementation commit `23612aee86a35fb97c2012d7075c1fc95f61b90d`; 268 tests in 32 suites and all 12 packaged
+workflows passed. The smoke evidence records 96 DPI/100% scale and an exact 800x600 logical minimum client. The
+238-file image digest is `194e1990d3590958ed1fed1a596aa6af11517d8aac82045fbc6ad0d313a4b80f`; the archive SHA-256 is
+`3bb708bcf407d79f12d1ef66611692dfccaf82d8887ec4693a1b24a534c22805`. Equivalent retained runs from
+125% and 150% interactive sessions remain necessary to complete the three-scale execution matrix.
+
 ## Reverting the single-codec cutover
 
 The dependency removal, temporary-oracle cleanup, permanent corpus expectations, convergence/retired-codec

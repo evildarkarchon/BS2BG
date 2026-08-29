@@ -1,0 +1,93 @@
+{
+  "schema": "bs2bg.third-party-components/1",
+  "application": {
+    "name": "BS2BG",
+    "version": "1.1.2"
+  },
+  "runtimeComponents": [
+    {
+      "id": "temurin-25.0.4.1+1-windows-x64",
+      "name": "Eclipse Adoptium Temurin-25.0.4.1+1 (Eclipse Temurin JDK, jlink'd runtime)",
+      "version": "25.0.4.1+1-LTS",
+      "binaryUrl": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_x64_windows_hotspot_25.0.4.1_1.zip",
+      "binarySha256": "00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283",
+      "sourceUrl": "https://github.com/openjdk/jdk25u/archive/refs/tags/jdk-25.0.4.1-ga.zip",
+      "sourceRevision": "598c9b864328adc4ce1049ea70b2e4b14cc5a051",
+      "modules": [
+        "java.base",
+        "java.datatransfer",
+        "java.xml",
+        "java.prefs",
+        "java.desktop",
+        "java.logging",
+        "java.scripting",
+        "javafx.base",
+        "jdk.unsupported",
+        "javafx.graphics",
+        "javafx.controls",
+        "javafx.fxml",
+        "jdk.charsets"
+      ],
+      "license": "GNU General Public License v2.0 with the Classpath Exception",
+      "noticesPath": "runtime/legal/<module>/ (LICENSE, ASSEMBLY_EXCEPTION, ADDITIONAL_LICENSE_INFO and third-party .md files per JDK module)"
+    },
+    {
+      "id": "openjfx-25.0.4-windows-x64-jmods",
+      "name": "OpenJFX (Gluon JavaFX Windows x64 JMODs)",
+      "version": "25.0.4",
+      "binaryUrl": "https://download2.gluonhq.com/openjfx/25.0.4/openjfx-25.0.4_windows-x64_bin-jmods.zip",
+      "binarySha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
+      "sourceUrl": "https://github.com/openjdk/jfx25u/archive/refs/tags/25.0.4%2B3.zip",
+      "sourceRevision": "96aaf07f6404c4d7ccad1aa75498ec7d2196047a",
+      "modules": [
+        "javafx.base",
+        "javafx.graphics",
+        "javafx.controls",
+        "javafx.fxml"
+      ],
+      "license": "GNU General Public License v2.0 with the Classpath Exception",
+      "noticesPath": "runtime/legal/{javafx.base,javafx.graphics,javafx.controls,javafx.fxml}/"
+    }
+  ],
+  "applicationLibraries": [
+    {
+      "jar": "commons-io-2.6.jar",
+      "coordinates": "commons-io:commons-io:2.6",
+      "sha256": "f877d304660ac2a142f3865badfc971dec7ed73c747c7f8d5d2f5139ca736513",
+      "size": 214788,
+      "sourceUrl": "https://repo.maven.apache.org/maven2/commons-io/commons-io/2.6/commons-io-2.6-sources.jar",
+      "licenses": [],
+      "extractedFiles": [
+        "notices/commons-io-2.6/LICENSE.txt",
+        "notices/commons-io-2.6/NOTICE.txt"
+      ]
+    },
+    {
+      "jar": "jackson-core-3.1.5.jar",
+      "coordinates": "tools.jackson.core:jackson-core:3.1.5",
+      "sha256": "9431b7fa2673bbb618c11d865fe15e13222fd182a214ff998cb7e56afd8f35d2",
+      "size": 598605,
+      "sourceUrl": "https://repo.maven.apache.org/maven2/tools/jackson/core/jackson-core/3.1.5/jackson-core-3.1.5-sources.jar",
+      "licenses": [
+        "The Apache Software License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0.txt)"
+      ],
+      "extractedFiles": [
+        "notices/jackson-core-3.1.5/LICENSE",
+        "notices/jackson-core-3.1.5/NOTICE"
+      ]
+    },
+    {
+      "jar": "juniversalchardet-2.1.0.jar",
+      "coordinates": "com.github.albfernandez:juniversalchardet:2.1.0",
+      "sha256": "988d74471cea29f6c64d4066c9f31a0d0f10a8241f79868ec1a04da42c6a8bed",
+      "size": 222853,
+      "sourceUrl": "https://repo.maven.apache.org/maven2/com/github/albfernandez/juniversalchardet/2.1.0/juniversalchardet-2.1.0-sources.jar",
+      "licenses": [
+        "Mozilla Public License Version 1.1 (https://www.mozilla.org/en-US/MPL/1.1/)",
+        "GENERAL PUBLIC LICENSE, version 3 (GPL-3.0) (http://www.gnu.org/licenses/gpl.txt)",
+        "GNU LESSER GENERAL PUBLIC LICENSE, version 3 (LGPL-3.0) (http://www.gnu.org/licenses/lgpl.txt)"
+      ],
+      "extractedFiles": []
+    }
+  ]
+}
