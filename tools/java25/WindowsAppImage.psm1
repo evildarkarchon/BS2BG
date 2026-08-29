@@ -169,6 +169,83 @@ function Read-LauncherConfig {
 
 <#
 .SYNOPSIS
+    Asserts that a parsed Windows launcher configuration requires one-process JVM hosting.
+.PARAMETER Config
+    The section/key/value-list dictionary returned by Read-LauncherConfig.
+.OUTPUTS
+    None.
+.NOTES
+    Throws when [Application] is missing or win.norestart is absent, repeated, or not exactly `true`.
+#>
+function Assert-LauncherSingleProcessMode {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [System.Collections.IDictionary]$Config)
+
+    if (-not $Config.Contains('Application')) {
+        throw 'Launcher configuration has no [Application] section.'
+    }
+    $application = $Config['Application']
+    $values = @()
+    if ($application.Contains('win.norestart')) { $values = @($application['win.norestart']) }
+    if ($values.Count -ne 1 -or $values[0] -cne 'true') {
+        $observed = $(if ($values.Count -gt 0) { $values -join ', ' } else { '<missing>' })
+        throw "Launcher configuration win.norestart must have one 'true' value so the launcher cannot re-exec itself (found: $observed)."
+    }
+}
+
+<#
+.SYNOPSIS
+    Pins a generated Windows jpackage launcher configuration to one process.
+.DESCRIPTION
+    Adds the JDK 25 `win.norestart=true` application setting when jpackage omitted it. An existing exact setting
+    is left unchanged so the operation is idempotent; conflicting or repeated values fail closed because they can
+    restore the launcher's parent/child re-execution behavior.
+.PARAMETER Path
+    Generated app/<launcher>.cfg file to update in place.
+.OUTPUTS
+    None.
+.NOTES
+    Throws without changing the file when it is missing, has zero or repeated [Application] sections, or already
+    contains a conflicting/repeated win.norestart setting.
+#>
+function Set-LauncherSingleProcessMode {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Launcher configuration not found: $Path"
+    }
+    $lines = @(Get-Content -LiteralPath $Path)
+    $applicationHeaders = @(for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].Trim() -ceq '[Application]') { $i }
+    })
+    if ($applicationHeaders.Count -ne 1) {
+        throw "Launcher configuration must contain exactly one [Application] section: $Path"
+    }
+    $applicationStart = $applicationHeaders[0]
+    $applicationEnd = $lines.Count
+    for ($i = $applicationStart + 1; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].Trim() -match '^\[.+\]$') { $applicationEnd = $i; break }
+    }
+    $settings = @(for ($i = $applicationStart + 1; $i -lt $applicationEnd; $i++) {
+        if ($lines[$i] -match '^\s*win\.norestart\s*=') { $lines[$i] }
+    })
+    if ($settings.Count -eq 1 -and $settings[0].Trim() -ceq 'win.norestart=true') { return }
+    if ($settings.Count -ne 0) {
+        throw "Launcher configuration has conflicting or repeated win.norestart settings: $($settings -join ', ')"
+    }
+
+    # jpackage has no CLI switch for this JDK 25 launcher setting, so it must be inserted into the generated image.
+    $updated = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $updated.Add($lines[$i])
+        if ($i -eq $applicationStart) { $updated.Add('win.norestart=true') }
+    }
+    [System.IO.File]::WriteAllLines((Resolve-Path -LiteralPath $Path).Path, $updated, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+<#
+.SYNOPSIS
     Asserts that the generated launcher configuration starts the launcher class from the staged jars on the bundled runtime.
 .PARAMETER RequiredJavaOptions
     JVM options that must reach the packaged process (e.g. --enable-native-access=javafx.graphics).
@@ -178,7 +255,8 @@ function Read-LauncherConfig {
     implicit (an app.runtime key only appears when one is configured explicitly). The contract asserted here:
     the main class is the launcher, $APPDIR\<main jar> and $APPDIR\lib\<each staged lib> are on the classpath, no
     entry is absolute or a JavaFX jar (nothing may reach outside the image or put JavaFX on the classpath), any
-    app.runtime is the image's own runtime, the stamped version is the pom's, and every required JVM option is present.
+    app.runtime is the image's own runtime, win.norestart is exactly true so the Windows launcher hosts the JVM in
+    its original process, the stamped version is the pom's, and every required JVM option is present.
 #>
 function Assert-LauncherConfig {
     [CmdletBinding()]
@@ -196,6 +274,7 @@ function Assert-LauncherConfig {
     }
     $application = $Config['Application']
     $problems = @()
+    try { Assert-LauncherSingleProcessMode -Config $Config } catch { $problems += "  win.norestart: $($_.Exception.Message)" }
     # Single value of a key, or $null when the key is absent or repeated (every value is a list; see Read-LauncherConfig).
     function Get-Single { param($Table, [string]$Key)
         if (-not $Table.Contains($Key)) { return $null }
@@ -585,6 +664,8 @@ Export-ModuleMember -Function @(
     'ConvertFrom-JdepsModuleDeps',
     'Resolve-RuntimeModules',
     'Read-LauncherConfig',
+    'Assert-LauncherSingleProcessMode',
+    'Set-LauncherSingleProcessMode',
     'Assert-LauncherConfig',
     'Assert-JpackageState',
     'Assert-AppImageLayout',

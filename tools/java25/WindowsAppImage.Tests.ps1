@@ -110,10 +110,11 @@ Describe 'Resolve-RuntimeModules' {
 
 Describe 'Read-LauncherConfig and Assert-LauncherConfig' {
     BeforeAll {
-        # The exact shape jpackage 25 generates: the main jar is the first classpath entry, the version travels as
-        # a -Djpackage.app-version option, and the bundled runtime is implicit (no app.runtime key).
+        # The accepted post-processed jpackage 25 shape: the main jar is the first classpath entry, the version
+        # travels as a -Djpackage.app-version option, and the bundled runtime is implicit (no app.runtime key).
         $script:CfgText = @"
 [Application]
+win.norestart=true
 app.classpath=`$APPDIR\app-1.0.jar
 app.mainclass=com.asdasfa.jbs2bg.Launcher
 app.classpath=`$APPDIR\lib\a.jar
@@ -142,6 +143,55 @@ java-options=--enable-native-access=javafx.graphics
 
     It 'accepts a launcher configuration that names the launcher, the jar, every lib jar, and the stamped version' {
         { Assert-LauncherConfig -Config $script:Config @script:Expected } | Should -Not -Throw
+    }
+
+    It 'recognizes the accepted single-process launcher configuration' {
+        { Assert-LauncherSingleProcessMode -Config $script:Config } | Should -Not -Throw
+    }
+
+    It 'fails closed unless one true no-restart setting pins the launcher to a single process' -ForEach @(
+        @{ Case = 'missing'; Replacement = '' }
+        @{ Case = 'false'; Replacement = 'win.norestart=false' }
+        @{ Case = 'repeated'; Replacement = "win.norestart=true`nwin.norestart=true" }
+    ) {
+        $text = $script:CfgText -replace 'win\.norestart=true', $Replacement
+        $config = Read-LauncherConfig -Path (New-TreeFile "cfg\restart-$Case.cfg" $text)
+        { Assert-LauncherConfig -Config $config @script:Expected } | Should -Throw -ExpectedMessage '*win.norestart*'
+    }
+
+    It 'enables single-process mode in a generated launcher configuration exactly once' {
+        $generatedText = $script:CfgText -replace "win\.norestart=true`r?`n", ''
+        $path = New-TreeFile 'cfg\generated.cfg' $generatedText
+
+        Set-LauncherSingleProcessMode -Path $path
+        Set-LauncherSingleProcessMode -Path $path
+
+        $config = Read-LauncherConfig -Path $path
+        $config['Application']['win.norestart'] | Should -Be @('true')
+        { Assert-LauncherConfig -Config $config @script:Expected } | Should -Not -Throw
+    }
+
+    It 'fails without changing a generated configuration whose no-restart setting is <Case>' -ForEach @(
+        @{ Case = 'false'; Replacement = 'win.norestart=false' }
+        @{ Case = 'repeated'; Replacement = "win.norestart=true`nwin.norestart=true" }
+    ) {
+        $text = $script:CfgText -replace 'win\.norestart=true', $Replacement
+        $path = New-TreeFile "cfg\setter-$Case.cfg" $text
+        $before = [System.IO.File]::ReadAllText($path)
+
+        { Set-LauncherSingleProcessMode -Path $path } | Should -Throw -ExpectedMessage '*win.norestart*'
+        [System.IO.File]::ReadAllText($path) | Should -BeExactly $before
+    }
+
+    It 'fails without changing a configuration whose Application section is <Case>' -ForEach @(
+        @{ Case = 'missing'; Text = $script:CfgText -replace "\[Application\]`r?`n", '' }
+        @{ Case = 'repeated'; Text = $script:CfgText -replace "\[Application\]`r?`n", "[Application]`n[Application]`n" }
+    ) {
+        $path = New-TreeFile "cfg\application-$Case.cfg" $Text
+        $before = [System.IO.File]::ReadAllText($path)
+
+        { Set-LauncherSingleProcessMode -Path $path } | Should -Throw -ExpectedMessage '*`[Application`]*'
+        [System.IO.File]::ReadAllText($path) | Should -BeExactly $before
     }
 
     It 'fails closed when the main class is not the launcher' {

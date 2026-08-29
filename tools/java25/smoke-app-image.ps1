@@ -8,9 +8,10 @@
     The archive produced by tools/java25/package-java25.ps1 is extracted to a fresh location and its launcher is
     started from an empty working directory with every host-Java discovery path removed from the environment
     (JAVA_HOME, *_JAVA_OPTIONS, and any Java-looking PATH entry), so the run can only succeed on the bundled runtime.
-    The jpackage Windows launcher re-launches itself as a child process that hosts the JVM; the harness follows that
-    child, verifies that jvm.dll was loaded from the extracted image, and then drives the application through
-    Windows UI Automation exactly as an assistive technology would:
+    The launcher configuration disables jpackage's Windows self-restart, so the original BS2BG.exe process must
+    host the JVM. The harness verifies that no second image process exists, that jvm.dll was loaded from the
+    extracted runtime, and then drives the application through Windows UI Automation exactly as an assistive
+    technology would:
 
       - controls are located by accessible role (Button, MenuItem, List, ListItem, Edit, CheckBox, TabItem, ...),
         by accessible name (the visible text, or the accessible name the FXML declares for the Project collections),
@@ -22,8 +23,8 @@
 
     Workflow: open the checked-in representative Project; generate, preview, copy, and export one BoS artifact;
     generate Templates output; load its Custom Morph Target and NPC Morph Assignment content; create a new Custom
-    Morph Target and assign every Slider Preset to it; generate Morphs output; Save As a new Project file; start a
-    New Project and reopen the saved file; then close the window and require both launcher processes to exit with
+    Morph Target and assign every Slider Preset to it; generate Morphs output; Save As a new Project file; exit;
+    relaunch and reopen the saved file; then close the window and require the single launcher process to exit with
     code 0 within a bounded timeout.
 
     Every step is recorded with its duration and observations in the evidence file; the first failure captures the
@@ -91,7 +92,6 @@ Get-ChildItem -LiteralPath $diagnosticsDir -File | Remove-Item -Force
 $startedAt = [DateTimeOffset]::UtcNow
 $steps = New-Object System.Collections.Generic.List[object]
 $observations = [ordered]@{}
-$script:launcher = $null
 $script:app = $null
 $script:stdoutTasks = New-Object System.Collections.Generic.List[object]
 $script:stderrTasks = New-Object System.Collections.Generic.List[object]
@@ -195,6 +195,20 @@ function Wait-MainWindow {
     param([string]$Title, [int]$TimeoutSeconds = $StepTimeoutSeconds)
     $script:mainWindow = Wait-UiaWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $TimeoutSeconds
     return $script:mainWindow
+}
+
+<#
+.SYNOPSIS
+    Returns every BS2BG launcher process whose executable belongs to the extracted smoke image.
+.OUTPUTS
+    Process objects; an empty stream before the image path has been recorded or when none remain.
+.NOTES
+    Centralizes the exact launcher-name and image-path boundary used by startup, bounded exit, and failure cleanup.
+#>
+function Get-ImageLauncherProcesses {
+    if (-not $observations.Contains('extractedImage')) { return }
+    Get-Process -Name $LauncherName -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -and $_.Path.StartsWith($observations['extractedImage'], [System.StringComparison]::OrdinalIgnoreCase) }
 }
 
 <#
@@ -408,6 +422,7 @@ Invoke-Step -Name 'extract-clean-image' -Action {
     $launcherPath = Join-Path (Join-Path $imageRoot $LauncherName) "$LauncherName.exe"
     if (-not (Test-Path -LiteralPath $launcherPath)) { throw "Extracted archive has no $LauncherName\$LauncherName.exe under $imageRoot" }
     $config = Read-LauncherConfig -Path (Join-Path (Join-Path $imageRoot $LauncherName) "app\$LauncherName.cfg")
+    Assert-LauncherSingleProcessMode -Config $config
     $javaOptions = @()
     if ($config.Contains('JavaOptions') -and $config['JavaOptions'].Contains('java-options')) { $javaOptions = @($config['JavaOptions']['java-options']) }
     if ($ExpectedAppVersion -and ($javaOptions -cnotcontains "-Djpackage.app-version=$ExpectedAppVersion")) {
@@ -417,6 +432,7 @@ Invoke-Step -Name 'extract-clean-image' -Action {
     $observations['extractedImage'] = Join-Path $imageRoot $LauncherName
     $observations['launcher'] = $launcherPath
     $observations['launcherSha256'] = (Get-FileHash -LiteralPath $launcherPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $observations['expectedProcessModel'] = 'single-launcher-process'
     $observations['workingDirectory'] = $workDir
     $observations['archiveSha256'] = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     "extracted $ArchivePath to $imageRoot; working directory $workDir holds only $openedProjectName"
@@ -425,13 +441,19 @@ Invoke-Step -Name 'extract-clean-image' -Action {
 <#
 .SYNOPSIS
     Starts the packaged launcher from the extracted image with a scrubbed environment and waits for its window.
+.PARAMETER ObservationKey
+    Evidence key under which this lifecycle's startup observation is recorded.
 .OUTPUTS
-    A summary string; sets $script:launcher / $script:app and records the lifecycle under the given observation key.
+    A summary string; sets $script:app and records its startup under the given observation key.
 .NOTES
-    Used twice: for the initial run and for the relaunch that reopens the saved Project in a fresh process.
+    Owns the returned process in $script:app until Stop-PackagedApplication completes. Throws when startup, the
+    one-image-process contract, or bundled JVM/native-library verification fails. Used once for each of the two
+    sequential application lifecycles.
 #>
 function Start-PackagedApplication {
     param([string]$ObservationKey)
+    # A later lifecycle must establish its own proof; never let a failed relaunch inherit the first launch's model.
+    $observations.Remove('observedProcessModel')
     $scrubbed = Get-ScrubbedEnvironment -Environment ([System.Environment]::GetEnvironmentVariables())
     if (-not $observations.Contains('environment')) {
         $observations['environment'] = [ordered]@{
@@ -449,21 +471,20 @@ function Start-PackagedApplication {
     $startInfo.RedirectStandardError = $true
     $startInfo.Environment.Clear()
     foreach ($name in $scrubbed.Variables.Keys) { $startInfo.Environment[$name] = "$($scrubbed.Variables[$name])" }
-    $script:launcher = [System.Diagnostics.Process]::Start($startInfo)
-    $script:stdoutTasks.Add($script:launcher.StandardOutput.ReadToEndAsync())
-    $script:stderrTasks.Add($script:launcher.StandardError.ReadToEndAsync())
+    $script:app = [System.Diagnostics.Process]::Start($startInfo)
+    $script:stdoutTasks.Add($script:app.StandardOutput.ReadToEndAsync())
+    $script:stderrTasks.Add($script:app.StandardError.ReadToEndAsync())
     $launchedAt = [DateTimeOffset]::UtcNow
 
-    # The Windows launcher re-launches itself; the child is the process that hosts the JVM and owns the windows.
-    $script:app = Wait-UiaCondition -Description "the JVM-hosting child of launcher pid $($script:launcher.Id)" -TimeoutSeconds $StartupTimeoutSeconds -Test {
-        if ($script:launcher.HasExited) { throw "The launcher exited early with code $($script:launcher.ExitCode) before showing a window.`n$($script:stderrTasks[-1].Result)" }
-        $child = Get-CimInstance Win32_Process -Filter "ParentProcessId = $($script:launcher.Id)" | Select-Object -First 1
-        if ($child) { [System.Diagnostics.Process]::GetProcessById($child.ProcessId) }
-    }
     Wait-MainWindow -Title $applicationTitle -TimeoutSeconds $StartupTimeoutSeconds | Out-Null
     $windowAt = [DateTimeOffset]::UtcNow
 
     $imageDir = $observations['extractedImage']
+    $imageProcesses = @(Get-ImageLauncherProcesses)
+    if ($imageProcesses.Count -ne 1 -or $imageProcesses[0].Id -ne $script:app.Id) {
+        throw "Expected launcher pid $($script:app.Id) to be the only $LauncherName process from the extracted image (found: $(($imageProcesses | ForEach-Object { $_.Id }) -join ', '))."
+    }
+    $observations['observedProcessModel'] = 'single-launcher-process'
     $runtimeModules = @()
     foreach ($module in $script:app.Modules) {
         if ($module.ModuleName -match '^(jvm|java|jli|jimage|glass|prism_d3d|prism_sw|javafx_font)\.dll$') {
@@ -476,38 +497,41 @@ function Start-PackagedApplication {
     if ($outside.Count -gt 0) { throw "Runtime libraries were loaded from outside the extracted image: $(($outside | ForEach-Object { $_.path }) -join ', ')" }
     $settings = @(Get-ChildItem -LiteralPath $workDir -File | Where-Object { $_.Name -like 'settings*.json' } | ForEach-Object { $_.Name })
     $observations[$ObservationKey] = [ordered]@{
-        launcherPid          = $script:launcher.Id
+        processModel        = 'single-launcher-process'
         applicationPid       = $script:app.Id
         applicationExe       = $script:app.MainModule.FileName
         startupSeconds       = [math]::Round(($windowAt - $launchedAt).TotalSeconds, 2)
         runtimeModules       = $runtimeModules
         settingsFilesCreated = $settings
     }
-    return "launcher pid $($script:launcher.Id) -> application pid $($script:app.Id); jvm.dll from $($jvm[0].path); window '$applicationTitle' after $([math]::Round(($windowAt - $launchedAt).TotalSeconds, 1)) s; settings present: $($settings -join ', ')"
+    return "application pid $($script:app.Id) hosts the JVM in the launcher process; jvm.dll from $($jvm[0].path); window '$applicationTitle' after $([math]::Round(($windowAt - $launchedAt).TotalSeconds, 1)) s; settings present: $($settings -join ', ')"
 }
 
 <#
 .SYNOPSIS
-    Closes the main window through its Window pattern and requires both launcher processes to exit with code 0.
+    Closes the main window through its Window pattern and requires the launcher process to exit with code 0.
+.PARAMETER ObservationKey
+    Evidence key under which this lifecycle's bounded exit observation is recorded.
 .OUTPUTS
     A summary string; records the exit under the given observation key and appends it to the lifecycle list.
+.NOTES
+    Completes ownership of $script:app. Throws when the process misses the timeout, returns non-zero, or leaves any
+    BS2BG process running from the extracted image.
 #>
 function Stop-PackagedApplication {
     param([string]$ObservationKey)
     $closeRequestedAt = [DateTimeOffset]::UtcNow
     Close-UiaWindow -Window $script:mainWindow
     $appExited = $script:app.WaitForExit($ExitTimeoutSeconds * 1000)
-    $launcherExited = $script:launcher.WaitForExit($ExitTimeoutSeconds * 1000)
     $exitedAt = [DateTimeOffset]::UtcNow
-    if (-not $appExited -or -not $launcherExited) {
-        throw "The packaged process did not exit within $ExitTimeoutSeconds s after the close request (application exited: $appExited, launcher exited: $launcherExited)."
+    if (-not $appExited) {
+        throw "The packaged process did not exit within $ExitTimeoutSeconds s after the close request."
     }
-    $exitCode = $script:launcher.ExitCode
+    $exitCode = $script:app.ExitCode
     if ($exitCode -ne 0) { throw "The packaged launcher exited with code $exitCode; expected 0." }
-    $leftovers = @(Get-Process -Name $LauncherName -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($observations['extractedImage'], [System.StringComparison]::OrdinalIgnoreCase) })
+    $leftovers = @(Get-ImageLauncherProcesses)
     if ($leftovers.Count -gt 0) { throw "Processes from the extracted image are still running: $(($leftovers | ForEach-Object { $_.Id }) -join ', ')" }
     $exit = [ordered]@{
-        launcherPid         = $script:launcher.Id
         applicationPid      = $script:app.Id
         closeRequestedAtUtc = $closeRequestedAt.ToString('o')
         exitCode            = $exitCode
@@ -726,8 +750,17 @@ catch {
 }
 finally {
     $killed = @()
-    foreach ($process in @($script:app, $script:launcher)) {
-        if ($process -and -not $process.HasExited) {
+    $cleanupProcesses = @()
+    if ($observations.Contains('extractedImage')) {
+        # A launcher regression can create an untracked child before the one-process assertion fails; sweep the
+        # exact extracted image so failure cleanup cannot leave that child running and locking the test image.
+        $cleanupProcesses = @(Get-ImageLauncherProcesses)
+    }
+    elseif ($script:app) {
+        $cleanupProcesses = @($script:app)
+    }
+    foreach ($process in $cleanupProcesses) {
+        if (-not $process.HasExited) {
             try { $process.Kill(); $killed += $process.Id } catch { <# already gone between the check and the kill #> }
         }
     }
@@ -740,7 +773,7 @@ finally {
 
     $restricted = @($stderr -split "`r?`n" | Where-Object { $_ -match 'restricted method|native access|--enable-native-access' })
     $evidence = [ordered]@{
-        schema           = 'bs2bg.windows-app-image-smoke/1'
+        schema           = 'bs2bg.windows-app-image-smoke/2'
         recordedAtUtc    = $startedAt.ToString('o')
         passed           = $passed
         expectedAppVersion = $ExpectedAppVersion
@@ -749,7 +782,8 @@ finally {
         steps            = $steps
         observations     = $observations
         process          = [ordered]@{
-            launcherPid     = $(if ($script:launcher) { $script:launcher.Id } else { $null })
+            expectedModel    = 'single-launcher-process'
+            model            = $(if ($observations.Contains('observedProcessModel')) { $observations['observedProcessModel'] } else { $null })
             applicationPid  = $(if ($script:app) { $script:app.Id } else { $null })
             exitCode        = $(if ($observations.Contains('exit')) { $observations['exit'].exitCode } else { $null })
             exitWaitSeconds = $(if ($observations.Contains('exit')) { $observations['exit'].exitWaitSeconds } else { $null })

@@ -18,8 +18,9 @@
       4. Assembles the third-party notices from the staged jars' own license metadata and the runtime's legal
          directories.
       5. Runs jpackage --type app-image with --runtime-image, --main-class com.asdasfa.jbs2bg.Launcher, and
-         --app-version from the pom, then verifies the image layout, the generated launcher configuration, and
-         hashes every file into one image digest; archives the image as BS2BG-<version>-windows-x64.zip.
+         --app-version from the pom; pins the generated Windows launcher to one process with win.norestart=true;
+         verifies the image layout and launcher configuration; hashes every file into one image digest; and
+         archives the image as BS2BG-<version>-windows-x64.zip.
       6. Extracts that archive to a clean temporary location and runs tools/java25/smoke-app-image.ps1: the
          packaged launcher starts with every host-Java discovery path scrubbed, the representative Project, BoS,
          Templates, and Morphs workflows are driven through Windows UI Automation, and the process must exit with
@@ -264,12 +265,15 @@ $jpackageOutput = Invoke-Native -FilePath (Join-Path $jdkHome 'bin\jpackage.exe'
 @("jpackage $($jpackageArguments -join ' ')", '') + $jpackageOutput | Set-Content -LiteralPath (Join-Path $evidenceDir 'app-image-jpackage-output.txt') -Encoding utf8
 
 Write-Step 'Verifying the application image'
+$launcherConfigPath = Join-Path $imageDir "app\$launcherName.cfg"
+# JDK 25 exposes no jpackage CLI switch for single-process launch, so pin the generated launcher before hashing it.
+Set-LauncherSingleProcessMode -Path $launcherConfigPath
 # The JavaFX toolkit's own native libraries (windowing, Direct3D and software pipelines, fonts) must have been
 # linked out of the JMODs into the bundled runtime; without them the launcher would start and then fail to open a window.
 $javafxNativeLibraries = @('glass.dll', 'prism_d3d.dll', 'prism_sw.dll', 'prism_common.dll', 'javafx_font.dll') | ForEach-Object { "runtime\bin\javafx\$_" }
 $requiredImageFiles = @('THIRD-PARTY-NOTICES.txt') + $javafxNativeLibraries + @($notices.Components | ForEach-Object { $_.extractedFiles } | ForEach-Object { $_.Replace('/', '\') })
 $inventory = Assert-AppImageLayout -ImageDir $imageDir -LauncherName $launcherName -MainJarName $staged.MainJarName -LibJarNames $staged.LibJarNames -RequiredFiles $requiredImageFiles
-$launcherConfig = Read-LauncherConfig -Path (Join-Path $imageDir "app\$launcherName.cfg")
+$launcherConfig = Read-LauncherConfig -Path $launcherConfigPath
 Assert-LauncherConfig -Config $launcherConfig -MainClass $mainClass -MainJarName $staged.MainJarName -LibJarNames $staged.LibJarNames -AppVersion $appVersion -RequiredJavaOptions $launcherJavaOptions
 $jpackageState = Assert-JpackageState -Path (Join-Path $imageDir 'app\.jpackage.xml') -AppVersion $appVersion -LauncherName $launcherName -MainClass $mainClass
 $imageRuntime = Assert-RuntimeRelease -RuntimeDir (Join-Path $imageDir 'runtime') -ExpectedJavaVersion $lock.jdk.release.JAVA_VERSION -ExpectedModules $resolvedModules.Modules
@@ -318,7 +322,7 @@ else {
 # ---------------------------------------------------------------------------------------------------------------
 Write-Step 'Recording app-image evidence'
 $evidence = [ordered]@{
-    schema            = 'bs2bg.windows-app-image/1'
+    schema            = 'bs2bg.windows-app-image/2'
     recordedAtUtc     = $startedAt.ToString('o')
     gitCommit         = $gateEvidence.gitCommit
     checkpointResult  = (-not $SkipVerify -and -not $SkipSmoke)
