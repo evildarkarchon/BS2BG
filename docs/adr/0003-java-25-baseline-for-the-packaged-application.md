@@ -1,12 +1,12 @@
 ---
 status: accepted
 date: 2026-08-28
-supersedes: the "preserving Java 8" clause of ADR-0001 only
+supersedes: ADR-0001 wherever it conflicts with the Java 25 baseline (today: its "preserving Java 8" clause)
 ---
 
 # Java 25 LTS is the application baseline
 
-ADR-0001 committed the `ProjectSession` design to "preserving Java 8 and semantic compatibility with existing `.jbs2bg` files". BS2BG now builds, tests, and ships on stable, pinned Java 25 LTS (Eclipse Temurin 25.0.4.1+1) with JavaFX 25.0.4, compiled with `--release 25` and full lint enforcement, with preview features and JavaFX incubator modules disabled; the application is delivered as a self-contained, non-modular Windows x64 `jpackage` app-image whose launcher is a plain `main` class that starts the one existing `Main` application. This decision replaces only ADR-0001's Java 8 baseline clause: the `ProjectSession` interface, immutable snapshots, `.jbs2bg` semantic compatibility, and every rejected option in ADR-0001 remain accepted, and ADR-0002 (the internal `Project` aggregate seam) is unchanged.
+ADR-0001 committed the `ProjectSession` design to "preserving Java 8 and semantic compatibility with existing `.jbs2bg` files". BS2BG now builds, tests, and ships on stable, pinned Java 25 LTS (Eclipse Temurin 25.0.4.1+1) with JavaFX 25.0.4, compiled with `--release 25` and full lint enforcement, with preview features and JavaFX incubator modules disabled; the application is delivered as a self-contained, non-modular Windows x64 `jpackage` app-image whose launcher is a plain `main` class that starts the one existing `Main` application. ADR-0001 predates the Java 25 modernization, and this decision supersedes it wherever the two conflict; today that is only its Java 8 baseline clause, because nothing else in ADR-0001 names a Java or JavaFX version, a toolchain, or a delivery format. The `ProjectSession` interface, immutable snapshots, `.jbs2bg` semantic compatibility, and every rejected option in ADR-0001 remain accepted, and ADR-0002 (the internal `Project` aggregate seam) is unchanged.
 
 ## Considered options
 

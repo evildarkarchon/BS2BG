@@ -123,7 +123,8 @@ scope, and checks the packaged artifact, so a direct `mvnw verify` is a develope
 - `dependency-tree.txt` — the resolved dependency graph (shows the JavaFX `win` classifier).
 - `test-classpath.txt` / `test-classpath-sha256.txt` — every resolved jar on the test classpath and its SHA-256.
 
-ADR-0003 records the Java 25 baseline and supersedes only ADR-0001's "preserving Java 8" clause; the
+ADR-0003 records the Java 25 baseline and supersedes ADR-0001 wherever it conflicts with it (today, its
+"preserving Java 8" clause); the
 `--release 25` target here is that decision. The packaging checkpoint that builds and smoke-tests the Windows
 app-image on top of this gate is described in [windows-app-image.md](windows-app-image.md); since #97 the jar
 plugin writes the artifact into `target/app-image-input/` (beside `lib/`), which is where this script verifies it.
