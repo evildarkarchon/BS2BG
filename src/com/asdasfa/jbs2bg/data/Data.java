@@ -2,6 +2,7 @@ package com.asdasfa.jbs2bg.data;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 import java.util.prefs.Preferences;
 
 import org.apache.commons.io.FileUtils;
@@ -34,7 +35,11 @@ public class Data {
 	public Data() {
 		homeDir = new File(System.getProperty("user.home"));
 		
-		File jarDir = new File(ClassLoader.getSystemClassLoader().getResource(".").getPath());
+		// The classpath root is a directory only in an exploded (IDE / target/classes) run; from the jar the
+		// packaged launcher puts on the classpath, getResource(".") is null (issue #97 smoke run), so the
+		// preference node falls back to the class name instead of a per-install-directory node.
+		URL classpathRoot = ClassLoader.getSystemClassLoader().getResource(".");
+		File jarDir = classpathRoot == null ? null : new File(classpathRoot.getPath());
 		String prefPath = getClass().getName();
 		if (jarDir != null) {
 			prefPath = jarDir.getAbsolutePath();

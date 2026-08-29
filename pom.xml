@@ -36,6 +36,15 @@
         -->
         <bs2bg.toolchain.jdk.runtimeVersion>25.0.4.1+1-LTS</bs2bg.toolchain.jdk.runtimeVersion>
 
+        <!--
+            Application version stamped on the Windows app-image by jpackage (issue #97). Surefire forwards it to
+            WindowsAppImageGateTest, which fails if it differs from Main.APP_VERSION (the About dialog's version),
+            so the packaged image and the running application can never disagree about their version.
+        -->
+        <bs2bg.app.version>1.1.2</bs2bg.app.version>
+        <!-- Staging directory handed to jpackage as its input: the application jar plus lib/ with runtime dependencies. -->
+        <bs2bg.appImage.input>${project.build.directory}/app-image-input</bs2bg.appImage.input>
+
         <!-- Material lifecycle and verification plugins, pinned so the default bindings cannot drift. -->
         <maven-clean-plugin.version>3.5.0</maven-clean-plugin.version>
         <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
@@ -66,15 +75,23 @@
             <artifactId>juniversalchardet</artifactId>
             <version>2.1.0</version>
         </dependency>
+        <!--
+            JavaFX is 'provided': it compiles and tests against the Maven Central jars, but the packaged image gets
+            JavaFX from the bundled runtime that tools/java25/package-java25.ps1 links out of the pinned Gluon JMODs.
+            The provided scope keeps these jars (and their transitive javafx-graphics/base) out of the staged lib/
+            payload and the jar manifest's Class-Path, so they can never end up on the classpath of the image.
+        -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
             <version>${javafx.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -277,8 +294,53 @@
                     <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
                     <systemPropertyVariables>
                         <bs2bg.toolchain.jdk.runtimeVersion>${bs2bg.toolchain.jdk.runtimeVersion}</bs2bg.toolchain.jdk.runtimeVersion>
+                        <bs2bg.app.version>${bs2bg.app.version}</bs2bg.app.version>
                     </systemPropertyVariables>
                 </configuration>
+            </plugin>
+
+            <!--
+                App-image staging (issue #97). The wrapper, not the packaging script, assembles everything jpackage
+                consumes: the application jar goes to target/app-image-input and every runtime-scoped dependency to
+                target/app-image-input/lib. jpackage walks that whole tree and puts each jar on the launcher's
+                classpath, so no manifest Class-Path is required for the image; the manifest still carries one
+                (lib/-prefixed) so the staged jar also runs with `java -jar` plus a JavaFX module path in a dev loop.
+                JavaFX is excluded twice on purpose (provided scope above, excludeGroupIds here): the runtime image
+                supplies it, and a JavaFX jar on the classpath would be the unsupported unnamed-module configuration.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <outputDirectory>${bs2bg.appImage.input}</outputDirectory>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.asdasfa.jbs2bg.Launcher</mainClass>
+                            <addClasspath>true</addClasspath>
+                            <classpathPrefix>lib/</classpathPrefix>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>stage-app-image-dependencies</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${bs2bg.appImage.input}/lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                            <excludeGroupIds>org.openjfx</excludeGroupIds>
+                            <overWriteReleases>true</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

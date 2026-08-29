@@ -1,15 +1,16 @@
 ---
-status: superseded by ADR-0002
+status: accepted; the "preserving Java 8" clause is superseded by ADR-0003
 date: 2026-08-26
-superseded: 2026-08-28
+amended: 2026-08-28
 ---
 
 # Deepen Project state behind ProjectSession
 
-> Superseded by [ADR-0002](0002-project-aggregate-internal-seam.md). This decision predates the Java 25 / JavaFX 25
-> modernization; its "preserving Java 8" clause is no longer a live constraint — the build targets `--release 25`
-> (issue #94). The `ProjectSession` interface, immutable snapshots, and the rejected options below still hold and are
-> carried forward by ADR-0002, which places the immutable `Project` aggregate behind that same seam.
+> The "preserving Java 8" clause below is superseded by [ADR-0003](0003-java-25-baseline-for-the-packaged-application.md):
+> the application baseline is stable, pinned Java 25 LTS with JavaFX 25 and no preview or incubator use. Every other
+> decision here — the `ProjectSession` interface, immutable snapshots, `.jbs2bg` semantic compatibility, and the
+> rejected options — remains accepted. [ADR-0002](0002-project-aggregate-internal-seam.md) builds on this decision by
+> placing the immutable `Project` aggregate behind the same seam; it does not replace it.
 
 BS2BG will replace the shallow, publicly mutable `Data` state and controller-owned lifecycle rules with one JavaFX-independent `ProjectSession` module. Its small interface exposes immutable snapshots, explicit lifecycle operations, and one `apply(ProjectEdit)` entry; typed outcomes distinguish changed, unchanged, rejected, and failed operations and carry structured diagnostics. The implementation owns Project mutations, referential-integrity cascades, dirty and file identity transitions, atomic new/open/save behavior, BodySlide XML imports, canonical ordering, and atomic bulk edits, preserving Java 8 and semantic compatibility with existing `.jbs2bg` files.
 

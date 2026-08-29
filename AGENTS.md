@@ -16,6 +16,8 @@ This repository uses the single-context domain documentation layout. See `docs/a
 
 The complete application gate is one repository-owned command, `tools/java25/verify-java25.ps1`, which checksum-provisions the pinned Temurin 25 / JavaFX 25 inputs, asserts that `pom.xml` compiles every production source with full lint enforcement, and invokes the committed Maven Wrapper with the `.mvn/toolchains.xml` toolchain. Plain `mvnw` fails closed unless `BS2BG_JDK25_HOME` is set. A source-filtered build cannot be reported as the gate; see `docs/build/java25-verification.md`.
 
+The packaging checkpoint is `tools/java25/package-java25.ps1`: it runs the gate, links the measured runtime, builds the non-modular Windows x64 app-image with jpackage, and smoke-tests the packaged launcher through Windows UI Automation. The smoke run drives the real desktop and must not be interacted with while it runs; see `docs/build/windows-app-image.md`.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

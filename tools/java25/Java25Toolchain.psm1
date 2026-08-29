@@ -577,7 +577,44 @@ function Get-SurefireSummary {
     }
 }
 
+<#
+.SYNOPSIS
+    Prints a cyan "==> step" banner for the verification and packaging scripts.
+#>
+function Write-Step {
+    [CmdletBinding()]
+    param([string]$Message)
+    Write-Host ''
+    Write-Host "==> $Message" -ForegroundColor Cyan
+}
+
+<#
+.SYNOPSIS
+    Runs a native executable, returning its combined stdout/stderr lines; throws on a non-zero exit code.
+.PARAMETER Label
+    Human-readable name for the failure message (e.g. 'java -version').
+#>
+function Invoke-Native {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string]$FilePath,
+        [string[]]$ArgumentList = @(),
+        [string]$Label = $FilePath
+    )
+    # java -version writes to stderr. Under $ErrorActionPreference = 'Stop', Windows PowerShell 5.1 turns redirected
+    # native stderr into a terminating NativeCommandError, so the preference is relaxed for the call only and the
+    # exit code decides success instead.
+    $ErrorActionPreference = 'Continue'
+    $output = & $FilePath @ArgumentList 2>&1 | ForEach-Object { "$_" }
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Label exited with code $LASTEXITCODE`n$($output -join "`n")"
+    }
+    return @($output)
+}
+
 Export-ModuleMember -Function @(
+    'Write-Step',
+    'Invoke-Native',
     'Get-PomProperty',
     'Get-SurefireSummary',
     'Get-ToolchainLock',

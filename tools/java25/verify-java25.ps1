@@ -64,32 +64,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $evidenceDir = Join-Path $repoRoot 'target\reproducibility'
 $startedAt = [DateTimeOffset]::UtcNow
 
-function Write-Step {
-    param([string]$Message)
-    Write-Host ''
-    Write-Host "==> $Message" -ForegroundColor Cyan
-}
-
-<#
-.SYNOPSIS
-    Runs a native executable, returning its combined stdout/stderr lines; throws on a non-zero exit code.
-#>
-function Invoke-Native {
-    param(
-        [Parameter(Mandatory)] [string]$FilePath,
-        [string[]]$ArgumentList = @(),
-        [string]$Label = $FilePath
-    )
-    # java -version writes to stderr. Under $ErrorActionPreference = 'Stop', Windows PowerShell 5.1 turns redirected
-    # native stderr into a terminating NativeCommandError, so the preference is relaxed for the call only and the
-    # exit code decides success instead.
-    $ErrorActionPreference = 'Continue'
-    $output = & $FilePath @ArgumentList 2>&1 | ForEach-Object { "$_" }
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Label exited with code $LASTEXITCODE`n$($output -join "`n")"
-    }
-    return @($output)
-}
+# Write-Step and Invoke-Native come from Java25Toolchain.psm1 (shared with package-java25.ps1).
 
 # The whole run is wrapped so that a thrown verification error always produces a non-zero exit code, whether the
 # script is invoked with `pwsh -File`, dot-sourced, or called with `&` from another script (where an uncaught
@@ -211,12 +186,15 @@ $requiredSuiteCounts = $null
 $artifact = $null
 
 # Suites whose presence and green result the gate requires, beyond the Surefire totals: the toolchain witness,
-# the structural source/pom gate, the FXML/controller harness, the public-JavaFX table adapter, and the
-# ProjectSession, Project, filtering-seam, and persistence-compatibility contracts.
+# the structural source/pom gate, the FXML/controller harness, the packaged-launcher and app-image staging
+# contracts (#97), the public-JavaFX table adapter, and the ProjectSession, Project, filtering-seam, and
+# persistence-compatibility contracts.
 $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest',
     'com.asdasfa.jbs2bg.build.ProductionSourceGateTest',
     'com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest',
+    'com.asdasfa.jbs2bg.build.LauncherTest',
+    'com.asdasfa.jbs2bg.build.WindowsAppImageGateTest',
     'com.asdasfa.jbs2bg.fx.FilteredTableAdapterTest',
     'com.asdasfa.jbs2bg.fx.DialogGraphicsTest',
     'com.asdasfa.jbs2bg.filtering.FilteredViewTest',
@@ -284,10 +262,16 @@ if (-not $SkipMaven) {
     $requiredSuiteCounts = Assert-RequiredSurefireSuites -RepoRoot $repoRoot -Suites $requiredSuites
     Write-Host "Required gate suites present and green: $($requiredSuites.Count)"
 
-    # The artifact is the thing that ships; verify the resources on it, not only on target/classes.
-    $jars = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'target') -File -Filter '*.jar' | Where-Object { $_.Name -notmatch '-(sources|javadoc|tests)\.jar$' })
+    # The artifact is the thing that ships; verify the resources on it, not only on target/classes. Since #97 the
+    # jar plugin writes it into the app-image staging directory (pom property bs2bg.appImage.input) beside lib/,
+    # which is exactly the tree jpackage consumes, so the check runs on the bytes that get packaged.
+    $stagingDir = (Get-PomProperty -RepoRoot $repoRoot -Name 'bs2bg.appImage.input').Replace('${project.build.directory}', (Join-Path $repoRoot 'target'))
+    if (-not (Test-Path -LiteralPath $stagingDir)) {
+        throw "App-image staging directory $stagingDir does not exist; the gate requires the package phase (run 'clean verify')."
+    }
+    $jars = @(Get-ChildItem -LiteralPath $stagingDir -File -Filter '*.jar' | Where-Object { $_.Name -notmatch '-(sources|javadoc|tests)\.jar$' })
     if ($jars.Count -ne 1) {
-        throw "Expected exactly one build artifact under target/, found $($jars.Count): $(($jars | ForEach-Object { $_.Name }) -join ', '). The gate requires the package phase (run 'clean verify')."
+        throw "Expected exactly one build artifact under $stagingDir, found $($jars.Count): $(($jars | ForEach-Object { $_.Name }) -join ', '). The gate requires the package phase (run 'clean verify')."
     }
     $artifact = Assert-JarContainsProductionResources -RepoRoot $repoRoot -JarPath $jars[0].FullName
     Write-Host "Artifact $($jars[0].Name): $($artifact.ClassCount) production classes and $($artifact.ResourceCount) resources present"

@@ -58,7 +58,7 @@
                                           <Insets />
                                        </VBox.margin>
                                     </Button>
-                                    <ListView fx:id="lvPresets" prefHeight="370.0" prefWidth="240.0" VBox.vgrow="ALWAYS" />
+                                    <ListView fx:id="lvPresets" accessibleText="Slider Presets" prefHeight="370.0" prefWidth="240.0" VBox.vgrow="ALWAYS" />
                                     <GridPane alignment="CENTER" hgap="5.0" vgap="5.0" VBox.vgrow="NEVER">
                                       <columnConstraints>
                                           <ColumnConstraints hgrow="SOMETIMES" maxWidth="116.0" minWidth="116.0" prefWidth="116.0" />
@@ -147,7 +147,7 @@
                                  <children>
                                     <HBox prefHeight="210.0" prefWidth="430.0">
                                        <children>
-                                          <ListView fx:id="lvCustomTargets" prefHeight="200.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+                                          <ListView fx:id="lvCustomTargets" accessibleText="Custom Morph Targets" prefHeight="200.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
                                              <HBox.margin>
                                                 <Insets right="5.0" />
                                              </HBox.margin>
@@ -232,7 +232,7 @@
                                                 </HBox>
                                              </children>
                                           </HBox>
-                                          <TableView fx:id="tvNpc" prefHeight="224.0" prefWidth="380.0" VBox.vgrow="ALWAYS">
+                                          <TableView fx:id="tvNpc" accessibleText="NPC Morph Assignments" prefHeight="224.0" prefWidth="380.0" VBox.vgrow="ALWAYS">
                                             <columns>
                                               <TableColumn fx:id="tcName" editable="false" minWidth="50.0" prefWidth="125.0" text="Name" />
                                               <TableColumn fx:id="tcMaster" editable="false" text="Master" />
@@ -278,7 +278,7 @@
                                           <Insets />
                                        </VBox.margin>
                                        <children>
-                                          <ListView fx:id="lvTargetPresets" prefHeight="210.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+                                          <ListView fx:id="lvTargetPresets" accessibleText="Target Slider Presets" prefHeight="210.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
                                              <HBox.margin>
                                                 <Insets right="5.0" />
                                              </HBox.margin>

@@ -51,7 +51,8 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | Existing Project contracts | `ProjectSession*Test`, `ProjectTest`, `ProjectPersistenceCompatibilityTest` unchanged and required by the script |
 
 The required suites the script asserts (report present, at least one test, zero failures/errors):
-`Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxmlGraphLoadingTest`, `FilteredTableAdapterTest`,
+`Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxmlGraphLoadingTest`, `LauncherTest`,
+`WindowsAppImageGateTest`, `FilteredTableAdapterTest`,
 `DialogGraphicsTest`, `FilteredViewTest`, `VisibleScopeCommandsTest`, `ProjectSessionTest`,
 `ProjectSessionOpenTest`, `ProjectSessionSaveTest`, `ProjectSessionImportTest`, `ProjectSessionSliderChoiceTest`,
 `ProjectTest`, `ProjectPersistenceCompatibilityTest`.
@@ -122,8 +123,10 @@ scope, and checks the packaged artifact, so a direct `mvnw verify` is a develope
 - `dependency-tree.txt` — the resolved dependency graph (shows the JavaFX `win` classifier).
 - `test-classpath.txt` / `test-classpath-sha256.txt` — every resolved jar on the test classpath and its SHA-256.
 
-ADR-0001's "preserving Java 8" clause predates the modernization and is marked superseded by ADR-0002, which
-governs the Project seam; the `--release 25` target here is consistent with the current ADRs.
+ADR-0003 records the Java 25 baseline and supersedes only ADR-0001's "preserving Java 8" clause; the
+`--release 25` target here is that decision. The packaging checkpoint that builds and smoke-tests the Windows
+app-image on top of this gate is described in [windows-app-image.md](windows-app-image.md); since #97 the jar
+plugin writes the artifact into `target/app-image-input/` (beside `lib/`), which is where this script verifies it.
 
 ## Updating a pin
 

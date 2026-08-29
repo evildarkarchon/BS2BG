@@ -24,7 +24,7 @@ public class PopupAboutController extends CustomController {
 	
 	@Override
 	protected void onPostInit() {
-		lblVersion.setText("v" + main.versionMajor + "." + main.versionMiddle + "." + main.versionMinor);
+		lblVersion.setText("v" + Main.APP_VERSION);
 		taDescription.setText("A tool for generating RaceMenu BodyGen templates and morphs INI from BodySlide XMLs.");
 	}
 }

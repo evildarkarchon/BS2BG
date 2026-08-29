@@ -34,9 +34,12 @@ public class Main extends Application {
 		- Table's search text by key press will now use the leftmost column instead of always by Name.
 		- Clear templates text area when toggling redundant sliders.
 	*/
-	public int versionMajor = 1;
-	public int versionMiddle = 1;
-	public int versionMinor = 2;
+	/**
+	 * The one application version string (MAJOR.MIDDLE.MINOR). jpackage stamps it on the Windows app-image
+	 * ({@code --app-version}, fed from the {@code bs2bg.app.version} pom property that WindowsAppImageGateTest
+	 * checks against this constant), and the About dialog renders it.
+	 */
+	public static final String APP_VERSION = "1.1.2";
 	
 	public final double decorWidth = 30;
 	public final double decorHeight = 40;

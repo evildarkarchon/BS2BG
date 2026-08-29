@@ -1,0 +1,697 @@
+#Requires -Version 7.0
+<#
+.SYNOPSIS
+    Drives the packaged BS2BG launcher through the representative Project, Templates, and Morphs workflows from a
+    clean extracted image and proves that it exits cleanly (issue #97).
+
+.DESCRIPTION
+    The archive produced by tools/java25/package-java25.ps1 is extracted to a fresh location and its launcher is
+    started from an empty working directory with every host-Java discovery path removed from the environment
+    (JAVA_HOME, *_JAVA_OPTIONS, and any Java-looking PATH entry), so the run can only succeed on the bundled runtime.
+    The jpackage Windows launcher re-launches itself as a child process that hosts the JVM; the harness follows that
+    child, verifies that jvm.dll was loaded from the extracted image, and then drives the application through
+    Windows UI Automation exactly as an assistive technology would:
+
+      - controls are located by accessible role (Button, MenuItem, List, ListItem, Edit, CheckBox, TabItem, ...),
+        by accessible name (the visible text, or the accessible name the FXML declares for the Project collections),
+        by Project-domain identity (Slider Preset, Custom Morph Target, and NPC editor-id names from the fixture),
+        and by semantic relationships in the accessibility tree (the field that follows the "Custom Target:" label,
+        the output area that precedes the "Omit Redundant Sliders" option, the "Add" button that follows the field);
+      - nothing is located by screen coordinates, row index, generated automation id, CSS, or JavaFX internals;
+      - native file dialogs owned by the JavaFX window are reached by their title and driven by role and name.
+
+    Workflow: open the checked-in representative Project, generate Templates output, load its Custom Morph Target
+    and NPC Morph Assignment content, create a new Custom Morph Target and assign every Slider Preset to it,
+    generate Morphs output, Save As a new Project file, start a New Project and reopen the saved file, then close
+    the window and require both launcher processes to exit with code 0 within a bounded timeout.
+
+    Every step is recorded with its duration and observations in the evidence file; the first failure captures the
+    UIA tree, the window list, a screenshot, and the process output before the launcher is terminated.
+
+.PARAMETER ArchivePath
+    The BS2BG-<version>-windows-x64.zip produced by the packaging script.
+.PARAMETER FixtureProject
+    A checked-in .jbs2bg Project to open (test-resources/projects/legacy-project-semantics.jbs2bg).
+.PARAMETER EvidencePath
+    Where to write the JSON evidence; diagnostics go to a smoke-diagnostics/ directory beside it.
+.PARAMETER ExpectedAppVersion
+    The version jpackage stamped; recorded and cross-checked against the launcher configuration.
+.PARAMETER WorkRoot
+    Clean directory that receives the extracted image and the working directory; a fresh %TEMP% path by default.
+.PARAMETER KeepWorkRoot
+    Leave the extracted image and working directory in place after the run (for inspection).
+#>
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)] [string]$ArchivePath,
+    [string]$LauncherName = 'BS2BG',
+    [Parameter(Mandatory)] [string]$FixtureProject,
+    [Parameter(Mandatory)] [string]$EvidencePath,
+    [string]$ExpectedAppVersion = '',
+    [string]$WorkRoot = (Join-Path $env:TEMP ("BS2BG-smoke-" + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))),
+    [int]$StartupTimeoutSeconds = 90,
+    [int]$StepTimeoutSeconds = 30,
+    [int]$ExitTimeoutSeconds = 30,
+    [switch]$KeepWorkRoot
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+Import-Module (Join-Path $PSScriptRoot 'WindowsAppImage.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'UiaAutomation.psm1') -Force
+
+# Application vocabulary the locators rely on: window titles derive from the application name, and the Project
+# collections carry the accessible names declared in main.fxml (CONTEXT.md terms).
+$applicationTitle = 'jBS2BG'
+$openDialogTitle = 'Open jBS2BG File'
+$saveDialogTitle = 'Save jBS2BG File'
+$sliderPresetsList = 'Slider Presets'
+$customTargetsList = 'Custom Morph Targets'
+$targetPresetsList = 'Target Slider Presets'
+$npcTable = 'NPC Morph Assignments'
+
+# Fixture identities (test-resources/projects/legacy-project-semantics.jbs2bg).
+$fixturePresets = @('CBBE Curvy', 'UUNP Athletic')
+$fixtureCustomTarget = 'All|Female'
+$fixtureNpcEditorId = 'HousecarlWhiterun'
+$fixtureNpcMod = 'Skyrim.esm'
+$newCustomTarget = 'All|Female|NordRace'
+$openedProjectName = 'representative.jbs2bg'
+$savedProjectName = 'smoke-output.jbs2bg'
+
+$evidenceDir = Split-Path -Parent $EvidencePath
+$diagnosticsDir = Join-Path $evidenceDir 'smoke-diagnostics'
+New-Item -ItemType Directory -Path $diagnosticsDir -Force | Out-Null
+Get-ChildItem -LiteralPath $diagnosticsDir -File | Remove-Item -Force
+
+$startedAt = [DateTimeOffset]::UtcNow
+$steps = New-Object System.Collections.Generic.List[object]
+$observations = [ordered]@{}
+$script:launcher = $null
+$script:app = $null
+$script:stdoutTasks = New-Object System.Collections.Generic.List[object]
+$script:stderrTasks = New-Object System.Collections.Generic.List[object]
+$script:lifecycles = New-Object System.Collections.Generic.List[object]
+$script:mainWindow = $null
+$imageRoot = Join-Path $WorkRoot 'image'
+$workDir = Join-Path $WorkRoot 'work'
+
+<#
+.SYNOPSIS
+    Prints one indented "[smoke]" progress line (the packaging script's banner style is reserved for its own steps).
+#>
+function Write-Step {
+    param([string]$Message)
+    Write-Host "  [smoke] $Message"
+}
+
+<#
+.SYNOPSIS
+    Runs one named workflow step, records its outcome and duration, and rethrows after capturing diagnostics.
+#>
+function Invoke-Step {
+    param([Parameter(Mandatory)] [string]$Name, [Parameter(Mandatory)] [scriptblock]$Action)
+    Write-Step "step: $Name"
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        $detail = & $Action
+        $steps.Add([ordered]@{ name = $Name; passed = $true; seconds = [math]::Round($stopwatch.Elapsed.TotalSeconds, 2); detail = $detail })
+        Write-Step "  ok ($([math]::Round($stopwatch.Elapsed.TotalSeconds, 1)) s)"
+    }
+    catch {
+        $steps.Add([ordered]@{ name = $Name; passed = $false; seconds = [math]::Round($stopwatch.Elapsed.TotalSeconds, 2); error = $_.Exception.Message })
+        Write-Host "  [smoke]   FAILED: $($_.Exception.Message)" -ForegroundColor Red
+        Save-FailureDiagnostics -StepName $Name
+        throw
+    }
+}
+
+<#
+.SYNOPSIS
+    Captures the UIA tree, the process's windows, and a screenshot when a step fails.
+#>
+function Save-FailureDiagnostics {
+    param([string]$StepName)
+    $safe = $StepName -replace '[^A-Za-z0-9-]', '_'
+    try {
+        if ($script:app -and -not $script:app.HasExited) {
+            Get-ProcessTopLevelWindows -ProcessId $script:app.Id | ForEach-Object { "$($_.className) visible=$($_.visible) title='$($_.title)'" } |
+                Set-Content -LiteralPath (Join-Path $diagnosticsDir "failure-$safe-windows.txt") -Encoding utf8
+            # Every visible window of the process, dialogs included, so a locator failure can be diagnosed offline.
+            $index = 0
+            foreach ($window in (Get-ProcessTopLevelWindows -ProcessId $script:app.Id | Where-Object { $_.visible })) {
+                $index++
+                try {
+                    Get-UiaTree -Element ([System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]$window.handle)) |
+                        Set-Content -LiteralPath (Join-Path $diagnosticsDir "failure-$safe-uia-tree-$index.txt") -Encoding utf8
+                }
+                catch {
+                    # A window that vanished between enumeration and dump is not worth failing the diagnostics over.
+                }
+            }
+        }
+    }
+    catch {
+        # Diagnostics are best effort; the original step failure is what gets reported.
+    }
+    Save-Screenshot -Path (Join-Path $diagnosticsDir "failure-$safe.png")
+}
+
+<#
+.SYNOPSIS
+    Best-effort screenshot of the virtual screen (System.Drawing is available on Windows PowerShell 7).
+#>
+function Save-Screenshot {
+    param([string]$Path)
+    try {
+        Add-Type -AssemblyName System.Drawing
+        Add-Type -AssemblyName System.Windows.Forms
+        $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size)
+            $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+        }
+        finally {
+            $graphics.Dispose()
+            $bitmap.Dispose()
+        }
+    }
+    catch {
+        # A headless or locked session cannot capture the screen; the textual diagnostics still stand.
+    }
+}
+
+<#
+.SYNOPSIS
+    Waits for the application's main window with the given exact title.
+#>
+function Wait-MainWindow {
+    param([string]$Title, [int]$TimeoutSeconds = $StepTimeoutSeconds)
+    $script:mainWindow = Wait-UiaWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $TimeoutSeconds
+    return $script:mainWindow
+}
+
+<#
+.SYNOPSIS
+    Triggers a File-menu command through the accelerator the application declares for it.
+.NOTES
+    A UIA Invoke of a JavaFX menu item runs the command inside the UIA callback on the application thread, and
+    the modal FileChooser it opens then cannot be automated by any client until it closes (see Invoke-UiaElement).
+    The accelerators are the ones MainController.setupKeyCombinations binds: New Ctrl+N, Open Ctrl+O,
+    Save As Ctrl+Alt+S. The menu items themselves are still verified to exist by role and name.
+#>
+function Send-FileCommand {
+    param([string]$Item, [string]$DialogTitle = '')
+    $accelerators = @{ 'New' = '^n'; 'Open…' = '^o'; 'Save As…' = '^%s' }
+    if (-not $accelerators.ContainsKey($Item)) { throw "No accelerator is known for File > $Item" }
+    $fileMenu = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'MenuItem' -Name 'File') -Description "'File' menu" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $fileMenu
+    Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'MenuItem' -Name $Item) -Description "'$Item' item of the 'File' menu" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+    # Close the menu again before sending the accelerator so the key sequence reaches the scene, not the popup.
+    Send-UiaAccelerator -Window $script:mainWindow -Keys '{ESC}'
+    Send-UiaAccelerator -Window $script:mainWindow -Keys $accelerators[$Item]
+    if ($DialogTitle) {
+        # A keystroke can be lost if the foreground changes at the wrong moment; one bounded re-send is allowed,
+        # and the dialog's absence after that is a real failure that the caller's wait reports.
+        try {
+            Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $DialogTitle -TimeoutSeconds 8 | Out-Null
+        }
+        catch {
+            Write-Step "  '$DialogTitle' did not appear within 8 s; re-sending the accelerator once"
+            Send-UiaAccelerator -Window $script:mainWindow -Keys $accelerators[$Item]
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    Completes a native file dialog owned by the application: types the full path into "File name:" and confirms.
+#>
+function Complete-FileDialog {
+    param([string]$Title, [string]$Path, [string]$ConfirmButton)
+    $dialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $StepTimeoutSeconds
+    $fileName = Wait-UiaElement -Root $dialog -Condition (New-UiaCondition -ControlType 'Edit' -Name 'File name:') -Description "'File name:' field of '$Title'" -TimeoutSeconds $StepTimeoutSeconds
+    Set-UiaValue -Element $fileName -Value $Path
+    # The common dialog's Open/Save control is a Win32 split button; UIA's legacy proxy exposes it as a Pane
+    # without patterns (older proxies: Button or SplitButton). It is located by name in any of those roles and
+    # activated through Invoke when offered, otherwise through the button's own window handle.
+    $confirmRole = New-Object System.Windows.Automation.OrCondition(@(
+        (New-UiaCondition -ControlType 'Pane' -Name $ConfirmButton),
+        (New-UiaCondition -ControlType 'SplitButton' -Name $ConfirmButton),
+        (New-UiaCondition -ControlType 'Button' -Name $ConfirmButton)))
+    $confirm = Wait-UiaElement -Root $dialog -Condition $confirmRole -Description "'$ConfirmButton' control of '$Title'" -TimeoutSeconds $StepTimeoutSeconds
+    $invoke = $null
+    if ($confirm.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$invoke)) {
+        $invoke.Invoke()
+    }
+    else {
+        Invoke-UiaNativeButton -Element $confirm
+    }
+}
+
+<#
+.SYNOPSIS
+    Names of the items currently exposed by the list with the given accessible name.
+#>
+function Get-ListItemNames {
+    param([string]$ListName)
+    $list = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'List' -Name $ListName) -Description "'$ListName' list" -TimeoutSeconds $StepTimeoutSeconds
+    return @(Find-UiaElements -Root $list -Condition (New-UiaCondition -ControlType 'ListItem') | ForEach-Object { $_.Current.Name })
+}
+
+<#
+.SYNOPSIS
+    Waits until the named list exposes every expected item.
+#>
+function Wait-ListItems {
+    param([string]$ListName, [string[]]$Expected)
+    return Wait-UiaCondition -Description "'$ListName' to list $($Expected -join ', ')" -TimeoutSeconds $StepTimeoutSeconds -Test {
+        $names = Get-ListItemNames -ListName $ListName
+        $missing = @($Expected | Where-Object { $names -cnotcontains $_ })
+        if ($missing.Count -eq 0) { , $names }
+    }
+}
+
+<#
+.SYNOPSIS
+    Selects the named item in the named list.
+#>
+function Select-ListItem {
+    param([string]$ListName, [string]$ItemName)
+    $list = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'List' -Name $ListName) -Description "'$ListName' list" -TimeoutSeconds $StepTimeoutSeconds
+    $item = Wait-UiaElement -Root $list -Condition (New-UiaCondition -ControlType 'ListItem' -Name $ItemName) -Description "'$ItemName' in '$ListName'" -TimeoutSeconds $StepTimeoutSeconds
+    Select-UiaElement -Element $item
+}
+
+<#
+.SYNOPSIS
+    Finds a control by role and name and returns its outermost element.
+.NOTES
+    JavaFX exposes a Labeled control as an element with an identically named inner text element, and a
+    descendant search may return the inner one, which has no siblings. Climbing to the outermost element with
+    the same role and name makes sibling relationships (label -> field, label -> counter) reliable.
+#>
+function Find-OuterControl {
+    param([string]$ControlType, [string]$Name)
+    $element = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType $ControlType -Name $Name) -Description "'$Name' $ControlType" -TimeoutSeconds $StepTimeoutSeconds
+    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    while ($true) {
+        $parent = $walker.GetParent($element)
+        if ($null -eq $parent -or $parent.Current.Name -cne $Name -or $parent.Current.ControlType -ne $element.Current.ControlType) { return $element }
+        $element = $parent
+    }
+}
+
+<#
+.SYNOPSIS
+    The nearest preceding sibling of the given control type (e.g. the output area before an option checkbox).
+#>
+function Get-PrecedingControl {
+    param($Element, [string]$ControlType, [int]$MaxHops = 6)
+    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    $visited = @()
+    $current = $walker.GetPreviousSibling($Element)
+    for ($hop = 0; $hop -lt $MaxHops -and $null -ne $current; $hop++) {
+        $type = Get-UiaRoleName -Element $current
+        $visited += "$type '$($current.Current.Name)'"
+        if ($type -eq $ControlType) { return $current }
+        $current = $walker.GetPreviousSibling($current)
+    }
+    throw "No $ControlType precedes '$($Element.Current.Name)' within $MaxHops siblings (parent: $(Get-ParentDescription $Element); walked: $($visited -join ' <- '))."
+}
+
+<#
+.SYNOPSIS
+    "Role 'Name'" of an element's control-view parent, for relationship failure messages.
+#>
+function Get-ParentDescription {
+    param($Element)
+    $parent = [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($Element)
+    if ($null -eq $parent) { return '<none>' }
+    return "$(Get-UiaRoleName -Element $parent) '$($parent.Current.Name)'"
+}
+
+<#
+.SYNOPSIS
+    The nearest following sibling with the given control type and, optionally, name.
+#>
+function Get-FollowingControl {
+    param($Element, [string]$ControlType, [string]$Name = $null, [int]$MaxHops = 6)
+    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    $visited = @()
+    $current = $walker.GetNextSibling($Element)
+    for ($hop = 0; $hop -lt $MaxHops -and $null -ne $current; $hop++) {
+        $type = Get-UiaRoleName -Element $current
+        $visited += "$type '$($current.Current.Name)'"
+        # A [string] parameter turns $null into '', so "any name" is the empty string here.
+        if ($type -eq $ControlType -and ([string]::IsNullOrEmpty($Name) -or $current.Current.Name -ceq $Name)) { return $current }
+        $current = $walker.GetNextSibling($current)
+    }
+    throw "No $ControlType$(if (-not [string]::IsNullOrEmpty($Name)) { " '$Name'" }) follows '$($Element.Current.Name)' within $MaxHops siblings (parent: $(Get-ParentDescription $Element); walked: $($visited -join ' -> '))."
+}
+
+<#
+.SYNOPSIS
+    Polls a text control until its value satisfies the predicate; returns the text.
+#>
+function Wait-Text {
+    param($Element, [scriptblock]$Predicate, [string]$Description)
+    return Wait-UiaCondition -Description $Description -TimeoutSeconds $StepTimeoutSeconds -Test {
+        $text = Get-UiaText -Element $Element
+        if (& $Predicate $text) { $text }
+    }
+}
+
+<#
+.SYNOPSIS
+    Flattens generated output to one line (newlines become " | ") and truncates it for the evidence and log lines.
+#>
+function Get-Excerpt {
+    param([string]$Text, [int]$MaxChars = 400)
+    $flat = $Text -replace "`r?`n", ' | '
+    if ($flat.Length -le $MaxChars) { return $flat }
+    return $flat.Substring(0, $MaxChars) + '...'
+}
+
+<#
+.SYNOPSIS
+    Asserts that the NPC Morph Assignment table exposes the fixture NPC by editor id and mod name.
+#>
+function Assert-NpcRow {
+    $table = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'Table' -Name $npcTable) -Description "'$npcTable' table" -TimeoutSeconds $StepTimeoutSeconds
+    $editorIdCell = Wait-UiaElement -Root $table -Condition (New-UiaCondition -Name $fixtureNpcEditorId) -Description "NPC '$fixtureNpcEditorId' in '$npcTable'" -TimeoutSeconds $StepTimeoutSeconds
+    $row = Get-UiaParent -Element $editorIdCell
+    $modCell = Find-UiaElement -Root $row -Condition (New-UiaCondition -Name $fixtureNpcMod)
+    if ($null -eq $modCell) {
+        # Some toolkits expose cells flat under the table; the mod name must then at least be a table descendant.
+        $modCell = Find-UiaElement -Root $table -Condition (New-UiaCondition -Name $fixtureNpcMod)
+    }
+    if ($null -eq $modCell) { throw "NPC row for '$fixtureNpcEditorId' does not expose its mod '$fixtureNpcMod'." }
+    return "row exposes '$fixtureNpcEditorId' ($($editorIdCell.Current.ControlType.ProgrammaticName)) and '$fixtureNpcMod'"
+}
+
+$passed = $false
+try {
+
+Invoke-Step -Name 'extract-clean-image' -Action {
+    if (-not (Test-Path -LiteralPath $ArchivePath)) { throw "Archive not found: $ArchivePath" }
+    if (Test-Path -LiteralPath $WorkRoot) { Remove-Item -LiteralPath $WorkRoot -Recurse -Force }
+    New-Item -ItemType Directory -Path $imageRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+    Expand-Archive -LiteralPath $ArchivePath -DestinationPath $imageRoot -Force
+    $launcherPath = Join-Path (Join-Path $imageRoot $LauncherName) "$LauncherName.exe"
+    if (-not (Test-Path -LiteralPath $launcherPath)) { throw "Extracted archive has no $LauncherName\$LauncherName.exe under $imageRoot" }
+    $config = Read-LauncherConfig -Path (Join-Path (Join-Path $imageRoot $LauncherName) "app\$LauncherName.cfg")
+    $javaOptions = @()
+    if ($config.Contains('JavaOptions') -and $config['JavaOptions'].Contains('java-options')) { $javaOptions = @($config['JavaOptions']['java-options']) }
+    if ($ExpectedAppVersion -and ($javaOptions -cnotcontains "-Djpackage.app-version=$ExpectedAppVersion")) {
+        throw "Extracted launcher configuration does not stamp app version $ExpectedAppVersion."
+    }
+    Copy-Item -LiteralPath $FixtureProject -Destination (Join-Path $workDir $openedProjectName)
+    $observations['extractedImage'] = Join-Path $imageRoot $LauncherName
+    $observations['launcher'] = $launcherPath
+    $observations['launcherSha256'] = (Get-FileHash -LiteralPath $launcherPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $observations['workingDirectory'] = $workDir
+    $observations['archiveSha256'] = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    "extracted $ArchivePath to $imageRoot; working directory $workDir holds only $openedProjectName"
+}
+
+<#
+.SYNOPSIS
+    Starts the packaged launcher from the extracted image with a scrubbed environment and waits for its window.
+.OUTPUTS
+    A summary string; sets $script:launcher / $script:app and records the lifecycle under the given observation key.
+.NOTES
+    Used twice: for the initial run and for the relaunch that reopens the saved Project in a fresh process.
+#>
+function Start-PackagedApplication {
+    param([string]$ObservationKey)
+    $scrubbed = Get-ScrubbedEnvironment -Environment ([System.Environment]::GetEnvironmentVariables())
+    if (-not $observations.Contains('environment')) {
+        $observations['environment'] = [ordered]@{
+            removedVariables   = $scrubbed.RemovedVariables
+            removedPathEntries = $scrubbed.RemovedPathEntries
+            # The remaining PATH is a host detail, not evidence; only its size is recorded.
+            keptPathEntryCount = @($scrubbed.Variables['PATH'].Split(';', [System.StringSplitOptions]::RemoveEmptyEntries)).Count
+        }
+    }
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $observations['launcher']
+    $startInfo.WorkingDirectory = $workDir
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.Environment.Clear()
+    foreach ($name in $scrubbed.Variables.Keys) { $startInfo.Environment[$name] = "$($scrubbed.Variables[$name])" }
+    $script:launcher = [System.Diagnostics.Process]::Start($startInfo)
+    $script:stdoutTasks.Add($script:launcher.StandardOutput.ReadToEndAsync())
+    $script:stderrTasks.Add($script:launcher.StandardError.ReadToEndAsync())
+    $launchedAt = [DateTimeOffset]::UtcNow
+
+    # The Windows launcher re-launches itself; the child is the process that hosts the JVM and owns the windows.
+    $script:app = Wait-UiaCondition -Description "the JVM-hosting child of launcher pid $($script:launcher.Id)" -TimeoutSeconds $StartupTimeoutSeconds -Test {
+        if ($script:launcher.HasExited) { throw "The launcher exited early with code $($script:launcher.ExitCode) before showing a window.`n$($script:stderrTasks[-1].Result)" }
+        $child = Get-CimInstance Win32_Process -Filter "ParentProcessId = $($script:launcher.Id)" | Select-Object -First 1
+        if ($child) { [System.Diagnostics.Process]::GetProcessById($child.ProcessId) }
+    }
+    Wait-MainWindow -Title $applicationTitle -TimeoutSeconds $StartupTimeoutSeconds | Out-Null
+    $windowAt = [DateTimeOffset]::UtcNow
+
+    $imageDir = $observations['extractedImage']
+    $runtimeModules = @()
+    foreach ($module in $script:app.Modules) {
+        if ($module.ModuleName -match '^(jvm|java|jli|jimage|glass|prism_d3d|prism_sw|javafx_font)\.dll$') {
+            $runtimeModules += [ordered]@{ module = $module.ModuleName; path = $module.FileName }
+        }
+    }
+    $jvm = @($runtimeModules | Where-Object { $_.module -eq 'jvm.dll' })
+    if ($jvm.Count -ne 1) { throw "jvm.dll is not loaded in the application process (found: $(($runtimeModules | ForEach-Object { $_.module }) -join ', '))." }
+    $outside = @($runtimeModules | Where-Object { -not $_.path.StartsWith($imageDir, [System.StringComparison]::OrdinalIgnoreCase) })
+    if ($outside.Count -gt 0) { throw "Runtime libraries were loaded from outside the extracted image: $(($outside | ForEach-Object { $_.path }) -join ', ')" }
+    $settings = @(Get-ChildItem -LiteralPath $workDir -File | Where-Object { $_.Name -like 'settings*.json' } | ForEach-Object { $_.Name })
+    $observations[$ObservationKey] = [ordered]@{
+        launcherPid          = $script:launcher.Id
+        applicationPid       = $script:app.Id
+        applicationExe       = $script:app.MainModule.FileName
+        startupSeconds       = [math]::Round(($windowAt - $launchedAt).TotalSeconds, 2)
+        runtimeModules       = $runtimeModules
+        settingsFilesCreated = $settings
+    }
+    return "launcher pid $($script:launcher.Id) -> application pid $($script:app.Id); jvm.dll from $($jvm[0].path); window '$applicationTitle' after $([math]::Round(($windowAt - $launchedAt).TotalSeconds, 1)) s; settings present: $($settings -join ', ')"
+}
+
+<#
+.SYNOPSIS
+    Closes the main window through its Window pattern and requires both launcher processes to exit with code 0.
+.OUTPUTS
+    A summary string; records the exit under the given observation key and appends it to the lifecycle list.
+#>
+function Stop-PackagedApplication {
+    param([string]$ObservationKey)
+    $closeRequestedAt = [DateTimeOffset]::UtcNow
+    Close-UiaWindow -Window $script:mainWindow
+    $appExited = $script:app.WaitForExit($ExitTimeoutSeconds * 1000)
+    $launcherExited = $script:launcher.WaitForExit($ExitTimeoutSeconds * 1000)
+    $exitedAt = [DateTimeOffset]::UtcNow
+    if (-not $appExited -or -not $launcherExited) {
+        throw "The packaged process did not exit within $ExitTimeoutSeconds s after the close request (application exited: $appExited, launcher exited: $launcherExited)."
+    }
+    $exitCode = $script:launcher.ExitCode
+    if ($exitCode -ne 0) { throw "The packaged launcher exited with code $exitCode; expected 0." }
+    $leftovers = @(Get-Process -Name $LauncherName -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($observations['extractedImage'], [System.StringComparison]::OrdinalIgnoreCase) })
+    if ($leftovers.Count -gt 0) { throw "Processes from the extracted image are still running: $(($leftovers | ForEach-Object { $_.Id }) -join ', ')" }
+    $exit = [ordered]@{
+        launcherPid         = $script:launcher.Id
+        applicationPid      = $script:app.Id
+        closeRequestedAtUtc = $closeRequestedAt.ToString('o')
+        exitCode            = $exitCode
+        exitWaitSeconds     = [math]::Round(($exitedAt - $closeRequestedAt).TotalSeconds, 2)
+        boundedBySeconds    = $ExitTimeoutSeconds
+    }
+    $observations[$ObservationKey] = $exit
+    $script:lifecycles.Add($exit)
+    return "exit code $exitCode after $([math]::Round(($exitedAt - $closeRequestedAt).TotalSeconds, 2)) s (bound $ExitTimeoutSeconds s)"
+}
+
+Invoke-Step -Name 'launch-packaged-launcher-without-system-java' -Action {
+    Start-PackagedApplication -ObservationKey 'process'
+}
+
+Invoke-Step -Name 'open-representative-project' -Action {
+    Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+    Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $openedProjectName) -ConfirmButton 'Open'
+    Wait-MainWindow -Title "$applicationTitle - $openedProjectName" | Out-Null
+    $presets = Wait-ListItems -ListName $sliderPresetsList -Expected $fixturePresets
+    $observations['openedProject'] = [ordered]@{ file = $openedProjectName; sliderPresets = $presets }
+    "title '$applicationTitle - $openedProjectName'; $sliderPresetsList lists $($presets -join ', ')"
+}
+
+Invoke-Step -Name 'generate-templates-output' -Action {
+    $option = Find-OuterControl -ControlType 'CheckBox' -Name 'Omit Redundant Sliders'
+    # The generated Templates output is the text area that immediately precedes the option that controls it.
+    $output = Get-PrecedingControl -Element $option -ControlType 'Edit'
+    $before = Get-UiaText -Element $output
+    if ($before.Trim()) { throw "Templates output is not empty before generation: $(Get-Excerpt $before)" }
+    $generate = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'Button' -Name 'Generate Templates') -Description "'Generate Templates' button" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $generate
+    $text = Wait-Text -Element $output -Description 'Templates output to name every Slider Preset' -Predicate { param($t) @($fixturePresets | Where-Object { $t -notmatch [regex]::Escape("$_=") }).Count -eq 0 }
+    $observations['templatesOutput'] = [ordered]@{ length = $text.Length; lines = @($text -split "`r?`n").Count; excerpt = Get-Excerpt $text }
+    "Templates output: $($text.Length) chars, $(@($text -split "`r?`n").Count) lines: $(Get-Excerpt $text 160)"
+}
+
+Invoke-Step -Name 'load-representative-morph-content' -Action {
+    $tab = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') -Description "'Morphs' tab" -TimeoutSeconds $StepTimeoutSeconds
+    Select-UiaElement -Element $tab
+    $targets = Wait-ListItems -ListName $customTargetsList -Expected @($fixtureCustomTarget)
+    $npc = Assert-NpcRow
+    $observations['loadedMorphContent'] = [ordered]@{ customMorphTargets = $targets; npcMorphAssignment = "$fixtureNpcMod / $fixtureNpcEditorId" }
+    "$customTargetsList lists $($targets -join ', '); $npc"
+}
+
+Invoke-Step -Name 'create-custom-morph-target' -Action {
+    $label = Find-OuterControl -ControlType 'Text' -Name 'Custom Target:'
+    # The Custom Target field is the edit that follows its label; the Add button is the button that follows the field.
+    $field = Get-FollowingControl -Element $label -ControlType 'Edit'
+    Set-UiaValue -Element $field -Value $newCustomTarget
+    $add = Get-FollowingControl -Element $field -ControlType 'Button' -Name 'Add'
+    Invoke-UiaElement -Element $add
+    $targets = Wait-ListItems -ListName $customTargetsList -Expected @($fixtureCustomTarget, $newCustomTarget)
+    Wait-MainWindow -Title "$applicationTitle - *$openedProjectName" | Out-Null
+    $observations['createdCustomMorphTarget'] = $newCustomTarget
+    "$customTargetsList lists $($targets -join ', '); title shows the unsaved marker"
+}
+
+Invoke-Step -Name 'assign-slider-presets-to-target' -Action {
+    Select-ListItem -ListName $customTargetsList -ItemName $newCustomTarget
+    $addAll = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'Button' -Name 'Add All') -Description "'Add All' button" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $addAll
+    $assigned = Wait-ListItems -ListName $targetPresetsList -Expected $fixturePresets
+    $countLabel = Find-OuterControl -ControlType 'Text' -Name 'Count:'
+    $counter = Get-FollowingControl -Element $countLabel -ControlType 'Text'
+    $count = Wait-Text -Element $counter -Description "the preset counter to read $($fixturePresets.Count)" -Predicate { param($t) $t.Trim() -eq "$($fixturePresets.Count)" }
+    $observations['assignedSliderPresets'] = [ordered]@{ target = $newCustomTarget; presets = $assigned; count = $count.Trim() }
+    "'$newCustomTarget' has $($count.Trim()) Slider Presets: $($assigned -join ', ')"
+}
+
+Invoke-Step -Name 'generate-morphs-output' -Action {
+    $copy = Find-OuterControl -ControlType 'Button' -Name 'Copy'
+    # The generated Morphs output is the text area that precedes the Copy / Generate Morphs buttons acting on it.
+    $output = Get-PrecedingControl -Element $copy -ControlType 'Edit'
+    $generate = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'Button' -Name 'Generate Morphs') -Description "'Generate Morphs' button" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $generate
+    $text = Wait-Text -Element $output -Description 'Morphs output to name the Custom Morph Targets and the NPC' -Predicate {
+        param($t)
+        $t.Contains("$newCustomTarget=") -and $t.Contains("$fixtureCustomTarget=") -and $t.Contains("$fixtureNpcMod|")
+    }
+    $observations['morphsOutput'] = [ordered]@{ length = $text.Length; lines = @($text -split "`r?`n").Count; excerpt = Get-Excerpt $text }
+    "Morphs output: $($text.Length) chars, $(@($text -split "`r?`n").Count) lines: $(Get-Excerpt $text 160)"
+}
+
+Invoke-Step -Name 'save-project-as' -Action {
+    $savedPath = Join-Path $workDir $savedProjectName
+    Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
+    Complete-FileDialog -Title $saveDialogTitle -Path $savedPath -ConfirmButton 'Save'
+    Wait-MainWindow -Title "$applicationTitle - $savedProjectName" | Out-Null
+    if (-not (Test-Path -LiteralPath $savedPath)) { throw "Saved Project file not found: $savedPath" }
+    $json = Get-Content -LiteralPath $savedPath -Raw | ConvertFrom-Json
+    $savedTargets = @($json.CustomMorphTargets.PSObject.Properties.Name)
+    if ($savedTargets -cnotcontains $newCustomTarget) { throw "Saved Project lacks Custom Morph Target '$newCustomTarget' (has: $($savedTargets -join ', '))." }
+    $savedPresets = @($json.CustomMorphTargets.$newCustomTarget.SliderPresets)
+    if ($savedPresets.Count -ne $fixturePresets.Count) { throw "Saved '$newCustomTarget' has $($savedPresets.Count) Slider Presets, expected $($fixturePresets.Count)." }
+    $savedNpcs = @($json.MorphedNPCs.PSObject.Properties.Value | ForEach-Object { "$($_.Mod) / $($_.EditorId)" })
+    $observations['savedProject'] = [ordered]@{
+        file               = $savedProjectName
+        sha256             = (Get-FileHash -LiteralPath $savedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        customMorphTargets = $savedTargets
+        npcMorphAssignments= $savedNpcs
+    }
+    "saved $savedProjectName (title clean); Custom Morph Targets $($savedTargets -join ', '); NPCs $($savedNpcs -join ', ')"
+}
+
+Invoke-Step -Name 'exit-after-save' -Action {
+    Stop-PackagedApplication -ObservationKey 'exitAfterSave'
+}
+
+Invoke-Step -Name 'relaunch-and-reopen-saved-project' -Action {
+    # Reopening in a fresh process proves the saved Project survives a complete exit/relaunch of the packaged
+    # executable. (It also sidesteps a JavaFX accessibility quirk: a ListView emptied by New and refilled by Open
+    # within one process no longer publishes its cells to UI Automation although it renders them.)
+    $launch = Start-PackagedApplication -ObservationKey 'relaunch'
+    Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+    Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $savedProjectName) -ConfirmButton 'Open'
+    Wait-MainWindow -Title "$applicationTitle - $savedProjectName" | Out-Null
+    $presets = Wait-ListItems -ListName $sliderPresetsList -Expected $fixturePresets
+    $tab = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') -Description "'Morphs' tab" -TimeoutSeconds $StepTimeoutSeconds
+    Select-UiaElement -Element $tab
+    $targets = Wait-ListItems -ListName $customTargetsList -Expected @($fixtureCustomTarget, $newCustomTarget)
+    $npc = Assert-NpcRow
+    Select-ListItem -ListName $customTargetsList -ItemName $newCustomTarget
+    $assigned = Wait-ListItems -ListName $targetPresetsList -Expected $fixturePresets
+    Get-UiaTree -Element $script:mainWindow | Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-after-reopen.txt') -Encoding utf8
+    $observations['reopenedProject'] = [ordered]@{ file = $savedProjectName; sliderPresets = $presets; customMorphTargets = $targets; targetSliderPresets = $assigned }
+    "$launch; reopened ${savedProjectName}: $sliderPresetsList $($presets -join ', '); $customTargetsList $($targets -join ', '); '$newCustomTarget' -> $($assigned -join ', '); $npc"
+}
+
+Invoke-Step -Name 'close-and-exit' -Action {
+    Stop-PackagedApplication -ObservationKey 'exit'
+}
+
+$passed = $true
+
+}
+catch {
+    Write-Host "  [smoke] run failed: $($_.Exception.Message)" -ForegroundColor Red
+}
+finally {
+    $killed = @()
+    foreach ($process in @($script:app, $script:launcher)) {
+        if ($process -and -not $process.HasExited) {
+            try { $process.Kill(); $killed += $process.Id } catch { <# already gone between the check and the kill #> }
+        }
+    }
+    $stdout = ''; $stderr = ''
+    # A task faults only when the pipe was torn down by a kill; the output captured so far is still reported.
+    foreach ($task in $script:stdoutTasks) { try { $stdout += $task.Result } catch { <# see above #> } }
+    foreach ($task in $script:stderrTasks) { try { $stderr += $task.Result } catch { <# see above #> } }
+    Set-Content -LiteralPath (Join-Path $diagnosticsDir 'launcher-stdout.txt') -Value $stdout -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $diagnosticsDir 'launcher-stderr.txt') -Value $stderr -Encoding utf8
+
+    $restricted = @($stderr -split "`r?`n" | Where-Object { $_ -match 'restricted method|native access|--enable-native-access' })
+    $evidence = [ordered]@{
+        schema           = 'bs2bg.windows-app-image-smoke/1'
+        recordedAtUtc    = $startedAt.ToString('o')
+        passed           = $passed
+        expectedAppVersion = $ExpectedAppVersion
+        archive          = $ArchivePath
+        timeouts         = [ordered]@{ startupSeconds = $StartupTimeoutSeconds; stepSeconds = $StepTimeoutSeconds; exitSeconds = $ExitTimeoutSeconds }
+        steps            = $steps
+        observations     = $observations
+        process          = [ordered]@{
+            launcherPid     = $(if ($script:launcher) { $script:launcher.Id } else { $null })
+            applicationPid  = $(if ($script:app) { $script:app.Id } else { $null })
+            exitCode        = $(if ($observations.Contains('exit')) { $observations['exit'].exitCode } else { $null })
+            exitWaitSeconds = $(if ($observations.Contains('exit')) { $observations['exit'].exitWaitSeconds } else { $null })
+            lifecycles      = $script:lifecycles
+            killed          = $killed
+        }
+        diagnostics      = [ordered]@{
+            directory              = 'target/reproducibility/smoke-diagnostics/'
+            stderrLines            = @($stderr -split "`r?`n" | Where-Object { $_ }).Count
+            stderrExcerpt          = @($stderr -split "`r?`n" | Where-Object { $_ } | Select-Object -First 20)
+            nativeAccessWarnings   = $restricted
+            uiaTreeAfterReopen     = 'smoke-diagnostics/uia-tree-after-reopen.txt'
+        }
+        workRoot         = $WorkRoot
+        workRootKept     = [bool]$KeepWorkRoot
+    }
+    $evidence | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $EvidencePath -Encoding utf8
+    Write-Step "evidence written to $EvidencePath"
+    if (-not $KeepWorkRoot -and (Test-Path -LiteralPath $WorkRoot)) {
+        try { Remove-Item -LiteralPath $WorkRoot -Recurse -Force } catch { Write-Step "could not remove $WorkRoot : $($_.Exception.Message)" }
+    }
+}
+
+if ($passed) { exit 0 } else { exit 1 }
