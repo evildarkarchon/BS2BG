@@ -2,7 +2,7 @@
 
 Status: packaging checkpoint on top of the complete application gate (issue #97, parent #81). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
-starts from a clean extracted location without any system Java, completes the representative Project,
+starts from a clean extracted location without any system Java, completes the representative Project, BoS,
 Templates, and Morphs workflows through its packaged launcher, and exits cleanly. ADR-0003 records the Java 25
 baseline this checkpoint ships.
 
@@ -96,18 +96,22 @@ Workflow steps (each recorded with duration and observations in the evidence):
    the loaded runtime libraries, note the settings files the application creates in its working directory.
 3. `open-representative-project` — File › Open…, the native dialog, the file path, Open; the title becomes
    `jBS2BG - representative.jbs2bg` and `Slider Presets` lists `CBBE Curvy` and `UUNP Athletic`.
-4. `generate-templates-output` — the Templates output names every Slider Preset (`<name>=...` lines).
-5. `load-representative-morph-content` — the Morphs tab lists `All|Female` and the NPC row for
+4. `generate-preview-copy-and-export-bos-artifact` — select `CBBE Curvy`, open `View BoS JSON`, parse the
+   preview, require clipboard content to match it after normalizing Windows `CF_UNICODETEXT` CRLF line endings,
+   export through the native save dialog, and require the exported UTF-8 bytes to equal that same preview exactly
+   without a BOM or final newline.
+5. `generate-templates-output` — the Templates output names every Slider Preset (`<name>=...` lines).
+6. `load-representative-morph-content` — the Morphs tab lists `All|Female` and the NPC row for
    `Skyrim.esm / HousecarlWhiterun`.
-6. `create-custom-morph-target` — `All|Female|NordRace` is added; the title shows the unsaved marker.
-7. `assign-slider-presets-to-target` — Add All; `Target Slider Presets` lists both presets and the counter reads 2.
-8. `generate-morphs-output` — the Morphs output names both Custom Morph Targets and the NPC.
-9. `save-project-as` — File › Save As… to `smoke-output.jbs2bg`; the title is clean; the file is parsed and must
+7. `create-custom-morph-target` — `All|Female|NordRace` is added; the title shows the unsaved marker.
+8. `assign-slider-presets-to-target` — Add All; `Target Slider Presets` lists both presets and the counter reads 2.
+9. `generate-morphs-output` — the Morphs output names both Custom Morph Targets and the NPC.
+10. `save-project-as` — File › Save As… to `smoke-output.jbs2bg`; the title is clean; the file is parsed and must
    contain the new target with both presets and the NPC.
-10. `exit-after-save` — close the window; both launcher processes must exit with code 0 within the bound.
-11. `relaunch-and-reopen-saved-project` — start the launcher again from the same extracted image, open the saved
+11. `exit-after-save` — close the window; both launcher processes must exit with code 0 within the bound.
+12. `relaunch-and-reopen-saved-project` — start the launcher again from the same extracted image, open the saved
     file, and verify the Slider Presets, both Custom Morph Targets, the NPC row, and the new target's presets.
-12. `close-and-exit` — close; exit code 0 within the bound again.
+13. `close-and-exit` — close; exit code 0 within the bound again.
 
 Two behaviours of the platform shaped the harness and are worth knowing before changing it:
 
@@ -121,6 +125,9 @@ Two behaviours of the platform shaped the harness and are worth knowing before c
   is a limitation, not an equivalent: the accelerator is the app's own published binding and no locator rule is
   broken, but activation does not go through the located menu item, so a broken menu-to-command wiring would not
   be caught by this run.
+- The BoS Copy and Export buttons also enter modal loops (the application notification and the native save
+  dialog). They are located by role and accessible name, focused, verified as the focused element, and activated
+  with Enter so JavaFX is not held inside a synchronous UIA callback while the harness drives the modal window.
 - The native file dialog is owned by the JavaFX window and is listed neither by the UIA desktop root nor by
   JavaFX's own provider; it is located by title through `EnumWindows` and attached with `FromHandle`, accepting
   only a fully formed window. Its Open/Save control is exposed as a bare `Pane` without patterns, so after being
@@ -160,18 +167,30 @@ focused window.
 
 Beside it: `app-image-jdeps-output.txt`, `app-image-jlink-output.txt`, `app-image-jpackage-output.txt`
 (`--verbose`), `app-image-module-resolution.txt`, `app-image-sha256.txt`, `windows-app-image-smoke.json`, and
-`smoke-diagnostics/` (launcher stdout/stderr and the UIA tree after the reopen).
+`smoke-diagnostics/` (launcher stdout/stderr, the BoS preview UIA tree, and the UIA tree after the reopen).
 
 `target/` is not versioned, so the checkpoint's evidence is retained verbatim under
 `docs/build/evidence/windows-app-image-<date>/`: the two JSON evidence files, the gate's
 `java25-verification.json`, the jdeps/jlink/jpackage/module-resolution logs, the per-file image hashes, the
-dependency tree and classpath hashes, and the smoke diagnostics (launcher stderr, UIA tree after the reopen).
+dependency tree and classpath hashes, and the smoke diagnostics (launcher stderr, BoS preview UIA tree, and UIA
+tree after the reopen).
 Paths inside the evidence are the machine-local paths of the run that produced it. The `gitCommit` in both JSON
 files is the commit the run was made *from* — the preceding verified state, not the checkpoint commit — because
 the evidence is captured before the commit that retains it exists; the checkpoint commit is the one that added the
 `docs/build/evidence/windows-app-image-<date>/` directory. Note that the Maven artifact
 is still `jbs2bg-1.0-SNAPSHOT.jar` while the application version is 1.1.2: `project.version` predates the
 modernization and is not what the image stamps; aligning it is a separate decision.
+
+The issue #83 BoS writer checkpoint is retained separately under
+`docs/build/evidence/windows-app-image-2026-08-28-bos-cutover/`. Its smoke evidence records the canonical BoS
+artifact byte count and SHA-256, clipboard parity after the Windows text-format boundary, exact preview/export
+byte parity, the BoS popup UIA tree, and both clean launcher lifecycles.
+
+## Reverting the BoS writer cutover
+
+The production writer route, filename policy, publisher, UI wiring, packaged smoke, documentation, and retained
+evidence land together in the single issue #83 commit. Reverting that commit restores the prior formatter/String
+route and its previous packaging checkpoint without a data migration or any external-state cleanup.
 
 ## Reverting this checkpoint
 

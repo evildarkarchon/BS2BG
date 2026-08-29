@@ -16,7 +16,7 @@ public final class ProjectGeneratedOutput {
 	private final String templatesText;
 	private final String morphsText;
 	private final Map<String, String> templateLinesByPresetName;
-	private final Map<String, String> bosJsonByFileName;
+	private final List<BosJsonArtifact> bosJsonArtifacts;
 	private final List<CustomMorphTargetSnapshot> customMorphTargetsWithoutPresets;
 	private final List<NpcMorphAssignmentSnapshot> npcMorphAssignmentsWithoutPresets;
 
@@ -27,13 +27,13 @@ public final class ProjectGeneratedOutput {
 	 * @param templatesText complete templates.ini text
 	 * @param morphsText complete morphs.ini text
 	 * @param templateLinesByPresetName individual template lines in canonical preset order
-	 * @param bosJsonByFileName BoS JSON payloads keyed by export file name
+	 * @param bosJsonArtifacts canonical BoS JSON artifacts in Slider Preset order
 	 * @param customMorphTargetsWithoutPresets unassigned Custom Morph Targets
 	 * @param npcMorphAssignmentsWithoutPresets unassigned NPC Morph Assignments
 	 * @throws NullPointerException when any argument is null
 	 */
 	ProjectGeneratedOutput(String templatesText, String morphsText,
-			Map<String, String> templateLinesByPresetName, Map<String, String> bosJsonByFileName,
+			Map<String, String> templateLinesByPresetName, List<BosJsonArtifact> bosJsonArtifacts,
 			List<CustomMorphTargetSnapshot> customMorphTargetsWithoutPresets,
 			List<NpcMorphAssignmentSnapshot> npcMorphAssignmentsWithoutPresets) {
 		this.templatesText = Objects.requireNonNull(templatesText, "templatesText");
@@ -41,8 +41,8 @@ public final class ProjectGeneratedOutput {
 		this.templateLinesByPresetName = Collections.unmodifiableMap(
 				new LinkedHashMap<>(Objects.requireNonNull(templateLinesByPresetName,
 						"templateLinesByPresetName")));
-		this.bosJsonByFileName = Collections.unmodifiableMap(
-				new LinkedHashMap<>(Objects.requireNonNull(bosJsonByFileName, "bosJsonByFileName")));
+		this.bosJsonArtifacts = Collections.unmodifiableList(
+				new ArrayList<>(Objects.requireNonNull(bosJsonArtifacts, "bosJsonArtifacts")));
 		this.customMorphTargetsWithoutPresets = Collections.unmodifiableList(
 				new ArrayList<>(Objects.requireNonNull(customMorphTargetsWithoutPresets,
 						"customMorphTargetsWithoutPresets")));
@@ -66,9 +66,9 @@ public final class ProjectGeneratedOutput {
 		return templateLinesByPresetName;
 	}
 
-	/** @return immutable BoS JSON payloads keyed by {@code <preset name>.json} */
-	public Map<String, String> getBosJsonByFileName() {
-		return bosJsonByFileName;
+	/** @return immutable canonical BoS artifacts in Slider Preset order */
+	public List<BosJsonArtifact> getBosJsonArtifacts() {
+		return bosJsonArtifacts;
 	}
 
 	/** @return immutable Custom Morph Target snapshots without Slider Preset relationships */

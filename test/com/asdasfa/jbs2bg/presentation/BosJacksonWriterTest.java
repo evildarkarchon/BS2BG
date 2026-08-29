@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -23,7 +24,7 @@ import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 
-/** Freezes exact BoS bytes produced by the non-production Jackson writer. */
+/** Freezes exact BoS bytes produced by the owned Jackson writer and production formatter. */
 final class BosJacksonWriterTest {
 
     /** Covers the complete escaping, ordering, numeric-lexeme, UTF-8, BOM, and newline profile. */
@@ -60,11 +61,11 @@ final class BosJacksonWriterTest {
     }
 
     /**
-     * Proves the checked-in calculated-value golden matches both old and new development adapters
-     * across inversion, multiplier, float, half-up rounding, zero, and exponent behavior.
+     * Proves production owns the checked-in calculated bytes across inversion,
+     * multiplier, float, half-up rounding, zero, and exponent behavior.
      */
     @Test
-    void calculatedValueGoldenMatchesTheUnchangedProductionRoute() throws Exception {
+    void calculatedValueGoldenIsTheDefensivelyOwnedProductionArtifact() throws Exception {
         Path golden = Path.of("test-resources", "json-oracles", "bos", "calculated.json");
         byte[] expected = Files.readAllBytes(golden);
         Map<String, Float> multipliers = standardMultipliers();
@@ -88,15 +89,15 @@ final class BosJacksonWriterTest {
                     "OracleExponent", true, Integer.valueOf(25), Integer.valueOf(100),
                     25, 100, 100, 100, false)));
 
-            String legacy = ProjectOutputFormatter.generate(session.getSnapshot(), false)
-                    .getBosJsonByFileName().get("Alpha.json");
-            Utf8Json jackson = BosJacksonWriter.write(new BosJacksonWriter.BosDocument(
-                    "Alpha", List.of("Breasts", "OracleExponent"),
-                    List.of("0", "1.0E8"), List.of("1.13", "2.5E7")));
+            BosJsonArtifact artifact = ProjectOutputFormatter.generate(session.getSnapshot(), false)
+                    .getBosJsonArtifacts().get(0);
+            byte[] exposed = artifact.getBytes();
+            exposed[0] = 'x';
 
-            assertArrayEquals(jackson.bytes(), legacy.getBytes(StandardCharsets.UTF_8), legacy);
-            assertArrayEquals(expected, legacy.getBytes(StandardCharsets.UTF_8), legacy);
-            assertArrayEquals(expected, jackson.bytes());
+            assertEquals("Alpha", artifact.getSliderPresetName());
+            assertEquals("Alpha.json", artifact.getFileName());
+            assertEquals(new String(expected, StandardCharsets.UTF_8), artifact.getText());
+            assertArrayEquals(expected, artifact.getBytes());
         } finally {
             multipliers.clear();
             multipliers.putAll(previousMultipliers);
@@ -116,10 +117,74 @@ final class BosJacksonWriterTest {
         }
     }
 
-    /**
-     * Accesses the legacy mutable Settings collection only for the temporary old/new differential seam.
-     * Production visibility stays unchanged until the Settings cutover issue.
-     */
+    /** Production reports non-finite values only after retaining every attempted filename mapping. */
+    @Test
+    void rejectsNonFiniteProductionValuesWithCompleteMappingsAndDiagnostics() throws Exception {
+        Map<String, Float> multipliers = standardMultipliers();
+        Map<String, Float> previousMultipliers = new LinkedHashMap<>(multipliers);
+        try {
+            multipliers.clear();
+            multipliers.put("Infinite", Float.valueOf(Float.POSITIVE_INFINITY));
+
+            ProjectSession session = ProjectSessions.create();
+            session.newProject();
+            session.apply(SliderPresetEdits.create("Broken"));
+            session.apply(SliderPresetEdits.setSliderChoice("Broken", new SliderChoiceSnapshot(
+                    "Infinite", true, Integer.valueOf(10), Integer.valueOf(100),
+                    10, 100, 100, 100, false)));
+            session.apply(SliderPresetEdits.create("Safe"));
+
+            BosOutputException exception = assertThrows(BosOutputException.class,
+                    () -> ProjectOutputFormatter.generate(session.getSnapshot(), false));
+
+            assertEquals(2, exception.getFileNameMappings().size());
+            assertEquals("Broken.json", exception.getFileNameMappings().get(0).getFileName().orElseThrow());
+            assertEquals("Safe.json", exception.getFileNameMappings().get(1).getFileName().orElseThrow());
+            assertEquals(1, exception.getDiagnostics().size());
+            assertEquals("BOS_VALUE_NON_FINITE", exception.getDiagnostics().get(0).getCode());
+            assertEquals("Broken", exception.getDiagnostics().get(0).getSliderPresetName());
+        } finally {
+            multipliers.clear();
+            multipliers.putAll(previousMultipliers);
+        }
+    }
+
+    /** Filename and value preflight must report every independent failure in one rejected command. */
+    @Test
+    void reportsFilenameAndNonFiniteFailuresTogetherBeforePublishing() throws Exception {
+        Map<String, Float> multipliers = standardMultipliers();
+        Map<String, Float> previousMultipliers = new LinkedHashMap<>(multipliers);
+        try {
+            multipliers.clear();
+            multipliers.put("Infinite", Float.valueOf(Float.POSITIVE_INFINITY));
+
+            ProjectSession session = ProjectSessions.create();
+            session.newProject();
+            session.apply(SliderPresetEdits.create("Broken\uD800"));
+            session.apply(SliderPresetEdits.create("Infinite Value"));
+            session.apply(SliderPresetEdits.setSliderChoice("Infinite Value", new SliderChoiceSnapshot(
+                    "Infinite", true, Integer.valueOf(10), Integer.valueOf(100),
+                    10, 100, 100, 100, false)));
+
+            BosOutputException exception = assertThrows(BosOutputException.class,
+                    () -> ProjectOutputFormatter.generate(session.getSnapshot(), false));
+
+            assertEquals(2, exception.getFileNameMappings().size());
+            assertTrue(exception.getFileNameMappings().get(0).getFileName().isEmpty());
+            assertEquals("Infinite Value.json",
+                    exception.getFileNameMappings().get(1).getFileName().orElseThrow());
+            assertEquals(List.of("BOS_FILENAME_UNREPRESENTABLE", "BOS_VALUE_NON_FINITE"),
+                    exception.getDiagnostics().stream().map(BosOutputDiagnostic::getCode).toList());
+        } finally {
+            multipliers.clear();
+            multipliers.putAll(previousMultipliers);
+        }
+    }
+
+	/**
+	 * Accesses the legacy mutable Settings collection to exercise production multiplier
+	 * edge cases without widening production visibility.
+	 */
     @SuppressWarnings("unchecked")
     private static Map<String, Float> standardMultipliers() throws ReflectiveOperationException {
         Field field = Settings.class.getDeclaredField("MULTIPLIERS");

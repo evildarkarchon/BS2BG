@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -16,8 +18,10 @@ import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.ProjectSnapshot;
+import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonObject;
 
@@ -46,9 +50,9 @@ class ProjectOutputFormatterTest {
 				Arrays.asList(output.getTemplateLinesByPresetName().keySet().toArray(new String[0])));
 		assertEquals("Alpha=Scale@0.35:0.65", output.getTemplateLinesByPresetName().get("Alpha"));
 		assertEquals(Arrays.asList("Alpha.json", "Zulu.json"),
-				Arrays.asList(output.getBosJsonByFileName().keySet().toArray(new String[0])));
+				output.getBosJsonArtifacts().stream().map(BosJsonArtifact::getFileName).toList());
 
-		JsonObject alphaBos = Json.parse(output.getBosJsonByFileName().get("Alpha.json")).asObject();
+		JsonObject alphaBos = Json.parse(artifactNamed(output, "Alpha.json").getText()).asObject();
 		assertEquals("Alpha", alphaBos.get("string").asObject().getString("bodyname", null));
 		assertEquals("Scale", alphaBos.get("string").asObject().getString("slidername1", null));
 		assertEquals(1, alphaBos.get("int").asObject().getInt("slidersnumber", -1));
@@ -85,7 +89,7 @@ class ProjectOutputFormatterTest {
 				choice("Disabled", false, 40, 60, 100, 100)));
 
 		ProjectGeneratedOutput output = ProjectOutputFormatter.generate(session.getSnapshot(), true);
-		JsonObject bos = Json.parse(output.getBosJsonByFileName().get("Preset.json")).asObject();
+		JsonObject bos = Json.parse(artifactNamed(output, "Preset.json").getText()).asObject();
 
 		assertEquals("Preset=Active@0.2", output.getTemplatesText());
 		assertEquals(1, bos.get("int").asObject().getInt("slidersnumber", -1));
@@ -103,14 +107,100 @@ class ProjectOutputFormatterTest {
 		session.apply(SliderPresetEdits.setSliderChoice("Preset",
 				choice("Beta", true, 30, 40, 100, 100)));
 
-		String json = ProjectOutputFormatter.generate(session.getSnapshot(), false)
-				.getBosJsonByFileName().get("Preset.json");
+		String json = artifactNamed(ProjectOutputFormatter.generate(session.getSnapshot(), false),
+				"Preset.json").getText();
 		int secondHighValueIndex = json.indexOf("\"highvalue2\"");
 		int firstLowValueIndex = json.indexOf("\"lowvalue1\"");
 
 		assertTrue(secondHighValueIndex >= 0);
 		assertTrue(firstLowValueIndex >= 0);
 		assertTrue(secondHighValueIndex < firstLowValueIndex);
+	}
+
+	/** Unsafe Windows filename bytes are reversibly mapped while safe names remain unchanged. */
+	@Test
+	void mapsEveryBosFilenameBeforePublishingArtifacts() {
+		ProjectSnapshot snapshot = new ProjectSnapshot(Arrays.asList(
+				new SliderPresetSnapshot("Safe Name", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot("CON", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot("100% <Body>", false, Collections.<SliderChoiceSnapshot>emptyList())),
+				Collections.emptyList(), Collections.emptyList(), Optional.empty(), true,
+				ProjectLifecycleStatus.UNTITLED);
+
+		ProjectGeneratedOutput output = ProjectOutputFormatter.generate(snapshot, false);
+
+		assertEquals(Arrays.asList("Safe Name.json", "%43ON.json", "100%25 %3CBody%3E.json"),
+				output.getBosJsonArtifacts().stream().map(BosJsonArtifact::getFileName).toList());
+	}
+
+	/** Filename policy handles Windows device names, trailing bytes, separators, and long names exactly. */
+	@Test
+	void mapsBosFilenameEdgeCasesDeterministically() {
+		String overlong = "a".repeat(300);
+		String validCjk = "界".repeat(100);
+		ProjectSnapshot snapshot = new ProjectSnapshot(Arrays.asList(
+				new SliderPresetSnapshot("CON.txt", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot("COM¹", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot("LPT³.log", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot("trail. ", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot("bad/name", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot(validCjk, false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot(overlong, false, Collections.<SliderChoiceSnapshot>emptyList())),
+				Collections.emptyList(), Collections.emptyList(), Optional.empty(), true,
+				ProjectLifecycleStatus.UNTITLED);
+
+		List<String> fileNames = ProjectOutputFormatter.generate(snapshot, false).getBosJsonArtifacts().stream()
+				.map(BosJsonArtifact::getFileName).toList();
+
+		assertEquals("%43ON.txt.json", fileNames.get(0));
+		assertEquals("%43OM¹.json", fileNames.get(1));
+		assertEquals("%4CPT³.log.json", fileNames.get(2));
+		assertEquals("trail%2E%20.json", fileNames.get(3));
+		assertEquals("bad%2Fname.json", fileNames.get(4));
+		assertEquals(validCjk + ".json", fileNames.get(5));
+		assertEquals("a".repeat(233) + "~9835fa6bf4e20a9b.json", fileNames.get(6));
+		assertEquals(255, fileNames.get(6).length());
+	}
+
+	/** Unpaired UTF-16 is rejected before any artifact is returned, with all mappings retained. */
+	@Test
+	void rejectsUnrepresentableBosFilenameWithCompleteMappings() {
+		ProjectSnapshot snapshot = new ProjectSnapshot(Arrays.asList(
+				new SliderPresetSnapshot("Safe", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot("Broken\uD800", false,
+						Collections.<SliderChoiceSnapshot>emptyList())),
+				Collections.emptyList(), Collections.emptyList(), Optional.empty(), true,
+				ProjectLifecycleStatus.UNTITLED);
+
+		BosOutputException exception = assertThrows(BosOutputException.class,
+				() -> ProjectOutputFormatter.generate(snapshot, false));
+
+		assertEquals(2, exception.getFileNameMappings().size());
+		assertEquals("Safe.json", exception.getFileNameMappings().get(0).getFileName().orElseThrow());
+		assertTrue(exception.getFileNameMappings().get(1).getFileName().isEmpty());
+		assertEquals("BOS_FILENAME_UNREPRESENTABLE", exception.getDiagnostics().get(0).getCode());
+	}
+
+	/** Every case-insensitive collision is rejected with all attempted filename mappings. */
+	@Test
+	void rejectsAllBosFilenameCollisionsBeforePublishingArtifacts() {
+		ProjectSnapshot snapshot = new ProjectSnapshot(Arrays.asList(
+				new SliderPresetSnapshot("Alpha", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot("alpha", false, Collections.<SliderChoiceSnapshot>emptyList()),
+				new SliderPresetSnapshot("Safe", false, Collections.<SliderChoiceSnapshot>emptyList())),
+				Collections.emptyList(), Collections.emptyList(), Optional.empty(), true,
+				ProjectLifecycleStatus.UNTITLED);
+
+		BosOutputException exception = assertThrows(BosOutputException.class,
+				() -> ProjectOutputFormatter.generate(snapshot, false));
+
+		assertEquals(3, exception.getFileNameMappings().size());
+		assertEquals("Alpha.json", exception.getFileNameMappings().get(0).getFileName().orElseThrow());
+		assertEquals("alpha.json", exception.getFileNameMappings().get(1).getFileName().orElseThrow());
+		assertEquals("Safe.json", exception.getFileNameMappings().get(2).getFileName().orElseThrow());
+		assertEquals(2, exception.getDiagnostics().size());
+		assertTrue(exception.getDiagnostics().stream()
+				.allMatch(diagnostic -> "BOS_FILENAME_COLLISION".equals(diagnostic.getCode())));
 	}
 
 	/** Every generated collection must reject mutation through its public result seam. */
@@ -121,11 +211,19 @@ class ProjectOutputFormatterTest {
 		assertThrows(UnsupportedOperationException.class,
 				() -> output.getTemplateLinesByPresetName().put("Injected", "Injected="));
 		assertThrows(UnsupportedOperationException.class,
-				() -> output.getBosJsonByFileName().clear());
+				() -> output.getBosJsonArtifacts().clear());
 		assertThrows(UnsupportedOperationException.class,
 				() -> output.getCustomMorphTargetsWithoutPresets().clear());
 		assertThrows(UnsupportedOperationException.class,
 				() -> output.getNpcMorphAssignmentsWithoutPresets().clear());
+	}
+
+	/** Resolves one generated artifact by its already-mapped filename. */
+	private static BosJsonArtifact artifactNamed(ProjectGeneratedOutput output, String fileName) {
+		return output.getBosJsonArtifacts().stream()
+				.filter(artifact -> artifact.getFileName().equals(fileName))
+				.findFirst()
+				.orElseThrow();
 	}
 
 	/** Builds canonical Project state through the external session seam used by presentation. */

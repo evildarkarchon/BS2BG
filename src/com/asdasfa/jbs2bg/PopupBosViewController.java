@@ -3,12 +3,13 @@ package com.asdasfa.jbs2bg;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.util.Locale;
 import java.util.ResourceBundle;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.apache.commons.io.FileUtils;
-
+import com.asdasfa.jbs2bg.presentation.BosArtifactPublisher;
+import com.asdasfa.jbs2bg.presentation.BosJsonArtifact;
 import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.project.ProjectSnapshot;
@@ -43,7 +44,7 @@ public class PopupBosViewController extends CustomController {
 	private CustomNotif notif;
 	
 	private FileChooser fcFile;
-	private String currentArtifactFileName;
+	private BosJsonArtifact currentArtifact;
 	
 	@Override
 	public void initialize(URL location, ResourceBundle resources) {
@@ -87,18 +88,25 @@ public class PopupBosViewController extends CustomController {
 			return;
 		}
 		boolean omitRedundantSliders = main.data.prefs.getBoolean(main.data.OMIT_REDUNDANT_SLIDERS, false);
-		ProjectGeneratedOutput output = ProjectOutputFormatter.generate(snapshot, omitRedundantSliders);
-		currentArtifactFileName = preset.getName() + ".json";
-		String bosJson = output.getBosJsonByFileName().get(currentArtifactFileName);
-		if (bosJson == null) {
+		ProjectGeneratedOutput output;
+		try {
+			output = ProjectOutputFormatter.generate(snapshot, omitRedundantSliders);
+		} catch (IllegalArgumentException exception) {
+			clearGeneratedOutput();
+			notif.showError(exception.getMessage());
+			return;
+		}
+		BosJsonArtifact artifact = findArtifact(output, preset.getName());
+		if (artifact == null) {
 			clearGeneratedOutput();
 			return;
 		}
+		currentArtifact = artifact;
 		
 		stage.setTitle("BodyTypes of Skyrim JSON: " + preset.getName());
 		btnBack.requestFocus();
 		
-		taBosJson.setText(bosJson);
+		taBosJson.setText(artifact.getText());
 	}
 
 	/** Resolves the selected logical preset within the captured Project snapshot. */
@@ -110,14 +118,23 @@ public class PopupBosViewController extends CustomController {
 		return null;
 	}
 
+	/** Resolves one owned artifact by its source Slider Preset identity. */
+	private static BosJsonArtifact findArtifact(ProjectGeneratedOutput output, String presetName) {
+		for (BosJsonArtifact artifact : output.getBosJsonArtifacts()) {
+			if (artifact.getSliderPresetName().equals(presetName))
+				return artifact;
+		}
+		return null;
+	}
+
 	/** Clears cached BoS output after a changed ProjectSession outcome. */
 	public void invalidateGeneratedOutput() {
 		clearGeneratedOutput();
 	}
 
-	/** Clears both parts of the currently rendered BoS artifact. */
+	/** Releases the current owned artifact and clears its decoded preview. */
 	private void clearGeneratedOutput() {
-		currentArtifactFileName = null;
+		currentArtifact = null;
 		taBosJson.clear();
 	}
 	
@@ -126,13 +143,14 @@ public class PopupBosViewController extends CustomController {
 		stage.hide();
 	}
 	
+	/** Copies text decoded from the owned artifact rather than mutable preview control state. */
 	@FXML
 	private void copyBosJson() {
-		String text = taBosJson.getText();
+		BosJsonArtifact artifact = currentArtifact;
 		
-		if (!text.isEmpty()) {
+		if (artifact != null) {
 			final ClipboardContent content = new ClipboardContent();
-			content.putString(text);
+			content.putString(artifact.getText());
 			Clipboard.getSystemClipboard().setContent(content);
 			
 			notif.show("JSON copied to clipboard!");
@@ -148,20 +166,18 @@ public class PopupBosViewController extends CustomController {
 	@FXML
 	private void exportBosJson() {
 		File file;
-		// JavaFX controls are confined to this thread; the worker receives plain values.
-		String artifactFileName = currentArtifactFileName;
-		String artifactContent = taBosJson.getText();
-		String artifactEncoding = main.data.encoding;
-		if (artifactFileName == null)
+		// JavaFX controls are confined to this thread; the worker receives the owned artifact.
+		BosJsonArtifact artifact = currentArtifact;
+		if (artifact == null)
 			return;
 		
 		try {
 			fcFile.setInitialDirectory(new File(main.data.prefs.get(main.data.LAST_USED_JSON_FOLDER, new File(".").getAbsolutePath())));
-			fcFile.setInitialFileName(withoutJsonExtension(artifactFileName));
+			fcFile.setInitialFileName(withoutJsonExtension(artifact.getFileName()));
 			file = fcFile.showSaveDialog(stage);
 		} catch (Exception e) {
 			fcFile.setInitialDirectory(main.data.homeDir);
-			fcFile.setInitialFileName(withoutJsonExtension(artifactFileName));
+			fcFile.setInitialFileName(withoutJsonExtension(artifact.getFileName()));
 			file = fcFile.showSaveDialog(stage);
 		}
 		
@@ -170,12 +186,12 @@ public class PopupBosViewController extends CustomController {
 		
 		main.data.prefs.put(main.data.LAST_USED_JSON_FOLDER, file.getParent());
 
-		if (!file.getAbsolutePath().endsWith(".json"))
+		if (!file.getAbsolutePath().toLowerCase(Locale.ROOT).endsWith(".json"))
 			file = new File(file.getAbsolutePath() + ".json");
 
 		mainPane.setDisable(true);
 		Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file...");
-		Task<Void> task = exportBosJsonTask(file, artifactContent, artifactEncoding);
+		Task<Void> task = exportBosJsonTask(file, artifact);
 		task.setOnSucceeded(e -> {
 			Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file done.");
 			mainPane.setDisable(false);
@@ -184,7 +200,7 @@ public class PopupBosViewController extends CustomController {
 			Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file failed.");
 			mainPane.setDisable(false);
 			
-			notif.showError("Exporting JSON file failed.");
+			notif.showError("Exporting JSON file failed: " + task.getException().getMessage());
 		});
 		task.setOnCancelled(e -> {
 			Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON file cancelled.");
@@ -202,35 +218,30 @@ public class PopupBosViewController extends CustomController {
 
 	/** Removes the extension used by the save-dialog filter from an artifact name. */
 	private static String withoutJsonExtension(String artifactFileName) {
-		return artifactFileName.endsWith(".json")
+		return artifactFileName.toLowerCase(Locale.ROOT).endsWith(".json")
 				? artifactFileName.substring(0, artifactFileName.length() - ".json".length())
 				: artifactFileName;
 	}
 
 	/**
-	 * Creates a worker that writes only the immutable destination and content captured
+	 * Creates a worker that publishes only the immutable destination and artifact captured
 	 * on the JavaFX thread.
 	 *
 	 * @param file resolved export destination
-	 * @param content captured BoS JSON content
-	 * @param encoding captured output character encoding
+	 * @param artifact captured canonical BoS artifact
 	 * @return background export task
 	 */
-	private static Task<Void> exportBosJsonTask(File file, String content, String encoding) {
+	private static Task<Void> exportBosJsonTask(File file, BosJsonArtifact artifact) {
 		return new Task<Void>() {
 			/**
-			 * Writes the already captured artifact without consulting JavaFX state.
+			 * Publishes the already captured artifact without consulting JavaFX state.
 			 *
-			 * @return always {@code null} after a successful or empty export
+			 * @return always {@code null} after a successful export
 			 * @throws IOException when the artifact cannot be written
 			 */
 			@Override
 			public Void call() throws IOException {
-				if (!content.isEmpty()) {
-					if (file.exists())
-						FileUtils.deleteQuietly(file);
-					FileUtils.writeStringToFile(file, content, encoding);
-				}
+				BosArtifactPublisher.publish(file.toPath(), artifact);
 				return null;
 			}
 		};

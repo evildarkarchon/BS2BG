@@ -1,0 +1,326 @@
+{
+  "schema": "bs2bg.windows-app-image-smoke/1",
+  "recordedAtUtc": "2026-08-29T05:02:07.6726123+00:00",
+  "passed": true,
+  "expectedAppVersion": "1.1.2",
+  "archive": "D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip",
+  "timeouts": {
+    "startupSeconds": 90,
+    "stepSeconds": 30,
+    "exitSeconds": 30
+  },
+  "steps": [
+    {
+      "name": "extract-clean-image",
+      "passed": true,
+      "seconds": 0.79,
+      "detail": "extracted D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip to C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image; working directory C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\work holds only representative.jbs2bg"
+    },
+    {
+      "name": "launch-packaged-launcher-without-system-java",
+      "passed": true,
+      "seconds": 1.46,
+      "detail": "launcher pid 28100 -> application pid 45036; jvm.dll from C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll; window 'jBS2BG' after 1.4 s; settings present: settings_UUNP.json, settings.json"
+    },
+    {
+      "name": "open-representative-project",
+      "passed": true,
+      "seconds": 1.48,
+      "detail": "title 'jBS2BG - representative.jbs2bg'; Slider Presets lists CBBE Curvy, UUNP Athletic"
+    },
+    {
+      "name": "generate-preview-copy-and-export-bos-artifact",
+      "passed": true,
+      "seconds": 1.86,
+      "detail": "BoS 'CBBE Curvy': preview/export bytes exact and clipboard content exact after Windows newline normalization, 456 UTF-8 bytes, sha256 66689f666943f316bd63bb435f2ebced83d81cb36807c506096997e84b8117d5"
+    },
+    {
+      "name": "generate-templates-output",
+      "passed": true,
+      "seconds": 0.03,
+      "detail": "Templates output: 349 chars, 2 lines: CBBE Curvy=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWi..."
+    },
+    {
+      "name": "load-representative-morph-content",
+      "passed": true,
+      "seconds": 0.04,
+      "detail": "Custom Morph Targets lists All|Female; row exposes 'HousecarlWhiterun' (ControlType.DataItem) and 'Skyrim.esm'"
+    },
+    {
+      "name": "create-custom-morph-target",
+      "passed": true,
+      "seconds": 0.04,
+      "detail": "Custom Morph Targets lists All|Female, All|Female|NordRace; title shows the unsaved marker"
+    },
+    {
+      "name": "assign-slider-presets-to-target",
+      "passed": true,
+      "seconds": 0.11,
+      "detail": "'All|Female|NordRace' has 2 Slider Presets: CBBE Curvy, UUNP Athletic"
+    },
+    {
+      "name": "generate-morphs-output",
+      "passed": true,
+      "seconds": 0.33,
+      "detail": "Morphs output: 112 chars, 4 lines: All|Female=CBBE Curvy|UUNP Athletic | All|Female|NordRace=CBBE Curvy|UUNP Athletic | Skyrim.esm|A2C94=UUNP Athletic | "
+    },
+    {
+      "name": "save-project-as",
+      "passed": true,
+      "seconds": 1.15,
+      "detail": "saved smoke-output.jbs2bg (title clean); Custom Morph Targets All|Female, All|Female|NordRace; NPCs Skyrim.esm / HousecarlWhiterun"
+    },
+    {
+      "name": "exit-after-save",
+      "passed": true,
+      "seconds": 0.37,
+      "detail": "exit code 0 after 0.36 s (bound 30 s)"
+    },
+    {
+      "name": "relaunch-and-reopen-saved-project",
+      "passed": true,
+      "seconds": 3.05,
+      "detail": "launcher pid 22524 -> application pid 1428; jvm.dll from C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll; window 'jBS2BG' after 1.2 s; settings present: settings_UUNP.json, settings.json; reopened smoke-output.jbs2bg: Slider Presets CBBE Curvy, UUNP Athletic; Custom Morph Targets All|Female, All|Female|NordRace; 'All|Female|NordRace' -> CBBE Curvy, UUNP Athletic; row exposes 'HousecarlWhiterun' (ControlType.DataItem) and 'Skyrim.esm'"
+    },
+    {
+      "name": "close-and-exit",
+      "passed": true,
+      "seconds": 0.36,
+      "detail": "exit code 0 after 0.35 s (bound 30 s)"
+    }
+  ],
+  "observations": {
+    "extractedImage": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG",
+    "launcher": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\BS2BG.exe",
+    "launcherSha256": "cfee2ac2f9e825256f10cb6ca2975590499cea1c9253fca4c9a8e3658b0a2b0e",
+    "workingDirectory": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\work",
+    "archiveSha256": "2fbd63548250e9e3f608ae5b04a0c2b5014dcf3939ac5800e50f083d3b5d354c",
+    "environment": {
+      "removedVariables": [
+        "JAVA_HOME"
+      ],
+      "removedPathEntries": [
+        "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath",
+        "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\java8path",
+        "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath"
+      ],
+      "keptPathEntryCount": 72
+    },
+    "process": {
+      "launcherPid": 28100,
+      "applicationPid": 45036,
+      "applicationExe": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\BS2BG.exe",
+      "startupSeconds": 1.35,
+      "runtimeModules": [
+        {
+          "module": "jli.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\jli.dll"
+        },
+        {
+          "module": "jvm.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll"
+        },
+        {
+          "module": "jimage.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\jimage.dll"
+        },
+        {
+          "module": "java.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\java.dll"
+        },
+        {
+          "module": "prism_d3d.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\javafx\\prism_d3d.dll"
+        },
+        {
+          "module": "glass.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\javafx\\glass.dll"
+        },
+        {
+          "module": "javafx_font.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\javafx\\javafx_font.dll"
+        }
+      ],
+      "settingsFilesCreated": [
+        "settings_UUNP.json",
+        "settings.json"
+      ]
+    },
+    "openedProject": {
+      "file": "representative.jbs2bg",
+      "sliderPresets": [
+        "CBBE Curvy",
+        "UUNP Athletic"
+      ]
+    },
+    "bosArtifact": {
+      "sliderPreset": "CBBE Curvy",
+      "file": "smoke-bos.json",
+      "bytes": 456,
+      "sha256": "66689f666943f316bd63bb435f2ebced83d81cb36807c506096997e84b8117d5",
+      "clipboardContentExactAfterWindowsNewlineNormalization": true,
+      "previewExportBytesExact": true
+    },
+    "templatesOutput": {
+      "length": 349,
+      "lines": 2,
+      "excerpt": "CBBE Curvy=Ankles@0.0, Arms@0.0, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0, Waist@0.26:0.74 | UUNP Athletic=Arms@0.13:0.38, Breasts@0.0, BreastsSmall@0.0, Butt@0.0, ButtCrack@0.0, ButtSmall@0.0, Legs@0.0, NippleDistance@0.0, NippleSize@0.0, ShoulderWidth@0.0"
+    },
+    "loadedMorphContent": {
+      "customMorphTargets": "All|Female",
+      "npcMorphAssignment": "Skyrim.esm / HousecarlWhiterun"
+    },
+    "createdCustomMorphTarget": "All|Female|NordRace",
+    "assignedSliderPresets": {
+      "target": "All|Female|NordRace",
+      "presets": [
+        "CBBE Curvy",
+        "UUNP Athletic"
+      ],
+      "count": "2"
+    },
+    "morphsOutput": {
+      "length": 112,
+      "lines": 4,
+      "excerpt": "All|Female=CBBE Curvy|UUNP Athletic | All|Female|NordRace=CBBE Curvy|UUNP Athletic | Skyrim.esm|A2C94=UUNP Athletic | "
+    },
+    "savedProject": {
+      "file": "smoke-output.jbs2bg",
+      "sha256": "57b0f992c1b22cedc34f0e8eb4b7c24b01958440c2b235296c7d5b9b87460d5a",
+      "customMorphTargets": [
+        "All|Female",
+        "All|Female|NordRace"
+      ],
+      "npcMorphAssignments": [
+        "Skyrim.esm / HousecarlWhiterun"
+      ]
+    },
+    "exitAfterSave": {
+      "launcherPid": 28100,
+      "applicationPid": 45036,
+      "closeRequestedAtUtc": "2026-08-29T05:02:14.9674270+00:00",
+      "exitCode": 0,
+      "exitWaitSeconds": 0.36,
+      "boundedBySeconds": 30
+    },
+    "relaunch": {
+      "launcherPid": 22524,
+      "applicationPid": 1428,
+      "applicationExe": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\BS2BG.exe",
+      "startupSeconds": 1.22,
+      "runtimeModules": [
+        {
+          "module": "jli.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\jli.dll"
+        },
+        {
+          "module": "jvm.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll"
+        },
+        {
+          "module": "jimage.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\jimage.dll"
+        },
+        {
+          "module": "java.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\java.dll"
+        },
+        {
+          "module": "prism_d3d.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\javafx\\prism_d3d.dll"
+        },
+        {
+          "module": "glass.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\javafx\\glass.dll"
+        },
+        {
+          "module": "javafx_font.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207\\image\\BS2BG\\runtime\\bin\\javafx\\javafx_font.dll"
+        }
+      ],
+      "settingsFilesCreated": [
+        "settings_UUNP.json",
+        "settings.json"
+      ]
+    },
+    "reopenedProject": {
+      "file": "smoke-output.jbs2bg",
+      "sliderPresets": [
+        "CBBE Curvy",
+        "UUNP Athletic"
+      ],
+      "customMorphTargets": [
+        "All|Female",
+        "All|Female|NordRace"
+      ],
+      "targetSliderPresets": [
+        "CBBE Curvy",
+        "UUNP Athletic"
+      ]
+    },
+    "exit": {
+      "launcherPid": 22524,
+      "applicationPid": 1428,
+      "closeRequestedAtUtc": "2026-08-29T05:02:18.3865256+00:00",
+      "exitCode": 0,
+      "exitWaitSeconds": 0.35,
+      "boundedBySeconds": 30
+    }
+  },
+  "process": {
+    "launcherPid": 22524,
+    "applicationPid": 1428,
+    "exitCode": 0,
+    "exitWaitSeconds": 0.35,
+    "lifecycles": [
+      {
+        "launcherPid": 28100,
+        "applicationPid": 45036,
+        "closeRequestedAtUtc": "2026-08-29T05:02:14.9674270+00:00",
+        "exitCode": 0,
+        "exitWaitSeconds": 0.36,
+        "boundedBySeconds": 30
+      },
+      {
+        "launcherPid": 22524,
+        "applicationPid": 1428,
+        "closeRequestedAtUtc": "2026-08-29T05:02:18.3865256+00:00",
+        "exitCode": 0,
+        "exitWaitSeconds": 0.35,
+        "boundedBySeconds": 30
+      }
+    ],
+    "killed": []
+  },
+  "diagnostics": {
+    "directory": "target/reproducibility/smoke-diagnostics/",
+    "stderrLines": 24,
+    "stderrExcerpt": [
+      "Aug 28, 2026 10:02:11 PM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask",
+      "INFO: Opening jBS2BG file...",
+      "Aug 28, 2026 10:02:11 PM com.asdasfa.jbs2bg.MainController lambda$openFromFile$0",
+      "INFO: Opening jBS2BG file done.",
+      "Aug 28, 2026 10:02:13 PM com.asdasfa.jbs2bg.PopupBosViewController exportBosJson",
+      "INFO: Exporting BoS JSON file...",
+      "Aug 28, 2026 10:02:13 PM com.asdasfa.jbs2bg.PopupBosViewController lambda$exportBosJson$0",
+      "INFO: Exporting BoS JSON file done.",
+      "Aug 28, 2026 10:02:13 PM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask",
+      "INFO: Generating Templates...",
+      "Aug 28, 2026 10:02:13 PM com.asdasfa.jbs2bg.MainController lambda$generateTemplates$0",
+      "INFO: Generating Templates done.",
+      "Aug 28, 2026 10:02:13 PM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask",
+      "INFO: Generating Morphs...",
+      "Aug 28, 2026 10:02:13 PM com.asdasfa.jbs2bg.MainController lambda$generateMorphs$0",
+      "INFO: Generating Morphs done.",
+      "Aug 28, 2026 10:02:14 PM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask",
+      "INFO: Saving jBS2BG file...",
+      "Aug 28, 2026 10:02:14 PM com.asdasfa.jbs2bg.MainController lambda$scheduleSave$0",
+      "INFO: Saving jBS2BG file done."
+    ],
+    "nativeAccessWarnings": [],
+    "uiaTreeBosPreview": "smoke-diagnostics/uia-tree-bos-preview.txt",
+    "uiaTreeAfterReopen": "smoke-diagnostics/uia-tree-after-reopen.txt"
+  },
+  "workRoot": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-050207",
+  "workRootKept": false
+}

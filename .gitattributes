@@ -2,10 +2,11 @@
 * text=auto
 
 # Byte-identical golden-file corpus — disable all EOL / encoding normalization.
-# BoS JSON expected files are written with LF only (Java minimal-json), INI files
+# BoS JSON expected files are written with LF only by the owned canonical writer, while INI files
 # are written with CRLF. Any normalization would break parity tests.
 tests/fixtures/expected/** -text
 tests/fixtures/inputs/**   -text
+test-resources/json-oracles/bos/** -text
 
 # Shell scripts
 *.ps1 text eol=crlf working-tree-encoding=UTF-8

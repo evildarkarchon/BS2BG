@@ -21,9 +21,9 @@
          --app-version from the pom, then verifies the image layout, the generated launcher configuration, and
          hashes every file into one image digest; archives the image as BS2BG-<version>-windows-x64.zip.
       6. Extracts that archive to a clean temporary location and runs tools/java25/smoke-app-image.ps1: the
-         packaged launcher starts with every host-Java discovery path scrubbed, the representative Project,
-         Templates, and Morphs workflows are driven through Windows UI Automation, and the process must exit
-         with code 0 within a bounded timeout.
+         packaged launcher starts with every host-Java discovery path scrubbed, the representative Project, BoS,
+         Templates, and Morphs workflows are driven through Windows UI Automation, and the process must exit with
+         code 0 within a bounded timeout.
       7. Writes target/reproducibility/windows-app-image.json (toolchain, runtime, package, workflow, and exit
          evidence) next to the jdeps/jlink/jpackage logs and the smoke diagnostics, and prints the report.
 

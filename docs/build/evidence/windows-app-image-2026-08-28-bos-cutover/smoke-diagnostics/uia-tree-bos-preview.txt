@@ -1,0 +1,44 @@
+Window 'BodyTypes of Skyrim JSON: CBBE Curvy' [Window,Transform]
+  TitleBar 'BodyTypes of Skyrim JSON: CBBE Curvy'
+    MenuBar 'System Menu Bar'
+      MenuItem 'System' [ExpandCollapse]
+    Button 'Minimize' [Invoke]
+    Button 'Maximize' [Invoke]
+    Button 'Close' [Invoke]
+  Edit '' [Value,Text]
+    Pane '' [Scroll]
+      Text '{
+  "string": {
+    "bodyname": "CBBE Curvy",
+    "slidername1": "Arms",
+    "slidername2": "Breasts",
+    "slidername3": "Butt",
+    "slidername4": "Legs",
+    "slidername5": "Waist"
+  },
+  "int": {
+    "slidersnumber": 5
+  },
+  "float": {
+    "highvalue1": 0,
+    "highvalue2": 0,
+    "highvalue3": 0,
+    "highvalue4": 0,
+    "highvalue5": 0.8,
+    "lowvalue1": 1,
+    "lowvalue2": 0.8,
+    "lowvalue3": 1,
+    "lowvalue4": 1,
+    "lowvalue5": 0.2
+  }
+}'
+      ScrollBar '' [RangeValue]
+        Button 'increment' [Invoke]
+        Button 'decrement' [Invoke]
+        Thumb ''
+  Button 'Export' [Invoke]
+    Text 'Export'
+  Button 'Copy' [Invoke]
+    Text 'Copy'
+  Button 'Back' [Invoke]
+    Text 'Back'

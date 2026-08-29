@@ -7,9 +7,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -22,6 +22,8 @@ import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
 import com.asdasfa.jbs2bg.filtering.VisibleScopeCommands;
 import com.asdasfa.jbs2bg.fx.DialogGraphics;
 import com.asdasfa.jbs2bg.fx.FilteredTableAdapter;
+import com.asdasfa.jbs2bg.presentation.BosArtifactPublisher;
+import com.asdasfa.jbs2bg.presentation.BosJsonArtifact;
 import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.presentation.ProjectPresentationUpdate;
@@ -1764,6 +1766,35 @@ public class MainController extends CustomController {
 	 */
 	private <T> void scheduleBackgroundTask(Task<T> task, Consumer<T> success, String operation,
 			String failureMessage) {
+		scheduleBackgroundTask(task, success, operation, ignored -> failureMessage);
+	}
+
+	/**
+	 * Schedules a task whose domain exception carries user-facing structured diagnostics.
+	 *
+	 * @param task worker task whose exception may carry complete diagnostics
+	 * @param success presentation callback for the task's typed value
+	 * @param operation user-facing operation phrase for start and cancellation logs
+	 * @param failureMessage prefix shown before the task's diagnostic message
+	 * @param <T> typed result returned by the operation
+	 */
+	private <T> void scheduleDiagnosticBackgroundTask(Task<T> task, Consumer<T> success,
+			String operation, String failureMessage) {
+		scheduleBackgroundTask(task, success, operation,
+				exception -> failureMessageFor(failureMessage, exception));
+	}
+
+	/**
+	 * Applies the shared JavaFX scheduling lifecycle with an operation-owned failure formatter.
+	 *
+	 * @param task worker task whose value is delivered on the JavaFX thread
+	 * @param success presentation callback for the task's typed value
+	 * @param operation user-facing operation phrase for start and cancellation logs
+	 * @param failureMessageFormatter maps the task exception to exact user-facing text
+	 * @param <T> typed result returned by the operation
+	 */
+	private <T> void scheduleBackgroundTask(Task<T> task, Consumer<T> success, String operation,
+			Function<Throwable, String> failureMessageFormatter) {
 		mainPane.setDisable(true);
 		Logger.getLogger(getClass().getName()).log(Level.INFO, operation + "...");
 		task.setOnSucceeded(e -> {
@@ -1771,9 +1802,10 @@ public class MainController extends CustomController {
 			success.accept(task.getValue());
 		});
 		task.setOnFailed(e -> {
-			Logger.getLogger(getClass().getName()).log(Level.INFO, failureMessage);
+			String detailedFailureMessage = failureMessageFormatter.apply(task.getException());
+			Logger.getLogger(getClass().getName()).log(Level.INFO, detailedFailureMessage);
 			mainPane.setDisable(false);
-			notif.showError(failureMessage);
+			notif.showError(detailedFailureMessage);
 		});
 		task.setOnCancelled(e -> {
 			Logger.getLogger(getClass().getName()).log(Level.INFO, operation + " cancelled.");
@@ -1784,6 +1816,13 @@ public class MainController extends CustomController {
 				newValue.printStackTrace();
 		});
 		new Thread(task).start();
+	}
+
+	/** Includes structured formatter or publisher diagnostics in the visible task failure. */
+	private static String failureMessageFor(String failureMessage, Throwable exception) {
+		if (exception == null || exception.getMessage() == null || exception.getMessage().isBlank())
+			return failureMessage;
+		return failureMessage + System.lineSeparator() + exception.getMessage();
 	}
 
 	/** @return true when a completed task carries a rejected or failed Project operation */
@@ -1901,11 +1940,13 @@ public class MainController extends CustomController {
 		ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
 		boolean omitRedundantSliders = cbOmitRedundantSliders.isSelected();
         
-		Task<Void> task = exportBosJsonTask(targetDir, outputSnapshot, omitRedundantSliders);
-		scheduleBackgroundTask(task, ignored -> {
+		Task<ProjectGeneratedOutput> task = exportBosJsonTask(targetDir, outputSnapshot,
+				omitRedundantSliders);
+		scheduleDiagnosticBackgroundTask(task, output -> {
 			Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON files done.");
-
-			notif.show("BodyTypes of Skyrim JSON files exported!");
+			String mappings = formatBosFileNameMappings(output);
+			Logger.getLogger(getClass().getName()).log(Level.INFO, mappings);
+			notif.show("BodyTypes of Skyrim JSON files exported!" + System.lineSeparator() + mappings);
 		}, "Exporting BoS JSON files", "Exporting BoS JSON files failed.");
 	}
 
@@ -1918,27 +1959,31 @@ public class MainController extends CustomController {
 	 * @param omitRedundantSliders captured formatter option
 	 * @return worker task that writes every generated BoS artifact
 	 */
-	private Task<Void> exportBosJsonTask(File targetDir, ProjectSnapshot outputSnapshot,
+	private Task<ProjectGeneratedOutput> exportBosJsonTask(File targetDir, ProjectSnapshot outputSnapshot,
 			boolean omitRedundantSliders) {
-		return new Task<Void>() {
+		return new Task<ProjectGeneratedOutput>() {
 			/**
-			 * @return always {@code null} after every captured BoS artifact is written
+			 * @return the immutable output after every captured BoS artifact is published
 			 * @throws Exception when any BoS destination cannot be written
 			 */
 			@Override
-			public Void call() throws Exception {
+			public ProjectGeneratedOutput call() throws Exception {
 				ProjectGeneratedOutput output = ProjectOutputFormatter.generate(outputSnapshot,
 						omitRedundantSliders);
-				for (Map.Entry<String, String> artifact : output.getBosJsonByFileName().entrySet()) {
-					File file = new File(targetDir.getAbsolutePath() + "/" + artifact.getKey());
-					if (file.exists())
-						FileUtils.deleteQuietly(file);
-					FileUtils.writeStringToFile(file, artifact.getValue(), main.data.encoding);
-				}
-				
-				return null;
+				BosArtifactPublisher.publishAll(targetDir.toPath(), output);
+				return output;
 			}
 		};
+	}
+
+	/** Formats every successful source-to-filename mapping for logs and notification. */
+	private static String formatBosFileNameMappings(ProjectGeneratedOutput output) {
+		StringBuilder mappings = new StringBuilder("BoS filename mappings:");
+		for (BosJsonArtifact artifact : output.getBosJsonArtifacts()) {
+			mappings.append(System.lineSeparator())
+					.append(artifact.getFileNameMapping().formatForDisplay());
+		}
+		return mappings.toString();
 	}
 	
 	/** Resets transient controls after a successful New Project or Open render. */

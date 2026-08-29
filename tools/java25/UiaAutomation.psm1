@@ -352,6 +352,29 @@ function Send-UiaAccelerator {
 
 <#
 .SYNOPSIS
+    Focuses one located control and sends keys to it without a synchronous cross-process Invoke callback.
+.NOTES
+    Use this for JavaFX buttons whose actions enter a modal loop (notifications and file choosers). The element is
+    still located by role and accessible name, and focus is verified on that exact element before input is sent.
+#>
+function Send-UiaKeysToElement {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Element,
+        [Parameter(Mandatory)] [string]$Keys,
+        [int]$TimeoutSeconds = 10
+    )
+    Add-Type -AssemblyName System.Windows.Forms
+    Wait-UiaCondition -Description "keyboard focus on '$($Element.Current.Name)' before sending '$Keys'" -TimeoutSeconds $TimeoutSeconds -Test {
+        $Element.SetFocus()
+        Start-Sleep -Milliseconds 150
+        if ($Element.Current.HasKeyboardFocus) { $true }
+    } | Out-Null
+    [System.Windows.Forms.SendKeys]::SendWait($Keys)
+}
+
+<#
+.SYNOPSIS
     Selects a selectable item (list item, tab, table row) through its SelectionItem pattern.
 #>
 function Select-UiaElement {
@@ -474,6 +497,7 @@ Export-ModuleMember -Function @(
     'Invoke-UiaElement',
     'Invoke-UiaNativeButton',
     'Send-UiaAccelerator',
+    'Send-UiaKeysToElement',
     'Select-UiaElement',
     'Expand-UiaElement',
     'Set-UiaValue',

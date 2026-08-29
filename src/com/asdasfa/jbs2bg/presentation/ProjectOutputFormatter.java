@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
@@ -16,8 +17,6 @@ import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectSnapshot;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
-import com.eclipsesource.json.JsonObject;
-import com.eclipsesource.json.WriterConfig;
 
 /** Generates all Project-derived output from one immutable snapshot without JavaFX state. */
 public final class ProjectOutputFormatter {
@@ -41,11 +40,18 @@ public final class ProjectOutputFormatter {
 	 * @param omitRedundantSliders whether redundant template sliders should be omitted
 	 * @return one immutable generated-output value
 	 * @throws NullPointerException when snapshot is null
+	 * @throws BosOutputException when any BoS filename or calculated value cannot publish safely
 	 */
 	public static ProjectGeneratedOutput generate(ProjectSnapshot snapshot, boolean omitRedundantSliders) {
 		Objects.requireNonNull(snapshot, "snapshot");
+		List<BosOutputDiagnostic> bosDiagnostics = new ArrayList<>();
+		List<BosFileNameMapping> bosFileNameMappings = mapBosFileNames(snapshot.getSliderPresets(), bosDiagnostics);
+		// Payload validation continues after filename failures so one preflight report covers the whole command.
+		List<BosJsonArtifact> bosJsonArtifacts = generateBosArtifacts(snapshot.getSliderPresets(),
+				bosFileNameMappings, bosDiagnostics);
+		if (!bosDiagnostics.isEmpty())
+			throw new BosOutputException(bosFileNameMappings, bosDiagnostics);
 		Map<String, String> templateLines = new LinkedHashMap<>();
-		Map<String, String> bosJson = new LinkedHashMap<>();
 		StringBuilder templatesText = new StringBuilder();
 		String newLine = System.lineSeparator();
 
@@ -55,7 +61,6 @@ public final class ProjectOutputFormatter {
 				templatesText.append(newLine);
 			templatesText.append(line);
 			templateLines.put(preset.getName(), line);
-			bosJson.put(preset.getName() + ".json", formatBosJson(preset));
 		}
 
 		List<CustomMorphTargetSnapshot> customWithoutPresets = new ArrayList<>();
@@ -74,7 +79,63 @@ public final class ProjectOutputFormatter {
 		}
 
 		return new ProjectGeneratedOutput(templatesText.toString(), morphsText.toString(), templateLines,
-				bosJson, customWithoutPresets, npcsWithoutPresets);
+				bosJsonArtifacts, customWithoutPresets, npcsWithoutPresets);
+	}
+
+	/** Maps every artifact name and accumulates all case-insensitive collision diagnostics. */
+	private static List<BosFileNameMapping> mapBosFileNames(List<SliderPresetSnapshot> presets,
+			List<BosOutputDiagnostic> diagnostics) {
+		List<BosFileNameMapping> mappings = new ArrayList<>();
+		Map<String, List<BosFileNameMapping>> mappingsByFileName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+		for (SliderPresetSnapshot preset : presets) {
+			String fileName = null;
+			try {
+				fileName = BosFileNamePolicy.map(preset.getName());
+			} catch (IllegalArgumentException exception) {
+				diagnostics.add(new BosOutputDiagnostic("BOS_FILENAME_UNREPRESENTABLE", preset.getName(),
+						exception.getMessage()));
+			}
+			BosFileNameMapping mapping = new BosFileNameMapping(preset.getName(), fileName);
+			mappings.add(mapping);
+			if (fileName != null)
+				mappingsByFileName.computeIfAbsent(fileName, ignored -> new ArrayList<>()).add(mapping);
+		}
+
+		for (Map.Entry<String, List<BosFileNameMapping>> entry : mappingsByFileName.entrySet()) {
+			if (entry.getValue().size() < 2)
+				continue;
+			String message = "Mapped filename collides without regard to case: " + entry.getKey();
+			for (BosFileNameMapping mapping : entry.getValue()) {
+				diagnostics.add(new BosOutputDiagnostic("BOS_FILENAME_COLLISION",
+						mapping.getSliderPresetName(), message));
+			}
+		}
+		return mappings;
+	}
+
+	/**
+	 * Validates every payload and creates artifacts only where a safe mapped filename exists, accumulating all
+	 * rejected Slider Presets into the command-wide diagnostic list.
+	 */
+	private static List<BosJsonArtifact> generateBosArtifacts(List<SliderPresetSnapshot> presets,
+			List<BosFileNameMapping> mappings, List<BosOutputDiagnostic> diagnostics) {
+		List<BosJsonArtifact> artifacts = new ArrayList<>();
+		for (int index = 0; index < presets.size(); index++) {
+			SliderPresetSnapshot preset = presets.get(index);
+			try {
+				Utf8Json json = formatBosJson(preset);
+				String fileName = mappings.get(index).getFileName().orElse(null);
+				if (fileName != null)
+					artifacts.add(new BosJsonArtifact(preset.getName(), fileName, json));
+			} catch (BosValueException exception) {
+				diagnostics.add(new BosOutputDiagnostic("BOS_VALUE_NON_FINITE", preset.getName(),
+						exception.getMessage()));
+			} catch (IllegalArgumentException exception) {
+				diagnostics.add(new BosOutputDiagnostic("BOS_VALUE_UNREPRESENTABLE", preset.getName(),
+						exception.getMessage()));
+			}
+		}
+		return artifacts;
 	}
 
 	/** Formats one legacy templates.ini line from immutable Slider Preset values. */
@@ -87,38 +148,30 @@ public final class ProjectOutputFormatter {
 		return preset.getName() + "=" + String.join(", ", values);
 	}
 
-	/** Formats one BoS JSON document while retaining the legacy property order. */
-	private static String formatBosJson(SliderPresetSnapshot preset) {
-		JsonObject strings = new JsonObject();
-		JsonObject integers = new JsonObject();
-		JsonObject floats = new JsonObject();
+	/** Formats one BoS JSON payload through the repository-owned canonical writer. */
+	private static Utf8Json formatBosJson(SliderPresetSnapshot preset) {
 		List<SliderChoiceSnapshot> included = new ArrayList<>();
-
-		strings.add("bodyname", preset.getName());
 		for (SliderChoiceSnapshot choice : enabledChoices(preset)) {
 			if (!isRedundant(choice, preset.isUunp()))
 				included.add(choice);
 		}
-		for (int index = 0; index < included.size(); index++) {
-			strings.add("slidername" + (index + 1), included.get(index).getName());
-		}
-		for (int index = 0; index < included.size(); index++) {
-			SliderChoiceSnapshot choice = included.get(index);
-			floats.add("highvalue" + (index + 1),
-					formatBosValue(choice.getEffectiveBigValue(), choice.getName(), preset.isUunp()));
-		}
-		for (int index = 0; index < included.size(); index++) {
-			SliderChoiceSnapshot choice = included.get(index);
-			floats.add("lowvalue" + (index + 1),
-					formatBosValue(choice.getEffectiveSmallValue(), choice.getName(), preset.isUunp()));
-		}
-		integers.add("slidersnumber", included.size());
 
-		JsonObject root = new JsonObject();
-		root.add("string", strings);
-		root.add("int", integers);
-		root.add("float", floats);
-		return root.toString(WriterConfig.PRETTY_PRINT);
+		List<String> sliderNames = new ArrayList<>();
+		List<String> highValues = new ArrayList<>();
+		List<String> lowValues = new ArrayList<>();
+		for (SliderChoiceSnapshot choice : included) {
+			sliderNames.add(choice.getName());
+			highValues.add(formatBosLexeme(choice.getEffectiveBigValue(), choice.getName(), preset.isUunp()));
+			lowValues.add(formatBosLexeme(choice.getEffectiveSmallValue(), choice.getName(), preset.isUunp()));
+		}
+		return BosJacksonWriter.write(new BosJacksonWriter.BosDocument(
+				preset.getName(), sliderNames, highValues, lowValues));
+	}
+
+	/** Preserves minimal-json's whole-float spelling while retaining exponent notation. */
+	private static String formatBosLexeme(int value, String sliderName, boolean uunp) {
+		String lexeme = Float.toString(formatBosValue(value, sliderName, uunp));
+		return lexeme.endsWith(".0") ? lexeme.substring(0, lexeme.length() - 2) : lexeme;
 	}
 
 	/** Returns enabled explicit and synthesized choices in the legacy name order. */
@@ -154,7 +207,11 @@ public final class ProjectOutputFormatter {
 		float formatted = value * 0.01f;
 		if (isInverted(sliderName, uunp))
 			formatted = 1f - formatted;
-		return roundLegacy(formatted * multiplier(sliderName, uunp));
+		float multiplied = formatted * multiplier(sliderName, uunp);
+		if (!Float.isFinite(multiplied))
+			throw new BosValueException("Slider " + BosOutputException.escape(sliderName)
+					+ " calculated a non-finite BoS endpoint.");
+		return roundLegacy(multiplied);
 	}
 
 	/** Reports whether a choice matches the legacy neutral endpoint for its inversion. */
@@ -184,5 +241,15 @@ public final class ProjectOutputFormatter {
 	private static void appendMorphLine(StringBuilder output, String identity, List<String> presetNames,
 			String newLine) {
 		output.append((identity + "=" + String.join("|", presetNames)).trim()).append(newLine);
+	}
+
+	/** Internal marker translated into the stable public BoS diagnostic contract. */
+	private static final class BosValueException extends IllegalArgumentException {
+		private static final long serialVersionUID = 1L;
+
+		/** Creates one non-finite calculation failure without exposing numeric implementation details. */
+		BosValueException(String message) {
+			super(message);
+		}
 	}
 }

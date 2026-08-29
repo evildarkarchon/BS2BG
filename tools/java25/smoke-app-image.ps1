@@ -1,8 +1,8 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG launcher through the representative Project, Templates, and Morphs workflows from a
-    clean extracted image and proves that it exits cleanly (issue #97).
+    Drives the packaged BS2BG launcher through the representative Project, BoS, Templates, and Morphs workflows
+    from a clean extracted image and proves that it exits cleanly (issues #83 and #97).
 
 .DESCRIPTION
     The archive produced by tools/java25/package-java25.ps1 is extracted to a fresh location and its launcher is
@@ -20,10 +20,11 @@
       - nothing is located by screen coordinates, row index, generated automation id, CSS, or JavaFX internals;
       - native file dialogs owned by the JavaFX window are reached by their title and driven by role and name.
 
-    Workflow: open the checked-in representative Project, generate Templates output, load its Custom Morph Target
-    and NPC Morph Assignment content, create a new Custom Morph Target and assign every Slider Preset to it,
-    generate Morphs output, Save As a new Project file, start a New Project and reopen the saved file, then close
-    the window and require both launcher processes to exit with code 0 within a bounded timeout.
+    Workflow: open the checked-in representative Project; generate, preview, copy, and export one BoS artifact;
+    generate Templates output; load its Custom Morph Target and NPC Morph Assignment content; create a new Custom
+    Morph Target and assign every Slider Preset to it; generate Morphs output; Save As a new Project file; start a
+    New Project and reopen the saved file; then close the window and require both launcher processes to exit with
+    code 0 within a bounded timeout.
 
     Every step is recorded with its duration and observations in the evidence file; the first failure captures the
     UIA tree, the window list, a screenshot, and the process output before the launcher is terminated.
@@ -66,6 +67,7 @@ Import-Module (Join-Path $PSScriptRoot 'UiaAutomation.psm1') -Force
 $applicationTitle = 'jBS2BG'
 $openDialogTitle = 'Open jBS2BG File'
 $saveDialogTitle = 'Save jBS2BG File'
+$bosExportDialogTitle = 'Export BoS JSON File'
 $sliderPresetsList = 'Slider Presets'
 $customTargetsList = 'Custom Morph Targets'
 $targetPresetsList = 'Target Slider Presets'
@@ -79,6 +81,7 @@ $fixtureNpcMod = 'Skyrim.esm'
 $newCustomTarget = 'All|Female|NordRace'
 $openedProjectName = 'representative.jbs2bg'
 $savedProjectName = 'smoke-output.jbs2bg'
+$bosExportName = 'smoke-bos.json'
 
 $evidenceDir = Split-Path -Parent $EvidencePath
 $diagnosticsDir = Join-Path $evidenceDir 'smoke-diagnostics'
@@ -529,6 +532,82 @@ Invoke-Step -Name 'open-representative-project' -Action {
     "title '$applicationTitle - $openedProjectName'; $sliderPresetsList lists $($presets -join ', ')"
 }
 
+Invoke-Step -Name 'generate-preview-copy-and-export-bos-artifact' -Action {
+    $presetName = $fixturePresets[0]
+    Select-ListItem -ListName $sliderPresetsList -ItemName $presetName
+    $view = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'Button' -Name 'View BoS JSON') -Description "'View BoS JSON' button" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $view
+
+    $popupTitle = "BodyTypes of Skyrim JSON: $presetName"
+    # JavaFX exposes an owned Stage beneath its owner in UIA's control view even though it is a native top-level
+    # window, so resolve it by the same titled-handle path used for native dialogs.
+    $popup = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $popupTitle -TimeoutSeconds $StepTimeoutSeconds
+    Wait-UiaElement -Root $popup -Condition (New-UiaCondition -ControlType 'Edit') -Description "BoS preview in '$popupTitle'" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+    $previewControls = @(Find-UiaElements -Root $popup -Condition (New-UiaCondition -ControlType 'Edit'))
+    if ($previewControls.Count -ne 1) { throw "'$popupTitle' exposes $($previewControls.Count) Edit controls; expected one BoS preview." }
+    $previewControl = $previewControls[0]
+    $preview = Get-UiaText -Element $previewControl
+    $parsed = $preview | ConvertFrom-Json
+    if ($parsed.string.bodyname -cne $presetName) {
+        throw "BoS preview bodyname '$($parsed.string.bodyname)' does not match '$presetName'."
+    }
+    if ([int]$parsed.int.slidersnumber -lt 1) {
+        throw "BoS preview for '$presetName' has no slider values."
+    }
+    Get-UiaTree -Element $popup | Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-bos-preview.txt') -Encoding utf8
+
+    Set-Clipboard -Value ''
+    $copy = Wait-UiaElement -Root $popup -Condition (New-UiaCondition -ControlType 'Button' -Name 'Copy') -Description "'Copy' button in '$popupTitle'" -TimeoutSeconds $StepTimeoutSeconds
+    # Copy opens the application's modal notification, so send Enter to the focused, located button instead of
+    # holding JavaFX's application thread inside a synchronous UIA Invoke callback.
+    Send-UiaKeysToElement -Element $copy -Keys '{ENTER}'
+    $notification = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title 'Notification' -TimeoutSeconds $StepTimeoutSeconds
+    $copied = Get-Clipboard -Raw
+    # Windows CF_UNICODETEXT represents line boundaries as CRLF. Normalize only that platform representation;
+    # every other character must still match the canonical LF artifact exactly.
+    $normalizedClipboard = $copied.Replace("`r`n", "`n")
+    if ($normalizedClipboard -cne $preview) {
+        throw 'BoS clipboard content differs from the displayed canonical artifact after Windows newline normalization.'
+    }
+    $ok = Wait-UiaElement -Root $notification -Condition (New-UiaCondition -ControlType 'Button' -Name 'OK') -Description "'OK' button in BoS copy notification" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $ok
+
+    $exportPath = Join-Path $workDir $bosExportName
+    $export = Wait-UiaElement -Root $popup -Condition (New-UiaCondition -ControlType 'Button' -Name 'Export') -Description "'Export' button in '$popupTitle'" -TimeoutSeconds $StepTimeoutSeconds
+    # Export enters the native save dialog's modal loop and therefore uses the same focused-key activation rule.
+    Send-UiaKeysToElement -Element $export -Keys '{ENTER}'
+    Complete-FileDialog -Title $bosExportDialogTitle -Path $exportPath -ConfirmButton 'Save'
+    Wait-UiaCondition -Description "BoS export '$bosExportName'" -TimeoutSeconds $StepTimeoutSeconds -Test {
+        if (Test-Path -LiteralPath $exportPath -PathType Leaf) { Get-Item -LiteralPath $exportPath }
+    } | Out-Null
+    $exportedBytes = [System.IO.File]::ReadAllBytes($exportPath)
+    $previewBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($preview)
+    if ([Convert]::ToBase64String($exportedBytes) -cne [Convert]::ToBase64String($previewBytes)) {
+        throw 'Exported BoS bytes differ from the displayed canonical artifact.'
+    }
+    if ($exportedBytes.Length -ge 3 -and $exportedBytes[0] -eq 0xEF -and $exportedBytes[1] -eq 0xBB -and $exportedBytes[2] -eq 0xBF) {
+        throw 'Exported BoS artifact contains an unexpected UTF-8 BOM.'
+    }
+    if ($exportedBytes[-1] -eq 0x0A -or $exportedBytes[-1] -eq 0x0D) {
+        throw 'Exported BoS artifact contains an unexpected final newline.'
+    }
+    $back = Wait-UiaElement -Root $popup -Condition (New-UiaCondition -ControlType 'Button' -Name 'Back') -Description "'Back' button in '$popupTitle'" -TimeoutSeconds $StepTimeoutSeconds
+    Wait-UiaCondition -Description "enabled 'Back' button in '$popupTitle'" -TimeoutSeconds $StepTimeoutSeconds -Test {
+        if ($back.Current.IsEnabled) { $true }
+    } | Out-Null
+    Invoke-UiaElement -Element $back
+
+    $observations['bosArtifact'] = [ordered]@{
+        sliderPreset = $presetName
+        file = $bosExportName
+        bytes = $exportedBytes.Length
+        sha256 = (Get-FileHash -LiteralPath $exportPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        clipboardContentExactAfterWindowsNewlineNormalization = $true
+        previewExportBytesExact = $true
+    }
+    "BoS '$presetName': preview/export bytes exact and clipboard content exact after Windows newline normalization, $($exportedBytes.Length) UTF-8 bytes, sha256 $($observations['bosArtifact'].sha256)"
+}
+
 Invoke-Step -Name 'generate-templates-output' -Action {
     $option = Find-OuterControl -ControlType 'CheckBox' -Name 'Omit Redundant Sliders'
     # The generated Templates output is the text area that immediately precedes the option that controls it.
@@ -682,6 +761,7 @@ finally {
             stderrLines            = @($stderr -split "`r?`n" | Where-Object { $_ }).Count
             stderrExcerpt          = @($stderr -split "`r?`n" | Where-Object { $_ } | Select-Object -First 20)
             nativeAccessWarnings   = $restricted
+            uiaTreeBosPreview      = 'smoke-diagnostics/uia-tree-bos-preview.txt'
             uiaTreeAfterReopen     = 'smoke-diagnostics/uia-tree-after-reopen.txt'
         }
         workRoot         = $WorkRoot
