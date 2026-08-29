@@ -33,9 +33,13 @@ Describe 'Get-ToolchainLock' {
         $lock.maven.version | Should -Be '3.9.16'
         $lock.maven.distributionSha256 | Should -Match '^[0-9a-f]{64}$'
         $lock.jdk.sha256 | Should -Match '^[0-9a-f]{64}$'
+        $lock.jdk.sourceUrl | Should -Match '^https://github\.com/openjdk/jdk25u/'
+        $lock.jdk.sourceRevision | Should -Match '^[0-9a-f]{40}$'
         $lock.jdk.release.IMPLEMENTOR_VERSION | Should -Be 'Temurin-25.0.4.1+1'
         $lock.javafx.version | Should -Be '25.0.4'
         $lock.javafx.sha256 | Should -Match '^[0-9a-f]{64}$'
+        $lock.javafx.sourceUrl | Should -Match '^https://github\.com/openjdk/jfx25u/'
+        $lock.javafx.sourceRevision | Should -Match '^[0-9a-f]{40}$'
         $lock.javafx.requiredModules | Should -Contain 'javafx.base'
         $lock.architecture.processorArchitecture | Should -Be 'AMD64'
     }
@@ -50,6 +54,14 @@ Describe 'Get-ToolchainLock' {
         $lock.jdk.sha256 = 'not-a-hash'
         $path = New-TempFile 'bad-hash-lock.json' ($lock | ConvertTo-Json -Depth 10)
         { Get-ToolchainLock -Path $path } | Should -Throw -ExpectedMessage '*jdk.sha256*'
+    }
+
+    It 'fails closed when an exact runtime source pin is missing' {
+        $lock = Get-Content -LiteralPath $script:LockPath -Raw | ConvertFrom-Json
+        $lock.javafx.PSObject.Properties.Remove('sourceRevision')
+        $path = New-TempFile 'missing-source-lock.json' ($lock | ConvertTo-Json -Depth 10)
+
+        { Get-ToolchainLock -Path $path } | Should -Throw -ExpectedMessage '*javafx.sourceRevision*'
     }
 }
 

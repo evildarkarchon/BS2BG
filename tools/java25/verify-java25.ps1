@@ -109,6 +109,11 @@ foreach ($goal in $MavenGoals) {
         throw "Maven argument '$goal' would skip or filter the test phase; the application gate runs every suite."
     }
 }
+if (-not $SkipMaven) {
+    if ($MavenGoals -cnotcontains 'clean' -or $MavenGoals -cnotcontains 'verify') {
+        throw "The complete application gate requires the clean and verify lifecycle goals."
+    }
+}
 
 # ---------------------------------------------------------------------------------------------------------------
 # 2. Provision and verify Temurin 25
@@ -206,7 +211,14 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.project.ProjectSessionSliderChoiceTest',
     'com.asdasfa.jbs2bg.project.ProjectJacksonCompatibilityTest',
     'com.asdasfa.jbs2bg.project.ProjectTest',
-    'com.asdasfa.jbs2bg.data.ProjectPersistenceCompatibilityTest'
+    'com.asdasfa.jbs2bg.data.ProjectPersistenceCompatibilityTest',
+    'com.asdasfa.jbs2bg.json.JacksonJsonTest',
+    'com.asdasfa.jbs2bg.json.JacksonDependencyPolicyTest',
+    'com.asdasfa.jbs2bg.data.SettingsJacksonAdapterTest',
+    'com.asdasfa.jbs2bg.data.SettingsPairPublisherTest',
+    'com.asdasfa.jbs2bg.presentation.ProjectOutputFormatterTest',
+    'com.asdasfa.jbs2bg.presentation.BosJacksonWriterTest',
+    'com.asdasfa.jbs2bg.presentation.BosArtifactPublisherTest'
 )
 
 if (-not $SkipMaven) {
@@ -303,6 +315,7 @@ $evidence = [ordered]@{
     gitCommit               = $(try { (& git -C $repoRoot rev-parse HEAD 2>$null) } catch { $null })
     applicationGate         = [ordered]@{
         completeApplicationGate = $scope.CompleteApplicationGate
+        cleanLifecycle          = $(if ($SkipMaven) { $false } else { $true })
         productionSourceCount   = $scope.ProductionSources.Count
         compilerArgs            = $scope.CompilerArgs
         requiredSuites          = $requiredSuiteCounts
@@ -372,6 +385,8 @@ $evidence = [ordered]@{
         mavenArtifacts  = 'org.openjfx:javafx-controls / javafx-fxml (see dependency-tree.txt for the resolved win classifier)'
     }
     dependencyGraph         = [ordered]@{
+        convergence             = 'Maven Enforcer dependencyConvergence passed before compilation'
+        retiredCodecBan         = 'Maven Enforcer bans com.eclipsesource.minimal-json:* transitively'
         dependencyTreeFile      = $(if ($SkipMaven) { $null } else { 'target/reproducibility/dependency-tree.txt' })
         testClasspathFile       = $(if ($SkipMaven) { $null } else { 'target/reproducibility/test-classpath.txt' })
         testClasspathSha256File = $(if ($SkipMaven) { $null } else { 'target/reproducibility/test-classpath-sha256.txt' })

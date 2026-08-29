@@ -1,6 +1,6 @@
 # Windows app-image packaging checkpoint
 
-Status: packaging checkpoint on top of the complete application gate (issue #97, parent #81). A green run proves
+Status: packaging checkpoint on top of the complete application gate (issues #97 and #87, parents #81 and #80). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
 starts from a clean extracted location without any system Java, exercises Project Open cancellation/malformed
 rejection/New/Save/Save As/recovery and failed-overwrite preservation plus the representative BoS, Templates, and
@@ -15,12 +15,16 @@ ADR-0003 records the Java 25 baseline this checkpoint ships.
 
 The script:
 
-1. Runs `tools/java25/verify-java25.ps1` first (the complete application gate; see
-   [java25-verification.md](java25-verification.md)). A packaging run never starts from a red or partial gate.
+1. For a checkpoint run, rejects tracked or untracked source changes and records the exact clean `HEAD` commit.
+   It then runs `tools/java25/verify-java25.ps1` (the complete application gate; see
+   [java25-verification.md](java25-verification.md)). A checkpoint never starts from a dirty, red, or partial gate.
 2. Reads the payload the Maven Wrapper staged in `target/app-image-input/`: the application jar (main class
    `com.asdasfa.jbs2bg.Launcher`) beside `lib/` with every runtime-scoped dependency. JavaFX is a `provided`
    dependency and is excluded from staging twice (`copy-dependencies` `excludeGroupIds`), so it can never be on
    the launcher classpath; `Get-StagedApplication` fails closed if a JavaFX jar appears anywhere in the tree.
+   `Assert-StagedJsonCodec` then inspects embedded Maven coordinates and every application/library class path. It
+   requires exactly `tools.jackson.core:jackson-core:3.1.5`, requires the Jackson Core classes to occur only in
+   that jar, and rejects minimal-json or every other reviewed production codec family even when shaded.
 3. Measures the runtime module closure with `jdeps --print-module-deps` over the staged jars against the pinned
    JavaFX 25 JMODs. `jdeps` reads jars and exploded modules but not JMOD archives, so the pinned JMODs are first
    extracted with `jmod extract` into `target/app-image-measure/`. The measured closure is widened only by the
@@ -32,17 +36,20 @@ The script:
    module present), that `bin\java.exe` is absent, and that every JavaFX module's `legal/` directory was linked
    in. The JVM's own resolution of that module set (`--show-module-resolution`, including service bindings) is
    recorded from the toolchain JVM against the same pinned inputs.
-5. Assembles `THIRD-PARTY-NOTICES.txt` and `notices/<jar>/` from the staged jars' own metadata (`META-INF`
+5. Assembles `THIRD-PARTY-NOTICES.txt`, `THIRD-PARTY-COMPONENTS.json`, `CORRESPONDING-SOURCE.txt`, and
+   `notices/<jar>/` from the staged jars' own metadata (`META-INF`
    license and notice files, the embedded Maven pom `<licenses>`), listing a jar without metadata explicitly
-   rather than omitting it, and points at the runtime's `runtime/legal/<module>/` directories for the JDK and
-   JavaFX licenses (GPLv2 with the Classpath Exception).
+   rather than omitting it. Checkpoint generation fails unless every staged library has an exact Maven coordinate
+   and versioned sources artifact URL and both runtime inputs have pinned source URLs/revisions. The component
+   manifest records library hashes and the exact JDK/JavaFX binary, source, license, notice, and module metadata;
+   the notices point at `runtime/legal/<module>/` for the GPLv2 with Classpath Exception texts.
 6. Runs `jpackage --type app-image` with `--runtime-image`, `--main-jar`, `--main-class com.asdasfa.jbs2bg.Launcher`,
-   `--app-version` from the pom's `bs2bg.app.version`, `--app-content` for the notices, and one JVM option,
+   `--app-version` from the pom's `bs2bg.app.version`, `--app-content` for all three manifests and notices, and one JVM option,
    `--enable-native-access=javafx.graphics` (JavaFX loads its native libraries through a restricted method; JDK 25
    warns without it and a later release will refuse). Because JDK 25 has no jpackage CLI switch for its Windows
    no-restart mode, the script then adds `win.norestart=true` under `[Application]` in the generated launcher
    configuration. It verifies the image: layout (`Assert-AppImageLayout`: launcher, exact payload, runtime, JavaFX
-   native libraries, notices, `runtime/legal/java.base/LICENSE`), launcher configuration (`Assert-LauncherConfig`:
+   native libraries, all three manifests, notices, `runtime/legal/java.base/LICENSE`), launcher configuration (`Assert-LauncherConfig`:
    single-process mode, main class, `$APPDIR`-relative classpath covering the jar and every lib, nothing absolute,
    no JavaFX jar, stamped version, required JVM option), jpackage's own state record (`Assert-JpackageState`), the
    bundled runtime's release, and hashes every file into one image digest. The image is archived as
@@ -186,12 +193,15 @@ focused window.
 
 `target/reproducibility/windows-app-image.json` (schema `bs2bg.windows-app-image/2`) records:
 
+- `sourceCheckout`: whether clean checkout was required, the observed result, and the exact checkpoint commit.
 - `application`: name, version, main class, main jar, description, vendor.
 - `gate`: how the gate was obtained (this run or reused), its test count, Maven version and `--version` output.
 - `toolchain`: Temurin implementor/full build/`JAVA_VERSION`/`JAVA_RUNTIME_VERSION`, JavaFX patch, archive
   hashes, architecture (`PROCESSOR_ARCHITECTURE`, JDK `OS_ARCH`, `os.arch`), and `jdeps`/`jlink`/`jpackage`
   versions.
-- `payload`: every staged artifact with SHA-256 and size; pointer to `dependency-tree.txt`.
+- `payload`: every staged artifact with SHA-256 and size; pointer to `dependency-tree.txt`; the selected Jackson
+  coordinate/jar, coordinate/class-entry inspection method, `onlyProductionCodec=true`, and
+  `shadedFallbacks=false` witnesses.
 - `runtime`: measured modules, explicit additions with reasons, requested modules, the image's `MODULES` list,
   the service closure (`serviceBindings`), the jlink options, and the runtime `release` values. The service
   closure is the ` binds ` lines of `java --show-module-resolution` run with `--limit-modules` set to the
@@ -200,7 +210,7 @@ focused window.
   used for this because it lists candidate providers across the whole module path, not what the image resolves.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
-  jpackage state (tool version, platform), the JVM options, and the notices components.
+  jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
 - `smoke`: the complete smoke evidence (schema `bs2bg.windows-app-image-smoke/5`; steps with durations; Project
   canceled/malformed Open preservation, New, recovered Save, Save As, failed-overwrite preservation, retry, and reopen observations; first-run/edited/
   recovered Settings hashes and exact output; expected and observed process models; the three sequential process
@@ -242,6 +252,24 @@ The issue #86 Project reader cutover checkpoint is retained separately under
 `docs/build/evidence/windows-app-image-2026-08-29-project-reader-cutover/`. Its smoke evidence records valid legacy
 and recovered Project reads, native Open cancellation, malformed input with source coordinates and transactional
 state preservation, save/reopen compatibility, and all three clean launcher lifecycles.
+
+The issue #87 single-codec checkpoint is retained separately under
+`docs/build/evidence/windows-app-image-2026-08-29-codec-cutover/`. It was built from a machine-verified clean
+checkout at `50152a9d65e39e4850385013f6dca0e5aed533f1`; 241 tests in 28 suites passed, including every required
+Project, Settings, and BoS corpus suite, and all 28 packaged smoke steps passed. Its payload evidence records only
+`tools.jackson.core:jackson-core:3.1.5`, with embedded-coordinate and class-entry inspection rejecting shaded
+fallbacks. The retained dependency tree, component/license/corresponding-source manifests, 13-module runtime
+closure, per-file hashes, and smoke diagnostics describe the 238-file image with digest
+`8136fc033c9191cde2ca2d611af14e0246b7581483e8ccbb0e553c582e27c9e7` and archive SHA-256
+`f87d7527411704181156c0d7987f674e588718ef72a5f06627e613125d274303`.
+
+## Reverting the single-codec cutover
+
+The dependency removal, temporary-oracle cleanup, permanent corpus expectations, convergence/retired-codec
+policy, packaged codec inspection, exact manifests, clean-checkout proof, documentation, and retained evidence
+land together in the single issue #87 commit. Reverting that commit restores the last verified dual-development
+oracle checkpoint and its prior packaging evidence. Project, Settings, and BoS files remain semantically
+compatible JSON; no data migration or external-state cleanup is required.
 
 ## Reverting the Project reader cutover
 

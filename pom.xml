@@ -67,11 +67,6 @@
             <version>${jackson-core.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.eclipsesource.minimal-json</groupId>
-            <artifactId>minimal-json</artifactId>
-            <version>0.9.5</version>
-        </dependency>
-        <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
             <version>2.6</version>
@@ -224,12 +219,17 @@
                                 <banDynamicVersions>
                                     <message>Dependency versions must be exact; ranges, LATEST, and RELEASE are banned.</message>
                                 </banDynamicVersions>
+                                <dependencyConvergence>
+                                    <message>Every resolved dependency must converge on one reviewed version.</message>
+                                </dependencyConvergence>
                                 <!-- JavaFX incubator modules are not part of the accepted JavaFX 25 surface. -->
                                 <bannedDependencies>
                                     <excludes>
                                         <exclude>org.openjfx:javafx-incubator-*</exclude>
+                                        <!-- The completed Jackson cutover must also reject transitive reintroduction. -->
+                                        <exclude>com.eclipsesource.minimal-json:*</exclude>
                                     </excludes>
-                                    <message>JavaFX incubator modules stay disabled.</message>
+                                    <message>JavaFX incubator modules and the retired minimal-json codec stay disabled.</message>
                                 </bannedDependencies>
                             </rules>
                             <fail>true</fail>

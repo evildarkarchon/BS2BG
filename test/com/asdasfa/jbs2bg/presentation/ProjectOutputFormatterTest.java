@@ -1,6 +1,7 @@
 package com.asdasfa.jbs2bg.presentation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,8 +26,6 @@ import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
-import com.eclipsesource.json.Json;
-import com.eclipsesource.json.JsonObject;
 
 /** Verifies JavaFX-free generated output derived from one immutable Project snapshot. */
 class ProjectOutputFormatterTest {
@@ -67,12 +66,12 @@ class ProjectOutputFormatterTest {
 		assertEquals(Arrays.asList("Alpha.json", "Zulu.json"),
 				output.getBosJsonArtifacts().stream().map(BosJsonArtifact::getFileName).toList());
 
-		JsonObject alphaBos = Json.parse(artifactNamed(output, "Alpha.json").getText()).asObject();
-		assertEquals("Alpha", alphaBos.get("string").asObject().getString("bodyname", null));
-		assertEquals("Scale", alphaBos.get("string").asObject().getString("slidername1", null));
-		assertEquals(1, alphaBos.get("int").asObject().getInt("slidersnumber", -1));
-		assertEquals(0.8f, alphaBos.get("float").asObject().getFloat("highvalue1", -1f));
-		assertEquals(0.2f, alphaBos.get("float").asObject().getFloat("lowvalue1", -1f));
+		String alphaBos = artifactNamed(output, "Alpha.json").getText();
+		assertTrue(alphaBos.contains("\"bodyname\": \"Alpha\""));
+		assertTrue(alphaBos.contains("\"slidername1\": \"Scale\""));
+		assertTrue(alphaBos.contains("\"slidersnumber\": 1"));
+		assertTrue(alphaBos.contains("\"highvalue1\": 0.8"));
+		assertTrue(alphaBos.contains("\"lowvalue1\": 0.2"));
 	}
 
 	/** No-preset reporting must preserve the exact immutable child values in output order. */
@@ -104,11 +103,13 @@ class ProjectOutputFormatterTest {
 				choice("Disabled", false, 40, 60, 100, 100)));
 
 		ProjectGeneratedOutput output = ProjectOutputFormatter.generate(session.getSnapshot(), true);
-		JsonObject bos = Json.parse(artifactNamed(output, "Preset.json").getText()).asObject();
+		String bos = artifactNamed(output, "Preset.json").getText();
 
 		assertEquals("Preset=Active@0.2", output.getTemplatesText());
-		assertEquals(1, bos.get("int").asObject().getInt("slidersnumber", -1));
-		assertEquals("Active", bos.get("string").asObject().getString("slidername1", null));
+		assertTrue(bos.contains("\"slidersnumber\": 1"));
+		assertTrue(bos.contains("\"slidername1\": \"Active\""));
+		assertFalse(bos.contains("Disabled"));
+		assertFalse(bos.contains("Zero"));
 	}
 
 	/** Omission uses the inverted profile's 100/100 neutral endpoint in both generated formats. */
@@ -122,10 +123,10 @@ class ProjectOutputFormatterTest {
 				choice("Inverted", true, 100, 100, 100, 100)));
 
 		ProjectGeneratedOutput output = ProjectOutputFormatter.generate(session.getSnapshot(), true);
-		JsonObject bos = Json.parse(artifactNamed(output, "Preset.json").getText()).asObject();
+		String bos = artifactNamed(output, "Preset.json").getText();
 
 		assertEquals("Preset=", output.getTemplatesText());
-		assertEquals(0, bos.get("int").asObject().getInt("slidersnumber", -1));
+		assertTrue(bos.contains("\"slidersnumber\": 0"));
 	}
 
 	/** BoS output must retain the legacy grouping of every high value before every low value. */

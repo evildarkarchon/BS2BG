@@ -68,6 +68,99 @@ Describe 'Get-StagedApplication' {
     }
 }
 
+Describe 'Assert-StagedJsonCodec' {
+    It 'requires exactly the pinned Jackson Core coordinate' {
+        $root = Join-Path $TestDrive 'codec\selected'
+        New-TestJar -Path (Join-Path $root 'app.jar') -Entries @{
+            'com/asdasfa/jbs2bg/Launcher.class' = 'class'
+        } | Out-Null
+        New-TestJar -Path (Join-Path $root 'lib\jackson-core-3.1.5.jar') -Entries @{
+            'META-INF/maven/tools.jackson.core/jackson-core/pom.properties' = "groupId=tools.jackson.core`nartifactId=jackson-core`nversion=3.1.5`n"
+            'tools/jackson/core/JsonFactory.class' = 'class'
+            'tools/jackson/core/JsonParser.class' = 'class'
+        } | Out-Null
+
+        $codec = Assert-StagedJsonCodec -StagedApplication (Get-StagedApplication -StagingDir $root) `
+            -ExpectedCoordinate 'tools.jackson.core:jackson-core:3.1.5'
+
+        $codec.Coordinate | Should -Be 'tools.jackson.core:jackson-core:3.1.5'
+        $codec.Jar | Should -Be 'jackson-core-3.1.5.jar'
+    }
+
+    It 'rejects a staged payload that also contains the retired codec' {
+        $root = Join-Path $TestDrive 'codec\dual'
+        New-TestJar -Path (Join-Path $root 'app.jar') -Entries @{
+            'com/asdasfa/jbs2bg/Launcher.class' = 'class'
+        } | Out-Null
+        New-TestJar -Path (Join-Path $root 'lib\jackson-core-3.1.5.jar') -Entries @{
+            'META-INF/maven/tools.jackson.core/jackson-core/pom.properties' = "groupId=tools.jackson.core`nartifactId=jackson-core`nversion=3.1.5`n"
+            'tools/jackson/core/JsonFactory.class' = 'class'
+        } | Out-Null
+        New-TestJar -Path (Join-Path $root 'lib\minimal-json-0.9.5.jar') -Entries @{
+            'META-INF/maven/com.eclipsesource.minimal-json/minimal-json/pom.properties' = "groupId=com.eclipsesource.minimal-json`nartifactId=minimal-json`nversion=0.9.5`n"
+            'com/eclipsesource/json/Json.class' = 'class'
+        } | Out-Null
+
+        { Assert-StagedJsonCodec -StagedApplication (Get-StagedApplication -StagingDir $root) `
+                -ExpectedCoordinate 'tools.jackson.core:jackson-core:3.1.5' } |
+            Should -Throw -ExpectedMessage '*minimal-json*'
+    }
+
+    It 'rejects any second production JSON codec' {
+        $root = Join-Path $TestDrive 'codec\gson'
+        New-TestJar -Path (Join-Path $root 'app.jar') -Entries @{
+            'com/asdasfa/jbs2bg/Launcher.class' = 'class'
+        } | Out-Null
+        New-TestJar -Path (Join-Path $root 'lib\jackson-core-3.1.5.jar') -Entries @{
+            'META-INF/maven/tools.jackson.core/jackson-core/pom.properties' = "groupId=tools.jackson.core`nartifactId=jackson-core`nversion=3.1.5`n"
+            'tools/jackson/core/JsonFactory.class' = 'class'
+        } | Out-Null
+        New-TestJar -Path (Join-Path $root 'lib\gson-2.13.2.jar') -Entries @{
+            'META-INF/maven/com.google.code.gson/gson/pom.properties' = "groupId=com.google.code.gson`nartifactId=gson`nversion=2.13.2`n"
+            'com/google/gson/Gson.class' = 'class'
+        } | Out-Null
+
+        { Assert-StagedJsonCodec -StagedApplication (Get-StagedApplication -StagingDir $root) `
+                -ExpectedCoordinate 'tools.jackson.core:jackson-core:3.1.5' } |
+            Should -Throw -ExpectedMessage '*gson*'
+    }
+
+    It 'rejects a shaded fallback codec even when no Maven coordinate reveals it' {
+        $root = Join-Path $TestDrive 'codec\shaded'
+        New-TestJar -Path (Join-Path $root 'app.jar') -Entries @{
+            'com/asdasfa/jbs2bg/Launcher.class' = 'class'
+            'com/eclipsesource/json/Json.class' = 'shaded class'
+        } | Out-Null
+        New-TestJar -Path (Join-Path $root 'lib\jackson-core-3.1.5.jar') -Entries @{
+            'META-INF/maven/tools.jackson.core/jackson-core/pom.properties' = "groupId=tools.jackson.core`nartifactId=jackson-core`nversion=3.1.5`n"
+            'tools/jackson/core/JsonFactory.class' = 'class'
+        } | Out-Null
+
+        { Assert-StagedJsonCodec -StagedApplication (Get-StagedApplication -StagingDir $root) `
+                -ExpectedCoordinate 'tools.jackson.core:jackson-core:3.1.5' } |
+            Should -Throw -ExpectedMessage '*minimal-json*app.jar*'
+    }
+}
+
+Describe 'Assert-CleanGitCheckout' {
+    It 'returns the pinned commit for a clean checkout and rejects source changes' {
+        $root = Join-Path $TestDrive 'git-checkout'
+        git init --quiet $root
+        git -C $root config user.email 'build-test@example.invalid'
+        git -C $root config user.name 'Build Test'
+        New-TreeFile 'git-checkout\tracked.txt' 'checkpoint' | Out-Null
+        git -C $root add tracked.txt
+        git -C $root commit --quiet -m 'checkpoint'
+
+        $checkout = Assert-CleanGitCheckout -RepositoryRoot $root
+
+        $checkout.Clean | Should -BeTrue
+        $checkout.Commit | Should -Match '^[0-9a-f]{40}$'
+        New-TreeFile 'git-checkout\untracked.txt' 'dirty' | Out-Null
+        { Assert-CleanGitCheckout -RepositoryRoot $root } | Should -Throw -ExpectedMessage '*untracked.txt*'
+    }
+}
+
 Describe 'ConvertFrom-JdepsModuleDeps' {
     It 'parses the comma-separated module line into a sorted unique list' {
         ConvertFrom-JdepsModuleDeps -Output @('java.xml,java.base,javafx.fxml,java.base') | Should -Be @('java.base', 'java.xml', 'javafx.fxml')
@@ -363,7 +456,10 @@ Describe 'New-ThirdPartyNotices' {
         $script:Staged = Get-StagedApplication -StagingDir $staging
         $script:Output = Join-Path $TestDrive 'notices\out'
         $script:Result = New-ThirdPartyNotices -StagedApplication $script:Staged -OutputDir $script:Output -ApplicationName 'BS2BG' -ApplicationVersion '1.1.2' -RuntimeComponents @(
-            [pscustomobject]@{ name = 'Eclipse Temurin JDK'; version = '25.0.4.1+1'; license = 'GPLv2 with Classpath Exception'; noticesPath = 'runtime/legal/java.base' }
+            [pscustomobject]@{
+                name = 'Eclipse Temurin JDK'; version = '25.0.4.1+1'; license = 'GPLv2 with Classpath Exception'
+                noticesPath = 'runtime/legal/java.base'; sourceUrl = 'https://example.test/temurin-25-sources.zip'
+            }
         )
     }
 
@@ -384,5 +480,29 @@ Describe 'New-ThirdPartyNotices' {
         $component.licenses | Should -BeNullOrEmpty
         $component.extractedFiles | Should -BeNullOrEmpty
         (Get-Content -LiteralPath (Join-Path $script:Output 'THIRD-PARTY-NOTICES.txt') -Raw) | Should -BeLike '*lib-b-3.0.jar*no license metadata*'
+    }
+
+    It 'writes exact component and corresponding-source manifests' {
+        Test-Path -LiteralPath $script:Result.ComponentManifestPath | Should -BeTrue
+        Test-Path -LiteralPath $script:Result.CorrespondingSourcePath | Should -BeTrue
+        $manifest = Get-Content -LiteralPath $script:Result.ComponentManifestPath -Raw | ConvertFrom-Json
+        $library = $manifest.applicationLibraries | Where-Object { $_.coordinates -eq 'org.example:lib-a:1.2' }
+        $library.sha256 | Should -Match '^[0-9a-f]{64}$'
+        $library.sourceUrl | Should -Be 'https://repo.maven.apache.org/maven2/org/example/lib-a/1.2/lib-a-1.2-sources.jar'
+        $manifest.runtimeComponents[0].sourceUrl | Should -Be 'https://example.test/temurin-25-sources.zip'
+        (Get-Content -LiteralPath $script:Result.CorrespondingSourcePath -Raw) |
+            Should -BeLike '*org.example:lib-a:1.2*lib-a-1.2-sources.jar*'
+    }
+
+    It 'fails checkpoint generation when a component has no corresponding-source location' {
+        { New-ThirdPartyNotices -StagedApplication $script:Staged `
+                -OutputDir (Join-Path $TestDrive 'notices\strict') -ApplicationName 'BS2BG' `
+                -ApplicationVersion '1.1.2' -RequireCompleteSource -RuntimeComponents @(
+                    [pscustomobject]@{
+                        name = 'Eclipse Temurin JDK'; version = '25.0.4.1+1'
+                        license = 'GPLv2 with Classpath Exception'; noticesPath = 'runtime/legal/java.base'
+                        sourceUrl = 'https://example.test/temurin-25-sources.zip'
+                    }
+                ) } | Should -Throw -ExpectedMessage '*lib-b-3.0.jar*'
     }
 }

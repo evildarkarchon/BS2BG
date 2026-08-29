@@ -62,6 +62,184 @@ function Get-StagedApplication {
 
 <#
 .SYNOPSIS
+    Reads Maven coordinates embedded in one staged library jar.
+.PARAMETER JarPath
+    Library jar whose META-INF/maven/*/*/pom.properties entries are inspected.
+.OUTPUTS
+    Objects with Coordinate and Jar for every complete embedded coordinate.
+.NOTES
+    Throws when the jar path cannot be resolved or the jar cannot be opened as a ZIP archive.
+#>
+function Get-EmbeddedMavenCoordinates {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string]$JarPath)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $coordinates = @()
+    $resolved = (Resolve-Path -LiteralPath $JarPath).Path
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($resolved)
+    try {
+        foreach ($entry in $zip.Entries) {
+            if ($entry.FullName -notmatch '^META-INF/maven/[^/]+/[^/]+/pom\.properties$') { continue }
+            $reader = New-Object System.IO.StreamReader($entry.Open())
+            try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+            $properties = @{}
+            foreach ($line in [regex]::Split($text, '\r?\n')) {
+                if ($line -match '^\s*([^#=]+?)\s*=\s*(.*)$') {
+                    $properties[$Matches[1]] = $Matches[2].Trim()
+                }
+            }
+            if ($properties.ContainsKey('groupId') -and $properties.ContainsKey('artifactId') -and
+                    $properties.ContainsKey('version')) {
+                $coordinates += [pscustomobject]@{
+                    Coordinate = "$($properties['groupId']):$($properties['artifactId']):$($properties['version'])"
+                    Jar        = [System.IO.Path]::GetFileName($resolved)
+                }
+            }
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+    return $coordinates
+}
+
+<#
+.SYNOPSIS
+    Finds reviewed production JSON codec class families embedded in one jar.
+.PARAMETER JarPath
+    Application or library jar whose class-entry paths are inspected.
+.OUTPUTS
+    Objects with Family and Jar for every reviewed codec family found in the jar.
+.NOTES
+    Throws when the jar path cannot be resolved or the jar cannot be opened as a ZIP archive.
+#>
+function Get-JsonCodecClassFamilies {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string]$JarPath)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $resolved = (Resolve-Path -LiteralPath $JarPath).Path
+    $patterns = [ordered]@{
+        'Jackson Core 3' = '^tools/jackson/core/'
+        'unsupported Jackson 3' = '^tools/jackson/'
+        'Jackson 2' = '^com/fasterxml/jackson/'
+        'minimal-json' = '^com/eclipsesource/json/'
+        'Gson' = '^com/google/gson/'
+        'Moshi' = '^com/squareup/moshi/'
+        'Fastjson2' = '^com/alibaba/fastjson2/'
+        'Parsson' = '^org/eclipse/parsson/'
+        'Glassfish Jakarta JSON' = '^org/glassfish/json/'
+        'Jakarta JSON API' = '^jakarta/json/'
+    }
+    $found = @{}
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($resolved)
+    try {
+        foreach ($entry in $zip.Entries) {
+            if (-not $entry.FullName.EndsWith('.class', [System.StringComparison]::Ordinal)) { continue }
+            foreach ($family in $patterns.Keys) {
+                if ($entry.FullName -match $patterns[$family]) {
+                    if (-not $found.ContainsKey($family)) { $found[$family] = $true }
+                    break
+                }
+            }
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+    return @($patterns.Keys | Where-Object { $found.ContainsKey($_) } | ForEach-Object {
+        [pscustomobject]@{ Family = $_; Jar = [System.IO.Path]::GetFileName($resolved) }
+    })
+}
+
+<#
+.SYNOPSIS
+    Proves the staged payload contains exactly the selected production JSON codec.
+.PARAMETER StagedApplication
+    Payload returned by Get-StagedApplication.
+.PARAMETER ExpectedCoordinate
+    Exact groupId:artifactId:version selected by the repository codec policy.
+.OUTPUTS
+    The single matching component record.
+.NOTES
+    Throws when a reviewed alternative or shaded fallback class family is present, the selected coordinate or
+    its class family is not present exactly once in the same jar, or a staged jar cannot be inspected.
+#>
+function Assert-StagedJsonCodec {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $StagedApplication,
+        [Parameter(Mandatory)] [string]$ExpectedCoordinate
+    )
+
+    $components = @($StagedApplication.LibJars | ForEach-Object {
+        Get-EmbeddedMavenCoordinates -JarPath $_
+    })
+    # The accepted codec decision evaluated these production families; none may ride beside the selected Core jar.
+    $jsonCodecCoordinate = '^(tools\.jackson\.|com\.fasterxml\.jackson\.|com\.eclipsesource\.minimal-json:|' +
+        'com\.google\.code\.gson:|com\.squareup\.moshi:|com\.alibaba\.fastjson2:|' +
+        'org\.eclipse\.parsson:|org\.glassfish\.jakarta\.json:|jakarta\.json:)'
+    $unexpected = @($components | Where-Object {
+        $_.Coordinate -cne $ExpectedCoordinate -and $_.Coordinate -match $jsonCodecCoordinate
+    })
+    if ($unexpected.Count -gt 0) {
+        throw "Staged payload contains unsupported JSON codec components: $(($unexpected | ForEach-Object { $_.Coordinate }) -join ', ')."
+    }
+    $matches = @($components | Where-Object { $_.Coordinate -ceq $ExpectedCoordinate })
+    if ($matches.Count -ne 1) {
+        throw "Staged payload must contain exactly one $ExpectedCoordinate component; found $($matches.Count)."
+    }
+
+    $classFamilies = @(@($StagedApplication.MainJar) + @($StagedApplication.LibJars) | ForEach-Object {
+        Get-JsonCodecClassFamilies -JarPath $_
+    })
+    $unexpectedClasses = @($classFamilies | Where-Object { $_.Family -cne 'Jackson Core 3' })
+    if ($unexpectedClasses.Count -gt 0) {
+        $details = $unexpectedClasses | ForEach-Object { "$($_.Family) in $($_.Jar)" }
+        throw "Staged payload contains unsupported JSON codec classes: $($details -join ', ')."
+    }
+    $selectedClassJars = @($classFamilies | Where-Object { $_.Family -ceq 'Jackson Core 3' } |
+        Select-Object -ExpandProperty Jar -Unique)
+    if ($selectedClassJars.Count -ne 1 -or $selectedClassJars[0] -cne $matches[0].Jar) {
+        throw "Staged payload must contain Jackson Core 3 classes only in $($matches[0].Jar); found $(if ($selectedClassJars) { $selectedClassJars -join ', ' } else { 'none' })."
+    }
+    return $matches[0]
+}
+
+<#
+.SYNOPSIS
+    Proves checkpoint packaging starts from a clean committed Git checkout.
+.PARAMETER RepositoryRoot
+    Root of the Git worktree to inspect.
+.OUTPUTS
+    An object with Clean set to true and the exact 40-hex HEAD commit.
+.NOTES
+    Throws when the path is not a readable Git worktree, HEAD cannot be resolved, or tracked/untracked source
+    changes are present. Ignored build outputs do not make the checkout dirty.
+#>
+function Assert-CleanGitCheckout {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string]$RepositoryRoot)
+
+    $resolved = (Resolve-Path -LiteralPath $RepositoryRoot).Path
+    $commit = @(& git -C $resolved rev-parse --verify HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $commit.Count -ne 1 -or $commit[0] -notmatch '^[0-9a-fA-F]{40}$') {
+        throw "Checkpoint packaging requires a committed Git checkout at '$resolved'."
+    }
+    $changes = @(& git -C $resolved status --porcelain=v1 --untracked-files=all 2>$null |
+        ForEach-Object { "$($_)".TrimEnd() } | Where-Object { $_ })
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not inspect Git worktree cleanliness at '$resolved'."
+    }
+    if ($changes.Count -gt 0) {
+        throw "Checkpoint packaging requires a clean Git checkout; found: $($changes -join '; ')."
+    }
+    return [pscustomobject]@{ Clean = $true; Commit = $commit[0].ToLowerInvariant() }
+}
+
+<#
+.SYNOPSIS
     Parses `jdeps --print-module-deps` output into a sorted, unique module list.
 .PARAMETER Output
     Combined stdout/stderr lines of the jdeps run.
@@ -539,15 +717,18 @@ function Get-ScrubbedEnvironment {
 
 <#
 .SYNOPSIS
-    Assembles THIRD-PARTY-NOTICES.txt and extracts each staged library's license/notice files for the image.
+    Assembles dependency, license, and corresponding-source manifests for the image.
 .PARAMETER RuntimeComponents
     Objects with name, version, license, and noticesPath describing the bundled runtime inputs (JDK, JavaFX).
+.PARAMETER RequireCompleteSource
+    Fails when any runtime or application-library component lacks an exact corresponding-source URL.
 .OUTPUTS
-    PSCustomObject with Path (the notices file) and Components (one record per staged lib jar).
+    PSCustomObject with notice, component-manifest, corresponding-source paths and one record per staged lib jar.
 .NOTES
     License metadata is taken from the jars themselves: META-INF/LICENSE*, META-INF/NOTICE*, and the embedded
     Maven pom's <licenses>. A jar without any of them is listed explicitly as having no embedded metadata rather
-    than omitted, so the notices file can never silently under-report the payload.
+    than omitted, so the notices file can never silently under-report the payload. Throws when a staged jar
+    cannot be inspected or strict source mode finds a library/runtime component without exact source metadata.
 #>
 function New-ThirdPartyNotices {
     [CmdletBinding()]
@@ -556,7 +737,8 @@ function New-ThirdPartyNotices {
         [Parameter(Mandatory)] [string]$OutputDir,
         [Parameter(Mandatory)] [string]$ApplicationName,
         [Parameter(Mandatory)] [string]$ApplicationVersion,
-        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]]$RuntimeComponents
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]]$RuntimeComponents,
+        [switch]$RequireCompleteSource
     )
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -567,7 +749,8 @@ function New-ThirdPartyNotices {
     foreach ($jarPath in $StagedApplication.LibJars) {
         $jarName = [System.IO.Path]::GetFileName($jarPath)
         $baseName = [System.IO.Path]::GetFileNameWithoutExtension($jarPath)
-        $coordinates = $null
+        $coordinateRecords = @(Get-EmbeddedMavenCoordinates -JarPath $jarPath)
+        $coordinates = $(if ($coordinateRecords.Count -gt 0) { $coordinateRecords[-1].Coordinate } else { $null })
         $licenses = @()
         $extracted = @()
         $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $jarPath).Path)
@@ -579,17 +762,6 @@ function New-ThirdPartyNotices {
                     New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
                     [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
                     $extracted += "notices/$baseName/$([System.IO.Path]::GetFileName($full))"
-                }
-                elseif ($full -match '^META-INF/maven/[^/]+/[^/]+/pom\.properties$') {
-                    $reader = New-Object System.IO.StreamReader($entry.Open())
-                    try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
-                    $properties = @{}
-                    foreach ($line in $text -split "`r?`n") {
-                        if ($line -match '^\s*([^#=]+?)\s*=\s*(.*)$') { $properties[$Matches[1]] = $Matches[2].Trim() }
-                    }
-                    if ($properties.ContainsKey('groupId') -and $properties.ContainsKey('artifactId') -and $properties.ContainsKey('version')) {
-                        $coordinates = "$($properties['groupId']):$($properties['artifactId']):$($properties['version'])"
-                    }
                 }
                 elseif ($full -match '^META-INF/maven/[^/]+/[^/]+/pom\.xml$') {
                     $reader = New-Object System.IO.StreamReader($entry.Open())
@@ -612,11 +784,37 @@ function New-ThirdPartyNotices {
         finally {
             $zip.Dispose()
         }
+        $sourceUrl = $null
+        if ($coordinates) {
+            $parts = $coordinates.Split(':')
+            if ($parts.Count -eq 3) {
+                $groupPath = $parts[0].Replace('.', '/')
+                $sourceUrl = "https://repo.maven.apache.org/maven2/$groupPath/$($parts[1])/$($parts[2])/$($parts[1])-$($parts[2])-sources.jar"
+            }
+        }
         $components += [pscustomobject]@{
             jar            = $jarName
             coordinates    = $coordinates
+            sha256         = (Get-FileHash -LiteralPath $jarPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            size           = (Get-Item -LiteralPath $jarPath).Length
+            sourceUrl      = $sourceUrl
             licenses       = @($licenses)
             extractedFiles = @($extracted | Sort-Object)
+        }
+    }
+
+    if ($RequireCompleteSource) {
+        $missingLibraries = @($components | Where-Object {
+            -not $_.coordinates -or -not $_.sourceUrl
+        })
+        if ($missingLibraries.Count -gt 0) {
+            throw "Application libraries lack exact corresponding-source metadata: $(($missingLibraries | ForEach-Object { $_.jar }) -join ', ')."
+        }
+        $missingRuntime = @($RuntimeComponents | Where-Object {
+            -not $_.PSObject.Properties['sourceUrl'] -or [string]::IsNullOrWhiteSpace($_.sourceUrl)
+        })
+        if ($missingRuntime.Count -gt 0) {
+            throw "Runtime components lack exact corresponding-source metadata: $(($missingRuntime | ForEach-Object { $_.name }) -join ', ')."
         }
     }
 
@@ -652,15 +850,54 @@ function New-ThirdPartyNotices {
     }
     $lines.Add('')
     $path = Join-Path $OutputDir 'THIRD-PARTY-NOTICES.txt'
-    Set-Content -LiteralPath $path -Value ($lines -join "`n") -Encoding utf8
+    Set-Content -LiteralPath $path -Value ($lines -join [char]10) -Encoding utf8
+
+    # Versioned Maven source artifacts and pinned runtime URLs keep the mechanism exact without mutating the build.
+    $componentManifestPath = Join-Path $OutputDir 'THIRD-PARTY-COMPONENTS.json'
+    $componentManifest = [ordered]@{
+        schema               = 'bs2bg.third-party-components/1'
+        application          = [ordered]@{ name = $ApplicationName; version = $ApplicationVersion }
+        runtimeComponents    = @($RuntimeComponents)
+        applicationLibraries = @($components)
+    }
+    $componentManifest | ConvertTo-Json -Depth 8 |
+        Set-Content -LiteralPath $componentManifestPath -Encoding utf8
+
+    $sourceLines = New-Object System.Collections.Generic.List[string]
+    $sourceLines.Add("$ApplicationName $ApplicationVersion - corresponding source")
+    $sourceLines.Add('')
+    $sourceLines.Add('Bundled runtime')
+    $sourceLines.Add('---------------')
+    foreach ($component in $RuntimeComponents) {
+        $sourceLines.Add("$($component.name) $($component.version)")
+        $source = $(if ($component.PSObject.Properties['sourceUrl']) { $component.sourceUrl } else { $null })
+        $sourceLines.Add("  Source: $(if ($source) { $source } else { 'not recorded' })")
+    }
+    $sourceLines.Add('')
+    $sourceLines.Add('Application libraries (app/lib)')
+    $sourceLines.Add('-------------------------------')
+    foreach ($component in $components) {
+        $title = $(if ($component.coordinates) { $component.coordinates } else { $component.jar })
+        $sourceLines.Add($title)
+        $sourceLines.Add("  Source: $(if ($component.sourceUrl) { $component.sourceUrl } else { 'not recorded (no embedded Maven coordinate)' })")
+    }
+    $sourceLines.Add('')
+    $sourceLines.Add('These versioned source locations correspond to the exact components in THIRD-PARTY-COMPONENTS.json.')
+    $correspondingSourcePath = Join-Path $OutputDir 'CORRESPONDING-SOURCE.txt'
+    Set-Content -LiteralPath $correspondingSourcePath -Value ($sourceLines -join [char]10) -Encoding utf8
+
     return [pscustomobject]@{
-        Path       = $path
-        Components = $components
+        Path                    = $path
+        ComponentManifestPath   = $componentManifestPath
+        CorrespondingSourcePath = $correspondingSourcePath
+        Components              = $components
     }
 }
 
 Export-ModuleMember -Function @(
     'Get-StagedApplication',
+    'Assert-StagedJsonCodec',
+    'Assert-CleanGitCheckout',
     'ConvertFrom-JdepsModuleDeps',
     'Resolve-RuntimeModules',
     'Read-LauncherConfig',

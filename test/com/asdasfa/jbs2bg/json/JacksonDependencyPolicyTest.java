@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,36 @@ final class JacksonDependencyPolicyTest {
         assertTrue(pom.contains("<groupId>tools.jackson.core</groupId>"));
         assertTrue(pom.contains("<artifactId>jackson-core</artifactId>"));
         assertFalse(pom.contains("jackson-databind"));
+    }
+
+    /** Verifies the retired codec and its temporary differential reader cannot remain in the checkpoint. */
+    @Test
+    void removesMinimalJsonAndTheTemporaryProjectComparisonReader() throws IOException {
+        String pom = Files.readString(Path.of("pom.xml"));
+
+        assertFalse(pom.contains("<groupId>com.eclipsesource.minimal-json</groupId>"));
+        assertFalse(Files.exists(Path.of(
+                "test/com/asdasfa/jbs2bg/project/LegacyProjectFileLoader.java")));
+        try (var productionSources = Files.walk(Path.of("src"));
+                var testSources = Files.walk(Path.of("test"))) {
+            List<String> importers = Stream.concat(productionSources, testSources)
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> !path.getFileName().toString().equals("JacksonDependencyPolicyTest.java"))
+                    .filter(JacksonDependencyPolicyTest::importsMinimalJson)
+                    .map(path -> path.toString().replace('\\', '/'))
+                    .sorted()
+                    .toList();
+            assertTrue(importers.isEmpty(), () -> "Java sources still import minimal-json: " + importers);
+        }
+    }
+
+    /** Verifies dependency convergence and the retired codec are enforced across the resolved graph. */
+    @Test
+    void enforcesConvergenceAndBansMinimalJsonTransitively() throws IOException {
+        String pom = Files.readString(Path.of("pom.xml"));
+
+        assertTrue(pom.contains("<dependencyConvergence>"));
+        assertTrue(pom.contains("<exclude>com.eclipsesource.minimal-json:*</exclude>"));
     }
 
     /** Verifies no Jackson type crosses the internal implementation or three format-adapter allowlist. */

@@ -8,8 +8,9 @@
     On top of the complete application gate (tools/java25/verify-java25.ps1, which this script runs first), the
     packaging checkpoint:
 
-      1. Reads the payload the Maven Wrapper staged (target/app-image-input: the application jar plus lib/ with
-         every runtime-scoped dependency; JavaFX is deliberately absent because the runtime supplies it).
+      1. Requires a clean committed Git checkout, then reads the payload the Maven Wrapper staged
+         (target/app-image-input: the application jar plus lib/ with every runtime-scoped dependency; JavaFX is
+         deliberately absent because the runtime supplies it).
       2. Measures the module closure with jdeps against the pinned JavaFX 25 JMODs (extracted to exploded modules,
          since jdeps reads jars and directories but not JMOD archives) and widens it only with documented explicit
          additions that static analysis cannot see.
@@ -92,6 +93,14 @@ $explicitModules = [ordered]@{
 # Wrapped so a thrown verification error always yields exit code 1, however the script was invoked.
 try {
 
+$checkpointResult = (-not $SkipVerify -and -not $SkipSmoke)
+$sourceCheckout = $null
+if ($checkpointResult) {
+    Write-Step 'Proving the checkpoint starts from a clean committed checkout'
+    $sourceCheckout = Assert-CleanGitCheckout -RepositoryRoot $repoRoot
+    Write-Host "Source checkout: clean at $($sourceCheckout.Commit)"
+}
+
 # ---------------------------------------------------------------------------------------------------------------
 # 1. Complete application gate (or reuse of a green run) and toolchain inputs
 # ---------------------------------------------------------------------------------------------------------------
@@ -156,6 +165,8 @@ Write-Host "Packaging tools: jdeps $($toolVersions['jdeps']), jlink $($toolVersi
 # ---------------------------------------------------------------------------------------------------------------
 Write-Step 'Reading the payload staged by the Maven Wrapper'
 $staged = Get-StagedApplication -StagingDir $stagingDir
+$expectedJsonCodec = "tools.jackson.core:jackson-core:$(Get-PomProperty -RepoRoot $repoRoot -Name 'jackson-core.version')"
+$stagedJsonCodec = Assert-StagedJsonCodec -StagedApplication $staged -ExpectedCoordinate $expectedJsonCodec
 $stagedArtifacts = @(@($staged.MainJar) + @($staged.LibJars) | ForEach-Object {
     [pscustomobject]@{
         path   = $_.Substring($staged.StagingDir.Length).TrimStart('\', '/').Replace('\', '/')
@@ -164,6 +175,7 @@ $stagedArtifacts = @(@($staged.MainJar) + @($staged.LibJars) | ForEach-Object {
     }
 })
 Write-Host "Application jar: $($staged.MainJarName); dependencies: $($staged.LibJarNames -join ', ')"
+Write-Host "JSON codec: $($stagedJsonCodec.Coordinate) in $($stagedJsonCodec.Jar) (single-codec policy passed)"
 
 # ---------------------------------------------------------------------------------------------------------------
 # 3. Measured module closure
@@ -231,10 +243,24 @@ Write-Host "Runtime: Java $($runtimeRelease.Release['JAVA_VERSION']) with $($run
 Write-Step 'Assembling third-party notices'
 $noticesDir = Join-Path $targetDir 'app-image-notices'
 $runtimeComponents = @(
-    [pscustomobject]@{ name = "$($release['IMPLEMENTOR']) $($release['IMPLEMENTOR_VERSION']) (Eclipse Temurin JDK, jlink'd runtime)"; version = $release['JAVA_RUNTIME_VERSION']; license = 'GNU General Public License v2.0 with the Classpath Exception'; noticesPath = 'runtime/legal/<module>/ (LICENSE, ASSEMBLY_EXCEPTION, ADDITIONAL_LICENSE_INFO and third-party .md files per JDK module)' },
-    [pscustomobject]@{ name = 'OpenJFX (Gluon JavaFX Windows x64 JMODs)'; version = $lock.javafx.version; license = 'GNU General Public License v2.0 with the Classpath Exception'; noticesPath = "runtime/legal/{$($lock.javafx.requiredModules -join ',')}/" }
+    [pscustomobject]@{
+        id = $lock.jdk.id; name = "$($release['IMPLEMENTOR']) $($release['IMPLEMENTOR_VERSION']) (Eclipse Temurin JDK, jlink'd runtime)"
+        version = $release['JAVA_RUNTIME_VERSION']; binaryUrl = $lock.jdk.url; binarySha256 = $lock.jdk.sha256
+        sourceUrl = $lock.jdk.sourceUrl; sourceRevision = $lock.jdk.sourceRevision
+        modules = $runtimeRelease.Modules
+        license = 'GNU General Public License v2.0 with the Classpath Exception'
+        noticesPath = 'runtime/legal/<module>/ (LICENSE, ASSEMBLY_EXCEPTION, ADDITIONAL_LICENSE_INFO and third-party .md files per JDK module)'
+    },
+    [pscustomobject]@{
+        id = $lock.javafx.id; name = 'OpenJFX (Gluon JavaFX Windows x64 JMODs)'; version = $lock.javafx.version
+        binaryUrl = $lock.javafx.url; binarySha256 = $lock.javafx.sha256
+        sourceUrl = $lock.javafx.sourceUrl; sourceRevision = $lock.javafx.sourceRevision
+        modules = $lock.javafx.requiredModules
+        license = 'GNU General Public License v2.0 with the Classpath Exception'
+        noticesPath = "runtime/legal/{$($lock.javafx.requiredModules -join ',')}/"
+    }
 )
-$notices = New-ThirdPartyNotices -StagedApplication $staged -OutputDir $noticesDir -ApplicationName $launcherName -ApplicationVersion $appVersion -RuntimeComponents $runtimeComponents
+$notices = New-ThirdPartyNotices -StagedApplication $staged -OutputDir $noticesDir -ApplicationName $launcherName -ApplicationVersion $appVersion -RuntimeComponents $runtimeComponents -RequireCompleteSource
 Write-Host "Notices: $($notices.Path)"
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -245,7 +271,11 @@ $imageParent = Join-Path $targetDir 'app-image'
 $imageDir = Join-Path $imageParent $launcherName
 if (Test-Path -LiteralPath $imageDir) { Remove-Item -LiteralPath $imageDir -Recurse -Force }
 New-Item -ItemType Directory -Path $imageParent -Force | Out-Null
-$appContent = @((Join-Path $noticesDir 'THIRD-PARTY-NOTICES.txt'))
+$appContent = @(
+    $notices.Path,
+    $notices.ComponentManifestPath,
+    $notices.CorrespondingSourcePath
+)
 if (Test-Path -LiteralPath (Join-Path $noticesDir 'notices')) { $appContent += (Join-Path $noticesDir 'notices') }
 $jpackageArguments = @(
     '--type', 'app-image',
@@ -272,7 +302,7 @@ Set-LauncherSingleProcessMode -Path $launcherConfigPath
 # The JavaFX toolkit's own native libraries (windowing, Direct3D and software pipelines, fonts) must have been
 # linked out of the JMODs into the bundled runtime; without them the launcher would start and then fail to open a window.
 $javafxNativeLibraries = @('glass.dll', 'prism_d3d.dll', 'prism_sw.dll', 'prism_common.dll', 'javafx_font.dll') | ForEach-Object { "runtime\bin\javafx\$_" }
-$requiredImageFiles = @('THIRD-PARTY-NOTICES.txt') + $javafxNativeLibraries + @($notices.Components | ForEach-Object { $_.extractedFiles } | ForEach-Object { $_.Replace('/', '\') })
+$requiredImageFiles = @('THIRD-PARTY-NOTICES.txt', 'THIRD-PARTY-COMPONENTS.json', 'CORRESPONDING-SOURCE.txt') + $javafxNativeLibraries + @($notices.Components | ForEach-Object { $_.extractedFiles } | ForEach-Object { $_.Replace('/', '\') })
 $inventory = Assert-AppImageLayout -ImageDir $imageDir -LauncherName $launcherName -MainJarName $staged.MainJarName -LibJarNames $staged.LibJarNames -RequiredFiles $requiredImageFiles
 $launcherConfig = Read-LauncherConfig -Path $launcherConfigPath
 Assert-LauncherConfig -Config $launcherConfig -MainClass $mainClass -MainJarName $staged.MainJarName -LibJarNames $staged.LibJarNames -AppVersion $appVersion -RequiredJavaOptions $launcherJavaOptions
@@ -330,7 +360,12 @@ $evidence = [ordered]@{
     schema            = 'bs2bg.windows-app-image/2'
     recordedAtUtc     = $startedAt.ToString('o')
     gitCommit         = $gateEvidence.gitCommit
-    checkpointResult  = (-not $SkipVerify -and -not $SkipSmoke)
+    checkpointResult  = $checkpointResult
+    sourceCheckout    = $(if ($sourceCheckout) {
+        [ordered]@{ required = $true; clean = $sourceCheckout.Clean; commit = $sourceCheckout.Commit }
+    } else {
+        [ordered]@{ required = $false; clean = $null; commit = $null; reason = 'Developer run used -SkipVerify or -SkipSmoke' }
+    })
     application       = [ordered]@{
         name        = $launcherName
         version     = $appVersion
@@ -365,6 +400,13 @@ $evidence = [ordered]@{
         artifacts         = $stagedArtifacts
         dependencyTree    = 'target/reproducibility/dependency-tree.txt'
         javafxOnClasspath = $false
+        jsonCodec          = [ordered]@{
+            coordinate          = $stagedJsonCodec.Coordinate
+            jar                 = $stagedJsonCodec.Jar
+            onlyProductionCodec = $true
+            inspection          = 'embedded Maven coordinates and class-entry paths across the application and every library jar'
+            shadedFallbacks     = $false
+        }
     }
     runtime           = [ordered]@{
         measuredModules      = $resolvedModules.Measured
@@ -390,7 +432,13 @@ $evidence = [ordered]@{
         launcherConfig   = $launcherConfig
         jpackageState    = [ordered]@{ toolVersion = $jpackageState.ToolVersion; platform = $jpackageState.Platform }
         javaOptions      = $launcherJavaOptions
-        notices          = [ordered]@{ file = 'THIRD-PARTY-NOTICES.txt'; components = $notices.Components; runtimeComponents = $runtimeComponents }
+        notices          = [ordered]@{
+            file = 'THIRD-PARTY-NOTICES.txt'
+            componentManifest = 'THIRD-PARTY-COMPONENTS.json'
+            correspondingSource = 'CORRESPONDING-SOURCE.txt'
+            components = $notices.Components
+            runtimeComponents = $runtimeComponents
+        }
         jpackageOutputFile = 'target/reproducibility/app-image-jpackage-output.txt'
     }
     smoke             = $(if ($smokeEvidence) { $smokeEvidence } else { [ordered]@{ skipped = $true; reason = '-SkipSmoke' } })

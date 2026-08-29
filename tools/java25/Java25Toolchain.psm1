@@ -20,8 +20,8 @@ Set-StrictMode -Version Latest
 .OUTPUTS
     PSCustomObject with targetRelease, architecture, maven, jdk, and javafx sections.
 .NOTES
-    Throws when a required section or SHA-256 pin is missing or malformed, so a half-edited lock cannot
-    silently skip a verification step.
+    Throws when the lock cannot be read or a required section, SHA-256 pin, HTTPS source URL, or 40-hex source
+    revision is missing or malformed, so a half-edited lock cannot silently skip a verification step.
 #>
 function Get-ToolchainLock {
     [CmdletBinding()]
@@ -46,10 +46,27 @@ function Get-ToolchainLock {
             throw "Toolchain lock '$Path': '$hashPath' must be a 64-hex SHA-256; found '$value'."
         }
     }
-    foreach ($required in @('jdk.url', 'jdk.archiveRootDirectory', 'jdk.release', 'javafx.url', 'javafx.archiveRootDirectory', 'javafx.version', 'javafx.requiredModules', 'maven.version')) {
+    foreach ($required in @(
+            'jdk.url', 'jdk.sourceUrl', 'jdk.sourceRevision', 'jdk.archiveRootDirectory', 'jdk.release',
+            'javafx.url', 'javafx.sourceUrl', 'javafx.sourceRevision', 'javafx.archiveRootDirectory',
+            'javafx.version', 'javafx.requiredModules', 'maven.version')) {
         $section, $property = $required.Split('.')
         if (-not ($lock.$section.PSObject.Properties.Name -contains $property)) {
             throw "Toolchain lock '$Path' is missing '$required'."
+        }
+    }
+    foreach ($sourceUrlPath in @('jdk.sourceUrl', 'javafx.sourceUrl')) {
+        $section, $property = $sourceUrlPath.Split('.')
+        $value = $lock.$section.$property
+        if (-not ($value -is [string]) -or $value -notmatch '^https://') {
+            throw "Toolchain lock '$Path': '$sourceUrlPath' must be an exact HTTPS source URL; found '$value'."
+        }
+    }
+    foreach ($revisionPath in @('jdk.sourceRevision', 'javafx.sourceRevision')) {
+        $section, $property = $revisionPath.Split('.')
+        $value = $lock.$section.$property
+        if (-not ($value -is [string]) -or $value -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "Toolchain lock '$Path': '$revisionPath' must be a 40-hex Git revision; found '$value'."
         }
     }
     return $lock

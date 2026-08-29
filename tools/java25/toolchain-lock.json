@@ -15,6 +15,8 @@
     "id": "temurin-25.0.4.1+1-windows-x64",
     "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_x64_windows_hotspot_25.0.4.1_1.zip",
     "sha256": "00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283",
+    "sourceUrl": "https://github.com/openjdk/jdk25u/archive/refs/tags/jdk-25.0.4.1-ga.zip",
+    "sourceRevision": "598c9b864328adc4ce1049ea70b2e4b14cc5a051",
     "archiveRootDirectory": "jdk-25.0.4.1+1",
     "release": {
       "IMPLEMENTOR": "Eclipse Adoptium",
@@ -32,6 +34,8 @@
     "version": "25.0.4",
     "url": "https://download2.gluonhq.com/openjfx/25.0.4/openjfx-25.0.4_windows-x64_bin-jmods.zip",
     "sha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
+    "sourceUrl": "https://github.com/openjdk/jfx25u/archive/refs/tags/25.0.4%2B3.zip",
+    "sourceRevision": "96aaf07f6404c4d7ccad1aa75498ec7d2196047a",
     "archiveRootDirectory": "javafx-jmods-25.0.4",
     "requiredModules": [
       "javafx.base",

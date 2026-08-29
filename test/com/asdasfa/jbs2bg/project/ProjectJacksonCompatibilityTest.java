@@ -49,25 +49,20 @@ final class ProjectJacksonCompatibilityTest {
         SettingsTestSupport.restoreRepositorySettings();
     }
 
-    /** The Jackson candidate and its canonical bytes retain the legacy Project meaning. */
+    /** The owned adapter and its canonical bytes retain the permanent semantic fixture meaning. */
     @Test
-    void semanticFixtureMatchesLegacyCandidateAndRoundTripsCanonicalBytes() throws Exception {
+    void semanticFixtureMatchesExpectedProjectAndRoundTripsCanonicalBytes() throws Exception {
         Path fixture = FIXTURE_ROOT.resolve("semantic-equivalence.jbs2bg");
 
-        ProjectJacksonAdapter.Candidate jackson = ProjectJacksonAdapter.read(fixture);
-        LegacyProjectFileLoader.LoadedProject legacy = LegacyProjectFileLoader.load(fixture);
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture);
 
-        assertProjectContentEquals(legacy.getSnapshot(), jackson.snapshot());
-        assertEquals(legacy.getDiagnostics().size(), jackson.diagnostics().size());
-        assertEquals("CBBE Curvy", jackson.snapshot().getSliderPresets().get(0).getName());
-        assertEquals(List.of("CBBE Curvy", "UUNP Athletic"),
-                jackson.snapshot().getCustomMorphTargets().get(0).getSliderPresetNames());
+        assertSemanticFixture(candidate.snapshot());
+        assertTrue(candidate.diagnostics().isEmpty());
 
         Path canonical = temporaryDirectory.resolve("semantic-canonical.jbs2bg");
-        Files.write(canonical, ProjectJacksonAdapter.write(jackson.snapshot()));
+        Files.write(canonical, ProjectJacksonAdapter.write(candidate.snapshot()));
         ProjectJacksonAdapter.Candidate reopened = ProjectJacksonAdapter.read(canonical);
-        assertProjectContentEquals(jackson.snapshot(), reopened.snapshot());
-        assertProjectContentEquals(jackson.snapshot(), LegacyProjectFileLoader.load(canonical).getSnapshot());
+        assertProjectContentEquals(candidate.snapshot(), reopened.snapshot());
         assertTrue(reopened.diagnostics().isEmpty());
     }
 
@@ -92,32 +87,41 @@ final class ProjectJacksonCompatibilityTest {
 
     /** Fixed-schema member order cannot change UUNP effective-value reconstruction. */
     @Test
-    void fixedSchemaMemberOrderDoesNotChangeProjectMeaning() throws Exception {
+    void fixedSchemaMemberOrderDoesNotChangeProjectMeaning() {
         Path fixture = FIXTURE_ROOT.resolve("member-order-uunp.jbs2bg");
 
-        ProjectJacksonAdapter.Candidate jackson = ProjectJacksonAdapter.read(fixture);
-        LegacyProjectFileLoader.LoadedProject legacy = LegacyProjectFileLoader.load(fixture);
+        ProjectSnapshot snapshot = ProjectJacksonAdapter.read(fixture).snapshot();
+        SliderPresetSnapshot preset = snapshot.getSliderPresets().get(0);
+        SliderChoiceSnapshot choice = preset.getSliderChoices().get(0);
 
-        assertProjectContentEquals(legacy.getSnapshot(), jackson.snapshot());
+        assertEquals("UUNP Ordered", preset.getName());
+        assertTrue(preset.isUunp());
+        assertEquals("Arms", choice.getName());
+        assertTrue(choice.getStoredSmallValue().isEmpty());
+        assertTrue(choice.getStoredBigValue().isEmpty());
+        assertEquals(100, choice.getEffectiveSmallValue());
+        assertEquals(100, choice.getEffectiveBigValue());
+        assertFalse(choice.isMissingDefault());
     }
 
     /** Missing references recover in encounter order and preserve every valid relationship. */
     @Test
-    void recoveryFixtureMatchesLegacyCandidateAndOrderedDiagnostics() throws Exception {
+    void recoveryFixtureRetainsExpectedProjectAndOrderedDiagnostics() {
         Path fixture = FIXTURE_ROOT.resolve("recovery-ordered-diagnostics.jbs2bg");
 
-        ProjectJacksonAdapter.Candidate jackson = ProjectJacksonAdapter.read(fixture);
-        LegacyProjectFileLoader.LoadedProject legacy = LegacyProjectFileLoader.load(fixture);
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture);
 
-        assertProjectContentEquals(legacy.getSnapshot(), jackson.snapshot());
-        assertEquals(ProjectLifecycleStatus.RECOVERED, jackson.snapshot().getLifecycleStatus());
-        assertTrue(jackson.snapshot().isDirty());
-        assertEquals(2, jackson.diagnostics().size());
-        assertDiagnostic(jackson.diagnostics().get(0), "/CustomMorphTargets/Target/SliderPresets/1",
+        assertEquals(List.of("Alpha", "Beta"), candidate.snapshot().getSliderPresets().stream()
+                .map(SliderPresetSnapshot::getName).toList());
+        assertEquals(List.of("Alpha", "Beta"),
+                candidate.snapshot().getCustomMorphTargets().get(0).getSliderPresetNames());
+        assertEquals(List.of("Beta"), candidate.snapshot().getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertEquals(ProjectLifecycleStatus.RECOVERED, candidate.snapshot().getLifecycleStatus());
+        assertTrue(candidate.snapshot().isDirty());
+        assertEquals(2, candidate.diagnostics().size());
+        assertDiagnostic(candidate.diagnostics().get(0), "/CustomMorphTargets/Target/SliderPresets/1",
                 "Missing Target");
-        assertDiagnostic(jackson.diagnostics().get(1), "/MorphedNPCs/NPC/SliderPresets/1", "Missing NPC");
-        assertEquals(legacy.getDiagnostics().get(0).getCode(), jackson.diagnostics().get(0).getCode());
-        assertEquals(legacy.getDiagnostics().get(1).getCode(), jackson.diagnostics().get(1).getCode());
+        assertDiagnostic(candidate.diagnostics().get(1), "/MorphedNPCs/NPC/SliderPresets/1", "Missing NPC");
     }
 
     /** Repeated display-name members remain visible because NPC identity is plugin plus editor ID. */
@@ -133,7 +137,6 @@ final class ProjectJacksonCompatibilityTest {
         assertEquals(2, candidate.snapshot().getNpcMorphAssignments().size());
         assertEquals(2, countOccurrences(new String(canonical, StandardCharsets.UTF_8), "\"Guard\""));
         assertEquals(2, ProjectJacksonAdapter.read(written).snapshot().getNpcMorphAssignments().size());
-        assertEquals(2, LegacyProjectFileLoader.load(written).getSnapshot().getNpcMorphAssignments().size());
     }
 
     /** Explicit null endpoints serialize, while unchanged synthesized defaults remain omitted. */
@@ -198,14 +201,12 @@ final class ProjectJacksonCompatibilityTest {
 
     /** Project integer tokens retain exact Integer.parseInt syntax and signed bounds. */
     @Test
-    void integerBoundsAndNegativeZeroMatchLegacyCandidate() throws Exception {
+    void integerBoundsAndNegativeZeroMatchThePermanentExpectedValues() {
         Path fixture = FIXTURE_ROOT.resolve("integer-bounds-valid.jbs2bg");
 
-        ProjectJacksonAdapter.Candidate jackson = ProjectJacksonAdapter.read(fixture);
-        LegacyProjectFileLoader.LoadedProject legacy = LegacyProjectFileLoader.load(fixture);
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture);
 
-        assertProjectContentEquals(legacy.getSnapshot(), jackson.snapshot());
-        SliderChoiceSnapshot choice = jackson.snapshot().getSliderPresets().get(0).getSliderChoices().get(0);
+        SliderChoiceSnapshot choice = candidate.snapshot().getSliderPresets().get(0).getSliderChoices().get(0);
         assertEquals(Integer.MIN_VALUE, choice.getStoredSmallValue().getAsInt());
         assertEquals(Integer.MAX_VALUE, choice.getStoredBigValue().getAsInt());
         assertEquals(0, choice.getPercentageMinimum());
@@ -314,6 +315,41 @@ final class ProjectJacksonCompatibilityTest {
             offset += expected.length();
         }
         return count;
+    }
+
+    /** Asserts the complete independent meaning pinned by the representative semantic fixture. */
+    private static void assertSemanticFixture(ProjectSnapshot snapshot) {
+        assertEquals(2, snapshot.getSliderPresets().size());
+        SliderPresetSnapshot cbbe = snapshot.getSliderPresets().get(0);
+        assertEquals("CBBE Curvy", cbbe.getName());
+        assertFalse(cbbe.isUunp());
+        assertEquals(2, cbbe.getSliderChoices().size());
+        SliderChoiceSnapshot waist = cbbe.getSliderChoices().get(1);
+        assertEquals("Waist", waist.getName());
+        assertEquals(20, waist.getStoredSmallValue().getAsInt());
+        assertEquals(80, waist.getStoredBigValue().getAsInt());
+        assertEquals(10, waist.getPercentageMinimum());
+        assertEquals(90, waist.getPercentageMaximum());
+
+        SliderPresetSnapshot uunp = snapshot.getSliderPresets().get(1);
+        assertEquals("UUNP Athletic", uunp.getName());
+        assertTrue(uunp.isUunp());
+        assertEquals("Arms", uunp.getSliderChoices().get(0).getName());
+        assertTrue(uunp.getSliderChoices().get(0).isMissingDefault());
+
+        assertEquals(1, snapshot.getCustomMorphTargets().size());
+        assertEquals("All|Female", snapshot.getCustomMorphTargets().get(0).getName());
+        assertEquals(List.of("CBBE Curvy", "UUNP Athletic"),
+                snapshot.getCustomMorphTargets().get(0).getSliderPresetNames());
+
+        assertEquals(1, snapshot.getNpcMorphAssignments().size());
+        NpcMorphAssignmentSnapshot npc = snapshot.getNpcMorphAssignments().get(0);
+        assertEquals("Lydia", npc.getDisplayName());
+        assertEquals("Skyrim.esm", npc.getPluginName());
+        assertEquals("HousecarlWhiterun", npc.getEditorId());
+        assertEquals("NordRace", npc.getRace());
+        assertEquals("A2C94", npc.getFormId());
+        assertEquals(List.of("UUNP Athletic"), npc.getSliderPresetNames());
     }
 
     /** Compares the complete immutable Project content while excluding lifecycle metadata. */
