@@ -219,6 +219,31 @@ function Assert-MavenWrapperPinned {
 
 <#
 .SYNOPSIS
+    Clears read-only attributes beneath one prior build-output tree so Maven clean can remove jpackage payloads.
+.OUTPUTS
+    The number of files whose read-only attribute was cleared.
+#>
+function Clear-ReadOnlyBuildOutputs {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return 0 }
+    $root = Get-Item -LiteralPath $Path -Force
+    if (-not $root.PSIsContainer) {
+        throw "Build-output path is not a directory: $($root.FullName)"
+    }
+    $cleared = 0
+    foreach ($file in (Get-ChildItem -LiteralPath $root.FullName -Recurse -Force -File)) {
+        if (-not $file.IsReadOnly) { continue }
+        # jpackage marks launchers read-only; Maven clean cannot remove them until this filesystem attribute clears.
+        $file.IsReadOnly = $false
+        $cleared++
+    }
+    return $cleared
+}
+
+<#
+.SYNOPSIS
     Returns $true when a destination already holds an extraction of the archive with the given checksum.
 .NOTES
     The marker records the archive SHA-256 rather than a version string, so bumping the lock invalidates the
@@ -641,6 +666,7 @@ Export-ModuleMember -Function @(
     'Assert-JmodDescribeOutput',
     'Read-PropertiesFile',
     'Assert-MavenWrapperPinned',
+    'Clear-ReadOnlyBuildOutputs',
     'Test-ProvisionedArchive',
     'Expand-LockedArchive',
     'Install-LockedArchive',

@@ -85,6 +85,22 @@ Describe 'Assert-FileSha256' {
     }
 }
 
+Describe 'Clear-ReadOnlyBuildOutputs' {
+    It 'clears read-only attributes left by jpackage beneath the selected build-output root' {
+        $root = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'target\app-image') -Force
+        $launcher = New-TempFile 'target\app-image\BS2BG.exe' 'launcher bytes'
+        (Get-Item -LiteralPath $launcher).IsReadOnly = $true
+
+        Clear-ReadOnlyBuildOutputs -Path $root.FullName | Should -Be 1
+
+        (Get-Item -LiteralPath $launcher).IsReadOnly | Should -BeFalse
+    }
+
+    It 'is a no-op when no previous build-output tree exists' {
+        Clear-ReadOnlyBuildOutputs -Path (Join-Path $TestDrive 'missing-target') | Should -Be 0
+    }
+}
+
 Describe 'Read-JdkReleaseFile' {
     It 'parses quoted KEY="value" pairs and ignores blank lines' {
         $content = "IMPLEMENTOR=`"Eclipse Adoptium`"`r`n`r`nJAVA_VERSION=`"25.0.4.1`"`nMODULES=`"java.base java.compiler`"`n"

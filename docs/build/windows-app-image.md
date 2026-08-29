@@ -1,10 +1,9 @@
 # Windows app-image packaging checkpoint
 
-Status: packaging checkpoint on top of the complete application gate (issues #97 and #87, parents #81 and #80). A green run proves
+Status: Workbench packaging checkpoint on top of the complete application gate (issue #98 and inherited gates). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
-starts from a clean extracted location without any system Java, exercises Project Open cancellation/malformed
-rejection/New/Save/Save As/recovery and failed-overwrite preservation plus the representative BoS, Templates, and
-Morphs workflows, and exits cleanly.
+starts from a clean extracted location without any system Java, exposes the five placeholder Workbench Areas,
+exercises New/Open/Save/Save As/recovery/failure preservation and dirty shutdown, and exits cleanly.
 ADR-0003 records the Java 25 baseline this checkpoint ships.
 
 ## One command
@@ -75,7 +74,39 @@ The pom pins the application version once (`bs2bg.app.version`, 1.1.2); `Windows
 differs from `Main.APP_VERSION`, the value the About dialog renders, so the stamped image and the running
 application cannot disagree.
 
-## Packaged smoke run
+## Current Workbench packaged smoke run
+
+`smoke-app-image.ps1` extracts the archive to a fresh temporary location and starts `BS2BG\BS2BG.exe` from an
+empty working directory with every host-Java discovery path removed. The original launcher must remain the only
+image process, host `jvm.dll` and JavaFX native libraries from the extracted runtime, and exit with code 0 inside
+the configured bound.
+
+Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #98
+workflow records these steps:
+
+1. Extract the clean image, verify launcher configuration/version, and install representative, recovery, and
+   malformed Project fixtures.
+2. Launch `BS2BG Preview` without system Java; verify Templates, Morphs, NPC Database, Output, and Settings Areas
+   plus the first-run Settings pair.
+3. Save As a clean New Project and verify the canonical file and adopted identity.
+4. Open a recovered Project and require both ordered `SLIDER_PRESET_ASSIGNMENT_MISSING` diagnostics and dirty title.
+5. Cancel and then explicitly discard a dirty New request.
+6. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
+7. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes.
+8. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
+   recover through Save As.
+9. Request dirty shutdown, Cancel and verify the Project/process remain, then Discard and require bounded exit 0
+   with no remaining image process.
+
+Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
+launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
+
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/6`; its durable UIA artifact is
+`smoke-diagnostics/uia-tree-workbench.txt`.
+
+## Historical pre-Workbench packaged smoke run
+
+The following describes the superseded #87 legacy-root checkpoint retained in historical evidence directories.
 
 `smoke-app-image.ps1` extracts the archive to a fresh `%TEMP%` location and starts `BS2BG\BS2BG.exe` from an
 empty working directory with the environment scrubbed of every host-Java discovery path (`JAVA_HOME`,
@@ -211,15 +242,14 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
-- `smoke`: the complete smoke evidence (schema `bs2bg.windows-app-image-smoke/5`; steps with durations; Project
-  canceled/malformed Open preservation, New, recovered Save, Save As, failed-overwrite preservation, retry, and reopen observations; first-run/edited/
-  recovered Settings hashes and exact output; expected and observed process models; the three sequential process
-  lifecycles with exit codes and exit wait times; environment scrubbing; diagnostics summary including any
-  native-access warning lines from stderr, which must be none).
+- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/6`; steps with durations;
+  placeholder Areas; Project recovery, New/Open/Save/Save As, failure preservation/retry and dirty shutdown;
+  the expected/observed process model; bounded exit; environment scrubbing; and diagnostics including native-access
+  warning lines, which must be none).
 
 Beside it: `app-image-jdeps-output.txt`, `app-image-jlink-output.txt`, `app-image-jpackage-output.txt`
 (`--verbose`), `app-image-module-resolution.txt`, `app-image-sha256.txt`, `windows-app-image-smoke.json`, and
-`smoke-diagnostics/` (launcher stdout/stderr, the BoS preview UIA tree, and the UIA tree after the reopen).
+`smoke-diagnostics/` (launcher stdout/stderr, the Workbench UIA tree, and any failure screenshots/window trees).
 
 `target/` is not versioned, so the checkpoint's evidence is retained verbatim under
 `docs/build/evidence/windows-app-image-<date>/`: the two JSON evidence files, the gate's

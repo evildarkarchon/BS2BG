@@ -11,7 +11,6 @@ import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.ProjectSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
-import com.asdasfa.jbs2bg.project.SourceLocation;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -67,7 +66,7 @@ public final class ProjectPresentation {
         // ChangedOutcome for the dirty flag / file identity alone, so keying
         // invalidation on the outcome type would discard freshly generated text.
         return new ProjectPresentationUpdate(!sameContent(previous, snapshot),
-                formatDiagnostics(requiredOutcome.getDiagnostics()), hasErrorDiagnostic(requiredOutcome));
+                ProjectDiagnosticFormatter.format(requiredOutcome.getDiagnostics()), hasErrorDiagnostic(requiredOutcome));
     }
 
     /** @return the latest immutable snapshot rendered by the presentation */
@@ -169,51 +168,6 @@ public final class ProjectPresentation {
                 return false;
         }
         return true;
-    }
-
-    /** Formats structured diagnostics without moving JavaFX controls into ProjectSession. */
-    private static String formatDiagnostics(List<ProjectDiagnostic> diagnostics) {
-        StringBuilder text = new StringBuilder();
-        for (ProjectDiagnostic diagnostic : diagnostics) {
-            if (text.length() > 0)
-                text.append(System.lineSeparator());
-            text.append(diagnostic.getSeverity()).append(" [").append(diagnostic.getCode()).append("] ");
-            appendLocation(text, diagnostic.getSourceLocation());
-            text.append(": ").append(diagnostic.getMessage());
-        }
-        return text.toString();
-    }
-
-    /** Appends the available file, element, line, and column portions of a source location. */
-    private static void appendLocation(StringBuilder text, SourceLocation location) {
-        boolean hasLocation = false;
-        if (location.getPath().isPresent()) {
-            Path path = location.getPath().get();
-            Path fileName = path.getFileName();
-            text.append(fileName == null ? path.toString() : fileName.toString());
-            hasLocation = true;
-        }
-        if (location.getElement().isPresent()) {
-            String element = location.getElement().get();
-            // A root JSON pointer adds no useful location beyond its source file.
-            if (!hasLocation || !"/".equals(element)) {
-                if (hasLocation)
-                    text.append(element.startsWith("/") ? " " : " / ");
-                text.append(element);
-                hasLocation = true;
-            }
-        }
-        if (location.getLine().isPresent()) {
-            if (hasLocation)
-                text.append(' ');
-            text.append("(line ").append(location.getLine().getAsInt());
-            if (location.getColumn().isPresent())
-                text.append(", column ").append(location.getColumn().getAsInt());
-            text.append(')');
-            hasLocation = true;
-        }
-        if (!hasLocation)
-            text.append("Project");
     }
 
     /** Reports whether an outcome carries any presentation-level error diagnostic. */

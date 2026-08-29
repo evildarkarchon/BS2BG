@@ -6,7 +6,6 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.ResourceBundle;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -92,14 +91,6 @@ public class MainController extends CustomController {
 	
 	// Menu Items
 	@FXML
-	private MenuItem miNew;
-	@FXML
-	private MenuItem miOpen;
-	@FXML
-	private MenuItem miSave;
-	@FXML
-	private MenuItem miSaveAs;
-	@FXML
 	private MenuItem miExportBosJson;
 	@FXML
 	private MenuItem miExport;
@@ -156,10 +147,6 @@ public class MainController extends CustomController {
 	FilteredTableAdapter<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> npcTable;
 
 	// Confirm Dialogs
-	private CustomConfirm confirmNewFile;
-	private CustomConfirm confirmOpenFile;
-	private CustomConfirm confirmExit;
-	
 	private CustomConfirm confirmClearPresets;
 	private CustomConfirm confirmRemovePreset;
 	
@@ -208,7 +195,6 @@ public class MainController extends CustomController {
 	private PopupNoPresetNotifController popupNoPresetNotifController;
 	
 	// File Choosers
-	private FileChooser fcFile;
 	private FileChooser fcXml;
 	private DirectoryChooser fcExport;
 	private DirectoryChooser fcExportBosJson;
@@ -298,16 +284,6 @@ public class MainController extends CustomController {
 		connectViews();
 		stage.setTitle(main.projectPresentation.getWindowTitle());
 		
-		// Don't allow closing if mainPane is disabled, meaning doing some tasks
-		stage.setOnCloseRequest(e -> {
-			if (mainPane.isDisabled())
-				e.consume();
-			
-			if (main.projectPresentation.requiresDiscardConfirmation()) {
-				e.consume();
-				confirmExit.show();
-			}
-		});
 		stage.getScene().cursorProperty().bind(Bindings.when(mainPane.disabledProperty()).then(Cursor.WAIT).otherwise(Cursor.DEFAULT));
 	}
 	
@@ -323,10 +299,6 @@ public class MainController extends CustomController {
 	}
 	
 	private void setupKeyCombinations() {
-		miNew.setAccelerator(new KeyCodeCombination(KeyCode.N, KeyCombination.CONTROL_DOWN));
-		miOpen.setAccelerator(new KeyCodeCombination(KeyCode.O, KeyCombination.CONTROL_DOWN));
-		miSave.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN));
-		miSaveAs.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN, KeyCombination.ALT_DOWN));
 		miExportBosJson.setAccelerator(new KeyCodeCombination(KeyCode.B, KeyCombination.CONTROL_DOWN));
 		miExport.setAccelerator(new KeyCodeCombination(KeyCode.X, KeyCombination.CONTROL_DOWN));
 	}
@@ -546,7 +518,7 @@ public class MainController extends CustomController {
 	 * @return the typed session outcome used by popup callback decisions
 	 */
 	ProjectOutcome applyProjectEdit(ProjectEdit edit) {
-		return renderProjectOutcome(main.projectSession.apply(edit));
+		return renderProjectOutcome(main.workbenchProjectFlow.apply(edit));
 	}
 
 	/** Restores a Slider Preset selection by stable case-insensitive name. */
@@ -690,51 +662,6 @@ public class MainController extends CustomController {
 	}
 	
 	private void setupAlerts() {
-		confirmNewFile = new CustomConfirm(main) {
-			@Override
-			public void ok() {
-				newFile();
-			}
-		};
-		confirmNewFile.setTitle("Confirm Action");
-		confirmNewFile.setHeaderText("New File");
-		confirmNewFile.setContentText(
-			"You're starting a new file.\n" +
-			"All unsaved changes will be discarded."
-		);
-		confirmNewFile.setOkButtonText("New");
-		confirmNewFile.setCancelButtonText("Cancel");
-		
-		confirmOpenFile = new CustomConfirm(main) {
-			@Override
-			public void ok() {
-				openFromFile();
-			}
-		};
-		confirmOpenFile.setTitle("Confirm Action");
-		confirmOpenFile.setHeaderText("Open File");
-		confirmOpenFile.setContentText(
-			"You still have a file open with some unsaved changes.\n" +
-			"All unsaved changes will be discarded."
-		);
-		confirmOpenFile.setOkButtonText("Open Another");
-		confirmOpenFile.setCancelButtonText("Cancel");
-		
-		confirmExit = new CustomConfirm(main) {
-			@Override
-			public void ok() {
-				Platform.exit();
-			}
-		};
-		confirmExit.setTitle("Confirm Action");
-		confirmExit.setHeaderText("Exit");
-		confirmExit.setContentText(
-			"You have some unsaved changes.\n" +
-			"All unsaved changes will be discarded."
-		);
-		confirmExit.setOkButtonText("Discard");
-		confirmExit.setCancelButtonText("Cancel");
-		
 		confirmClearPresets = new CustomConfirm(main) {
 			@Override
 			public void ok() {
@@ -1051,9 +978,6 @@ public class MainController extends CustomController {
 	}
 	
 	private void setupFileChoosers() {
-		fcFile = new FileChooser();
-		fcFile.getExtensionFilters().add(new FileChooser.ExtensionFilter("jBS2BG files (*.jbs2bg)", "*.jbs2bg"));
-		
 		fcXml = new FileChooser();
 		fcXml.setTitle("Add BodySlide XMLs");
 		fcXml.getExtensionFilters().add(new FileChooser.ExtensionFilter("BodySlide XML files (*.xml)", "*.xml"));
@@ -1105,7 +1029,7 @@ public class MainController extends CustomController {
 		return new Task<SliderPresetImportOutcome>() {
 			@Override
 			protected SliderPresetImportOutcome call() {
-				return main.projectSession.importSliderPresets(sources);
+				return main.workbenchProjectFlow.importSliderPresets(sources);
 			}
 		};
 	}
@@ -1583,154 +1507,6 @@ public class MainController extends CustomController {
 		}
 	}
 	
-	@FXML
-	private void showConfirmNewFile() {
-		if (main.projectPresentation.requiresDiscardConfirmation()) {
-			confirmNewFile.show();
-		} else { // Just reset to newFile
-			newFile();
-		}
-	}
-	
-	/** Establishes and renders a clean untitled Project through ProjectSession. */
-	private void newFile() {
-		renderProjectOutcome(main.projectSession.newProject());
-		reset();
-	}
-	
-	@FXML
-	private void showConfirmOpenFile() {
-		if (main.projectPresentation.requiresDiscardConfirmation()) {
-			confirmOpenFile.show();
-		} else {
-			openFromFile();
-		}
-	}
-	
-	/** Selects a Project file and schedules an atomic ProjectSession open operation. */
-	private void openFromFile() {
-		File file;
-		fcFile.setTitle("Open jBS2BG File");
-		try {
-			fcFile.setInitialDirectory(new File(main.data.prefs.get(main.data.LAST_USED_FOLDER, new File(".").getAbsolutePath())));
-			file = fcFile.showOpenDialog(stage);
-		} catch (Exception e) {
-			fcFile.setInitialDirectory(main.data.homeDir);
-			file = fcFile.showOpenDialog(stage);
-		}
-		if (file != null) {
-			main.data.prefs.put(main.data.LAST_USED_FOLDER, file.getParent());
-			
-			Task<ProjectOutcome> task = openProject(file.toPath());
-			scheduleBackgroundTask(task, outcome -> {
-				renderProjectOutcome(outcome);
-				if (!isRejectedOrFailed(outcome))
-					reset();
-				Logger.getLogger(getClass().getName()).log(Level.INFO,
-						isRejectedOrFailed(outcome) ? "Opening jBS2BG file rejected or failed."
-								: "Opening jBS2BG file done.");
-			}, "Opening jBS2BG file");
-		} else {
-		}
-	}
-	
-	/**
-	 * Creates a worker wrapper for synchronous atomic Project opening without
-	 * mutating JavaFX state on the worker thread.
-	 *
-	 * @param source selected Project file
-	 * @return background task carrying the typed open outcome
-	 */
-	private Task<ProjectOutcome> openProject(Path source) {
-		return new Task<ProjectOutcome>() {
-			@Override
-			protected ProjectOutcome call() {
-				return main.projectSession.open(source);
-			}
-		};
-	}
-
-	/** Saves to the rendered file identity or delegates untitled Projects to Save As. */
-	@FXML
-	private void save() {
-		if (main.projectPresentation.getSnapshot().getFileIdentity().isPresent()) {
-			scheduleSave(saveProject());
-			return;
-		}
-		Path target = chooseProjectSaveTarget();
-		if (target != null)
-			scheduleSave(saveProjectAs(target));
-	}
-
-	/** Selects a target and schedules an atomic ProjectSession Save As operation. */
-	@FXML
-	private void saveToFile() {
-		Path target = chooseProjectSaveTarget();
-		if (target != null)
-			scheduleSave(saveProjectAs(target));
-	}
-
-	/**
-	 * Keeps chooser state and extension normalization in presentation while
-	 * returning the exact target supplied to ProjectSession Save As.
-	 *
-	 * @return normalized target path, or null when the chooser is cancelled
-	 */
-	private Path chooseProjectSaveTarget() {
-		File saveFile;
-		fcFile.setTitle("Save jBS2BG File");
-		try {
-			fcFile.setInitialDirectory(new File(main.data.prefs.get(main.data.LAST_USED_FOLDER, new File(".").getAbsolutePath())));
-			saveFile = fcFile.showSaveDialog(stage);
-		} catch (Exception e) {
-			fcFile.setInitialDirectory(main.data.homeDir);
-			saveFile = fcFile.showSaveDialog(stage);
-		}
-		if (saveFile == null)
-			return null;
-		main.data.prefs.put(main.data.LAST_USED_FOLDER, saveFile.getParent());
-		String target = saveFile.getAbsolutePath();
-		if (!target.toLowerCase(Locale.ROOT).endsWith(".jbs2bg"))
-			target += ".jbs2bg";
-		return new File(target).toPath();
-	}
-
-	/** @return background task for saving to the adopted Project file identity */
-	private Task<ProjectOutcome> saveProject() {
-		return new Task<ProjectOutcome>() {
-			@Override
-			protected ProjectOutcome call() {
-				return main.projectSession.save();
-			}
-		};
-	}
-
-	/**
-	 * Creates a background task for atomic Save As while retaining scheduling in
-	 * presentation.
-	 *
-	 * @param target chooser-selected normalized target
-	 * @return background task carrying the typed Save As outcome
-	 */
-	private Task<ProjectOutcome> saveProjectAs(Path target) {
-		return new Task<ProjectOutcome>() {
-			@Override
-			protected ProjectOutcome call() {
-				return main.projectSession.saveAs(target);
-			}
-		};
-	}
-
-	/** Schedules a save task and distinguishes typed failure outcomes from task failure. */
-	private void scheduleSave(Task<ProjectOutcome> task) {
-		scheduleBackgroundTask(task, outcome -> {
-			renderProjectOutcome(outcome);
-			Logger.getLogger(getClass().getName()).log(Level.INFO,
-					isRejectedOrFailed(outcome) ? "Saving jBS2BG file rejected or failed."
-							: "Saving jBS2BG file done.");
-		}, "Saving jBS2BG file");
-	}
-
 	/**
 	 * Applies the shared JavaFX scheduling, busy, and unexpected-failure lifecycle
 	 * around a synchronous domain operation.

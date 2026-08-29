@@ -166,6 +166,29 @@ class Java25ToolchainGuardTest {
         assertEquals(List.of(), violations);
     }
 
+    /** The Workbench Project flow is the sole presentation caller of every ProjectSession write operation. */
+    @Test
+    void workbenchOwnsTheOnlyPresentationProjectWriteRoute() throws IOException, URISyntaxException {
+        List<String> violations = new ArrayList<>();
+        Path classesRoot = productionClassesRoot();
+        String allowed = "com/asdasfa/jbs2bg/workbench/WorkbenchProjectFlow.class";
+        for (Path classFile : productionClassFiles()) {
+            String relative = classesRoot.relativize(classFile).toString().replace('\\', '/');
+            if (relative.startsWith("com/asdasfa/jbs2bg/project/") || relative.equals(allowed))
+                continue;
+            List<String> constants = readConstantPoolText(classFile);
+            if (!constants.contains("com/asdasfa/jbs2bg/project/ProjectSession"))
+                continue;
+            for (String writeMethod : List.of("newProject", "open", "save", "saveAs", "apply",
+                    "importSliderPresets")) {
+                if (constants.contains(writeMethod))
+                    violations.add(relative + " -> ProjectSession." + writeMethod);
+            }
+        }
+        assertEquals(List.of(), violations,
+                "presentation Project writes must not bypass WorkbenchProjectFlow");
+    }
+
     @Test
     void previewFeaturesAreNotEnabledOnTheTestJvm() {
         List<String> jvmArgs = ManagementFactory.getRuntimeMXBean().getInputArguments();

@@ -17,20 +17,27 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.asdasfa.jbs2bg.CustomConfirm;
 import com.asdasfa.jbs2bg.CustomController;
 import com.asdasfa.jbs2bg.CustomNotif;
 import com.asdasfa.jbs2bg.Main;
-import com.asdasfa.jbs2bg.MainController;
 import com.asdasfa.jbs2bg.SetSliderControl;
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
+import com.asdasfa.jbs2bg.project.ProjectSessions;
+import com.asdasfa.jbs2bg.workbench.WorkbenchController;
+import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
-import javafx.scene.control.TableView;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 
 /**
  * Public-JavaFX harness proving that every FXML graph in the build artifact
@@ -50,18 +57,50 @@ class FxmlGraphLoadingTest {
 
     private static final String STYLESHEET = Main.class.getResource("dark.css").toExternalForm();
 
-    /** The root window graph binds to MainController and wires the NPC Morph Assignment table. */
+    @TempDir
+    Path temporaryDirectory;
+
+    /** The sole root graph binds to WorkbenchController and exposes every placeholder Area by semantic name. */
     @Test
     void rootWindowGraphLoadsWithItsController() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = load("main.fxml");
-            assertTrue(loader.getRoot() instanceof VBox, "main.fxml root");
-            MainController controller = loader.getController();
-            assertNotNull(controller, "main.fxml must declare its controller");
+            FXMLLoader loader = load("workbench.fxml");
+            assertTrue(loader.getRoot() instanceof BorderPane, "workbench.fxml root");
+            WorkbenchController controller = loader.getController();
+            assertNotNull(controller, "workbench.fxml must declare its controller");
             assertEveryFxmlFieldInjected(controller);
-            TableView<?> npcTable = (TableView<?>) loader.getNamespace().get("tvNpc");
-            assertEquals(List.of("Name", "Master", "Race", "EditorID", "FormID", "Slider Presets"),
-                    npcTable.getColumns().stream().map(column -> column.getText()).toList());
+            assertEquals(List.of("Templates", "Morphs", "NPC Database", "Output", "Settings"),
+                    List.of("templatesAreaButton", "morphsAreaButton", "npcDatabaseAreaButton",
+                            "outputAreaButton", "settingsAreaButton").stream()
+                            .map(id -> ((ToggleButton) loader.getNamespace().get(id)).getText()).toList());
+        });
+    }
+
+    /** The attached File commands render and mutate only through the authoritative Workbench Project flow. */
+    @Test
+    void attachedWorkbenchSaveCommandPublishesTheReturnedProjectFrame() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
+        Files.copy(Paths.get("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
+                source);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN).effect().orElseThrow();
+        flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selected(source));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = load("workbench.fxml");
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage);
+
+            assertEquals("BS2BG Preview - *recovery-source.jbs2bg", stage.getTitle());
+            MenuItem save = (MenuItem) loader.getNamespace().get("saveProjectMenuItem");
+            assertNotNull(save);
+            save.fire();
+
+            assertFalse(flow.frame().snapshot().isDirty());
+            assertEquals("BS2BG Preview - recovery-source.jbs2bg", stage.getTitle());
+            stage.close();
         });
     }
 
@@ -118,6 +157,8 @@ class FxmlGraphLoadingTest {
     void everyFxmlGraphOnDiskIsServedFromTheClasspath() throws IOException {
         List<String> graphs = fxmlFiles("");
         assertTrue(graphs.size() >= 13, "expected the full FXML set, found " + graphs);
+        assertTrue(graphs.contains("workbench.fxml"), "the Workbench must be the packaged root graph");
+        assertFalse(graphs.contains("main.fxml"), "the replaced legacy root graph must not ship");
         for (String graph : graphs)
             assertNotNull(Main.class.getResource(graph), graph + " must be on the classpath");
     }

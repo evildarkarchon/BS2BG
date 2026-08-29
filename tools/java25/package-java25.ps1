@@ -1,8 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds, verifies, and smoke-tests the self-contained, non-modular Windows x64 application image (issues #83-#86
-    and #97, parent #81) from the complete Java 25 build.
+    Builds, verifies, and smoke-tests the self-contained Windows x64 Workbench image (issue #98 and inherited gates).
 
 .DESCRIPTION
     On top of the complete application gate (tools/java25/verify-java25.ps1, which this script runs first), the
@@ -22,11 +21,10 @@
          --app-version from the pom; pins the generated Windows launcher to one process with win.norestart=true;
          verifies the image layout and launcher configuration; hashes every file into one image digest; and
          archives the image as BS2BG-<version>-windows-x64.zip.
-      6. Extracts that archive to a clean temporary location and runs tools/java25/smoke-app-image.ps1: the
-         packaged launcher starts with every host-Java discovery path scrubbed; Project Open cancellation,
-         malformed rejection, New, recovered Save, Save As, failed overwrite, retry, and reopen; first-run Settings creation, legacy Settings editing and
-         interrupted-publication recovery; and the representative BoS, Templates, and Morphs workflows are
-         exercised; every process must exit with code 0 within a bounded timeout.
+      6. Extracts that archive to a clean temporary location and runs tools/java25/smoke-app-image.ps1. The
+         packaged Preview launcher starts with every host-Java discovery path scrubbed; the five Workbench Areas,
+         New, Open, recovered Save, Save As, malformed/failed-operation preservation, retry, dirty shutdown, and
+         bounded exit are exercised through Windows UI Automation.
       7. Writes target/reproducibility/windows-app-image.json (toolchain, runtime, package, workflow, and exit
          evidence) next to the jdeps/jlink/jpackage logs and the smoke diagnostics, and prints the report.
 
@@ -337,8 +335,6 @@ else {
         FixtureProject = Join-Path $repoRoot 'test-resources\projects\legacy-project-semantics.jbs2bg'
         FixtureRecoveryProject = Join-Path $repoRoot 'test-resources\json-oracles\project\recovery-ordered-diagnostics.jbs2bg'
         FixtureMalformedProject = Join-Path $repoRoot 'test-resources\json-oracles\project\malformed-syntax.jbs2bg'
-        FixtureStandardSettings = Join-Path $repoRoot 'test-resources\json-oracles\settings\standard.json'
-        FixtureUunpSettings = Join-Path $repoRoot 'test-resources\json-oracles\settings\uunp.json'
         EvidencePath   = $smokeEvidencePath
         ExpectedAppVersion = $appVersion
     }

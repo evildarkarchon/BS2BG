@@ -218,7 +218,9 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.data.SettingsPairPublisherTest',
     'com.asdasfa.jbs2bg.presentation.ProjectOutputFormatterTest',
     'com.asdasfa.jbs2bg.presentation.BosJacksonWriterTest',
-    'com.asdasfa.jbs2bg.presentation.BosArtifactPublisherTest'
+    'com.asdasfa.jbs2bg.presentation.BosArtifactPublisherTest',
+    'com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlowTest',
+    'com.asdasfa.jbs2bg.workbench.WorkbenchControllerTest'
 )
 
 if (-not $SkipMaven) {
@@ -226,6 +228,10 @@ if (-not $SkipMaven) {
     # 5. Reproducible Maven run through the wrapper
     # -----------------------------------------------------------------------------------------------------------
     Write-Step "Running the Maven Wrapper: $($MavenGoals -join ' ')"
+    $clearedReadOnly = Clear-ReadOnlyBuildOutputs -Path (Join-Path $repoRoot 'target')
+    if ($clearedReadOnly -gt 0) {
+        Write-Host "Cleared read-only attributes from $clearedReadOnly prior jpackage output file(s) before Maven clean"
+    }
     Push-Location $repoRoot
     try {
         $mvnw = Join-Path $repoRoot 'mvnw.cmd'
@@ -328,7 +334,8 @@ $evidence = [ordered]@{
             }
         } else { $null })
         structuralGate          = 'ProductionSourceGateTest (sources, resources, pom) and Java25ToolchainGuardTest (every emitted class file)'
-        fxmlHarness             = 'FxmlGraphLoadingTest (root, popup, and custom-root FXML/controller graphs on the pinned toolkit)'
+        fxmlHarness             = 'FxmlGraphLoadingTest (Workbench root, retained migration popups, and custom-root graphs on the pinned toolkit)'
+        workbenchLifecycle      = 'WorkbenchProjectFlowTest + WorkbenchControllerTest (authoritative Project flow, effects, shutdown, and JavaFX adapter)'
     }
     targetRelease           = [ordered]@{
         pinned      = $lock.targetRelease

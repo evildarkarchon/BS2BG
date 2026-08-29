@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.SeparatorMenuItem?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane fx:id="workbenchRoot" accessibleText="BS2BG Workbench" prefHeight="600.0" prefWidth="900.0"
+        xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1"
+        fx:controller="com.asdasfa.jbs2bg.workbench.WorkbenchController">
+    <top>
+        <MenuBar BorderPane.alignment="CENTER">
+            <menus>
+                <Menu mnemonicParsing="true" text="_File">
+                    <items>
+                        <MenuItem fx:id="newProjectMenuItem" mnemonicParsing="true" text="_New" />
+                        <MenuItem fx:id="openProjectMenuItem" mnemonicParsing="true" text="_Open…" />
+                        <MenuItem fx:id="saveProjectMenuItem" mnemonicParsing="true" text="_Save" />
+                        <MenuItem fx:id="saveAsProjectMenuItem" mnemonicParsing="true" text="Save _As…" />
+                        <SeparatorMenuItem />
+                        <MenuItem fx:id="exitMenuItem" mnemonicParsing="true" text="E_xit" />
+                    </items>
+                </Menu>
+            </menus>
+        </MenuBar>
+    </top>
+    <left>
+        <VBox alignment="TOP_CENTER" prefWidth="144.0" spacing="8.0" BorderPane.alignment="CENTER">
+            <padding>
+                <Insets bottom="12.0" left="8.0" right="8.0" top="12.0" />
+            </padding>
+            <children>
+                <ToggleButton fx:id="templatesAreaButton" maxWidth="Infinity" selected="true" text="Templates" />
+                <ToggleButton fx:id="morphsAreaButton" maxWidth="Infinity" text="Morphs" />
+                <ToggleButton fx:id="npcDatabaseAreaButton" maxWidth="Infinity" text="NPC Database" />
+                <ToggleButton fx:id="outputAreaButton" maxWidth="Infinity" text="Output" />
+                <ToggleButton fx:id="settingsAreaButton" maxWidth="Infinity" text="Settings" />
+            </children>
+        </VBox>
+    </left>
+    <center>
+        <VBox spacing="12.0" BorderPane.alignment="CENTER">
+            <padding>
+                <Insets bottom="12.0" left="16.0" right="16.0" top="12.0" />
+            </padding>
+            <children>
+                <HBox alignment="CENTER_LEFT" spacing="12.0">
+                    <children>
+                        <Label fx:id="areaTitle" styleClass="title" text="Templates" />
+                        <Region HBox.hgrow="ALWAYS" />
+                        <Label fx:id="projectStatusText" accessibleText="Project status" text="Untitled Project" />
+                    </children>
+                </HBox>
+                <HBox spacing="12.0" VBox.vgrow="ALWAYS">
+                    <children>
+                        <VBox accessibleText="List placeholder" minWidth="160.0" prefWidth="220.0" styleClass="placeholder-pane">
+                            <children><Label text="List" /></children>
+                        </VBox>
+                        <StackPane accessibleText="Editor placeholder" styleClass="placeholder-pane" HBox.hgrow="ALWAYS">
+                            <children><Label fx:id="placeholderText" text="Templates Area — Workbench placeholder" /></children>
+                        </StackPane>
+                        <VBox accessibleText="Inspector placeholder" minWidth="180.0" prefWidth="240.0" styleClass="placeholder-pane">
+                            <children><Label text="Inspector" /></children>
+                        </VBox>
+                    </children>
+                </HBox>
+                <Label text="Project diagnostics" />
+                <TextArea fx:id="diagnosticsText" editable="false"
+                        focusTraversable="true" prefRowCount="4" wrapText="true" />
+            </children>
+        </VBox>
+    </center>
+    <bottom>
+        <HBox alignment="CENTER_LEFT" spacing="8.0" BorderPane.alignment="CENTER">
+            <padding><Insets bottom="8.0" left="12.0" right="12.0" top="8.0" /></padding>
+            <children>
+                <Label fx:id="statusText" accessibleText="Workbench status" text="Ready" />
+            </children>
+        </HBox>
+    </bottom>
+</BorderPane>
