@@ -149,6 +149,20 @@ class ProductionSourceGateTest {
         }
     }
 
+    /** The selected bundled-vector icon stack ships alone; an unverified Ikonli fallback cannot drift back in. */
+    @Test
+    void enforcerKeepsTheUnselectedIkonliStackOutOfTheImage() throws Exception {
+        Document pom = parse(POM);
+        String pomText = Files.readString(POM, StandardCharsets.UTF_8);
+        assertTrue(pomText.contains("<exclude>org.kordamp.ikonli:*</exclude>"),
+                "pom.xml must ban the unselected Ikonli stack through bannedDependencies");
+        for (Element dependency : children(child(pom.getDocumentElement(), "dependencies"), "dependency")) {
+            String groupId = child(dependency, "groupId").getTextContent().trim();
+            assertFalse("org.kordamp.ikonli".equals(groupId),
+                    "only the selected application-owned bundled vectors may ship");
+        }
+    }
+
     /** Appends one "path:line reason (match)" entry per forbidden pattern found in the file. */
     private static void scan(Path file, Map<Pattern, String> forbidden, List<String> violations) throws IOException {
         String text = Files.readString(file, StandardCharsets.UTF_8);

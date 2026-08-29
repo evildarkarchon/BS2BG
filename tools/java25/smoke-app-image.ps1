@@ -1,15 +1,15 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG Preview Workbench through its Project lifecycle and shell contract (issues #98/#99).
+    Drives the packaged BS2BG Preview Workbench through its lifecycle and platform contract (issues #98-#100).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
     discovery path, proves that the launcher process hosts the bundled JVM, and drives the Workbench through
     Windows UI Automation by accessible role and name. The run covers typed navigation, focus cycling and return,
-    Output drawer interaction, responsive/minimum geometry, startup, New, Open, Save, Save As, Project recovery
-    diagnostics, malformed/failed operation preservation, retry, dirty shutdown cancellation, final discard, and
-    bounded process exit.
+    Output drawer interaction, responsive/minimum geometry, live themes, High Contrast, reduced motion,
+    accessibility semantics, notifications, typed dialogs, startup, New, Open, Save, Save As, Project recovery,
+    malformed/failed operation preservation, retry, dirty shutdown cancellation, and bounded process exit.
 #>
 [CmdletBinding()]
 param(
@@ -43,6 +43,7 @@ $malformedProjectName = 'malformed-project.jbs2bg'
 $firstSaveName = 'new-project.jbs2bg'
 $retrySaveName = 'save-retry.jbs2bg'
 $shutdownProjectName = 'shutdown-recovery.jbs2bg'
+$accessibilityState = Get-SystemAccessibilityPreferences
 
 $evidenceDir = Split-Path -Parent $EvidencePath
 $diagnosticsDir = Join-Path $evidenceDir 'smoke-diagnostics'
@@ -576,6 +577,65 @@ try {
         'five typed navigation destinations and the canonical Settings pair are accessible'
     }
 
+    Invoke-SmokeStep -Name 'verify-live-themes-high-contrast-reduced-motion-and-semantics' -Action {
+        $themeChoice = Find-OuterControl -ControlType 'ComboBox' -Name 'Theme choice'
+        $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        $cancel = Find-OuterControl -ControlType 'Button' -Name 'Cancel current operation'
+        if ($activity.Current.IsKeyboardFocusable -ne $true) { throw 'Activity is not keyboard reachable.' }
+        if ($cancel.Current.IsEnabled) { throw 'Cancel must be disabled while no cancellable operation is active.' }
+
+        Set-SystemHighContrast -Enabled:$false
+        Send-UiaKeysToElement -Element $themeChoice -Keys '{HOME}{DOWN}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Light theme') `
+            -Description 'explicit Light theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $themeChoice -Keys '{DOWN}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
+            -Description 'explicit Dark theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Set-SystemHighContrast -Enabled:$true
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
+            -Description 'live High Contrast override' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Save-Screenshot -Path (Join-Path $diagnosticsDir 'workbench-high-contrast.png')
+
+        Set-SystemHighContrast -Enabled:$false
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
+            -Description 'theme restored after High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Set-SystemClientAreaAnimation -Enabled:$true
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Motion preference: Standard motion') `
+            -Description 'standard motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Set-SystemClientAreaAnimation -Enabled:$false
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Motion preference: Reduced motion') `
+            -Description 'live reduced-motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Save-Screenshot -Path (Join-Path $diagnosticsDir 'workbench-reduced-motion.png')
+
+        Restore-SystemAccessibilityPreferences -State $accessibilityState
+        Send-UiaKeysToElement -Element $themeChoice -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        $expectedMotion = if ($accessibilityState.ClientAreaAnimation) {
+            'Motion preference: Standard motion'
+        } else {
+            'Motion preference: Reduced motion'
+        }
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name $expectedMotion) `
+            -Description 'restored motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $observations['appearance'] = [ordered]@{
+            choices = @('System', 'Light', 'Dark')
+            highContrastOverride = $true
+            reducedMotionObserved = $true
+            restoredHighContrast = $accessibilityState.HighContrast
+            restoredClientAreaAnimation = $accessibilityState.ClientAreaAnimation
+            iconImplementation = 'application-owned-bundled-vectors'
+        }
+        'theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed'
+    }
+
     Invoke-SmokeStep -Name 'verify-keyboard-navigation-focus-and-output-drawer' -Action {
         $outputLauncher = Get-AreaButton -Name 'Output'
         $outputLauncher.SetFocus()
@@ -639,6 +699,7 @@ try {
             @{ Role = 'Button'; Name = 'Morphs editor' },
             @{ Role = 'Button'; Name = 'Morphs inspector' },
             @{ Role = 'Text'; Name = 'Output generated text' },
+            @{ Role = 'List'; Name = 'Activity' },
             @{ Role = 'Text'; Name = 'Workbench status' },
             @{ Role = 'Button'; Name = 'Morphs' }
         )
@@ -743,8 +804,18 @@ try {
             [regex]::Matches($value, 'SLIDER_PRESET_ASSIGNMENT_MISSING').Count -ge 2 -and
                 $value.Contains('Missing Target') -and $value.Contains('Missing NPC')
         }
+        $infoBar = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Group' -Name 'Workbench notification') `
+            -Description 'warning InfoBar region' -TimeoutSeconds $StepTimeoutSeconds
+        if ($infoBar.Current.HelpText -cne 'Warning: Project opened with 2 diagnostics.') {
+            throw "Warning InfoBar did not expose severity and message: '$($infoBar.Current.HelpText)'"
+        }
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Warning — Open Project — Completed with issues: Project opened with 2 diagnostics.') `
+            -Description 'durable warning Activity record' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $observations['recoveredProject'] = [ordered]@{ title = $script:mainWindow.Current.Name; diagnostics = $text }
-        'opened a dirty recovered Project and exposed both missing-relationship diagnostics'
+        'opened a dirty recovered Project with diagnostics, warning InfoBar, Activity, and status projection'
     }
 
     Invoke-SmokeStep -Name 'cancel-then-discard-dirty-new' -Action {
@@ -841,6 +912,13 @@ catch {
     Write-Host "  [smoke] run failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 finally {
+    try {
+        Restore-SystemAccessibilityPreferences -State $accessibilityState
+    }
+    catch {
+        $passed = $false
+        Write-Host "  [smoke] accessibility preference restoration failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
     $killed = @()
     if ($observations.Contains('extractedImage')) {
         foreach ($process in @(Get-ImageLauncherProcesses)) {
@@ -869,7 +947,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/7'
+        schema = 'bs2bg.windows-app-image-smoke/8'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion
@@ -901,6 +979,8 @@ finally {
             nativeAccessWarnings = $restricted
             workbenchTree = 'smoke-diagnostics/uia-tree-workbench.txt'
             responsiveWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-responsive.txt'
+            highContrastScreenshot = 'smoke-diagnostics/workbench-high-contrast.png'
+            reducedMotionScreenshot = 'smoke-diagnostics/workbench-reduced-motion.png'
         }
         workRoot = $WorkRoot
         workRootKept = [bool]$KeepWorkRoot

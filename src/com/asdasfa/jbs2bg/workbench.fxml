@@ -2,7 +2,9 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.Menu?>
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
@@ -47,6 +49,13 @@
                 <ToggleButton fx:id="npcDatabaseAreaButton" maxWidth="Infinity" text="NPC Database" />
                 <ToggleButton fx:id="outputAreaButton" maxWidth="Infinity" text="Output" />
                 <ToggleButton fx:id="settingsAreaButton" maxWidth="Infinity" text="Settings" />
+                <Region VBox.vgrow="ALWAYS" />
+                <Label labelFor="$themeChoice" mnemonicParsing="true" text="_Theme:" />
+                <ComboBox fx:id="themeChoice" accessibleText="Theme choice" maxWidth="Infinity" />
+                <Label fx:id="appearanceStateText" accessibleText="Effective theme"
+                        maxWidth="Infinity" text="System theme" wrapText="true" />
+                <Label fx:id="motionStateText" accessibleText="Motion preference"
+                        maxWidth="Infinity" text="Standard motion" wrapText="true" />
             </children>
         </VBox>
     </left>
@@ -64,11 +73,29 @@
                                     <children>
                                         <Label fx:id="areaTitle" accessibleText="Active Workbench Area" styleClass="title" text="Templates" />
                                         <Button fx:id="showPrimaryOverlayButton" accessibleText="Open Templates list"
-                                                managed="false" text="List" visible="false" />
+                                                managed="false" mnemonicParsing="true" text="_List" visible="false" />
                                         <Button fx:id="showInspectorOverlayButton" accessibleText="Open Templates inspector"
-                                                managed="false" text="Inspector" visible="false" />
+                                                managed="false" mnemonicParsing="true" text="_Inspector" visible="false" />
                                         <Region HBox.hgrow="ALWAYS" />
                                         <Label fx:id="projectStatusText" accessibleText="Project status" text="Untitled Project" />
+                                    </children>
+                                </HBox>
+                                <HBox fx:id="infoBar" accessibleRole="PARENT" accessibleText="Workbench notification"
+                                        alignment="CENTER_LEFT" focusTraversable="false" managed="false"
+                                        spacing="8.0" styleClass="info-bar" visible="false">
+                                    <padding>
+                                        <Insets bottom="8.0" left="10.0" right="10.0" top="8.0" />
+                                    </padding>
+                                    <children>
+                                        <StackPane fx:id="infoBarIconHost" minHeight="24.0" minWidth="24.0"
+                                                prefHeight="24.0" prefWidth="24.0" />
+                                        <VBox spacing="2.0" HBox.hgrow="ALWAYS">
+                                            <children>
+                                                <Label fx:id="infoBarCue" styleClass="feedback-cue" text="Information" />
+                                                <Label fx:id="infoBarMessage" text="Ready" wrapText="true" />
+                                            </children>
+                                        </VBox>
+                                        <Button fx:id="dismissInfoBarButton" mnemonicParsing="true" text="_Dismiss" />
                                     </children>
                                 </HBox>
                                 <StackPane fx:id="paneHost" VBox.vgrow="ALWAYS">
@@ -107,9 +134,26 @@
                                                 styleClass="overlay-layer" />
                                     </children>
                                 </StackPane>
-                                <Label text="Project diagnostics" />
-                                <TextArea fx:id="diagnosticsText" accessibleText="Project diagnostics" editable="false"
-                                        focusTraversable="true" prefRowCount="4" wrapText="true" />
+                                <HBox spacing="12.0">
+                                    <children>
+                                        <VBox spacing="4.0" HBox.hgrow="ALWAYS">
+                                            <children>
+                                                <Label text="Project diagnostics" />
+                                                <TextArea fx:id="diagnosticsText" accessibleText="Project diagnostics"
+                                                        editable="false" focusTraversable="true" prefRowCount="3"
+                                                        wrapText="true" VBox.vgrow="ALWAYS" />
+                                            </children>
+                                        </VBox>
+                                        <VBox prefWidth="360.0" spacing="4.0" HBox.hgrow="ALWAYS">
+                                            <children>
+                                                <Label text="Activity" />
+                                                <ListView fx:id="activityList" accessibleText="Activity"
+                                                        focusTraversable="true" prefHeight="92.0"
+                                                        VBox.vgrow="ALWAYS" />
+                                            </children>
+                                        </VBox>
+                                    </children>
+                                </HBox>
                             </children>
                         </VBox>
                         <VBox fx:id="outputDrawer" accessibleText="Output" alignment="TOP_LEFT"
@@ -142,7 +186,12 @@
                         spacing="8.0" styleClass="status-bar">
                     <padding><Insets bottom="8.0" left="12.0" right="12.0" top="8.0" /></padding>
                     <children>
+                        <StackPane fx:id="statusIconHost" minHeight="20.0" minWidth="20.0"
+                                prefHeight="20.0" prefWidth="20.0" />
                         <Label fx:id="statusText" accessibleText="Workbench status" focusTraversable="true" text="Ready" />
+                        <Region HBox.hgrow="ALWAYS" />
+                        <Button fx:id="cancelOperationButton" accessibleText="Cancel current operation"
+                                disable="true" mnemonicParsing="true" text="_Cancel" />
                     </children>
                 </HBox>
             </children>

@@ -228,8 +228,10 @@
                                         <exclude>org.openjfx:javafx-incubator-*</exclude>
                                         <!-- The completed Jackson cutover must also reject transitive reintroduction. -->
                                         <exclude>com.eclipsesource.minimal-json:*</exclude>
+                                        <!-- Issue #100 selected application-owned vectors; no dormant icon stack ships. -->
+                                        <exclude>org.kordamp.ikonli:*</exclude>
                                     </excludes>
-                                    <message>JavaFX incubator modules and the retired minimal-json codec stay disabled.</message>
+                                    <message>JavaFX incubators, retired codecs, and the unselected icon stack stay disabled.</message>
                                 </bannedDependencies>
                             </rules>
                             <fail>true</fail>

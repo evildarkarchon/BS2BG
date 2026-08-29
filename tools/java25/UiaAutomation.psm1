@@ -154,6 +154,123 @@ public static class BS2BGWindows
         return result;
     }
 }
+
+public sealed class BS2BGAccessibilityState
+{
+    public bool HighContrast;
+    public bool ClientAreaAnimation;
+    public uint HighContrastFlags;
+    public string HighContrastScheme;
+}
+
+public static class BS2BGSystemPreferences
+{
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct HIGHCONTRAST
+    {
+        public uint cbSize;
+        public uint dwFlags;
+        public IntPtr lpszDefaultScheme;
+    }
+
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool SystemParametersInfoHighContrast(uint action, uint parameter,
+        ref HIGHCONTRAST value, uint flags);
+
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    private static extern bool SystemParametersInfoBoolean(uint action, uint parameter, ref int value, uint flags);
+
+    private const uint SPI_GETHIGHCONTRAST = 0x0042;
+    private const uint SPI_SETHIGHCONTRAST = 0x0043;
+    private const uint SPI_GETCLIENTAREAANIMATION = 0x1042;
+    private const uint SPI_SETCLIENTAREAANIMATION = 0x1043;
+    private const uint HCF_HIGHCONTRASTON = 0x00000001;
+    private const uint SPIF_SENDCHANGE = 0x0002;
+
+    /// <summary>
+    /// Captures the accessibility preferences changed by the packaged theme/motion smoke.
+    /// </summary>
+    /// <returns>A complete state value suitable for unconditional restoration in a finally block.</returns>
+    /// <exception cref="System.ComponentModel.Win32Exception">Thrown when Windows rejects a query.</exception>
+    public static BS2BGAccessibilityState Capture()
+    {
+        var highContrast = ReadHighContrast();
+        int animation = 0;
+        if (!SystemParametersInfoBoolean(SPI_GETCLIENTAREAANIMATION, 0, ref animation, 0))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        return new BS2BGAccessibilityState {
+            HighContrast = (highContrast.dwFlags & HCF_HIGHCONTRASTON) != 0,
+            ClientAreaAnimation = animation != 0,
+            HighContrastFlags = highContrast.dwFlags,
+            HighContrastScheme = Marshal.PtrToStringUni(highContrast.lpszDefaultScheme)
+        };
+    }
+
+    /// <summary>
+    /// Toggles High Contrast while retaining every unrelated HIGHCONTRAST flag and the user's scheme.
+    /// </summary>
+    /// <param name="enabled">Whether the High Contrast mode bit should be active.</param>
+    public static void SetHighContrast(bool enabled)
+    {
+        var current = Capture();
+        uint flags = enabled
+            ? current.HighContrastFlags | HCF_HIGHCONTRASTON
+            : current.HighContrastFlags & ~HCF_HIGHCONTRASTON;
+        WriteHighContrast(flags, current.HighContrastScheme);
+    }
+
+    /// <summary>
+    /// Sets whether client-area animation is enabled; JavaFX exposes the inverse as reduced motion.
+    /// </summary>
+    /// <param name="enabled">Whether client-area animation should be enabled.</param>
+    /// <exception cref="System.ComponentModel.Win32Exception">Thrown when Windows rejects the change.</exception>
+    public static void SetClientAreaAnimation(bool enabled)
+    {
+        int value = enabled ? 1 : 0;
+        if (!SystemParametersInfoBoolean(SPI_SETCLIENTAREAANIMATION, 0, ref value, SPIF_SENDCHANGE))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    }
+
+    /// <summary>
+    /// Restores exactly the flags, scheme, and animation preference captured before a packaged smoke run.
+    /// </summary>
+    /// <param name="state">Original preference value returned by Capture.</param>
+    public static void Restore(BS2BGAccessibilityState state)
+    {
+        if (state == null) throw new ArgumentNullException("state");
+        WriteHighContrast(state.HighContrastFlags, state.HighContrastScheme);
+        SetClientAreaAnimation(state.ClientAreaAnimation);
+    }
+
+    /// <summary>Reads the complete native High Contrast structure.</summary>
+    private static HIGHCONTRAST ReadHighContrast()
+    {
+        var value = new HIGHCONTRAST { cbSize = (uint)Marshal.SizeOf(typeof(HIGHCONTRAST)) };
+        if (!SystemParametersInfoHighContrast(SPI_GETHIGHCONTRAST, value.cbSize, ref value, 0))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        return value;
+    }
+
+    /// <summary>Writes a complete native High Contrast structure and broadcasts the live change.</summary>
+    private static void WriteHighContrast(uint flags, string scheme)
+    {
+        IntPtr schemePointer = IntPtr.Zero;
+        try {
+            if (!String.IsNullOrEmpty(scheme)) schemePointer = Marshal.StringToHGlobalUni(scheme);
+            var value = new HIGHCONTRAST {
+                cbSize = (uint)Marshal.SizeOf(typeof(HIGHCONTRAST)),
+                dwFlags = flags,
+                lpszDefaultScheme = schemePointer
+            };
+            if (!SystemParametersInfoHighContrast(SPI_SETHIGHCONTRAST, value.cbSize, ref value, SPIF_SENDCHANGE))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        }
+        finally
+        {
+            if (schemePointer != IntPtr.Zero) Marshal.FreeHGlobal(schemePointer);
+        }
+    }
+}
 '@
 
 <#
@@ -664,6 +781,46 @@ function Get-UiaParent {
     return [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($Element)
 }
 
+<#
+.SYNOPSIS
+    Captures High Contrast and client-area animation before a reversible packaged accessibility test.
+#>
+function Get-SystemAccessibilityPreferences {
+    [CmdletBinding()]
+    param()
+    return [BS2BGSystemPreferences]::Capture()
+}
+
+<#
+.SYNOPSIS
+    Toggles live Windows High Contrast and broadcasts the preference change to the packaged Workbench.
+#>
+function Set-SystemHighContrast {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [bool]$Enabled)
+    [BS2BGSystemPreferences]::SetHighContrast($Enabled)
+}
+
+<#
+.SYNOPSIS
+    Toggles client-area animation; JavaFX exposes its inverse as reduced motion.
+#>
+function Set-SystemClientAreaAnimation {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [bool]$Enabled)
+    [BS2BGSystemPreferences]::SetClientAreaAnimation($Enabled)
+}
+
+<#
+.SYNOPSIS
+    Restores the exact accessibility preferences captured before a packaged test.
+#>
+function Restore-SystemAccessibilityPreferences {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [BS2BGAccessibilityState]$State)
+    [BS2BGSystemPreferences]::Restore($State)
+}
+
 Export-ModuleMember -Function @(
     'New-UiaCondition',
     'Get-UiaRoleName',
@@ -691,5 +848,9 @@ Export-ModuleMember -Function @(
     'Resize-UiaClient',
     'Close-UiaWindow',
     'Get-UiaTree',
-    'Get-UiaParent'
+    'Get-UiaParent',
+    'Get-SystemAccessibilityPreferences',
+    'Set-SystemHighContrast',
+    'Set-SystemClientAreaAnimation',
+    'Restore-SystemAccessibilityPreferences'
 )

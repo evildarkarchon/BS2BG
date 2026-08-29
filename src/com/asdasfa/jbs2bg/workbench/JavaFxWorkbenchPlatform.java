@@ -2,13 +2,7 @@ package com.asdasfa.jbs2bg.workbench;
 
 import java.io.File;
 import java.util.Objects;
-import java.util.Optional;
 
-import com.asdasfa.jbs2bg.fx.DialogGraphics;
-
-import javafx.scene.control.Alert;
-import javafx.scene.control.ButtonBar;
-import javafx.scene.control.ButtonType;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -23,11 +17,9 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
         return switch (effect.kind()) {
         case CHOOSE_OPEN_PATH -> chooseProject(owner, false);
         case CHOOSE_SAVE_PATH -> chooseProject(owner, true);
-        case CONFIRM_NEW -> confirmReplacement(owner, "Create a new Project?",
-                "The current Project has unsaved changes.");
-        case CONFIRM_OPEN -> confirmReplacement(owner, "Open another Project?",
-                "The current Project has unsaved changes.");
-        case CONFIRM_CLOSE -> confirmClose(owner);
+        case CONFIRM_NEW, CONFIRM_OPEN -> response(JavaFxWorkbenchDialogs.show(
+                dialogSpec(effect.kind()), owner));
+        case CONFIRM_CLOSE -> response(JavaFxWorkbenchDialogs.show(dialogSpec(effect.kind()), owner));
         case CLOSE_WINDOW -> throw new IllegalArgumentException("CLOSE_WINDOW is not a modal platform effect");
         };
     }
@@ -48,40 +40,28 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
                 : WorkbenchProjectFlow.Response.selected(selected.toPath());
     }
 
-    /** Confirms a destructive New/Open replacement with Cancel as the safe default. */
-    private static WorkbenchProjectFlow.Response confirmReplacement(Stage owner, String header, String content) {
-        ButtonType discard = new ButtonType("Discard", ButtonBar.ButtonData.NO);
-        ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
-        Alert alert = confirmation(owner, header, content, discard, cancel);
-        Optional<ButtonType> answer = alert.showAndWait();
-        return answer.isPresent() && answer.get() == discard ? WorkbenchProjectFlow.Response.discard()
-                : WorkbenchProjectFlow.Response.cancelled();
+    /** Returns the typed dialog contract for one Project confirmation effect. */
+    static WorkbenchFeedback.DialogSpec dialogSpec(WorkbenchProjectFlow.EffectKind kind) {
+        return switch (Objects.requireNonNull(kind, "kind")) {
+            case CONFIRM_NEW -> WorkbenchFeedback.DialogSpec.destructiveConfirmation(
+                    "Create a new Project?", "The current Project has unsaved changes.");
+            case CONFIRM_OPEN -> WorkbenchFeedback.DialogSpec.destructiveConfirmation(
+                    "Open another Project?", "The current Project has unsaved changes.");
+            case CONFIRM_CLOSE -> WorkbenchFeedback.DialogSpec.unsavedClose(
+                    "Save changes before closing?", "Closing now would discard unsaved Project changes.");
+            case CHOOSE_OPEN_PATH, CHOOSE_SAVE_PATH, CLOSE_WINDOW ->
+                    throw new IllegalArgumentException(kind + " is not a Workbench dialog effect");
+        };
     }
 
-    /** Offers Save, Discard, and Cancel for dirty shutdown; Cancel remains the safe default. */
-    private static WorkbenchProjectFlow.Response confirmClose(Stage owner) {
-        ButtonType save = new ButtonType("Save", ButtonBar.ButtonData.YES);
-        ButtonType discard = new ButtonType("Discard", ButtonBar.ButtonData.NO);
-        ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
-        Alert alert = confirmation(owner, "Save changes before closing?",
-                "Closing now would discard unsaved Project changes.", save, discard, cancel);
-        Optional<ButtonType> answer = alert.showAndWait();
-        if (answer.isPresent() && answer.get() == save)
-            return WorkbenchProjectFlow.Response.save();
-        if (answer.isPresent() && answer.get() == discard)
-            return WorkbenchProjectFlow.Response.discard();
-        return WorkbenchProjectFlow.Response.cancelled();
-    }
-
-    /** Builds one owned confirmation with application-owned public-JavaFX graphics. */
-    private static Alert confirmation(Stage owner, String header, String content, ButtonType... buttons) {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.initOwner(owner);
-        alert.setTitle("BS2BG Preview");
-        alert.setHeaderText(header);
-        alert.setContentText(content);
-        alert.setGraphic(DialogGraphics.node(DialogGraphics.Semantic.CONFIRMATION, 48));
-        alert.getButtonTypes().setAll(buttons);
-        return alert;
+    /** Converts one typed dialog action to the Project flow's ordinary response intent. */
+    private static WorkbenchProjectFlow.Response response(WorkbenchFeedback.DialogAction action) {
+        return switch (Objects.requireNonNull(action, "action")) {
+            case SAVE -> WorkbenchProjectFlow.Response.save();
+            case DISCARD -> WorkbenchProjectFlow.Response.discard();
+            case CANCEL, CLOSE -> WorkbenchProjectFlow.Response.cancelled();
+            case COPY_DETAILS, RETRY -> throw new IllegalArgumentException(
+                    action + " is not a Project confirmation response");
+        };
     }
 }

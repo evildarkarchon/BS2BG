@@ -1,10 +1,10 @@
 # Windows app-image packaging checkpoint
 
-Status: Workbench packaging checkpoint on top of the complete application gate (issues #98/#99 and inherited gates). A green run proves
+Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#100 and inherited gates). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
-starts from a clean extracted location without any system Java, exercises typed navigation, semantic focus,
-Output and responsive/minimum geometry plus New/Open/Save/Save As/recovery/failure preservation and dirty shutdown,
-and exits cleanly.
+starts from a clean extracted location without any system Java, exercises typed navigation, semantic focus, Output,
+responsive/minimum geometry, live themes, High Contrast, reduced motion, feedback, typed dialogs, Project lifecycle,
+failure preservation, and dirty shutdown, and exits cleanly.
 ADR-0003 records the Java 25 baseline this checkpoint ships.
 
 ## One command
@@ -121,8 +121,10 @@ workflow records these steps:
 Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
 launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/7`; its durable UIA artifacts are
-`smoke-diagnostics/uia-tree-workbench.txt` and `smoke-diagnostics/uia-tree-workbench-responsive.txt`.
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/8`; its durable artifacts include the Workbench and
+responsive UIA trees plus `workbench-high-contrast.png` and `workbench-reduced-motion.png`. The accessibility
+preference changes use documented Windows SPI calls and restore the exact original state in `finally`; see
+[workbench-platform.md](workbench-platform.md).
 
 ## Historical pre-Workbench packaged smoke run
 
@@ -262,11 +264,11 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
-- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/7`; steps with durations;
-  typed navigation, semantic focus, Output interaction, native DPI and responsive/minimum geometry; Project
-  recovery, New/Open/Save/Save As, failure preservation/retry and dirty shutdown; the expected/observed process
-  model; bounded exit; environment scrubbing; and diagnostics including native-access warning lines, which must
-  be none).
+- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/8`; steps with durations;
+  typed navigation, semantic focus, Output interaction, live themes, High Contrast, reduced motion, feedback,
+  dialogs, native DPI and responsive/minimum geometry; Project recovery, New/Open/Save/Save As, failure
+  preservation/retry and dirty shutdown; the expected/observed process model; bounded exit; environment scrubbing;
+  and diagnostics including native-access warning lines, which must be none).
 
 Beside it: `app-image-jdeps-output.txt`, `app-image-jlink-output.txt`, `app-image-jpackage-output.txt`
 (`--verbose`), `app-image-module-resolution.txt`, `app-image-sha256.txt`, `windows-app-image-smoke.json`, and

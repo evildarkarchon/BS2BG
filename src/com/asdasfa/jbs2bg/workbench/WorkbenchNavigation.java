@@ -52,6 +52,7 @@ public final class WorkbenchNavigation {
         INSPECTOR,
         OUTPUT_LAUNCHER,
         OUTPUT,
+        ACTIVITY,
         STATUS
     }
 
@@ -168,6 +169,7 @@ public final class WorkbenchNavigation {
             landmarks.add(Landmark.INSPECTOR);
         if (outputDrawerVisible)
             landmarks.add(Landmark.OUTPUT);
+        landmarks.add(Landmark.ACTIVITY);
         landmarks.add(Landmark.STATUS);
         int currentIndex = landmarks.indexOf(currentFocus.landmark());
         int nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % landmarks.size();

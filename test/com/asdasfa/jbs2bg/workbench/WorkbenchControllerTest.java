@@ -19,11 +19,16 @@ import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 
+import javafx.css.PseudoClass;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.AccessibleRole;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
@@ -68,6 +73,18 @@ class WorkbenchControllerTest {
             assertTrue(diagnostics.contains("SLIDER_PRESET_ASSIGNMENT_MISSING"));
             assertTrue(diagnostics.contains("Missing Target"));
             assertTrue(diagnostics.contains("Missing NPC"));
+            HBox infoBar = (HBox) loader.getNamespace().get("infoBar");
+            assertTrue(infoBar.isVisible());
+            assertEquals(AccessibleRole.PARENT, infoBar.getAccessibleRole());
+            assertEquals("Workbench notification", infoBar.getAccessibleText());
+            assertEquals("Warning: Project opened with 2 diagnostics.", infoBar.getAccessibleHelp());
+            @SuppressWarnings("unchecked")
+            ListView<String> activity = (ListView<String>) loader.getNamespace().get("activityList");
+            assertEquals(java.util.List.of(
+                    "Warning — Open Project — Completed with issues: Project opened with 2 diagnostics."),
+                    activity.getItems());
+            assertEquals("Warning — Completed with issues — Project opened with 2 diagnostics.",
+                    ((Label) loader.getNamespace().get("statusText")).getText());
             stage.close();
         });
     }
@@ -236,6 +253,35 @@ class WorkbenchControllerTest {
             assertTrue(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
             assertEquals("generated output", ((TextArea) loader.getNamespace().get("outputText")).getText());
             assertSame(editor, scene.getFocusOwner());
+            stage.close();
+        });
+    }
+
+    /** Theme selection applies live token state while rail icons stay decorative beside their text labels. */
+    @Test
+    void themeChoiceAndSemanticIconsRenderThroughTheLoadedWorkbench() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform());
+
+            @SuppressWarnings("unchecked")
+            ComboBox<WorkbenchAppearance.ThemeChoice> themeChoice =
+                    (ComboBox<WorkbenchAppearance.ThemeChoice>) loader.getNamespace().get("themeChoice");
+            themeChoice.setValue(WorkbenchAppearance.ThemeChoice.LIGHT);
+            themeChoice.fireEvent(new ActionEvent());
+
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-light")));
+            assertEquals("Light theme", ((Label) loader.getNamespace().get("appearanceStateText")).getText());
+            ToggleButton templates = (ToggleButton) loader.getNamespace().get("templatesAreaButton");
+            assertTrue(templates.getGraphic() instanceof javafx.scene.shape.SVGPath);
+            assertEquals(AccessibleRole.NODE, templates.getGraphic().getAccessibleRole());
             stage.close();
         });
     }

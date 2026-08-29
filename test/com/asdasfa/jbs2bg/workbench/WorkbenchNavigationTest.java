@@ -82,7 +82,7 @@ class WorkbenchNavigationTest {
         assertTrue(revealed.focusTarget().isEmpty());
     }
 
-    /** F6 follows semantic landmark order and loops while skipping the absent Activity surface. */
+    /** F6 follows semantic landmark order through durable Activity and loops across the wide Workbench. */
     @Test
     void f6CyclesTheOpenWideWorkbenchLandmarksCoherently() {
         WorkbenchNavigation navigation = new WorkbenchNavigation();
@@ -96,6 +96,7 @@ class WorkbenchNavigationTest {
                 WorkbenchNavigation.Landmark.EDITOR,
                 WorkbenchNavigation.Landmark.INSPECTOR,
                 WorkbenchNavigation.Landmark.OUTPUT,
+                WorkbenchNavigation.Landmark.ACTIVITY,
                 WorkbenchNavigation.Landmark.STATUS,
                 WorkbenchNavigation.Landmark.RAIL }) {
             current = navigation.cycleFocus(current).focusTarget().orElseThrow();

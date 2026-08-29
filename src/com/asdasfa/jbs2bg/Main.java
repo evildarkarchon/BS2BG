@@ -39,6 +39,7 @@ public class Main extends Application {
 	
 	public final Image icon = new Image(getClass().getResourceAsStream("/res/icon.png"));
 	public final String style = getClass().getResource("dark.css").toExternalForm();
+	public final String workbenchStyle = getClass().getResource("workbench.css").toExternalForm();
 	
 	public Stage primaryStage;
 	public MainController mainController;
@@ -82,7 +83,7 @@ public class Main extends Application {
 			FXMLLoader loader = new FXMLLoader(getClass().getResource("workbench.fxml"));
 			Parent root = loader.load();
 			Scene scene = new Scene(root, 1300, 800);
-			scene.getStylesheets().add(style);
+			scene.getStylesheets().add(workbenchStyle);
 			primaryStage.setScene(scene);
 			primaryStage.setResizable(true);
 			WorkbenchController controller = loader.getController();

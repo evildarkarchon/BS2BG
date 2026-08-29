@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds, verifies, and smoke-tests the self-contained Windows x64 Workbench image (issues #98/#99 and gates).
+    Builds, verifies, and smoke-tests the self-contained Windows x64 Workbench image (issues #98-#100 and gates).
 
 .DESCRIPTION
     On top of the complete application gate (tools/java25/verify-java25.ps1, which this script runs first), the
@@ -23,9 +23,10 @@
          archives the image as BS2BG-<version>-windows-x64.zip.
       6. Extracts that archive to a clean temporary location and runs tools/java25/smoke-app-image.ps1. The
          packaged Preview launcher starts with every host-Java discovery path scrubbed; typed Workbench navigation,
-         focus return/cycling, Output drawer interaction, responsive/minimum geometry, New, Open, recovered Save,
-         Save As, malformed/failed-operation preservation, retry, dirty shutdown, and bounded exit are exercised
-         through Windows UI Automation.
+         focus return/cycling, Output drawer interaction, responsive/minimum geometry, themes, High Contrast,
+         reduced motion, accessibility semantics, feedback, dialogs, New, Open, recovered Save, Save As,
+         malformed/failed-operation preservation, retry, dirty shutdown, and bounded exit are exercised through
+         Windows UI Automation.
       7. Writes target/reproducibility/windows-app-image.json (toolchain, runtime, package, workflow, and exit
          evidence) next to the jdeps/jlink/jpackage logs and the smoke diagnostics, and prints the report.
 
@@ -45,7 +46,7 @@
     Build and verify the image without launching it. Not a checkpoint result; the evidence says so.
 
 .PARAMETER ExpectedDpiPercent
-    Require the packaged window to report this display scale. Use 100, 125, or 150 for the issue #99 scale matrix;
+    Require the packaged window to report this display scale. Use 100, 125, or 150 for the Workbench scale matrix;
     zero records and accepts whichever supported scale the current interactive desktop uses.
 
 .EXAMPLE
