@@ -1,0 +1,56 @@
+Window 'BS2BG Preview' [Window,Transform]
+  TitleBar 'BS2BG Preview'
+    MenuBar 'System Menu Bar'
+      MenuItem 'System' [ExpandCollapse]
+    Button 'Minimize' [Invoke]
+    Button 'Maximize' [Invoke]
+    Button 'Close' [Invoke]
+  MenuBar ''
+    MenuItem 'File' [Invoke,ExpandCollapse]
+      Text 'File'
+        Text 'File'
+  Button 'Templates' [Toggle]
+    Text 'Templates'
+  Button 'Morphs' [Toggle]
+    Text 'Morphs'
+  Button 'NPC Database' [Toggle]
+    Text 'NPC Database'
+  Button 'Output' [Toggle]
+    Text 'Output'
+  Button 'Settings' [Toggle]
+    Text 'Settings'
+  Text 'Theme:'
+    Text 'Theme:'
+  ComboBox '' [Value,ExpandCollapse]
+    List '' [Selection,Scroll]
+    Text 'Dark'
+  Text 'Effective theme: Dark theme'
+    Text 'Dark theme'
+  Text 'Motion preference: Standard motion'
+    Text 'Standard motion'
+  Text 'Morphs Area'
+    Text 'Morphs'
+  Text 'Project status'
+    Text 'Untitled Project'
+  Text 'List'
+    Text 'List'
+  Button 'Morphs primary content' [Invoke]
+    Text 'Focus Morphs list'
+  Button 'Morphs editor' [Invoke]
+    Text 'Morphs Area — Workbench placeholder'
+  Text 'Inspector'
+    Text 'Inspector'
+  Button 'Morphs inspector' [Invoke]
+    Text 'Focus Morphs inspector'
+  Text 'Project diagnostics'
+    Text 'Project diagnostics'
+  Edit '' [Value,Text]
+    Pane '' [Scroll]
+      Text ''
+  Text 'Activity'
+    Text 'Activity'
+  List 'Activity' [Selection,Scroll]
+  Text 'Workbench status'
+    Text 'Ready'
+  Button 'Cancel current operation' [Invoke]
+    Text 'Cancel'

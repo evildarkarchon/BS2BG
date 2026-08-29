@@ -1,0 +1,313 @@
+{
+  "schema": "bs2bg.windows-app-image-smoke/8",
+  "recordedAtUtc": "2026-08-29T23:14:12.3291294+00:00",
+  "passed": true,
+  "expectedAppVersion": "1.1.2",
+  "archive": "D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip",
+  "timeouts": {
+    "startupSeconds": 90,
+    "stepSeconds": 30,
+    "exitSeconds": 30,
+    "expectedDpiPercent": 0
+  },
+  "steps": [
+    {
+      "name": "extract-clean-image",
+      "passed": true,
+      "seconds": 0.84,
+      "detail": "extracted archive and installed three Project fixtures in C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\work"
+    },
+    {
+      "name": "launch-workbench-without-system-java",
+      "passed": true,
+      "seconds": 1.09,
+      "detail": "launcher pid 17456 hosts image-local jvm.dll; Workbench appeared after 1 s"
+    },
+    {
+      "name": "verify-workbench-shell-and-first-run-settings",
+      "passed": true,
+      "seconds": 0.19,
+      "detail": "five typed navigation destinations and the canonical Settings pair are accessible"
+    },
+    {
+      "name": "verify-live-themes-high-contrast-reduced-motion-and-semantics",
+      "passed": true,
+      "seconds": 8.97,
+      "detail": "theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed"
+    },
+    {
+      "name": "verify-keyboard-navigation-focus-and-output-drawer",
+      "passed": true,
+      "seconds": 1.52,
+      "detail": "typed shortcuts, semantic focus return, drawer resize, alias, and F6 cycle passed through packaged UIA"
+    },
+    {
+      "name": "verify-responsive-layout-and-minimum-geometry",
+      "passed": true,
+      "seconds": 0.52,
+      "detail": "narrow overlays, semantic restoration, 800x600 minimum, breakpoint, and live-DPI geometry passed"
+    },
+    {
+      "name": "save-as-new-project",
+      "passed": true,
+      "seconds": 1.5,
+      "detail": "saved clean untitled Project as new-project.jbs2bg"
+    },
+    {
+      "name": "open-recovered-project-with-complete-diagnostics",
+      "passed": true,
+      "seconds": 1.17,
+      "detail": "opened a dirty recovered Project with diagnostics, warning InfoBar, Activity, and status projection"
+    },
+    {
+      "name": "cancel-then-discard-dirty-new",
+      "passed": true,
+      "seconds": 1.31,
+      "detail": "Cancel preserved the dirty Project; Discard then established a clean New Project"
+    },
+    {
+      "name": "save-recovered-project-through-adopted-identity",
+      "passed": true,
+      "seconds": 1.53,
+      "detail": "Save used the adopted identity and published a clean file-backed Project"
+    },
+    {
+      "name": "malformed-open-preserves-active-project",
+      "passed": true,
+      "seconds": 1.14,
+      "detail": "malformed Open reported a stable diagnostic and preserved active file identity and bytes"
+    },
+    {
+      "name": "failed-save-preserves-dirty-project-then-save-as-recovers",
+      "passed": true,
+      "seconds": 2.73,
+      "detail": "failed Save preserved dirty identity and diagnostics; Save As retry recovered to a clean identity"
+    },
+    {
+      "name": "dirty-shutdown-cancel-then-discard",
+      "passed": true,
+      "seconds": 2.37,
+      "detail": "exit code 0 after 0.34 s"
+    }
+  ],
+  "observations": {
+    "extractedImage": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG",
+    "launcher": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG\\BS2BG.exe",
+    "launcherSha256": "cfee2ac2f9e825256f10cb6ca2975590499cea1c9253fca4c9a8e3658b0a2b0e",
+    "archiveSha256": "4d1ea4b5473d978c4000ad39cb1af347fa90dcc3272861634b7e5a326821f07a",
+    "workingDirectory": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\work",
+    "environment": {
+      "removedVariables": [
+        "JAVA_HOME"
+      ],
+      "removedPathEntries": [
+        "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath",
+        "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\java8path",
+        "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath"
+      ],
+      "keptPathEntryCount": 72
+    },
+    "observedProcessModel": "single-launcher-process",
+    "launch": {
+      "applicationPid": 17456,
+      "applicationExe": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG\\BS2BG.exe",
+      "startupSeconds": 0.98,
+      "runtimeModules": [
+        {
+          "module": "jli.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG\\runtime\\bin\\jli.dll"
+        },
+        {
+          "module": "jvm.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll"
+        },
+        {
+          "module": "jimage.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG\\runtime\\bin\\jimage.dll"
+        },
+        {
+          "module": "java.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG\\runtime\\bin\\java.dll"
+        },
+        {
+          "module": "prism_d3d.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG\\runtime\\bin\\javafx\\prism_d3d.dll"
+        },
+        {
+          "module": "glass.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG\\runtime\\bin\\javafx\\glass.dll"
+        },
+        {
+          "module": "javafx_font.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\image\\BS2BG\\runtime\\bin\\javafx\\javafx_font.dll"
+        }
+      ]
+    },
+    "workbenchAreas": [
+      "Templates",
+      "Morphs",
+      "NPC Database",
+      "Output",
+      "Settings"
+    ],
+    "appearance": {
+      "choices": [
+        "System",
+        "Light",
+        "Dark"
+      ],
+      "highContrastOverride": true,
+      "reducedMotionObserved": true,
+      "restoredHighContrast": false,
+      "restoredClientAreaAnimation": true,
+      "systemEffectiveTheme": "Effective theme: Dark theme",
+      "iconImplementation": "application-owned-bundled-vectors"
+    },
+    "keyboardNavigation": {
+      "areas": [
+        "Templates",
+        "Morphs",
+        "NPC Database",
+        "Settings"
+      ],
+      "outputPreservedArea": "Morphs",
+      "drawerRange": {
+        "before": 220.0,
+        "after": 240.0
+      },
+      "focusCycle": [
+        "Morphs primary content",
+        "Morphs editor",
+        "Morphs inspector",
+        "Output generated text",
+        "Activity",
+        "Workbench status",
+        "Morphs"
+      ]
+    },
+    "responsiveLayout": {
+      "expectedScalePercent": null,
+      "initial": {
+        "dpi": 96,
+        "scalePercent": 100.0,
+        "windowPhysical": {
+          "left": 622,
+          "top": 200,
+          "width": 1316,
+          "height": 839
+        },
+        "clientPhysical": {
+          "left": 630,
+          "top": 231,
+          "width": 1300,
+          "height": 800
+        },
+        "clientLogical": {
+          "width": 1300.0,
+          "height": 800.0
+        }
+      },
+      "narrow": {
+        "dpi": 96,
+        "scalePercent": 100.0,
+        "windowPhysical": {
+          "left": 622,
+          "top": 200,
+          "width": 1215,
+          "height": 739
+        },
+        "clientPhysical": {
+          "left": 630,
+          "top": 231,
+          "width": 1199,
+          "height": 700
+        },
+        "clientLogical": {
+          "width": 1199.0,
+          "height": 700.0
+        }
+      },
+      "minimum": {
+        "dpi": 96,
+        "scalePercent": 100.0,
+        "windowPhysical": {
+          "left": 622,
+          "top": 200,
+          "width": 816,
+          "height": 639
+        },
+        "clientPhysical": {
+          "left": 630,
+          "top": 231,
+          "width": 800,
+          "height": 600
+        },
+        "clientLogical": {
+          "width": 800.0,
+          "height": 600.0
+        }
+      },
+      "wide": {
+        "dpi": 96,
+        "scalePercent": 100.0,
+        "windowPhysical": {
+          "left": 622,
+          "top": 200,
+          "width": 1216,
+          "height": 739
+        },
+        "clientPhysical": {
+          "left": 630,
+          "top": 231,
+          "width": 1200,
+          "height": 700
+        },
+        "clientLogical": {
+          "width": 1200.0,
+          "height": 700.0
+        }
+      }
+    },
+    "firstSaveAs": {
+      "file": "new-project.jbs2bg",
+      "sha256": "5b2aaa5ea4708a95beb7566441b6f831316f958ebcdd1b7e7266bf2acb99993d"
+    },
+    "recoveredProject": {
+      "title": "BS2BG Preview - *recovery-source.jbs2bg",
+      "diagnostics": "WARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /CustomMorphTargets/Target/SliderPresets/1 (line 7, column 43): Slider Preset assignment 'Missing Target' does not exist and was omitted.\nWARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /MorphedNPCs/NPC/SliderPresets/1 (line 15, column 33): Slider Preset assignment 'Missing NPC' does not exist and was omitted."
+    },
+    "malformedOpen": {
+      "preservedTitle": "BS2BG Preview - recovery-source.jbs2bg",
+      "diagnostics": "ERROR [PROJECT_JSON_MALFORMED] malformed-project.jbs2bg /SliderPresets (line 2, column 1): Unexpected end-of-input: expected close marker for Object (start marker at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); byte offset: #UNKNOWN])"
+    },
+    "saveFailureRecovery": {
+      "diagnostic": "ERROR [PROJECT_FILE_WRITE_FAILED] vanishing-recovery.jbs2bg: The Project file could not be written: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411\\work\\vanishing\\.vanishing-recovery.jbs2bg-13466237878611545386.tmp",
+      "retry": "save-retry.jbs2bg"
+    },
+    "exit": {
+      "exitCode": 0,
+      "exitWaitSeconds": 0.34,
+      "boundedBySeconds": 30
+    }
+  },
+  "process": {
+    "expectedModel": "single-launcher-process",
+    "model": "single-launcher-process",
+    "applicationPid": 17456,
+    "exitCode": 0,
+    "exitWaitSeconds": 0.34,
+    "killed": []
+  },
+  "diagnostics": {
+    "directory": "target/reproducibility/smoke-diagnostics/",
+    "stderrLines": 0,
+    "stderrExcerpt": [],
+    "nativeAccessWarnings": [],
+    "workbenchTree": "smoke-diagnostics/uia-tree-workbench.txt",
+    "responsiveWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-responsive.txt",
+    "highContrastScreenshot": "smoke-diagnostics/workbench-high-contrast.png",
+    "reducedMotionScreenshot": "smoke-diagnostics/workbench-reduced-motion.png"
+  },
+  "workRoot": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260829-231411",
+  "workRootKept": false
+}

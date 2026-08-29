@@ -324,6 +324,17 @@ workflows passed. The smoke evidence records 96 DPI/100% scale and an exact 800x
 `3bb708bcf407d79f12d1ef66611692dfccaf82d8887ec4693a1b24a534c22805`. Equivalent retained runs from
 125% and 150% interactive sessions remain necessary to complete the three-scale execution matrix.
 
+The issue #100 Workbench platform checkpoint at 100% scale is retained under
+`docs/build/evidence/windows-app-image-2026-08-29-workbench-platform-100-percent/`. It was built from the clean
+implementation commit `fe50691f4a9625fdd5d187ba6e04e8705afe4d90`; 285 tests in 36 suites and all 13 packaged
+workflows passed. The smoke evidence records live System/Light/Dark selection, High Contrast precedence and
+restoration, reduced motion, semantic icon/keyboard help, the Activity F6 landmark, InfoBar/Activity/status
+projections, typed destructive dialogs, 96 DPI/100% scale, and the exact 800x600 logical minimum. High Contrast
+and reduced-motion screenshots are retained beside the UIA trees. The 238-file image digest is
+`48106a0a9828b49df3a8eaa5cd4b2a22a09129d9b602360e579cd7e150127197`; the archive SHA-256 is
+`4d1ea4b5473d978c4000ad39cb1af347fa90dcc3272861634b7e5a326821f07a`. Equivalent retained runs from
+125% and 150% interactive sessions remain necessary to complete the three-scale execution matrix.
+
 ## Reverting the single-codec cutover
 
 The dependency removal, temporary-oracle cleanup, permanent corpus expectations, convergence/retired-codec
