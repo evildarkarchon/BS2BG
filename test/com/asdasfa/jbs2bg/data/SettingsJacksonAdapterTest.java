@@ -2,6 +2,7 @@ package com.asdasfa.jbs2bg.data;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,11 +12,238 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-/** Locks paired Settings semantics behind the non-production Jackson adapter. */
+import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
+import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
+import com.asdasfa.jbs2bg.project.ChangedOutcome;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.ProjectSession;
+import com.asdasfa.jbs2bg.project.ProjectSessions;
+
+/** Locks paired production Settings semantics and their generated-output consumption. */
 final class SettingsJacksonAdapterTest {
     private static final Path FIXTURE_ROOT = Path.of("test-resources", "json-oracles", "settings");
+
+    /** Restores the repository Settings pair after every process-wide publication test. */
+    @AfterEach
+    void restoreRepositorySettings() {
+        SettingsTestSupport.restoreRepositorySettings();
+    }
+
+    /**
+     * Publishes the validated pair through the production Settings seam and proves a later rejected pair cannot
+     * replace either live profile.
+     *
+     * @param directory isolated working directory containing the two production filenames
+     * @throws IOException when a permanent fixture cannot be copied into the isolated directory
+     */
+    @Test
+    void productionLoadPublishesBothProfilesTogetherAndPreservesThemOnFailure(@TempDir Path directory)
+            throws IOException {
+        Path standard = directory.resolve("settings.json");
+        Path uunp = directory.resolve("settings_UUNP.json");
+        Files.copy(fixture("standard.json"), standard);
+        Files.copy(fixture("uunp.json"), uunp);
+
+        Settings.InitializationResult loaded = Settings.initialize(directory);
+
+        assertTrue(loaded.isSuccessful());
+        assertEquals(List.of("/Defaults/Waist/FutureDefault", "/Future"),
+                loaded.getDiagnostics().stream().map(Settings.Diagnostic::getPath).toList());
+        assertEquals(2f, Settings.getMultiplier("Exponent"));
+        assertEquals(2f, Settings.getMultiplierUUNP("Arms"));
+        assertTrue(Settings.isInverted("Waist"));
+
+        Files.copy(fixture("duplicate-uunp.json"), uunp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        Settings.InitializationResult rejected = Settings.initialize(directory);
+
+        assertFalse(rejected.isSuccessful());
+        Settings.Failure failure = rejected.getFailure().orElseThrow();
+        assertEquals("SETTINGS_MEMBER_DUPLICATE", failure.getCode());
+        assertEquals(uunp.toString(), failure.getSource());
+        assertEquals("/Defaults/Arms/valueSmall", failure.getPath());
+        assertEquals(2f, Settings.getMultiplier("Exponent"));
+        assertEquals(2f, Settings.getMultiplierUUNP("Arms"));
+        assertTrue(Settings.isInverted("Waist"));
+    }
+
+    /**
+     * Rejects every remaining required invalid-input family through the production seam while retaining both
+     * previously published live profiles and their stable member paths.
+     *
+     * @param directory isolated production Settings directory
+     * @throws IOException when permanent fixtures cannot be copied
+     */
+    @Test
+    void productionLoadPreservesTheLivePairAcrossMalformedNonFiniteAndLimitedInputs(@TempDir Path directory)
+            throws IOException {
+        Path standard = directory.resolve("settings.json");
+        Files.copy(fixture("standard.json"), standard);
+        Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
+        assertTrue(Settings.initialize(directory).isSuccessful());
+
+        List<InvalidProductionFixture> invalidFixtures = List.of(
+                new InvalidProductionFixture("non-finite.json", "SETTINGS_NUMBER_NON_FINITE",
+                        "/Multipliers/Overflow"),
+                new InvalidProductionFixture("malformed.json", "SETTINGS_JSON_MALFORMED", "/Multipliers"),
+                new InvalidProductionFixture("resource-limit.json", "SETTINGS_RESOURCE_LIMIT", "/Future"));
+        for (InvalidProductionFixture invalid : invalidFixtures) {
+            Files.copy(fixture(invalid.name()), standard, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+            Settings.InitializationResult rejected = Settings.initialize(directory);
+
+            assertFalse(rejected.isSuccessful(), invalid.name());
+            Settings.Failure failure = rejected.getFailure().orElseThrow();
+            assertEquals(invalid.code(), failure.getCode(), invalid.name());
+            assertEquals(invalid.path(), failure.getPath(), invalid.name());
+            assertEquals(2f, Settings.getMultiplier("Exponent"), invalid.name());
+            assertEquals(2f, Settings.getMultiplierUUNP("Arms"), invalid.name());
+            assertTrue(Settings.isInverted("Waist"), invalid.name());
+        }
+    }
+
+    /** A nonexistent working directory is classified structurally as lock acquisition, not by message text. */
+    @Test
+    void missingWorkingDirectoryProducesTheOwnedLockFailure(@TempDir Path directory) {
+        Path missing = directory.resolve("missing");
+
+        Settings.InitializationResult rejected = Settings.initialize(missing);
+
+        assertFalse(rejected.isSuccessful());
+        Settings.Failure failure = rejected.getFailure().orElseThrow();
+        assertEquals("SETTINGS_LOCK_FAILED", failure.getCode());
+        assertEquals(missing.toString(), failure.getSource());
+        assertEquals("/", failure.getPath());
+    }
+
+    /**
+     * Creates the accepted built-in profiles only when the working directory has no Settings sources, then
+     * verifies that both production filenames contain the adapter's canonical bytes.
+     *
+     * @param directory isolated empty working directory
+     * @throws IOException when the published pair cannot be inspected
+     */
+    @Test
+    void missingSettingsAreCreatedAsOneCanonicalPair(@TempDir Path directory) throws IOException {
+        Settings.InitializationResult result = Settings.initialize(directory);
+
+        assertTrue(result.isSuccessful());
+        Path standard = directory.resolve("settings.json");
+        Path uunp = directory.resolve("settings_UUNP.json");
+        SettingsJacksonAdapter.SettingsCandidate candidate = SettingsJacksonAdapter.readPair(standard, uunp);
+        SettingsJacksonAdapter.SettingsPairBytes canonical = SettingsJacksonAdapter.writePair(candidate);
+        assertArrayEquals(canonical.standardUtf8(), Files.readAllBytes(standard));
+        assertArrayEquals(canonical.uunpUtf8(), Files.readAllBytes(uunp));
+        assertEquals(20, Settings.getDefaultValueSmall("Breasts"));
+        assertEquals(100, Settings.getDefaultValueSmallUUNP("Breasts"));
+        try (var entries = Files.list(directory)) {
+            assertTrue(entries.noneMatch(path -> path.getFileName().toString().startsWith(".bs2bg-settings-")));
+        }
+    }
+
+    /**
+     * Simulates a process stop after the Standard replacement was installed and requires startup to restore the
+     * complete prior pair before parsing or publishing live values.
+     *
+     * @param directory isolated working directory containing the interrupted transaction
+     * @throws IOException when the interrupted state cannot be assembled or inspected
+     */
+    @Test
+    void interruptedPublicationRecoversThePriorPairBeforeLoading(@TempDir Path directory) throws IOException {
+        Path standard = directory.resolve("settings.json");
+        Path uunp = directory.resolve("settings_UUNP.json");
+        Files.copy(fixture("standard.json"), standard);
+        Files.copy(fixture("uunp.json"), uunp);
+        byte[] priorStandard = Files.readAllBytes(standard);
+        byte[] priorUunp = Files.readAllBytes(uunp);
+        Path transaction = Files.createDirectory(directory.resolve(".bs2bg-settings-stage-interrupted"));
+        Files.move(standard, transaction.resolve("standard.backup"));
+        Files.move(uunp, transaction.resolve("uunp.backup"));
+        Files.copy(fixture("standard.canonical.json"), standard);
+
+        Settings.InitializationResult result = Settings.initialize(directory);
+
+        assertTrue(result.isSuccessful());
+        assertEquals("SETTINGS_PUBLICATION_RECOVERED", result.getDiagnostics().get(0).getCode());
+        assertArrayEquals(priorStandard, Files.readAllBytes(standard));
+        assertArrayEquals(priorUunp, Files.readAllBytes(uunp));
+        assertFalse(Files.exists(transaction));
+        assertEquals(2f, Settings.getMultiplierUUNP("Arms"));
+    }
+
+    /**
+     * Retains a valid legacy Standard document, supplies the accepted built-in UUNP profile, and republishes
+     * both canonical documents when only one production source exists.
+     *
+     * @param directory isolated working directory with only the Standard source
+     * @throws IOException when the legacy source cannot be copied or the published pair cannot be inspected
+     */
+    @Test
+    void oneMissingProfileUsesItsBuiltInDefaultAndRepublishesTheCompletePair(@TempDir Path directory)
+            throws IOException {
+        Path standard = directory.resolve("settings.json");
+        Path uunp = directory.resolve("settings_UUNP.json");
+        Files.copy(fixture("standard.json"), standard);
+
+        Settings.InitializationResult result = Settings.initialize(directory);
+
+        assertTrue(result.isSuccessful());
+        assertTrue(Files.isRegularFile(uunp));
+        assertEquals(2f, Settings.getMultiplier("Exponent"));
+        assertEquals(1f, Settings.getMultiplierUUNP("Arms"));
+        assertEquals(100, Settings.getDefaultValueSmallUUNP("Arms"));
+        SettingsJacksonAdapter.SettingsCandidate published = SettingsJacksonAdapter.readPair(standard, uunp);
+        SettingsJacksonAdapter.SettingsPairBytes canonical = SettingsJacksonAdapter.writePair(published);
+        assertArrayEquals(canonical.standardUtf8(), Files.readAllBytes(standard));
+        assertArrayEquals(canonical.uunpUtf8(), Files.readAllBytes(uunp));
+    }
+
+    /**
+     * Prevents callers from mutating either defaults collection outside the validated paired publication seam.
+     *
+     * @param directory isolated valid Settings pair
+     * @throws IOException when permanent fixtures cannot be copied
+     */
+    @Test
+    void publishedDefaultsCannotBeMutatedOutsideThePairedSettingsSeam(@TempDir Path directory)
+            throws IOException {
+        Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
+        Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
+        assertTrue(Settings.initialize(directory).isSuccessful());
+
+        assertThrows(UnsupportedOperationException.class, () -> Settings.getDefaultsMap().clear());
+        assertThrows(UnsupportedOperationException.class, () -> Settings.getDefaultsMapUUNP().clear());
+        assertEquals(0, Settings.getDefaultValueSmall("Waist"));
+        assertEquals(100, Settings.getDefaultValueSmallUUNP("Arms"));
+    }
+
+    /**
+     * Loads legacy Settings through the production seam and proves their defaults, multipliers, and inversion
+     * choices reach the generated Templates output consumed by the application.
+     *
+     * @param directory isolated working directory containing the two legacy Settings fixtures
+     * @throws IOException when the fixtures cannot be copied
+     */
+    @Test
+    void productionSettingsDriveLegacyProjectOutput(@TempDir Path directory) throws IOException {
+        Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
+        Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        ProjectSession session = ProjectSessions.create();
+
+        ProjectOutcome opened = session.open(Path.of("test-resources", "projects",
+                "legacy-project-semantics.jbs2bg"));
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(opened.getSnapshot(), false);
+
+        assertTrue(opened instanceof ChangedOutcome);
+        assertEquals("CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0",
+                output.getTemplateLinesByPresetName().get("CBBE Curvy"));
+        assertEquals("UUNP Athletic=Arms@0.25:0.75",
+                output.getTemplateLinesByPresetName().get("UUNP Athletic"));
+    }
 
     /** Verifies paired semantics, forward-compatible warnings, float conversion, and first-entry deduplication. */
     @Test
@@ -33,6 +261,8 @@ final class SettingsJacksonAdapterTest {
         assertEquals(List.of("Waist", "Ångström/形"), candidate.standard().inverted());
         assertEquals(List.of("/Defaults/Waist/FutureDefault", "/Future"),
                 candidate.diagnostics().stream().map(SettingsJacksonAdapter.SettingsDiagnostic::path).toList());
+        assertEquals(List.of("SETTINGS_MEMBER_UNKNOWN", "SETTINGS_MEMBER_UNKNOWN"),
+                candidate.diagnostics().stream().map(SettingsJacksonAdapter.SettingsDiagnostic::code).toList());
         assertEquals(2f, candidate.uunp().multipliers().get("Arms"));
     }
 
@@ -148,5 +378,9 @@ final class SettingsJacksonAdapterTest {
     /** Resolves one permanent Settings oracle from the repository fixture root. */
     private static Path fixture(String name) {
         return FIXTURE_ROOT.resolve(name);
+    }
+
+    /** One required invalid production fixture and its stable owned diagnostic identity. */
+    private record InvalidProductionFixture(String name, String code, String path) {
     }
 }

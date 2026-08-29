@@ -37,9 +37,25 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.asdasfa.jbs2bg.data.SettingsTestSupport;
+
 class ProjectSessionTest {
+
+    /** Publishes empty profiles so session unit tests synthesize only choices they explicitly request. */
+    @BeforeEach
+    void initializeEmptySettings() {
+        SettingsTestSupport.installDefaults(Collections.emptyMap(), Collections.emptyMap());
+    }
+
+    /** Restores the checked-in Settings pair after each process-wide session test. */
+    @AfterEach
+    void restoreSettings() {
+        SettingsTestSupport.restoreRepositorySettings();
+    }
 
     /**
      * Verifies that New Project establishes the lifecycle's canonical empty state

@@ -24,7 +24,7 @@ import tools.jackson.core.ObjectReadContext;
 import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.TokenStreamLocation;
 
-/** Non-production Jackson Settings adapter used to establish permanent compatibility evidence. */
+/** Owns the production JSON format boundary for paired Standard and UUNP Settings documents. */
 final class SettingsJacksonAdapter {
     private SettingsJacksonAdapter() {
     }
@@ -120,7 +120,7 @@ final class SettingsJacksonAdapter {
      * Reads one Settings source into detached collections, translating I/O and streaming failures before
      * the caller can combine it with the other profile.
      */
-    private static SettingsProfile read(Path source, List<SettingsDiagnostic> diagnostics) {
+    static SettingsProfile read(Path source, List<SettingsDiagnostic> diagnostics) {
         byte[] bytes;
         try {
             bytes = Files.readAllBytes(source);
@@ -168,7 +168,7 @@ final class SettingsJacksonAdapter {
                         case "Multipliers" -> readMultipliers(parser, valueToken, source, path, multipliers);
                         case "Inverted" -> readInverted(parser, valueToken, source, path, inverted);
                         default -> {
-                            diagnostics.add(new SettingsDiagnostic(source.toString(), path,
+                            diagnostics.add(new SettingsDiagnostic("SETTINGS_MEMBER_UNKNOWN", source.toString(), path,
                                     "Unknown Settings member '" + name + "' was ignored."));
                             parser.skipChildren();
                         }
@@ -233,7 +233,7 @@ final class SettingsJacksonAdapter {
                 else if ("valueBig".equals(field))
                     big = finiteFloat(parser, valueToken, source, fieldPath);
                 else {
-                    diagnostics.add(new SettingsDiagnostic(source.toString(), fieldPath,
+                    diagnostics.add(new SettingsDiagnostic("SETTINGS_MEMBER_UNKNOWN", source.toString(), fieldPath,
                             "Unknown Settings member '" + field + "' was ignored."));
                     parser.skipChildren();
                 }
@@ -347,7 +347,7 @@ final class SettingsJacksonAdapter {
     }
 
     /** Ordered forward-compatibility warning for one ignored Settings member. */
-    record SettingsDiagnostic(String source, String path, String message) {
+    record SettingsDiagnostic(String code, String source, String path, String message) {
     }
 
     /** Pairwise publication unit containing both validated profiles and their ordered warnings. */

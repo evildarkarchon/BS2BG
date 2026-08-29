@@ -1,8 +1,8 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG launcher through the representative Project, BoS, Templates, and Morphs workflows
-    from a clean extracted image and proves that it exits cleanly (issues #83 and #97).
+    Drives the packaged BS2BG launcher through Settings recovery plus the representative Project, BoS, Templates,
+    and Morphs workflows from a clean extracted image and proves that it exits cleanly (issues #83, #84, and #97).
 
 .DESCRIPTION
     The archive produced by tools/java25/package-java25.ps1 is extracted to a fresh location and its launcher is
@@ -21,11 +21,11 @@
       - nothing is located by screen coordinates, row index, generated automation id, CSS, or JavaFX internals;
       - native file dialogs owned by the JavaFX window are reached by their title and driven by role and name.
 
-    Workflow: open the checked-in representative Project; generate, preview, copy, and export one BoS artifact;
-    generate Templates output; load its Custom Morph Target and NPC Morph Assignment content; create a new Custom
-    Morph Target and assign every Slider Preset to it; generate Morphs output; Save As a new Project file; exit;
-    relaunch and reopen the saved file; then close the window and require the single launcher process to exit with
-    code 0 within a bounded timeout.
+    Workflow: launch once from an empty directory and validate the canonical Settings pair; exit; replace that pair
+    with the checked-in legacy Settings fixtures; relaunch and drive the representative Project, BoS, Templates,
+    Morphs, and Save As workflows; exit; assemble an interrupted paired Settings publication; relaunch and require
+    recovery of the exact prior pair before reopening the saved Project and regenerating its Settings-dependent
+    output; then close the window and require all three launcher processes to exit with code 0 within bounded waits.
 
     Every step is recorded with its duration and observations in the evidence file; the first failure captures the
     UIA tree, the window list, a screenshot, and the process output before the launcher is terminated.
@@ -34,6 +34,10 @@
     The BS2BG-<version>-windows-x64.zip produced by the packaging script.
 .PARAMETER FixtureProject
     A checked-in .jbs2bg Project to open (test-resources/projects/legacy-project-semantics.jbs2bg).
+.PARAMETER FixtureStandardSettings
+    The checked-in legacy Standard Settings JSON document to install after first-run creation.
+.PARAMETER FixtureUunpSettings
+    The checked-in legacy UUNP Settings JSON document to install after first-run creation.
 .PARAMETER EvidencePath
     Where to write the JSON evidence; diagnostics go to a smoke-diagnostics/ directory beside it.
 .PARAMETER ExpectedAppVersion
@@ -48,6 +52,8 @@ param(
     [Parameter(Mandatory)] [string]$ArchivePath,
     [string]$LauncherName = 'BS2BG',
     [Parameter(Mandatory)] [string]$FixtureProject,
+    [Parameter(Mandatory)] [string]$FixtureStandardSettings,
+    [Parameter(Mandatory)] [string]$FixtureUunpSettings,
     [Parameter(Mandatory)] [string]$EvidencePath,
     [string]$ExpectedAppVersion = '',
     [string]$WorkRoot = (Join-Path $env:TEMP ("BS2BG-smoke-" + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))),
@@ -83,6 +89,8 @@ $newCustomTarget = 'All|Female|NordRace'
 $openedProjectName = 'representative.jbs2bg'
 $savedProjectName = 'smoke-output.jbs2bg'
 $bosExportName = 'smoke-bos.json'
+$expectedCbbeTemplate = 'CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0'
+$expectedUunpTemplate = 'UUNP Athletic=Arms@0.25:0.75'
 
 $evidenceDir = Split-Path -Parent $EvidencePath
 $diagnosticsDir = Join-Path $evidenceDir 'smoke-diagnostics'
@@ -97,6 +105,10 @@ $script:stdoutTasks = New-Object System.Collections.Generic.List[object]
 $script:stderrTasks = New-Object System.Collections.Generic.List[object]
 $script:lifecycles = New-Object System.Collections.Generic.List[object]
 $script:mainWindow = $null
+$script:firstRunStandardBytes = $null
+$script:firstRunUunpBytes = $null
+$script:legacyStandardSha256 = $null
+$script:legacyUunpSha256 = $null
 $imageRoot = Join-Path $WorkRoot 'image'
 $workDir = Join-Path $WorkRoot 'work'
 
@@ -447,7 +459,7 @@ Invoke-Step -Name 'extract-clean-image' -Action {
     A summary string; sets $script:app and records its startup under the given observation key.
 .NOTES
     Owns the returned process in $script:app until Stop-PackagedApplication completes. Throws when startup, the
-    one-image-process contract, or bundled JVM/native-library verification fails. Used once for each of the two
+    one-image-process contract, or bundled JVM/native-library verification fails. Used once for each of the three
     sequential application lifecycles.
 #>
 function Start-PackagedApplication {
@@ -544,7 +556,89 @@ function Stop-PackagedApplication {
 }
 
 Invoke-Step -Name 'launch-packaged-launcher-without-system-java' -Action {
-    Start-PackagedApplication -ObservationKey 'process'
+    Start-PackagedApplication -ObservationKey 'firstRunLaunch'
+}
+
+Invoke-Step -Name 'verify-first-run-canonical-settings-pair' -Action {
+    $standard = Join-Path $workDir 'settings.json'
+    $uunp = Join-Path $workDir 'settings_UUNP.json'
+    if (-not (Test-Path -LiteralPath $standard -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $uunp -PathType Leaf)) {
+        throw 'First-run startup did not create both Settings files.'
+    }
+    $settingsFiles = @(Get-ChildItem -LiteralPath $workDir -File -Filter 'settings*.json' | ForEach-Object { $_.Name })
+    if ($settingsFiles.Count -ne 2 -or $settingsFiles -cnotcontains 'settings.json' -or
+        $settingsFiles -cnotcontains 'settings_UUNP.json') {
+        throw "First-run startup created an unexpected Settings file set: $($settingsFiles -join ', ')."
+    }
+    $staging = @(Get-ChildItem -LiteralPath $workDir -Force | Where-Object { $_.Name -like '.bs2bg-settings-stage-*' })
+    if ($staging.Count -ne 0) { throw 'First-run paired publication left transaction state behind.' }
+
+    $script:firstRunStandardBytes = [System.IO.File]::ReadAllBytes($standard)
+    $script:firstRunUunpBytes = [System.IO.File]::ReadAllBytes($uunp)
+    foreach ($entry in @(
+        [ordered]@{ name = 'settings.json'; bytes = $script:firstRunStandardBytes },
+        [ordered]@{ name = 'settings_UUNP.json'; bytes = $script:firstRunUunpBytes })) {
+        if ($entry.bytes.Length -lt 2 -or $entry.bytes[-1] -ne 0x0A) {
+            throw "$($entry.name) is not terminated by the canonical LF byte."
+        }
+        if ($entry.bytes.Length -ge 3 -and $entry.bytes[0] -eq 0xEF -and
+            $entry.bytes[1] -eq 0xBB -and $entry.bytes[2] -eq 0xBF) {
+            throw "$($entry.name) contains an unexpected UTF-8 BOM."
+        }
+    }
+    $standardJson = Get-Content -LiteralPath $standard -Raw | ConvertFrom-Json
+    $uunpJson = Get-Content -LiteralPath $uunp -Raw | ConvertFrom-Json
+    if ([single]$standardJson.Defaults.Breasts.valueSmall -ne [single]0.2 -or
+        [single]$standardJson.Defaults.Waist.valueBig -ne [single]1.0 -or
+        @($standardJson.Inverted) -cnotcontains 'Breasts') {
+        throw 'First-run Standard Settings do not preserve the accepted built-in defaults and inversion family.'
+    }
+    if ([single]$uunpJson.Defaults.Arms.valueSmall -ne [single]1.0 -or
+        [single]$uunpJson.Defaults.Arms.valueBig -ne [single]1.0 -or
+        @($uunpJson.Inverted) -cnotcontains 'Arms') {
+        throw 'First-run UUNP Settings do not preserve the accepted built-in defaults and inversion family.'
+    }
+    $observations['firstRunSettings'] = [ordered]@{
+        files = $settingsFiles
+        standardSha256 = (Get-FileHash -LiteralPath $standard -Algorithm SHA256).Hash.ToLowerInvariant()
+        uunpSha256 = (Get-FileHash -LiteralPath $uunp -Algorithm SHA256).Hash.ToLowerInvariant()
+        canonicalUtf8NoBomWithFinalLf = $true
+    }
+    "created canonical UTF-8 pair $($settingsFiles -join ', ') with no transaction state"
+}
+
+Invoke-Step -Name 'exit-after-first-run-settings-creation' -Action {
+    Stop-PackagedApplication -ObservationKey 'exitAfterFirstRunSettingsCreation'
+}
+
+Invoke-Step -Name 'install-legacy-settings-edit' -Action {
+    foreach ($fixture in @($FixtureStandardSettings, $FixtureUunpSettings)) {
+        if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) { throw "Settings fixture not found: $fixture" }
+    }
+    $standard = Join-Path $workDir 'settings.json'
+    $uunp = Join-Path $workDir 'settings_UUNP.json'
+    Copy-Item -LiteralPath $FixtureStandardSettings -Destination $standard -Force
+    Copy-Item -LiteralPath $FixtureUunpSettings -Destination $uunp -Force
+    $script:legacyStandardSha256 = (Get-FileHash -LiteralPath $standard -Algorithm SHA256).Hash.ToLowerInvariant()
+    $script:legacyUunpSha256 = (Get-FileHash -LiteralPath $uunp -Algorithm SHA256).Hash.ToLowerInvariant()
+    $observations['legacySettingsEdit'] = [ordered]@{
+        standardFixture = $FixtureStandardSettings
+        uunpFixture = $FixtureUunpSettings
+        standardSha256 = $script:legacyStandardSha256
+        uunpSha256 = $script:legacyUunpSha256
+    }
+    "installed legacy pair: Standard sha256 $script:legacyStandardSha256; UUNP sha256 $script:legacyUunpSha256"
+}
+
+Invoke-Step -Name 'launch-after-legacy-settings-edit' -Action {
+    $launch = Start-PackagedApplication -ObservationKey 'legacySettingsLaunch'
+    $standardHash = (Get-FileHash -LiteralPath (Join-Path $workDir 'settings.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $uunpHash = (Get-FileHash -LiteralPath (Join-Path $workDir 'settings_UUNP.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($standardHash -cne $script:legacyStandardSha256 -or $uunpHash -cne $script:legacyUunpSha256) {
+        throw 'Startup did not retain the externally edited legacy Settings pair byte-for-byte.'
+    }
+    "$launch; retained the externally edited legacy Settings pair"
 }
 
 Invoke-Step -Name 'open-representative-project' -Action {
@@ -577,6 +671,10 @@ Invoke-Step -Name 'generate-preview-copy-and-export-bos-artifact' -Action {
     }
     if ([int]$parsed.int.slidersnumber -lt 1) {
         throw "BoS preview for '$presetName' has no slider values."
+    }
+    if ($parsed.string.slidername1 -cne 'Waist' -or [single]$parsed.float.highvalue1 -ne [single]0.2 -or
+        [single]$parsed.float.lowvalue1 -ne [single]0.8) {
+        throw 'BoS preview did not consume the legacy Standard Settings inversion for Waist.'
     }
     Get-UiaTree -Element $popup | Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-bos-preview.txt') -Encoding utf8
 
@@ -641,7 +739,17 @@ Invoke-Step -Name 'generate-templates-output' -Action {
     $generate = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'Button' -Name 'Generate Templates') -Description "'Generate Templates' button" -TimeoutSeconds $StepTimeoutSeconds
     Invoke-UiaElement -Element $generate
     $text = Wait-Text -Element $output -Description 'Templates output to name every Slider Preset' -Predicate { param($t) @($fixturePresets | Where-Object { $t -notmatch [regex]::Escape("$_=") }).Count -eq 0 }
-    $observations['templatesOutput'] = [ordered]@{ length = $text.Length; lines = @($text -split "`r?`n").Count; excerpt = Get-Excerpt $text }
+    $templateLines = @($text -split "`r?`n")
+    if ($templateLines -cnotcontains $expectedCbbeTemplate -or $templateLines -cnotcontains $expectedUunpTemplate) {
+        throw "Templates output did not preserve the edited Settings math: $(Get-Excerpt $text 240)"
+    }
+    $observations['templatesOutput'] = [ordered]@{
+        length = $text.Length
+        lines = $templateLines.Count
+        excerpt = Get-Excerpt $text
+        standardSettingsLine = $expectedCbbeTemplate
+        uunpSettingsLine = $expectedUunpTemplate
+    }
     "Templates output: $($text.Length) chars, $(@($text -split "`r?`n").Count) lines: $(Get-Excerpt $text 160)"
 }
 
@@ -718,15 +826,50 @@ Invoke-Step -Name 'exit-after-save' -Action {
     Stop-PackagedApplication -ObservationKey 'exitAfterSave'
 }
 
-Invoke-Step -Name 'relaunch-and-reopen-saved-project' -Action {
+Invoke-Step -Name 'prepare-interrupted-settings-publication' -Action {
+    $standard = Join-Path $workDir 'settings.json'
+    $uunp = Join-Path $workDir 'settings_UUNP.json'
+    $transaction = Join-Path $workDir '.bs2bg-settings-stage-smoke-interrupted'
+    New-Item -ItemType Directory -Path $transaction | Out-Null
+    Move-Item -LiteralPath $standard -Destination (Join-Path $transaction 'standard.backup')
+    Move-Item -LiteralPath $uunp -Destination (Join-Path $transaction 'uunp.backup')
+    [System.IO.File]::WriteAllBytes($standard, $script:firstRunStandardBytes)
+    [System.IO.File]::WriteAllBytes((Join-Path $transaction 'uunp.staged'), $script:firstRunUunpBytes)
+    $observations['interruptedSettingsPublication'] = [ordered]@{
+        transactionDirectory = $transaction
+        installedMembers = @('settings.json')
+        absentMembers = @('settings_UUNP.json')
+        priorStandardSha256 = $script:legacyStandardSha256
+        priorUunpSha256 = $script:legacyUunpSha256
+    }
+    'assembled an interrupted publication after the Standard install and before the UUNP install'
+}
+
+Invoke-Step -Name 'recover-settings-relaunch-and-reopen-saved-project' -Action {
     # Reopening in a fresh process proves the saved Project survives a complete exit/relaunch of the packaged
     # executable. (It also sidesteps a JavaFX accessibility quirk: a ListView emptied by New and refilled by Open
     # within one process no longer publishes its cells to UI Automation although it renders them.)
-    $launch = Start-PackagedApplication -ObservationKey 'relaunch'
+    $launch = Start-PackagedApplication -ObservationKey 'recoveryLaunch'
+    $standardHash = (Get-FileHash -LiteralPath (Join-Path $workDir 'settings.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $uunpHash = (Get-FileHash -LiteralPath (Join-Path $workDir 'settings_UUNP.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($standardHash -cne $script:legacyStandardSha256 -or $uunpHash -cne $script:legacyUunpSha256) {
+        throw 'Restart recovery did not restore the exact prior Settings pair.'
+    }
+    $staging = @(Get-ChildItem -LiteralPath $workDir -Force | Where-Object { $_.Name -like '.bs2bg-settings-stage-*' })
+    if ($staging.Count -ne 0) { throw 'Restart recovery left Settings transaction state behind.' }
     Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
     Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $savedProjectName) -ConfirmButton 'Open'
     Wait-MainWindow -Title "$applicationTitle - $savedProjectName" | Out-Null
     $presets = Wait-ListItems -ListName $sliderPresetsList -Expected $fixturePresets
+    $option = Find-OuterControl -ControlType 'CheckBox' -Name 'Omit Redundant Sliders'
+    $templatesOutput = Get-PrecedingControl -Element $option -ControlType 'Edit'
+    $generateTemplates = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'Button' -Name 'Generate Templates') -Description "'Generate Templates' button" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $generateTemplates
+    $recoveredText = Wait-Text -Element $templatesOutput -Description 'recovered Settings-dependent Templates output' -Predicate {
+        param($t)
+        @($t -split "`r?`n") -ccontains $expectedCbbeTemplate -and
+            @($t -split "`r?`n") -ccontains $expectedUunpTemplate
+    }
     $tab = Wait-UiaElement -Root $script:mainWindow -Condition (New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') -Description "'Morphs' tab" -TimeoutSeconds $StepTimeoutSeconds
     Select-UiaElement -Element $tab
     $targets = Wait-ListItems -ListName $customTargetsList -Expected @($fixtureCustomTarget, $newCustomTarget)
@@ -734,12 +877,31 @@ Invoke-Step -Name 'relaunch-and-reopen-saved-project' -Action {
     Select-ListItem -ListName $customTargetsList -ItemName $newCustomTarget
     $assigned = Wait-ListItems -ListName $targetPresetsList -Expected $fixturePresets
     Get-UiaTree -Element $script:mainWindow | Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-after-reopen.txt') -Encoding utf8
-    $observations['reopenedProject'] = [ordered]@{ file = $savedProjectName; sliderPresets = $presets; customMorphTargets = $targets; targetSliderPresets = $assigned }
-    "$launch; reopened ${savedProjectName}: $sliderPresetsList $($presets -join ', '); $customTargetsList $($targets -join ', '); '$newCustomTarget' -> $($assigned -join ', '); $npc"
+    $observations['reopenedProject'] = [ordered]@{
+        file = $savedProjectName
+        sliderPresets = $presets
+        customMorphTargets = $targets
+        targetSliderPresets = $assigned
+        recoveredSettingsOutput = Get-Excerpt $recoveredText 240
+        exactPriorSettingsPairRestored = $true
+    }
+    "$launch; restored exact prior Settings pair and output; reopened ${savedProjectName}: $sliderPresetsList $($presets -join ', '); $customTargetsList $($targets -join ', '); '$newCustomTarget' -> $($assigned -join ', '); $npc"
 }
 
 Invoke-Step -Name 'close-and-exit' -Action {
     Stop-PackagedApplication -ObservationKey 'exit'
+}
+
+Invoke-Step -Name 'verify-settings-recovery-diagnostic' -Action {
+    $lifecycleStderr = ''
+    foreach ($task in $script:stderrTasks) { $lifecycleStderr += $task.Result }
+    $recoveryLines = @($lifecycleStderr -split "`r?`n" | Where-Object { $_ -match 'SETTINGS_PUBLICATION_RECOVERED' })
+    if ($recoveryLines.Count -lt 1) { throw 'The recovery lifecycle did not emit SETTINGS_PUBLICATION_RECOVERED.' }
+    $observations['settingsRecoveryDiagnostic'] = [ordered]@{
+        code = 'SETTINGS_PUBLICATION_RECOVERED'
+        occurrences = $recoveryLines.Count
+    }
+    'observed SETTINGS_PUBLICATION_RECOVERED in packaged launcher diagnostics'
 }
 
 $passed = $true
@@ -773,7 +935,7 @@ finally {
 
     $restricted = @($stderr -split "`r?`n" | Where-Object { $_ -match 'restricted method|native access|--enable-native-access' })
     $evidence = [ordered]@{
-        schema           = 'bs2bg.windows-app-image-smoke/2'
+        schema           = 'bs2bg.windows-app-image-smoke/3'
         recordedAtUtc    = $startedAt.ToString('o')
         passed           = $passed
         expectedAppVersion = $ExpectedAppVersion

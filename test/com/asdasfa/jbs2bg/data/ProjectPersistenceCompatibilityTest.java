@@ -40,38 +40,31 @@ class ProjectPersistenceCompatibilityTest {
 
 	private static final String SEMANTICS_FIXTURE = "projects/legacy-project-semantics.jbs2bg";
 	private static final String ALL_DEFAULTS_FIXTURE = "projects/legacy-project-all-defaults.jbs2bg";
-	private static final Map<String, DefaultSliderValue> ORIGINAL_DEFAULTS = new LinkedHashMap<>();
-	private static final Map<String, DefaultSliderValue> ORIGINAL_UUNP_DEFAULTS = new LinkedHashMap<>();
 
 	@TempDir
 	Path tempDirectory;
 
 	/**
-	 * Seeds only the legacy defaults exercised by these fixtures, keeping the test
+	 * Publishes only the defaults exercised by these fixtures, keeping the test
 	 * independent from checkout-local settings files.
 	 */
 	@BeforeAll
 	static void initializeSliderSettings() {
-		ORIGINAL_DEFAULTS.putAll(Settings.getDefaultsMap());
-		ORIGINAL_UUNP_DEFAULTS.putAll(Settings.getDefaultsMapUUNP());
-
-		Settings.getDefaultsMap().clear();
-		Settings.getDefaultsMap().put("Breasts", new DefaultSliderValue(0.2f, 1f));
-		Settings.getDefaultsMapUUNP().clear();
-		Settings.getDefaultsMapUUNP().put("Arms", new DefaultSliderValue(1f, 1f));
-		Settings.getDefaultsMapUUNP().put("Breasts", new DefaultSliderValue(1f, 1f));
+		Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
+		standard.put("Breasts", new DefaultSliderValue(0.2f, 1f));
+		Map<String, DefaultSliderValue> uunp = new LinkedHashMap<>();
+		uunp.put("Arms", new DefaultSliderValue(1f, 1f));
+		uunp.put("Breasts", new DefaultSliderValue(1f, 1f));
+		SettingsTestSupport.installDefaults(standard, uunp);
 	}
 
 	/**
-	 * Restores the process-wide legacy defaults so this characterization class does
+	 * Restores the checked-in Settings pair so this characterization class does
 	 * not leak state into later tests.
 	 */
 	@AfterAll
 	static void restoreSliderSettings() {
-		Settings.getDefaultsMap().clear();
-		Settings.getDefaultsMap().putAll(ORIGINAL_DEFAULTS);
-		Settings.getDefaultsMapUUNP().clear();
-		Settings.getDefaultsMapUUNP().putAll(ORIGINAL_UUNP_DEFAULTS);
+		SettingsTestSupport.restoreRepositorySettings();
 	}
 
 	/**

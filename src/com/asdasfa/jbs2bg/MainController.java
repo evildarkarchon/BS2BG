@@ -15,6 +15,7 @@ import java.util.logging.Logger;
 
 import org.apache.commons.io.FileUtils;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
 import com.asdasfa.jbs2bg.filtering.NpcTableColumns;
@@ -237,27 +238,16 @@ public class MainController extends CustomController {
 	@Override
 	protected void onPostInit() {
 		setupNotifs();
-		// Exit if...
-		if (main.initSuccess == 0) { // settings.json is erroneous
-			notif.showError("Invalid settings.json file detected!\n" +
-					"Delete settings file and relaunch to recreate it.");
-			
+		for (Settings.Diagnostic diagnostic : main.settingsInitialization.getDiagnostics()) {
+			Logger.getLogger(Settings.class.getName()).log(Level.WARNING,
+					diagnostic.getCode() + ": " + diagnostic.getSource() + " " + diagnostic.getPath()
+							+ System.lineSeparator() + diagnostic.getMessage());
+		}
+		if (!main.settingsInitialization.isSuccessful()) {
+			Settings.Failure failure = main.settingsInitialization.getFailure().orElseThrow();
+			notif.showError("Invalid Settings files detected!" + System.lineSeparator()
+					+ failure.formatForDisplay());
 			Platform.exit();
-			
-			return;
-		} else if (main.initSuccess == -1) { // settings_UUNP.json is erroneous
-			notif.showError("Invalid settings_UUNP.json file detected!\n" +
-					"Delete settings file and relaunch to recreate it.");
-			
-			Platform.exit();
-			
-			return;
-		} else if (main.initSuccess == -2) { // settings.json and settings_UUNP.json are erroneous
-			notif.showError("Invalid settings files detected!\n" +
-					"Delete both settings files and relaunch to recreate them.");
-			
-			Platform.exit();
-			
 			return;
 		}
 		

@@ -17,8 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
+import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 
 /**
  * Verifies slider-choice validation and UUNP default rebuilding through the
@@ -26,34 +26,27 @@ import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
  */
 class ProjectSessionSliderChoiceTest {
 
-    private final Map<String, DefaultSliderValue> originalDefaults = new LinkedHashMap<>();
-    private final Map<String, DefaultSliderValue> originalUunpDefaults = new LinkedHashMap<>();
-
     @TempDir
     Path tempDirectory;
 
     /** Seeds distinct regular and UUNP defaults so mode changes are observable. */
     @BeforeEach
     void initializeSliderSettings() {
-        originalDefaults.putAll(Settings.getDefaultsMap());
-        originalUunpDefaults.putAll(Settings.getDefaultsMapUUNP());
-        Settings.getDefaultsMap().clear();
-        Settings.getDefaultsMap().put("Breasts", new DefaultSliderValue(0.2f, 1f));
-        Settings.getDefaultsMap().put("Legs", new DefaultSliderValue(0f, 1f));
-        Settings.getDefaultsMap().put("Waist", new DefaultSliderValue(0f, 1f));
-        Settings.getDefaultsMapUUNP().clear();
-        Settings.getDefaultsMapUUNP().put("Arms", new DefaultSliderValue(1f, 1f));
-        Settings.getDefaultsMapUUNP().put("Breasts", new DefaultSliderValue(1f, 1f));
-        Settings.getDefaultsMapUUNP().put("Legs", new DefaultSliderValue(1f, 1f));
+        Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
+        standard.put("Breasts", new DefaultSliderValue(0.2f, 1f));
+        standard.put("Legs", new DefaultSliderValue(0f, 1f));
+        standard.put("Waist", new DefaultSliderValue(0f, 1f));
+        Map<String, DefaultSliderValue> uunp = new LinkedHashMap<>();
+        uunp.put("Arms", new DefaultSliderValue(1f, 1f));
+        uunp.put("Breasts", new DefaultSliderValue(1f, 1f));
+        uunp.put("Legs", new DefaultSliderValue(1f, 1f));
+        SettingsTestSupport.installDefaults(standard, uunp);
     }
 
     /** Restores process-wide Slider settings after each test. */
     @AfterEach
     void restoreSliderSettings() {
-        Settings.getDefaultsMap().clear();
-        Settings.getDefaultsMap().putAll(originalDefaults);
-        Settings.getDefaultsMapUUNP().clear();
-        Settings.getDefaultsMapUUNP().putAll(originalUunpDefaults);
+        SettingsTestSupport.restoreRepositorySettings();
     }
 
     /**

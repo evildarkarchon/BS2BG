@@ -98,24 +98,37 @@ Workflow steps (each recorded with duration and observations in the evidence):
 2. `launch-packaged-launcher-without-system-java` — start the launcher, wait for the `jBS2BG` window, require it to
    be the image's only BS2BG process, check the loaded runtime libraries, and note the settings files created in its
    working directory.
-3. `open-representative-project` — File › Open…, the native dialog, the file path, Open; the title becomes
+3. `verify-first-run-canonical-settings-pair` — require both Settings filenames, canonical UTF-8 bytes without a
+   BOM and with a final LF, the accepted built-in Standard/UUNP defaults and inversion families, and no transaction
+   directory.
+4. `exit-after-first-run-settings-creation` — close the first-run window; require exit code 0 within the bound.
+5. `install-legacy-settings-edit` — replace both files with the checked-in legacy Settings oracles and retain their
+   exact SHA-256 values as the prior pair for later recovery.
+6. `launch-after-legacy-settings-edit` — relaunch the package and require the edited pair to remain byte-identical.
+7. `open-representative-project` — File › Open…, the native dialog, the file path, Open; the title becomes
    `jBS2BG - representative.jbs2bg` and `Slider Presets` lists `CBBE Curvy` and `UUNP Athletic`.
-4. `generate-preview-copy-and-export-bos-artifact` — select `CBBE Curvy`, open `View BoS JSON`, parse the
-   preview, require clipboard content to match it after normalizing Windows `CF_UNICODETEXT` CRLF line endings,
-   export through the native save dialog, and require the exported UTF-8 bytes to equal that same preview exactly
-   without a BOM or final newline.
-5. `generate-templates-output` — the Templates output names every Slider Preset (`<name>=...` lines).
-6. `load-representative-morph-content` — the Morphs tab lists `All|Female` and the NPC row for
+8. `generate-preview-copy-and-export-bos-artifact` — select `CBBE Curvy`, open `View BoS JSON`, parse the
+   preview, require its Waist values to reflect the imported inversion, require clipboard content to match it after
+   normalizing Windows `CF_UNICODETEXT` CRLF line endings, export through the native save dialog, and require the
+   exported UTF-8 bytes to equal that same preview exactly without a BOM or final newline.
+9. `generate-templates-output` — require the exact Settings-dependent legacy lines
+   `CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0` and `UUNP Athletic=Arms@0.25:0.75`.
+10. `load-representative-morph-content` — the Morphs tab lists `All|Female` and the NPC row for
    `Skyrim.esm / HousecarlWhiterun`.
-7. `create-custom-morph-target` — `All|Female|NordRace` is added; the title shows the unsaved marker.
-8. `assign-slider-presets-to-target` — Add All; `Target Slider Presets` lists both presets and the counter reads 2.
-9. `generate-morphs-output` — the Morphs output names both Custom Morph Targets and the NPC.
-10. `save-project-as` — File › Save As… to `smoke-output.jbs2bg`; the title is clean; the file is parsed and must
+11. `create-custom-morph-target` — `All|Female|NordRace` is added; the title shows the unsaved marker.
+12. `assign-slider-presets-to-target` — Add All; `Target Slider Presets` lists both presets and the counter reads 2.
+13. `generate-morphs-output` — the Morphs output names both Custom Morph Targets and the NPC.
+14. `save-project-as` — File › Save As… to `smoke-output.jbs2bg`; the title is clean; the file is parsed and must
    contain the new target with both presets and the NPC.
-11. `exit-after-save` — close the window; the launcher process must exit with code 0 within the bound.
-12. `relaunch-and-reopen-saved-project` — start the launcher again from the same extracted image, open the saved
-    file, and verify the Slider Presets, both Custom Morph Targets, the NPC row, and the new target's presets.
-13. `close-and-exit` — close; exit code 0 within the bound again.
+15. `exit-after-save` — close the second window; the launcher process must exit with code 0 within the bound.
+16. `prepare-interrupted-settings-publication` — move the edited pair into the transaction's backups, install only
+    a replacement Standard member, and leave the staged UUNP member to model interruption between installs.
+17. `recover-settings-relaunch-and-reopen-saved-project` — relaunch, require the exact prior Settings hashes and no
+    remaining transaction state, reopen the saved Project, regenerate the exact Settings-dependent Templates lines,
+    and verify the Slider Presets, both Custom Morph Targets, the NPC row, and the new target's presets.
+18. `close-and-exit` — close the third window; require exit code 0 within the bound.
+19. `verify-settings-recovery-diagnostic` — require the stable `SETTINGS_PUBLICATION_RECOVERED` diagnostic in the
+    packaged launcher's captured stderr.
 
 Two behaviours of the platform shaped the harness and are worth knowing before changing it:
 
@@ -165,9 +178,10 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, and the notices components.
-- `smoke`: the complete smoke evidence (steps with durations, expected and observed process models, the two
-  sequential process lifecycles with exit codes and exit wait times, environment scrubbing, diagnostics summary
-  including any native-access warning lines from stderr, which must be none).
+- `smoke`: the complete smoke evidence (steps with durations, first-run/edited/recovered Settings hashes and exact
+  output, expected and observed process models, the three sequential process lifecycles with exit codes and exit
+  wait times, environment scrubbing, diagnostics summary including any native-access warning lines from stderr,
+  which must be none).
 
 Beside it: `app-image-jdeps-output.txt`, `app-image-jlink-output.txt`, `app-image-jpackage-output.txt`
 (`--verbose`), `app-image-module-resolution.txt`, `app-image-sha256.txt`, `windows-app-image-smoke.json`, and
@@ -189,6 +203,19 @@ The issue #83 BoS writer checkpoint is retained separately under
 `docs/build/evidence/windows-app-image-2026-08-28-bos-cutover/`. Its smoke evidence records the canonical BoS
 artifact byte count and SHA-256, clipboard parity after the Windows text-format boundary, exact preview/export
 byte parity, the BoS popup UIA tree, and both clean launcher lifecycles.
+
+The issue #84 Settings cutover checkpoint is retained separately under
+`docs/build/evidence/windows-app-image-2026-08-28-settings-cutover/`. Its smoke evidence records first-run canonical
+pair creation, byte-identical legacy editing, exact Standard/UUNP output consumption, interrupted-publication
+recovery, the stable recovery diagnostic, and all three clean launcher lifecycles.
+
+## Reverting the Settings persistence cutover
+
+The production Settings adapter route, paired publisher/recovery protocol, immutable live publication, consumer
+test migration, packaged smoke, documentation, and retained evidence land together in the single issue #84 commit.
+Reverting that commit restores the prior independent minimal-json Settings loader/writer and the previous packaging
+checkpoint. The generated Settings files remain backward-compatible JSON and need no data migration or external
+state cleanup.
 
 ## Reverting the BoS writer cutover
 

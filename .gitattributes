@@ -7,6 +7,7 @@
 tests/fixtures/expected/** -text
 tests/fixtures/inputs/**   -text
 test-resources/json-oracles/bos/** -text
+test-resources/json-oracles/settings/** -text
 
 # Shell scripts
 *.ps1 text eol=crlf working-tree-encoding=UTF-8

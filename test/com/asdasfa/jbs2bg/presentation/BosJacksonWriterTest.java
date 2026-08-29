@@ -7,18 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import com.asdasfa.jbs2bg.data.Settings;
+import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
@@ -68,17 +65,10 @@ final class BosJacksonWriterTest {
     void calculatedValueGoldenIsTheDefensivelyOwnedProductionArtifact() throws Exception {
         Path golden = Path.of("test-resources", "json-oracles", "bos", "calculated.json");
         byte[] expected = Files.readAllBytes(golden);
-        Map<String, Float> multipliers = standardMultipliers();
-        List<String> inverted = standardInverted();
-        Map<String, Float> previousMultipliers = new LinkedHashMap<>(multipliers);
-        List<String> previousInverted = new ArrayList<>(inverted);
+        Map<String, Float> multipliers = Map.of("Breasts", Float.valueOf(1.25f),
+                "OracleExponent", Float.valueOf(1.0E8f));
+        SettingsTestSupport.installStandardOutput(multipliers, List.of("Breasts"));
         try {
-            multipliers.clear();
-            multipliers.put("Breasts", Float.valueOf(1.25f));
-            multipliers.put("OracleExponent", Float.valueOf(1.0E8f));
-            inverted.clear();
-            inverted.add("Breasts");
-
             ProjectSession session = ProjectSessions.create();
             session.newProject();
             session.apply(SliderPresetEdits.create("Alpha"));
@@ -99,10 +89,7 @@ final class BosJacksonWriterTest {
             assertEquals(new String(expected, StandardCharsets.UTF_8), artifact.getText());
             assertArrayEquals(expected, artifact.getBytes());
         } finally {
-            multipliers.clear();
-            multipliers.putAll(previousMultipliers);
-            inverted.clear();
-            inverted.addAll(previousInverted);
+            SettingsTestSupport.restoreRepositorySettings();
         }
     }
 
@@ -117,21 +104,17 @@ final class BosJacksonWriterTest {
         }
     }
 
-    /** Production reports non-finite values only after retaining every attempted filename mapping. */
+    /** Production reports non-finite calculations only after retaining every attempted filename mapping. */
     @Test
-    void rejectsNonFiniteProductionValuesWithCompleteMappingsAndDiagnostics() throws Exception {
-        Map<String, Float> multipliers = standardMultipliers();
-        Map<String, Float> previousMultipliers = new LinkedHashMap<>(multipliers);
+    void rejectsNonFiniteProductionValuesWithCompleteMappingsAndDiagnostics() {
+        SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());
         try {
-            multipliers.clear();
-            multipliers.put("Infinite", Float.valueOf(Float.POSITIVE_INFINITY));
-
             ProjectSession session = ProjectSessions.create();
             session.newProject();
             session.apply(SliderPresetEdits.create("Broken"));
             session.apply(SliderPresetEdits.setSliderChoice("Broken", new SliderChoiceSnapshot(
-                    "Infinite", true, Integer.valueOf(10), Integer.valueOf(100),
-                    10, 100, 100, 100, false)));
+                    "Overflow", true, Integer.valueOf(10), Integer.valueOf(200),
+                    10, 200, 100, 100, false)));
             session.apply(SliderPresetEdits.create("Safe"));
 
             BosOutputException exception = assertThrows(BosOutputException.class,
@@ -144,27 +127,22 @@ final class BosJacksonWriterTest {
             assertEquals("BOS_VALUE_NON_FINITE", exception.getDiagnostics().get(0).getCode());
             assertEquals("Broken", exception.getDiagnostics().get(0).getSliderPresetName());
         } finally {
-            multipliers.clear();
-            multipliers.putAll(previousMultipliers);
+            SettingsTestSupport.restoreRepositorySettings();
         }
     }
 
-    /** Filename and value preflight must report every independent failure in one rejected command. */
+    /** Filename and finite-input overflow failures are reported together before publishing. */
     @Test
-    void reportsFilenameAndNonFiniteFailuresTogetherBeforePublishing() throws Exception {
-        Map<String, Float> multipliers = standardMultipliers();
-        Map<String, Float> previousMultipliers = new LinkedHashMap<>(multipliers);
+    void reportsFilenameAndNonFiniteFailuresTogetherBeforePublishing() {
+        SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());
         try {
-            multipliers.clear();
-            multipliers.put("Infinite", Float.valueOf(Float.POSITIVE_INFINITY));
-
             ProjectSession session = ProjectSessions.create();
             session.newProject();
             session.apply(SliderPresetEdits.create("Broken\uD800"));
             session.apply(SliderPresetEdits.create("Infinite Value"));
             session.apply(SliderPresetEdits.setSliderChoice("Infinite Value", new SliderChoiceSnapshot(
-                    "Infinite", true, Integer.valueOf(10), Integer.valueOf(100),
-                    10, 100, 100, 100, false)));
+                    "Overflow", true, Integer.valueOf(10), Integer.valueOf(200),
+                    10, 200, 100, 100, false)));
 
             BosOutputException exception = assertThrows(BosOutputException.class,
                     () -> ProjectOutputFormatter.generate(session.getSnapshot(), false));
@@ -176,29 +154,8 @@ final class BosJacksonWriterTest {
             assertEquals(List.of("BOS_FILENAME_UNREPRESENTABLE", "BOS_VALUE_NON_FINITE"),
                     exception.getDiagnostics().stream().map(BosOutputDiagnostic::getCode).toList());
         } finally {
-            multipliers.clear();
-            multipliers.putAll(previousMultipliers);
+            SettingsTestSupport.restoreRepositorySettings();
         }
     }
 
-	/**
-	 * Accesses the legacy mutable Settings collection to exercise production multiplier
-	 * edge cases without widening production visibility.
-	 */
-    @SuppressWarnings("unchecked")
-    private static Map<String, Float> standardMultipliers() throws ReflectiveOperationException {
-        Field field = Settings.class.getDeclaredField("MULTIPLIERS");
-        field.setAccessible(true);
-        return (Map<String, Float>) field.get(null);
-    }
-
-    /**
-     * Accesses legacy inversion state alongside multipliers and restores it in the test's finally block.
-     */
-    @SuppressWarnings("unchecked")
-    private static List<String> standardInverted() throws ReflectiveOperationException {
-        Field field = Settings.class.getDeclaredField("INVERTED");
-        field.setAccessible(true);
-        return (List<String>) field.get(null);
-    }
 }

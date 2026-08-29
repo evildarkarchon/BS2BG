@@ -22,37 +22,30 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
+import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 
 /** Locks Project semantics behind the non-production, package-owned Jackson adapter. */
 final class ProjectJacksonCompatibilityTest {
 
     private static final Path FIXTURE_ROOT = Path.of("test-resources", "json-oracles", "project");
-    private static final Map<String, DefaultSliderValue> ORIGINAL_DEFAULTS = new LinkedHashMap<>();
-    private static final Map<String, DefaultSliderValue> ORIGINAL_UUNP_DEFAULTS = new LinkedHashMap<>();
-
     @TempDir
     Path temporaryDirectory;
 
     /** Seeds profile-distinct defaults so an order-dependent parser cannot pass accidentally. */
     @BeforeAll
     static void seedSliderDefaults() {
-        ORIGINAL_DEFAULTS.putAll(Settings.getDefaultsMap());
-        ORIGINAL_UUNP_DEFAULTS.putAll(Settings.getDefaultsMapUUNP());
-        Settings.getDefaultsMap().clear();
-        Settings.getDefaultsMap().put("Waist", new DefaultSliderValue(0.2f, 1f));
-        Settings.getDefaultsMapUUNP().clear();
-        Settings.getDefaultsMapUUNP().put("Arms", new DefaultSliderValue(1f, 1f));
+        Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
+        standard.put("Waist", new DefaultSliderValue(0.2f, 1f));
+        Map<String, DefaultSliderValue> uunp = new LinkedHashMap<>();
+        uunp.put("Arms", new DefaultSliderValue(1f, 1f));
+        SettingsTestSupport.installDefaults(standard, uunp);
     }
 
-    /** Restores the process-wide Settings collections after the compatibility oracle runs. */
+    /** Restores the checked-in Settings pair after the compatibility oracle runs. */
     @AfterAll
     static void restoreSliderDefaults() {
-        Settings.getDefaultsMap().clear();
-        Settings.getDefaultsMap().putAll(ORIGINAL_DEFAULTS);
-        Settings.getDefaultsMapUUNP().clear();
-        Settings.getDefaultsMapUUNP().putAll(ORIGINAL_UUNP_DEFAULTS);
+        SettingsTestSupport.restoreRepositorySettings();
     }
 
     /** The Jackson candidate and its canonical bytes retain the legacy Project meaning. */

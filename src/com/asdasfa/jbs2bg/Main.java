@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg;
 	
+import java.nio.file.Path;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
@@ -54,14 +55,14 @@ public class Main extends Application {
 	public final ProjectSession projectSession;
 	public final ProjectPresentation projectPresentation;
 	
-	public int initSuccess = 0;
+	public final Settings.InitializationResult settingsInitialization;
 	
 	/**
-	 * Initializes legacy settings plus the authoritative ProjectSession and renders
+	 * Initializes the owned Settings pair plus the authoritative ProjectSession and renders
 	 * its initial untitled snapshot into the JavaFX read model.
 	 */
 	public Main() {
-		initSuccess = Settings.init();
+		settingsInitialization = Settings.initialize(Path.of("."));
 		projectSession = ProjectSessions.create();
 		ProjectOutcome initialProject = projectSession.newProject();
 		projectPresentation = new ProjectPresentation(appName, initialProject.getSnapshot());

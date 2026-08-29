@@ -22,9 +22,9 @@
          verifies the image layout and launcher configuration; hashes every file into one image digest; and
          archives the image as BS2BG-<version>-windows-x64.zip.
       6. Extracts that archive to a clean temporary location and runs tools/java25/smoke-app-image.ps1: the
-         packaged launcher starts with every host-Java discovery path scrubbed, the representative Project, BoS,
-         Templates, and Morphs workflows are driven through Windows UI Automation, and the process must exit with
-         code 0 within a bounded timeout.
+         packaged launcher starts with every host-Java discovery path scrubbed; first-run Settings creation, legacy
+         Settings editing, interrupted-publication recovery, and the representative Project, BoS, Templates, and
+         Morphs workflows are exercised; and each process must exit with code 0 within a bounded timeout.
       7. Writes target/reproducibility/windows-app-image.json (toolchain, runtime, package, workflow, and exit
          evidence) next to the jdeps/jlink/jpackage logs and the smoke diagnostics, and prints the report.
 
@@ -304,6 +304,8 @@ else {
         ArchivePath    = $archivePath
         LauncherName   = $launcherName
         FixtureProject = Join-Path $repoRoot 'test-resources\projects\legacy-project-semantics.jbs2bg'
+        FixtureStandardSettings = Join-Path $repoRoot 'test-resources\json-oracles\settings\standard.json'
+        FixtureUunpSettings = Join-Path $repoRoot 'test-resources\json-oracles\settings\uunp.json'
         EvidencePath   = $smokeEvidencePath
         ExpectedAppVersion = $appVersion
     }

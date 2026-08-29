@@ -10,8 +10,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
@@ -27,6 +30,18 @@ import com.eclipsesource.json.JsonObject;
 
 /** Verifies JavaFX-free generated output derived from one immutable Project snapshot. */
 class ProjectOutputFormatterTest {
+
+	/** Publishes empty profiles so formatter fixtures contain only their explicit Slider choices. */
+	@BeforeEach
+	void initializeEmptySettings() {
+		SettingsTestSupport.installDefaults(Collections.emptyMap(), Collections.emptyMap());
+	}
+
+	/** Restores the checked-in Settings pair after each formatter test. */
+	@AfterEach
+	void restoreSettings() {
+		SettingsTestSupport.restoreRepositorySettings();
+	}
 
 	/**
 	 * A formatter that reads live session state or reorders snapshot values would
@@ -94,6 +109,23 @@ class ProjectOutputFormatterTest {
 		assertEquals("Preset=Active@0.2", output.getTemplatesText());
 		assertEquals(1, bos.get("int").asObject().getInt("slidersnumber", -1));
 		assertEquals("Active", bos.get("string").asObject().getString("slidername1", null));
+	}
+
+	/** Omission uses the inverted profile's 100/100 neutral endpoint in both generated formats. */
+	@Test
+	void omitsRedundantInvertedSlidersAtTheirLegacyNeutralEndpoint() {
+		SettingsTestSupport.installStandardOutput(Collections.emptyMap(), List.of("Inverted"));
+		ProjectSession session = ProjectSessions.create();
+		session.newProject();
+		session.apply(SliderPresetEdits.create("Preset"));
+		session.apply(SliderPresetEdits.setSliderChoice("Preset",
+				choice("Inverted", true, 100, 100, 100, 100)));
+
+		ProjectGeneratedOutput output = ProjectOutputFormatter.generate(session.getSnapshot(), true);
+		JsonObject bos = Json.parse(artifactNamed(output, "Preset.json").getText()).asObject();
+
+		assertEquals("Preset=", output.getTemplatesText());
+		assertEquals(0, bos.get("int").asObject().getInt("slidersnumber", -1));
 	}
 
 	/** BoS output must retain the legacy grouping of every high value before every low value. */

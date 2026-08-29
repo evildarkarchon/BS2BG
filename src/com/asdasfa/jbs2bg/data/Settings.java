@@ -1,407 +1,451 @@
 package com.asdasfa.jbs2bg.data;
 
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.Objects;
+import java.util.Optional;
 
-import org.apache.commons.io.FileUtils;
+/** Owns the one validated Standard/UUNP Settings value consumed by the application. */
+public final class Settings {
+    private static volatile LiveSettings liveSettings = LiveSettings.empty();
 
-import com.eclipsesource.json.Json;
-import com.eclipsesource.json.JsonArray;
-import com.eclipsesource.json.JsonObject;
-import com.eclipsesource.json.JsonObject.Member;
-import com.eclipsesource.json.WriterConfig;
+    private Settings() {
+    }
 
-/**
- *
- * @author Totiman
- */
-public class Settings {
-	
-	// Non-UUNP
-	private final static LinkedHashMap<String, DefaultSliderValue> DEFAULTS = new LinkedHashMap<String, DefaultSliderValue>();
-	private final static LinkedHashMap<String, Float> MULTIPLIERS = new LinkedHashMap<String, Float>();
-	private final static ArrayList<String> INVERTED = new ArrayList<String>();
-	
-	// UUNP
-	private final static LinkedHashMap<String, DefaultSliderValue> DEFAULTS_UUNP = new LinkedHashMap<String, DefaultSliderValue>();
-	private final static LinkedHashMap<String, Float> MULTIPLIERS_UUNP = new LinkedHashMap<String, Float>();
-	private final static ArrayList<String> INVERTED_UUNP = new ArrayList<String>();
-	
-	/**
-	 * 
-	 * @return 1 if init is success, 0 if settings.json failed
-	 */
-	public static int init() {
-		DEFAULTS.put("Breasts", new DefaultSliderValue(0.2f, 1f));
-		DEFAULTS.put("BreastsSmall", new DefaultSliderValue(1f, 1f));
-		DEFAULTS.put("NippleDistance", new DefaultSliderValue(1f, 1f));
-		DEFAULTS.put("NippleSize", new DefaultSliderValue(1f, 1f));
-		DEFAULTS.put("ButtCrack", new DefaultSliderValue(1f, 1f));
-		DEFAULTS.put("Butt", new DefaultSliderValue(0f, 1f));
-		DEFAULTS.put("ButtSmall", new DefaultSliderValue(1f, 1f));
-		DEFAULTS.put("Waist", new DefaultSliderValue(0f, 1f));
-		DEFAULTS.put("Legs", new DefaultSliderValue(0f, 1f));
-		DEFAULTS.put("Ankles", new DefaultSliderValue(1f, 1f));
-		DEFAULTS.put("Arms", new DefaultSliderValue(0f, 1f));
-		DEFAULTS.put("ShoulderWidth", new DefaultSliderValue(1f, 1f));
-		
-		MULTIPLIERS.clear();
-		
-		INVERTED.add("Breasts");
-		INVERTED.add("BreastsSmall");
-		INVERTED.add("NippleDistance");
-		INVERTED.add("NippleSize");
-		INVERTED.add("ButtCrack");
-		INVERTED.add("Butt");
-		INVERTED.add("ButtSmall");
-		INVERTED.add("Legs");
-		INVERTED.add("Ankles");
-		INVERTED.add("Arms");
-		INVERTED.add("ShoulderWidth");
-		
-		// UUNP
-		DEFAULTS_UUNP.put("Breasts", new DefaultSliderValue(1f, 1f));
-		DEFAULTS_UUNP.put("BreastsSmall", new DefaultSliderValue(1f, 1f));
-		DEFAULTS_UUNP.put("NippleDistance", new DefaultSliderValue(1f, 1f));
-		DEFAULTS_UUNP.put("NippleSize", new DefaultSliderValue(1f, 1f));
-		DEFAULTS_UUNP.put("Arms", new DefaultSliderValue(1f, 1f));
-		DEFAULTS_UUNP.put("ShoulderWidth", new DefaultSliderValue(1f, 1f));
-		DEFAULTS_UUNP.put("ButtCrack", new DefaultSliderValue(1f, 1f));
-		DEFAULTS_UUNP.put("Butt", new DefaultSliderValue(1f, 1f));
-		DEFAULTS_UUNP.put("ButtSmall", new DefaultSliderValue(1f, 1f));
-		DEFAULTS_UUNP.put("Legs", new DefaultSliderValue(1f, 1f));
-		
-		MULTIPLIERS_UUNP.clear();
-		
-		INVERTED_UUNP.add("Breasts");
-		INVERTED_UUNP.add("BreastsSmall");
-		INVERTED_UUNP.add("NippleDistance");
-		INVERTED_UUNP.add("NippleSize");
-		INVERTED_UUNP.add("Arms");
-		INVERTED_UUNP.add("ShoulderWidth");
-		INVERTED_UUNP.add("ButtCrack");
-		INVERTED_UUNP.add("Butt");
-		INVERTED_UUNP.add("ButtSmall");
-		INVERTED_UUNP.add("Legs");
-		
-		boolean settingsOk = true;
-		try {
-			File settingsFile = new File("settings.json");
-			if (settingsFile.exists()) {
-				loadSettingsFile(settingsFile);
-			} else {
-				createSettingsFile(settingsFile);
-			}
-		} catch (Exception e) {
-			settingsOk = false;
-		}
-		
-		boolean settingsUUNPOk = true;
-		try {
-			File settingsFile = new File("settings_UUNP.json");
-			if (settingsFile.exists()) {
-				loadSettingsUUNPFile(settingsFile);
-			} else {
-				createSettingsUUNPFile(settingsFile);
-			}
-		} catch (Exception e) {
-			settingsUUNPOk = false;
-		}
-		
-		int initSuccess = 1;
-		if (settingsOk && settingsUUNPOk) { // Success
-			initSuccess = 1;
-		}
-		if (!settingsOk && settingsUUNPOk) { // settings.json failed
-			initSuccess = 0;
-		}
-		if (settingsOk && !settingsUUNPOk) { // settings_UUNP.json failed
-			initSuccess = -1;
-		}
-		if (!settingsOk && !settingsUUNPOk) { // Both settings.json and settings_UUNP.json failed
-			initSuccess = -2;
-		}
-		
-		return initSuccess;
-	}
+    /**
+     * Recovers, loads, and validates the Standard and UUNP Settings documents before publishing either profile.
+     * This startup operation serializes writers; readers observe the prior or replacement immutable value.
+     *
+     * @param workingDirectory directory containing {@code settings.json} and {@code settings_UUNP.json}
+     * @return success with ordered warnings, or one stable failure without partial live-state mutation
+     */
+    public static synchronized InitializationResult initialize(Path workingDirectory) {
+        Objects.requireNonNull(workingDirectory, "workingDirectory");
+        Path directory = workingDirectory.toAbsolutePath().normalize();
+        Path standardSource = directory.resolve("settings.json");
+        Path uunpSource = directory.resolve("settings_UUNP.json");
+        boolean recovered;
+        SettingsJacksonAdapter.SettingsCandidate candidate;
+        SettingsDirectoryLock directoryLock;
+        try {
+            directoryLock = SettingsDirectoryLock.acquire(directory);
+        } catch (IOException exception) {
+            return InitializationResult.failure(Failure.fromIo("SETTINGS_LOCK_FAILED", directory, exception));
+        }
+        try (directoryLock) {
+            try {
+                recovered = SettingsPairPublisher.recover(directory, standardSource, uunpSource);
+            } catch (IOException exception) {
+                return InitializationResult.failure(
+                        Failure.fromIo("SETTINGS_RECOVERY_FAILED", directory, exception));
+            }
+            try {
+                candidate = loadCandidate(standardSource, uunpSource);
+            } catch (SettingsJacksonAdapter.SettingsFormatException exception) {
+                return InitializationResult.failure(Failure.fromAdapter(exception));
+            } catch (IOException exception) {
+                return InitializationResult.failure(
+                        Failure.fromIo("SETTINGS_PUBLISH_FAILED", directory, exception));
+            }
+        } catch (IOException exception) {
+            return InitializationResult.failure(Failure.fromIo("SETTINGS_LOCK_FAILED", directory, exception));
+        }
 
-	private static void createSettingsFile(File file) {
-		JsonObject root = new JsonObject();
-		
-		JsonObject joDefaults = new JsonObject();
-		JsonObject joMultipliers = new JsonObject();
-		JsonArray joInverses = new JsonArray();
-		
-		for (Map.Entry<String, DefaultSliderValue> entry : DEFAULTS.entrySet()) {
-			String key = entry.getKey();
-			DefaultSliderValue dsl = entry.getValue();
-			joDefaults.add(key, newJsonObjectDefault(dsl.getValueSmall(), dsl.getValueBig()));
-		}
-		
-		for (Map.Entry<String, Float> entry : MULTIPLIERS.entrySet()) {
-			String key = entry.getKey();
-			float v = (float) entry.getValue();
-			joMultipliers.add(key, v);
-		}
-		
-		for (String s : INVERTED) {
-			joInverses.add(s);
-		}
-		
-		root.add("Defaults", joDefaults);
-		root.add("Multipliers", joMultipliers);
-		root.add("Inverted", joInverses);
-		
-		String settingsString = root.toString(WriterConfig.PRETTY_PRINT);
-		
-		try {
-			if (file.exists())
-				FileUtils.deleteQuietly(file);
-			
-			FileUtils.writeStringToFile(file, settingsString, "UTF-8");
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
-	
-	private static void createSettingsUUNPFile(File file) {
-		JsonObject root = new JsonObject();
-		
-		JsonObject joDefaults = new JsonObject();
-		JsonObject joMultipliers = new JsonObject();
-		JsonArray joInverses = new JsonArray();
-		
-		for (Map.Entry<String, DefaultSliderValue> entry : DEFAULTS_UUNP.entrySet()) {
-			String key = entry.getKey();
-			DefaultSliderValue dsl = entry.getValue();
-			joDefaults.add(key, newJsonObjectDefault(dsl.getValueSmall(), dsl.getValueBig()));
-		}
-		
-		for (Map.Entry<String, Float> entry : MULTIPLIERS_UUNP.entrySet()) {
-			String key = entry.getKey();
-			float v = (float) entry.getValue();
-			joMultipliers.add(key, v);
-		}
-		
-		for (String s : INVERTED_UUNP) {
-			joInverses.add(s);
-		}
-		
-		root.add("Defaults", joDefaults);
-		root.add("Multipliers", joMultipliers);
-		root.add("Inverted", joInverses);
-		
-		String settingsString = root.toString(WriterConfig.PRETTY_PRINT);
-		
-		try {
-			if (file.exists())
-				FileUtils.deleteQuietly(file);
-			
-			FileUtils.writeStringToFile(file, settingsString, "UTF-8");
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
+        publish(candidate);
+        List<Diagnostic> diagnostics = new ArrayList<>();
+        if (recovered)
+            diagnostics.add(Diagnostic.recovered(directory));
+        diagnostics.addAll(candidate.diagnostics().stream().map(Diagnostic::fromAdapter).toList());
+        return InitializationResult.success(diagnostics);
+    }
 
-	private static JsonObject newJsonObjectDefault(float valueSmall, float valueBig) {
-		JsonObject jo = new JsonObject();
-		jo.add("valueSmall", valueSmall);
-		jo.add("valueBig", valueBig);
-		
-		return jo;
-	}
+    /** Loads existing sources and transactionally creates a canonical pair when either legacy file is absent. */
+    private static SettingsJacksonAdapter.SettingsCandidate loadCandidate(Path standardSource, Path uunpSource)
+            throws IOException {
+        boolean standardExists = Files.exists(standardSource);
+        boolean uunpExists = Files.exists(uunpSource);
+        if (standardExists && uunpExists)
+            return SettingsJacksonAdapter.readPair(standardSource, uunpSource);
 
-	private static void loadSettingsFile(File file) {
-		try {
-			String s = FileUtils.readFileToString(file, "UTF-8");
-			
-			JsonObject root = Json.parse(s).asObject();
-			
-			JsonObject joDefaults = root.get("Defaults").asObject();
-			JsonObject joMultipliers = root.get("Multipliers").asObject();
-			JsonArray joInverses = root.get("Inverted").asArray();
-			
-			DEFAULTS.clear();
-			MULTIPLIERS.clear();
-			INVERTED.clear();
-			
-			for (Member member : joDefaults) {
-				String key = member.getName();
-				JsonObject jo = member.getValue().asObject();
-				float valueSmall = jo.getFloat("valueSmall", 0f);
-				float valueBig = jo.getFloat("valueBig", 1f);
-				DefaultSliderValue dsl = new DefaultSliderValue(valueSmall, valueBig);
-				DEFAULTS.put(key, dsl);
-			}
-			
-			for (Member member : joMultipliers) {
-				String key = member.getName();
-				float v = member.getValue().asFloat();
-				MULTIPLIERS.put(key, v);
-			}
-			
-			for (int i = 0; i < joInverses.size(); i++) {
-				String v = joInverses.get(i).asString();
-				INVERTED.add(v);
-			}
-		} catch (FileNotFoundException e) {
-			Logger.getLogger(Settings.class.getName()).log(Level.SEVERE, null, e);
-		} catch (IOException e) {
-			Logger.getLogger(Settings.class.getName()).log(Level.SEVERE, null, e);
-		}
-	}
-	
-	private static void loadSettingsUUNPFile(File file) {
-		try {
-			String s = FileUtils.readFileToString(file, "UTF-8");
-			
-			JsonObject root = Json.parse(s).asObject();
-			
-			JsonObject joDefaults = root.get("Defaults").asObject();
-			JsonObject joMultipliers = root.get("Multipliers").asObject();
-			JsonArray joInverses = root.get("Inverted").asArray();
-			
-			DEFAULTS_UUNP.clear();
-			MULTIPLIERS_UUNP.clear();
-			INVERTED_UUNP.clear();
-			
-			for (Member member : joDefaults) {
-				String key = member.getName();
-				JsonObject jo = member.getValue().asObject();
-				float valueSmall = jo.getFloat("valueSmall", 0f);
-				float valueBig = jo.getFloat("valueBig", 1f);
-				DefaultSliderValue dsl = new DefaultSliderValue(valueSmall, valueBig);
-				DEFAULTS_UUNP.put(key, dsl);
-			}
-			
-			for (Member member : joMultipliers) {
-				String key = member.getName();
-				float v = member.getValue().asFloat();
-				MULTIPLIERS_UUNP.put(key, v);
-			}
-			
-			for (int i = 0; i < joInverses.size(); i++) {
-				String v = joInverses.get(i).asString();
-				INVERTED_UUNP.add(v);
-			}
-		} catch (FileNotFoundException e) {
-			Logger.getLogger(Settings.class.getName()).log(Level.SEVERE, null, e);
-		} catch (IOException e) {
-			Logger.getLogger(Settings.class.getName()).log(Level.SEVERE, null, e);
-		}
-	}
+        SettingsJacksonAdapter.SettingsCandidate defaults = defaultCandidate();
+        List<SettingsJacksonAdapter.SettingsDiagnostic> diagnostics = new ArrayList<>();
+        SettingsJacksonAdapter.SettingsProfile standard = standardExists
+                ? SettingsJacksonAdapter.read(standardSource, diagnostics) : defaults.standard();
+        SettingsJacksonAdapter.SettingsProfile uunp = uunpExists
+                ? SettingsJacksonAdapter.read(uunpSource, diagnostics) : defaults.uunp();
+        SettingsJacksonAdapter.SettingsCandidate candidate = new SettingsJacksonAdapter.SettingsCandidate(
+                standard, uunp, diagnostics);
+        SettingsPairPublisher.publish(standardSource, uunpSource, SettingsJacksonAdapter.writePair(candidate));
+        return candidate;
+    }
 
-	/**
-	 * 
-	 * @param sliderName
-	 * @return multiplier for slider, returns 1 if slider is not defined
-	 */
-	public static float getMultiplier(String sliderName) {
-		Float v = MULTIPLIERS.get(sliderName);
-		if (v == null)
-			return 1f;
-		return (float) v;
-	}
-	
-	/**
-	 * 
-	 * @param sliderName
-	 * @return multiplier for slider for UUNP, returns 1 if slider is not defined
-	 */
-	public static float getMultiplierUUNP(String sliderName) {
-		Float v = MULTIPLIERS_UUNP.get(sliderName);
-		if (v == null)
-			return 1f;
-		return (float) v;
-	}
-	
-	public static LinkedHashMap<String, DefaultSliderValue> getDefaultsMap() {
-		return DEFAULTS;
-	}
-	
-	public static LinkedHashMap<String, DefaultSliderValue> getDefaultsMapUUNP() {
-		return DEFAULTS_UUNP;
-	}
-	
-	public static int getDefaultValueSmall(String name) {
-		DefaultSliderValue dsv = DEFAULTS.get(name);
-		if (dsv != null) {
-			return (int) (dsv.getValueSmall() * 100);
-		} else {
-			return 0;
-		}
-	}
-	
-	public static int getDefaultValueSmallUUNP(String name) {
-		DefaultSliderValue dsv = DEFAULTS_UUNP.get(name);
-		if (dsv != null) {
-			return (int) (dsv.getValueSmall() * 100);
-		} else {
-			return 0;
-		}
-	}
-	
-	public static int getDefaultValueBig(String name) {
-		DefaultSliderValue dsv = DEFAULTS.get(name);
-		if (dsv != null) {
-			return (int) (dsv.getValueBig() * 100);
-		} else {
-			return 0;
-		}
-	}
-	
-	public static int getDefaultValueBigUUNP(String name) {
-		DefaultSliderValue dsv = DEFAULTS_UUNP.get(name);
-		if (dsv != null) {
-			return (int) (dsv.getValueBig() * 100);
-		} else {
-			return 0;
-		}
-	}
-	
-	public static boolean isInverted(String sliderName) {
-		for (int i = 0; i < INVERTED.size(); i++) {
-			String slider = INVERTED.get(i);
-			if (slider.equalsIgnoreCase(sliderName)) {
-				return true;
-			}
-		}
-		
-		return false;
-	}
-	
-	public static boolean isInvertedUUNP(String sliderName) {
-		for (int i = 0; i < INVERTED_UUNP.size(); i++) {
-			String slider = INVERTED_UUNP.get(i);
-			if (slider.equalsIgnoreCase(sliderName)) {
-				return true;
-			}
-		}
-		
-		return false;
-	}
+    /** Builds the exact legacy defaults as one detached candidate for first-run paired publication. */
+    private static SettingsJacksonAdapter.SettingsCandidate defaultCandidate() {
+        Map<String, SettingsJacksonAdapter.DefaultValue> standardDefaults = new LinkedHashMap<>();
+        standardDefaults.put("Breasts", new SettingsJacksonAdapter.DefaultValue(0.2f, 1f));
+        standardDefaults.put("BreastsSmall", new SettingsJacksonAdapter.DefaultValue(1f, 1f));
+        standardDefaults.put("NippleDistance", new SettingsJacksonAdapter.DefaultValue(1f, 1f));
+        standardDefaults.put("NippleSize", new SettingsJacksonAdapter.DefaultValue(1f, 1f));
+        standardDefaults.put("ButtCrack", new SettingsJacksonAdapter.DefaultValue(1f, 1f));
+        standardDefaults.put("Butt", new SettingsJacksonAdapter.DefaultValue(0f, 1f));
+        standardDefaults.put("ButtSmall", new SettingsJacksonAdapter.DefaultValue(1f, 1f));
+        standardDefaults.put("Waist", new SettingsJacksonAdapter.DefaultValue(0f, 1f));
+        standardDefaults.put("Legs", new SettingsJacksonAdapter.DefaultValue(0f, 1f));
+        standardDefaults.put("Ankles", new SettingsJacksonAdapter.DefaultValue(1f, 1f));
+        standardDefaults.put("Arms", new SettingsJacksonAdapter.DefaultValue(0f, 1f));
+        standardDefaults.put("ShoulderWidth", new SettingsJacksonAdapter.DefaultValue(1f, 1f));
 
-	public static class DefaultSliderValue {
-		private float valueSmall;
-		private float valueBig;
-		
-		public DefaultSliderValue(float valueSmall, float valueBig) {
-			this.valueSmall = valueSmall;
-			this.valueBig = valueBig;
-		}
-		
-		public float getValueSmall() {
-			return valueSmall;
-		}
-		
-		public float getValueBig() {
-			return valueBig;
-		}
-	}
+        Map<String, SettingsJacksonAdapter.DefaultValue> uunpDefaults = new LinkedHashMap<>();
+        for (String name : List.of("Breasts", "BreastsSmall", "NippleDistance", "NippleSize", "Arms",
+                "ShoulderWidth", "ButtCrack", "Butt", "ButtSmall", "Legs")) {
+            uunpDefaults.put(name, new SettingsJacksonAdapter.DefaultValue(1f, 1f));
+        }
+
+        SettingsJacksonAdapter.SettingsProfile standard = new SettingsJacksonAdapter.SettingsProfile(
+                standardDefaults, Collections.emptyMap(), List.of("Breasts", "BreastsSmall", "NippleDistance",
+                        "NippleSize", "ButtCrack", "Butt", "ButtSmall", "Legs", "Ankles", "Arms",
+                        "ShoulderWidth"));
+        SettingsJacksonAdapter.SettingsProfile uunp = new SettingsJacksonAdapter.SettingsProfile(
+                uunpDefaults, Collections.emptyMap(), List.of("Breasts", "BreastsSmall", "NippleDistance",
+                        "NippleSize", "Arms", "ShoulderWidth", "ButtCrack", "Butt", "ButtSmall", "Legs"));
+        return new SettingsJacksonAdapter.SettingsCandidate(standard, uunp, Collections.emptyList());
+    }
+
+    /** Constructs the entire replacement value before one volatile assignment makes the pair live. */
+    private static void publish(SettingsJacksonAdapter.SettingsCandidate candidate) {
+        liveSettings = LiveSettings.from(candidate);
+    }
+
+    /**
+     * Resolves a Standard multiplier.
+     *
+     * @param sliderName exact dynamic Slider key
+     * @return configured multiplier, or {@code 1f} when absent
+     */
+    public static float getMultiplier(String sliderName) {
+        return liveSettings.standardMultipliers.getOrDefault(sliderName, Float.valueOf(1f));
+    }
+
+    /**
+     * Resolves a UUNP multiplier.
+     *
+     * @param sliderName exact dynamic Slider key
+     * @return configured multiplier, or {@code 1f} when absent
+     */
+    public static float getMultiplierUUNP(String sliderName) {
+        return liveSettings.uunpMultipliers.getOrDefault(sliderName, Float.valueOf(1f));
+    }
+
+    /** @return immutable Standard defaults in source encounter order */
+    public static Map<String, DefaultSliderValue> getDefaultsMap() {
+        return liveSettings.standardDefaults;
+    }
+
+    /** @return immutable UUNP defaults in source encounter order */
+    public static Map<String, DefaultSliderValue> getDefaultsMapUUNP() {
+        return liveSettings.uunpDefaults;
+    }
+
+    /**
+     * Resolves a Standard small endpoint as the legacy integer percentage.
+     *
+     * @param name exact dynamic Slider key
+     * @return truncated percentage, or zero when absent
+     */
+    public static int getDefaultValueSmall(String name) {
+        return percentage(liveSettings.standardDefaults.get(name), true);
+    }
+
+    /**
+     * Resolves a UUNP small endpoint as the legacy integer percentage.
+     *
+     * @param name exact dynamic Slider key
+     * @return truncated percentage, or zero when absent
+     */
+    public static int getDefaultValueSmallUUNP(String name) {
+        return percentage(liveSettings.uunpDefaults.get(name), true);
+    }
+
+    /**
+     * Resolves a Standard big endpoint as the legacy integer percentage.
+     *
+     * @param name exact dynamic Slider key
+     * @return truncated percentage, or zero when absent
+     */
+    public static int getDefaultValueBig(String name) {
+        return percentage(liveSettings.standardDefaults.get(name), false);
+    }
+
+    /**
+     * Resolves a UUNP big endpoint as the legacy integer percentage.
+     *
+     * @param name exact dynamic Slider key
+     * @return truncated percentage, or zero when absent
+     */
+    public static int getDefaultValueBigUUNP(String name) {
+        return percentage(liveSettings.uunpDefaults.get(name), false);
+    }
+
+    /** Converts one optional endpoint to the legacy truncated percentage. */
+    private static int percentage(DefaultSliderValue value, boolean small) {
+        if (value == null)
+            return 0;
+        return (int) ((small ? value.getValueSmall() : value.getValueBig()) * 100);
+    }
+
+    /**
+     * Tests Standard inversion identity without changing its accepted case-insensitive meaning.
+     *
+     * @param sliderName Slider name to classify
+     * @return true when the configured Standard inversion list contains the name
+     */
+    public static boolean isInverted(String sliderName) {
+        return containsIgnoreCase(liveSettings.standardInverted, sliderName);
+    }
+
+    /**
+     * Tests UUNP inversion identity without changing its accepted case-insensitive meaning.
+     *
+     * @param sliderName Slider name to classify
+     * @return true when the configured UUNP inversion list contains the name
+     */
+    public static boolean isInvertedUUNP(String sliderName) {
+        return containsIgnoreCase(liveSettings.uunpInverted, sliderName);
+    }
+
+    /** Performs the legacy case-insensitive inversion lookup over an immutable encounter-ordered list. */
+    private static boolean containsIgnoreCase(List<String> values, String expected) {
+        for (String value : values) {
+            if (value.equalsIgnoreCase(expected))
+                return true;
+        }
+        return false;
+    }
+
+    /** Ordered non-blocking warning emitted while reading or recovering Settings. */
+    public static final class Diagnostic {
+        private final String code;
+        private final String source;
+        private final String path;
+        private final String message;
+
+        /** Creates one immutable warning translated at the Settings package boundary. */
+        private Diagnostic(String code, String source, String path, String message) {
+            this.code = code;
+            this.source = source;
+            this.path = path;
+            this.message = message;
+        }
+
+        /** Converts an internal adapter warning without exposing Jackson or adapter types. */
+        private static Diagnostic fromAdapter(SettingsJacksonAdapter.SettingsDiagnostic diagnostic) {
+            return new Diagnostic(diagnostic.code(), diagnostic.source(), diagnostic.path(), diagnostic.message());
+        }
+
+        /** Creates the ordered warning emitted after restoring an interrupted paired publication. */
+        private static Diagnostic recovered(Path directory) {
+            return new Diagnostic("SETTINGS_PUBLICATION_RECOVERED", directory.toString(), "/",
+                    "An interrupted Settings publication was rolled back before loading.");
+        }
+
+        /** @return stable machine-readable warning code */
+        public String getCode() {
+            return code;
+        }
+
+        /** @return source Settings filename */
+        public String getSource() {
+            return source;
+        }
+
+        /** @return escaped JSON-pointer-like member path */
+        public String getPath() {
+            return path;
+        }
+
+        /** @return human-readable warning */
+        public String getMessage() {
+            return message;
+        }
+    }
+
+    /** Stable Settings rejection with an owned code, source, member path, and optional coordinate. */
+    public static final class Failure {
+        private final String code;
+        private final String source;
+        private final String path;
+        private final int line;
+        private final int column;
+        private final String message;
+
+        /** Creates one immutable failure translated at the Settings package boundary. */
+        private Failure(String code, String source, String path, int line, int column, String message) {
+            this.code = code;
+            this.source = source;
+            this.path = path;
+            this.line = line;
+            this.column = column;
+            this.message = message;
+        }
+
+        /** Converts an internal adapter rejection without leaking its exception type. */
+        private static Failure fromAdapter(SettingsJacksonAdapter.SettingsFormatException exception) {
+            return new Failure(exception.code(), exception.source(), exception.path(), exception.line(),
+                    exception.column(), exception.getMessage());
+        }
+
+        /** Converts a structurally classified persistence I/O failure into the stable Settings failure surface. */
+        private static Failure fromIo(String code, Path directory, IOException exception) {
+            String message = exception.getMessage() == null ? "Settings files could not be published."
+                    : exception.getMessage();
+            return new Failure(code, directory.toString(), "/", 0, 0, message);
+        }
+
+        /** @return stable machine-readable Settings code */
+        public String getCode() {
+            return code;
+        }
+
+        /** @return source Settings filename */
+        public String getSource() {
+            return source;
+        }
+
+        /** @return escaped JSON-pointer-like member path */
+        public String getPath() {
+            return path;
+        }
+
+        /** @return one-based line, or zero when no source coordinate exists */
+        public int getLine() {
+            return line;
+        }
+
+        /** @return one-based column, or zero when no source coordinate exists */
+        public int getColumn() {
+            return column;
+        }
+
+        /** @return human-readable rejection detail */
+        public String getMessage() {
+            return message;
+        }
+
+        /** @return one line suitable for the startup failure notification */
+        public String formatForDisplay() {
+            String coordinate = line > 0 && column > 0 ? " (line " + line + ", column " + column + ")" : "";
+            return code + ": " + source + " " + path + coordinate + System.lineSeparator() + message;
+        }
+    }
+
+    /** Result of attempting to publish one Settings pair into the live lookup state. */
+    public static final class InitializationResult {
+        private final List<Diagnostic> diagnostics;
+        private final Failure failure;
+
+        /** Creates one immutable success or failure result. */
+        private InitializationResult(List<Diagnostic> diagnostics, Failure failure) {
+            this.diagnostics = List.copyOf(diagnostics);
+            this.failure = failure;
+        }
+
+        /** Returns one successful result carrying ordered non-blocking warnings. */
+        private static InitializationResult success(List<Diagnostic> diagnostics) {
+            return new InitializationResult(diagnostics, null);
+        }
+
+        /** Returns one rejected result carrying the stable blocking diagnostic. */
+        private static InitializationResult failure(Failure failure) {
+            return new InitializationResult(Collections.emptyList(), Objects.requireNonNull(failure, "failure"));
+        }
+
+        /** @return true only when both validated profiles became live */
+        public boolean isSuccessful() {
+            return failure == null;
+        }
+
+        /** @return ordered forward-compatibility and recovery warnings from the published pair */
+        public List<Diagnostic> getDiagnostics() {
+            return diagnostics;
+        }
+
+        /** @return the blocking diagnostic when publication was rejected */
+        public Optional<Failure> getFailure() {
+            return Optional.ofNullable(failure);
+        }
+    }
+
+    /** Immutable Slider endpoint defaults exposed to Project value construction. */
+    public static final class DefaultSliderValue {
+        private final float valueSmall;
+        private final float valueBig;
+
+        /**
+         * Creates one endpoint pair.
+         *
+         * @param valueSmall small endpoint expressed as a float fraction
+         * @param valueBig big endpoint expressed as a float fraction
+         */
+        public DefaultSliderValue(float valueSmall, float valueBig) {
+            this.valueSmall = valueSmall;
+            this.valueBig = valueBig;
+        }
+
+        /** @return small endpoint float fraction */
+        public float getValueSmall() {
+            return valueSmall;
+        }
+
+        /** @return big endpoint float fraction */
+        public float getValueBig() {
+            return valueBig;
+        }
+    }
+
+    /** One immutable application-facing value containing both Settings profiles. */
+    private record LiveSettings(Map<String, DefaultSliderValue> standardDefaults,
+            Map<String, Float> standardMultipliers, List<String> standardInverted,
+            Map<String, DefaultSliderValue> uunpDefaults, Map<String, Float> uunpMultipliers,
+            List<String> uunpInverted) {
+        /** Creates an immutable, defensively owned live value. */
+        private LiveSettings {
+            standardDefaults = Collections.unmodifiableMap(new LinkedHashMap<>(standardDefaults));
+            standardMultipliers = Collections.unmodifiableMap(new LinkedHashMap<>(standardMultipliers));
+            standardInverted = List.copyOf(standardInverted);
+            uunpDefaults = Collections.unmodifiableMap(new LinkedHashMap<>(uunpDefaults));
+            uunpMultipliers = Collections.unmodifiableMap(new LinkedHashMap<>(uunpMultipliers));
+            uunpInverted = List.copyOf(uunpInverted);
+        }
+
+        /** Converts the detached adapter candidate without retaining any adapter-owned mutable input. */
+        private static LiveSettings from(SettingsJacksonAdapter.SettingsCandidate candidate) {
+            return new LiveSettings(convertDefaults(candidate.standard().defaults()),
+                    candidate.standard().multipliers(), candidate.standard().inverted(),
+                    convertDefaults(candidate.uunp().defaults()), candidate.uunp().multipliers(),
+                    candidate.uunp().inverted());
+        }
+
+        /** Creates the pre-initialization empty value used before application startup. */
+        private static LiveSettings empty() {
+            return new LiveSettings(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyList(),
+                    Collections.emptyMap(), Collections.emptyMap(), Collections.emptyList());
+        }
+
+        /** Converts adapter endpoint records into the application-facing immutable endpoint values. */
+        private static Map<String, DefaultSliderValue> convertDefaults(
+                Map<String, SettingsJacksonAdapter.DefaultValue> source) {
+            Map<String, DefaultSliderValue> converted = new LinkedHashMap<>();
+            for (Map.Entry<String, SettingsJacksonAdapter.DefaultValue> entry : source.entrySet()) {
+                converted.put(entry.getKey(), new DefaultSliderValue(entry.getValue().valueSmall(),
+                        entry.getValue().valueBig()));
+            }
+            return converted;
+        }
+    }
 }

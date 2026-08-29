@@ -25,13 +25,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
+import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 
 class ProjectSessionImportTest {
-
-    private final Map<String, DefaultSliderValue> originalDefaults = new LinkedHashMap<>();
-    private final Map<String, DefaultSliderValue> originalUunpDefaults = new LinkedHashMap<>();
 
     @TempDir
     Path tempDirectory;
@@ -39,20 +36,15 @@ class ProjectSessionImportTest {
     /** Seeds deterministic Slider settings used by imported effective values. */
     @BeforeEach
     void initializeSliderSettings() {
-        originalDefaults.putAll(Settings.getDefaultsMap());
-        originalUunpDefaults.putAll(Settings.getDefaultsMapUUNP());
-        Settings.getDefaultsMap().clear();
-        Settings.getDefaultsMap().put("Breasts", new DefaultSliderValue(0.2f, 1f));
-        Settings.getDefaultsMapUUNP().clear();
+        Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
+        standard.put("Breasts", new DefaultSliderValue(0.2f, 1f));
+        SettingsTestSupport.installDefaults(standard, Collections.emptyMap());
     }
 
     /** Restores process-wide Slider settings after each import seam test. */
     @AfterEach
     void restoreSliderSettings() {
-        Settings.getDefaultsMap().clear();
-        Settings.getDefaultsMap().putAll(originalDefaults);
-        Settings.getDefaultsMapUUNP().clear();
-        Settings.getDefaultsMapUUNP().putAll(originalUunpDefaults);
+        SettingsTestSupport.restoreRepositorySettings();
     }
 
     /** Import rejects every selected source without parsing when no Project is active. */
