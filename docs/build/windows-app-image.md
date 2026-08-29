@@ -146,7 +146,11 @@ focused window.
   versions.
 - `payload`: every staged artifact with SHA-256 and size; pointer to `dependency-tree.txt`.
 - `runtime`: measured modules, explicit additions with reasons, requested modules, the image's `MODULES` list,
-  the service bindings from the JVM's resolution, the jlink options, and the runtime `release` values.
+  the service closure (`serviceBindings`), the jlink options, and the runtime `release` values. The service
+  closure is the ` binds ` lines of `java --show-module-resolution` run with `--limit-modules` set to the
+  image's exact module set (`app-image-module-resolution.txt` holds the whole resolution): every `uses`/
+  `provides` binding the JVM actually makes among the modules that ship. `jlink --suggest-providers` is not
+  used for this because it lists candidate providers across the whole module path, not what the image resolves.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, and the notices components.
@@ -162,7 +166,10 @@ Beside it: `app-image-jdeps-output.txt`, `app-image-jlink-output.txt`, `app-imag
 `docs/build/evidence/windows-app-image-<date>/`: the two JSON evidence files, the gate's
 `java25-verification.json`, the jdeps/jlink/jpackage/module-resolution logs, the per-file image hashes, the
 dependency tree and classpath hashes, and the smoke diagnostics (launcher stderr, UIA tree after the reopen).
-Paths inside the evidence are the machine-local paths of the run that produced it. Note that the Maven artifact
+Paths inside the evidence are the machine-local paths of the run that produced it. The `gitCommit` in both JSON
+files is the commit the run was made *from* — the preceding verified state, not the checkpoint commit — because
+the evidence is captured before the commit that retains it exists; the checkpoint commit is the one that added the
+`docs/build/evidence/windows-app-image-<date>/` directory. Note that the Maven artifact
 is still `jbs2bg-1.0-SNAPSHOT.jar` while the application version is 1.1.2: `project.version` predates the
 modernization and is not what the image stamps; aligning it is a separate decision.
 

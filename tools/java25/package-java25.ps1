@@ -180,7 +180,11 @@ foreach ($module in $lock.javafx.requiredModules) {
     }
     $explodedModules += $classes
 }
-$jdepsArguments = @('--multi-release', "$($lock.targetRelease)", '--ignore-missing-deps', '--print-module-deps',
+# Deliberately no --ignore-missing-deps: the staged payload is the complete runtime classpath, so every class a
+# jar references must resolve against it or the pinned JavaFX modules. With the flag a missing dependency would
+# not stop the run, it would silently shrink the measured closure; without it jdeps fails and Invoke-Native
+# throws, which is the fail-closed behaviour the checkpoint wants. (Verified: the flag changes nothing today.)
+$jdepsArguments = @('--multi-release', "$($lock.targetRelease)", '--print-module-deps',
     '--module-path', ($explodedModules -join ';'),
     '--class-path', (Join-Path $staged.StagingDir 'lib\*')) + @($staged.MainJar) + @($staged.LibJars)
 $jdepsOutput = Invoke-Native -FilePath (Join-Path $jdkHome 'bin\jdeps.exe') -ArgumentList $jdepsArguments -Label 'jdeps'
