@@ -564,7 +564,10 @@ try {
 
     Invoke-SmokeStep -Name 'verify-workbench-shell-and-first-run-settings' -Action {
         foreach ($area in @('Templates', 'Morphs', 'NPC Database', 'Output', 'Settings')) {
-            Get-AreaButton -Name $area | Out-Null
+            $areaButton = Get-AreaButton -Name $area
+            if ($areaButton.Current.HelpText -notlike "Semantic icon: $area.*Keyboard shortcut:*") {
+                throw "The packaged $area action did not expose its selected semantic icon and keyboard cue."
+            }
         }
         foreach ($settingsName in @('settings.json', 'settings_UUNP.json')) {
             if (-not (Test-Path -LiteralPath (Join-Path $workDir $settingsName) -PathType Leaf)) {
@@ -598,7 +601,11 @@ try {
         Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
             -Description 'live High Contrast override' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        Save-Screenshot -Path (Join-Path $diagnosticsDir 'workbench-high-contrast.png')
+        $highContrastScreenshot = Join-Path $diagnosticsDir 'workbench-high-contrast.png'
+        Save-Screenshot -Path $highContrastScreenshot
+        if (-not (Test-Path -LiteralPath $highContrastScreenshot -PathType Leaf)) {
+            throw 'The packaged semantic-icon High Contrast screenshot was not captured.'
+        }
 
         Set-SystemHighContrast -Enabled:$false
         Wait-UiaElement -Root $script:mainWindow -Condition (
@@ -613,10 +620,23 @@ try {
         Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'Text' -Name 'Motion preference: Reduced motion') `
             -Description 'live reduced-motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        Save-Screenshot -Path (Join-Path $diagnosticsDir 'workbench-reduced-motion.png')
+        $reducedMotionScreenshot = Join-Path $diagnosticsDir 'workbench-reduced-motion.png'
+        Save-Screenshot -Path $reducedMotionScreenshot
+        if (-not (Test-Path -LiteralPath $reducedMotionScreenshot -PathType Leaf)) {
+            throw 'The packaged reduced-motion screenshot was not captured.'
+        }
 
         Restore-SystemAccessibilityPreferences -State $accessibilityState
         Send-UiaKeysToElement -Element $themeChoice -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        $systemTheme = Wait-UiaCondition -Description 'System theme resolved from restored Windows preferences' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+                foreach ($name in @('Effective theme: Light theme', 'Effective theme: Dark theme',
+                        'Effective theme: High Contrast theme')) {
+                    $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                        New-UiaCondition -ControlType 'Text' -Name $name)
+                    if ($null -ne $candidate) { return $candidate }
+                }
+            }
         $expectedMotion = if ($accessibilityState.ClientAreaAnimation) {
             'Motion preference: Standard motion'
         } else {
@@ -631,6 +651,7 @@ try {
             reducedMotionObserved = $true
             restoredHighContrast = $accessibilityState.HighContrast
             restoredClientAreaAnimation = $accessibilityState.ClientAreaAnimation
+            systemEffectiveTheme = $systemTheme.Current.Name
             iconImplementation = 'application-owned-bundled-vectors'
         }
         'theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed'
@@ -788,6 +809,10 @@ try {
         if ($null -eq $json.SliderPresets -or $null -eq $json.CustomMorphTargets -or $null -eq $json.MorphedNPCs) {
             throw 'Save As did not write the complete canonical empty Project schema.'
         }
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Success — Save Project — Completed: Project saved.') `
+            -Description 'durable successful Save Activity record' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $observations['firstSaveAs'] = [ordered]@{
             file = $firstSaveName
             sha256 = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -810,10 +835,13 @@ try {
         if ($infoBar.Current.HelpText -cne 'Warning: Project opened with 2 diagnostics.') {
             throw "Warning InfoBar did not expose severity and message: '$($infoBar.Current.HelpText)'"
         }
-        Wait-UiaElement -Root $script:mainWindow -Condition (
+        $activityRecord = Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'ListItem' `
                 -Name 'Warning — Open Project — Completed with issues: Project opened with 2 diagnostics.') `
-            -Description 'durable warning Activity record' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+            -Description 'durable warning Activity record' -TimeoutSeconds $StepTimeoutSeconds
+        if ($activityRecord.Current.HelpText -notmatch '^Timestamp: \d{4}-\d{2}-\d{2}T') {
+            throw "Activity did not expose its timestamp: '$($activityRecord.Current.HelpText)'"
+        }
         $observations['recoveredProject'] = [ordered]@{ title = $script:mainWindow.Current.Name; diagnostics = $text }
         'opened a dirty recovered Project with diagnostics, warning InfoBar, Activity, and status projection'
     }
@@ -858,6 +886,16 @@ try {
         $text = Wait-ProjectDiagnostics -Description 'malformed Project diagnostic' -Predicate {
             param($value) $value.Contains('PROJECT_JSON_MALFORMED')
         }
+        $failureInfoBar = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Group' -Name 'Workbench notification') `
+            -Description 'failure InfoBar region' -TimeoutSeconds $StepTimeoutSeconds
+        if ($failureInfoBar.Current.HelpText -cne 'Failure: Open Project failed with 1 diagnostic.') {
+            throw "Failed Open did not expose its failure InfoBar: '$($failureInfoBar.Current.HelpText)'"
+        }
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Failure — Open Project — Failed: Open Project failed with 1 diagnostic.') `
+            -Description 'durable failed Open Activity record' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $hashAfter = (Get-FileHash -LiteralPath (Join-Path $workDir $recoveryProjectName) -Algorithm SHA256).Hash
         if ($hashAfter -cne $hashBefore) { throw 'Malformed Open changed the active Project bytes.' }
         $observations['malformedOpen'] = [ordered]@{ preservedTitle = $titleBefore; diagnostics = $text }

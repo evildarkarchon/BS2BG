@@ -15,6 +15,7 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.Slider;
@@ -113,7 +114,7 @@ public final class WorkbenchController {
     private TextArea diagnosticsText;
 
     @FXML
-    private ListView<String> activityList;
+    private ListView<WorkbenchFeedback.ActivityRecord> activityList;
 
     @FXML
     private StackPane contentStack;
@@ -184,6 +185,7 @@ public final class WorkbenchController {
         try {
             initialChoice = store.load();
         } catch (IOException exception) {
+            // A damaged or unreadable optional preference must not prevent the Workbench from starting safely.
             initialChoice = WorkbenchAppearance.ThemeChoice.SYSTEM;
         }
         attach(flow, ownerStage, new JavaFxWorkbenchPlatform(), initialChoice, store::save);
@@ -205,7 +207,17 @@ public final class WorkbenchController {
         });
     }
 
-    /** Attaches Project, platform, and profile appearance adapters through one initialization path. */
+    /**
+     * Attaches Project, platform, and profile appearance adapters through one window-lifetime initialization path.
+     *
+     * @param flow authoritative window-scoped Project flow
+     * @param ownerStage Stage that owns dialogs, focus, and the live appearance listener
+     * @param platformAdapter native-effect adapter retained until the Stage is hidden
+     * @param initialChoice persisted System, Light, or Dark choice
+     * @param themeSaver profile persistence callback used after user selection
+     * @throws NullPointerException when an argument is null
+     * @throws IllegalStateException when this controller is already attached
+     */
     private void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
             WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver) {
         if (projectFlow != null)
@@ -305,6 +317,7 @@ public final class WorkbenchController {
 
     /** Connects nonmodal dismissal while leaving the durable Activity record and terminal status intact. */
     private void configureFeedback() {
+        activityList.setCellFactory(list -> new ActivityCell());
         dismissInfoBarButton.setOnAction(event -> renderFeedback(feedback.dismissInfoBar()));
         cancelOperationButton.setDisable(true);
         cancelOperationButton.setAccessibleHelp("No cancellable operation is currently active.");
@@ -338,11 +351,17 @@ public final class WorkbenchController {
 
     /** Adds the selected bundled-vector implementation to every text-labelled Workbench rail action. */
     private void configureSemanticIcons() {
-        templatesAreaButton.setGraphic(SemanticIcons.create(SemanticIcons.IconKey.TEMPLATES, true));
-        morphsAreaButton.setGraphic(SemanticIcons.create(SemanticIcons.IconKey.MORPHS, true));
-        npcDatabaseAreaButton.setGraphic(SemanticIcons.create(SemanticIcons.IconKey.NPC_DATABASE, true));
-        outputAreaButton.setGraphic(SemanticIcons.create(SemanticIcons.IconKey.OUTPUT, true));
-        settingsAreaButton.setGraphic(SemanticIcons.create(SemanticIcons.IconKey.SETTINGS, true));
+        configureSemanticIcon(templatesAreaButton, SemanticIcons.IconKey.TEMPLATES, "Ctrl+1");
+        configureSemanticIcon(morphsAreaButton, SemanticIcons.IconKey.MORPHS, "Ctrl+2");
+        configureSemanticIcon(npcDatabaseAreaButton, SemanticIcons.IconKey.NPC_DATABASE, "Ctrl+3");
+        configureSemanticIcon(outputAreaButton, SemanticIcons.IconKey.OUTPUT, "Ctrl+4 or Ctrl+Backtick");
+        configureSemanticIcon(settingsAreaButton, SemanticIcons.IconKey.SETTINGS, "Ctrl+5");
+    }
+
+    /** Pairs one decorative vector with the text label and exposes its keyboard cue as help text. */
+    private static void configureSemanticIcon(ToggleButton button, SemanticIcons.IconKey key, String shortcut) {
+        button.setGraphic(SemanticIcons.create(key, true));
+        button.setAccessibleHelp("Semantic icon: " + key.accessibleName() + ". Keyboard shortcut: " + shortcut + ".");
     }
 
     /** Renders effective theme and reduced-motion state as explicit non-color text. */
@@ -579,9 +598,9 @@ public final class WorkbenchController {
             }
             returnTarget = currentSemanticFocus();
             WorkbenchFeedback.PendingDialog pendingDialog = null;
-            if (isConfirmation(effect.kind())) {
-                WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(
-                        JavaFxWorkbenchPlatform.dialogSpec(effect.kind()));
+            var dialogSpec = JavaFxWorkbenchPlatform.dialogSpec(effect.kind());
+            if (dialogSpec.isPresent()) {
+                WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(dialogSpec.orElseThrow());
                 pendingDialog = pendingFrame.pendingDialog().orElseThrow();
                 renderFeedback(pendingFrame);
             }
@@ -593,14 +612,6 @@ public final class WorkbenchController {
             }
             current = projectFlow.respond(effect.token(), response);
         }
-    }
-
-    /** Classifies Project effects that must publish typed durable dialog state before opening a modal. */
-    private static boolean isConfirmation(WorkbenchProjectFlow.EffectKind kind) {
-        return switch (kind) {
-            case CONFIRM_CLOSE, CONFIRM_NEW, CONFIRM_OPEN -> true;
-            case CHOOSE_OPEN_PATH, CHOOSE_SAVE_PATH, CLOSE_WINDOW -> false;
-        };
     }
 
     /** Converts a Project confirmation response into the matching typed dialog action. */
@@ -627,7 +638,7 @@ public final class WorkbenchController {
 
     /** Publishes one Project outcome with validation/failure distinctions and a truthful terminal disposition. */
     private void publishProjectFeedback(WorkbenchProjectFlow.Frame frame) {
-        String operation = operationName(activeOperation);
+        OperationDescription operation = operationDescription(activeOperation);
         long diagnosticCount = frame.diagnostics().size();
         boolean failed = frame.diagnostics().stream()
                 .anyMatch(diagnostic -> diagnostic.getSeverity() == DiagnosticSeverity.ERROR);
@@ -637,18 +648,18 @@ public final class WorkbenchController {
         if (failed) {
             severity = WorkbenchFeedback.Severity.FAILURE;
             disposition = WorkbenchFeedback.Disposition.FAILED;
-            message = operation + " failed with " + diagnosticSummary(diagnosticCount) + ".";
+            message = operation.name() + " failed with " + diagnosticSummary(diagnosticCount) + ".";
         } else if (diagnosticCount > 0) {
             severity = WorkbenchFeedback.Severity.WARNING;
             disposition = WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES;
-            message = operationPastTense(activeOperation) + " with " + diagnosticSummary(diagnosticCount) + ".";
+            message = operation.completedText() + " with " + diagnosticSummary(diagnosticCount) + ".";
         } else {
             severity = WorkbenchFeedback.Severity.SUCCESS;
             disposition = WorkbenchFeedback.Disposition.COMPLETED;
-            message = operationPastTense(activeOperation) + ".";
+            message = operation.completedText() + ".";
         }
         renderFeedback(feedback.publish(new WorkbenchFeedback.Notification(
-                operation, severity, message, disposition)));
+                operation.name(), severity, message, disposition)));
     }
 
     /** Renders one committed feedback frame without requesting focus or replaying any platform effect. */
@@ -667,10 +678,7 @@ public final class WorkbenchController {
             infoBar.setManaged(false);
             infoBar.setVisible(false);
         });
-        activityList.getItems().setAll(frame.activities().stream()
-                .map(activity -> activity.cue() + " — " + activity.operation() + " — "
-                        + activity.disposition().displayText() + ": " + activity.message())
-                .toList());
+        activityList.getItems().setAll(frame.activities());
         WorkbenchFeedback.StatusProjection status = frame.status();
         statusText.setText(frame.activities().isEmpty()
                 ? "Ready"
@@ -689,33 +697,55 @@ public final class WorkbenchController {
         node.getStyleClass().add("severity-" + severity.name().toLowerCase(java.util.Locale.ROOT));
     }
 
-    /** Returns the stable Activity operation label for one Project command. */
-    private static String operationName(WorkbenchProjectFlow.Intent intent) {
+    /** Returns the one stable Activity name and terminal sentence fragment for a Project command. */
+    private static OperationDescription operationDescription(WorkbenchProjectFlow.Intent intent) {
         if (intent == null)
-            return "Project operation";
+            return new OperationDescription("Project operation", "Project operation completed");
         return switch (intent) {
-            case NEW -> "New Project";
-            case OPEN -> "Open Project";
-            case SAVE, SAVE_AS -> "Save Project";
-            case CLOSE -> "Close Project";
-        };
-    }
-
-    /** Returns a concise terminal sentence fragment for one successful Project command. */
-    private static String operationPastTense(WorkbenchProjectFlow.Intent intent) {
-        if (intent == null)
-            return "Project operation completed";
-        return switch (intent) {
-            case NEW -> "New Project created";
-            case OPEN -> "Project opened";
-            case SAVE, SAVE_AS -> "Project saved";
-            case CLOSE -> "Project closed";
+            case NEW -> new OperationDescription("New Project", "New Project created");
+            case OPEN -> new OperationDescription("Open Project", "Project opened");
+            case SAVE, SAVE_AS -> new OperationDescription("Save Project", "Project saved");
+            case CLOSE -> new OperationDescription("Close Project", "Project closed");
         };
     }
 
     /** Pluralizes the stable diagnostic count used by InfoBar, Activity, and status projections. */
     private static String diagnosticSummary(long count) {
         return count + (count == 1 ? " diagnostic" : " diagnostics");
+    }
+
+    /** Builds the stable role/name identity used to locate one Activity record without visible-order assumptions. */
+    private static String activityText(WorkbenchFeedback.ActivityRecord activity) {
+        return activity.cue() + " — " + activity.operation() + " — "
+                + activity.disposition().displayText() + ": " + activity.message();
+    }
+
+    /** List cell that exposes durable Activity time separately from its stable semantic locator name. */
+    private static final class ActivityCell extends ListCell<WorkbenchFeedback.ActivityRecord> {
+        /** Publishes text and timestamp accessibility state together whenever JavaFX reuses this cell. */
+        @Override
+        protected void updateItem(WorkbenchFeedback.ActivityRecord activity, boolean empty) {
+            super.updateItem(activity, empty);
+            if (empty || activity == null) {
+                setText(null);
+                setAccessibleText(null);
+                setAccessibleHelp(null);
+                return;
+            }
+            String text = activityText(activity);
+            setText(text);
+            setAccessibleText(text);
+            setAccessibleHelp("Timestamp: " + activity.occurredAt());
+        }
+    }
+
+    /** Typed user-facing operation wording kept together so Activity and terminal summaries cannot drift. */
+    private record OperationDescription(String name, String completedText) {
+        /** Rejects incomplete wording values used by user-facing feedback projections. */
+        private OperationDescription {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(completedText, "completedText");
+        }
     }
 
     /** Profile persistence function whose checked failure becomes nonmodal feedback. */

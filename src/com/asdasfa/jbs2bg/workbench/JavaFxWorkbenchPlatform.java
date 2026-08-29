@@ -2,6 +2,7 @@ package com.asdasfa.jbs2bg.workbench;
 
 import java.io.File;
 import java.util.Objects;
+import java.util.Optional;
 
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -18,8 +19,9 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
         case CHOOSE_OPEN_PATH -> chooseProject(owner, false);
         case CHOOSE_SAVE_PATH -> chooseProject(owner, true);
         case CONFIRM_NEW, CONFIRM_OPEN -> response(JavaFxWorkbenchDialogs.show(
-                dialogSpec(effect.kind()), owner));
-        case CONFIRM_CLOSE -> response(JavaFxWorkbenchDialogs.show(dialogSpec(effect.kind()), owner));
+                dialogSpec(effect.kind()).orElseThrow(), owner));
+        case CONFIRM_CLOSE -> response(JavaFxWorkbenchDialogs.show(
+                dialogSpec(effect.kind()).orElseThrow(), owner));
         case CLOSE_WINDOW -> throw new IllegalArgumentException("CLOSE_WINDOW is not a modal platform effect");
         };
     }
@@ -40,21 +42,33 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
                 : WorkbenchProjectFlow.Response.selected(selected.toPath());
     }
 
-    /** Returns the typed dialog contract for one Project confirmation effect. */
-    static WorkbenchFeedback.DialogSpec dialogSpec(WorkbenchProjectFlow.EffectKind kind) {
+    /**
+     * Returns the typed dialog contract for one Project confirmation effect.
+     *
+     * @param kind Project platform-effect kind
+     * @return typed destructive confirmation request, or empty for chooser/final-window effects
+     * @throws NullPointerException when kind is null
+     */
+    static Optional<WorkbenchFeedback.DialogSpec> dialogSpec(WorkbenchProjectFlow.EffectKind kind) {
         return switch (Objects.requireNonNull(kind, "kind")) {
-            case CONFIRM_NEW -> WorkbenchFeedback.DialogSpec.destructiveConfirmation(
-                    "Create a new Project?", "The current Project has unsaved changes.");
-            case CONFIRM_OPEN -> WorkbenchFeedback.DialogSpec.destructiveConfirmation(
-                    "Open another Project?", "The current Project has unsaved changes.");
-            case CONFIRM_CLOSE -> WorkbenchFeedback.DialogSpec.unsavedClose(
-                    "Save changes before closing?", "Closing now would discard unsaved Project changes.");
-            case CHOOSE_OPEN_PATH, CHOOSE_SAVE_PATH, CLOSE_WINDOW ->
-                    throw new IllegalArgumentException(kind + " is not a Workbench dialog effect");
+            case CONFIRM_NEW -> Optional.of(WorkbenchFeedback.DialogSpec.destructiveConfirmation(
+                    "Create a new Project?", "The current Project has unsaved changes."));
+            case CONFIRM_OPEN -> Optional.of(WorkbenchFeedback.DialogSpec.destructiveConfirmation(
+                    "Open another Project?", "The current Project has unsaved changes."));
+            case CONFIRM_CLOSE -> Optional.of(WorkbenchFeedback.DialogSpec.unsavedClose(
+                    "Save changes before closing?", "Closing now would discard unsaved Project changes."));
+            case CHOOSE_OPEN_PATH, CHOOSE_SAVE_PATH, CLOSE_WINDOW -> Optional.empty();
         };
     }
 
-    /** Converts one typed dialog action to the Project flow's ordinary response intent. */
+    /**
+     * Converts one typed dialog action to the Project flow's ordinary response intent.
+     *
+     * @param action action returned by the typed dialog
+     * @return ordinary Project-flow response
+     * @throws NullPointerException when action is null
+     * @throws IllegalArgumentException when action belongs only to failure dialogs
+     */
     private static WorkbenchProjectFlow.Response response(WorkbenchFeedback.DialogAction action) {
         return switch (Objects.requireNonNull(action, "action")) {
             case SAVE -> WorkbenchProjectFlow.Response.save();

@@ -210,6 +210,7 @@ public static class BS2BGSystemPreferences
     /// Toggles High Contrast while retaining every unrelated HIGHCONTRAST flag and the user's scheme.
     /// </summary>
     /// <param name="enabled">Whether the High Contrast mode bit should be active.</param>
+    /// <exception cref="System.ComponentModel.Win32Exception">Thrown when Windows rejects the query or change.</exception>
     public static void SetHighContrast(bool enabled)
     {
         var current = Capture();
@@ -235,6 +236,8 @@ public static class BS2BGSystemPreferences
     /// Restores exactly the flags, scheme, and animation preference captured before a packaged smoke run.
     /// </summary>
     /// <param name="state">Original preference value returned by Capture.</param>
+    /// <exception cref="ArgumentNullException">Thrown when state is null.</exception>
+    /// <exception cref="System.ComponentModel.Win32Exception">Thrown when Windows rejects either restored value.</exception>
     public static void Restore(BS2BGAccessibilityState state)
     {
         if (state == null) throw new ArgumentNullException("state");
@@ -243,6 +246,7 @@ public static class BS2BGSystemPreferences
     }
 
     /// <summary>Reads the complete native High Contrast structure.</summary>
+    /// <exception cref="System.ComponentModel.Win32Exception">Thrown when Windows rejects the query.</exception>
     private static HIGHCONTRAST ReadHighContrast()
     {
         var value = new HIGHCONTRAST { cbSize = (uint)Marshal.SizeOf(typeof(HIGHCONTRAST)) };
@@ -252,6 +256,7 @@ public static class BS2BGSystemPreferences
     }
 
     /// <summary>Writes a complete native High Contrast structure and broadcasts the live change.</summary>
+    /// <exception cref="System.ComponentModel.Win32Exception">Thrown when Windows rejects the change.</exception>
     private static void WriteHighContrast(uint flags, string scheme)
     {
         IntPtr schemePointer = IntPtr.Zero;

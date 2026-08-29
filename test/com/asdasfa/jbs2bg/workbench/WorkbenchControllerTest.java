@@ -79,10 +79,12 @@ class WorkbenchControllerTest {
             assertEquals("Workbench notification", infoBar.getAccessibleText());
             assertEquals("Warning: Project opened with 2 diagnostics.", infoBar.getAccessibleHelp());
             @SuppressWarnings("unchecked")
-            ListView<String> activity = (ListView<String>) loader.getNamespace().get("activityList");
-            assertEquals(java.util.List.of(
-                    "Warning — Open Project — Completed with issues: Project opened with 2 diagnostics."),
-                    activity.getItems());
+            ListView<WorkbenchFeedback.ActivityRecord> activity =
+                    (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+            assertEquals(1, activity.getItems().size());
+            assertEquals("Open Project", activity.getItems().getFirst().operation());
+            assertEquals(WorkbenchFeedback.Severity.WARNING, activity.getItems().getFirst().severity());
+            assertTrue(activity.getItems().getFirst().occurredAt().isAfter(java.time.Instant.EPOCH));
             assertEquals("Warning — Completed with issues — Project opened with 2 diagnostics.",
                     ((Label) loader.getNamespace().get("statusText")).getText());
             stage.close();
@@ -282,6 +284,7 @@ class WorkbenchControllerTest {
             ToggleButton templates = (ToggleButton) loader.getNamespace().get("templatesAreaButton");
             assertTrue(templates.getGraphic() instanceof javafx.scene.shape.SVGPath);
             assertEquals(AccessibleRole.NODE, templates.getGraphic().getAccessibleRole());
+            assertEquals("Semantic icon: Templates. Keyboard shortcut: Ctrl+1.", templates.getAccessibleHelp());
             stage.close();
         });
     }
