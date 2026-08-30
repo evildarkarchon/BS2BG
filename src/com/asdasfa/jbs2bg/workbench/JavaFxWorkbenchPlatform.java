@@ -26,6 +26,14 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
         };
     }
 
+    /** Shows a typed failure dialog only after durable feedback state has published it. */
+    @Override
+    public WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+        if (Objects.requireNonNull(spec, "spec").kind() != WorkbenchFeedback.DialogKind.FAILURE)
+            throw new IllegalArgumentException("Only failure dialogs use the failure platform seam");
+        return JavaFxWorkbenchDialogs.show(spec, Objects.requireNonNull(owner, "owner"));
+    }
+
     /** Closes the JavaFX Stage after the Project flow has already entered its terminal state. */
     @Override
     public void closeWindow(Stage owner) {

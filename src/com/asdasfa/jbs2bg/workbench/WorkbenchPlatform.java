@@ -15,6 +15,17 @@ interface WorkbenchPlatform {
     WorkbenchProjectFlow.Response complete(WorkbenchProjectFlow.Effect effect, Stage owner);
 
     /**
+     * Completes one typed job-failure dialog that may offer Retry.
+     *
+     * @param spec failure-only dialog specification
+     * @param owner owning application window
+     * @return selected failure action
+     */
+    default WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+        return WorkbenchFeedback.DialogAction.CLOSE;
+    }
+
+    /**
      * Realizes the final at-most-once close-window effect.
      *
      * @param owner application window to close

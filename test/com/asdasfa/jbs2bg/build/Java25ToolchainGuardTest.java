@@ -189,6 +189,27 @@ class Java25ToolchainGuardTest {
                 "presentation Project writes must not bypass WorkbenchProjectFlow");
     }
 
+    /** Coordinator, Project operation context, and Workbench flow bytecode remain independent from JavaFX. */
+    @Test
+    void centralizedJobKernelHasNoJavaFxConstantPoolReferences() throws IOException, URISyntaxException {
+        List<String> violations = new ArrayList<>();
+        Path classesRoot = productionClassesRoot();
+        for (Path classFile : productionClassFiles()) {
+            String relative = classesRoot.relativize(classFile).toString().replace('\\', '/');
+            boolean guarded = relative.startsWith("com/asdasfa/jbs2bg/workbench/jobs/")
+                    || relative.startsWith("com/asdasfa/jbs2bg/workbench/WorkbenchProjectFlow")
+                    || relative.startsWith("com/asdasfa/jbs2bg/project/ProjectOperation");
+            if (!guarded)
+                continue;
+            for (String constant : readConstantPoolText(classFile)) {
+                if (constant.startsWith("javafx/"))
+                    violations.add(relative + " -> " + constant);
+            }
+        }
+        assertEquals(List.of(), violations,
+                "centralized job and Project operation seams must remain JavaFX-independent");
+    }
+
     @Test
     void previewFeaturesAreNotEnabledOnTheTestJvm() {
         List<String> jvmArgs = ManagementFactory.getRuntimeMXBean().getInputArguments();

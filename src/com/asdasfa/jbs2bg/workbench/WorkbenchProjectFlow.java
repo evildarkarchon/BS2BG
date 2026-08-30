@@ -1,19 +1,28 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.TimeUnit;
 
+import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
+import com.asdasfa.jbs2bg.project.CancelledOutcome;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
+import com.asdasfa.jbs2bg.project.ProjectContentVersion;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectEdit;
+import com.asdasfa.jbs2bg.project.ProjectOperationContext;
+import com.asdasfa.jbs2bg.project.ProjectOperationProgress;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSnapshot;
 import com.asdasfa.jbs2bg.project.RejectedOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
+import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 /**
  * Owns the Workbench's sole ProjectSession flow and publishes immutable Project frames.
@@ -112,6 +121,7 @@ public final class WorkbenchProjectFlow {
 
     private final String applicationName;
     private final ProjectSession projectSession;
+    private final JobCoordinator jobs;
     private long sequence;
     private long nextEffectToken;
     private Frame frame;
@@ -125,8 +135,20 @@ public final class WorkbenchProjectFlow {
      * @param projectSession authoritative synchronous Project session
      */
     public WorkbenchProjectFlow(String applicationName, ProjectSession projectSession) {
+        this(applicationName, projectSession, directCoordinator());
+    }
+
+    /**
+     * Creates the sole Workbench Project flow on an injected application-wide job coordinator.
+     *
+     * @param applicationName stable base window title
+     * @param projectSession authoritative synchronous Project session
+     * @param jobs application-wide admission, progress, cancellation, retry, and shutdown owner
+     */
+    public WorkbenchProjectFlow(String applicationName, ProjectSession projectSession, JobCoordinator jobs) {
         this.applicationName = requireApplicationName(applicationName);
         this.projectSession = Objects.requireNonNull(projectSession, "projectSession");
+        this.jobs = Objects.requireNonNull(jobs, "jobs");
         this.nextEffectToken = 1;
         publish(projectSession.newProject());
     }
@@ -134,6 +156,11 @@ public final class WorkbenchProjectFlow {
     /** @return the latest immutable, completely published Workbench Project frame */
     public Frame frame() {
         return frame;
+    }
+
+    /** @return application-wide job coordinator used by this flow and its Workbench adapter */
+    public JobCoordinator jobs() {
+        return jobs;
     }
 
     /**
@@ -144,7 +171,7 @@ public final class WorkbenchProjectFlow {
      */
     public Update request(Intent intent) {
         Objects.requireNonNull(intent, "intent");
-        if (frame.closed() || pendingEffect != null)
+        if (frame.closed() || pendingEffect != null || jobs.frame().active())
             return rejected();
         if (intent == Intent.CLOSE && !frame.snapshot().isDirty())
             return closeWindow();
@@ -248,10 +275,15 @@ public final class WorkbenchProjectFlow {
             return rejected();
         Intent completedIntent = pendingIntent;
         clearPendingEffect();
+        if (completedIntent == Intent.OPEN) {
+            Path source = response.selectedPath().toAbsolutePath().normalize();
+            JobCoordinator.Admission admission = jobs.submit(openSubmission(source));
+            return admission.admitted() ? accepted(null) : rejected();
+        }
         ProjectOutcome outcome = switch (completedIntent) {
         case CLOSE -> projectSession.saveAs(projectPath(response.selectedPath()));
         case NEW -> throw new IllegalStateException("New Project cannot complete from a path chooser");
-        case OPEN -> projectSession.open(response.selectedPath());
+        case OPEN -> throw new AssertionError("Open is admitted through the application job coordinator");
         case SAVE, SAVE_AS -> projectSession.saveAs(projectPath(response.selectedPath()));
         };
         publish(outcome);
@@ -268,7 +300,7 @@ public final class WorkbenchProjectFlow {
 
     /** Rejects immediate legacy feature work while the lifecycle state machine owns a platform effect. */
     private void requireImmediateOperation() {
-        if (frame.closed() || pendingEffect != null)
+        if (frame.closed() || pendingEffect != null || jobs.frame().active())
             throw new IllegalStateException("Workbench Project flow is not accepting immediate operations");
     }
 
@@ -330,5 +362,163 @@ public final class WorkbenchProjectFlow {
     /** Returns the unchanged frame for a request that cannot be accepted. */
     private Update rejected() {
         return new Update(false, frame, Optional.empty());
+    }
+
+    /** Captures one Open attempt and its retry factory without retaining mutable chooser or Project state. */
+    private JobCoordinator.Submission<ProjectOutcome> openSubmission(Path source) {
+        Path capturedSource = Objects.requireNonNull(source, "source").toAbsolutePath().normalize();
+        ProjectContentVersion capturedBasis = projectSession.getSnapshot().getContentVersion();
+        JobCoordinator.Operation operation = new JobCoordinator.Operation("Open Project",
+                List.of(capturedSource.toString()), List.of(), Optional.of(capturedBasis.toString()));
+        return new JobCoordinator.Submission<>(operation, context -> {
+            OpenOperationContext projectContext = new OpenOperationContext(context, capturedBasis);
+            ProjectOutcome outcome = projectSession.open(capturedSource, projectContext);
+            return openResult(outcome, projectContext.stale());
+        }, (attempt, result) -> {
+            boolean stale = result.diagnostics().stream()
+                    .anyMatch(diagnostic -> diagnostic.code().equals("STALE_RESULT"));
+            if (!stale && result.lifecycle() != JobCoordinator.Lifecycle.CANCELLED)
+                result.value().ifPresent(this::publish);
+        }, Optional.of(() -> openSubmission(capturedSource)));
+    }
+
+    /** Classifies one typed Project outcome into durable job disposition, effects, and diagnostics. */
+    private static JobCoordinator.Result<ProjectOutcome> openResult(ProjectOutcome outcome, boolean stale) {
+        List<JobCoordinator.Diagnostic> diagnostics = outcome.getDiagnostics().stream()
+                .map(WorkbenchProjectFlow::jobDiagnostic)
+                .toList();
+        if (stale) {
+            List<JobCoordinator.Diagnostic> staleDiagnostics = new java.util.ArrayList<>(diagnostics);
+            staleDiagnostics.add(new JobCoordinator.Diagnostic("STALE_RESULT",
+                    "Open result was not published because the active Project changed after admission.",
+                    Optional.empty()));
+            return JobCoordinator.Result.completedWithIssues(outcome, "Open result was stale.", List.of(),
+                    staleDiagnostics);
+        }
+        if (outcome instanceof CancelledOutcome)
+            return JobCoordinator.Result.cancelled(outcome, "Open Project cancelled.", List.of(), diagnostics);
+        if (outcome instanceof FailedOutcome || outcome instanceof RejectedOutcome)
+            return JobCoordinator.Result.failed(outcome,
+                    "Open Project failed with " + diagnosticSummary(diagnostics.size()) + ".", diagnostics);
+        if (diagnostics.isEmpty())
+            return JobCoordinator.Result.completed(outcome, "Project opened.", List.of("Project published"),
+                    diagnostics);
+        return JobCoordinator.Result.completedWithIssues(outcome,
+                "Project opened with " + diagnosticSummary(diagnostics.size()) + ".",
+                List.of("Project published"), diagnostics);
+    }
+
+    /** Pluralizes the stable diagnostic count used in terminal Open summaries. */
+    private static String diagnosticSummary(int count) {
+        return count + (count == 1 ? " diagnostic" : " diagnostics");
+    }
+
+    /** Converts one structured Project diagnostic without introducing presentation or JavaFX dependencies. */
+    private static JobCoordinator.Diagnostic jobDiagnostic(ProjectDiagnostic diagnostic) {
+        return new JobCoordinator.Diagnostic(diagnostic.getCode(), diagnostic.getMessage(),
+                Optional.of(ProjectDiagnosticFormatter.format(List.of(diagnostic))));
+    }
+
+    /** Builds the immediate coordinator retained by synchronous kernel tests and compatibility callers. */
+    private static JobCoordinator directCoordinator() {
+        return new JobCoordinator(new DirectExecutorService(), Runnable::run, Clock.systemUTC(),
+                (delay, action) -> () -> {
+                    // Immediate compatibility work cannot remain in Cancelling long enough for this timer.
+                }, failure -> {
+                    // Compatibility callers have no technical diagnostics surface; the coordinator still retains it.
+                });
+    }
+
+    /** Project-operation adapter bound to one captured content version and one coordinator attempt. */
+    private final class OpenOperationContext implements ProjectOperationContext {
+        private final JobCoordinator.Context jobContext;
+        private final ProjectContentVersion capturedBasis;
+        private boolean stale;
+
+        /** Captures immutable freshness state for exactly one Open worker invocation. */
+        private OpenOperationContext(JobCoordinator.Context jobContext, ProjectContentVersion capturedBasis) {
+            this.jobContext = Objects.requireNonNull(jobContext, "jobContext");
+            this.capturedBasis = Objects.requireNonNull(capturedBasis, "capturedBasis");
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public boolean cancellationRequested() {
+            return jobContext.cancellationRequested();
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public void report(ProjectOperationProgress progress) {
+            ProjectOperationProgress reported = Objects.requireNonNull(progress, "progress");
+            JobCoordinator.Progress jobProgress;
+            if (reported.completedUnits().isPresent()) {
+                jobProgress = JobCoordinator.Progress.determinate(reported.phase(),
+                        reported.completedUnits().orElseThrow(), reported.totalUnits().orElseThrow());
+            } else {
+                jobProgress = JobCoordinator.Progress.indeterminate(reported.phase(), true);
+            }
+            jobContext.report(jobProgress);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public boolean beginCommit(String phase) {
+            if (!capturedBasis.equals(projectSession.getSnapshot().getContentVersion())) {
+                stale = true;
+                return false;
+            }
+            return jobContext.beginCommit(phase);
+        }
+
+        /** @return whether freshness, rather than user cancellation, refused publication */
+        private boolean stale() {
+            return stale;
+        }
+    }
+
+    /** ExecutorService adapter that runs one submitted task inline for compatibility tests. */
+    private static final class DirectExecutorService extends AbstractExecutorService {
+        private boolean shutdown;
+
+        /** Rejects no task before shutdown and runs accepted work on the calling thread. */
+        @Override
+        public void execute(Runnable command) {
+            if (shutdown)
+                throw new java.util.concurrent.RejectedExecutionException("Direct coordinator is shut down");
+            Objects.requireNonNull(command, "command").run();
+        }
+
+        /** Prevents later compatibility submissions. */
+        @Override
+        public void shutdown() {
+            shutdown = true;
+        }
+
+        /** Prevents later work; inline execution leaves no queued tasks to return. */
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown = true;
+            return List.of();
+        }
+
+        /** @return whether shutdown was requested */
+        @Override
+        public boolean isShutdown() {
+            return shutdown;
+        }
+
+        /** @return whether shutdown was requested, since inline work never remains queued */
+        @Override
+        public boolean isTerminated() {
+            return shutdown;
+        }
+
+        /** Inline work is already settled whenever this method is reached. */
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            Objects.requireNonNull(unit, "unit");
+            return shutdown;
+        }
     }
 }

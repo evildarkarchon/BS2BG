@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG Preview Workbench through its lifecycle and platform contract (issues #98-#100).
+    Drives the packaged BS2BG Preview Workbench through its lifecycle and platform contract (issues #98-#101).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
@@ -9,7 +9,8 @@
     Windows UI Automation by accessible role and name. The run covers typed navigation, focus cycling and return,
     Output drawer interaction, responsive/minimum geometry, live themes, High Contrast, reduced motion,
     accessibility semantics, notifications, typed dialogs, startup, New, Open, Save, Save As, Project recovery,
-    malformed/failed operation preservation, retry, dirty shutdown cancellation, and bounded process exit.
+    centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
+    malformed/failed operation preservation, coordinated dirty shutdown, and bounded process exit.
 #>
 [CmdletBinding()]
 param(
@@ -40,6 +41,7 @@ $saveDialogTitle = 'Save BS2BG Project'
 $openedProjectName = 'representative.jbs2bg'
 $recoveryProjectName = 'recovery-source.jbs2bg'
 $malformedProjectName = 'malformed-project.jbs2bg'
+$cancellableProjectName = 'cancellable-project.jbs2bg'
 $firstSaveName = 'new-project.jbs2bg'
 $retrySaveName = 'save-retry.jbs2bg'
 $shutdownProjectName = 'shutdown-recovery.jbs2bg'
@@ -59,6 +61,34 @@ $script:stdoutTask = $null
 $script:stderrTask = $null
 $imageRoot = Join-Path $WorkRoot 'image'
 $workDir = Join-Path $WorkRoot 'work'
+
+<#
+.SYNOPSIS
+    Writes a valid high-token-count Project used to keep packaged Open at cooperative parser safe points.
+.PARAMETER Path
+    Destination fixture path.
+.PARAMETER ChoiceCount
+    Number of unique Slider choices in the one detached preset.
+.NOTES
+    The fixture creates natural parsing work without adding production sleeps or test-only application behavior.
+#>
+function New-CancellableProjectFixture {
+    param([Parameter(Mandatory)] [string]$Path, [int]$ChoiceCount = 120000)
+    $utf8 = [System.Text.UTF8Encoding]::new($false)
+    $writer = [System.IO.StreamWriter]::new($Path, $false, $utf8, 1MB)
+    try {
+        $writer.Write('{"SliderPresets":{"Cancellable":{"isUUNP":false,"SetSliders":[')
+        for ($index = 0; $index -lt $ChoiceCount; $index++) {
+            if ($index -gt 0) { $writer.Write(',') }
+            $writer.Write(('{"name":"Cancel{0:D6}","enabled":true,"valueSmall":1,' +
+                    '"valueBig":2,"pctMin":0,"pctMax":100}') -f $index)
+        }
+        $writer.Write(']}},"CustomMorphTargets":{},"MorphedNPCs":{}}')
+    }
+    finally {
+        $writer.Dispose()
+    }
+}
 
 <#
 .SYNOPSIS
@@ -550,12 +580,15 @@ try {
         Copy-Item -LiteralPath $FixtureProject -Destination (Join-Path $workDir $openedProjectName)
         Copy-Item -LiteralPath $FixtureRecoveryProject -Destination (Join-Path $workDir $recoveryProjectName)
         Copy-Item -LiteralPath $FixtureMalformedProject -Destination (Join-Path $workDir $malformedProjectName)
+        $cancellableProject = Join-Path $workDir $cancellableProjectName
+        New-CancellableProjectFixture -Path $cancellableProject
         $observations['extractedImage'] = Join-Path $imageRoot $LauncherName
         $observations['launcher'] = $launcherPath
         $observations['launcherSha256'] = (Get-FileHash -LiteralPath $launcherPath -Algorithm SHA256).Hash.ToLowerInvariant()
         $observations['archiveSha256'] = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
         $observations['workingDirectory'] = $workDir
-        "extracted archive and installed three Project fixtures in $workDir"
+        $observations['cancellableProjectBytes'] = (Get-Item -LiteralPath $cancellableProject).Length
+        "extracted archive and installed four Project fixtures in $workDir"
     }
 
     Invoke-SmokeStep -Name 'launch-workbench-without-system-java' -Action {
@@ -842,6 +875,13 @@ try {
         if ($activityRecord.Current.HelpText -notmatch '^Timestamp: \d{4}-\d{2}-\d{2}T') {
             throw "Activity did not expose its timestamp: '$($activityRecord.Current.HelpText)'"
         }
+        foreach ($evidence in @('Attempt:', 'Sources:', $recoveryProjectName, 'Captured basis: Project content version',
+                'Effects committed: Project published', 'Diagnostics: SLIDER_PRESET_ASSIGNMENT_MISSING',
+                'Retry available: true')) {
+            if (-not $activityRecord.Current.HelpText.Contains($evidence)) {
+                throw "Recovered Open Activity omitted '$evidence': '$($activityRecord.Current.HelpText)'"
+            }
+        }
         $observations['recoveredProject'] = [ordered]@{ title = $script:mainWindow.Current.Name; diagnostics = $text }
         'opened a dirty recovered Project with diagnostics, warning InfoBar, Activity, and status projection'
     }
@@ -877,11 +917,12 @@ try {
         'Save used the adopted identity and published a clean file-backed Project'
     }
 
-    Invoke-SmokeStep -Name 'malformed-open-preserves-active-project' -Action {
+    Invoke-SmokeStep -Name 'malformed-open-preserves-active-project-and-linked-retry' -Action {
         $titleBefore = $script:mainWindow.Current.Name
         $hashBefore = (Get-FileHash -LiteralPath (Join-Path $workDir $recoveryProjectName) -Algorithm SHA256).Hash
         Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
         Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $malformedProjectName) -ConfirmButton 'Open'
+        Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $applicationTitle -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Wait-MainWindow -Title $titleBefore | Out-Null
         $text = Wait-ProjectDiagnostics -Description 'malformed Project diagnostic' -Predicate {
             param($value) $value.Contains('PROJECT_JSON_MALFORMED')
@@ -891,14 +932,86 @@ try {
         if ($failureMessage.Current.Name -cne 'Open Project failed with 1 diagnostic.') {
             throw "Failed Open did not expose its related failure message: '$($failureMessage.Current.Name)'"
         }
-        Wait-UiaElement -Root $script:mainWindow -Condition (
+        $failedActivity = Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'ListItem' `
                 -Name 'Failure — Open Project — Failed: Open Project failed with 1 diagnostic.') `
-            -Description 'durable failed Open Activity record' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+            -Description 'durable failed Open Activity record' -TimeoutSeconds $StepTimeoutSeconds
+        foreach ($evidence in @('Attempt:', 'Effects committed: none', 'Diagnostics: PROJECT_JSON_MALFORMED',
+                'Retry available: true')) {
+            if (-not $failedActivity.Current.HelpText.Contains($evidence)) {
+                throw "Failed Open Activity omitted '$evidence': '$($failedActivity.Current.HelpText)'"
+            }
+        }
         $hashAfter = (Get-FileHash -LiteralPath (Join-Path $workDir $recoveryProjectName) -Algorithm SHA256).Hash
         if ($hashAfter -cne $hashBefore) { throw 'Malformed Open changed the active Project bytes.' }
-        $observations['malformedOpen'] = [ordered]@{ preservedTitle = $titleBefore; diagnostics = $text }
-        'malformed Open reported a stable diagnostic and preserved active file identity and bytes'
+
+        Copy-Item -LiteralPath $FixtureProject -Destination (Join-Path $workDir $malformedProjectName) -Force
+        Choose-Confirmation -ButtonName 'Retry'
+        Wait-MainWindow -Title "$applicationTitle - $malformedProjectName" | Out-Null
+        $retryCondition = New-UiaCondition -ControlType 'ListItem' -Name 'Success — Open Project — Completed: Project opened.'
+        $retryActivity = Wait-UiaElement -Root $script:mainWindow -Condition $retryCondition -Description 'durable linked Retry Activity record' -TimeoutSeconds $StepTimeoutSeconds
+        foreach ($evidence in @('Retry of attempt:', $malformedProjectName,
+                'Effects committed: Project published', 'Diagnostics: none')) {
+            if (-not $retryActivity.Current.HelpText.Contains($evidence)) {
+                throw "Retried Open Activity omitted '$evidence': '$($retryActivity.Current.HelpText)'"
+            }
+        }
+        $observations['malformedOpen'] = [ordered]@{
+            preservedTitle = $titleBefore
+            diagnostics = $text
+            retryLinked = $true
+            retrySource = $malformedProjectName
+        }
+        'malformed Open preserved active bytes; Retry re-read the repaired source as a linked successful attempt'
+    }
+
+    Invoke-SmokeStep -Name 'central-job-admission-progress-and-cancellation' -Action {
+        $titleBefore = $script:mainWindow.Current.Name
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $cancellableProjectName) -ConfirmButton 'Open'
+        $progressCondition = New-UiaCondition -ControlType 'ProgressBar' -Name 'Current operation progress'
+        $progress = Wait-UiaCondition -Description 'truthful active Open phase progress' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition $progressCondition
+            if ($null -ne $candidate -and
+                    $candidate.Current.HelpText -match 'Open Project, (Reading|Parsing|Validating) Project') {
+                return $candidate
+            }
+        }
+        $cancel = Wait-UiaCondition -Description 'enabled Open cancellation control' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Button' -Name 'Cancel current operation')
+            if ($null -ne $candidate -and $candidate.Current.IsEnabled) { return $candidate }
+        }
+        $progressEvidence = $progress.Current.HelpText
+
+        $fileMenu = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'MenuItem' -Name 'File') -Description "'File' menu during active Open" -TimeoutSeconds $StepTimeoutSeconds
+        Invoke-UiaElement -Element $fileMenu
+        foreach ($blockedItem in @('New', 'Open…', 'Save', 'Save As…')) {
+            $item = Wait-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'MenuItem' -Name $blockedItem) -Description "'$blockedItem' during active Open" -TimeoutSeconds $StepTimeoutSeconds
+            if ($item.Current.IsEnabled) { throw "$blockedItem remained enabled while Open owned admission." }
+        }
+        $exitItem = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'MenuItem' -Name 'Exit') -Description "'Exit' during active Open" -TimeoutSeconds $StepTimeoutSeconds
+        if (-not $exitItem.Current.IsEnabled) { throw 'Exit was disabled while Open owned admission.' }
+        Send-UiaAccelerator -Window $script:mainWindow -Keys '{ESC}'
+
+        Send-UiaKeysToElement -Element $cancel -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $cancelledCondition = New-UiaCondition -ControlType 'ListItem' -Name 'Information — Open Project — Cancelled: Cancellation completed.'
+        $cancelledActivity = Wait-UiaElement -Root $script:mainWindow -Condition $cancelledCondition -Description 'durable cancelled Open Activity' -TimeoutSeconds $StepTimeoutSeconds
+        foreach ($evidence in @($cancellableProjectName, 'Effects committed: none', 'Diagnostics: none')) {
+            if (-not $cancelledActivity.Current.HelpText.Contains($evidence)) {
+                throw "Cancelled Open Activity omitted '$evidence': '$($cancelledActivity.Current.HelpText)'"
+            }
+        }
+        Wait-MainWindow -Title $titleBefore | Out-Null
+        $observations['centralJobCancellation'] = [ordered]@{
+            progress = $progressEvidence
+            preservedTitle = $titleBefore
+            effects = 'none'
+        }
+        'one Open owned global admission, published truthful progress, accepted Cancel, and committed no effect'
     }
 
     Invoke-SmokeStep -Name 'failed-save-preserves-dirty-project-then-save-as-recovers' -Action {
@@ -926,20 +1039,34 @@ try {
         'failed Save preserved dirty identity and diagnostics; Save As retry recovered to a clean identity'
     }
 
-    Invoke-SmokeStep -Name 'dirty-shutdown-cancel-then-discard' -Action {
+    Invoke-SmokeStep -Name 'active-job-shutdown-cancel-resume-then-discard' -Action {
         $shutdownProject = Join-Path $workDir $shutdownProjectName
         Copy-Item -LiteralPath $FixtureRecoveryProject -Destination $shutdownProject
         Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
         Complete-FileDialog -Title $openDialogTitle -Path $shutdownProject -ConfirmButton 'Open'
         Wait-MainWindow -Title "$applicationTitle - *$shutdownProjectName" | Out-Null
 
+        Send-FileCommand -Item 'Open…' -DialogTitle $applicationTitle
+        Choose-Confirmation -ButtonName 'Discard'
+        Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $cancellableProjectName) -ConfirmButton 'Open'
+        $activeProgress = New-UiaCondition -ControlType 'ProgressBar' -Name 'Current operation progress'
+        Wait-UiaElement -Root $script:mainWindow -Condition $activeProgress -Description 'Open progress before shutdown' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Close-UiaWindow -Window $script:mainWindow
         Choose-Confirmation -ButtonName 'Cancel'
         Wait-MainWindow -Title "$applicationTitle - *$shutdownProjectName" | Out-Null
         if ($script:app.HasExited) { throw 'Shutdown Cancel unexpectedly exited the application.' }
 
+        Send-FileCommand -Item 'Open…' -DialogTitle $applicationTitle
+        Choose-Confirmation -ButtonName 'Discard'
+        Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $cancellableProjectName) -ConfirmButton 'Open'
+        Wait-UiaElement -Root $script:mainWindow -Condition $activeProgress -Description 'Open progress after shutdown resume' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Close-UiaWindow -Window $script:mainWindow
         Choose-Confirmation -ButtonName 'Discard'
+        $observations['activeJobShutdown'] = [ordered]@{
+            cancellationSettledBeforePrompt = $true
+            cancelResumedAdmission = $true
+            secondCloseDiscarded = $true
+        }
         Assert-PackagedExit
     }
 
@@ -984,7 +1111,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/8'
+        schema = 'bs2bg.windows-app-image-smoke/9'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion

@@ -7,6 +7,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.Objects;
+import java.util.concurrent.CancellationException;
 
 /**
  * Publishes canonical Project bytes through a sibling staging file and replaces
@@ -42,7 +44,24 @@ final class ProjectFileWriter {
      *         environmental failure
      */
     static void write(ProjectSnapshot snapshot, Path target) throws IOException {
+        write(snapshot, target, ProjectOperationContext.nonCancellable());
+    }
+
+    /**
+     * Persists one snapshot with measured staging progress and a cancellation-linearized replacement.
+     *
+     * @param snapshot immutable Project content to persist
+     * @param target requested destination file
+     * @param context operation context retained for this synchronous write
+     * @throws IOException when staging or replacement fails
+     * @throws CancellationException when cancellation wins before replacement
+     */
+    static void write(ProjectSnapshot snapshot, Path target, ProjectOperationContext context) throws IOException {
+        ProjectOperationContext operation = Objects.requireNonNull(context, "context");
+        operation.report(ProjectOperationProgress.indeterminate("Serializing Project"));
+        operation.checkCancellation();
         byte[] content = ProjectJacksonAdapter.write(snapshot);
+        operation.checkCancellation();
         Path normalizedTarget = target.toAbsolutePath().normalize();
         Path parent = normalizedTarget.getParent();
         if (parent == null)
@@ -57,7 +76,10 @@ final class ProjectFileWriter {
 
         Path temporary = Files.createTempFile(parent, prefix, ".tmp");
         try {
-            writeAndFlush(temporary, content);
+            writeAndFlush(temporary, content, operation);
+            operation.checkCancellation();
+            if (!operation.beginCommit("Replacing Project file"))
+                throw new CancellationException("Project save cancellation was accepted before replacement");
             replace(temporary, normalizedTarget);
         } catch (IOException failure) {
             cleanupTemporary(temporary, failure);
@@ -107,12 +129,21 @@ final class ProjectFileWriter {
      * @param content serialized UTF-8 Project bytes
      * @throws IOException when writing or flushing fails
      */
-    private static void writeAndFlush(Path temporary, byte[] content) throws IOException {
+    private static void writeAndFlush(Path temporary, byte[] content, ProjectOperationContext context)
+            throws IOException {
         try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE,
                 StandardOpenOption.TRUNCATE_EXISTING)) {
             ByteBuffer buffer = ByteBuffer.wrap(content);
-            while (buffer.hasRemaining())
+            context.report(content.length == 0
+                    ? ProjectOperationProgress.indeterminate("Staging Project file")
+                    : ProjectOperationProgress.determinate("Staging Project file", 0, content.length));
+            while (buffer.hasRemaining()) {
+                context.checkCancellation();
                 channel.write(buffer);
+                if (content.length > 0)
+                    context.report(ProjectOperationProgress.determinate("Staging Project file",
+                            buffer.position(), content.length));
+            }
             channel.force(true);
         }
     }

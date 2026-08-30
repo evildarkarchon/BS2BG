@@ -7,8 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -18,6 +25,7 @@ import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
+import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 import javafx.css.PseudoClass;
 import javafx.event.ActionEvent;
@@ -30,6 +38,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleButton;
@@ -149,6 +158,106 @@ class WorkbenchControllerTest {
             assertTrue(diagnostics.contains("/SliderPresets"));
             assertTrue(diagnostics.contains("line "));
             assertTrue(diagnostics.contains("column "));
+            stage.close();
+        });
+    }
+
+    /** A failed Activity exposes Retry, which re-reads the source and publishes coordinator-owned linkage. */
+    @Test
+    void failedOpenActivityCanRetryWithFreshlyCapturedInputs() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path source = temporaryDirectory.resolve("retry-source.jbs2bg");
+        Files.copy(Path.of("test-resources", "json-oracles", "project", "malformed-syntax.jbs2bg"), source);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondWith(WorkbenchProjectFlow.Response.selected(source));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, platform);
+            ((MenuItem) loader.getNamespace().get("openProjectMenuItem")).fire();
+            @SuppressWarnings("unchecked")
+            ListView<WorkbenchFeedback.ActivityRecord> activity =
+                    (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+            activity.getSelectionModel().selectLast();
+            Button retry = (Button) loader.getNamespace().get("retryActivityButton");
+            assertFalse(retry.isDisabled());
+
+            Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            retry.fire();
+
+            assertEquals(source.toAbsolutePath().normalize(),
+                    flow.frame().snapshot().getFileIdentity().orElseThrow());
+            WorkbenchFeedback.ActivityRecord retried = activity.getItems().getLast();
+            assertTrue(retried.jobDetails().orElseThrow().retryOf().isPresent());
+            assertEquals(java.util.List.of("Project published"),
+                    retried.jobDetails().orElseThrow().effectsCommitted());
+            stage.close();
+        });
+    }
+
+    /** Active Open disables global launchers, exposes progress, and accepts deterministic pre-start cancellation. */
+    @Test
+    void activeJobOwnsAdmissionProgressAndCancelControls() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path source = temporaryDirectory.resolve("queued-source.jbs2bg");
+        Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source);
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Pre-start cancellation settles before prolonged feedback is relevant.
+                }, failure -> {
+                    throw new AssertionError("Unexpected callback failure", failure);
+                });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondWith(WorkbenchProjectFlow.Response.selected(source));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, platform);
+            MenuItem open = (MenuItem) loader.getNamespace().get("openProjectMenuItem");
+            MenuItem create = (MenuItem) loader.getNamespace().get("newProjectMenuItem");
+            MenuItem save = (MenuItem) loader.getNamespace().get("saveProjectMenuItem");
+            MenuItem exit = (MenuItem) loader.getNamespace().get("exitMenuItem");
+            Button cancel = (Button) loader.getNamespace().get("cancelOperationButton");
+            ProgressBar progress = (ProgressBar) loader.getNamespace().get("operationProgress");
+
+            open.fire();
+
+            assertTrue(open.isDisable());
+            assertTrue(create.isDisable());
+            assertTrue(save.isDisable());
+            assertFalse(exit.isDisable());
+            assertTrue(progress.isVisible());
+            assertEquals(ProgressBar.INDETERMINATE_PROGRESS, progress.getProgress());
+            assertFalse(cancel.isDisable());
+
+            cancel.fire();
+
+            assertFalse(jobs.frame().active());
+            assertEquals(JobCoordinator.Lifecycle.CANCELLED,
+                    jobs.frame().attempt().orElseThrow().lifecycle());
+            assertFalse(open.isDisable());
+            assertFalse(progress.isVisible());
+            assertTrue(cancel.isDisable());
+            @SuppressWarnings("unchecked")
+            ListView<WorkbenchFeedback.ActivityRecord> activity =
+                    (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+            assertEquals(WorkbenchFeedback.Disposition.CANCELLED,
+                    activity.getItems().getLast().disposition());
+            assertTrue(activity.getItems().getLast().jobDetails().orElseThrow()
+                    .effectsCommitted().isEmpty());
+            worker.runNext();
             stage.close();
         });
     }
@@ -371,6 +480,57 @@ class WorkbenchControllerTest {
         @Override
         public void closeWindow(Stage owner) {
             closeCount++;
+        }
+    }
+
+    /** FIFO executor that leaves admitted Workbench work queued until a test advances it. */
+    private static final class ManualExecutor extends AbstractExecutorService {
+        private final Deque<Runnable> tasks = new ArrayDeque<>();
+        private boolean shutdown;
+
+        /** Queues one worker action without running it. */
+        @Override
+        public void execute(Runnable command) {
+            tasks.addLast(Objects.requireNonNull(command, "command"));
+        }
+
+        /** Prevents later submissions. */
+        @Override
+        public void shutdown() {
+            shutdown = true;
+        }
+
+        /** Prevents later work and returns the queued actions. */
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown = true;
+            List<Runnable> remaining = List.copyOf(tasks);
+            tasks.clear();
+            return remaining;
+        }
+
+        /** @return whether shutdown was requested */
+        @Override
+        public boolean isShutdown() {
+            return shutdown;
+        }
+
+        /** @return whether shutdown was requested after the queue drained */
+        @Override
+        public boolean isTerminated() {
+            return shutdown && tasks.isEmpty();
+        }
+
+        /** Deterministic tests never block for termination. */
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            Objects.requireNonNull(unit, "unit");
+            return isTerminated();
+        }
+
+        /** Runs the oldest queued action, including a Future already cancelled before start. */
+        private void runNext() {
+            tasks.removeFirst().run();
         }
     }
 }

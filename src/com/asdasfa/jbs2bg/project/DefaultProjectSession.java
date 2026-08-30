@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.concurrent.CancellationException;
 
 import javax.xml.parsers.ParserConfigurationException;
 
@@ -34,13 +35,20 @@ final class DefaultProjectSession implements ProjectSession {
      * Published view for lock-free readers; volatile so {@link #getSnapshot()} sees
      * a complete snapshot without taking the operation lock.
      */
-    private volatile ProjectSnapshot snapshot = ProjectSnapshot.noProject();
+    private volatile ProjectSnapshot snapshot;
     /**
      * Source of truth for Project content. Read and written only under the
      * operation lock, and always swapped together with {@link #snapshot} by
      * {@link #publish}, so the two never disagree about content.
      */
     private Project project = Project.empty();
+    private ProjectContentVersion contentVersion;
+
+    /** Creates one independent content-version scope and its coherent pre-lifecycle snapshot. */
+    DefaultProjectSession() {
+        contentVersion = ProjectContentVersion.initial(new Object());
+        snapshot = ProjectSnapshot.noProject(contentVersion);
+    }
 
     /**
      * {@inheritDoc}
@@ -60,7 +68,7 @@ final class DefaultProjectSession implements ProjectSession {
             // Project on a pristine untitled Project is Unchanged by identity, while
             // a Project that edits emptied again is a different (dirty) instance.
             return publish(Project.empty(), Optional.<Path>empty(), false, ProjectLifecycleStatus.UNTITLED,
-                    NO_DIAGNOSTICS);
+                    true, NO_DIAGNOSTICS);
         }
     }
 
@@ -68,19 +76,25 @@ final class DefaultProjectSession implements ProjectSession {
      * {@inheritDoc}
      */
     @Override
-    public ProjectOutcome open(Path source) {
+    public ProjectOutcome open(Path source, ProjectOperationContext context) {
         Objects.requireNonNull(source, "source");
+        ProjectOperationContext operation = Objects.requireNonNull(context, "context");
         synchronized (operationLock) {
             try {
-                ProjectFileLoader.LoadedProject loaded = ProjectFileLoader.load(source);
+                ProjectFileLoader.LoadedProject loaded = ProjectFileLoader.load(source, operation);
                 ProjectSnapshot loadedSnapshot = loaded.getSnapshot();
                 // Constructing the aggregate re-validates name uniqueness and dangling
                 // Slider Preset references at the session publication boundary. The
                 // adapter already performs this check on its detached candidate, so a
                 // violation here is a cutover regression rather than publishable state.
                 Project opened = Project.from(loadedSnapshot);
+                operation.checkCancellation();
+                if (!operation.beginCommit("Publishing Project"))
+                    return new CancelledOutcome(snapshot);
                 return publish(opened, loadedSnapshot.getFileIdentity(), loadedSnapshot.isDirty(),
-                        loadedSnapshot.getLifecycleStatus(), loaded.getDiagnostics());
+                        loadedSnapshot.getLifecycleStatus(), true, loaded.getDiagnostics());
+            } catch (CancellationException exception) {
+                return new CancelledOutcome(snapshot);
             } catch (ProjectJacksonAdapter.ProjectFormatException exception) {
                 return projectFormatFailure(source, exception);
             } catch (RuntimeException exception) {
@@ -130,12 +144,13 @@ final class DefaultProjectSession implements ProjectSession {
      * {@inheritDoc}
      */
     @Override
-    public ProjectOutcome save() {
+    public ProjectOutcome save(ProjectOperationContext context) {
+        ProjectOperationContext operation = Objects.requireNonNull(context, "context");
         synchronized (operationLock) {
             if (snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT)
                 return rejectedActiveProjectRequired();
             if (snapshot.getFileIdentity().isPresent())
-                return persist(snapshot.getFileIdentity().get());
+                return persist(snapshot.getFileIdentity().get(), operation);
             SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("project-file"),
                     OptionalInt.empty(), OptionalInt.empty());
             return rejected(ProjectDiagnosticCodes.FILE_IDENTITY_REQUIRED, location,
@@ -147,12 +162,13 @@ final class DefaultProjectSession implements ProjectSession {
      * {@inheritDoc}
      */
     @Override
-    public ProjectOutcome saveAs(Path target) {
+    public ProjectOutcome saveAs(Path target, ProjectOperationContext context) {
         Objects.requireNonNull(target, "target");
+        ProjectOperationContext operation = Objects.requireNonNull(context, "context");
         synchronized (operationLock) {
             if (snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT)
                 return rejectedActiveProjectRequired();
-            return persist(target);
+            return persist(target, operation);
         }
     }
 
@@ -160,8 +176,9 @@ final class DefaultProjectSession implements ProjectSession {
      * {@inheritDoc}
      */
     @Override
-    public SliderPresetImportOutcome importSliderPresets(List<Path> sources) {
+    public SliderPresetImportOutcome importSliderPresets(List<Path> sources, ProjectOperationContext context) {
         List<Path> selectedSources = ImmutableValues.copyOf(sources, "sources");
+        ProjectOperationContext operation = Objects.requireNonNull(context, "context");
         synchronized (operationLock) {
             if (snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT) {
                 List<ProjectOutcome> rejectedSources = new ArrayList<>();
@@ -175,13 +192,32 @@ final class DefaultProjectSession implements ProjectSession {
             List<ProjectDiagnostic> diagnostics = new ArrayList<>();
             boolean rejected = false;
             boolean failed = false;
-            for (Path source : selectedSources) {
-                ProjectOutcome sourceOutcome = importSliderPresetSource(source);
+            boolean cancelled = false;
+            for (int index = 0; index < selectedSources.size(); index++) {
+                Path source = selectedSources.get(index);
+                try {
+                    operation.checkCancellation();
+                    operation.report(ProjectOperationProgress.determinate("Importing Slider Preset sources",
+                            index, selectedSources.size()));
+                    operation.checkCancellation();
+                } catch (CancellationException exception) {
+                    cancelled = true;
+                    while (sourceOutcomes.size() < selectedSources.size())
+                        sourceOutcomes.add(new CancelledOutcome(snapshot));
+                    break;
+                }
+                ProjectOutcome sourceOutcome = importSliderPresetSource(source, operation);
                 sourceOutcomes.add(sourceOutcome);
                 diagnostics.addAll(sourceOutcome.getDiagnostics());
                 ImportOutcomeKind outcomeKind = importOutcomeKind(sourceOutcome);
                 rejected |= outcomeKind == ImportOutcomeKind.REJECTED;
                 failed |= outcomeKind == ImportOutcomeKind.FAILED;
+                if (outcomeKind == ImportOutcomeKind.CANCELLED) {
+                    cancelled = true;
+                    while (sourceOutcomes.size() < selectedSources.size())
+                        sourceOutcomes.add(new CancelledOutcome(snapshot));
+                    break;
+                }
             }
 
             List<ProjectOutcome> finalSourceOutcomes = new ArrayList<>();
@@ -194,7 +230,9 @@ final class DefaultProjectSession implements ProjectSession {
             // changed exactly when the aggregate is no longer the instance it started
             // from. Without a change, rejection distinguishes invalid content from a
             // batch made solely of environmental failures; exact kinds remain per file.
-            if (project != before)
+            if (cancelled)
+                projectOutcome = new CancelledOutcome(snapshot, diagnostics);
+            else if (project != before)
                 projectOutcome = new ChangedOutcome(snapshot, diagnostics);
             else if (rejected)
                 projectOutcome = new RejectedOutcome(snapshot, diagnostics);
@@ -222,6 +260,8 @@ final class DefaultProjectSession implements ProjectSession {
             return new RejectedOutcome(finalSnapshot, outcome.getDiagnostics());
         case FAILED:
             return new FailedOutcome(finalSnapshot, outcome.getDiagnostics());
+        case CANCELLED:
+            return new CancelledOutcome(finalSnapshot, outcome.getDiagnostics());
         case UNCHANGED:
             return new UnchangedOutcome(finalSnapshot, outcome.getDiagnostics());
         default:
@@ -243,6 +283,8 @@ final class DefaultProjectSession implements ProjectSession {
             return ImportOutcomeKind.REJECTED;
         if (outcome instanceof FailedOutcome)
             return ImportOutcomeKind.FAILED;
+        if (outcome instanceof CancelledOutcome)
+            return ImportOutcomeKind.CANCELLED;
         return ImportOutcomeKind.UNCHANGED;
     }
 
@@ -251,7 +293,8 @@ final class DefaultProjectSession implements ProjectSession {
         CHANGED,
         UNCHANGED,
         REJECTED,
-        FAILED
+        FAILED,
+        CANCELLED
     }
 
     /**
@@ -261,7 +304,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @param source selected BodySlide XML source
      * @return one typed source outcome at the latest coherent snapshot
      */
-    private ProjectOutcome importSliderPresetSource(Path source) {
+    private ProjectOutcome importSliderPresetSource(Path source, ProjectOperationContext context) {
         Path normalizedSource;
         try {
             normalizedSource = source.toAbsolutePath().normalize();
@@ -272,8 +315,12 @@ final class DefaultProjectSession implements ProjectSession {
                     "The BodySlide XML source could not be resolved: " + exception.getMessage());
         }
         try {
+            context.checkCancellation();
             List<BodySlidePresetFileParser.ParsedPreset> imported = BodySlidePresetFileParser.parse(normalizedSource);
+            context.checkCancellation();
             return upsertImportedSliderPresets(imported, normalizedSource);
+        } catch (CancellationException exception) {
+            return new CancelledOutcome(snapshot);
         } catch (SAXParseException exception) {
             return rejectedMalformedXml(normalizedSource, exception,
                     optionalPositive(exception.getLineNumber()), optionalPositive(exception.getColumnNumber()));
@@ -360,7 +407,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @param target requested Project destination
      * @return changed, unchanged, or failed outcome at the operation boundary
      */
-    private ProjectOutcome persist(Path target) {
+    private ProjectOutcome persist(Path target, ProjectOperationContext context) {
         Path normalizedTarget;
         try {
             normalizedTarget = target.toAbsolutePath().normalize();
@@ -370,7 +417,9 @@ final class DefaultProjectSession implements ProjectSession {
                     "project-file", "The Project target could not be resolved: " + exception.getMessage());
         }
         try {
-            ProjectFileWriter.write(snapshot, normalizedTarget);
+            ProjectFileWriter.write(snapshot, normalizedTarget, context);
+        } catch (CancellationException exception) {
+            return new CancelledOutcome(snapshot);
         } catch (IOException exception) {
             return failedOperation(ProjectDiagnosticCodes.PROJECT_FILE_WRITE_FAILED, Optional.of(normalizedTarget),
                     "/", "The Project file could not be written: " + exception.getMessage());
@@ -381,7 +430,7 @@ final class DefaultProjectSession implements ProjectSession {
         }
 
         return publish(project, Optional.of(normalizedTarget), false, ProjectLifecycleStatus.FILE_BACKED,
-                NO_DIAGNOSTICS);
+                false, NO_DIAGNOSTICS);
     }
 
     /**
@@ -1180,7 +1229,8 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome outcome(Project next) {
         boolean dirty = snapshot.isDirty() || next != project;
-        return publish(next, snapshot.getFileIdentity(), dirty, snapshot.getLifecycleStatus(), NO_DIAGNOSTICS);
+        return publish(next, snapshot.getFileIdentity(), dirty, snapshot.getLifecycleStatus(), next != project,
+                NO_DIAGNOSTICS);
     }
 
     /**
@@ -1201,14 +1251,16 @@ final class DefaultProjectSession implements ProjectSession {
      *         content (see {@link ProjectSnapshot}); nothing is swapped when it does
      */
     private ProjectOutcome publish(Project next, Optional<Path> fileIdentity, boolean dirty,
-            ProjectLifecycleStatus lifecycleStatus, List<ProjectDiagnostic> diagnostics) {
+            ProjectLifecycleStatus lifecycleStatus, boolean changesContent, List<ProjectDiagnostic> diagnostics) {
         boolean sameContent = next == project;
         boolean sameLifecycle = fileIdentity.equals(snapshot.getFileIdentity()) && dirty == snapshot.isDirty()
                 && lifecycleStatus == snapshot.getLifecycleStatus();
         if (sameContent && sameLifecycle)
             return new UnchangedOutcome(snapshot, diagnostics);
-        ProjectSnapshot published = next.toSnapshot(fileIdentity, dirty, lifecycleStatus);
+        ProjectContentVersion publishedVersion = changesContent ? contentVersion.next() : contentVersion;
+        ProjectSnapshot published = next.toSnapshot(fileIdentity, dirty, lifecycleStatus, publishedVersion);
         project = next;
+        contentVersion = publishedVersion;
         snapshot = published;
         return new ChangedOutcome(published, diagnostics);
     }

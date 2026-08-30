@@ -109,6 +109,37 @@ class ProjectSessionTest {
         assertSame(replaced.getSnapshot(), session.getSnapshot());
     }
 
+    /** Project content versions advance only when the session publishes changed Project content. */
+    @Test
+    void contentVersionAdvancesForNewAndContentMutationButNotForUnchangedOrRejectedWork() {
+        ProjectSession session = ProjectSessions.create();
+        ProjectContentVersion before = session.getSnapshot().getContentVersion();
+
+        ProjectOutcome created = session.newProject();
+        ProjectContentVersion newProjectVersion = created.getSnapshot().getContentVersion();
+        ProjectOutcome repeatedNew = session.newProject();
+        ProjectOutcome edited = session.apply(SliderPresetEdits.create("Athletic"));
+        ProjectContentVersion editedVersion = edited.getSnapshot().getContentVersion();
+        ProjectOutcome duplicate = session.apply(SliderPresetEdits.create("athletic"));
+
+        assertFalse(before.equals(newProjectVersion));
+        assertEquals(newProjectVersion, repeatedNew.getSnapshot().getContentVersion());
+        assertFalse(newProjectVersion.equals(editedVersion));
+        assertEquals(editedVersion, duplicate.getSnapshot().getContentVersion());
+    }
+
+    /** Content-version equality remains scoped to one ProjectSession even at matching transition counts. */
+    @Test
+    void contentVersionsFromDifferentSessionsNeverCompareEqual() {
+        ProjectSession first = ProjectSessions.create();
+        ProjectSession second = ProjectSessions.create();
+
+        ProjectContentVersion firstVersion = first.newProject().getSnapshot().getContentVersion();
+        ProjectContentVersion secondVersion = second.newProject().getSnapshot().getContentVersion();
+
+        assertFalse(firstVersion.equals(secondVersion));
+    }
+
     /**
      * Proves that snapshots copy their complete value graph and expose no mutable
      * collection or legacy domain object to callers.

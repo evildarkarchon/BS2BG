@@ -31,14 +31,36 @@ public interface ProjectSession {
 	 * @return a typed outcome carrying the replaced or preserved latest snapshot
 	 * @throws NullPointerException when source is null
 	 */
-	ProjectOutcome open(Path source);
+	default ProjectOutcome open(Path source) {
+		return open(source, ProjectOperationContext.nonCancellable());
+	}
+
+	/**
+	 * Opens a Project with cooperative cancellation, truthful progress, and an atomic publication boundary.
+	 *
+	 * @param source Project file to open
+	 * @param context operation context retained for the synchronous call only
+	 * @return a typed outcome carrying the replaced or preserved latest snapshot
+	 * @throws NullPointerException when source or context is null
+	 */
+	ProjectOutcome open(Path source, ProjectOperationContext context);
 
 	/**
 	 * Saves the current Project to its adopted file identity.
 	 *
 	 * @return a typed outcome carrying the saved or preserved latest snapshot
 	 */
-	ProjectOutcome save();
+	default ProjectOutcome save() {
+		return save(ProjectOperationContext.nonCancellable());
+	}
+
+	/**
+	 * Saves the adopted Project identity through the supplied operation context.
+	 *
+	 * @param context operation context retained for the synchronous call only
+	 * @return a typed outcome carrying the saved or preserved latest snapshot
+	 */
+	ProjectOutcome save(ProjectOperationContext context);
 
 	/**
 	 * Saves the current Project to a requested path and adopts that identity only
@@ -48,7 +70,18 @@ public interface ProjectSession {
 	 * @return a typed outcome carrying the saved or preserved latest snapshot
 	 * @throws NullPointerException when target is null
 	 */
-	ProjectOutcome saveAs(Path target);
+	default ProjectOutcome saveAs(Path target) {
+		return saveAs(target, ProjectOperationContext.nonCancellable());
+	}
+
+	/**
+	 * Saves to a requested identity through the supplied operation context.
+	 *
+	 * @param target requested Project file identity
+	 * @param context operation context retained for the synchronous call only
+	 * @return a typed outcome carrying the saved or preserved latest snapshot
+	 */
+	ProjectOutcome saveAs(Path target, ProjectOperationContext context);
 
 	/**
 	 * Parses and upserts Slider Presets from an ordered batch of BodySlide XML
@@ -59,7 +92,18 @@ public interface ProjectSession {
 	 * @return aggregate and per-source typed outcomes carrying coherent snapshots
 	 * @throws NullPointerException when sources or any contained source is null
 	 */
-	SliderPresetImportOutcome importSliderPresets(List<Path> sources);
+	default SliderPresetImportOutcome importSliderPresets(List<Path> sources) {
+		return importSliderPresets(sources, ProjectOperationContext.nonCancellable());
+	}
+
+	/**
+	 * Imports an ordered source batch with cancellation safe points between sources.
+	 *
+	 * @param sources BodySlide XML files in selection order
+	 * @param context operation context retained for the synchronous call only
+	 * @return aggregate and per-source outcomes, including any effects committed before cancellation
+	 */
+	SliderPresetImportOutcome importSliderPresets(List<Path> sources, ProjectOperationContext context);
 
 	/**
 	 * Applies one explicit Project edit atomically. Unknown edit request types are

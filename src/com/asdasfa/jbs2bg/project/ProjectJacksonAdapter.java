@@ -2,6 +2,7 @@ package com.asdasfa.jbs2bg.project;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -39,6 +40,8 @@ import tools.jackson.core.TokenStreamLocation;
 final class ProjectJacksonAdapter {
 
     private static final String WRITE_FAILED_CODE = "PROJECT_JSON_WRITE_FAILED";
+    /** Bounds publication traffic while preserving byte-measured progress and cancellation checks on every chunk. */
+    private static final long PROGRESS_REPORT_BYTES = 256L * 1024L;
     private static final Comparator<String> CASE_INSENSITIVE_ORDER = String::compareToIgnoreCase;
     private static final Set<String> ROOT_FIELDS = Set.of("SliderPresets", "CustomMorphTargets", "MorphedNPCs");
     private static final Set<String> PRESET_FIELDS = Set.of("isUUNP", "SetSliders");
@@ -59,7 +62,20 @@ final class ProjectJacksonAdapter {
      * @throws ProjectFormatException for I/O, syntax, schema, domain, or limit failure
      */
     static Candidate read(Path source) {
+        return read(source, ProjectOperationContext.nonCancellable());
+    }
+
+    /**
+     * Reads one candidate with cooperative cancellation and measured byte progress.
+     *
+     * @param source Project fixture or source file
+     * @param context operation context retained only for this synchronous parse
+     * @return immutable candidate and ordered recovery diagnostics
+     * @throws ProjectFormatException for I/O, syntax, schema, domain, or limit failure
+     */
+    static Candidate read(Path source, ProjectOperationContext context) {
         Objects.requireNonNull(source, "source");
+        ProjectOperationContext operation = Objects.requireNonNull(context, "context");
         Path normalizedSource = source.toAbsolutePath().normalize();
         long sourceSize;
         try {
@@ -77,9 +93,42 @@ final class ProjectJacksonAdapter {
         byte[] sourceBytes;
         Charset charset;
         try {
-            charset = detectCharset(normalizedSource);
-            sourceBytes = Files.readAllBytes(normalizedSource);
+            operation.report(sourceSize > 0
+                    ? ProjectOperationProgress.determinate("Reading Project", 0, sourceSize)
+                    : ProjectOperationProgress.indeterminate("Reading Project"));
+            UniversalDetector detector = new UniversalDetector();
+            try (InputStream input = Files.newInputStream(normalizedSource);
+                    ByteArrayOutputStream output = new ByteArrayOutputStream((int) sourceSize)) {
+                byte[] buffer = new byte[8192];
+                long completed = 0;
+                long lastReported = 0;
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    operation.checkCancellation();
+                    output.write(buffer, 0, read);
+                    detector.handleData(buffer, 0, read);
+                    completed += read;
+                    if (sourceSize > 0 && (completed == sourceSize
+                            || completed - lastReported >= PROGRESS_REPORT_BYTES)) {
+                        operation.report(ProjectOperationProgress.determinate("Reading Project",
+                                Math.min(completed, sourceSize), sourceSize));
+                        lastReported = completed;
+                    }
+                    if (completed > JacksonJson.projectMaximumDocumentBytes())
+                        throw failure(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT,
+                                normalizedSource.toString(), "/", 1, 1,
+                                "Project input exceeds the 64 MiB document limit.");
+                }
+                detector.dataEnd();
+                sourceBytes = output.toByteArray();
+                String detected = detector.getDetectedCharset();
+                charset = detected == null ? StandardCharsets.UTF_8 : Charset.forName(detected);
+            }
         } catch (IOException | RuntimeException exception) {
+            if (exception instanceof java.util.concurrent.CancellationException cancellation)
+                throw cancellation;
+            if (exception instanceof ProjectFormatException formatFailure)
+                throw formatFailure;
             throw failure(ProjectDiagnosticCodes.PROJECT_FILE_READ_FAILED, normalizedSource.toString(), "/", 0, 0,
                     readableMessage(exception, "The Project source could not be read."));
         }
@@ -89,13 +138,19 @@ final class ProjectJacksonAdapter {
         }
 
         String decoded = new String(sourceBytes, charset);
+        operation.checkCancellation();
+        operation.report(ProjectOperationProgress.indeterminate("Parsing Project"));
         Reader reader = null;
         // Parse detected text directly so the 64 MiB source limit is not applied again after UTF-8 expansion.
         try (JsonParser parser = JacksonJson.projectReaderFactory()
                 .createParser(ObjectReadContext.empty(), decoded)) {
-            reader = new Reader(parser, normalizedSource.toString());
+            reader = new Reader(parser, normalizedSource.toString(), operation);
             ParsedProject parsed = readDocument(reader);
-            return finishCandidate(normalizedSource, parsed);
+            operation.report(ProjectOperationProgress.indeterminate("Validating Project"));
+            operation.checkCancellation();
+            Candidate candidate = finishCandidate(normalizedSource, parsed);
+            operation.checkCancellation();
+            return candidate;
         } catch (ProjectFormatException exception) {
             throw exception;
         } catch (JacksonException exception) {
@@ -137,12 +192,6 @@ final class ProjectJacksonAdapter {
                     readableMessage(exception, "Project JSON could not be represented."));
         }
         return output.toByteArray();
-    }
-
-    /** Detects the same source charset as the legacy loader, retaining UTF-8 fallback for ASCII. */
-    private static Charset detectCharset(Path source) throws IOException {
-        String detected = UniversalDetector.detectCharset(source.toFile());
-        return detected == null ? StandardCharsets.UTF_8 : Charset.forName(detected);
     }
 
     /** Parses the root fields without assuming their encounter order. */
@@ -766,6 +815,7 @@ final class ProjectJacksonAdapter {
     private static final class Reader {
         private final JsonParser parser;
         private final String source;
+        private final ProjectOperationContext context;
         private String path = "/";
 
         /**
@@ -773,14 +823,17 @@ final class ProjectJacksonAdapter {
          *
          * @param parser Jackson cursor contained within this adapter
          * @param source normalized source-file description
+         * @param context operation context checked before every parser advance
          */
-        Reader(JsonParser parser, String source) {
+        Reader(JsonParser parser, String source, ProjectOperationContext context) {
             this.parser = parser;
             this.source = source;
+            this.context = context;
         }
 
         /** Advances the stream after recording the path the next token belongs to. */
         JsonToken next(String requestedPath) {
+            context.checkCancellation();
             path = requestedPath;
             return parser.nextToken();
         }

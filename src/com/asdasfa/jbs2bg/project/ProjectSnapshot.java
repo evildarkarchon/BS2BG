@@ -20,6 +20,7 @@ public final class ProjectSnapshot {
 	private final Path fileIdentity;
 	private final boolean dirty;
 	private final ProjectLifecycleStatus lifecycleStatus;
+	private final ProjectContentVersion contentVersion;
 
 	/**
 	 * Creates one of the canonical empty snapshots used before and after the first
@@ -31,7 +32,7 @@ public final class ProjectSnapshot {
 		this(Collections.<SliderPresetSnapshot>emptyList(),
 				Collections.<CustomMorphTargetSnapshot>emptyList(),
 				Collections.<NpcMorphAssignmentSnapshot>emptyList(), Optional.<Path>empty(), false,
-				lifecycleStatus);
+				lifecycleStatus, ProjectContentVersion.detached());
 	}
 
 	/**
@@ -53,6 +54,25 @@ public final class ProjectSnapshot {
 			List<CustomMorphTargetSnapshot> customMorphTargets,
 			List<NpcMorphAssignmentSnapshot> npcMorphAssignments, Optional<Path> fileIdentity, boolean dirty,
 			ProjectLifecycleStatus lifecycleStatus) {
+		this(sliderPresets, customMorphTargets, npcMorphAssignments, fileIdentity, dirty, lifecycleStatus,
+				ProjectContentVersion.detached());
+	}
+
+	/**
+	 * Creates a session-owned snapshot while retaining the public detached-construction compatibility seam.
+	 *
+	 * @param sliderPresets canonical Slider Preset values
+	 * @param customMorphTargets canonical Custom Morph Target values
+	 * @param npcMorphAssignments canonical NPC Morph Assignment values
+	 * @param fileIdentity adopted file identity, if any
+	 * @param dirty whether content requires persistence
+	 * @param lifecycleStatus coherent Project lifecycle state
+	 * @param contentVersion opaque session-owned content identity
+	 */
+	ProjectSnapshot(List<SliderPresetSnapshot> sliderPresets,
+			List<CustomMorphTargetSnapshot> customMorphTargets,
+			List<NpcMorphAssignmentSnapshot> npcMorphAssignments, Optional<Path> fileIdentity, boolean dirty,
+			ProjectLifecycleStatus lifecycleStatus, ProjectContentVersion contentVersion) {
 		this.sliderPresets = ImmutableValues.copyOf(sliderPresets, "sliderPresets");
 		this.customMorphTargets = ImmutableValues.copyOf(customMorphTargets, "customMorphTargets");
 		this.npcMorphAssignments = ImmutableValues.copyOf(npcMorphAssignments, "npcMorphAssignments");
@@ -62,6 +82,7 @@ public final class ProjectSnapshot {
 				: null;
 		this.dirty = dirty;
 		this.lifecycleStatus = Objects.requireNonNull(lifecycleStatus, "lifecycleStatus");
+		this.contentVersion = Objects.requireNonNull(contentVersion, "contentVersion");
 		validateLifecycle();
 	}
 
@@ -82,6 +103,12 @@ public final class ProjectSnapshot {
 	 */
 	static ProjectSnapshot noProject() {
 		return NO_PROJECT;
+	}
+
+	/** @return session-owned pre-lifecycle snapshot carrying the supplied opaque content version */
+	static ProjectSnapshot noProject(ProjectContentVersion contentVersion) {
+		return new ProjectSnapshot(Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
+				Optional.empty(), false, ProjectLifecycleStatus.NO_PROJECT, contentVersion);
 	}
 
 	/**
@@ -136,6 +163,15 @@ public final class ProjectSnapshot {
 	 */
 	public ProjectLifecycleStatus getLifecycleStatus() {
 		return lifecycleStatus;
+	}
+
+	/**
+	 * Returns the opaque session-scoped identity of this snapshot's Project content.
+	 *
+	 * @return token suitable only for equality-based freshness checks
+	 */
+	public ProjectContentVersion getContentVersion() {
+		return contentVersion;
 	}
 
 	/**

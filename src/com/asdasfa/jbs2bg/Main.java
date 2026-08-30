@@ -1,6 +1,12 @@
 package com.asdasfa.jbs2bg;
 	
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
@@ -14,8 +20,11 @@ import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.workbench.WorkbenchController;
 import com.asdasfa.jbs2bg.workbench.WorkbenchGeometry;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
+import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
+import javafx.animation.PauseTransition;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -49,16 +58,59 @@ public class Main extends Application {
 	
 	public final Settings.InitializationResult settingsInitialization;
 	final WorkbenchProjectFlow workbenchProjectFlow;
+	private final ExecutorService jobWorker;
+	private final JobCoordinator jobCoordinator;
 	
 	/**
-	 * Initializes the owned Settings pair, the authoritative ProjectSession, and the sole
-	 * Workbench Project flow. The legacy read model remains unmounted for later feature cutovers.
+	 * Initializes the owned Settings pair, authoritative ProjectSession, application-wide job
+	 * coordinator, and sole Workbench Project flow. The legacy read model remains unmounted for
+	 * later feature cutovers.
 	 */
 	public Main() {
 		settingsInitialization = Settings.initialize(Path.of("."));
 		ProjectSession projectSession = ProjectSessions.create();
-		workbenchProjectFlow = new WorkbenchProjectFlow(APPLICATION_NAME, projectSession);
+		jobWorker = Executors.newSingleThreadExecutor(
+				Thread.ofPlatform().name("bs2bg-job-worker").factory());
+		jobCoordinator = new JobCoordinator(jobWorker, Platform::runLater, Clock.systemUTC(),
+				Main::scheduleCancellationStatus,
+				failure -> Logger.getLogger(Main.class.getName()).log(Level.WARNING,
+						"A Workbench job callback failed", failure));
+		workbenchProjectFlow = new WorkbenchProjectFlow(APPLICATION_NAME, projectSession, jobCoordinator);
 		projectPresentation = new ProjectPresentation(APPLICATION_NAME, workbenchProjectFlow.frame().snapshot());
+	}
+
+	/**
+	 * Schedules prolonged-cancellation feedback on the JavaFX clock without creating another application worker.
+	 *
+	 * @param delay elapsed cancellation duration before the update
+	 * @param action attempt-scoped coordinator callback
+	 * @return cancellation handle safe to invoke from either application thread
+	 */
+	private static JobCoordinator.ScheduledAction scheduleCancellationStatus(Duration delay, Runnable action) {
+		AtomicReference<PauseTransition> timerReference = new AtomicReference<>();
+		AtomicBoolean cancelled = new AtomicBoolean();
+		Runnable createTimer = () -> {
+			if (cancelled.get())
+				return;
+			PauseTransition timer = new PauseTransition(javafx.util.Duration.millis(delay.toMillis()));
+			timer.setOnFinished(event -> action.run());
+			timerReference.set(timer);
+			timer.play();
+		};
+		if (Platform.isFxApplicationThread())
+			createTimer.run();
+		else
+			Platform.runLater(createTimer);
+		return () -> {
+			cancelled.set(true);
+			PauseTransition timer = timerReference.get();
+			if (timer == null)
+				return;
+			if (Platform.isFxApplicationThread())
+				timer.stop();
+			else
+				Platform.runLater(timer::stop);
+		};
 	}
 	
 	/**
@@ -113,6 +165,7 @@ public class Main extends Application {
 	
 	@Override
 	public void stop() {
-		// The controller completes the tokenized close flow before closing the Stage.
+		// The controller settles any active attempt before Stage closure, so close cannot abandon worker work.
+		jobCoordinator.close();
 	}
 }

@@ -8,6 +8,7 @@
 <?import javafx.scene.control.Menu?>
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.ProgressBar?>
 <?import javafx.scene.control.SeparatorMenuItem?>
 <?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.TextArea?>
@@ -150,6 +151,9 @@
                                                 <ListView fx:id="activityList" accessibleText="Activity"
                                                         focusTraversable="true" prefHeight="92.0"
                                                         VBox.vgrow="ALWAYS" />
+                                                <Button fx:id="retryActivityButton"
+                                                        accessibleText="Retry selected activity"
+                                                        disable="true" mnemonicParsing="true" text="_Retry" />
                                             </children>
                                         </VBox>
                                     </children>
@@ -189,6 +193,8 @@
                         <StackPane fx:id="statusIconHost" minHeight="20.0" minWidth="20.0"
                                 prefHeight="20.0" prefWidth="20.0" />
                         <Label fx:id="statusText" accessibleText="Workbench status" focusTraversable="true" text="Ready" />
+                        <ProgressBar fx:id="operationProgress" accessibleText="Current operation progress"
+                                managed="false" maxWidth="180.0" prefWidth="180.0" progress="0.0" visible="false" />
                         <Region HBox.hgrow="ALWAYS" />
                         <Button fx:id="cancelOperationButton" accessibleText="Cancel current operation"
                                 disable="true" mnemonicParsing="true" text="_Cancel" />

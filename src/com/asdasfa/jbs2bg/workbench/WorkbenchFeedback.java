@@ -178,9 +178,27 @@ public final class WorkbenchFeedback {
         }
     }
 
+    /** Durable structured job evidence exposed through Activity accessibility details. */
+    public record JobDetails(long attemptId, Optional<Long> retryOf, List<String> sources,
+            List<String> destinations, Optional<String> capturedBasis, List<String> effectsCommitted,
+            List<String> diagnosticCodes, boolean retryAvailable) {
+        /** Defensively owns captured inputs, linkage, effects, and diagnostic identities. */
+        public JobDetails {
+            if (attemptId <= 0)
+                throw new IllegalArgumentException("attemptId must be positive");
+            Objects.requireNonNull(retryOf, "retryOf");
+            sources = List.copyOf(Objects.requireNonNull(sources, "sources"));
+            destinations = List.copyOf(Objects.requireNonNull(destinations, "destinations"));
+            Objects.requireNonNull(capturedBasis, "capturedBasis");
+            effectsCommitted = List.copyOf(Objects.requireNonNull(effectsCommitted, "effectsCommitted"));
+            diagnosticCodes = List.copyOf(Objects.requireNonNull(diagnosticCodes, "diagnosticCodes"));
+        }
+    }
+
     /** Durable session-scoped record of one user-visible operation outcome. */
     public record ActivityRecord(long id, String operation, Severity severity, String cue,
-            SemanticIcons.IconKey icon, String message, Disposition disposition, Instant occurredAt) {
+            SemanticIcons.IconKey icon, String message, Disposition disposition, Instant occurredAt,
+            Optional<JobDetails> jobDetails) {
         /** Rejects incomplete or non-positive Activity identities. */
         public ActivityRecord {
             if (id <= 0)
@@ -192,6 +210,7 @@ public final class WorkbenchFeedback {
             message = requireText(message, "message");
             Objects.requireNonNull(disposition, "disposition");
             Objects.requireNonNull(occurredAt, "occurredAt");
+            Objects.requireNonNull(jobDetails, "jobDetails");
         }
     }
 
@@ -248,12 +267,24 @@ public final class WorkbenchFeedback {
      * @return the newly committed immutable frame
      */
     public Frame publish(Notification notification) {
+        return publish(notification, Optional.empty());
+    }
+
+    /**
+     * Publishes one outcome together with optional structured job evidence retained by Activity.
+     *
+     * @param notification completely described operation outcome
+     * @param jobDetails captured inputs, linkage, effects, and diagnostics for a coordinated attempt
+     * @return the newly committed immutable frame
+     */
+    public Frame publish(Notification notification, Optional<JobDetails> jobDetails) {
         Notification value = Objects.requireNonNull(notification, "notification");
+        Optional<JobDetails> details = Objects.requireNonNull(jobDetails, "jobDetails");
         String cue = value.severity().cue();
         SemanticIcons.IconKey icon = value.severity().icon();
         InfoBar infoBar = new InfoBar(value.severity(), cue, icon, value.message());
         activities.add(new ActivityRecord(nextActivityId++, value.operation(), value.severity(), cue, icon,
-                value.message(), value.disposition(), clock.instant()));
+                value.message(), value.disposition(), clock.instant(), details));
         StatusProjection status = new StatusProjection(value.severity(), value.message(),
                 value.disposition().displayText());
         frame = new Frame(++revision, Optional.of(infoBar), activities, status, frame.pendingDialog());

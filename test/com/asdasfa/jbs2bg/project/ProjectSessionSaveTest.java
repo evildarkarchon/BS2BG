@@ -1,6 +1,7 @@
 package com.asdasfa.jbs2bg.project;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -306,6 +307,54 @@ class ProjectSessionSaveTest {
         ProjectOutcome reopened = ProjectSessions.create().open(target);
         assertTrue(reopened.getDiagnostics().isEmpty());
         assertTrue(reopened.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
+    }
+
+    /** Cancellation after staging preserves destination bytes, dirty identity, and the opaque content version. */
+    @Test
+    void cancellationBeforeReplacementPreservesDestinationAndDirtyProject() throws Exception {
+        Path target = tempDirectory.resolve("cancelled-replacement.jbs2bg");
+        byte[] previous = "previous destination bytes".getBytes(StandardCharsets.UTF_8);
+        Files.write(target, previous);
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        ProjectSnapshot dirty = session.apply(SliderPresetEdits.create("Unsaved")).getSnapshot();
+        ProjectOperationContext context = new ProjectOperationContext() {
+            private boolean cancel;
+
+            /** Requests cancellation after real staged bytes have been reported. */
+            @Override
+            public boolean cancellationRequested() {
+                return cancel;
+            }
+
+            /** Makes the completed staging measurement the deterministic pre-replacement safe point. */
+            @Override
+            public void report(ProjectOperationProgress progress) {
+                if (progress.phase().equals("Staging Project file")
+                        && progress.completedUnits().isPresent()
+                        && progress.completedUnits().orElseThrow() > 0)
+                    cancel = true;
+            }
+
+            /** Replacement must not start after cancellation has been accepted. */
+            @Override
+            public boolean beginCommit(String phase) {
+                throw new AssertionError("Cancelled Save must not begin replacement");
+            }
+        };
+
+        ProjectOutcome outcome = session.saveAs(target, context);
+
+        assertTrue(outcome instanceof CancelledOutcome);
+        assertSame(dirty, outcome.getSnapshot());
+        assertSame(dirty, session.getSnapshot());
+        assertEquals(dirty.getContentVersion(), outcome.getSnapshot().getContentVersion());
+        assertArrayEquals(previous, Files.readAllBytes(target));
+        try (var siblings = Files.list(tempDirectory)) {
+            assertFalse(siblings.anyMatch(path -> path.getFileName().toString()
+                    .startsWith(".cancelled-replacement.jbs2bg-")),
+                    "cancelled replacement must remove its sibling staging file");
+        }
     }
 
 }

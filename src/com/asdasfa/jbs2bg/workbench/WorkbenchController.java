@@ -3,10 +3,13 @@ package com.asdasfa.jbs2bg.workbench;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
 import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
+import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -18,6 +21,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleButton;
@@ -111,10 +115,16 @@ public final class WorkbenchController {
     private Button cancelOperationButton;
 
     @FXML
+    private ProgressBar operationProgress;
+
+    @FXML
     private TextArea diagnosticsText;
 
     @FXML
     private ListView<WorkbenchFeedback.ActivityRecord> activityList;
+
+    @FXML
+    private Button retryActivityButton;
 
     @FXML
     private StackPane contentStack;
@@ -171,6 +181,9 @@ public final class WorkbenchController {
     private boolean finalClose;
     private long renderedProjectSequence;
     private WorkbenchProjectFlow.Intent activeOperation;
+    private JobCoordinator.Subscription jobSubscription;
+    private long renderedTerminalAttemptId;
+    private boolean closeAfterActiveJob;
 
     /**
      * Attaches the loaded JavaFX graph to the sole Project flow and renders its current frame.
@@ -237,7 +250,11 @@ public final class WorkbenchController {
                 dispatch(WorkbenchProjectFlow.Intent.CLOSE);
             }
         });
-        stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> appearanceAdapter.close());
+        jobSubscription = projectFlow.jobs().observe(this::renderJobFrame);
+        stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> {
+            appearanceAdapter.close();
+            jobSubscription.close();
+        });
         renderedProjectSequence = projectFlow.frame().sequence();
         renderNavigation(navigationFrame);
         render(projectFlow.frame());
@@ -318,9 +335,38 @@ public final class WorkbenchController {
     /** Connects nonmodal dismissal while leaving the durable Activity record and terminal status intact. */
     private void configureFeedback() {
         activityList.setCellFactory(list -> new ActivityCell());
+        activityList.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) ->
+                updateActivityRetry(selected));
         dismissInfoBarButton.setOnAction(event -> renderFeedback(feedback.dismissInfoBar()));
+        retryActivityButton.setOnAction(event -> retrySelectedActivity());
+        cancelOperationButton.setOnAction(event -> projectFlow.jobs().requestCancel());
         cancelOperationButton.setDisable(true);
         cancelOperationButton.setAccessibleHelp("No cancellable operation is currently active.");
+        operationProgress.setProgress(0.0);
+        operationProgress.setManaged(false);
+        operationProgress.setVisible(false);
+    }
+
+    /** Enables Activity Retry only for one selected retryable terminal attempt while admission is open. */
+    private void updateActivityRetry(WorkbenchFeedback.ActivityRecord selected) {
+        boolean available = selected != null
+                && selected.jobDetails().stream().anyMatch(WorkbenchFeedback.JobDetails::retryAvailable)
+                && !projectFlow.jobs().frame().active()
+                && !projectFlow.jobs().frame().shutdownRequested();
+        retryActivityButton.setDisable(!available);
+        retryActivityButton.setAccessibleHelp(available
+                ? "Starts a new attempt linked to attempt "
+                        + selected.jobDetails().orElseThrow().attemptId() + " with freshly captured inputs."
+                : "Select a retryable failed Activity record while no operation is active.");
+    }
+
+    /** Requests a coordinator-owned retry for the selected durable Activity attempt. */
+    private void retrySelectedActivity() {
+        WorkbenchFeedback.ActivityRecord selected = activityList.getSelectionModel().getSelectedItem();
+        if (selected == null || selected.jobDetails().isEmpty())
+            return;
+        projectFlow.jobs().retry(new JobCoordinator.AttemptId(
+                selected.jobDetails().orElseThrow().attemptId()));
     }
 
     /** Connects System/Light/Dark selection to the live public-JavaFX appearance adapter and profile store. */
@@ -571,6 +617,11 @@ public final class WorkbenchController {
 
     /** Dispatches one Project intent, renders its frame, and completes any chained tokenized platform effects. */
     private void dispatch(WorkbenchProjectFlow.Intent intent) {
+        if (intent == WorkbenchProjectFlow.Intent.CLOSE && projectFlow.jobs().frame().active()) {
+            closeAfterActiveJob = true;
+            projectFlow.jobs().requestShutdown();
+            return;
+        }
         activeOperation = Objects.requireNonNull(intent, "intent");
         try {
             apply(projectFlow.request(intent));
@@ -586,6 +637,12 @@ public final class WorkbenchController {
         while (true) {
             render(current.frame());
             if (current.effect().isEmpty()) {
+                if (activeOperation == WorkbenchProjectFlow.Intent.CLOSE
+                        && projectFlow.jobs().frame().shutdownRequested()
+                        && !current.frame().closed()) {
+                    closeAfterActiveJob = false;
+                    projectFlow.jobs().resumeAfterShutdown();
+                }
                 if (returnTarget != null)
                     requestFocus(returnTarget);
                 return;
@@ -634,6 +691,134 @@ public final class WorkbenchController {
             renderedProjectSequence = frame.sequence();
             publishProjectFeedback(frame);
         }
+    }
+
+    /** Projects one coordinator frame into global admission, progress, cancellation, Activity, and shutdown UI. */
+    private void renderJobFrame(JobCoordinator.Frame frame) {
+        Objects.requireNonNull(frame, "frame");
+        boolean blocked = frame.active() || frame.shutdownRequested();
+        newProjectMenuItem.setDisable(blocked);
+        openProjectMenuItem.setDisable(blocked);
+        saveProjectMenuItem.setDisable(blocked);
+        saveAsProjectMenuItem.setDisable(blocked);
+        updateActivityRetry(activityList.getSelectionModel().getSelectedItem());
+
+        Optional<JobCoordinator.Attempt> current = frame.attempt();
+        if (frame.active() && current.isPresent()) {
+            JobCoordinator.Attempt attempt = current.orElseThrow();
+            renderActiveJob(attempt);
+        } else {
+            operationProgress.setManaged(false);
+            operationProgress.setVisible(false);
+            cancelOperationButton.setDisable(true);
+            cancelOperationButton.setAccessibleHelp("No cancellable operation is currently active.");
+        }
+
+        if (current.isPresent() && current.orElseThrow().lifecycle().terminal()) {
+            JobCoordinator.Attempt terminal = current.orElseThrow();
+            WorkbenchProjectFlow.Frame projectFrame = projectFlow.frame();
+            // The job terminal record is the authoritative feedback source for async work.
+            renderedProjectSequence = projectFrame.sequence();
+            render(projectFrame);
+            if (terminal.id().value() > renderedTerminalAttemptId) {
+                renderedTerminalAttemptId = terminal.id().value();
+                renderTerminalJob(terminal);
+            }
+        }
+
+        if (closeAfterActiveJob && frame.shutdownReady()) {
+            closeAfterActiveJob = false;
+            dispatch(WorkbenchProjectFlow.Intent.CLOSE);
+        }
+    }
+
+    /** Renders truthful active phase progress and cancellation availability without inventing percentages. */
+    private void renderActiveJob(JobCoordinator.Attempt attempt) {
+        JobCoordinator.Progress progress = attempt.progress();
+        operationProgress.setManaged(true);
+        operationProgress.setVisible(true);
+        String progressText;
+        if (progress.completedUnits().isPresent()) {
+            long completed = progress.completedUnits().orElseThrow();
+            long total = progress.totalUnits().orElseThrow();
+            operationProgress.setProgress((double) completed / (double) total);
+            progressText = progress.percentage().orElseThrow() + "%";
+        } else {
+            operationProgress.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
+            progressText = "indeterminate";
+        }
+        operationProgress.setAccessibleHelp(attempt.operation().name() + ", " + progress.phase() + ", "
+                + progressText + ".");
+        statusText.setText(attempt.operation().name() + " — " + progress.phase()
+                + (progress.percentage().isPresent() ? " — " + progress.percentage().orElseThrow() + "%" : ""));
+        statusText.setAccessibleHelp(attempt.operation().name() + ", " + progress.phase() + ", "
+                + progressText + ".");
+        cancelOperationButton.setDisable(!progress.cancellable());
+        cancelOperationButton.setAccessibleHelp(progress.cancellable()
+                ? "Cancel " + attempt.operation().name() + " at its next safe point."
+                : attempt.lifecycle() == JobCoordinator.Lifecycle.CANCELLING
+                        ? "Cancellation was accepted; waiting for a safe point."
+                        : "The operation is finishing an atomic commit and can no longer be cancelled.");
+    }
+
+    /** Publishes one terminal job consistently and opens a modal only for a failure requiring user action. */
+    private void renderTerminalJob(JobCoordinator.Attempt attempt) {
+        WorkbenchFeedback.Severity severity;
+        WorkbenchFeedback.Disposition disposition;
+        switch (attempt.lifecycle()) {
+        case COMPLETED:
+            severity = WorkbenchFeedback.Severity.SUCCESS;
+            disposition = WorkbenchFeedback.Disposition.COMPLETED;
+            break;
+        case COMPLETED_WITH_ISSUES:
+            severity = WorkbenchFeedback.Severity.WARNING;
+            disposition = WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES;
+            break;
+        case CANCELLED:
+            severity = WorkbenchFeedback.Severity.INFORMATION;
+            disposition = WorkbenchFeedback.Disposition.CANCELLED;
+            break;
+        case FAILED:
+            severity = WorkbenchFeedback.Severity.FAILURE;
+            disposition = WorkbenchFeedback.Disposition.FAILED;
+            break;
+        case RUNNING, CANCELLING, FINISHING:
+            throw new IllegalArgumentException("Only terminal attempts can publish terminal feedback");
+        default:
+            throw new IllegalStateException("Unsupported job lifecycle");
+        }
+        WorkbenchFeedback.JobDetails details = new WorkbenchFeedback.JobDetails(attempt.id().value(),
+                attempt.retryOf().map(JobCoordinator.AttemptId::value), attempt.operation().sourceLabels(),
+                attempt.operation().destinationLabels(), attempt.operation().capturedBasis(),
+                attempt.effectsCommitted(), attempt.diagnostics().stream()
+                        .map(JobCoordinator.Diagnostic::code).toList(),
+                attempt.retryAvailable());
+        WorkbenchFeedback.Notification notification = new WorkbenchFeedback.Notification(
+                attempt.operation().name(), severity, attempt.summary(), disposition);
+        renderFeedback(feedback.publish(notification, Optional.of(details)));
+
+        if (attempt.lifecycle() == JobCoordinator.Lifecycle.FAILED)
+            showJobFailure(attempt);
+    }
+
+    /** Publishes and completes a typed failure dialog, translating Retry to a fresh linked attempt. */
+    private void showJobFailure(JobCoordinator.Attempt attempt) {
+        String details = attempt.diagnostics().isEmpty()
+                ? attempt.summary()
+                : String.join(System.lineSeparator(), attempt.diagnostics().stream()
+                        .map(diagnostic -> diagnostic.code() + ": " + diagnostic.message()
+                                + diagnostic.details().map(value -> System.lineSeparator() + value).orElse(""))
+                        .toList());
+        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
+                attempt.operation().name() + " failed", attempt.summary(), details, attempt.retryAvailable());
+        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
+        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
+        renderFeedback(pendingFrame);
+        WorkbenchFeedback.DialogAction action = platform.completeFailure(spec, stage);
+        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
+                pending.token(), action)).frame());
+        if (action == WorkbenchFeedback.DialogAction.RETRY)
+            projectFlow.jobs().retry(attempt.id());
     }
 
     /** Publishes one Project outcome with validation/failure distinctions and a truthful terminal disposition. */
@@ -735,8 +920,27 @@ public final class WorkbenchController {
             String text = activityText(activity);
             setText(text);
             setAccessibleText(text);
-            setAccessibleHelp("Timestamp: " + activity.occurredAt());
+            setAccessibleHelp(activityHelp(activity));
         }
+    }
+
+    /** Formats durable attempt linkage, captured inputs, effects, and diagnostics for assistive inspection. */
+    private static String activityHelp(WorkbenchFeedback.ActivityRecord activity) {
+        if (activity.jobDetails().isEmpty())
+            return "Timestamp: " + activity.occurredAt();
+        WorkbenchFeedback.JobDetails details = activity.jobDetails().orElseThrow();
+        return "Timestamp: " + activity.occurredAt()
+                + ". Attempt: " + details.attemptId()
+                + details.retryOf().map(value -> ". Retry of attempt: " + value).orElse("")
+                + ". Sources: " + (details.sources().isEmpty() ? "none" : String.join(", ", details.sources()))
+                + ". Destinations: "
+                + (details.destinations().isEmpty() ? "none" : String.join(", ", details.destinations()))
+                + details.capturedBasis().map(value -> ". Captured basis: " + value).orElse("")
+                + ". Effects committed: "
+                + (details.effectsCommitted().isEmpty() ? "none" : String.join(", ", details.effectsCommitted()))
+                + ". Diagnostics: "
+                + (details.diagnosticCodes().isEmpty() ? "none" : String.join(", ", details.diagnosticCodes()))
+                + ". Retry available: " + details.retryAvailable() + ".";
     }
 
     /** Typed user-facing operation wording kept together so Activity and terminal summaries cannot drift. */

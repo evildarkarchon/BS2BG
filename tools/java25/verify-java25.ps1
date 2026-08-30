@@ -193,7 +193,7 @@ $artifact = $null
 # Suites whose presence and green result the gate requires, beyond the Surefire totals: the toolchain witness,
 # the structural source/pom gate, the FXML/controller harness, the packaged-launcher and app-image staging
 # contracts (#97), the public-JavaFX table adapter, and the ProjectSession, Project, filtering-seam, and
-# persistence-compatibility contracts.
+# persistence-compatibility contracts, plus the centralized job coordinator race and shutdown contract.
 $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest',
     'com.asdasfa.jbs2bg.build.ProductionSourceGateTest',
@@ -219,6 +219,7 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.presentation.ProjectOutputFormatterTest',
     'com.asdasfa.jbs2bg.presentation.BosJacksonWriterTest',
     'com.asdasfa.jbs2bg.presentation.BosArtifactPublisherTest',
+    'com.asdasfa.jbs2bg.workbench.jobs.JobCoordinatorTest',
     'com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlowTest',
     'com.asdasfa.jbs2bg.workbench.WorkbenchControllerTest'
 )
@@ -335,7 +336,7 @@ $evidence = [ordered]@{
         } else { $null })
         structuralGate          = 'ProductionSourceGateTest (sources, resources, pom) and Java25ToolchainGuardTest (every emitted class file)'
         fxmlHarness             = 'FxmlGraphLoadingTest (Workbench root, retained migration popups, and custom-root graphs on the pinned toolkit)'
-        workbenchLifecycle      = 'WorkbenchProjectFlowTest + WorkbenchControllerTest (authoritative Project flow, effects, shutdown, and JavaFX adapter)'
+        workbenchLifecycle      = 'JobCoordinatorTest + WorkbenchProjectFlowTest + WorkbenchControllerTest (central admission, progress, cancellation, retry, stale refusal, shutdown, and JavaFX adapter)'
     }
     targetRelease           = [ordered]@{
         pinned      = $lock.targetRelease

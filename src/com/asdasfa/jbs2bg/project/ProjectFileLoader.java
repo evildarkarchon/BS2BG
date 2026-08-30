@@ -22,7 +22,21 @@ final class ProjectFileLoader {
      *         validation, or resource-limit enforcement fails
      */
     static LoadedProject load(Path source) {
-        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(source);
+        return load(source, ProjectOperationContext.nonCancellable());
+    }
+
+    /**
+     * Reads and validates one complete candidate while reporting real adapter phases.
+     *
+     * @param source Project path to inspect and stream-parse
+     * @param context operation context retained for this synchronous load
+     * @return detached Project content and ordered recovery diagnostics
+     */
+    static LoadedProject load(Path source, ProjectOperationContext context) {
+        ProjectOperationContext operation = Objects.requireNonNull(context, "context");
+        operation.report(ProjectOperationProgress.indeterminate("Inspecting Project"));
+        operation.checkCancellation();
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(source, operation);
         return new LoadedProject(candidate.snapshot(), candidate.diagnostics());
     }
 

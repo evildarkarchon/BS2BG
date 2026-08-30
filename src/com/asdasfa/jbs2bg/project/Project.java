@@ -185,8 +185,14 @@ final class Project {
      *         each other or this content (see {@link ProjectSnapshot})
      */
     ProjectSnapshot toSnapshot(Optional<Path> fileIdentity, boolean dirty, ProjectLifecycleStatus lifecycleStatus) {
+        return toSnapshot(fileIdentity, dirty, lifecycleStatus, ProjectContentVersion.detached());
+    }
+
+    /** Produces a session-owned snapshot carrying the supplied opaque content version. */
+    ProjectSnapshot toSnapshot(Optional<Path> fileIdentity, boolean dirty, ProjectLifecycleStatus lifecycleStatus,
+            ProjectContentVersion contentVersion) {
         return new ProjectSnapshot(sliderPresets, customMorphTargets, npcMorphAssignments, fileIdentity, dirty,
-                lifecycleStatus);
+                lifecycleStatus, contentVersion);
     }
 
     /** @return Slider Presets in canonical order, as an unmodifiable list */

@@ -49,7 +49,7 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | One converged production JSON codec | Enforcer `dependencyConvergence` and `bannedDependencies com.eclipsesource.minimal-json:*`; `JacksonDependencyPolicyTest` pins Jackson Core 3.1.5, scans production/test imports, and requires the temporary comparison reader to remain deleted |
 | Every production resource in the artifact | `Java25ToolchainGuardTest.everyProductionResourceIsInTheBuildOutput` (`target/classes` and classpath) and `Assert-JarContainsProductionResources` on the packaged jar |
 | Representative FXML/controller graphs load | `FxmlGraphLoadingTest`: `workbench.fxml` (sole root), every retained migration `popup_*.fxml`, and the custom-root graphs on the pinned toolkit; it also rejects the removed `main.fxml` resource |
-| Workbench Project lifecycle | `WorkbenchProjectFlowTest` covers coherent New/Open/Save/Save As frames, recovery, dirty decisions, failed-close preservation, and stale-effect rejection; `WorkbenchControllerTest` covers real JavaFX command rendering with platform effects substituted at the native chooser/dialog seam |
+| Workbench Project lifecycle and centralized jobs | `JobCoordinatorTest` covers single admission, truthful progress, cancel/commit races, prolonged cancellation, retry linkage, observer isolation, stale callbacks, and shutdown; `WorkbenchProjectFlowTest` covers captured asynchronous Open, content-version freshness, coherent lifecycle frames, and stale-effect rejection; `WorkbenchControllerTest` covers real JavaFX admission/progress/cancel/Activity/Retry rendering with platform effects substituted at the native chooser/dialog seam |
 | Logical visible-set behavior preserved | `FilteredViewTest`, `VisibleScopeCommandsTest` (seam), `FilteredTableAdapterTest` (public-JavaFX adapter: AND filtering, sort through `TableView.sortOrder`, identity-stable selection, frozen bulk scope, detach) |
 | Project, Settings, and BoS JSON contracts | `ProjectSession*Test`, `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`, `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, and `BosArtifactPublisherTest` required by the script; `JacksonJsonTest` and `JacksonDependencyPolicyTest` witness the shared policy |
 
@@ -60,8 +60,8 @@ The required suites the script asserts (report present, at least one test, zero 
 `ProjectSessionOpenTest`, `ProjectSessionSaveTest`, `ProjectSessionImportTest`, `ProjectSessionSliderChoiceTest`,
 `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `JacksonJsonTest`,
 `JacksonDependencyPolicyTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`,
-`ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `BosArtifactPublisherTest`, `WorkbenchProjectFlowTest`, and
-`WorkbenchControllerTest`.
+`ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `BosArtifactPublisherTest`, `JobCoordinatorTest`,
+`WorkbenchProjectFlowTest`, and `WorkbenchControllerTest`.
 
 ## Public-JavaFX replacements made for this gate
 

@@ -120,6 +120,52 @@ class ProjectSessionImportTest {
         assertTrue(breasts.isMissingDefault());
     }
 
+    /** Cancellation between sources retains earlier committed imports and marks later sources unprocessed. */
+    @Test
+    void cancellationBetweenSourcesRetainsEarlierCommittedEffects() throws Exception {
+        Path first = writeXml("first.xml",
+                "<SliderPresets><Preset name=\"Committed First\"/></SliderPresets>");
+        Path second = writeXml("second.xml",
+                "<SliderPresets><Preset name=\"Must Not Commit\"/></SliderPresets>");
+        Path third = writeXml("third.xml",
+                "<SliderPresets><Preset name=\"Also Unprocessed\"/></SliderPresets>");
+        ProjectSession session = ProjectSessions.create();
+        ProjectSnapshot clean = session.newProject().getSnapshot();
+        ProjectOperationContext context = new ProjectOperationContext() {
+            private boolean cancel;
+
+            /** Requests cancellation at the second source boundary. */
+            @Override
+            public boolean cancellationRequested() {
+                return cancel;
+            }
+
+            /** Uses the real completed-source count as the deterministic cancellation point. */
+            @Override
+            public void report(ProjectOperationProgress progress) {
+                cancel = progress.completedUnits().isPresent()
+                        && progress.completedUnits().orElseThrow() == 1;
+            }
+
+            /** Ordered import commits are source-local and do not use one final all-or-nothing publication. */
+            @Override
+            public boolean beginCommit(String phase) {
+                return true;
+            }
+        };
+
+        SliderPresetImportOutcome outcome = session.importSliderPresets(
+                List.of(first, second, third), context);
+
+        assertTrue(outcome.getProjectOutcome() instanceof CancelledOutcome);
+        assertEquals(List.of("Committed First"), sliderPresetNames(outcome.getSnapshot()));
+        assertFalse(clean.getContentVersion().equals(outcome.getSnapshot().getContentVersion()));
+        assertEquals(3, outcome.getSourceOutcomes().size());
+        assertTrue(outcome.getSourceOutcomes().get(0) instanceof ChangedOutcome);
+        assertTrue(outcome.getSourceOutcomes().get(1) instanceof CancelledOutcome);
+        assertTrue(outcome.getSourceOutcomes().get(2) instanceof CancelledOutcome);
+    }
+
     /**
      * Continues after rejected and failed sources, commits the valid file between
      * them, and reports stable source diagnostics in selection order.
