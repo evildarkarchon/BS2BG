@@ -116,17 +116,19 @@ workflow records these steps:
 10. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
 11. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes; repair the
     captured source and Retry it as a newly linked successful attempt.
-12. Open the high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
+12. Change the selected high-token-count source after detached parsing begins, require `STALE_RESULT`, zero effects,
+    a durable Completed-with-issues Activity record, and preservation of the active Project.
+13. Open the regenerated high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
     New/Open/Save/Save As disabled while Exit remains available, then Cancel and require zero committed effects.
-13. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
-   recover through Save As.
-14. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
+14. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
+    recover through Save As.
+15. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
     prompt and prove admission resumes, then repeat and Discard to require bounded exit 0 with no image process.
 
 Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
 launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/9`; its durable artifacts include the Workbench and
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/10`; its durable artifacts include the Workbench and
 responsive UIA trees plus `workbench-high-contrast.png` and `workbench-reduced-motion.png`. The accessibility
 preference changes use documented Windows SPI calls and restore the exact original state in `finally`; see
 [workbench-platform.md](workbench-platform.md).
@@ -269,7 +271,7 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
-- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/9`; steps with durations;
+- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/10`; steps with durations;
   typed navigation, semantic focus, Output interaction, live themes, High Contrast, reduced motion, feedback,
   dialogs, native DPI and responsive/minimum geometry; Project recovery, New/Open/Save/Save As, failure
   preservation/retry and dirty shutdown; the expected/observed process model; bounded exit; environment scrubbing;

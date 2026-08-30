@@ -7,18 +7,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
+
+import com.asdasfa.jbs2bg.testing.ManualExecutor;
 
 class JobCoordinatorTest {
 
@@ -398,61 +397,4 @@ class JobCoordinatorTest {
         }
     }
 
-    /** FIFO executor used to make worker completion an explicit test action. */
-    private static final class ManualExecutor extends AbstractExecutorService {
-        private final Deque<Runnable> tasks = new ArrayDeque<>();
-        private boolean shutdown;
-
-        /** Queues work until the test chooses its deterministic execution point. */
-        @Override
-        public void execute(Runnable command) {
-            tasks.addLast(command);
-        }
-
-        /** Marks the deterministic adapter closed without discarding already submitted work. */
-        @Override
-        public void shutdown() {
-            shutdown = true;
-        }
-
-        /** Marks the adapter closed and returns queued work without running it. */
-        @Override
-        public List<Runnable> shutdownNow() {
-            shutdown = true;
-            List<Runnable> remaining = List.copyOf(tasks);
-            tasks.clear();
-            return remaining;
-        }
-
-        /** @return whether shutdown was requested */
-        @Override
-        public boolean isShutdown() {
-            return shutdown;
-        }
-
-        /** @return whether shutdown was requested and no work remains */
-        @Override
-        public boolean isTerminated() {
-            return shutdown && tasks.isEmpty();
-        }
-
-        /** Deterministic tests never block while waiting for termination. */
-        @Override
-        public boolean awaitTermination(long timeout, TimeUnit unit) {
-            Objects.requireNonNull(unit, "unit");
-            return isTerminated();
-        }
-
-        /** Runs the oldest submitted worker action. */
-        private void runNext() {
-            tasks.removeFirst().run();
-        }
-
-        /** Runs the oldest submitted worker action on one owned platform thread for blocking-race tests. */
-        private Thread runNextAsync() {
-            Thread thread = new Thread(tasks.removeFirst(), "job-coordinator-test-worker");
-            thread.start();
-            return thread;
-        }
-    }
 }

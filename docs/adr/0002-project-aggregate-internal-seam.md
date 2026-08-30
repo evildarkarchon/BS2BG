@@ -1,6 +1,7 @@
 ---
 status: accepted
 date: 2026-08-27
+superseded-by: ADR-0004 only for the frozen ProjectSession/ProjectSnapshot surface; the internal Project aggregate decision remains accepted
 ---
 
 # Project aggregate is an internal seam of ProjectSession

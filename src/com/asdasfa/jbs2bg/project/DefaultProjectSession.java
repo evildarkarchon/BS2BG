@@ -79,29 +79,38 @@ final class DefaultProjectSession implements ProjectSession {
     public ProjectOutcome open(Path source, ProjectOperationContext context) {
         Objects.requireNonNull(source, "source");
         ProjectOperationContext operation = Objects.requireNonNull(context, "context");
+        ProjectFileLoader.LoadedProject loaded;
+        Project opened;
+        try {
+            loaded = ProjectFileLoader.load(source, operation);
+            ProjectSnapshot loadedSnapshot = loaded.getSnapshot();
+            // Constructing the aggregate re-validates name uniqueness and dangling
+            // Slider Preset references at the session publication boundary. The
+            // adapter already performs this check on its detached candidate, so a
+            // violation here is a cutover regression rather than publishable state.
+            opened = Project.from(loadedSnapshot);
+            operation.checkCancellation();
+        } catch (CancellationException exception) {
+            return new CancelledOutcome(snapshot);
+        } catch (ProjectJacksonAdapter.ProjectFormatException exception) {
+            return projectFormatFailure(source, exception);
+        } catch (RuntimeException exception) {
+            // Known document failures are handled above; this boundary keeps an
+            // unexpected adapter failure from escaping after callers entrusted state to Open.
+            return failedOpen(ProjectDiagnosticCodes.PROJECT_OPEN_FAILED, source,
+                    "The Project could not be opened: " + exception.getMessage());
+        }
+
         synchronized (operationLock) {
             try {
-                ProjectFileLoader.LoadedProject loaded = ProjectFileLoader.load(source, operation);
-                ProjectSnapshot loadedSnapshot = loaded.getSnapshot();
-                // Constructing the aggregate re-validates name uniqueness and dangling
-                // Slider Preset references at the session publication boundary. The
-                // adapter already performs this check on its detached candidate, so a
-                // violation here is a cutover regression rather than publishable state.
-                Project opened = Project.from(loadedSnapshot);
                 operation.checkCancellation();
                 if (!operation.beginCommit("Publishing Project"))
                     return new CancelledOutcome(snapshot);
+                ProjectSnapshot loadedSnapshot = loaded.getSnapshot();
                 return publish(opened, loadedSnapshot.getFileIdentity(), loadedSnapshot.isDirty(),
                         loadedSnapshot.getLifecycleStatus(), true, loaded.getDiagnostics());
             } catch (CancellationException exception) {
                 return new CancelledOutcome(snapshot);
-            } catch (ProjectJacksonAdapter.ProjectFormatException exception) {
-                return projectFormatFailure(source, exception);
-            } catch (RuntimeException exception) {
-                // Known document failures are handled above; this boundary keeps an
-                // unexpected adapter failure from escaping after callers entrusted state to Open.
-                return failedOpen(ProjectDiagnosticCodes.PROJECT_OPEN_FAILED, source,
-                        "The Project could not be opened: " + exception.getMessage());
             }
         }
     }

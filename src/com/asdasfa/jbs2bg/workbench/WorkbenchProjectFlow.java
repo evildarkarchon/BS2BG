@@ -1,6 +1,10 @@
 package com.asdasfa.jbs2bg.workbench;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
@@ -368,12 +372,14 @@ public final class WorkbenchProjectFlow {
     private JobCoordinator.Submission<ProjectOutcome> openSubmission(Path source) {
         Path capturedSource = Objects.requireNonNull(source, "source").toAbsolutePath().normalize();
         ProjectContentVersion capturedBasis = projectSession.getSnapshot().getContentVersion();
+        OpenSourceStamp capturedSourceStamp = OpenSourceStamp.capture(capturedSource);
         JobCoordinator.Operation operation = new JobCoordinator.Operation("Open Project",
                 List.of(capturedSource.toString()), List.of(), Optional.of(capturedBasis.toString()));
         return new JobCoordinator.Submission<>(operation, context -> {
-            OpenOperationContext projectContext = new OpenOperationContext(context, capturedBasis);
+            OpenOperationContext projectContext = new OpenOperationContext(context, capturedBasis,
+                    capturedSource, capturedSourceStamp);
             ProjectOutcome outcome = projectSession.open(capturedSource, projectContext);
-            return openResult(outcome, projectContext.stale());
+            return openResult(outcome, projectContext.staleReason());
         }, (attempt, result) -> {
             boolean stale = result.diagnostics().stream()
                     .anyMatch(diagnostic -> diagnostic.code().equals("STALE_RESULT"));
@@ -383,14 +389,15 @@ public final class WorkbenchProjectFlow {
     }
 
     /** Classifies one typed Project outcome into durable job disposition, effects, and diagnostics. */
-    private static JobCoordinator.Result<ProjectOutcome> openResult(ProjectOutcome outcome, boolean stale) {
+    private static JobCoordinator.Result<ProjectOutcome> openResult(ProjectOutcome outcome,
+            Optional<String> staleReason) {
         List<JobCoordinator.Diagnostic> diagnostics = outcome.getDiagnostics().stream()
                 .map(WorkbenchProjectFlow::jobDiagnostic)
                 .toList();
-        if (stale) {
+        if (staleReason.isPresent()) {
             List<JobCoordinator.Diagnostic> staleDiagnostics = new java.util.ArrayList<>(diagnostics);
             staleDiagnostics.add(new JobCoordinator.Diagnostic("STALE_RESULT",
-                    "Open result was not published because the active Project changed after admission.",
+                    "Open result was not published because " + staleReason.orElseThrow() + ".",
                     Optional.empty()));
             return JobCoordinator.Result.completedWithIssues(outcome, "Open result was stale.", List.of(),
                     staleDiagnostics);
@@ -433,12 +440,17 @@ public final class WorkbenchProjectFlow {
     private final class OpenOperationContext implements ProjectOperationContext {
         private final JobCoordinator.Context jobContext;
         private final ProjectContentVersion capturedBasis;
-        private boolean stale;
+        private final Path capturedSource;
+        private final OpenSourceStamp capturedSourceStamp;
+        private String staleReason;
 
         /** Captures immutable freshness state for exactly one Open worker invocation. */
-        private OpenOperationContext(JobCoordinator.Context jobContext, ProjectContentVersion capturedBasis) {
+        private OpenOperationContext(JobCoordinator.Context jobContext, ProjectContentVersion capturedBasis,
+                Path capturedSource, OpenSourceStamp capturedSourceStamp) {
             this.jobContext = Objects.requireNonNull(jobContext, "jobContext");
             this.capturedBasis = Objects.requireNonNull(capturedBasis, "capturedBasis");
+            this.capturedSource = Objects.requireNonNull(capturedSource, "capturedSource");
+            this.capturedSourceStamp = Objects.requireNonNull(capturedSourceStamp, "capturedSourceStamp");
         }
 
         /** {@inheritDoc} */
@@ -465,15 +477,33 @@ public final class WorkbenchProjectFlow {
         @Override
         public boolean beginCommit(String phase) {
             if (!capturedBasis.equals(projectSession.getSnapshot().getContentVersion())) {
-                stale = true;
+                staleReason = "the active Project changed after admission";
+                return false;
+            }
+            if (!capturedSourceStamp.equals(OpenSourceStamp.capture(capturedSource))) {
+                staleReason = "the selected source changed after admission";
                 return false;
             }
             return jobContext.beginCommit(phase);
         }
 
-        /** @return whether freshness, rather than user cancellation, refused publication */
-        private boolean stale() {
-            return stale;
+        /** @return freshness reason when input change, rather than cancellation, refused publication */
+        private Optional<String> staleReason() {
+            return Optional.ofNullable(staleReason);
+        }
+    }
+
+    /** Lightweight filesystem identity used to reject an Open whose selected source changed in flight. */
+    private record OpenSourceStamp(boolean readable, long size, FileTime modifiedAt, String fileKey) {
+        /** Captures stable basic attributes without reading Project bytes on the JavaFX publication lane. */
+        private static OpenSourceStamp capture(Path source) {
+            try {
+                BasicFileAttributes attributes = Files.readAttributes(source, BasicFileAttributes.class);
+                return new OpenSourceStamp(true, attributes.size(), attributes.lastModifiedTime(),
+                        Objects.toString(attributes.fileKey(), ""));
+            } catch (IOException exception) {
+                return new OpenSourceStamp(false, -1L, FileTime.fromMillis(0L), "");
+            }
         }
     }
 

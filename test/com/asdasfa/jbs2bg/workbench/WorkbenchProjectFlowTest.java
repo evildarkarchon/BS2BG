@@ -6,16 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.AbstractExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -26,6 +22,7 @@ import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 class WorkbenchProjectFlowTest {
@@ -138,6 +135,35 @@ class WorkbenchProjectFlowTest {
         assertEquals(newer, session.getSnapshot());
         assertTrue(session.getSnapshot().getSliderPresets().stream()
                 .anyMatch(preset -> preset.getName().equals("Newer content")));
+    }
+
+    /** A source changed after admission is stale even when its replacement remains a valid Project document. */
+    @Test
+    void changedOpenSourceCannotPublishAsTheCapturedInput() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path source = temporaryDirectory.resolve("changing-source.jbs2bg");
+        Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source);
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        ProjectSession session = ProjectSessions.create();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session, jobs);
+        WorkbenchProjectFlow.Frame before = flow.frame();
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
+                .effect().orElseThrow();
+        flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selected(source));
+        Files.copy(Path.of("test-resources", "projects", "legacy-project-all-defaults.jbs2bg"), source,
+                StandardCopyOption.REPLACE_EXISTING);
+
+        worker.runNext();
+
+        JobCoordinator.Attempt terminal = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, terminal.lifecycle());
+        assertTrue(terminal.effectsCommitted().isEmpty());
+        assertTrue(terminal.diagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.code().equals("STALE_RESULT")
+                        && diagnostic.message().contains("source changed")));
+        assertEquals(before.snapshot(), session.getSnapshot());
+        assertEquals(before, flow.frame());
     }
 
     /** New keeps a dirty Project intact until the user explicitly confirms its replacement. */
@@ -384,57 +410,6 @@ class WorkbenchProjectFlowTest {
                 }, failure -> {
                     throw new AssertionError("Unexpected coordinator callback failure", failure);
                 });
-    }
-
-    /** FIFO executor that makes async Workbench completion an explicit test action. */
-    private static final class ManualExecutor extends AbstractExecutorService {
-        private final Deque<Runnable> tasks = new ArrayDeque<>();
-        private boolean shutdown;
-
-        /** Queues one worker action until the test advances it. */
-        @Override
-        public void execute(Runnable command) {
-            tasks.addLast(Objects.requireNonNull(command, "command"));
-        }
-
-        /** Prevents later test submissions. */
-        @Override
-        public void shutdown() {
-            shutdown = true;
-        }
-
-        /** Prevents later work and returns every queued action. */
-        @Override
-        public List<Runnable> shutdownNow() {
-            shutdown = true;
-            List<Runnable> remaining = List.copyOf(tasks);
-            tasks.clear();
-            return remaining;
-        }
-
-        /** @return whether shutdown was requested */
-        @Override
-        public boolean isShutdown() {
-            return shutdown;
-        }
-
-        /** @return whether shutdown was requested after the queue drained */
-        @Override
-        public boolean isTerminated() {
-            return shutdown && tasks.isEmpty();
-        }
-
-        /** Deterministic tests never block for executor termination. */
-        @Override
-        public boolean awaitTermination(long timeout, TimeUnit unit) {
-            Objects.requireNonNull(unit, "unit");
-            return isTerminated();
-        }
-
-        /** Runs the oldest admitted Workbench action. */
-        private void runNext() {
-            tasks.removeFirst().run();
-        }
     }
 
 }

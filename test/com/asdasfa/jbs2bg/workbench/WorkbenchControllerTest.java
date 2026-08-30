@@ -13,9 +13,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.AbstractExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -25,6 +22,7 @@ import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
+import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 import javafx.css.PseudoClass;
@@ -483,54 +481,4 @@ class WorkbenchControllerTest {
         }
     }
 
-    /** FIFO executor that leaves admitted Workbench work queued until a test advances it. */
-    private static final class ManualExecutor extends AbstractExecutorService {
-        private final Deque<Runnable> tasks = new ArrayDeque<>();
-        private boolean shutdown;
-
-        /** Queues one worker action without running it. */
-        @Override
-        public void execute(Runnable command) {
-            tasks.addLast(Objects.requireNonNull(command, "command"));
-        }
-
-        /** Prevents later submissions. */
-        @Override
-        public void shutdown() {
-            shutdown = true;
-        }
-
-        /** Prevents later work and returns the queued actions. */
-        @Override
-        public List<Runnable> shutdownNow() {
-            shutdown = true;
-            List<Runnable> remaining = List.copyOf(tasks);
-            tasks.clear();
-            return remaining;
-        }
-
-        /** @return whether shutdown was requested */
-        @Override
-        public boolean isShutdown() {
-            return shutdown;
-        }
-
-        /** @return whether shutdown was requested after the queue drained */
-        @Override
-        public boolean isTerminated() {
-            return shutdown && tasks.isEmpty();
-        }
-
-        /** Deterministic tests never block for termination. */
-        @Override
-        public boolean awaitTermination(long timeout, TimeUnit unit) {
-            Objects.requireNonNull(unit, "unit");
-            return isTerminated();
-        }
-
-        /** Runs the oldest queued action, including a Future already cancelled before start. */
-        private void runNext() {
-            tasks.removeFirst().run();
-        }
-    }
 }

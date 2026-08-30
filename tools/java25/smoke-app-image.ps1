@@ -966,6 +966,40 @@ try {
         'malformed Open preserved active bytes; Retry re-read the repaired source as a linked successful attempt'
     }
 
+    Invoke-SmokeStep -Name 'changed-source-open-rejects-stale-completion' -Action {
+        $titleBefore = $script:mainWindow.Current.Name
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $cancellableProjectName) -ConfirmButton 'Open'
+        $progressCondition = New-UiaCondition -ControlType 'ProgressBar' -Name 'Current operation progress'
+        Wait-UiaCondition -Description 'Open parsing before selected-source replacement' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition $progressCondition
+            if ($null -ne $candidate -and
+                    $candidate.Current.HelpText -match 'Open Project, (Parsing|Validating) Project') {
+                return $candidate
+            }
+        } | Out-Null
+        Copy-Item -LiteralPath $FixtureProject -Destination (Join-Path $workDir $cancellableProjectName) -Force
+
+        $staleCondition = New-UiaCondition -ControlType 'ListItem' `
+            -Name 'Warning — Open Project — Completed with issues: Open result was stale.'
+        $staleActivity = Wait-UiaElement -Root $script:mainWindow -Condition $staleCondition `
+            -Description 'durable stale Open Activity' -TimeoutSeconds $StepTimeoutSeconds
+        foreach ($evidence in @($cancellableProjectName, 'Effects committed: none', 'Diagnostics: STALE_RESULT')) {
+            if (-not $staleActivity.Current.HelpText.Contains($evidence)) {
+                throw "Stale Open Activity omitted '$evidence': '$($staleActivity.Current.HelpText)'"
+            }
+        }
+        Wait-MainWindow -Title $titleBefore | Out-Null
+        $observations['staleOpen'] = [ordered]@{
+            preservedTitle = $titleBefore
+            changedInput = $cancellableProjectName
+            diagnostic = 'STALE_RESULT'
+            effects = 'none'
+        }
+        New-CancellableProjectFixture -Path (Join-Path $workDir $cancellableProjectName)
+        'changing the selected source during detached parsing produced stale Activity and committed no effect'
+    }
+
     Invoke-SmokeStep -Name 'central-job-admission-progress-and-cancellation' -Action {
         $titleBefore = $script:mainWindow.Current.Name
         Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
@@ -1112,7 +1146,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/9'
+        schema = 'bs2bg.windows-app-image-smoke/10'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion
