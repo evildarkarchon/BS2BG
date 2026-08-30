@@ -71,9 +71,10 @@ $workDir = Join-Path $WorkRoot 'work'
     Number of unique Slider choices in the one detached preset.
 .NOTES
     The fixture creates natural parsing work without adding production sleeps or test-only application behavior.
+    Its default stays below the production parser's 5,000,000-token safety limit.
 #>
 function New-CancellableProjectFixture {
-    param([Parameter(Mandatory)] [string]$Path, [int]$ChoiceCount = 400000)
+    param([Parameter(Mandatory)] [string]$Path, [int]$ChoiceCount = 300000)
     $utf8 = [System.Text.UTF8Encoding]::new($false)
     $writer = [System.IO.StreamWriter]::new($Path, $false, $utf8, 1MB)
     try {
