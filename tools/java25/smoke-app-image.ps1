@@ -73,7 +73,7 @@ $workDir = Join-Path $WorkRoot 'work'
     The fixture creates natural parsing work without adding production sleeps or test-only application behavior.
 #>
 function New-CancellableProjectFixture {
-    param([Parameter(Mandatory)] [string]$Path, [int]$ChoiceCount = 120000)
+    param([Parameter(Mandatory)] [string]$Path, [int]$ChoiceCount = 400000)
     $utf8 = [System.Text.UTF8Encoding]::new($false)
     $writer = [System.IO.StreamWriter]::new($Path, $false, $utf8, 1MB)
     try {
@@ -998,7 +998,7 @@ try {
         if (-not $exitItem.Current.IsEnabled) { throw 'Exit was disabled while Open owned admission.' }
         Send-UiaAccelerator -Window $script:mainWindow -Keys '{ESC}'
 
-        Send-UiaKeysToElement -Element $cancel -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Invoke-UiaElement -Element $cancel
         $cancelledCondition = New-UiaCondition -ControlType 'ListItem' -Name 'Information — Open Project — Cancelled: Cancellation completed.'
         $cancelledActivity = Wait-UiaElement -Root $script:mainWindow -Condition $cancelledCondition -Description 'durable cancelled Open Activity' -TimeoutSeconds $StepTimeoutSeconds
         foreach ($evidence in @($cancellableProjectName, 'Effects committed: none', 'Diagnostics: none')) {
