@@ -80,8 +80,9 @@ function New-CancellableProjectFixture {
         $writer.Write('{"SliderPresets":{"Cancellable":{"isUUNP":false,"SetSliders":[')
         for ($index = 0; $index -lt $ChoiceCount; $index++) {
             if ($index -gt 0) { $writer.Write(',') }
-            $writer.Write(('{"name":"Cancel{0:D6}","enabled":true,"valueSmall":1,' +
-                    '"valueBig":2,"pctMin":0,"pctMax":100}') -f $index)
+            $choiceName = 'Cancel' + $index.ToString('D6', [System.Globalization.CultureInfo]::InvariantCulture)
+            $writer.Write('{"name":"' + $choiceName + '","enabled":true,"valueSmall":1,' +
+                    '"valueBig":2,"pctMin":0,"pctMax":100}')
         }
         $writer.Write(']}},"CustomMorphTargets":{},"MorphedNPCs":{}}')
     }
