@@ -13,8 +13,8 @@
       2. Measures the module closure with jdeps against the pinned JavaFX 25 JMODs (extracted to exploded modules,
          since jdeps reads jars and directories but not JMOD archives) and widens it only with documented explicit
          additions that static analysis cannot see.
-      3. Links the runtime with jlink from the pinned Temurin 25 jmods and the pinned JavaFX JMODs, and verifies
-         the runtime's release metadata and module list.
+      3. Links a zip-6-compressed runtime with jlink from the pinned Temurin 25 jmods and the pinned JavaFX JMODs,
+         and verifies the runtime's release metadata and module list.
       4. Assembles the third-party notices from the staged jars' own license metadata and the runtime's legal
          directories.
       5. Runs jpackage --type app-image with --runtime-image, --main-class com.asdasfa.jbs2bg.Launcher, and
@@ -160,10 +160,10 @@ $stagingDir = (Get-PomProperty -RepoRoot $repoRoot -Name 'bs2bg.appImage.input')
 New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
 
 $toolVersions = [ordered]@{}
-foreach ($tool in @('jdeps', 'jlink', 'jpackage')) {
+foreach ($tool in @('jdeps', 'jimage', 'jlink', 'jpackage')) {
     $toolVersions[$tool] = (Invoke-Native -FilePath (Join-Path $jdkHome "bin\$tool.exe") -ArgumentList @('--version') -Label "$tool --version") -join ' '
 }
-Write-Host "Packaging tools: jdeps $($toolVersions['jdeps']), jlink $($toolVersions['jlink']), jpackage $($toolVersions['jpackage'])"
+Write-Host "Packaging tools: jdeps $($toolVersions['jdeps']), jimage $($toolVersions['jimage']), jlink $($toolVersions['jlink']), jpackage $($toolVersions['jpackage'])"
 
 # ---------------------------------------------------------------------------------------------------------------
 # 2. Staged payload
@@ -219,9 +219,10 @@ Write-Host "Explicit additions: $($resolvedModules.Explicit.Keys -join ', ')"
 Write-Step 'Linking the runtime from the pinned Temurin and JavaFX inputs'
 $runtimeDir = Join-Path $targetDir 'app-image-runtime'
 if (Test-Path -LiteralPath $runtimeDir) { Remove-Item -LiteralPath $runtimeDir -Recurse -Force }
-# The same four options jpackage applies when it links a runtime itself; the runtime is linked here explicitly so
-# the module list is the measured one rather than jpackage's "every module on the module path" default.
-$jlinkOptions = @('--strip-debug', '--no-header-files', '--no-man-pages', '--strip-native-commands')
+# Link explicitly so the module list is measured rather than jpackage's "every module on the module path" default.
+# zip-6 cuts this runtime by about 38%; zip-9 saved only another 0.09% in the pinned JDK 25 benchmark while taking
+# slightly longer to link, so the ordinary ZIP level is the deliberate release-size/packaging-time tradeoff.
+$jlinkOptions = @('--compress', 'zip-6', '--strip-debug', '--no-header-files', '--no-man-pages', '--strip-native-commands')
 $jlinkArguments = @('--module-path', ((Join-Path $jdkHome 'jmods') + ';' + $javafxJmods), '--add-modules', ($resolvedModules.Modules -join ','), '--output', $runtimeDir) + $jlinkOptions
 $jlinkOutput = Invoke-Native -FilePath (Join-Path $jdkHome 'bin\jlink.exe') -ArgumentList $jlinkArguments -Label 'jlink'
 @("jlink $($jlinkArguments -join ' ')", '') + $jlinkOutput | Set-Content -LiteralPath (Join-Path $evidenceDir 'app-image-jlink-output.txt') -Encoding utf8
@@ -313,6 +314,9 @@ $launcherConfig = Read-LauncherConfig -Path $launcherConfigPath
 Assert-LauncherConfig -Config $launcherConfig -MainClass $mainClass -MainJarName $staged.MainJarName -LibJarNames $staged.LibJarNames -AppVersion $appVersion -RequiredJavaOptions $launcherJavaOptions
 $jpackageState = Assert-JpackageState -Path (Join-Path $imageDir 'app\.jpackage.xml') -AppVersion $appVersion -LauncherName $launcherName -MainClass $mainClass
 $imageRuntime = Assert-RuntimeRelease -RuntimeDir (Join-Path $imageDir 'runtime') -ExpectedJavaVersion $lock.jdk.release.JAVA_VERSION -ExpectedModules $resolvedModules.Modules
+$jimageOutput = Invoke-Native -FilePath (Join-Path $jdkHome 'bin\jimage.exe') -ArgumentList @('list', '--verbose', (Join-Path $imageDir 'runtime\lib\modules')) -Label 'jimage list --verbose'
+$runtimeCompression = Assert-JimageCompression -Output $jimageOutput
+Write-Host "Runtime compression: $($runtimeCompression.CompressedResources)/$($runtimeCompression.Resources) resources, $($runtimeCompression.SavingsPercent)% resource-byte reduction"
 $digest = Get-TreeDigest -Root $imageDir
 $digest.Files | ForEach-Object { "$($_.sha256)  $($_.path)" } | Set-Content -LiteralPath (Join-Path $evidenceDir 'app-image-sha256.txt') -Encoding ascii
 Write-Host "Image: $($inventory.FileCount) files, $([math]::Round($inventory.TotalBytes / 1MB, 1)) MB, digest $($digest.Sha256)"
@@ -422,6 +426,16 @@ $evidence = [ordered]@{
         jdepsOutputFile      = 'target/reproducibility/app-image-jdeps-output.txt'
         jlinkOptions         = $jlinkOptions
         jlinkOutputFile      = 'target/reproducibility/app-image-jlink-output.txt'
+        compression          = [ordered]@{
+            algorithm           = 'zip-6'
+            resources           = $runtimeCompression.Resources
+            compressedResources = $runtimeCompression.CompressedResources
+            uncompressedBytes   = $runtimeCompression.UncompressedBytes
+            storedBytes         = $runtimeCompression.StoredBytes
+            savingsBytes        = $runtimeCompression.SavingsBytes
+            savingsPercent      = $runtimeCompression.SavingsPercent
+            verification        = 'jimage list --verbose on the runtime copied into the final jpackage app-image'
+        }
         release              = $imageRuntime.Release
         nativeCommandsStripped = $true
     }

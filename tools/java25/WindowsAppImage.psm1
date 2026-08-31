@@ -672,6 +672,57 @@ function Assert-RuntimeRelease {
 
 <#
 .SYNOPSIS
+    Verifies that verbose jimage metadata contains compressed runtime resources and returns their size summary.
+.PARAMETER Output
+    Lines produced by `jimage list --verbose <runtime>\lib\modules`.
+.OUTPUTS
+    PSCustomObject with resource counts plus uncompressed, stored, and saved byte totals.
+.NOTES
+    The jimage Compressed column is zero for an uncompressed entry; otherwise it is the stored byte count.
+    Failing when every entry is uncompressed makes omission of the release pipeline's jlink compression option
+    observable on the generated runtime rather than trusting the command line alone.
+#>
+function Assert-JimageCompression {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [AllowEmptyString()] [string[]]$Output)
+
+    [long]$uncompressedBytes = 0
+    [long]$storedBytes = 0
+    [int]$resources = 0
+    [int]$compressedResources = 0
+    foreach ($line in $Output) {
+        if ("$line" -notmatch '^\s*\d+\s+(\d+)\s+(\d+)\s+\S') { continue }
+        [long]$size = $Matches[1]
+        [long]$compressed = $Matches[2]
+        $resources++
+        $uncompressedBytes += $size
+        if ($compressed -gt 0) {
+            $compressedResources++
+            $storedBytes += $compressed
+        }
+        else {
+            $storedBytes += $size
+        }
+    }
+    if ($resources -eq 0) {
+        throw 'jimage verbose output contains no resource metadata; runtime compression could not be verified.'
+    }
+    if ($compressedResources -eq 0) {
+        throw "jimage reports no compressed resources among $resources entries; the linked runtime is uncompressed."
+    }
+    $savingsBytes = $uncompressedBytes - $storedBytes
+    return [pscustomobject]@{
+        Resources            = $resources
+        CompressedResources  = $compressedResources
+        UncompressedBytes    = $uncompressedBytes
+        StoredBytes          = $storedBytes
+        SavingsBytes         = $savingsBytes
+        SavingsPercent       = [math]::Round(100 * $savingsBytes / $uncompressedBytes, 2)
+    }
+}
+
+<#
+.SYNOPSIS
     Builds the environment for the packaged smoke run with every host-Java discovery path removed.
 .PARAMETER Environment
     The variables to start from (normally [System.Environment]::GetEnvironmentVariables()).
@@ -908,6 +959,7 @@ Export-ModuleMember -Function @(
     'Assert-AppImageLayout',
     'Get-TreeDigest',
     'Assert-RuntimeRelease',
+    'Assert-JimageCompression',
     'Get-ScrubbedEnvironment',
     'New-ThirdPartyNotices'
 )

@@ -418,6 +418,32 @@ Describe 'Assert-RuntimeRelease' {
     }
 }
 
+Describe 'Assert-JimageCompression' {
+    It 'summarizes compressed resources from verbose jimage metadata' {
+        $summary = Assert-JimageCompression -Output @(
+            'Offset       Size       Compressed Entry',
+            '  10896389       1470        899 com/sun/crypto/provider/AEADBufferedStream.class',
+            '  10900139        532        357 com/sun/crypto/provider/AESCipher.class',
+            '  11244737         41          0 META-INF/services/java.nio.file.spi.FileSystemProvider'
+        )
+
+        $summary.Resources | Should -Be 3
+        $summary.CompressedResources | Should -Be 2
+        $summary.UncompressedBytes | Should -Be 2043
+        $summary.StoredBytes | Should -Be 1297
+    }
+
+    It 'fails closed when jimage reports no compressed resources' {
+        $output = @(
+            'Offset       Size       Compressed Entry',
+            '  24229423       1470          0 com/sun/crypto/provider/AEADBufferedStream.class',
+            '  24230893        532          0 com/sun/crypto/provider/AESCipher.class'
+        )
+
+        { Assert-JimageCompression -Output $output } | Should -Throw -ExpectedMessage '*no compressed resources*'
+    }
+}
+
 Describe 'Get-ScrubbedEnvironment' {
     It 'removes every JDK discovery variable and every Java directory from PATH' {
         $environment = @{

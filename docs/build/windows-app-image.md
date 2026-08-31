@@ -44,12 +44,14 @@ The script:
    extracted with `jmod extract` into `target/app-image-measure/`. The measured closure is widened only by the
    explicit additions listed in the script, each with a recorded reason (currently `jdk.charsets`: the extended
    charsets that the owned Project reader may resolve at runtime from a juniversalchardet detection).
-4. Links the runtime with `jlink` from the pinned Temurin 25 `jmods/` and the pinned JavaFX JMODs with the same
-   four options jpackage applies by default (`--strip-debug --no-header-files --no-man-pages
-   --strip-native-commands`), then verifies its `release` file (`JAVA_VERSION` = the lock's, every requested
-   module present), that `bin\java.exe` is absent, and that every JavaFX module's `legal/` directory was linked
-   in. The JVM's own resolution of that module set (`--show-module-resolution`, including service bindings) is
-   recorded from the toolchain JVM against the same pinned inputs.
+4. Links the runtime with `jlink` from the pinned Temurin 25 `jmods/` and the pinned JavaFX JMODs using
+   `--compress zip-6` plus `--strip-debug --no-header-files --no-man-pages --strip-native-commands`. The pinned
+   JDK benchmark found that zip-6 removes about 38% of the runtime image while zip-9 saves only another 0.09%,
+   so zip-6 is the release-size/packaging-time policy. The script then verifies the runtime's `release` file
+   (`JAVA_VERSION` = the lock's, every requested module present), that `bin\java.exe` is absent, and that every
+   JavaFX module's `legal/` directory was linked in. The JVM's own resolution of that module set
+   (`--show-module-resolution`, including service bindings) is recorded from the toolchain JVM against the same
+   pinned inputs.
 5. Assembles `THIRD-PARTY-NOTICES.txt`, `THIRD-PARTY-COMPONENTS.json`, `CORRESPONDING-SOURCE.txt`, and
    `notices/<jar>/` from the staged jars' own metadata (`META-INF`
    license and notice files, the embedded Maven pom `<licenses>`), listing a jar without metadata explicitly
@@ -66,8 +68,9 @@ The script:
    native libraries, all three manifests, notices, `runtime/legal/java.base/LICENSE`), launcher configuration (`Assert-LauncherConfig`:
    single-process mode, main class, `$APPDIR`-relative classpath covering the jar and every lib, nothing absolute,
    no JavaFX jar, stamped version, required JVM option), jpackage's own state record (`Assert-JpackageState`), the
-   bundled runtime's release, and hashes every file into one image digest. The image is archived as
-   `target/BS2BG-<version>-windows-x64.zip` (top-level `BS2BG\` preserved).
+   bundled runtime's release, and actual compressed-resource metadata from `jimage list --verbose`; an image with
+   no compressed resources fails closed. It then hashes every file into one image digest. The image is archived
+   as `target/BS2BG-<version>-windows-x64.zip` (top-level `BS2BG\` preserved).
 7. Runs `tools/java25/smoke-app-image.ps1` against that archive (below) and writes
    `target/reproducibility/windows-app-image.json`.
 
@@ -257,17 +260,18 @@ focused window.
 - `application`: name, version, main class, main jar, description, vendor.
 - `gate`: how the gate was obtained (this run or reused), its test count, Maven version and `--version` output.
 - `toolchain`: Temurin implementor/full build/`JAVA_VERSION`/`JAVA_RUNTIME_VERSION`, JavaFX patch, archive
-  hashes, architecture (`PROCESSOR_ARCHITECTURE`, JDK `OS_ARCH`, `os.arch`), and `jdeps`/`jlink`/`jpackage`
-  versions.
+  hashes, architecture (`PROCESSOR_ARCHITECTURE`, JDK `OS_ARCH`, `os.arch`), and
+  `jdeps`/`jimage`/`jlink`/`jpackage` versions.
 - `payload`: every staged artifact with SHA-256 and size; pointer to `dependency-tree.txt`; the selected Jackson
   coordinate/jar, coordinate/class-entry inspection method, `onlyProductionCodec=true`, and
   `shadedFallbacks=false` witnesses.
 - `runtime`: measured modules, explicit additions with reasons, requested modules, the image's `MODULES` list,
-  the service closure (`serviceBindings`), the jlink options, and the runtime `release` values. The service
-  closure is the ` binds ` lines of `java --show-module-resolution` run with `--limit-modules` set to the
-  image's exact module set (`app-image-module-resolution.txt` holds the whole resolution): every `uses`/
-  `provides` binding the JVM actually makes among the modules that ship. `jlink --suggest-providers` is not
-  used for this because it lists candidate providers across the whole module path, not what the image resolves.
+  the service closure (`serviceBindings`), the jlink options, the runtime `release` values, and the verified
+  compression algorithm/resource counts/byte savings. The service closure is the ` binds ` lines of
+  `java --show-module-resolution` run with `--limit-modules` set to the image's exact module set
+  (`app-image-module-resolution.txt` holds the whole resolution): every `uses`/`provides` binding the JVM
+  actually makes among the modules that ship. `jlink --suggest-providers` is not used for this because it lists
+  candidate providers across the whole module path, not what the image resolves.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
