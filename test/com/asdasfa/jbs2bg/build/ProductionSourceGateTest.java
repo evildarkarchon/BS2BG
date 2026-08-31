@@ -136,6 +136,51 @@ class ProductionSourceGateTest {
         }
     }
 
+    /**
+     * OpenRewrite remains an explicitly activated maintenance tool rather than a lifecycle-bound part of the
+     * application gate, and its only configured migration is the reviewed Java 25 composite recipe.
+     */
+    @Test
+    void openRewriteJava25MigrationIsOptInAndUnbound() throws Exception {
+        Document pom = parse(POM);
+        Element project = pom.getDocumentElement();
+        Element profiles = child(project, "profiles");
+        List<Element> matches = children(profiles, "profile").stream()
+                .filter(profile -> "openrewrite".equals(child(profile, "id").getTextContent().trim())).toList();
+        assertEquals(1, matches.size(), "pom.xml must define one openrewrite profile");
+
+        Element profile = matches.get(0);
+        assertTrue(children(profile, "activation").isEmpty(), "the openrewrite profile must require explicit activation");
+        Element rewrite = plugin(child(child(profile, "build"), "plugins"), "rewrite-maven-plugin",
+                "profiles/profile[id=openrewrite]/build/plugins");
+        assertTrue(children(rewrite, "executions").isEmpty(), "OpenRewrite must not be bound to a lifecycle phase");
+
+        Element activeRecipes = child(child(rewrite, "configuration"), "activeRecipes");
+        List<String> recipes = children(activeRecipes, "recipe").stream().map(Element::getTextContent)
+                .map(String::trim).toList();
+        assertEquals(List.of("org.openrewrite.java.migrate.UpgradeToJava25"), recipes,
+                "the profile must activate only the Java 25 migration recipe");
+
+        Element recipeDependency = child(child(rewrite, "dependencies"), "dependency");
+        assertEquals("org.openrewrite.recipe", child(recipeDependency, "groupId").getTextContent().trim());
+        assertEquals("rewrite-migrate-java", child(recipeDependency, "artifactId").getTextContent().trim());
+        assertEquals("${rewrite-migrate-java.version}", child(recipeDependency, "version").getTextContent().trim());
+
+        Element managedPlugins = child(child(child(project, "build"), "pluginManagement"), "plugins");
+        Element managedRewrite = plugin(managedPlugins, "rewrite-maven-plugin", "build/pluginManagement/plugins");
+        assertEquals("${rewrite-maven-plugin.version}", child(managedRewrite, "version").getTextContent().trim());
+        assertTrue(property(pom, "rewrite-maven-plugin.version").matches("\\d+\\.\\d+\\.\\d+"),
+                "rewrite-maven-plugin.version must be an exact release");
+        assertTrue(property(pom, "rewrite-migrate-java.version").matches("\\d+\\.\\d+\\.\\d+"),
+                "rewrite-migrate-java.version must be an exact release");
+
+        Element applicationPlugins = child(child(project, "build"), "plugins");
+        assertTrue(children(applicationPlugins, "plugin").stream()
+                .noneMatch(candidate -> "rewrite-maven-plugin".equals(
+                        child(candidate, "artifactId").getTextContent().trim())),
+                "OpenRewrite must stay out of the default application build");
+    }
+
     /** The enforcer keeps JavaFX incubator artifacts out of the dependency graph. */
     @Test
     void enforcerBansJavaFxIncubatorModules() throws Exception {
@@ -213,10 +258,15 @@ class ProductionSourceGateTest {
     /** The build/plugins entry for the given artifact; fails when the pom does not configure it. */
     private static Element plugin(Document pom, String artifactId) {
         Element plugins = child(child(pom.getDocumentElement(), "build"), "plugins");
+        return plugin(plugins, artifactId, "build/plugins");
+    }
+
+    /** The named plugin directly under a plugins element; fails with the supplied location when absent. */
+    private static Element plugin(Element plugins, String artifactId, String location) {
         for (Element plugin : children(plugins, "plugin"))
             if (artifactId.equals(child(plugin, "artifactId").getTextContent().trim()))
                 return plugin;
-        throw new AssertionError("pom.xml must configure " + artifactId + " under build/plugins");
+        throw new AssertionError("pom.xml must configure " + artifactId + " under " + location);
     }
 
     /** The single child element of that name; fails when there are zero or several. */

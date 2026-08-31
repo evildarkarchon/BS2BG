@@ -114,6 +114,10 @@ Running `mvnw` directly (without the script) fails closed unless `BS2BG_JDK25_HO
 Only the script verifies that the JDK behind that variable is the pinned Temurin build, asserts the compiler
 scope, and checks the packaged artifact, so a direct `mvnw verify` is a developer loop, not the gate.
 
+The optional OpenRewrite Java 25 migration is also kept outside this gate. Its repository runner must host Maven
+on the pinned JDK 25 because Rewrite chooses its parser from the Maven JVM, not from the compiler toolchain; see
+[openrewrite-java25.md](openrewrite-java25.md).
+
 ## Reproducibility evidence
 
 `target/reproducibility/` after a run contains:

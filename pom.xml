@@ -58,6 +58,10 @@
         <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
         <maven-toolchains-plugin.version>3.2.0</maven-toolchains-plugin.version>
         <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
+
+        <!-- OpenRewrite is opt-in through the openrewrite profile; these no-auth pins resolve from Maven Central. -->
+        <rewrite-maven-plugin.version>6.46.1</rewrite-maven-plugin.version>
+        <rewrite-migrate-java.version>3.42.1</rewrite-migrate-java.version>
     </properties>
 
     <dependencies>
@@ -178,6 +182,11 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-dependency-plugin</artifactId>
                     <version>${maven-dependency-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.openrewrite.maven</groupId>
+                    <artifactId>rewrite-maven-plugin</artifactId>
+                    <version>${rewrite-maven-plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -352,5 +361,39 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>openrewrite</id>
+            <build>
+                <plugins>
+                    <!--
+                        Keep source migration separate from the application gate: this profile is activated only by
+                        tools/java25/run-openrewrite.ps1, and no Rewrite goal is bound to a lifecycle phase. The recipe
+                        is composite and may update both Java sources and pom.xml, so dryRun is the runner's default.
+                    -->
+                    <plugin>
+                        <groupId>org.openrewrite.maven</groupId>
+                        <artifactId>rewrite-maven-plugin</artifactId>
+                        <configuration>
+                            <activeRecipes>
+                                <recipe>org.openrewrite.java.migrate.UpgradeToJava25</recipe>
+                            </activeRecipes>
+                            <exportDatatables>true</exportDatatables>
+                            <failOnInvalidActiveRecipes>true</failOnInvalidActiveRecipes>
+                            <pomCacheDirectory>${project.build.directory}/rewrite-cache</pomCacheDirectory>
+                        </configuration>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.openrewrite.recipe</groupId>
+                                <artifactId>rewrite-migrate-java</artifactId>
+                                <version>${rewrite-migrate-java.version}</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
