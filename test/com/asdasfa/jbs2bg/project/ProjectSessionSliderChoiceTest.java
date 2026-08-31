@@ -1,10 +1,5 @@
 package com.asdasfa.jbs2bg.project;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,6 +15,8 @@ import org.junit.jupiter.api.io.TempDir;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 /**
  * Verifies slider-choice validation and UUNP default rebuilding through the
  * public ProjectSession seam, with deterministic Slider settings.
@@ -29,7 +26,86 @@ class ProjectSessionSliderChoiceTest {
     @TempDir
     Path tempDirectory;
 
-    /** Seeds distinct regular and UUNP defaults so mode changes are observable. */
+    /**
+     * Builds an explicit choice with both stored values present.
+     *
+     * @param name    slider name
+     * @param small   stored and effective small value
+     * @param big     stored and effective big value
+     * @param minimum lower randomization percentage
+     * @param maximum upper randomization percentage
+     * @return an explicit, enabled slider choice
+     */
+    private static SliderChoiceSnapshot explicit(String name, int small, int big, int minimum, int maximum) {
+        return new SliderChoiceSnapshot(name, true, Integer.valueOf(small), Integer.valueOf(big), small, big,
+                minimum, maximum, false);
+    }
+
+    /**
+     * Asserts one all-default synthesized choice with the given effective values.
+     */
+    private static void assertSynthesized(SliderChoiceSnapshot choice, int effectiveSmall, int effectiveBig) {
+        assertTrue(choice.isMissingDefault());
+        assertTrue(choice.isEnabled());
+        assertFalse(choice.getStoredSmallValue().isPresent());
+        assertFalse(choice.getStoredBigValue().isPresent());
+        assertEquals(effectiveSmall, choice.getEffectiveSmallValue());
+        assertEquals(effectiveBig, choice.getEffectiveBigValue());
+        assertEquals(100, choice.getPercentageMinimum());
+        assertEquals(100, choice.getPercentageMaximum());
+    }
+
+    /**
+     * Asserts an explicit choice whose stored and effective values are both present.
+     */
+    private static void assertExplicitStored(SliderChoiceSnapshot choice, int small, int big, int minimum,
+                                             int maximum) {
+        assertFalse(choice.isMissingDefault());
+        assertEquals(small, choice.getStoredSmallValue().getAsInt());
+        assertEquals(big, choice.getStoredBigValue().getAsInt());
+        assertEquals(small, choice.getEffectiveSmallValue());
+        assertEquals(big, choice.getEffectiveBigValue());
+        assertEquals(minimum, choice.getPercentageMinimum());
+        assertEquals(maximum, choice.getPercentageMaximum());
+    }
+
+    /**
+     * Asserts the structured slider-choice rejection contract at a stable element.
+     */
+    private static void assertSliderChoiceRejected(ProjectOutcome outcome, String code, String element,
+                                                   ProjectSnapshot snapshot) {
+        assertInstanceOf(RejectedOutcome.class, outcome);
+        assertSame(snapshot, outcome.getSnapshot());
+        ProjectDiagnostic diagnostic = outcome.getDiagnostics().get(0);
+        assertEquals(code, diagnostic.getCode());
+        assertEquals(DiagnosticSeverity.ERROR, diagnostic.getSeverity());
+        assertEquals(element, diagnostic.getSourceLocation().getElement().get());
+    }
+
+    /**
+     * Returns slider-choice names in published order.
+     */
+    private static List<String> names(SliderPresetSnapshot preset) {
+        List<String> names = new ArrayList<>();
+        for (SliderChoiceSnapshot choice : preset.getSliderChoices())
+            names.add(choice.getName());
+        return names;
+    }
+
+    /**
+     * Finds one choice by case-insensitive name, failing when absent.
+     */
+    private static SliderChoiceSnapshot find(SliderPresetSnapshot preset, String name) {
+        for (SliderChoiceSnapshot choice : preset.getSliderChoices()) {
+            if (choice.getName().equalsIgnoreCase(name))
+                return choice;
+        }
+        throw new AssertionError("Missing slider choice: " + name);
+    }
+
+    /**
+     * Seeds distinct regular and UUNP defaults so mode changes are observable.
+     */
     @BeforeEach
     void initializeSliderSettings() {
         Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
@@ -43,7 +119,9 @@ class ProjectSessionSliderChoiceTest {
         SettingsTestSupport.installDefaults(standard, uunp);
     }
 
-    /** Restores process-wide Slider settings after each test. */
+    /**
+     * Restores process-wide Slider settings after each test.
+     */
     @AfterEach
     void restoreSliderSettings() {
         SettingsTestSupport.restoreRepositorySettings();
@@ -100,8 +178,8 @@ class ProjectSessionSliderChoiceTest {
         ProjectOutcome collapsedRange = session.apply(SliderPresetEdits.setSliderChoice("Alpha",
                 explicit("Arms", 5, 95, 50, 50)));
 
-        assertTrue(fullRange instanceof ChangedOutcome);
-        assertTrue(collapsedRange instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, fullRange);
+        assertInstanceOf(ChangedOutcome.class, collapsedRange);
         // Breasts and Legs are the standard defaults synthesized at creation; Waist's
         // synthesized default was replaced by the explicit choice above.
         assertEquals(Arrays.asList("Arms", "Breasts", "Legs", "Waist"),
@@ -146,7 +224,7 @@ class ProjectSessionSliderChoiceTest {
         ProjectOutcome created = session.apply(SliderPresetEdits.create("Alpha"));
         SliderPresetSnapshot preset = created.getSnapshot().getSliderPresets().get(0);
 
-        assertTrue(created instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, created);
         assertFalse(preset.isUunp());
         assertEquals(Arrays.asList("Breasts", "Legs", "Waist"), names(preset));
         assertSynthesized(find(preset, "Breasts"), 20, 100);
@@ -154,7 +232,7 @@ class ProjectSessionSliderChoiceTest {
         assertSynthesized(find(preset, "Waist"), 0, 100);
 
         Path savedFile = tempDirectory.resolve("created.jbs2bg");
-        assertTrue(session.saveAs(savedFile) instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, session.saveAs(savedFile));
         SliderPresetSnapshot reopened = ProjectSessions.create().open(savedFile).getSnapshot()
                 .getSliderPresets().get(0);
 
@@ -181,7 +259,7 @@ class ProjectSessionSliderChoiceTest {
         ProjectOutcome toUunp = session.apply(SliderPresetEdits.setUunp("Alpha", true));
         SliderPresetSnapshot uunpPreset = toUunp.getSnapshot().getSliderPresets().get(0);
 
-        assertTrue(toUunp instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, toUunp);
         assertTrue(uunpPreset.isUunp());
         assertEquals(Arrays.asList("Arms", "Breasts", "Legs", "Waist"), names(uunpPreset));
         assertSynthesized(find(uunpPreset, "Arms"), 100, 100);
@@ -197,13 +275,13 @@ class ProjectSessionSliderChoiceTest {
 
         ProjectOutcome editedSynthesized = session.apply(SliderPresetEdits.setSliderChoice("Alpha",
                 find(uunpPreset, "Legs").withPercentageRange(20, 80)));
-        assertTrue(editedSynthesized instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, editedSynthesized);
         assertTrue(find(editedSynthesized.getSnapshot().getSliderPresets().get(0), "Legs").isMissingDefault());
 
         ProjectOutcome toRegular = session.apply(SliderPresetEdits.setUunp("Alpha", false));
         SliderPresetSnapshot regularPreset = toRegular.getSnapshot().getSliderPresets().get(0);
 
-        assertTrue(toRegular instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, toRegular);
         assertFalse(regularPreset.isUunp());
         assertEquals(Arrays.asList("Breasts", "Legs", "Waist"), names(regularPreset));
         assertExplicitStored(find(regularPreset, "Breasts"), 30, 90, 10, 90);
@@ -232,7 +310,7 @@ class ProjectSessionSliderChoiceTest {
                 new SliderPresetSnapshot("Alpha", true, Arrays.asList(breasts, staleWaist))));
         SliderPresetSnapshot preset = outcome.getSnapshot().getSliderPresets().get(0);
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertTrue(preset.isUunp());
         assertEquals(Arrays.asList("Arms", "Breasts", "Legs"), names(preset));
         assertSynthesized(find(preset, "Arms"), 100, 100);
@@ -241,7 +319,7 @@ class ProjectSessionSliderChoiceTest {
 
         ProjectOutcome sameMode = session.apply(SliderPresetEdits.update("Alpha",
                 new SliderPresetSnapshot("Alpha", true, preset.getSliderChoices())));
-        assertTrue(sameMode instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, sameMode);
         assertSame(outcome.getSnapshot(), sameMode.getSnapshot());
     }
 
@@ -265,8 +343,8 @@ class ProjectSessionSliderChoiceTest {
         ProjectOutcome breastsOutcome = session.apply(SliderPresetEdits.setSliderChoice("Alpha", deferringBreasts));
         SliderPresetSnapshot preset = breastsOutcome.getSnapshot().getSliderPresets().get(0);
 
-        assertTrue(waistOutcome instanceof ChangedOutcome);
-        assertTrue(breastsOutcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, waistOutcome);
+        assertInstanceOf(ChangedOutcome.class, breastsOutcome);
         assertExplicitStored(find(preset, "Waist"), 20, 80, 10, 90);
         SliderChoiceSnapshot breasts = find(preset, "Breasts");
         assertFalse(breasts.isMissingDefault());
@@ -281,7 +359,7 @@ class ProjectSessionSliderChoiceTest {
         ProjectOutcome sameStored = session.apply(SliderPresetEdits.setSliderChoice("Alpha",
                 new SliderChoiceSnapshot("Waist", true, Integer.valueOf(20), Integer.valueOf(80), 1, 2, 10, 90,
                         false)));
-        assertTrue(sameStored instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, sameStored);
         assertSame(breastsOutcome.getSnapshot(), sameStored.getSnapshot());
     }
 
@@ -301,75 +379,8 @@ class ProjectSessionSliderChoiceTest {
                 new SliderPresetSnapshot("Alpha", false, Arrays.asList(divergentWaist))));
         SliderPresetSnapshot preset = outcome.getSnapshot().getSliderPresets().get(0);
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertFalse(preset.isUunp());
         assertExplicitStored(find(preset, "Waist"), 20, 80, 10, 90);
-    }
-
-    /**
-     * Builds an explicit choice with both stored values present.
-     *
-     * @param name slider name
-     * @param small stored and effective small value
-     * @param big stored and effective big value
-     * @param minimum lower randomization percentage
-     * @param maximum upper randomization percentage
-     * @return an explicit, enabled slider choice
-     */
-    private static SliderChoiceSnapshot explicit(String name, int small, int big, int minimum, int maximum) {
-        return new SliderChoiceSnapshot(name, true, Integer.valueOf(small), Integer.valueOf(big), small, big,
-                minimum, maximum, false);
-    }
-
-    /** Asserts one all-default synthesized choice with the given effective values. */
-    private static void assertSynthesized(SliderChoiceSnapshot choice, int effectiveSmall, int effectiveBig) {
-        assertTrue(choice.isMissingDefault());
-        assertTrue(choice.isEnabled());
-        assertFalse(choice.getStoredSmallValue().isPresent());
-        assertFalse(choice.getStoredBigValue().isPresent());
-        assertEquals(effectiveSmall, choice.getEffectiveSmallValue());
-        assertEquals(effectiveBig, choice.getEffectiveBigValue());
-        assertEquals(100, choice.getPercentageMinimum());
-        assertEquals(100, choice.getPercentageMaximum());
-    }
-
-    /** Asserts an explicit choice whose stored and effective values are both present. */
-    private static void assertExplicitStored(SliderChoiceSnapshot choice, int small, int big, int minimum,
-            int maximum) {
-        assertFalse(choice.isMissingDefault());
-        assertEquals(small, choice.getStoredSmallValue().getAsInt());
-        assertEquals(big, choice.getStoredBigValue().getAsInt());
-        assertEquals(small, choice.getEffectiveSmallValue());
-        assertEquals(big, choice.getEffectiveBigValue());
-        assertEquals(minimum, choice.getPercentageMinimum());
-        assertEquals(maximum, choice.getPercentageMaximum());
-    }
-
-    /** Asserts the structured slider-choice rejection contract at a stable element. */
-    private static void assertSliderChoiceRejected(ProjectOutcome outcome, String code, String element,
-            ProjectSnapshot snapshot) {
-        assertTrue(outcome instanceof RejectedOutcome);
-        assertSame(snapshot, outcome.getSnapshot());
-        ProjectDiagnostic diagnostic = outcome.getDiagnostics().get(0);
-        assertEquals(code, diagnostic.getCode());
-        assertEquals(DiagnosticSeverity.ERROR, diagnostic.getSeverity());
-        assertEquals(element, diagnostic.getSourceLocation().getElement().get());
-    }
-
-    /** Returns slider-choice names in published order. */
-    private static List<String> names(SliderPresetSnapshot preset) {
-        List<String> names = new ArrayList<>();
-        for (SliderChoiceSnapshot choice : preset.getSliderChoices())
-            names.add(choice.getName());
-        return names;
-    }
-
-    /** Finds one choice by case-insensitive name, failing when absent. */
-    private static SliderChoiceSnapshot find(SliderPresetSnapshot preset, String name) {
-        for (SliderChoiceSnapshot choice : preset.getSliderChoices()) {
-            if (choice.getName().equalsIgnoreCase(name))
-                return choice;
-        }
-        throw new AssertionError("Missing slider choice: " + name);
     }
 }

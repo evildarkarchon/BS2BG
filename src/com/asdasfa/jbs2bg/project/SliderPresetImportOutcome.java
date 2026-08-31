@@ -25,22 +25,30 @@ public final class SliderPresetImportOutcome {
         this.sourceOutcomes = ImmutableValues.copyOf(sourceOutcomes, "sourceOutcomes");
     }
 
-    /** @return the aggregate typed Project outcome */
+    /**
+     * @return the aggregate typed Project outcome
+     */
     public ProjectOutcome getProjectOutcome() {
         return projectOutcome;
     }
 
-    /** @return the final coherent Project snapshot */
+    /**
+     * @return the final coherent Project snapshot
+     */
     public ProjectSnapshot getSnapshot() {
         return projectOutcome.getSnapshot();
     }
 
-    /** @return aggregate diagnostics in selected-source order */
+    /**
+     * @return aggregate diagnostics in selected-source order
+     */
     public List<ProjectDiagnostic> getDiagnostics() {
         return projectOutcome.getDiagnostics();
     }
 
-    /** @return immutable typed outcomes in selected-source order */
+    /**
+     * @return immutable typed outcomes in selected-source order
+     */
     public List<ProjectOutcome> getSourceOutcomes() {
         return sourceOutcomes;
     }

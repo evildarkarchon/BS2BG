@@ -11,85 +11,10 @@ import java.util.Optional;
  */
 public final class WorkbenchNavigation {
 
-    /** Client widths below this logical-pixel boundary use narrow side overlays. */
+    /**
+     * Client widths below this logical-pixel boundary use narrow side overlays.
+     */
     public static final double NARROW_BREAKPOINT = 1200.0;
-
-    /** Full-page Workbench Areas; Output remains a drawer rather than an Area. */
-    public enum Area {
-        TEMPLATES("Templates"),
-        MORPHS("Morphs"),
-        NPC_DATABASE("NPC Database"),
-        SETTINGS("Settings");
-
-        private final String displayName;
-
-        Area(String displayName) {
-            this.displayName = displayName;
-        }
-
-        /** Returns the stable user-facing Area name shared by semantic navigation adapters. */
-        public String displayName() {
-            return displayName;
-        }
-    }
-
-    /** Typed rail and accelerator destinations. */
-    public enum Destination {
-        TEMPLATES,
-        MORPHS,
-        NPC_DATABASE,
-        OUTPUT,
-        SETTINGS
-    }
-
-    /** Semantic F6 landmarks owned by the Workbench shell. */
-    public enum Landmark {
-        RAIL,
-        PRIMARY_LAUNCHER,
-        PRIMARY_CONTENT,
-        EDITOR,
-        INSPECTOR_LAUNCHER,
-        INSPECTOR,
-        OUTPUT_LAUNCHER,
-        OUTPUT,
-        ACTIVITY,
-        STATUS
-    }
-
-    /** Side content that is temporarily overlaid in narrow mode. */
-    public enum Overlay {
-        NONE,
-        PRIMARY_CONTENT,
-        INSPECTOR
-    }
-
-    /** A logical focus destination that can be resolved by the current JavaFX adapter. */
-    public record FocusTarget(Area area, Landmark landmark) {
-        /** Rejects incomplete semantic targets at construction time. */
-        public FocusTarget {
-            Objects.requireNonNull(area, "area");
-            Objects.requireNonNull(landmark, "landmark");
-        }
-    }
-
-    /** Durable navigation state rendered by the Workbench adapter. */
-    public record Frame(Area activeArea, boolean outputDrawerVisible, boolean narrowMode, Overlay overlay) {
-        /** Rejects incomplete frame state at construction time. */
-        public Frame {
-            Objects.requireNonNull(activeArea, "activeArea");
-            Objects.requireNonNull(overlay, "overlay");
-        }
-    }
-
-    /** One committed frame plus an optional at-most-once semantic focus effect. */
-    public record Transition(Frame frame, Optional<FocusTarget> focusTarget) {
-        /** Rejects incomplete transition values at construction time. */
-        public Transition {
-            Objects.requireNonNull(frame, "frame");
-            Objects.requireNonNull(focusTarget, "focusTarget");
-        }
-    }
-
     private Area activeArea = Area.TEMPLATES;
     private boolean outputDrawerVisible;
     private FocusTarget outputReturnTarget;
@@ -98,9 +23,42 @@ public final class WorkbenchNavigation {
     private FocusTarget overlayReturnTarget;
 
     /**
+     * A logical focus destination that can be resolved by the current JavaFX adapter.
+     */
+    public record FocusTarget(Area area, Landmark landmark) {
+        /** Rejects incomplete semantic targets at construction time. */
+        public FocusTarget {
+            Objects.requireNonNull(area, "area");
+            Objects.requireNonNull(landmark, "landmark");
+        }
+    }
+
+    /**
+     * Durable navigation state rendered by the Workbench adapter.
+     */
+    public record Frame(Area activeArea, boolean outputDrawerVisible, boolean narrowMode, Overlay overlay) {
+        /** Rejects incomplete frame state at construction time. */
+        public Frame {
+            Objects.requireNonNull(activeArea, "activeArea");
+            Objects.requireNonNull(overlay, "overlay");
+        }
+    }
+
+    /**
+     * One committed frame plus an optional at-most-once semantic focus effect.
+     */
+    public record Transition(Frame frame, Optional<FocusTarget> focusTarget) {
+        /** Rejects incomplete transition values at construction time. */
+        public Transition {
+            Objects.requireNonNull(frame, "frame");
+            Objects.requireNonNull(focusTarget, "focusTarget");
+        }
+    }
+
+    /**
      * Navigates to one typed rail destination.
      *
-     * @param destination semantic rail or accelerator destination
+     * @param destination  semantic rail or accelerator destination
      * @param currentFocus current semantic focus, retained by later transient-surface slices
      * @return committed navigation state and the requested destination focus
      */
@@ -147,7 +105,9 @@ public final class WorkbenchNavigation {
         return new Transition(currentFrame(), Optional.empty());
     }
 
-    /** Returns the current immutable navigation state for a newly attached adapter. */
+    /**
+     * Returns the current immutable navigation state for a newly attached adapter.
+     */
     public Frame currentFrame() {
         return new Frame(activeArea, outputDrawerVisible, narrowMode, overlay);
     }
@@ -179,7 +139,7 @@ public final class WorkbenchNavigation {
     /**
      * Reconciles responsive state from the measured logical client width.
      *
-     * @param clientWidth current client width in JavaFX logical pixels
+     * @param clientWidth  current client width in JavaFX logical pixels
      * @param currentFocus semantic focus before the reflow
      * @return reflowed frame and a safe editor focus request when an inline side pane became hidden
      */
@@ -255,8 +215,69 @@ public final class WorkbenchNavigation {
         return new Transition(currentFrame(), Optional.empty());
     }
 
-    /** Creates one transition from the reducer's committed durable state. */
+    /**
+     * Creates one transition from the reducer's committed durable state.
+     */
     private Transition transition(FocusTarget focusTarget) {
         return new Transition(currentFrame(), Optional.of(focusTarget));
+    }
+
+    /**
+     * Full-page Workbench Areas; Output remains a drawer rather than an Area.
+     */
+    public enum Area {
+        TEMPLATES("Templates"),
+        MORPHS("Morphs"),
+        NPC_DATABASE("NPC Database"),
+        SETTINGS("Settings");
+
+        private final String displayName;
+
+        Area(String displayName) {
+            this.displayName = displayName;
+        }
+
+        /**
+         * Returns the stable user-facing Area name shared by semantic navigation adapters.
+         */
+        public String displayName() {
+            return displayName;
+        }
+    }
+
+    /**
+     * Typed rail and accelerator destinations.
+     */
+    public enum Destination {
+        TEMPLATES,
+        MORPHS,
+        NPC_DATABASE,
+        OUTPUT,
+        SETTINGS
+    }
+
+    /**
+     * Semantic F6 landmarks owned by the Workbench shell.
+     */
+    public enum Landmark {
+        RAIL,
+        PRIMARY_LAUNCHER,
+        PRIMARY_CONTENT,
+        EDITOR,
+        INSPECTOR_LAUNCHER,
+        INSPECTOR,
+        OUTPUT_LAUNCHER,
+        OUTPUT,
+        ACTIVITY,
+        STATUS
+    }
+
+    /**
+     * Side content that is temporarily overlaid in narrow mode.
+     */
+    public enum Overlay {
+        NONE,
+        PRIMARY_CONTENT,
+        INSPECTOR
     }
 }

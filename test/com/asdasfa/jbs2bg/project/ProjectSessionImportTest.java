@@ -1,10 +1,5 @@
 package com.asdasfa.jbs2bg.project;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -28,12 +23,70 @@ import org.junit.jupiter.api.io.TempDir;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 class ProjectSessionImportTest {
 
     @TempDir
     Path tempDirectory;
 
-    /** Seeds deterministic Slider settings used by imported effective values. */
+    /**
+     * Asserts the stable machine-readable fields for one failed XML source.
+     */
+    private static void assertImportDiagnostic(ProjectDiagnostic diagnostic, Path source, String code,
+                                               String element) {
+        assertEquals(code, diagnostic.getCode());
+        assertEquals(DiagnosticSeverity.ERROR, diagnostic.getSeverity());
+        assertEquals(source.toAbsolutePath().normalize(), diagnostic.getSourceLocation().getPath().get());
+        assertEquals(element, diagnostic.getSourceLocation().getElement().get());
+        assertFalse(diagnostic.getMessage().trim().isEmpty());
+    }
+
+    /**
+     * Returns Slider Preset names in exposed snapshot order.
+     */
+    private static List<String> sliderPresetNames(ProjectSnapshot snapshot) {
+        List<String> names = new java.util.ArrayList<>();
+        for (SliderPresetSnapshot preset : snapshot.getSliderPresets())
+            names.add(preset.getName());
+        return names;
+    }
+
+    /**
+     * Returns slider-choice names in exposed snapshot order.
+     */
+    private static List<String> sliderChoiceNames(SliderPresetSnapshot preset) {
+        List<String> names = new java.util.ArrayList<>();
+        for (SliderChoiceSnapshot choice : preset.getSliderChoices())
+            names.add(choice.getName());
+        return names;
+    }
+
+    /**
+     * Finds one Slider Preset by its case-insensitive logical identity.
+     */
+    private static SliderPresetSnapshot findPreset(ProjectSnapshot snapshot, String name) {
+        for (SliderPresetSnapshot preset : snapshot.getSliderPresets()) {
+            if (preset.getName().equalsIgnoreCase(name))
+                return preset;
+        }
+        throw new AssertionError("Missing Slider Preset: " + name);
+    }
+
+    /**
+     * Finds one slider choice by its case-insensitive identity.
+     */
+    private static SliderChoiceSnapshot findChoice(SliderPresetSnapshot preset, String name) {
+        for (SliderChoiceSnapshot choice : preset.getSliderChoices()) {
+            if (choice.getName().equalsIgnoreCase(name))
+                return choice;
+        }
+        throw new AssertionError("Missing slider choice: " + name);
+    }
+
+    /**
+     * Seeds deterministic Slider settings used by imported effective values.
+     */
     @BeforeEach
     void initializeSliderSettings() {
         Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
@@ -41,13 +94,17 @@ class ProjectSessionImportTest {
         SettingsTestSupport.installDefaults(standard, Collections.emptyMap());
     }
 
-    /** Restores process-wide Slider settings after each import seam test. */
+    /**
+     * Restores process-wide Slider settings after each import seam test.
+     */
     @AfterEach
     void restoreSliderSettings() {
         SettingsTestSupport.restoreRepositorySettings();
     }
 
-    /** Import rejects every selected source without parsing when no Project is active. */
+    /**
+     * Import rejects every selected source without parsing when no Project is active.
+     */
     @Test
     void importBeforeActiveProjectRejectsEverySourceWithoutPublishing() {
         ProjectSession session = ProjectSessions.create();
@@ -57,12 +114,12 @@ class ProjectSessionImportTest {
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(sources);
 
-        assertTrue(outcome.getProjectOutcome() instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, outcome.getProjectOutcome());
         assertSame(before, outcome.getProjectOutcome().getSnapshot());
         assertSame(before, session.getSnapshot());
         assertEquals(2, outcome.getSourceOutcomes().size());
         for (ProjectOutcome sourceOutcome : outcome.getSourceOutcomes()) {
-            assertTrue(sourceOutcome instanceof RejectedOutcome);
+            assertInstanceOf(RejectedOutcome.class, sourceOutcome);
             assertSame(before, sourceOutcome.getSnapshot());
             assertEquals(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED,
                     sourceOutcome.getDiagnostics().get(0).getCode());
@@ -92,13 +149,13 @@ class ProjectSessionImportTest {
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(zulu, alpha));
         ProjectSnapshot snapshot = outcome.getSnapshot();
 
-        assertTrue(outcome.getProjectOutcome() instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome.getProjectOutcome());
         assertSame(snapshot, session.getSnapshot());
         assertTrue(snapshot.isDirty());
         assertEquals(Arrays.asList("Alpha Shape", "Zulu Body"), sliderPresetNames(snapshot));
         assertEquals(2, outcome.getSourceOutcomes().size());
-        assertTrue(outcome.getSourceOutcomes().get(0) instanceof ChangedOutcome);
-        assertTrue(outcome.getSourceOutcomes().get(1) instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().get(1));
         assertSame(snapshot, outcome.getSourceOutcomes().get(0).getSnapshot());
         assertSame(snapshot, outcome.getSourceOutcomes().get(1).getSnapshot());
         assertTrue(outcome.getDiagnostics().isEmpty());
@@ -120,7 +177,9 @@ class ProjectSessionImportTest {
         assertTrue(breasts.isMissingDefault());
     }
 
-    /** Cancellation between sources retains earlier committed imports and marks later sources unprocessed. */
+    /**
+     * Cancellation between sources retains earlier committed imports and marks later sources unprocessed.
+     */
     @Test
     void cancellationBetweenSourcesRetainsEarlierCommittedEffects() throws Exception {
         Path first = writeXml("first.xml",
@@ -157,13 +216,13 @@ class ProjectSessionImportTest {
         SliderPresetImportOutcome outcome = session.importSliderPresets(
                 List.of(first, second, third), context);
 
-        assertTrue(outcome.getProjectOutcome() instanceof CancelledOutcome);
+        assertInstanceOf(CancelledOutcome.class, outcome.getProjectOutcome());
         assertEquals(List.of("Committed First"), sliderPresetNames(outcome.getSnapshot()));
         assertFalse(clean.getContentVersion().equals(outcome.getSnapshot().getContentVersion()));
         assertEquals(3, outcome.getSourceOutcomes().size());
-        assertTrue(outcome.getSourceOutcomes().get(0) instanceof ChangedOutcome);
-        assertTrue(outcome.getSourceOutcomes().get(1) instanceof CancelledOutcome);
-        assertTrue(outcome.getSourceOutcomes().get(2) instanceof CancelledOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(CancelledOutcome.class, outcome.getSourceOutcomes().get(1));
+        assertInstanceOf(CancelledOutcome.class, outcome.getSourceOutcomes().get(2));
     }
 
     /**
@@ -184,14 +243,14 @@ class ProjectSessionImportTest {
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(malformed, valid, missing));
 
-        assertTrue(outcome.getProjectOutcome() instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome.getProjectOutcome());
         assertSame(outcome.getSnapshot(), session.getSnapshot());
         assertTrue(outcome.getSnapshot().isDirty());
         assertEquals(Arrays.asList("Committed"), sliderPresetNames(outcome.getSnapshot()));
         assertEquals(3, outcome.getSourceOutcomes().size());
-        assertTrue(outcome.getSourceOutcomes().get(0) instanceof RejectedOutcome);
-        assertTrue(outcome.getSourceOutcomes().get(1) instanceof ChangedOutcome);
-        assertTrue(outcome.getSourceOutcomes().get(2) instanceof FailedOutcome);
+        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().get(1));
+        assertInstanceOf(FailedOutcome.class, outcome.getSourceOutcomes().get(2));
         assertEquals(2, outcome.getDiagnostics().size());
 
         ProjectDiagnostic malformedDiagnostic = outcome.getSourceOutcomes().get(0).getDiagnostics().get(0);
@@ -221,13 +280,13 @@ class ProjectSessionImportTest {
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(wrongRoot, blankName));
 
-        assertTrue(outcome.getProjectOutcome() instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, outcome.getProjectOutcome());
         assertSame(clean, outcome.getSnapshot());
         assertSame(clean, session.getSnapshot());
         assertFalse(outcome.getSnapshot().isDirty());
         assertEquals(2, outcome.getSourceOutcomes().size());
-        assertTrue(outcome.getSourceOutcomes().get(0) instanceof RejectedOutcome);
-        assertTrue(outcome.getSourceOutcomes().get(1) instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(1));
         assertImportDiagnostic(outcome.getSourceOutcomes().get(0).getDiagnostics().get(0), wrongRoot,
                 ProjectDiagnosticCodes.SLIDER_PRESET_XML_STRUCTURE_INVALID, "/");
         assertImportDiagnostic(outcome.getSourceOutcomes().get(1).getDiagnostics().get(0), blankName,
@@ -256,8 +315,8 @@ class ProjectSessionImportTest {
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(source));
 
-        assertTrue(outcome.getProjectOutcome() instanceof RejectedOutcome);
-        assertTrue(outcome.getSourceOutcomes().get(0) instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, outcome.getProjectOutcome());
+        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(0));
         assertSame(clean, outcome.getSnapshot());
         assertSame(clean, session.getSnapshot());
         assertTrue(outcome.getSnapshot().getSliderPresets().isEmpty());
@@ -289,13 +348,13 @@ class ProjectSessionImportTest {
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(duplicate, empty));
 
-        assertTrue(outcome.getProjectOutcome() instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, outcome.getProjectOutcome());
         assertSame(clean, outcome.getSnapshot());
         assertSame(clean, session.getSnapshot());
         assertFalse(outcome.getSnapshot().isDirty());
         assertEquals(2, outcome.getSourceOutcomes().size());
-        assertTrue(outcome.getSourceOutcomes().get(0) instanceof UnchangedOutcome);
-        assertTrue(outcome.getSourceOutcomes().get(1) instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(UnchangedOutcome.class, outcome.getSourceOutcomes().get(1));
         assertSame(clean, outcome.getSourceOutcomes().get(0).getSnapshot());
         assertSame(clean, outcome.getSourceOutcomes().get(1).getSnapshot());
         assertTrue(outcome.getDiagnostics().isEmpty());
@@ -331,7 +390,7 @@ class ProjectSessionImportTest {
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(source));
         ProjectSnapshot snapshot = outcome.getSnapshot();
 
-        assertTrue(outcome.getProjectOutcome() instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome.getProjectOutcome());
         assertEquals(Arrays.asList("Alpha"), sliderPresetNames(snapshot));
         SliderPresetSnapshot preset = findPreset(snapshot, "Alpha");
         assertFalse(preset.isUunp());
@@ -372,8 +431,8 @@ class ProjectSessionImportTest {
             });
             start.countDown();
 
-            assertTrue(first.get(10, TimeUnit.SECONDS).getProjectOutcome() instanceof ChangedOutcome);
-            assertTrue(second.get(10, TimeUnit.SECONDS).getProjectOutcome() instanceof ChangedOutcome);
+            assertInstanceOf(ChangedOutcome.class, first.get(10, TimeUnit.SECONDS).getProjectOutcome());
+            assertInstanceOf(ChangedOutcome.class, second.get(10, TimeUnit.SECONDS).getProjectOutcome());
             ProjectSnapshot snapshot = session.getSnapshot();
             assertEquals(Arrays.asList("Alpha", "beta"), sliderPresetNames(snapshot));
             assertTrue(snapshot.isDirty());
@@ -389,7 +448,7 @@ class ProjectSessionImportTest {
      */
     @Test
     void unresolvableSourceDiagnosticStillIdentifiesSelectedPath() {
-        Path source = (Path) Proxy.newProxyInstance(Path.class.getClassLoader(), new Class<?>[] { Path.class },
+        Path source = (Path) Proxy.newProxyInstance(Path.class.getClassLoader(), new Class<?>[]{Path.class},
                 (proxy, method, arguments) -> {
                     if ("toAbsolutePath".equals(method.getName()))
                         throw new UnsupportedOperationException("No absolute path is available.");
@@ -406,61 +465,19 @@ class ProjectSessionImportTest {
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Collections.singletonList(source));
 
-        assertTrue(outcome.getProjectOutcome() instanceof FailedOutcome);
+        assertInstanceOf(FailedOutcome.class, outcome.getProjectOutcome());
         ProjectDiagnostic diagnostic = outcome.getDiagnostics().get(0);
         assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_XML_IMPORT_FAILED, diagnostic.getCode());
         assertSame(source, diagnostic.getSourceLocation().getPath().get());
         assertFalse(outcome.getSnapshot().isDirty());
     }
 
-    /** Writes one UTF-8 BodySlide XML source in the temporary directory. */
+    /**
+     * Writes one UTF-8 BodySlide XML source in the temporary directory.
+     */
     private Path writeXml(String fileName, String xml) throws Exception {
         Path source = tempDirectory.resolve(fileName);
         Files.write(source, xml.getBytes(StandardCharsets.UTF_8));
         return source;
-    }
-
-    /** Asserts the stable machine-readable fields for one failed XML source. */
-    private static void assertImportDiagnostic(ProjectDiagnostic diagnostic, Path source, String code,
-            String element) {
-        assertEquals(code, diagnostic.getCode());
-        assertEquals(DiagnosticSeverity.ERROR, diagnostic.getSeverity());
-        assertEquals(source.toAbsolutePath().normalize(), diagnostic.getSourceLocation().getPath().get());
-        assertEquals(element, diagnostic.getSourceLocation().getElement().get());
-        assertFalse(diagnostic.getMessage().trim().isEmpty());
-    }
-
-    /** Returns Slider Preset names in exposed snapshot order. */
-    private static List<String> sliderPresetNames(ProjectSnapshot snapshot) {
-        List<String> names = new java.util.ArrayList<>();
-        for (SliderPresetSnapshot preset : snapshot.getSliderPresets())
-            names.add(preset.getName());
-        return names;
-    }
-
-    /** Returns slider-choice names in exposed snapshot order. */
-    private static List<String> sliderChoiceNames(SliderPresetSnapshot preset) {
-        List<String> names = new java.util.ArrayList<>();
-        for (SliderChoiceSnapshot choice : preset.getSliderChoices())
-            names.add(choice.getName());
-        return names;
-    }
-
-    /** Finds one Slider Preset by its case-insensitive logical identity. */
-    private static SliderPresetSnapshot findPreset(ProjectSnapshot snapshot, String name) {
-        for (SliderPresetSnapshot preset : snapshot.getSliderPresets()) {
-            if (preset.getName().equalsIgnoreCase(name))
-                return preset;
-        }
-        throw new AssertionError("Missing Slider Preset: " + name);
-    }
-
-    /** Finds one slider choice by its case-insensitive identity. */
-    private static SliderChoiceSnapshot findChoice(SliderPresetSnapshot preset, String name) {
-        for (SliderChoiceSnapshot choice : preset.getSliderChoices()) {
-            if (choice.getName().equalsIgnoreCase(name))
-                return choice;
-        }
-        throw new AssertionError("Missing slider choice: " + name);
     }
 }

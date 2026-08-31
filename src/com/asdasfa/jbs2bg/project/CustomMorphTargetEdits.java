@@ -28,7 +28,7 @@ public final class CustomMorphTargetEdits {
      * Requests creation of a Custom Morph Target with explicit Slider Preset
      * relationships chosen by the caller before submission.
      *
-     * @param name requested Custom Morph Target name; the session trims and validates it
+     * @param name              requested Custom Morph Target name; the session trims and validates it
      * @param sliderPresetNames initial Slider Preset relationships
      * @return an immutable atomic creation request
      */
@@ -39,7 +39,7 @@ public final class CustomMorphTargetEdits {
     /**
      * Requests assignment of one existing Slider Preset to a Custom Morph Target.
      *
-     * @param targetName existing Custom Morph Target name, compared without regard to case
+     * @param targetName       existing Custom Morph Target name, compared without regard to case
      * @param sliderPresetName existing Slider Preset name, compared without regard to case
      * @return an immutable assignment-add request
      */
@@ -51,7 +51,7 @@ public final class CustomMorphTargetEdits {
      * Requests atomic assignment of several existing Slider Presets to one Custom
      * Morph Target. Duplicate requested or existing relationships are no-ops.
      *
-     * @param targetName existing Custom Morph Target name, compared without regard to case
+     * @param targetName        existing Custom Morph Target name, compared without regard to case
      * @param sliderPresetNames caller-selected Slider Preset names
      * @return an immutable assignment-batch request
      */
@@ -62,7 +62,7 @@ public final class CustomMorphTargetEdits {
     /**
      * Requests removal of one Slider Preset assignment from a Custom Morph Target.
      *
-     * @param targetName existing Custom Morph Target name, compared without regard to case
+     * @param targetName       existing Custom Morph Target name, compared without regard to case
      * @param sliderPresetName assigned Slider Preset name, compared without regard to case
      * @return an immutable assignment-remove request
      */
@@ -99,11 +99,15 @@ public final class CustomMorphTargetEdits {
         return CLEAR;
     }
 
-    /** Identifies the closed family of Custom Morph Target requests handled by the module. */
+    /**
+     * Identifies the closed family of Custom Morph Target requests handled by the module.
+     */
     interface CustomMorphTargetEdit extends ProjectEdit {
     }
 
-    /** Immutable creation request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable creation request interpreted only by the ProjectSession module.
+     */
     static final class Create implements CustomMorphTargetEdit {
         private final String name;
         private final List<String> sliderPresetNames;
@@ -111,7 +115,7 @@ public final class CustomMorphTargetEdits {
         /**
          * Captures the raw requested name so validation remains inside ProjectSession.
          *
-         * @param name caller-supplied Custom Morph Target name
+         * @param name              caller-supplied Custom Morph Target name
          * @param sliderPresetNames caller-selected initial relationships, or null for validation
          */
         Create(String name, List<String> sliderPresetNames) {
@@ -120,18 +124,24 @@ public final class CustomMorphTargetEdits {
                     : ImmutableValues.copyOf(sliderPresetNames, "sliderPresetNames");
         }
 
-        /** @return the raw requested Custom Morph Target name */
+        /**
+         * @return the raw requested Custom Morph Target name
+         */
         String getName() {
             return name;
         }
 
-        /** @return immutable initial Slider Preset names, or null when omitted */
+        /**
+         * @return immutable initial Slider Preset names, or null when omitted
+         */
         List<String> getSliderPresetNames() {
             return sliderPresetNames;
         }
     }
 
-    /** Immutable assignment-add request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable assignment-add request interpreted only by the ProjectSession module.
+     */
     static final class AddSliderPreset implements CustomMorphTargetEdit {
         private final String targetName;
         private final String sliderPresetName;
@@ -139,7 +149,7 @@ public final class CustomMorphTargetEdits {
         /**
          * Captures both case-insensitive relationship endpoints for session validation.
          *
-         * @param targetName existing Custom Morph Target name
+         * @param targetName       existing Custom Morph Target name
          * @param sliderPresetName existing Slider Preset name
          */
         AddSliderPreset(String targetName, String sliderPresetName) {
@@ -147,18 +157,24 @@ public final class CustomMorphTargetEdits {
             this.sliderPresetName = sliderPresetName;
         }
 
-        /** @return the requested Custom Morph Target name */
+        /**
+         * @return the requested Custom Morph Target name
+         */
         String getTargetName() {
             return targetName;
         }
 
-        /** @return the requested Slider Preset name */
+        /**
+         * @return the requested Slider Preset name
+         */
         String getSliderPresetName() {
             return sliderPresetName;
         }
     }
 
-    /** Immutable assignment-batch request interpreted only by ProjectSession. */
+    /**
+     * Immutable assignment-batch request interpreted only by ProjectSession.
+     */
     static final class AddSliderPresets implements CustomMorphTargetEdit {
         private final String targetName;
         private final List<String> sliderPresetNames;
@@ -166,7 +182,7 @@ public final class CustomMorphTargetEdits {
         /**
          * Defensively captures the target and caller-selected relationship set.
          *
-         * @param targetName existing Custom Morph Target name
+         * @param targetName        existing Custom Morph Target name
          * @param sliderPresetNames selected Slider Preset names, or null for validation
          */
         AddSliderPresets(String targetName, List<String> sliderPresetNames) {
@@ -175,18 +191,24 @@ public final class CustomMorphTargetEdits {
                     : ImmutableValues.copyOf(sliderPresetNames, "sliderPresetNames");
         }
 
-        /** @return the requested Custom Morph Target name */
+        /**
+         * @return the requested Custom Morph Target name
+         */
         String getTargetName() {
             return targetName;
         }
 
-        /** @return immutable selected Slider Preset names, or null when omitted */
+        /**
+         * @return immutable selected Slider Preset names, or null when omitted
+         */
         List<String> getSliderPresetNames() {
             return sliderPresetNames;
         }
     }
 
-    /** Immutable assignment-remove request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable assignment-remove request interpreted only by the ProjectSession module.
+     */
     static final class RemoveSliderPreset implements CustomMorphTargetEdit {
         private final String targetName;
         private final String sliderPresetName;
@@ -194,7 +216,7 @@ public final class CustomMorphTargetEdits {
         /**
          * Captures both case-insensitive relationship endpoints for session validation.
          *
-         * @param targetName existing Custom Morph Target name
+         * @param targetName       existing Custom Morph Target name
          * @param sliderPresetName assigned Slider Preset name
          */
         RemoveSliderPreset(String targetName, String sliderPresetName) {
@@ -202,18 +224,24 @@ public final class CustomMorphTargetEdits {
             this.sliderPresetName = sliderPresetName;
         }
 
-        /** @return the requested Custom Morph Target name */
+        /**
+         * @return the requested Custom Morph Target name
+         */
         String getTargetName() {
             return targetName;
         }
 
-        /** @return the requested Slider Preset assignment name */
+        /**
+         * @return the requested Slider Preset assignment name
+         */
         String getSliderPresetName() {
             return sliderPresetName;
         }
     }
 
-    /** Immutable assignment-clear request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable assignment-clear request interpreted only by the ProjectSession module.
+     */
     static final class ClearSliderPresets implements CustomMorphTargetEdit {
         private final String targetName;
 
@@ -226,13 +254,17 @@ public final class CustomMorphTargetEdits {
             this.targetName = targetName;
         }
 
-        /** @return the requested Custom Morph Target name */
+        /**
+         * @return the requested Custom Morph Target name
+         */
         String getTargetName() {
             return targetName;
         }
     }
 
-    /** Immutable deletion request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable deletion request interpreted only by the ProjectSession module.
+     */
     static final class Delete implements CustomMorphTargetEdit {
         private final String name;
 
@@ -245,13 +277,17 @@ public final class CustomMorphTargetEdits {
             this.name = name;
         }
 
-        /** @return the requested Custom Morph Target name */
+        /**
+         * @return the requested Custom Morph Target name
+         */
         String getName() {
             return name;
         }
     }
 
-    /** Immutable clear request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable clear request interpreted only by the ProjectSession module.
+     */
     static final class Clear implements CustomMorphTargetEdit {
         private Clear() {
         }

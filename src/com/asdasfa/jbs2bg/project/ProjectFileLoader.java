@@ -19,7 +19,7 @@ final class ProjectFileLoader {
      * @param source Project path to inspect and stream-parse
      * @return detached Project content and ordered recovery diagnostics
      * @throws ProjectJacksonAdapter.ProjectFormatException when reading, parsing,
-     *         validation, or resource-limit enforcement fails
+     *                                                      validation, or resource-limit enforcement fails
      */
     static LoadedProject load(Path source) {
         return load(source, ProjectOperationContext.nonCancellable());
@@ -28,7 +28,7 @@ final class ProjectFileLoader {
     /**
      * Reads and validates one complete candidate while reporting real adapter phases.
      *
-     * @param source Project path to inspect and stream-parse
+     * @param source  Project path to inspect and stream-parse
      * @param context operation context retained for this synchronous load
      * @return detached Project content and ordered recovery diagnostics
      */
@@ -40,7 +40,9 @@ final class ProjectFileLoader {
         return new LoadedProject(candidate.snapshot(), candidate.diagnostics());
     }
 
-    /** Complete detached load result for the session publication boundary. */
+    /**
+     * Complete detached load result for the session publication boundary.
+     */
     static final class LoadedProject {
         private final ProjectSnapshot snapshot;
         private final List<ProjectDiagnostic> diagnostics;
@@ -48,7 +50,7 @@ final class ProjectFileLoader {
         /**
          * Creates one immutable loader result.
          *
-         * @param snapshot validated detached Project candidate
+         * @param snapshot    validated detached Project candidate
          * @param diagnostics ordered recovery diagnostics
          */
         LoadedProject(ProjectSnapshot snapshot, List<ProjectDiagnostic> diagnostics) {
@@ -56,12 +58,16 @@ final class ProjectFileLoader {
             this.diagnostics = List.copyOf(diagnostics);
         }
 
-        /** @return validated detached Project candidate */
+        /**
+         * @return validated detached Project candidate
+         */
         ProjectSnapshot getSnapshot() {
             return snapshot;
         }
 
-        /** @return immutable ordered recovery diagnostics */
+        /**
+         * @return immutable ordered recovery diagnostics
+         */
         List<ProjectDiagnostic> getDiagnostics() {
             return diagnostics;
         }

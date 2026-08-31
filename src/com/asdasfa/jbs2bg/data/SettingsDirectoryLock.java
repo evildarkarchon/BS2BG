@@ -10,14 +10,18 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 
-/** Owns the operating-system lock that serializes Settings recovery and publication across application processes. */
+/**
+ * Owns the operating-system lock that serializes Settings recovery and publication across application processes.
+ */
 final class SettingsDirectoryLock implements AutoCloseable {
     private static final String LOCK_FILE_NAME = ".bs2bg-settings.lock";
 
     private final FileChannel channel;
     private final FileLock lock;
 
-    /** Captures the opened channel and its exclusive operating-system lock. */
+    /**
+     * Captures the opened channel and its exclusive operating-system lock.
+     */
     private SettingsDirectoryLock(FileChannel channel, FileLock lock) {
         this.channel = channel;
         this.lock = lock;
@@ -57,7 +61,9 @@ final class SettingsDirectoryLock implements AutoCloseable {
         }
     }
 
-    /** Releases the file lock and its channel, retaining both close failures when necessary. */
+    /**
+     * Releases the file lock and its channel, retaining both close failures when necessary.
+     */
     @Override
     public void close() throws IOException {
         IOException failure = null;

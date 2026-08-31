@@ -38,42 +38,58 @@ public final class JacksonJson {
     private JacksonJson() {
     }
 
-    /** @return the shared Project parser factory carrying the repository's named constraints */
+    /**
+     * @return the shared Project parser factory carrying the repository's named constraints
+     */
     public static JsonFactory projectReaderFactory() {
         return PROJECT_READER_FACTORY;
     }
 
-    /** @return the shared Settings parser factory carrying the repository's named constraints */
+    /**
+     * @return the shared Settings parser factory carrying the repository's named constraints
+     */
     public static JsonFactory settingsReaderFactory() {
         return SETTINGS_READER_FACTORY;
     }
 
-    /** @return the repository's deterministic Core-only writer factory for semantic JSON formats */
+    /**
+     * @return the repository's deterministic Core-only writer factory for semantic JSON formats
+     */
     public static JsonFactory canonicalWriterFactory() {
         return CANONICAL_WRITER_FACTORY;
     }
 
-    /** @return maximum accepted Project source bytes */
+    /**
+     * @return maximum accepted Project source bytes
+     */
     public static long projectMaximumDocumentBytes() {
         return JsonProfile.PROJECT.maximumDocumentBytes();
     }
 
-    /** @return maximum accepted bytes for each Settings source */
+    /**
+     * @return maximum accepted bytes for each Settings source
+     */
     public static long settingsMaximumDocumentBytes() {
         return JsonProfile.SETTINGS.maximumDocumentBytes();
     }
 
-    /** Reports whether decoded text exceeds the shared one-MiB UTF-8 token limit. */
+    /**
+     * Reports whether decoded text exceeds the shared one-MiB UTF-8 token limit.
+     */
     public static boolean exceedsTextLimit(String value) {
         return value.getBytes(StandardCharsets.UTF_8).length > MAXIMUM_TEXT_BYTES;
     }
 
-    /** Reports whether Jackson identified one of the repository-configured stream constraints. */
+    /**
+     * Reports whether Jackson identified one of the repository-configured stream constraints.
+     */
     public static boolean isConstraintFailure(JacksonException exception) {
         return exception.getClass().getName().contains("StreamConstraints");
     }
 
-    /** Uses parser state when a Jackson failure does not carry its own source coordinate. */
+    /**
+     * Uses parser state when a Jackson failure does not carry its own source coordinate.
+     */
     public static TokenStreamLocation bestLocation(JacksonException exception, JsonParser parser) {
         TokenStreamLocation location = exception.getLocation();
         if (location != null)
@@ -85,9 +101,9 @@ public final class JacksonJson {
      * Strictly validates one complete UTF-8 JSON document with the selected owned profile.
      * Exact duplicate names are rejected except for legal Project NPC display-name members.
      *
-     * @param source stable source description used by diagnostics
+     * @param source  stable source description used by diagnostics
      * @param profile owned resource-limit and duplicate-name profile
-     * @param utf8 complete document bytes
+     * @param utf8    complete document bytes
      * @throws JsonFormatException for syntax, duplicate, trailing-data, or limit failures
      */
     static void validate(String source, JsonProfile profile, byte[] utf8) {
@@ -176,7 +192,9 @@ public final class JacksonJson {
         }
     }
 
-    /** Builds the immutable Jackson limit set for one repository profile. */
+    /**
+     * Builds the immutable Jackson limit set for one repository profile.
+     */
     private static StreamReadConstraints constraints(JsonProfile profile) {
         return StreamReadConstraints.builder()
                 .maxNestingDepth(MAXIMUM_NESTING_DEPTH)
@@ -189,12 +207,16 @@ public final class JacksonJson {
                 .build();
     }
 
-    /** Builds one named strict-reader factory; adapters share the completed configuration. */
+    /**
+     * Builds one named strict-reader factory; adapters share the completed configuration.
+     */
     private static JsonFactory readerFactory(JsonProfile profile) {
         return JsonFactory.builder().streamReadConstraints(constraints(profile)).build();
     }
 
-    /** Returns the object frame that owns a property token; malformed placement remains a syntax failure. */
+    /**
+     * Returns the object frame that owns a property token; malformed placement remains a syntax failure.
+     */
     private static ObjectFrame requireObjectFrame(Deque<ContainerFrame> containers) {
         ContainerFrame frame = containers.peek();
         if (frame instanceof ObjectFrame objectFrame)
@@ -203,22 +225,28 @@ public final class JacksonJson {
                 "A JSON member name occurred outside an object.");
     }
 
-    /** Resolves the path where the next scalar or container value will be consumed. */
+    /**
+     * Resolves the path where the next scalar or container value will be consumed.
+     */
     private static String nextValuePath(Deque<ContainerFrame> containers) {
         ContainerFrame frame = containers.peek();
         return frame == null ? "/" : frame.nextValuePath();
     }
 
-    /** Advances only the parent frame; a newly started container owns its children independently. */
+    /**
+     * Advances only the parent frame; a newly started container owns its children independently.
+     */
     private static void consumeValue(Deque<ContainerFrame> containers) {
         ContainerFrame frame = containers.peek();
         if (frame != null)
             frame.consumeValue();
     }
 
-    /** Enforces the policy's UTF-8 byte limit in addition to Jackson's decoded-length guard. */
+    /**
+     * Enforces the policy's UTF-8 byte limit in addition to Jackson's decoded-length guard.
+     */
     private static void enforceTextLimit(String source, String path, TokenStreamLocation location,
-            String description, String value) {
+                                         String description, String value) {
         if (exceedsTextLimit(value)) {
             throw failure("JSON_RESOURCE_LIMIT", source, path, location,
                     "JSON " + description + " exceeds the 1 MiB UTF-8 limit.");
@@ -229,7 +257,7 @@ public final class JacksonJson {
      * Appends one RFC 6901-style escaped member segment to an owned diagnostic path.
      *
      * @param owner escaped path of the containing object
-     * @param name unescaped JSON member name
+     * @param name  unescaped JSON member name
      * @return escaped path of the member
      */
     public static String memberPath(String owner, String name) {
@@ -237,7 +265,9 @@ public final class JacksonJson {
         return "/".equals(owner) ? owner + escaped : owner + "/" + escaped;
     }
 
-    /** Closes the in-memory parser without allowing a codec-specific close failure to escape the boundary. */
+    /**
+     * Closes the in-memory parser without allowing a codec-specific close failure to escape the boundary.
+     */
     private static void close(JsonParser parser) {
         if (parser == null)
             return;
@@ -248,39 +278,55 @@ public final class JacksonJson {
         }
     }
 
-    /** Creates a translated failure from an optional Jackson coordinate. */
+    /**
+     * Creates a translated failure from an optional Jackson coordinate.
+     */
     private static JsonFormatException failure(String code, String source, String path,
-            TokenStreamLocation location, String message) {
+                                               TokenStreamLocation location, String message) {
         int line = location == null ? 1 : Math.max(1, location.getLineNr());
         int column = location == null ? 1 : Math.max(1, location.getColumnNr());
         return failure(code, source, path, line, column, message);
     }
 
-    /** Creates the stable repository exception with no Jackson cause. */
+    /**
+     * Creates the stable repository exception with no Jackson cause.
+     */
     private static JsonFormatException failure(String code, String source, String path,
-            int line, int column, String message) {
+                                               int line, int column, String message) {
         return new JsonFormatException(code, source, path, line, column, message);
     }
 
-    /** Mutable parse context shared by object and array frames. */
+    /**
+     * Mutable parse context shared by object and array frames.
+     */
     private interface ContainerFrame {
-        /** @return escaped path of this container */
+        /**
+         * @return escaped path of this container
+         */
         String path();
 
-        /** @return escaped path where the next child value will be consumed */
+        /**
+         * @return escaped path where the next child value will be consumed
+         */
         String nextValuePath();
 
-        /** Advances this container after its pending child value has been consumed. */
+        /**
+         * Advances this container after its pending child value has been consumed.
+         */
         void consumeValue();
     }
 
-    /** Tracks exact names and the pending value path for one JSON object. */
+    /**
+     * Tracks exact names and the pending value path for one JSON object.
+     */
     private static final class ObjectFrame implements ContainerFrame {
         private final String path;
         private final Set<String> names = new HashSet<>();
         private String pendingValuePath;
 
-        /** Creates one object frame rooted at its already resolved JSON path. */
+        /**
+         * Creates one object frame rooted at its already resolved JSON path.
+         */
         ObjectFrame(String path) {
             this.path = path;
         }
@@ -290,12 +336,16 @@ public final class JacksonJson {
             return path;
         }
 
-        /** Records one exact member name and reports whether this is its first occurrence. */
+        /**
+         * Records one exact member name and reports whether this is its first occurrence.
+         */
         boolean recordName(String name) {
             return names.add(name);
         }
 
-        /** Stores the member path that the next scalar or container token must consume. */
+        /**
+         * Stores the member path that the next scalar or container token must consume.
+         */
         void expectValueAt(String valuePath) {
             pendingValuePath = valuePath;
         }
@@ -311,12 +361,16 @@ public final class JacksonJson {
         }
     }
 
-    /** Tracks the next stable index path for one JSON array. */
+    /**
+     * Tracks the next stable index path for one JSON array.
+     */
     private static final class ArrayFrame implements ContainerFrame {
         private final String path;
         private int nextIndex;
 
-        /** Creates one array frame whose first value has index zero. */
+        /**
+         * Creates one array frame whose first value has index zero.
+         */
         ArrayFrame(String path) {
             this.path = path;
         }

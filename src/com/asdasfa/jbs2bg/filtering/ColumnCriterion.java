@@ -31,7 +31,7 @@ public final class ColumnCriterion {
     /**
      * Creates a criterion that hides rows whose cell text equals any listed value.
      *
-     * @param columnId ID of the column the criterion applies to
+     * @param columnId     ID of the column the criterion applies to
      * @param hiddenValues exact cell texts to hide; empty makes the criterion inactive
      * @return the immutable criterion
      * @throws NullPointerException when an argument or value is null
@@ -40,17 +40,23 @@ public final class ColumnCriterion {
         return new ColumnCriterion(columnId, hiddenValues);
     }
 
-    /** @return the ID of the column this criterion applies to */
+    /**
+     * @return the ID of the column this criterion applies to
+     */
     public String getColumnId() {
         return columnId;
     }
 
-    /** @return the immutable set of hidden cell texts */
+    /**
+     * @return the immutable set of hidden cell texts
+     */
     public Set<String> getHiddenValues() {
         return hiddenValues;
     }
 
-    /** @return true when at least one value is hidden */
+    /**
+     * @return true when at least one value is hidden
+     */
     public boolean isActive() {
         return !hiddenValues.isEmpty();
     }

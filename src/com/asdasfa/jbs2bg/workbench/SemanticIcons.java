@@ -7,10 +7,41 @@ import javafx.scene.AccessibleRole;
 import javafx.scene.Node;
 import javafx.scene.shape.SVGPath;
 
-/** Application-owned bundled-vector implementation of the Workbench semantic icon catalog. */
+/**
+ * Application-owned bundled-vector implementation of the Workbench semantic icon catalog.
+ */
 public final class SemanticIcons {
 
-    /** Stable semantic requests used by feature modules instead of glyph names or font code points. */
+    private SemanticIcons() {
+    }
+
+    /**
+     * Creates a fresh public-JavaFX vector for one semantic request.
+     *
+     * @param key        semantic icon identity
+     * @param decorative true when adjacent text already names the action or state
+     * @return a new toolkit node with no font or external runtime dependency
+     */
+    public static Node create(IconKey key, boolean decorative) {
+        IconKey resolvedKey = Objects.requireNonNull(key, "key");
+        SVGPath icon = new SVGPath();
+        icon.setContent(resolvedKey.svgPath);
+        icon.getStyleClass().addAll("semantic-icon",
+                "semantic-icon-" + resolvedKey.name().toLowerCase(Locale.ROOT).replace('_', '-'));
+        icon.setFocusTraversable(false);
+        icon.setMouseTransparent(true);
+        if (decorative) {
+            icon.setAccessibleRole(AccessibleRole.NODE);
+        } else {
+            icon.setAccessibleRole(AccessibleRole.IMAGE_VIEW);
+            icon.setAccessibleText(resolvedKey.accessibleName());
+        }
+        return icon;
+    }
+
+    /**
+     * Stable semantic requests used by feature modules instead of glyph names or font code points.
+     */
     public enum IconKey {
         TEMPLATES("Templates", "M4 2H14L20 8V22H4ZM14 2V8H20"),
         MORPHS("Morphs", "M12 2A5 5 0 1 0 12 12A5 5 0 1 0 12 2M4 22A8 8 0 0 1 20 22"),
@@ -34,36 +65,11 @@ public final class SemanticIcons {
             this.svgPath = svgPath;
         }
 
-        /** @return stable accessible name used when this icon is the only action label */
+        /**
+         * @return stable accessible name used when this icon is the only action label
+         */
         public String accessibleName() {
             return accessibleName;
         }
-    }
-
-    private SemanticIcons() {
-    }
-
-    /**
-     * Creates a fresh public-JavaFX vector for one semantic request.
-     *
-     * @param key semantic icon identity
-     * @param decorative true when adjacent text already names the action or state
-     * @return a new toolkit node with no font or external runtime dependency
-     */
-    public static Node create(IconKey key, boolean decorative) {
-        IconKey resolvedKey = Objects.requireNonNull(key, "key");
-        SVGPath icon = new SVGPath();
-        icon.setContent(resolvedKey.svgPath);
-        icon.getStyleClass().addAll("semantic-icon",
-                "semantic-icon-" + resolvedKey.name().toLowerCase(Locale.ROOT).replace('_', '-'));
-        icon.setFocusTraversable(false);
-        icon.setMouseTransparent(true);
-        if (decorative) {
-            icon.setAccessibleRole(AccessibleRole.NODE);
-        } else {
-            icon.setAccessibleRole(AccessibleRole.IMAGE_VIEW);
-            icon.setAccessibleText(resolvedKey.accessibleName());
-        }
-        return icon;
     }
 }

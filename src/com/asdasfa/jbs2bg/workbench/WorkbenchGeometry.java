@@ -1,12 +1,18 @@
 package com.asdasfa.jbs2bg.workbench;
 
-/** Converts accepted logical client geometry into window bounds using live JavaFX measurements. */
+/**
+ * Converts accepted logical client geometry into window bounds using live JavaFX measurements.
+ */
 public final class WorkbenchGeometry {
 
-    /** Accepted minimum Workbench client width in logical pixels. */
+    /**
+     * Accepted minimum Workbench client width in logical pixels.
+     */
     public static final double MINIMUM_CLIENT_WIDTH = 800.0;
 
-    /** Accepted minimum Workbench client height in logical pixels. */
+    /**
+     * Accepted minimum Workbench client height in logical pixels.
+     */
     public static final double MINIMUM_CLIENT_HEIGHT = 600.0;
 
     private WorkbenchGeometry() {
@@ -34,9 +40,11 @@ public final class WorkbenchGeometry {
         return minimumWindowSize(measuredWindowHeight, measuredClientHeight, MINIMUM_CLIENT_HEIGHT);
     }
 
-    /** Applies one measured non-client inset without assuming decoration dimensions or DPI. */
+    /**
+     * Applies one measured non-client inset without assuming decoration dimensions or DPI.
+     */
     private static double minimumWindowSize(double measuredWindowSize, double measuredClientSize,
-            double minimumClientSize) {
+                                            double minimumClientSize) {
         if (!Double.isFinite(measuredWindowSize) || !Double.isFinite(measuredClientSize)
                 || measuredWindowSize < 0.0 || measuredClientSize < 0.0) {
             throw new IllegalArgumentException("measured sizes must be finite and non-negative");

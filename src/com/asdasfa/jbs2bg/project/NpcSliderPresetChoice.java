@@ -14,7 +14,7 @@ public final class NpcSliderPresetChoice {
     /**
      * Captures one explicit fill-empty decision for later session validation.
      *
-     * @param identity target NPC Morph Assignment identity
+     * @param identity         target NPC Morph Assignment identity
      * @param sliderPresetName caller-chosen Slider Preset name
      * @throws NullPointerException when either value is null
      */
@@ -23,12 +23,16 @@ public final class NpcSliderPresetChoice {
         this.sliderPresetName = Objects.requireNonNull(sliderPresetName, "sliderPresetName");
     }
 
-    /** @return the target NPC Morph Assignment identity */
+    /**
+     * @return the target NPC Morph Assignment identity
+     */
     public NpcMorphAssignmentIdentity getIdentity() {
         return identity;
     }
 
-    /** @return the explicit caller-chosen Slider Preset name */
+    /**
+     * @return the explicit caller-chosen Slider Preset name
+     */
     public String getSliderPresetName() {
         return sliderPresetName;
     }

@@ -24,7 +24,7 @@ public final class SliderPresetEdits {
     /**
      * Requests duplication of one Slider Preset under a new logical name.
      *
-     * @param sourceName existing Slider Preset name, compared without regard to case
+     * @param sourceName    existing Slider Preset name, compared without regard to case
      * @param duplicateName requested name for the independent copy
      * @return an immutable duplication request
      */
@@ -51,7 +51,7 @@ public final class SliderPresetEdits {
      * Requests a display-name change while retaining the logical Slider Preset.
      *
      * @param currentName existing logical Slider Preset name
-     * @param newName requested display name, including case-only changes
+     * @param newName     requested display name, including case-only changes
      * @return an immutable rename request
      */
     public static ProjectEdit rename(String currentName, String newName) {
@@ -97,18 +97,22 @@ public final class SliderPresetEdits {
      * whose minimum exceeds the maximum.
      *
      * @param presetName existing Slider Preset name, compared without regard to case
-     * @param choice complete observable slider-choice value
+     * @param choice     complete observable slider-choice value
      * @return an immutable slider-choice request
      */
     public static ProjectEdit setSliderChoice(String presetName, SliderChoiceSnapshot choice) {
         return new SetSliderChoice(presetName, choice);
     }
 
-    /** Identifies the closed family of Slider Preset requests handled by the module. */
+    /**
+     * Identifies the closed family of Slider Preset requests handled by the module.
+     */
     interface SliderPresetEdit extends ProjectEdit {
     }
 
-    /** Immutable creation request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable creation request interpreted only by the ProjectSession module.
+     */
     static final class Create implements SliderPresetEdit {
         private final String name;
 
@@ -121,13 +125,17 @@ public final class SliderPresetEdits {
             this.name = name;
         }
 
-        /** @return the raw requested Slider Preset name */
+        /**
+         * @return the raw requested Slider Preset name
+         */
         String getName() {
             return name;
         }
     }
 
-    /** Immutable duplication request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable duplication request interpreted only by the ProjectSession module.
+     */
     static final class Duplicate implements SliderPresetEdit {
         private final String sourceName;
         private final String duplicateName;
@@ -135,7 +143,7 @@ public final class SliderPresetEdits {
         /**
          * Captures source identity and the raw requested duplicate name.
          *
-         * @param sourceName existing Slider Preset name
+         * @param sourceName    existing Slider Preset name
          * @param duplicateName caller-supplied duplicate name
          */
         Duplicate(String sourceName, String duplicateName) {
@@ -143,18 +151,24 @@ public final class SliderPresetEdits {
             this.duplicateName = duplicateName;
         }
 
-        /** @return the requested source Slider Preset name */
+        /**
+         * @return the requested source Slider Preset name
+         */
         String getSourceName() {
             return sourceName;
         }
 
-        /** @return the raw requested duplicate name */
+        /**
+         * @return the raw requested duplicate name
+         */
         String getDuplicateName() {
             return duplicateName;
         }
     }
 
-    /** Immutable full-update request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable full-update request interpreted only by the ProjectSession module.
+     */
     static final class Update implements SliderPresetEdit {
         private final String currentName;
         private final SliderPresetSnapshot replacement;
@@ -170,18 +184,24 @@ public final class SliderPresetEdits {
             this.replacement = replacement;
         }
 
-        /** @return the requested current Slider Preset name */
+        /**
+         * @return the requested current Slider Preset name
+         */
         String getCurrentName() {
             return currentName;
         }
 
-        /** @return the requested replacement, or null when omitted */
+        /**
+         * @return the requested replacement, or null when omitted
+         */
         SliderPresetSnapshot getReplacement() {
             return replacement;
         }
     }
 
-    /** Immutable rename request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable rename request interpreted only by the ProjectSession module.
+     */
     static final class Rename implements SliderPresetEdit {
         private final String currentName;
         private final String newName;
@@ -190,25 +210,31 @@ public final class SliderPresetEdits {
          * Captures the logical target and raw requested display name.
          *
          * @param currentName existing Slider Preset name
-         * @param newName caller-supplied replacement name
+         * @param newName     caller-supplied replacement name
          */
         Rename(String currentName, String newName) {
             this.currentName = currentName;
             this.newName = newName;
         }
 
-        /** @return the requested current Slider Preset name */
+        /**
+         * @return the requested current Slider Preset name
+         */
         String getCurrentName() {
             return currentName;
         }
 
-        /** @return the raw requested display name */
+        /**
+         * @return the raw requested display name
+         */
         String getNewName() {
             return newName;
         }
     }
 
-    /** Immutable deletion request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable deletion request interpreted only by the ProjectSession module.
+     */
     static final class Delete implements SliderPresetEdit {
         private final String name;
 
@@ -221,19 +247,25 @@ public final class SliderPresetEdits {
             this.name = name;
         }
 
-        /** @return the requested Slider Preset name */
+        /**
+         * @return the requested Slider Preset name
+         */
         String getName() {
             return name;
         }
     }
 
-    /** Immutable clear request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable clear request interpreted only by the ProjectSession module.
+     */
     static final class Clear implements SliderPresetEdit {
         private Clear() {
         }
     }
 
-    /** Immutable UUNP request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable UUNP request interpreted only by the ProjectSession module.
+     */
     static final class SetUunp implements SliderPresetEdit {
         private final String name;
         private final boolean uunp;
@@ -249,18 +281,24 @@ public final class SliderPresetEdits {
             this.uunp = uunp;
         }
 
-        /** @return the requested Slider Preset name */
+        /**
+         * @return the requested Slider Preset name
+         */
         String getName() {
             return name;
         }
 
-        /** @return the requested UUNP flag */
+        /**
+         * @return the requested UUNP flag
+         */
         boolean isUunp() {
             return uunp;
         }
     }
 
-    /** Immutable slider-choice request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable slider-choice request interpreted only by the ProjectSession module.
+     */
     static final class SetSliderChoice implements SliderPresetEdit {
         private final String presetName;
         private final SliderChoiceSnapshot choice;
@@ -269,19 +307,23 @@ public final class SliderPresetEdits {
          * Captures the target identity and complete slider-choice value.
          *
          * @param presetName existing Slider Preset name
-         * @param choice requested choice, or null for session validation
+         * @param choice     requested choice, or null for session validation
          */
         SetSliderChoice(String presetName, SliderChoiceSnapshot choice) {
             this.presetName = presetName;
             this.choice = choice;
         }
 
-        /** @return the requested Slider Preset name */
+        /**
+         * @return the requested Slider Preset name
+         */
         String getPresetName() {
             return presetName;
         }
 
-        /** @return the requested slider choice, or null when omitted */
+        /**
+         * @return the requested slider choice, or null when omitted
+         */
         SliderChoiceSnapshot getChoice() {
             return choice;
         }

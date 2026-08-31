@@ -24,41 +24,161 @@ import java.util.function.Consumer;
 public final class JobCoordinator implements AutoCloseable {
 
     private static final Duration PROLONGED_CANCELLATION_DELAY = Duration.ofSeconds(5);
+    private final Object lock = new Object();
+    private final ExecutorService workerExecutor;
+    private final Executor publicationExecutor;
+    private final Clock clock;
+    private final DelayScheduler delayScheduler;
+    private final Consumer<Throwable> callbackFailureSink;
+    private final Map<Long, Consumer<Frame>> observers = new LinkedHashMap<>();
+    private final Map<AttemptId, RetryFactory<?>> completedRetryFactories = new LinkedHashMap<>();
+    private final List<Diagnostic> technicalDiagnostics = new ArrayList<>();
+/**
+     * Type-safe terminal worker result delivered only for its accepted current attempt.
+     */
+    public record Result<T>(
+    /**
+     * Fully captured request for a new attempt; only the coordinator stamps retry linkage.
+     */
+    public record Submission<T>value,
+    Lifecycle lifecycle, Optional<String>effectsCommitted,
+    String summary, List)
+List<Diagnostic> diagnostics
+Operation operation, Work
+Completion<T> completion
+Optional<RetryFactory<T>> retryFactory
+    private long nextAttemptId = 1;
+    private long nextObserverId = 1;<T>(
+        private long nextSequence = 2;<T>work,
+        private Frame frame = new Frame(1, Optional.empty(), false, false, List.of());,
+        private Active<?> active;)
+    private boolean shutdownRequested;
+    private boolean closed;
 
-    /** Observable lifecycle from admitted work through one truthful terminal disposition. */
-    public enum Lifecycle {
-        RUNNING,
-        CANCELLING,
-        FINISHING,
-        COMPLETED,
-        COMPLETED_WITH_ISSUES,
-        CANCELLED,
-        FAILED;
-
-        /** @return true only after no more worker transition may change this attempt */
-        public boolean terminal() {
-            return switch (this) {
-                case COMPLETED, COMPLETED_WITH_ISSUES, CANCELLED, FAILED -> true;
-                case RUNNING, CANCELLING, FINISHING -> false;
-            };
-        }
+    {
+        /** Creates a successful result carrying its usable typed value. */
+        public static <T > Result < T > completed(T value, String summary, List < String > effectsCommitted,
+            List < Diagnostic > diagnostics) {
+        return new Result<>(Lifecycle.COMPLETED, Optional.of(Objects.requireNonNull(value, "value")), summary,
+                effectsCommitted, diagnostics);
     }
 
-    /** Result of the cancellation linearization point. */
-    public enum CancelResponse {
-        ACCEPTED,
-        TOO_LATE,
-        NO_ACTIVE_JOB
+        /** Creates a usable result whose structured diagnostics require attention. */
+        public static <T > Result < T > completedWithIssues(T value, String summary, List < String > effectsCommitted,
+            List < Diagnostic > diagnostics) {
+        return new Result<>(Lifecycle.COMPLETED_WITH_ISSUES,
+                Optional.of(Objects.requireNonNull(value, "value")), summary, effectsCommitted, diagnostics);
     }
 
-    /** Result of requesting coordinated application shutdown. */
-    public enum ShutdownResponse {
-        READY,
-        WAITING_FOR_JOB,
-        ALREADY_REQUESTED
+        /** Creates a cancellation result without a usable value or unsafe committed effect. */
+        public static <T > Result < T > cancelled(String summary, List < String > effectsCommitted,
+            List < Diagnostic > diagnostics) {
+        return new Result<>(Lifecycle.CANCELLED, Optional.empty(), summary, effectsCommitted, diagnostics);
     }
 
-    /** Opaque, monotonically increasing identity of one coordinator attempt. */
+        /** Creates a cancellation result carrying an authoritative unchanged or partially committed typed outcome. */
+        public static <T > Result < T > cancelled(T value, String summary, List < String > effectsCommitted,
+            List < Diagnostic > diagnostics) {
+        return new Result<>(Lifecycle.CANCELLED, Optional.of(Objects.requireNonNull(value, "value")), summary,
+                effectsCommitted, diagnostics);
+    }
+
+        /** Creates a failed result without a usable value. */
+        public static <T > Result < T > failed(String summary, List < Diagnostic > diagnostics) {
+        return new Result<>(Lifecycle.FAILED, Optional.empty(), summary, List.of(), diagnostics);
+    }
+
+        /** Creates a failed result carrying an authoritative domain outcome for serialized presentation. */
+        public static <T > Result < T > failed(T value, String summary, List < Diagnostic > diagnostics) {
+        return new Result<>(Lifecycle.FAILED, Optional.of(Objects.requireNonNull(value, "value")), summary,
+                List.of(), diagnostics);
+    }
+
+        /** Rejects active lifecycles and successful results that omit their usable typed value. */
+        public Result {
+        Objects.requireNonNull(lifecycle, "lifecycle");
+        if (!lifecycle.terminal())
+            throw new IllegalArgumentException("worker results must be terminal");
+        value = Objects.requireNonNull(value, "value");
+        summary = requireText(summary, "summary");
+        effectsCommitted = copyText(effectsCommitted, "effectsCommitted");
+        diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
+        if (diagnostics.stream().anyMatch(Objects::isNull))
+            throw new NullPointerException("diagnostics contains null");
+        boolean usable = lifecycle == Lifecycle.COMPLETED || lifecycle == Lifecycle.COMPLETED_WITH_ISSUES;
+        if (usable && value.isEmpty())
+            throw new IllegalArgumentException("successful completion dispositions require a value");
+    }
+    }
+
+    {
+        /** Requires immutable operation context, executable callbacks, and an explicit retry capability. */
+        public Submission {
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(work, "work");
+        Objects.requireNonNull(completion, "completion");
+        Objects.requireNonNull(retryFactory, "retryFactory");
+    }
+    }
+
+    /**
+     * Creates one coordinator from injected worker, serialized publication, clock, delay, and failure adapters.
+     * The publication executor must serialize callbacks in submission order.
+     *
+     * @param workerExecutor      application-owned worker executor
+     * @param publicationExecutor serialized presentation-lane executor
+     * @param clock               timestamps attempt evidence
+     * @param delayScheduler      schedules prolonged-cancellation status only
+     * @param callbackFailureSink records observer/completion failures outside job disposition
+     */
+    public JobCoordinator(ExecutorService workerExecutor, Executor publicationExecutor, Clock clock,
+                          DelayScheduler delayScheduler, Consumer<Throwable> callbackFailureSink) {
+        this.workerExecutor = Objects.requireNonNull(workerExecutor, "workerExecutor");
+        this.publicationExecutor = Objects.requireNonNull(publicationExecutor, "publicationExecutor");
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.delayScheduler = Objects.requireNonNull(delayScheduler, "delayScheduler");
+        this.callbackFailureSink = Objects.requireNonNull(callbackFailureSink, "callbackFailureSink");
+    }
+
+    /**
+     * Converts an unexpected throwable to structured diagnostic evidence.
+     */
+    private static Diagnostic diagnostic(String code, String message, Throwable failure) {
+        return new Diagnostic(code, message, Optional.of(failure.getClass().getName() + ": "
+                + readableMessage(failure)));
+    }
+
+    /**
+     * Returns stable nonblank throwable text without assuming providers supply a message.
+     */
+    private static String readableMessage(Throwable failure) {
+        String message = failure.getMessage();
+        return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
+    }
+
+    /**
+     * Normalizes one nonblank interface string.
+     */
+    private static String requireText(String value, String name) {
+        String text = Objects.requireNonNull(value, name).trim();
+        if (text.isEmpty())
+            throw new IllegalArgumentException(name + " must not be blank");
+        return text;
+    }
+
+    /**
+     * Defensively copies a non-null list of nonblank interface strings.
+     */
+    private static List<String> copyText(List<String> values, String name) {
+        List<String> copy = new ArrayList<>();
+        for (String value : Objects.requireNonNull(values, name))
+            copy.add(requireText(value, name + " value"));
+        return List.copyOf(copy);
+    }
+
+    /**
+     * Opaque, monotonically increasing identity of one coordinator attempt.
+     */
     public record AttemptId(long value) {
         /** Rejects identities that could be confused with the absence of an attempt. */
         public AttemptId {
@@ -67,9 +187,11 @@ public final class JobCoordinator implements AutoCloseable {
         }
     }
 
-    /** Immutable captured operation identity and user-facing source/destination context. */
+    /**
+     * Immutable captured operation identity and user-facing source/destination context.
+     */
     public record Operation(String name, List<String> sourceLabels, List<String> destinationLabels,
-            Optional<String> capturedBasis) {
+                            Optional<String> capturedBasis) {
         /** Defensively owns labels and rejects incomplete operation descriptions. */
         public Operation {
             name = requireText(name, "name");
@@ -80,16 +202,18 @@ public final class JobCoordinator implements AutoCloseable {
         }
     }
 
-    /** Truthful current phase with either measured units or indeterminate progress. */
+    /**
+     * Truthful current phase with either measured units or indeterminate progress.
+     */
     public record Progress(String phase, Optional<Long> completedUnits, Optional<Long> totalUnits,
-            boolean cancellable) {
+                           boolean cancellable) {
         /** Creates indeterminate phase progress without synthesizing a percentage. */
-        public static Progress indeterminate(String phase, boolean cancellable) {
+        public static Progress indeterminate (String phase,boolean cancellable){
             return new Progress(phase, Optional.empty(), Optional.empty(), cancellable);
         }
 
         /** Creates measured phase progress whose percentage is derived only from supplied real units. */
-        public static Progress determinate(String phase, long completedUnits, long totalUnits) {
+        public static Progress determinate (String phase,long completedUnits, long totalUnits){
             return new Progress(phase, Optional.of(completedUnits), Optional.of(totalUnits), true);
         }
 
@@ -109,7 +233,7 @@ public final class JobCoordinator implements AutoCloseable {
         }
 
         /** @return floor percentage derived from real units, or empty for indeterminate progress */
-        public OptionalInt percentage() {
+        public OptionalInt percentage () {
             if (completedUnits.isEmpty())
                 return OptionalInt.empty();
             double ratio = (double) completedUnits.orElseThrow() / (double) totalUnits.orElseThrow();
@@ -117,7 +241,9 @@ public final class JobCoordinator implements AutoCloseable {
         }
     }
 
-    /** Structured coordinator or worker diagnostic retained independently from terminal classification. */
+    /**
+     * Structured coordinator or worker diagnostic retained independently from terminal classification.
+     */
     public record Diagnostic(String code, String message, Optional<String> details) {
         /** Rejects incomplete diagnostic values. */
         public Diagnostic {
@@ -127,11 +253,13 @@ public final class JobCoordinator implements AutoCloseable {
         }
     }
 
-    /** Immutable public state of the latest attempt. */
+    /**
+     * Immutable public state of the latest attempt.
+     */
     public record Attempt(AttemptId id, Operation operation, Optional<AttemptId> retryOf, Lifecycle lifecycle,
-            Progress progress, Instant startedAt, Optional<Instant> completedAt, String summary,
-            List<String> effectsCommitted, List<Diagnostic> diagnostics, boolean cancellationProlonged,
-            boolean retryAvailable) {
+                          Progress progress, Instant startedAt, Optional<Instant> completedAt, String summary,
+                          List<String> effectsCommitted, List<Diagnostic> diagnostics, boolean cancellationProlonged,
+                          boolean retryAvailable) {
         /** Defensively owns all terminal evidence and validates lifecycle/time coherence. */
         public Attempt {
             Objects.requireNonNull(id, "id");
@@ -153,14 +281,16 @@ public final class JobCoordinator implements AutoCloseable {
         }
 
         /** @return true while this attempt still owns application-wide admission */
-        public boolean active() {
+        public boolean active () {
             return !lifecycle.terminal();
         }
     }
 
-    /** Immutable coordinator publication containing the latest attempt and technical isolation diagnostics. */
+    /**
+     * Immutable coordinator publication containing the latest attempt and technical isolation diagnostics.
+     */
     public record Frame(long sequence, Optional<Attempt> attempt, boolean shutdownRequested, boolean shutdownReady,
-            List<Diagnostic> technicalDiagnostics) {
+                        List<Diagnostic> technicalDiagnostics) {
         /** Rejects incoherent frame sequence and shutdown state. */
         public Frame {
             if (sequence <= 0)
@@ -175,126 +305,14 @@ public final class JobCoordinator implements AutoCloseable {
         }
 
         /** @return true while an admitted attempt still owns the application-wide job slot */
-        public boolean active() {
+        public boolean active () {
             return attempt.stream().anyMatch(Attempt::active);
         }
     }
 
-    /** Type-safe terminal worker result delivered only for its accepted current attempt. */
-    public record Result<T>(Lifecycle lifecycle, Optional<T> value, String summary, List<String> effectsCommitted,
-            List<Diagnostic> diagnostics) {
-        /** Creates a successful result carrying its usable typed value. */
-        public static <T> Result<T> completed(T value, String summary, List<String> effectsCommitted,
-                List<Diagnostic> diagnostics) {
-            return new Result<>(Lifecycle.COMPLETED, Optional.of(Objects.requireNonNull(value, "value")), summary,
-                    effectsCommitted, diagnostics);
-        }
-
-        /** Creates a usable result whose structured diagnostics require attention. */
-        public static <T> Result<T> completedWithIssues(T value, String summary, List<String> effectsCommitted,
-                List<Diagnostic> diagnostics) {
-            return new Result<>(Lifecycle.COMPLETED_WITH_ISSUES,
-                    Optional.of(Objects.requireNonNull(value, "value")), summary, effectsCommitted, diagnostics);
-        }
-
-        /** Creates a cancellation result without a usable value or unsafe committed effect. */
-        public static <T> Result<T> cancelled(String summary, List<String> effectsCommitted,
-                List<Diagnostic> diagnostics) {
-            return new Result<>(Lifecycle.CANCELLED, Optional.empty(), summary, effectsCommitted, diagnostics);
-        }
-
-        /** Creates a cancellation result carrying an authoritative unchanged or partially committed typed outcome. */
-        public static <T> Result<T> cancelled(T value, String summary, List<String> effectsCommitted,
-                List<Diagnostic> diagnostics) {
-            return new Result<>(Lifecycle.CANCELLED, Optional.of(Objects.requireNonNull(value, "value")), summary,
-                    effectsCommitted, diagnostics);
-        }
-
-        /** Creates a failed result without a usable value. */
-        public static <T> Result<T> failed(String summary, List<Diagnostic> diagnostics) {
-            return new Result<>(Lifecycle.FAILED, Optional.empty(), summary, List.of(), diagnostics);
-        }
-
-        /** Creates a failed result carrying an authoritative domain outcome for serialized presentation. */
-        public static <T> Result<T> failed(T value, String summary, List<Diagnostic> diagnostics) {
-            return new Result<>(Lifecycle.FAILED, Optional.of(Objects.requireNonNull(value, "value")), summary,
-                    List.of(), diagnostics);
-        }
-
-        /** Rejects active lifecycles and successful results that omit their usable typed value. */
-        public Result {
-            Objects.requireNonNull(lifecycle, "lifecycle");
-            if (!lifecycle.terminal())
-                throw new IllegalArgumentException("worker results must be terminal");
-            value = Objects.requireNonNull(value, "value");
-            summary = requireText(summary, "summary");
-            effectsCommitted = copyText(effectsCommitted, "effectsCommitted");
-            diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
-            if (diagnostics.stream().anyMatch(Objects::isNull))
-                throw new NullPointerException("diagnostics contains null");
-            boolean usable = lifecycle == Lifecycle.COMPLETED || lifecycle == Lifecycle.COMPLETED_WITH_ISSUES;
-            if (usable && value.isEmpty())
-                throw new IllegalArgumentException("successful completion dispositions require a value");
-        }
-    }
-
-    /** Worker-facing cancellation, progress, and atomic commit linearization interface. */
-    public interface Context {
-        /** @return true after cancellation was accepted and before an unsafe commit may begin */
-        boolean cancellationRequested();
-
-        /** Publishes a truthful worker phase; stale worker reports are rejected by attempt identity. */
-        void report(Progress progress);
-
-        /**
-         * Tries to enter a non-cancellable commit phase at the cancellation linearization point.
-         *
-         * @param phase truthful commit-phase label
-         * @return false when accepted cancellation won first; true when later cancellation must be refused
-         */
-        boolean beginCommit(String phase);
-
-        /** Throws at an ordinary worker safe point after cancellation has been accepted. */
-        default void checkCancellation() {
-            if (cancellationRequested())
-                throw new CancellationException("Job cancellation was accepted");
-        }
-    }
-
-    /** Typed worker implementation executed by the injected application worker adapter. */
-    @FunctionalInterface
-    public interface Work<T> {
-        /** Runs captured work and returns one truthful terminal result. */
-        Result<T> run(Context context) throws Exception;
-    }
-
-    /** Typed terminal callback invoked on the injected serialized publication adapter. */
-    @FunctionalInterface
-    public interface Completion<T> {
-        /** Accepts the result only after coordinator terminal state has committed. */
-        void accept(AttemptId attempt, Result<T> result);
-    }
-
-    /** Re-captures current operation inputs when the user explicitly retries a terminal attempt. */
-    @FunctionalInterface
-    public interface RetryFactory<T> {
-        /** @return a fresh submission whose inputs are captured at retry time */
-        Submission<T> recapture();
-    }
-
-    /** Fully captured request for a new attempt; only the coordinator stamps retry linkage. */
-    public record Submission<T>(Operation operation, Work<T> work, Completion<T> completion,
-            Optional<RetryFactory<T>> retryFactory) {
-        /** Requires immutable operation context, executable callbacks, and an explicit retry capability. */
-        public Submission {
-            Objects.requireNonNull(operation, "operation");
-            Objects.requireNonNull(work, "work");
-            Objects.requireNonNull(completion, "completion");
-            Objects.requireNonNull(retryFactory, "retryFactory");
-        }
-    }
-
-    /** Admission result carrying either the new attempt identity or the active operation that caused rejection. */
+    /**
+     * Admission result carrying either the new attempt identity or the active operation that caused rejection.
+     */
     public record Admission(boolean admitted, Optional<AttemptId> attempt, Optional<String> activeOperation) {
         /** Enforces the mutually exclusive admitted/rejected result shape. */
         public Admission {
@@ -306,65 +324,9 @@ public final class JobCoordinator implements AutoCloseable {
         }
     }
 
-    /** Cancel handle returned by the delayed-status adapter. */
-    @FunctionalInterface
-    public interface ScheduledAction {
-        /** Prevents the delayed action when its owning attempt has already settled. */
-        void cancel();
-    }
-
-    /** Injected delay adapter used only for the five-second prolonged-cancellation status. */
-    @FunctionalInterface
-    public interface DelayScheduler {
-        /** Schedules one action without imposing a global job timeout. */
-        ScheduledAction schedule(Duration delay, Runnable action);
-    }
-
-    /** Observer handle whose close operation rejects any later queued callback. */
-    @FunctionalInterface
-    public interface Subscription extends AutoCloseable {
-        /** Detaches the observer idempotently. */
-        @Override
-        void close();
-    }
-
-    private final Object lock = new Object();
-    private final ExecutorService workerExecutor;
-    private final Executor publicationExecutor;
-    private final Clock clock;
-    private final DelayScheduler delayScheduler;
-    private final Consumer<Throwable> callbackFailureSink;
-    private final Map<Long, Consumer<Frame>> observers = new LinkedHashMap<>();
-    private final Map<AttemptId, RetryFactory<?>> completedRetryFactories = new LinkedHashMap<>();
-    private final List<Diagnostic> technicalDiagnostics = new ArrayList<>();
-    private long nextAttemptId = 1;
-    private long nextObserverId = 1;
-    private long nextSequence = 2;
-    private Frame frame = new Frame(1, Optional.empty(), false, false, List.of());
-    private Active<?> active;
-    private boolean shutdownRequested;
-    private boolean closed;
-
     /**
-     * Creates one coordinator from injected worker, serialized publication, clock, delay, and failure adapters.
-     * The publication executor must serialize callbacks in submission order.
-     *
-     * @param workerExecutor application-owned worker executor
-     * @param publicationExecutor serialized presentation-lane executor
-     * @param clock timestamps attempt evidence
-     * @param delayScheduler schedules prolonged-cancellation status only
-     * @param callbackFailureSink records observer/completion failures outside job disposition
+     * @return latest immutable coordinator frame
      */
-    public JobCoordinator(ExecutorService workerExecutor, Executor publicationExecutor, Clock clock,
-            DelayScheduler delayScheduler, Consumer<Throwable> callbackFailureSink) {
-        this.workerExecutor = Objects.requireNonNull(workerExecutor, "workerExecutor");
-        this.publicationExecutor = Objects.requireNonNull(publicationExecutor, "publicationExecutor");
-        this.clock = Objects.requireNonNull(clock, "clock");
-        this.delayScheduler = Objects.requireNonNull(delayScheduler, "delayScheduler");
-        this.callbackFailureSink = Objects.requireNonNull(callbackFailureSink, "callbackFailureSink");
-    }
-
-    /** @return latest immutable coordinator frame */
     public Frame frame() {
         synchronized (lock) {
             return frame;
@@ -402,7 +364,9 @@ public final class JobCoordinator implements AutoCloseable {
         return recaptureRetry(selected, retryFactory);
     }
 
-    /** Captures a wildcard retry factory through a private generic bridge. */
+    /**
+     * Captures a wildcard retry factory through a private generic bridge.
+     */
     private <T> Admission recaptureRetry(AttemptId failedAttempt, RetryFactory<T> retryFactory) {
         Submission<T> recaptured;
         try {
@@ -414,7 +378,9 @@ public final class JobCoordinator implements AutoCloseable {
         return submit(recaptured, Optional.of(failedAttempt));
     }
 
-    /** Admits an already captured first or retry submission and stamps coordinator-owned linkage. */
+    /**
+     * Admits an already captured first or retry submission and stamps coordinator-owned linkage.
+     */
     private <T> Admission submit(Submission<T> request, Optional<AttemptId> retryOf) {
         Active<T> accepted;
         Frame published;
@@ -447,7 +413,9 @@ public final class JobCoordinator implements AutoCloseable {
         return new Admission(true, Optional.of(accepted.id()), Optional.empty());
     }
 
-    /** Requests idempotent cancellation at the shared pre-commit linearization point. */
+    /**
+     * Requests idempotent cancellation at the shared pre-commit linearization point.
+     */
     public CancelResponse requestCancel() {
         Active<?> current;
         Frame published;
@@ -486,7 +454,9 @@ public final class JobCoordinator implements AutoCloseable {
         return CancelResponse.ACCEPTED;
     }
 
-    /** Prevents new admission and either reports immediate readiness or requests active-job cancellation. */
+    /**
+     * Prevents new admission and either reports immediate readiness or requests active-job cancellation.
+     */
     public ShutdownResponse requestShutdown() {
         Frame published;
         boolean cancel;
@@ -567,7 +537,9 @@ public final class JobCoordinator implements AutoCloseable {
         }
     }
 
-    /** Executes captured worker code and converts thrown failures without allowing them to strand admission. */
+    /**
+     * Executes captured worker code and converts thrown failures without allowing them to strand admission.
+     */
     private <T> void runWorker(Active<T> current) {
         synchronized (lock) {
             if (active != current || current.cancelRequested())
@@ -590,12 +562,16 @@ public final class JobCoordinator implements AutoCloseable {
         dispatchTerminal(current, result);
     }
 
-    /** Commits terminal state on the serialized lane before invoking completion and observers. */
+    /**
+     * Commits terminal state on the serialized lane before invoking completion and observers.
+     */
     private <T> void dispatchTerminal(Active<T> current, Result<T> result) {
         publicationExecutor.execute(() -> finishOnPublicationLane(current, result));
     }
 
-    /** Rejects late completion, preserves accepted cancellation, and publishes one terminal attempt. */
+    /**
+     * Rejects late completion, preserves accepted cancellation, and publishes one terminal attempt.
+     */
     private <T> void finishOnPublicationLane(Active<T> current, Result<T> supplied) {
         Result<T> result = supplied;
         Frame published;
@@ -631,7 +607,9 @@ public final class JobCoordinator implements AutoCloseable {
         notifyObservers(published);
     }
 
-    /** Publishes progress only while its attempt still owns admission. */
+    /**
+     * Publishes progress only while its attempt still owns admission.
+     */
     private void report(Active<?> current, Progress progress) {
         Frame published;
         synchronized (lock) {
@@ -646,7 +624,9 @@ public final class JobCoordinator implements AutoCloseable {
         dispatchObservers(published);
     }
 
-    /** Linearizes commit against cancellation and publishes the non-cancellable Finishing phase. */
+    /**
+     * Linearizes commit against cancellation and publishes the non-cancellable Finishing phase.
+     */
     private boolean beginCommit(Active<?> current, String phase) {
         Frame published;
         synchronized (lock) {
@@ -664,7 +644,9 @@ public final class JobCoordinator implements AutoCloseable {
         return true;
     }
 
-    /** Marks cancellation prolonged only if the same attempt is still cancelling after the delay. */
+    /**
+     * Marks cancellation prolonged only if the same attempt is still cancelling after the delay.
+     */
     private void markCancellationProlonged(AttemptId id) {
         Frame published;
         synchronized (lock) {
@@ -676,19 +658,25 @@ public final class JobCoordinator implements AutoCloseable {
         dispatchObservers(published);
     }
 
-    /** Commits the latest frame under the coordinator lock. */
+    /**
+     * Commits the latest frame under the coordinator lock.
+     */
     private Frame commitFrame(Attempt attempt, boolean shutdownReady) {
         frame = new Frame(nextSequence++, Optional.ofNullable(attempt), shutdownRequested, shutdownReady,
                 technicalDiagnostics);
         return frame;
     }
 
-    /** Dispatches one coherent frame to every currently attached observer. */
+    /**
+     * Dispatches one coherent frame to every currently attached observer.
+     */
     private void dispatchObservers(Frame published) {
         publicationExecutor.execute(() -> notifyObservers(published));
     }
 
-    /** Isolates observer failures while preserving one shared frame for every observer in this publication. */
+    /**
+     * Isolates observer failures while preserving one shared frame for every observer in this publication.
+     */
     private void notifyObservers(Frame published) {
         List<Map.Entry<Long, Consumer<Frame>>> snapshot;
         synchronized (lock) {
@@ -698,7 +686,9 @@ public final class JobCoordinator implements AutoCloseable {
             notifyObserver(entry.getKey(), entry.getValue(), published);
     }
 
-    /** Rejects queued callbacks after detachment and records any observer exception separately. */
+    /**
+     * Rejects queued callbacks after detachment and records any observer exception separately.
+     */
     private void notifyObserver(long id, Consumer<Frame> observer, Frame published) {
         synchronized (lock) {
             if (closed || observers.get(id) != observer)
@@ -711,7 +701,9 @@ public final class JobCoordinator implements AutoCloseable {
         }
     }
 
-    /** Records callback isolation without relabelling the underlying operation. */
+    /**
+     * Records callback isolation without relabelling the underlying operation.
+     */
     private void recordCallbackFailure(String code, Throwable failure) {
         recordTechnical(code, failure.getClass().getName() + ": " + readableMessage(failure));
         try {
@@ -721,7 +713,9 @@ public final class JobCoordinator implements AutoCloseable {
         }
     }
 
-    /** Appends a technical diagnostic to the latest frame without recursively notifying observers. */
+    /**
+     * Appends a technical diagnostic to the latest frame without recursively notifying observers.
+     */
     private void recordTechnical(String code, String message) {
         synchronized (lock) {
             technicalDiagnostics.add(new Diagnostic(code, message, Optional.empty()));
@@ -730,65 +724,148 @@ public final class JobCoordinator implements AutoCloseable {
         }
     }
 
-    /** Converts an unexpected throwable to structured diagnostic evidence. */
-    private static Diagnostic diagnostic(String code, String message, Throwable failure) {
-        return new Diagnostic(code, message, Optional.of(failure.getClass().getName() + ": "
-                + readableMessage(failure)));
-    }
+    /**
+     * Observable lifecycle from admitted work through one truthful terminal disposition.
+     */
+    public enum Lifecycle {
+        RUNNING,
+        CANCELLING,
+        FINISHING,
+        COMPLETED,
+        COMPLETED_WITH_ISSUES,
+        CANCELLED,
+        FAILED;
 
-    /** Returns stable nonblank throwable text without assuming providers supply a message. */
-    private static String readableMessage(Throwable failure) {
-        String message = failure.getMessage();
-        return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
-    }
-
-    /** Normalizes one nonblank interface string. */
-    private static String requireText(String value, String name) {
-        String text = Objects.requireNonNull(value, name).trim();
-        if (text.isEmpty())
-            throw new IllegalArgumentException(name + " must not be blank");
-        return text;
-    }
-
-    /** Defensively copies a non-null list of nonblank interface strings. */
-    private static List<String> copyText(List<String> values, String name) {
-        List<String> copy = new ArrayList<>();
-        for (String value : Objects.requireNonNull(values, name))
-            copy.add(requireText(value, name + " value"));
-        return List.copyOf(copy);
-    }
-
-    /** Worker context bound to exactly one attempt identity. */
-    private final class WorkerContext implements Context {
-        private final Active<?> current;
-
-        /** Binds worker callbacks to the attempt that received this context. */
-        private WorkerContext(Active<?> current) {
-            this.current = current;
+        /**
+         * @return true only after no more worker transition may change this attempt
+         */
+        public boolean terminal() {
+            return switch (this) {
+                case COMPLETED, COMPLETED_WITH_ISSUES, CANCELLED, FAILED -> true;
+                case RUNNING, CANCELLING, FINISHING -> false;
+            };
         }
+    }
 
-        /** {@inheritDoc} */
+    /**
+     * Result of the cancellation linearization point.
+     */
+    public enum CancelResponse {
+        ACCEPTED,
+        TOO_LATE,
+        NO_ACTIVE_JOB
+    }
+
+    /**
+     * Result of requesting coordinated application shutdown.
+     */
+    public enum ShutdownResponse {
+        READY,
+        WAITING_FOR_JOB,
+        ALREADY_REQUESTED
+    }
+
+    /**
+     * Worker-facing cancellation, progress, and atomic commit linearization interface.
+     */
+    public interface Context {
+        /**
+         * @return true after cancellation was accepted and before an unsafe commit may begin
+         */
+        boolean cancellationRequested();
+
+        /**
+         * Publishes a truthful worker phase; stale worker reports are rejected by attempt identity.
+         */
+        void report(Progress progress);
+
+        /**
+         * Tries to enter a non-cancellable commit phase at the cancellation linearization point.
+         *
+         * @param phase truthful commit-phase label
+         * @return false when accepted cancellation won first; true when later cancellation must be refused
+         */
+        boolean beginCommit(String phase);
+
+        /**
+         * Throws at an ordinary worker safe point after cancellation has been accepted.
+         */
+        default void checkCancellation() {
+            if (cancellationRequested())
+                throw new CancellationException("Job cancellation was accepted");
+        }
+    }
+
+    /**
+     * Typed worker implementation executed by the injected application worker adapter.
+     */
+    @FunctionalInterface
+    public interface Work<T> {
+        /**
+         * Runs captured work and returns one truthful terminal result.
+         */
+        Result<T> run(Context context) throws Exception;
+    }
+
+    /**
+     * Typed terminal callback invoked on the injected serialized publication adapter.
+     */
+    @FunctionalInterface
+    public interface Completion<T> {
+        /**
+         * Accepts the result only after coordinator terminal state has committed.
+         */
+        void accept(AttemptId attempt, Result<T> result);
+    }
+
+    /**
+     * Re-captures current operation inputs when the user explicitly retries a terminal attempt.
+     */
+    @FunctionalInterface
+    public interface RetryFactory<T> {
+        /**
+         * @return a fresh submission whose inputs are captured at retry time
+         */
+        Submission<T> recapture();
+    }
+
+    /**
+     * Cancel handle returned by the delayed-status adapter.
+     */
+    @FunctionalInterface
+    public interface ScheduledAction {
+        /**
+         * Prevents the delayed action when its owning attempt has already settled.
+         */
+        void cancel();
+    }
+
+    /**
+     * Injected delay adapter used only for the five-second prolonged-cancellation status.
+     */
+    @FunctionalInterface
+    public interface DelayScheduler {
+        /**
+         * Schedules one action without imposing a global job timeout.
+         */
+        ScheduledAction schedule(Duration delay, Runnable action);
+    }
+
+    /**
+     * Observer handle whose close operation rejects any later queued callback.
+     */
+    @FunctionalInterface
+    public interface Subscription extends AutoCloseable {
+        /**
+         * Detaches the observer idempotently.
+         */
         @Override
-        public boolean cancellationRequested() {
-            synchronized (lock) {
-                return active != current || current.cancelRequested();
-            }
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public void report(Progress progress) {
-            JobCoordinator.this.report(current, Objects.requireNonNull(progress, "progress"));
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public boolean beginCommit(String phase) {
-            return JobCoordinator.this.beginCommit(current, phase);
-        }
+        void close();
     }
 
-    /** Mutable state kept wholly behind the coordinator interface and operation lock. */
+    /**
+     * Mutable state kept wholly behind the coordinator interface and operation lock.
+     */
     private static final class Active<T> {
         private final AttemptId id;
         private final Submission<T> submission;
@@ -807,7 +884,9 @@ public final class JobCoordinator implements AutoCloseable {
         private ScheduledAction cancellationTimer;
         private Future<?> future;
 
-        /** Creates newly admitted Running state from one fully captured submission. */
+        /**
+         * Creates newly admitted Running state from one fully captured submission.
+         */
         private Active(AttemptId id, Submission<T> submission, Optional<AttemptId> retryOf, Instant startedAt) {
             this.id = id;
             this.submission = submission;
@@ -816,42 +895,58 @@ public final class JobCoordinator implements AutoCloseable {
             this.progress = Progress.indeterminate("Starting " + submission.operation().name(), true);
         }
 
-        /** @return attempt identity */
+        /**
+         * @return attempt identity
+         */
         private AttemptId id() {
             return id;
         }
 
-        /** @return captured submission */
+        /**
+         * @return captured submission
+         */
         private Submission<T> submission() {
             return submission;
         }
 
-        /** @return captured operation */
+        /**
+         * @return captured operation
+         */
         private Operation operation() {
             return submission.operation();
         }
 
-        /** @return whether cancellation already won */
+        /**
+         * @return whether cancellation already won
+         */
         private boolean cancelRequested() {
             return cancelRequested;
         }
 
-        /** @return whether commit already won */
+        /**
+         * @return whether commit already won
+         */
         private boolean commitStarted() {
             return commitStarted;
         }
 
-        /** @return whether the owned executor entered the worker body */
+        /**
+         * @return whether the owned executor entered the worker body
+         */
         private boolean started() {
             return started;
         }
 
-        /** Marks the point after which Future cancellation may interrupt worker code instead of preventing start. */
+        /**
+         * Marks the point after which Future cancellation may interrupt worker code instead of preventing start.
+         */
         private void markStarted() {
             started = true;
         }
 
-        /** Moves Running to Cancelling exactly once. */
+        /**
+         * Moves Running to Cancelling exactly once.
+         */
         private void acceptCancellation(Instant acceptedAt) {
             cancelRequested = true;
             lifecycle = Lifecycle.CANCELLING;
@@ -859,7 +954,9 @@ public final class JobCoordinator implements AutoCloseable {
             Objects.requireNonNull(acceptedAt, "acceptedAt");
         }
 
-        /** Retains truthful progress while preserving an already accepted cancellation lifecycle. */
+        /**
+         * Retains truthful progress while preserving an already accepted cancellation lifecycle.
+         */
         private void report(Progress reported) {
             Progress value = Objects.requireNonNull(reported, "reported");
             progress = cancelRequested
@@ -869,41 +966,55 @@ public final class JobCoordinator implements AutoCloseable {
                 lifecycle = Lifecycle.CANCELLING;
         }
 
-        /** Moves the attempt to its non-cancellable Finishing phase. */
+        /**
+         * Moves the attempt to its non-cancellable Finishing phase.
+         */
         private void beginCommit(String phase) {
             commitStarted = true;
             lifecycle = Lifecycle.FINISHING;
             progress = Progress.indeterminate(phase, false);
         }
 
-        /** Stores the delayed cancellation handle so terminal completion can suppress it. */
+        /**
+         * Stores the delayed cancellation handle so terminal completion can suppress it.
+         */
         private void setCancellationTimer(ScheduledAction timer) {
             cancellationTimer = Objects.requireNonNull(timer, "timer");
         }
 
-        /** Retains the owned worker Future so accepted cancellation can interrupt blocking adapters explicitly. */
+        /**
+         * Retains the owned worker Future so accepted cancellation can interrupt blocking adapters explicitly.
+         */
         private void setFuture(Future<?> submitted) {
             future = Objects.requireNonNull(submitted, "submitted");
         }
 
-        /** @return owned worker Future, or null before executor submission completes */
+        /**
+         * @return owned worker Future, or null before executor submission completes
+         */
         private Future<?> future() {
             return future;
         }
 
-        /** Marks the still-active cancellation status after five seconds. */
+        /**
+         * Marks the still-active cancellation status after five seconds.
+         */
         private void markCancellationProlonged() {
             cancellationProlonged = true;
             progress = Progress.indeterminate("Still cancelling…", false);
         }
 
-        /** Cancels only the delayed status action; it never stops worker execution. */
+        /**
+         * Cancels only the delayed status action; it never stops worker execution.
+         */
         private void cancelTimer() {
             if (cancellationTimer != null)
                 cancellationTimer.cancel();
         }
 
-        /** Captures immutable terminal evidence from the accepted result. */
+        /**
+         * Captures immutable terminal evidence from the accepted result.
+         */
         private void finish(Result<T> result, Instant finishedAt) {
             lifecycle = result.lifecycle();
             completedAt = Objects.requireNonNull(finishedAt, "finishedAt");
@@ -914,11 +1025,53 @@ public final class JobCoordinator implements AutoCloseable {
                 progress = Progress.indeterminate(progress.phase(), false);
         }
 
-        /** @return immutable public attempt projection */
+        /**
+         * @return immutable public attempt projection
+         */
         private Attempt attempt() {
             return new Attempt(id, operation(), retryOf, lifecycle, progress, startedAt,
                     Optional.ofNullable(completedAt), summary, effectsCommitted, diagnostics,
                     cancellationProlonged, lifecycle.terminal() && submission.retryFactory().isPresent());
+        }
+    }
+
+    /**
+     * Worker context bound to exactly one attempt identity.
+     */
+    private final class WorkerContext implements Context {
+        private final Active<?> current;
+
+        /**
+         * Binds worker callbacks to the attempt that received this context.
+         */
+        private WorkerContext(Active<?> current) {
+            this.current = current;
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public boolean cancellationRequested() {
+            synchronized (lock) {
+                return active != current || current.cancelRequested();
+            }
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public void report(Progress progress) {
+            JobCoordinator.this.report(current, Objects.requireNonNull(progress, "progress"));
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public boolean beginCommit(String phase) {
+            return JobCoordinator.this.beginCommit(current, phase);
         }
     }
 }

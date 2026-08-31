@@ -45,6 +45,33 @@ class FilteredViewTest {
     private static final NpcMorphAssignmentSnapshot DELTA = npc("Delta", "Dawnguard.esm", "DeltaEditor",
             "BretonRace");
 
+    private static void collectForeignTypes(String signature, List<String> offenders) {
+        for (String forbidden : Arrays.asList("javafx.", "controlsfx", "com.sun."))
+            if (signature.contains(forbidden))
+                offenders.add(signature);
+    }
+
+    private static FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> npcView() {
+        return new FilteredView<>(Arrays.asList(NAME, MASTER, RACE), ProjectIdentities::npcMorphAssignment);
+    }
+
+    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId,
+                                                  String race) {
+        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, race, "1A696",
+                Collections.<String>emptyList());
+    }
+
+    private static NpcMorphAssignmentIdentity identityOf(NpcMorphAssignmentSnapshot npc) {
+        return ProjectIdentities.npcMorphAssignment(npc);
+    }
+
+    private static List<NpcMorphAssignmentIdentity> identities(NpcMorphAssignmentSnapshot... npcs) {
+        List<NpcMorphAssignmentIdentity> identities = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot npc : npcs)
+            identities.add(identityOf(npc));
+        return identities;
+    }
+
     /**
      * Every active column criterion must admit a row for it to be visible; a
      * criterion hides exactly the cell values it names and admits every other
@@ -73,7 +100,9 @@ class FilteredViewTest {
         assertEquals(identities(ALPHA, BETA, GAMMA, DELTA), view.visibleSet().getIdentities());
     }
 
-    /** Cell values are matched exactly, the way the checklist filter matched them. */
+    /**
+     * Cell values are matched exactly, the way the checklist filter matched them.
+     */
     @Test
     void criteriaMatchCellValuesExactly() {
         FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> view = npcView();
@@ -216,7 +245,9 @@ class FilteredViewTest {
         assertEquals(Optional.empty(), view.getSelection());
     }
 
-    /** Only a visible identity can be selected; unknown or hidden identities are rejected. */
+    /**
+     * Only a visible identity can be selected; unknown or hidden identities are rejected.
+     */
     @Test
     void selectingAnAbsentOrHiddenIdentityIsRejected() {
         FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> view = npcView();
@@ -230,7 +261,9 @@ class FilteredViewTest {
         assertThrows(NullPointerException.class, () -> view.select(null));
     }
 
-    /** Source rows must be identity-unique and criteria must name a known column. */
+    /**
+     * Source rows must be identity-unique and criteria must name a known column.
+     */
     @Test
     void invalidRowsAndCriteriaAreRejected() {
         FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> view = npcView();
@@ -249,7 +282,9 @@ class FilteredViewTest {
         assertTrue(view.visibleSet().isEmpty());
     }
 
-    /** A null cell value filters and sorts as the empty string. */
+    /**
+     * A null cell value filters and sorts as the empty string.
+     */
     @Test
     void nullCellValuesAreTreatedAsEmptyStrings() {
         FilterColumn<String> column = FilterColumn.of("Value", value -> value.isEmpty() ? null : value);
@@ -316,32 +351,5 @@ class FilteredViewTest {
                     offenders);
         }
         assertEquals(Collections.emptyList(), offenders);
-    }
-
-    private static void collectForeignTypes(String signature, List<String> offenders) {
-        for (String forbidden : Arrays.asList("javafx.", "controlsfx", "com.sun."))
-            if (signature.contains(forbidden))
-                offenders.add(signature);
-    }
-
-    private static FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> npcView() {
-        return new FilteredView<>(Arrays.asList(NAME, MASTER, RACE), ProjectIdentities::npcMorphAssignment);
-    }
-
-    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId,
-            String race) {
-        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, race, "1A696",
-                Collections.<String>emptyList());
-    }
-
-    private static NpcMorphAssignmentIdentity identityOf(NpcMorphAssignmentSnapshot npc) {
-        return ProjectIdentities.npcMorphAssignment(npc);
-    }
-
-    private static List<NpcMorphAssignmentIdentity> identities(NpcMorphAssignmentSnapshot... npcs) {
-        List<NpcMorphAssignmentIdentity> identities = new ArrayList<>();
-        for (NpcMorphAssignmentSnapshot npc : npcs)
-            identities.add(identityOf(npc));
-        return identities;
     }
 }

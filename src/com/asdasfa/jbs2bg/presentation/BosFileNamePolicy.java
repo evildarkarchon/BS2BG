@@ -7,7 +7,9 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
-/** Maps Slider Preset names to deterministic Windows-safe BoS artifact filenames. */
+/**
+ * Maps Slider Preset names to deterministic Windows-safe BoS artifact filenames.
+ */
 final class BosFileNamePolicy {
     private static final String JSON_EXTENSION = ".json";
     private static final int MAX_COMPONENT_UTF16_CODE_UNITS = 255;
@@ -34,7 +36,7 @@ final class BosFileNamePolicy {
 
         int trailingUnsafeStart = trailingUnsafeStart(sliderPresetName);
         StringBuilder mapped = new StringBuilder(sliderPresetName.length());
-        for (int offset = 0; offset < sliderPresetName.length();) {
+        for (int offset = 0; offset < sliderPresetName.length(); ) {
             int codePoint = sliderPresetName.codePointAt(offset);
             if (offset >= trailingUnsafeStart || isUnsafe(codePoint))
                 appendPercentEncoded(mapped, codePoint);
@@ -60,7 +62,9 @@ final class BosFileNamePolicy {
         return truncateMappedName(mapped.toString(), baseBudget) + suffix + JSON_EXTENSION;
     }
 
-    /** Rejects malformed UTF-16 that cannot identify deterministic UTF-8 bytes. */
+    /**
+     * Rejects malformed UTF-16 that cannot identify deterministic UTF-8 bytes.
+     */
     private static void validateUnicodeScalars(String value) {
         for (int index = 0; index < value.length(); index++) {
             char current = value.charAt(index);
@@ -74,7 +78,9 @@ final class BosFileNamePolicy {
         }
     }
 
-    /** Locates the first trailing dot or space because Windows strips those code points. */
+    /**
+     * Locates the first trailing dot or space because Windows strips those code points.
+     */
     private static int trailingUnsafeStart(String value) {
         int start = value.length();
         while (start > 0) {
@@ -86,14 +92,18 @@ final class BosFileNamePolicy {
         return start;
     }
 
-    /** Reports whether a code point cannot appear literally in an owned Windows filename. */
+    /**
+     * Reports whether a code point cannot appear literally in an owned Windows filename.
+     */
     private static boolean isUnsafe(int codePoint) {
         return codePoint < 0x20 || codePoint == '%' || codePoint == '<' || codePoint == '>'
                 || codePoint == ':' || codePoint == '"' || codePoint == '/' || codePoint == '\\'
                 || codePoint == '|' || codePoint == '?' || codePoint == '*';
     }
 
-    /** Appends one code point as uppercase percent-encoded UTF-8 bytes. */
+    /**
+     * Appends one code point as uppercase percent-encoded UTF-8 bytes.
+     */
     private static void appendPercentEncoded(StringBuilder output, int codePoint) {
         byte[] bytes = new String(Character.toChars(codePoint)).getBytes(StandardCharsets.UTF_8);
         for (byte value : bytes) {
@@ -103,18 +113,22 @@ final class BosFileNamePolicy {
         }
     }
 
-    /** Applies Windows device-name matching before the first literal dot. */
+    /**
+     * Applies Windows device-name matching before the first literal dot.
+     */
     private static boolean isReservedBasename(String mappedName) {
         int dot = mappedName.indexOf('.');
         String basename = dot >= 0 ? mappedName.substring(0, dot) : mappedName;
         return RESERVED_BASENAME.matcher(basename.toUpperCase(Locale.ROOT)).matches();
     }
 
-    /** Truncates at code-point or percent-triplet boundaries within a UTF-16 component budget. */
+    /**
+     * Truncates at code-point or percent-triplet boundaries within a UTF-16 component budget.
+     */
     private static String truncateMappedName(String mappedName, int codeUnitBudget) {
         StringBuilder truncated = new StringBuilder();
         int used = 0;
-        for (int offset = 0; offset < mappedName.length();) {
+        for (int offset = 0; offset < mappedName.length(); ) {
             int tokenLength;
             if (mappedName.charAt(offset) == '%') {
                 tokenLength = 3;
@@ -131,7 +145,9 @@ final class BosFileNamePolicy {
         return truncated.toString();
     }
 
-    /** Produces the stable short suffix used only for overlong components. */
+    /**
+     * Produces the stable short suffix used only for overlong components.
+     */
     private static String stableHash(String value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));

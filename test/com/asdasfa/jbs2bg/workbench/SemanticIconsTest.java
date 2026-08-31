@@ -16,7 +16,9 @@ import javafx.scene.shape.SVGPath;
 
 class SemanticIconsTest {
 
-    /** Every selected bundled-vector key renders without a font or third-party runtime dependency. */
+    /**
+     * Every selected bundled-vector key renders without a font or third-party runtime dependency.
+     */
     @Test
     void everySemanticKeyRendersAsAnApplicationOwnedVector() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {

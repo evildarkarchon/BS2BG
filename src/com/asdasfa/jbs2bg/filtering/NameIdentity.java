@@ -23,7 +23,9 @@ public final class NameIdentity {
         return new NameIdentity(name);
     }
 
-    /** @return the name as supplied (case preserved for display) */
+    /**
+     * @return the name as supplied (case preserved for display)
+     */
     public String getName() {
         return name;
     }

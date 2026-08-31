@@ -2,14 +2,16 @@ package com.asdasfa.jbs2bg.workbench;
 
 import javafx.stage.Stage;
 
-/** Platform seam for modal chooser/confirmation effects and final window closure. */
+/**
+ * Platform seam for modal chooser/confirmation effects and final window closure.
+ */
 interface WorkbenchPlatform {
 
     /**
      * Completes one tokenized chooser or confirmation effect.
      *
      * @param effect pending Workbench effect
-     * @param owner owning application window
+     * @param owner  owning application window
      * @return the user's immutable response
      */
     WorkbenchProjectFlow.Response complete(WorkbenchProjectFlow.Effect effect, Stage owner);
@@ -17,7 +19,7 @@ interface WorkbenchPlatform {
     /**
      * Completes one typed job-failure dialog that may offer Retry.
      *
-     * @param spec failure-only dialog specification
+     * @param spec  failure-only dialog specification
      * @param owner owning application window
      * @return selected failure action
      */

@@ -34,12 +34,16 @@ public final class SortKey {
         return new SortKey(columnId, SortDirection.DESCENDING);
     }
 
-    /** @return the column ID */
+    /**
+     * @return the column ID
+     */
     public String getColumnId() {
         return columnId;
     }
 
-    /** @return the sort direction */
+    /**
+     * @return the sort direction
+     */
     public SortDirection getDirection() {
         return direction;
     }

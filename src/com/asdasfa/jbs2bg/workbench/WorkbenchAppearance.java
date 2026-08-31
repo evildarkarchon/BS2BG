@@ -7,35 +7,45 @@ import java.util.Objects;
  */
 public final class WorkbenchAppearance {
 
-    /** User-selected theme behavior. */
-    public enum ThemeChoice {
-        SYSTEM("System"),
-        LIGHT("Light"),
-        DARK("Dark");
+    private static final Palette LIGHT_PALETTE = new Palette(
+            "#F3F3F3", "#1B1B1B", "#FFFFFF", "#767676",
+            "#DCEEFF", "#1B1B1B", "#005A9E", "#767676",
+            "#005A9E", "#FFFFFF", "#005A9E", "#0F6B3B", "#8A4B00", "#C42B1C");
+    private static final Palette DARK_PALETTE = new Palette(
+            "#202020", "#FFFFFF", "#2B2B2B", "#8A8A8A",
+            "#004B67", "#FFFFFF", "#60CDFF", "#9A9A9A",
+            "#60CDFF", "#002A3A", "#60CDFF", "#6CCB5F", "#FCE100", "#FF99A4");
+    private ThemeChoice selectedTheme;
+    private PlatformPreferences platformPreferences;
+    private Frame frame;
 
-        private final String displayName;
-
-        ThemeChoice(String displayName) {
-            this.displayName = displayName;
-        }
-
-        /** @return stable title-case text used by the Workbench theme selector */
-        @Override
-        public String toString() {
-            return displayName;
-        }
+    /**
+     * Creates appearance state from one persisted selection and current platform preferences.
+     *
+     * @param selectedTheme       persisted System, Light, or Dark choice
+     * @param platformPreferences current operating-system appearance
+     */
+    public WorkbenchAppearance(ThemeChoice selectedTheme, PlatformPreferences platformPreferences) {
+        this.selectedTheme = Objects.requireNonNull(selectedTheme, "selectedTheme");
+        this.platformPreferences = Objects.requireNonNull(platformPreferences, "platformPreferences");
+        frame = resolve();
     }
 
-    /** Theme actually rendered after resolving the user choice against platform preferences. */
-    public enum EffectiveTheme {
-        LIGHT,
-        DARK,
-        HIGH_CONTRAST
+    /**
+     * Normalizes the shared non-blank invariant for semantic CSS token values.
+     */
+    private static String requireCssColor(String value, String name) {
+        String color = Objects.requireNonNull(value, name).trim();
+        if (color.isEmpty())
+            throw new IllegalArgumentException(name + " must not be blank");
+        return color;
     }
 
-    /** Windows system colors required by the High Contrast token path. */
+    /**
+     * Windows system colors required by the High Contrast token path.
+     */
     public record SystemColors(String window, String windowText, String control, String controlText,
-            String highlight, String highlightText, String hotlight, String grayText) {
+                               String highlight, String highlightText, String hotlight, String grayText) {
         /** Rejects missing CSS colors before a partial High Contrast frame can be published. */
         public SystemColors {
             window = requireCssColor(window, "window");
@@ -49,16 +59,18 @@ public final class WorkbenchAppearance {
         }
 
         /** @return stable fallback system colors used only when the platform omits an optional color */
-        public static SystemColors defaults() {
+        public static SystemColors defaults () {
             return new SystemColors("#FFFFFF", "#000000", "#F0F0F0", "#000000",
                     "#0078D4", "#FFFFFF", "#0066CC", "#6D6D6D");
         }
     }
 
-    /** Application-owned semantic colors consumed by the Workbench stylesheet. */
+    /**
+     * Application-owned semantic colors consumed by the Workbench stylesheet.
+     */
     public record Palette(String background, String text, String surface, String border,
-            String selection, String selectionText, String focus, String disabledText,
-            String accent, String accentText, String information, String success, String warning, String failure) {
+                          String selection, String selectionText, String focus, String disabledText,
+                          String accent, String accentText, String information, String success, String warning, String failure) {
         /** Rejects missing token values before the palette reaches JavaFX CSS. */
         public Palette {
             background = requireCssColor(background, "background");
@@ -78,7 +90,7 @@ public final class WorkbenchAppearance {
         }
 
         /** Builds the separate High Contrast path directly from live Windows system colors. */
-        private static Palette highContrast(SystemColors colors) {
+        private static Palette highContrast (SystemColors colors){
             return new Palette(colors.window(), colors.windowText(), colors.control(), colors.controlText(),
                     colors.highlight(), colors.highlightText(), colors.hotlight(), colors.grayText(),
                     colors.highlight(), colors.highlightText(), colors.windowText(), colors.windowText(),
@@ -86,21 +98,23 @@ public final class WorkbenchAppearance {
         }
     }
 
-    /** Platform appearance values observed through a public toolkit adapter. */
+    /**
+     * Platform appearance values observed through a public toolkit adapter.
+     */
     public record PlatformPreferences(boolean systemDark, boolean highContrast, boolean reducedMotion,
-            SystemColors systemColors) {
+                                      SystemColors systemColors) {
         /** Rejects a partial platform snapshot at construction time. */
         public PlatformPreferences {
             Objects.requireNonNull(systemColors, "systemColors");
         }
 
         /** @return a platform snapshot whose system color scheme is light */
-        public static PlatformPreferences light() {
+        public static PlatformPreferences light () {
             return new PlatformPreferences(false, false, false, SystemColors.defaults());
         }
 
         /** @return a platform snapshot whose system color scheme is dark */
-        public static PlatformPreferences dark() {
+        public static PlatformPreferences dark () {
             return new PlatformPreferences(true, false, false, SystemColors.defaults());
         }
 
@@ -110,7 +124,7 @@ public final class WorkbenchAppearance {
          * @param enabled whether Windows High Contrast is active
          * @return an immutable updated snapshot
          */
-        public PlatformPreferences withHighContrast(boolean enabled) {
+        public PlatformPreferences withHighContrast ( boolean enabled){
             return new PlatformPreferences(systemDark, enabled, reducedMotion, systemColors);
         }
 
@@ -120,14 +134,16 @@ public final class WorkbenchAppearance {
          * @param enabled whether nonessential Workbench motion must be suppressed
          * @return an immutable updated snapshot
          */
-        public PlatformPreferences withReducedMotion(boolean enabled) {
+        public PlatformPreferences withReducedMotion ( boolean enabled){
             return new PlatformPreferences(systemDark, highContrast, enabled, systemColors);
         }
     }
 
-    /** Immutable appearance state rendered by adapters. */
+    /**
+     * Immutable appearance state rendered by adapters.
+     */
     public record Frame(ThemeChoice selectedTheme, EffectiveTheme effectiveTheme, boolean reducedMotion,
-            Palette palette) {
+                        Palette palette) {
         /** Rejects incomplete frames at construction time. */
         public Frame {
             Objects.requireNonNull(selectedTheme, "selectedTheme");
@@ -136,32 +152,9 @@ public final class WorkbenchAppearance {
         }
     }
 
-    private static final Palette LIGHT_PALETTE = new Palette(
-            "#F3F3F3", "#1B1B1B", "#FFFFFF", "#767676",
-            "#DCEEFF", "#1B1B1B", "#005A9E", "#767676",
-            "#005A9E", "#FFFFFF", "#005A9E", "#0F6B3B", "#8A4B00", "#C42B1C");
-    private static final Palette DARK_PALETTE = new Palette(
-            "#202020", "#FFFFFF", "#2B2B2B", "#8A8A8A",
-            "#004B67", "#FFFFFF", "#60CDFF", "#9A9A9A",
-            "#60CDFF", "#002A3A", "#60CDFF", "#6CCB5F", "#FCE100", "#FF99A4");
-
-    private ThemeChoice selectedTheme;
-    private PlatformPreferences platformPreferences;
-    private Frame frame;
-
     /**
-     * Creates appearance state from one persisted selection and current platform preferences.
-     *
-     * @param selectedTheme persisted System, Light, or Dark choice
-     * @param platformPreferences current operating-system appearance
+     * @return the latest completely resolved immutable appearance frame
      */
-    public WorkbenchAppearance(ThemeChoice selectedTheme, PlatformPreferences platformPreferences) {
-        this.selectedTheme = Objects.requireNonNull(selectedTheme, "selectedTheme");
-        this.platformPreferences = Objects.requireNonNull(platformPreferences, "platformPreferences");
-        frame = resolve();
-    }
-
-    /** @return the latest completely resolved immutable appearance frame */
     public Frame frame() {
         return frame;
     }
@@ -190,7 +183,9 @@ public final class WorkbenchAppearance {
         return frame;
     }
 
-    /** Resolves the effective theme without exposing platform rules to JavaFX callers. */
+    /**
+     * Resolves the effective theme without exposing platform rules to JavaFX callers.
+     */
     private Frame resolve() {
         if (platformPreferences.highContrast())
             return new Frame(selectedTheme, EffectiveTheme.HIGH_CONTRAST, platformPreferences.reducedMotion(),
@@ -204,11 +199,35 @@ public final class WorkbenchAppearance {
         return new Frame(selectedTheme, effectiveTheme, platformPreferences.reducedMotion(), palette);
     }
 
-    /** Normalizes the shared non-blank invariant for semantic CSS token values. */
-    private static String requireCssColor(String value, String name) {
-        String color = Objects.requireNonNull(value, name).trim();
-        if (color.isEmpty())
-            throw new IllegalArgumentException(name + " must not be blank");
-        return color;
+    /**
+     * User-selected theme behavior.
+     */
+    public enum ThemeChoice {
+        SYSTEM("System"),
+        LIGHT("Light"),
+        DARK("Dark");
+
+        private final String displayName;
+
+        ThemeChoice(String displayName) {
+            this.displayName = displayName;
+        }
+
+        /**
+         * @return stable title-case text used by the Workbench theme selector
+         */
+        @Override
+        public String toString() {
+            return displayName;
+        }
+    }
+
+    /**
+     * Theme actually rendered after resolving the user choice against platform preferences.
+     */
+    public enum EffectiveTheme {
+        LIGHT,
+        DARK,
+        HIGH_CONTRAST
     }
 }

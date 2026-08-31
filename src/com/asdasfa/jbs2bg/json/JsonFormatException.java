@@ -1,6 +1,8 @@
 package com.asdasfa.jbs2bg.json;
 
-/** Stable repository diagnostic translated from JSON syntax, schema, and resource failures. */
+/**
+ * Stable repository diagnostic translated from JSON syntax, schema, and resource failures.
+ */
 final class JsonFormatException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
@@ -13,11 +15,11 @@ final class JsonFormatException extends RuntimeException {
     /**
      * Creates a JSON failure that contains no codec-specific type.
      *
-     * @param code stable diagnostic code
-     * @param source source-file description
-     * @param path escaped JSON-pointer-like path
-     * @param line one-based line, or zero when unavailable
-     * @param column one-based column, or zero when unavailable
+     * @param code    stable diagnostic code
+     * @param source  source-file description
+     * @param path    escaped JSON-pointer-like path
+     * @param line    one-based line, or zero when unavailable
+     * @param column  one-based column, or zero when unavailable
      * @param message readable failure detail
      */
     JsonFormatException(String code, String source, String path, int line, int column, String message) {

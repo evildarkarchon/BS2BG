@@ -9,7 +9,9 @@ import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.Objects;
 
-/** Persists the Workbench theme choice inside the application's isolated working profile. */
+/**
+ * Persists the Workbench theme choice inside the application's isolated working profile.
+ */
 public final class WorkbenchAppearanceStore {
     static final String FILE_NAME = "workbench-appearance.properties";
     private static final String THEME_PREFIX = "theme=";

@@ -1,6 +1,8 @@
 package com.asdasfa.jbs2bg.json;
 
-/** Named, non-configurable JSON input profiles owned by the repository. */
+/**
+ * Named, non-configurable JSON input profiles owned by the repository.
+ */
 enum JsonProfile {
     PROJECT(64L * 1024L * 1024L, 5_000_000L),
     SETTINGS(8L * 1024L * 1024L, 500_000L);
@@ -21,7 +23,9 @@ enum JsonProfile {
         return maximumTokens;
     }
 
-    /** Reports the one legacy Project object whose member names are display labels rather than identities. */
+    /**
+     * Reports the one legacy Project object whose member names are display labels rather than identities.
+     */
     boolean allowsExactDuplicateNamesAt(String path) {
         return this == PROJECT && "/MorphedNPCs".equals(path);
     }

@@ -34,12 +34,16 @@ public final class NpcTableColumns {
     private NpcTableColumns() {
     }
 
-    /** @return the immutable columns of the Project's NPC Morph Assignment table, in table order */
+    /**
+     * @return the immutable columns of the Project's NPC Morph Assignment table, in table order
+     */
     public static List<FilterColumn<NpcMorphAssignmentSnapshot>> npcMorphAssignments() {
         return NPC_MORPH_ASSIGNMENTS;
     }
 
-    /** @return the immutable columns of the NPC Database table, in table order */
+    /**
+     * @return the immutable columns of the NPC Database table, in table order
+     */
     public static List<FilterColumn<NPC>> npcDatabase() {
         return NPC_DATABASE;
     }

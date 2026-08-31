@@ -35,9 +35,9 @@ final class BodySlidePresetFileParser {
      *
      * @param source XML file to parse
      * @return detached Slider Presets and name locations in canonical name order
-     * @throws IOException when the source cannot be read
-     * @throws SAXException when XML syntax is malformed
-     * @throws ParserConfigurationException when secure XML parsing is unavailable
+     * @throws IOException                     when the source cannot be read
+     * @throws SAXException                    when XML syntax is malformed
+     * @throws ParserConfigurationException    when secure XML parsing is unavailable
      * @throws InvalidBodySlidePresetException when valid XML violates import rules
      */
     static List<ParsedPreset> parse(Path source)
@@ -107,7 +107,7 @@ final class BodySlidePresetFileParser {
      * Converts one XML Preset into the complete standard-profile snapshot used by
      * Project persistence and edits.
      *
-     * @param element Preset element
+     * @param element       Preset element
      * @param presetElement stable diagnostic element path
      * @return detached, canonically ordered Slider Preset with its name location
      * @throws InvalidBodySlidePresetException when a slider choice is invalid
@@ -132,9 +132,9 @@ final class BodySlidePresetFileParser {
      * Applies one small or big endpoint to a case-insensitive explicit choice.
      * Repeated endpoints remain later-wins for legacy BodySlide compatibility.
      *
-     * @param element SetSlider element
+     * @param element       SetSlider element
      * @param choiceElement stable diagnostic element path
-     * @param choices accumulated explicit choices
+     * @param choices       accumulated explicit choices
      * @throws InvalidBodySlidePresetException when the slider name or value is invalid
      */
     private static void parseChoice(Element element, String choiceElement, Map<String, MutableChoice> choices) {
@@ -184,7 +184,9 @@ final class BodySlidePresetFileParser {
         return new ArrayList<>(choices.values());
     }
 
-    /** Mutable parse-only holder for the two endpoints of one slider choice. */
+    /**
+     * Mutable parse-only holder for the two endpoints of one slider choice.
+     */
     private static final class MutableChoice {
         private final String name;
         private Integer small;
@@ -195,48 +197,64 @@ final class BodySlidePresetFileParser {
         }
     }
 
-    /** Detached imported value paired with its stable XML name location. */
+    /**
+     * Detached imported value paired with its stable XML name location.
+     */
     static final class ParsedPreset {
         private final SliderPresetSnapshot preset;
         private final String nameElement;
 
-        /** Creates one parsed value for later Project validation and publication. */
+        /**
+         * Creates one parsed value for later Project validation and publication.
+         */
         private ParsedPreset(SliderPresetSnapshot preset, String nameElement) {
             this.preset = preset;
             this.nameElement = nameElement;
         }
 
-        /** @return detached Slider Preset value */
+        /**
+         * @return detached Slider Preset value
+         */
         SliderPresetSnapshot getPreset() {
             return preset;
         }
 
-        /** @return stable XML location of the imported name */
+        /**
+         * @return stable XML location of the imported name
+         */
         String getNameElement() {
             return nameElement;
         }
     }
 
-    /** Stable schema or value rejection raised only after XML syntax succeeds. */
+    /**
+     * Stable schema or value rejection raised only after XML syntax succeeds.
+     */
     static final class InvalidBodySlidePresetException extends RuntimeException {
         private static final long serialVersionUID = 1L;
 
         private final String code;
         private final String element;
 
-        /** Creates a structured validation failure for one XML element. */
+        /**
+         * Creates a structured validation failure for one XML element.
+         */
         InvalidBodySlidePresetException(String code, String element, String message) {
             super(message);
             this.code = code;
             this.element = element;
         }
 
-        /** @return stable diagnostic code */
+        /**
+         * @return stable diagnostic code
+         */
         String getCode() {
             return code;
         }
 
-        /** @return stable XML element path */
+        /**
+         * @return stable XML element path
+         */
         String getElement() {
             return element;
         }

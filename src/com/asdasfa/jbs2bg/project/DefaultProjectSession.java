@@ -44,10 +44,95 @@ final class DefaultProjectSession implements ProjectSession {
     private Project project = Project.empty();
     private ProjectContentVersion contentVersion;
 
-    /** Creates one independent content-version scope and its coherent pre-lifecycle snapshot. */
+    /**
+     * Creates one independent content-version scope and its coherent pre-lifecycle snapshot.
+     */
     DefaultProjectSession() {
         contentVersion = ProjectContentVersion.initial(new Object());
         snapshot = ProjectSnapshot.noProject(contentVersion);
+    }
+
+    /**
+     * Retypes one source result against the final batch snapshot while preserving
+     * its classification and diagnostics.
+     *
+     * @param outcome       source result captured during ordered processing
+     * @param finalSnapshot latest snapshot after every selected source
+     * @return equivalent typed outcome carrying the final snapshot
+     */
+    private static ProjectOutcome outcomeAtSnapshot(ProjectOutcome outcome, ProjectSnapshot finalSnapshot) {
+        switch (importOutcomeKind(outcome)) {
+            case CHANGED:
+                return new ChangedOutcome(finalSnapshot, outcome.getDiagnostics());
+            case REJECTED:
+                return new RejectedOutcome(finalSnapshot, outcome.getDiagnostics());
+            case FAILED:
+                return new FailedOutcome(finalSnapshot, outcome.getDiagnostics());
+            case CANCELLED:
+                return new CancelledOutcome(finalSnapshot, outcome.getDiagnostics());
+            case UNCHANGED:
+                return new UnchangedOutcome(finalSnapshot, outcome.getDiagnostics());
+            default:
+                throw new IllegalStateException("Unsupported import outcome kind.");
+        }
+    }
+
+    /**
+     * Classifies the established typed Project outcomes once for import aggregation
+     * and final-snapshot rebinding.
+     *
+     * @param outcome typed source outcome
+     * @return corresponding import aggregation kind
+     */
+    private static ImportOutcomeKind importOutcomeKind(ProjectOutcome outcome) {
+        if (outcome instanceof ChangedOutcome)
+            return ImportOutcomeKind.CHANGED;
+        if (outcome instanceof RejectedOutcome)
+            return ImportOutcomeKind.REJECTED;
+        if (outcome instanceof FailedOutcome)
+            return ImportOutcomeKind.FAILED;
+        if (outcome instanceof CancelledOutcome)
+            return ImportOutcomeKind.CANCELLED;
+        return ImportOutcomeKind.UNCHANGED;
+    }
+
+    /**
+     * Converts positive SAX coordinates to the optional source-location form.
+     *
+     * @param value parser coordinate, or a non-positive unknown marker
+     * @return present one-based coordinate when known
+     */
+    private static OptionalInt optionalPositive(int value) {
+        return value > 0 ? OptionalInt.of(value) : OptionalInt.empty();
+    }
+
+    /**
+     * Produces a Slider Preset whose choices are in stable case-insensitive order.
+     *
+     * @param source         immutable source value
+     * @param normalizedName validated display name
+     * @return a canonically ordered immutable value
+     */
+    private static SliderPresetSnapshot canonicalSliderPreset(SliderPresetSnapshot source, String normalizedName) {
+        return new SliderPresetSnapshot(normalizedName, source.isUunp(),
+                SliderChoiceDefaults.sortedByName(source.getSliderChoices()));
+    }
+
+    /**
+     * Applies the handler-side Slider Preset name rules for both edit and XML-import
+     * callers, which report the problem at different locations.
+     *
+     * @param requestedName name before trimming
+     * @return validation problem, or null when the name is trimmed-non-empty and dot-free
+     */
+    private static SliderPresetNameProblem findSliderPresetNameProblem(String requestedName) {
+        if (requestedName == null || requestedName.trim().isEmpty())
+            return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_REQUIRED,
+                    "A Slider Preset name must not be empty.");
+        if (requestedName.trim().indexOf('.') >= 0)
+            return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_CONTAINS_DOT,
+                    "A Slider Preset name must not contain dots.");
+        return null;
     }
 
     /**
@@ -118,12 +203,12 @@ final class DefaultProjectSession implements ProjectSession {
     /**
      * Translates an owned adapter failure without publishing any part of its candidate.
      *
-     * @param source requested Project file
+     * @param source    requested Project file
      * @param exception codec-free failure with stable source diagnostics
      * @return filesystem failure or document rejection carrying the unchanged snapshot
      */
     private ProjectOutcome projectFormatFailure(Path source,
-            ProjectJacksonAdapter.ProjectFormatException exception) {
+                                                ProjectJacksonAdapter.ProjectFormatException exception) {
         OptionalInt line = exception.line() > 0 ? OptionalInt.of(exception.line()) : OptionalInt.empty();
         OptionalInt column = exception.column() > 0 ? OptionalInt.of(exception.column()) : OptionalInt.empty();
         SourceLocation location = new SourceLocation(Optional.of(source.toAbsolutePath().normalize()),
@@ -140,8 +225,8 @@ final class DefaultProjectSession implements ProjectSession {
      * Builds a failed open outcome without replacing the currently published
      * Project snapshot.
      *
-     * @param code stable diagnostic code
-     * @param source requested source file
+     * @param code    stable diagnostic code
+     * @param source  requested source file
      * @param message human-readable failure message
      * @return failure carrying the unchanged snapshot
      */
@@ -254,59 +339,6 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Retypes one source result against the final batch snapshot while preserving
-     * its classification and diagnostics.
-     *
-     * @param outcome source result captured during ordered processing
-     * @param finalSnapshot latest snapshot after every selected source
-     * @return equivalent typed outcome carrying the final snapshot
-     */
-    private static ProjectOutcome outcomeAtSnapshot(ProjectOutcome outcome, ProjectSnapshot finalSnapshot) {
-        switch (importOutcomeKind(outcome)) {
-        case CHANGED:
-            return new ChangedOutcome(finalSnapshot, outcome.getDiagnostics());
-        case REJECTED:
-            return new RejectedOutcome(finalSnapshot, outcome.getDiagnostics());
-        case FAILED:
-            return new FailedOutcome(finalSnapshot, outcome.getDiagnostics());
-        case CANCELLED:
-            return new CancelledOutcome(finalSnapshot, outcome.getDiagnostics());
-        case UNCHANGED:
-            return new UnchangedOutcome(finalSnapshot, outcome.getDiagnostics());
-        default:
-            throw new IllegalStateException("Unsupported import outcome kind.");
-        }
-    }
-
-    /**
-     * Classifies the established typed Project outcomes once for import aggregation
-     * and final-snapshot rebinding.
-     *
-     * @param outcome typed source outcome
-     * @return corresponding import aggregation kind
-     */
-    private static ImportOutcomeKind importOutcomeKind(ProjectOutcome outcome) {
-        if (outcome instanceof ChangedOutcome)
-            return ImportOutcomeKind.CHANGED;
-        if (outcome instanceof RejectedOutcome)
-            return ImportOutcomeKind.REJECTED;
-        if (outcome instanceof FailedOutcome)
-            return ImportOutcomeKind.FAILED;
-        if (outcome instanceof CancelledOutcome)
-            return ImportOutcomeKind.CANCELLED;
-        return ImportOutcomeKind.UNCHANGED;
-    }
-
-    /** Internal classification for the four public typed Project outcomes. */
-    private enum ImportOutcomeKind {
-        CHANGED,
-        UNCHANGED,
-        REJECTED,
-        FAILED,
-        CANCELLED
-    }
-
-    /**
      * Parses and commits one source without allowing its failure to escape or
      * discard state committed by another selected file.
      *
@@ -359,27 +391,17 @@ final class DefaultProjectSession implements ProjectSession {
     /**
      * Builds one malformed-XML rejection with optional parser coordinates.
      *
-     * @param source normalized XML source
+     * @param source    normalized XML source
      * @param exception parser failure
-     * @param line optional one-based line
-     * @param column optional one-based column
+     * @param line      optional one-based line
+     * @param column    optional one-based column
      * @return structured rejection carrying the current coherent snapshot
      */
     private RejectedOutcome rejectedMalformedXml(Path source, SAXException exception, OptionalInt line,
-            OptionalInt column) {
+                                                 OptionalInt column) {
         SourceLocation location = new SourceLocation(Optional.of(source), Optional.of("/"), line, column);
         return rejected(ProjectDiagnosticCodes.SLIDER_PRESET_XML_MALFORMED, location,
                 "The BodySlide source contains malformed XML: " + exception.getMessage());
-    }
-
-    /**
-     * Converts positive SAX coordinates to the optional source-location form.
-     *
-     * @param value parser coordinate, or a non-positive unknown marker
-     * @return present one-based coordinate when known
-     */
-    private static OptionalInt optionalPositive(int value) {
-        return value > 0 ? OptionalInt.of(value) : OptionalInt.empty();
     }
 
     /**
@@ -389,11 +411,11 @@ final class DefaultProjectSession implements ProjectSession {
      * its XML location before anything is published.
      *
      * @param imported complete detached source payload with XML name locations
-     * @param source normalized XML source for validation diagnostics
+     * @param source   normalized XML source for validation diagnostics
      * @return changed, unchanged, or rejected source outcome
      */
     private ProjectOutcome upsertImportedSliderPresets(List<BodySlidePresetFileParser.ParsedPreset> imported,
-            Path source) {
+                                                       Path source) {
         Project upserted = project;
         for (BodySlidePresetFileParser.ParsedPreset parsedPreset : imported) {
             SliderPresetSnapshot candidate = parsedPreset.getPreset();
@@ -446,8 +468,8 @@ final class DefaultProjectSession implements ProjectSession {
      * Reports an operation failure without replacing or partially updating the
      * currently published Project snapshot.
      *
-     * @param code stable diagnostic code
-     * @param path requested filesystem source, or empty when no identity is available
+     * @param code    stable diagnostic code
+     * @param path    requested filesystem source, or empty when no identity is available
      * @param element stable logical location within the operation
      * @param message human-readable failure message
      * @return failed outcome carrying the unchanged snapshot
@@ -720,7 +742,7 @@ final class DefaultProjectSession implements ProjectSession {
     /**
      * Builds an NPC edit rejection at the stable identity location.
      *
-     * @param code stable diagnostic code
+     * @param code    stable diagnostic code
      * @param message human-readable validation failure
      * @return a rejection carrying the unchanged current snapshot
      */
@@ -870,7 +892,7 @@ final class DefaultProjectSession implements ProjectSession {
     /**
      * Builds a naming rejection at the stable Custom Morph Target name location.
      *
-     * @param code stable diagnostic code
+     * @param code    stable diagnostic code
      * @param message human-readable validation failure
      * @return a rejection carrying the unchanged current snapshot
      */
@@ -1126,7 +1148,7 @@ final class DefaultProjectSession implements ProjectSession {
     /**
      * Builds a slider-choice validation rejection at a stable logical location.
      *
-     * @param code stable diagnostic code
+     * @param code    stable diagnostic code
      * @param element stable logical location within the Slider Preset
      * @param message human-readable validation failure
      * @return a rejection carrying the unchanged current snapshot
@@ -1135,18 +1157,6 @@ final class DefaultProjectSession implements ProjectSession {
         SourceLocation location = new SourceLocation(Optional.empty(), Optional.of(element), OptionalInt.empty(),
                 OptionalInt.empty());
         return rejected(code, location, message);
-    }
-
-    /**
-     * Produces a Slider Preset whose choices are in stable case-insensitive order.
-     *
-     * @param source immutable source value
-     * @param normalizedName validated display name
-     * @return a canonically ordered immutable value
-     */
-    private static SliderPresetSnapshot canonicalSliderPreset(SliderPresetSnapshot source, String normalizedName) {
-        return new SliderPresetSnapshot(normalizedName, source.isUunp(),
-                SliderChoiceDefaults.sortedByName(source.getSliderChoices()));
     }
 
     /**
@@ -1176,38 +1186,9 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Applies the handler-side Slider Preset name rules for both edit and XML-import
-     * callers, which report the problem at different locations.
-     *
-     * @param requestedName name before trimming
-     * @return validation problem, or null when the name is trimmed-non-empty and dot-free
-     */
-    private static SliderPresetNameProblem findSliderPresetNameProblem(String requestedName) {
-        if (requestedName == null || requestedName.trim().isEmpty())
-            return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_REQUIRED,
-                    "A Slider Preset name must not be empty.");
-        if (requestedName.trim().indexOf('.') >= 0)
-            return new SliderPresetNameProblem(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_CONTAINS_DOT,
-                    "A Slider Preset name must not contain dots.");
-        return null;
-    }
-
-    /** Immutable validation detail shared by edit and XML-import callers. */
-    private static final class SliderPresetNameProblem {
-        private final String code;
-        private final String message;
-
-        /** Creates one stable name-validation problem. */
-        private SliderPresetNameProblem(String code, String message) {
-            this.code = code;
-            this.message = message;
-        }
-    }
-
-    /**
      * Builds a naming rejection at the stable Slider Preset name location.
      *
-     * @param code stable diagnostic code
+     * @param code    stable diagnostic code
      * @param message human-readable validation failure
      * @return a rejection carrying the unchanged current snapshot
      */
@@ -1250,17 +1231,17 @@ final class DefaultProjectSession implements ProjectSession {
      * content plus the requested lifecycle, and the aggregate and snapshot are
      * swapped together. Must be called under the operation lock.
      *
-     * @param next aggregate to publish, possibly the current instance
-     * @param fileIdentity adopted Project path, or empty for an untitled Project
-     * @param dirty whether the published Project has unsaved changes
+     * @param next            aggregate to publish, possibly the current instance
+     * @param fileIdentity    adopted Project path, or empty for an untitled Project
+     * @param dirty           whether the published Project has unsaved changes
      * @param lifecycleStatus stable lifecycle classification to publish
-     * @param diagnostics diagnostics the outcome carries either way
+     * @param diagnostics     diagnostics the outcome carries either way
      * @return unchanged or changed outcome at the published snapshot
      * @throws IllegalArgumentException when the lifecycle contradicts itself or the
-     *         content (see {@link ProjectSnapshot}); nothing is swapped when it does
+     *                                  content (see {@link ProjectSnapshot}); nothing is swapped when it does
      */
     private ProjectOutcome publish(Project next, Optional<Path> fileIdentity, boolean dirty,
-            ProjectLifecycleStatus lifecycleStatus, boolean changesContent, List<ProjectDiagnostic> diagnostics) {
+                                   ProjectLifecycleStatus lifecycleStatus, boolean changesContent, List<ProjectDiagnostic> diagnostics) {
         boolean sameContent = next == project;
         boolean sameLifecycle = fileIdentity.equals(snapshot.getFileIdentity()) && dirty == snapshot.isDirty()
                 && lifecycleStatus == snapshot.getLifecycleStatus();
@@ -1288,13 +1269,40 @@ final class DefaultProjectSession implements ProjectSession {
      * Builds a validation rejection while the operation lock pins the snapshot used
      * by both the outcome and concurrent callers.
      *
-     * @param code stable diagnostic code
+     * @param code     stable diagnostic code
      * @param location structured source location
-     * @param message human-readable diagnostic message
+     * @param message  human-readable diagnostic message
      * @return a rejection carrying the pinned snapshot
      */
     private RejectedOutcome rejected(String code, SourceLocation location, String message) {
         ProjectDiagnostic diagnostic = new ProjectDiagnostic(code, DiagnosticSeverity.ERROR, location, message);
         return new RejectedOutcome(snapshot, Collections.singletonList(diagnostic));
+    }
+
+    /**
+     * Internal classification for the four public typed Project outcomes.
+     */
+    private enum ImportOutcomeKind {
+        CHANGED,
+        UNCHANGED,
+        REJECTED,
+        FAILED,
+        CANCELLED
+    }
+
+    /**
+     * Immutable validation detail shared by edit and XML-import callers.
+     */
+    private static final class SliderPresetNameProblem {
+        private final String code;
+        private final String message;
+
+        /**
+         * Creates one stable name-validation problem.
+         */
+        private SliderPresetNameProblem(String code, String message) {
+            this.code = code;
+            this.message = message;
+        }
     }
 }

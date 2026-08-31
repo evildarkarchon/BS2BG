@@ -39,140 +39,99 @@ import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 
-/** JavaFX adapter for the Workbench root graph; Project and navigation state remain JavaFX-independent. */
+/**
+ * JavaFX adapter for the Workbench root graph; Project and navigation state remain JavaFX-independent.
+ */
 public final class WorkbenchController {
-
-    @FXML
-    private BorderPane workbenchRoot;
-
-    @FXML
-    private ToggleButton templatesAreaButton;
-
-    @FXML
-    private ToggleButton morphsAreaButton;
-
-    @FXML
-    private ToggleButton npcDatabaseAreaButton;
-
-    @FXML
-    private ToggleButton outputAreaButton;
-
-    @FXML
-    private ToggleButton settingsAreaButton;
-
-    @FXML
-    private MenuItem saveProjectMenuItem;
-
-    @FXML
-    private MenuItem newProjectMenuItem;
-
-    @FXML
-    private MenuItem openProjectMenuItem;
-
-    @FXML
-    private MenuItem saveAsProjectMenuItem;
-
-    @FXML
-    private MenuItem exitMenuItem;
-
-    @FXML
-    private Label areaTitle;
-
-    @FXML
-    private Label projectStatusText;
-
-    @FXML
-    private ComboBox<WorkbenchAppearance.ThemeChoice> themeChoice;
-
-    @FXML
-    private Label appearanceStateText;
-
-    @FXML
-    private Label motionStateText;
-
-    @FXML
-    private Label statusText;
-
-    @FXML
-    private HBox infoBar;
-
-    @FXML
-    private StackPane infoBarIconHost;
-
-    @FXML
-    private Label infoBarCue;
-
-    @FXML
-    private Label infoBarMessage;
-
-    @FXML
-    private Button dismissInfoBarButton;
-
-    @FXML
-    private StackPane statusIconHost;
-
-    @FXML
-    private Button cancelOperationButton;
-
-    @FXML
-    private ProgressBar operationProgress;
-
-    @FXML
-    private TextArea diagnosticsText;
-
-    @FXML
-    private ListView<WorkbenchFeedback.ActivityRecord> activityList;
-
-    @FXML
-    private Button retryActivityButton;
-
-    @FXML
-    private StackPane contentStack;
-
-    @FXML
-    private HBox areaPanes;
-
-    @FXML
-    private VBox primaryPane;
-
-    @FXML
-    private StackPane editorPane;
-
-    @FXML
-    private VBox inspectorPane;
-
-    @FXML
-    private StackPane overlayLayer;
-
-    @FXML
-    private Button primaryContentButton;
-
-    @FXML
-    private Button editorButton;
-
-    @FXML
-    private Button inspectorButton;
-
-    @FXML
-    private Button showPrimaryOverlayButton;
-
-    @FXML
-    private Button showInspectorOverlayButton;
-
-    @FXML
-    private VBox outputDrawer;
-
-    @FXML
-    private Slider outputDrawerHeight;
-
-    @FXML
-    private Label outputFocusTarget;
-
-    @FXML
-    private TextArea outputText;
 
     private final WorkbenchNavigation navigation = new WorkbenchNavigation();
     private final WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.systemUTC());
+    @FXML
+    private BorderPane workbenchRoot;
+    @FXML
+    private ToggleButton templatesAreaButton;
+    @FXML
+    private ToggleButton morphsAreaButton;
+    @FXML
+    private ToggleButton npcDatabaseAreaButton;
+    @FXML
+    private ToggleButton outputAreaButton;
+    @FXML
+    private ToggleButton settingsAreaButton;
+    @FXML
+    private MenuItem saveProjectMenuItem;
+    @FXML
+    private MenuItem newProjectMenuItem;
+    @FXML
+    private MenuItem openProjectMenuItem;
+    @FXML
+    private MenuItem saveAsProjectMenuItem;
+    @FXML
+    private MenuItem exitMenuItem;
+    @FXML
+    private Label areaTitle;
+    @FXML
+    private Label projectStatusText;
+    @FXML
+    private ComboBox<WorkbenchAppearance.ThemeChoice> themeChoice;
+    @FXML
+    private Label appearanceStateText;
+    @FXML
+    private Label motionStateText;
+    @FXML
+    private Label statusText;
+    @FXML
+    private HBox infoBar;
+    @FXML
+    private StackPane infoBarIconHost;
+    @FXML
+    private Label infoBarCue;
+    @FXML
+    private Label infoBarMessage;
+    @FXML
+    private Button dismissInfoBarButton;
+    @FXML
+    private StackPane statusIconHost;
+    @FXML
+    private Button cancelOperationButton;
+    @FXML
+    private ProgressBar operationProgress;
+    @FXML
+    private TextArea diagnosticsText;
+    @FXML
+    private ListView<WorkbenchFeedback.ActivityRecord> activityList;
+    @FXML
+    private Button retryActivityButton;
+    @FXML
+    private StackPane contentStack;
+    @FXML
+    private HBox areaPanes;
+    @FXML
+    private VBox primaryPane;
+    @FXML
+    private StackPane editorPane;
+    @FXML
+    private VBox inspectorPane;
+    @FXML
+    private StackPane overlayLayer;
+    @FXML
+    private Button primaryContentButton;
+    @FXML
+    private Button editorButton;
+    @FXML
+    private Button inspectorButton;
+    @FXML
+    private Button showPrimaryOverlayButton;
+    @FXML
+    private Button showInspectorOverlayButton;
+    @FXML
+    private VBox outputDrawer;
+    @FXML
+    private Slider outputDrawerHeight;
+    @FXML
+    private Label outputFocusTarget;
+    @FXML
+    private TextArea outputText;
     private WorkbenchNavigation.Frame navigationFrame = navigation.currentFrame();
     private WorkbenchProjectFlow projectFlow;
     private Stage stage;
@@ -186,9 +145,105 @@ public final class WorkbenchController {
     private boolean closeAfterActiveJob;
 
     /**
+     * Pairs one decorative vector with the text label and exposes its keyboard cue as help text.
+     */
+    private static void configureSemanticIcon(ToggleButton button, SemanticIcons.IconKey key, String shortcut) {
+        button.setGraphic(SemanticIcons.create(key, true));
+        button.setAccessibleHelp("Semantic icon: " + key.accessibleName() + ". Keyboard shortcut: " + shortcut + ".");
+    }
+
+    /**
+     * Converts a Project confirmation response into the matching typed dialog action.
+     */
+    private static WorkbenchFeedback.DialogAction dialogAction(WorkbenchProjectFlow.Response response) {
+        return switch (response.kind()) {
+            case SAVE -> WorkbenchFeedback.DialogAction.SAVE;
+            case DISCARD -> WorkbenchFeedback.DialogAction.DISCARD;
+            case CANCELLED -> WorkbenchFeedback.DialogAction.CANCEL;
+            case PATH_SELECTED -> throw new IllegalArgumentException(
+                    "A Project confirmation cannot return a selected path");
+        };
+    }
+
+    /**
+     * Keeps one severity style class on a feedback node so text/icon/boundary cues stay synchronized.
+     */
+    private static void setSeverityStyle(Node node, WorkbenchFeedback.Severity severity) {
+        node.getStyleClass().removeAll("severity-information", "severity-validation", "severity-success",
+                "severity-warning", "severity-failure");
+        node.getStyleClass().add("severity-" + severity.name().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /**
+     * Returns the one stable Activity name and terminal sentence fragment for a Project command.
+     */
+    private static OperationDescription operationDescription(WorkbenchProjectFlow.Intent intent) {
+        if (intent == null)
+            return new OperationDescription("Project operation", "Project operation completed");
+        return switch (intent) {
+            case NEW -> new OperationDescription("New Project", "New Project created");
+            case OPEN -> new OperationDescription("Open Project", "Project opened");
+            case SAVE, SAVE_AS -> new OperationDescription("Save Project", "Project saved");
+            case CLOSE -> new OperationDescription("Close Project", "Project closed");
+        };
+    }
+
+    /**
+     * Pluralizes the stable diagnostic count used by InfoBar, Activity, and status projections.
+     */
+    private static String diagnosticSummary(long count) {
+        return count + (count == 1 ? " diagnostic" : " diagnostics");
+    }
+
+    /**
+     * Builds the stable role/name identity used to locate one Activity record without visible-order assumptions.
+     */
+    private static String activityText(WorkbenchFeedback.ActivityRecord activity) {
+        return activity.cue() + " — " + activity.operation() + " — "
+                + activity.disposition().displayText() + ": " + activity.message();
+    }
+
+    /**
+     * Formats durable attempt linkage, captured inputs, effects, and diagnostics for assistive inspection.
+     */
+    private static String activityHelp(WorkbenchFeedback.ActivityRecord activity) {
+        if (activity.jobDetails().isEmpty())
+            return "Timestamp: " + activity.occurredAt();
+        WorkbenchFeedback.JobDetails details = activity.jobDetails().orElseThrow();
+        return "Timestamp: " + activity.occurredAt()
+                + ". Attempt: " + details.attemptId()
+                + details.retryOf().map(value -> ". Retry of attempt: " + value).orElse("")
+                + ". Sources: " + (details.sources().isEmpty() ? "none" : String.join(", ", details.sources()))
+                + ". Destinations: "
+                + (details.destinations().isEmpty() ? "none" : String.join(", ", details.destinations()))
+                + details.capturedBasis().map(value -> ". Captured basis: " + value).orElse("")
+                + ". Effects committed: "
+                + (details.effectsCommitted().isEmpty() ? "none" : String.join(", ", details.effectsCommitted()))
+                + ". Diagnostics: "
+                + (details.diagnosticCodes().isEmpty() ? "none" : String.join(", ", details.diagnosticCodes()))
+                + ". Retry available: " + details.retryAvailable() + ".";
+    }
+
+    /**
+     * Derives a concise non-color Project lifecycle summary.
+     */
+    private static String projectStatus(WorkbenchProjectFlow.Frame frame) {
+        if (frame.snapshot().isDirty())
+            return "Unsaved changes";
+        return frame.snapshot().getFileIdentity().isPresent() ? "Saved Project" : "Untitled Project";
+    }
+
+    /**
+     * Creates the conventional Control accelerator for one File command key.
+     */
+    private static KeyCodeCombination shortcut(KeyCode code) {
+        return new KeyCodeCombination(code, KeyCombination.CONTROL_DOWN);
+    }
+
+    /**
      * Attaches the loaded JavaFX graph to the sole Project flow and renders its current frame.
      *
-     * @param flow authoritative Workbench Project flow
+     * @param flow       authoritative Workbench Project flow
      * @param ownerStage application window that receives Project titles
      * @throws IllegalStateException when this controller is attached more than once
      */
@@ -208,10 +263,10 @@ public final class WorkbenchController {
      * Attaches one platform adapter on the JavaFX Application Thread. The controller owns the Stage handlers until
      * the flow publishes its final close effect; it cannot be attached again.
      *
-     * @param flow authoritative window-scoped Project flow
-     * @param ownerStage Stage whose title, close request, choosers, and dialogs are owned by this controller
+     * @param flow            authoritative window-scoped Project flow
+     * @param ownerStage      Stage whose title, close request, choosers, and dialogs are owned by this controller
      * @param platformAdapter native-effect adapter retained for the controller lifetime
-     * @throws NullPointerException when an argument is null
+     * @throws NullPointerException  when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
     void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter) {
@@ -223,16 +278,16 @@ public final class WorkbenchController {
     /**
      * Attaches Project, platform, and profile appearance adapters through one window-lifetime initialization path.
      *
-     * @param flow authoritative window-scoped Project flow
-     * @param ownerStage Stage that owns dialogs, focus, and the live appearance listener
+     * @param flow            authoritative window-scoped Project flow
+     * @param ownerStage      Stage that owns dialogs, focus, and the live appearance listener
      * @param platformAdapter native-effect adapter retained until the Stage is hidden
-     * @param initialChoice persisted System, Light, or Dark choice
-     * @param themeSaver profile persistence callback used after user selection
-     * @throws NullPointerException when an argument is null
+     * @param initialChoice   persisted System, Light, or Dark choice
+     * @param themeSaver      profile persistence callback used after user selection
+     * @throws NullPointerException  when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
     private void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
-            WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver) {
+                        WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver) {
         if (projectFlow != null)
             throw new IllegalStateException("WorkbenchController is already attached");
         projectFlow = Objects.requireNonNull(flow, "flow");
@@ -270,7 +325,7 @@ public final class WorkbenchController {
      * Publishes freshly generated text and reveals Output without taking focus from the user's current Area.
      *
      * @param generatedOutput complete generated text to present in the drawer
-     * @throws NullPointerException when generatedOutput is null
+     * @throws NullPointerException  when generatedOutput is null
      * @throws IllegalStateException when called off the JavaFX Application Thread
      */
     public void revealGeneratedOutput(String generatedOutput) {
@@ -280,7 +335,9 @@ public final class WorkbenchController {
         applyNavigation(navigation.revealOutput());
     }
 
-    /** Connects File menu commands and their stable keyboard accelerators to Project intents. */
+    /**
+     * Connects File menu commands and their stable keyboard accelerators to Project intents.
+     */
     private void configureProjectCommands() {
         newProjectMenuItem.setAccelerator(shortcut(KeyCode.N));
         openProjectMenuItem.setAccelerator(shortcut(KeyCode.O));
@@ -294,11 +351,13 @@ public final class WorkbenchController {
         exitMenuItem.setOnAction(event -> dispatch(WorkbenchProjectFlow.Intent.CLOSE));
     }
 
-    /** Connects rail gestures, accepted keyboard commands, and responsive width changes to typed navigation. */
+    /**
+     * Connects rail gestures, accepted keyboard commands, and responsive width changes to typed navigation.
+     */
     private void configureNavigation() {
         ToggleGroup areas = new ToggleGroup();
-        for (ToggleButton button : new ToggleButton[] {
-                templatesAreaButton, morphsAreaButton, npcDatabaseAreaButton, settingsAreaButton }) {
+        for (ToggleButton button : new ToggleButton[]{
+                templatesAreaButton, morphsAreaButton, npcDatabaseAreaButton, settingsAreaButton}) {
             button.setToggleGroup(areas);
         }
         templatesAreaButton.setOnAction(event -> navigate(WorkbenchNavigation.Destination.TEMPLATES));
@@ -319,7 +378,9 @@ public final class WorkbenchController {
         });
     }
 
-    /** Clips the drawer to Workbench content and maps its public Slider value to drawer height. */
+    /**
+     * Clips the drawer to Workbench content and maps its public Slider value to drawer height.
+     */
     private void configureDrawerGeometry() {
         Rectangle clip = new Rectangle();
         clip.widthProperty().bind(contentStack.widthProperty());
@@ -332,7 +393,9 @@ public final class WorkbenchController {
                 updateDrawerMaximum(newHeight.doubleValue()));
     }
 
-    /** Connects nonmodal dismissal while leaving the durable Activity record and terminal status intact. */
+    /**
+     * Connects nonmodal dismissal while leaving the durable Activity record and terminal status intact.
+     */
     private void configureFeedback() {
         activityList.setCellFactory(list -> new ActivityCell());
         activityList.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) ->
@@ -347,7 +410,9 @@ public final class WorkbenchController {
         operationProgress.setVisible(false);
     }
 
-    /** Enables Activity Retry only for one selected retryable terminal attempt while admission is open. */
+    /**
+     * Enables Activity Retry only for one selected retryable terminal attempt while admission is open.
+     */
     private void updateActivityRetry(WorkbenchFeedback.ActivityRecord selected) {
         boolean available = selected != null
                 && selected.jobDetails().stream().anyMatch(WorkbenchFeedback.JobDetails::retryAvailable)
@@ -356,11 +421,13 @@ public final class WorkbenchController {
         retryActivityButton.setDisable(!available);
         retryActivityButton.setAccessibleHelp(available
                 ? "Starts a new attempt linked to attempt "
-                        + selected.jobDetails().orElseThrow().attemptId() + " with freshly captured inputs."
+                + selected.jobDetails().orElseThrow().attemptId() + " with freshly captured inputs."
                 : "Select a retryable failed Activity record while no operation is active.");
     }
 
-    /** Requests a coordinator-owned retry for the selected durable Activity attempt. */
+    /**
+     * Requests a coordinator-owned retry for the selected durable Activity attempt.
+     */
     private void retrySelectedActivity() {
         WorkbenchFeedback.ActivityRecord selected = activityList.getSelectionModel().getSelectedItem();
         if (selected == null || selected.jobDetails().isEmpty())
@@ -369,7 +436,9 @@ public final class WorkbenchController {
                 selected.jobDetails().orElseThrow().attemptId()));
     }
 
-    /** Connects System/Light/Dark selection to the live public-JavaFX appearance adapter and profile store. */
+    /**
+     * Connects System/Light/Dark selection to the live public-JavaFX appearance adapter and profile store.
+     */
     private void configureAppearance(WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver saver) {
         Objects.requireNonNull(saver, "saver");
         WorkbenchAppearance appearance = new WorkbenchAppearance(
@@ -395,7 +464,9 @@ public final class WorkbenchController {
         appearanceAdapter.start();
     }
 
-    /** Adds the selected bundled-vector implementation to every text-labelled Workbench rail action. */
+    /**
+     * Adds the selected bundled-vector implementation to every text-labelled Workbench rail action.
+     */
     private void configureSemanticIcons() {
         configureSemanticIcon(templatesAreaButton, SemanticIcons.IconKey.TEMPLATES, "Ctrl+1");
         configureSemanticIcon(morphsAreaButton, SemanticIcons.IconKey.MORPHS, "Ctrl+2");
@@ -404,13 +475,9 @@ public final class WorkbenchController {
         configureSemanticIcon(settingsAreaButton, SemanticIcons.IconKey.SETTINGS, "Ctrl+5");
     }
 
-    /** Pairs one decorative vector with the text label and exposes its keyboard cue as help text. */
-    private static void configureSemanticIcon(ToggleButton button, SemanticIcons.IconKey key, String shortcut) {
-        button.setGraphic(SemanticIcons.create(key, true));
-        button.setAccessibleHelp("Semantic icon: " + key.accessibleName() + ". Keyboard shortcut: " + shortcut + ".");
-    }
-
-    /** Renders effective theme and reduced-motion state as explicit non-color text. */
+    /**
+     * Renders effective theme and reduced-motion state as explicit non-color text.
+     */
     private void renderAppearance(WorkbenchAppearance.Frame frame) {
         String theme = switch (frame.effectiveTheme()) {
             case LIGHT -> "Light theme";
@@ -427,13 +494,17 @@ public final class WorkbenchController {
                 + theme + "; " + motion + ".");
     }
 
-    /** Pins the bottom-aligned resizable VBox to the user-selected drawer height. */
+    /**
+     * Pins the bottom-aligned resizable VBox to the user-selected drawer height.
+     */
     private void applyDrawerHeight(double height) {
         outputDrawer.setPrefHeight(height);
         outputDrawer.setMaxHeight(height);
     }
 
-    /** Keeps the drawer proportional at small client heights while retaining its accepted keyboard resize range. */
+    /**
+     * Keeps the drawer proportional at small client heights while retaining its accepted keyboard resize range.
+     */
     private void updateDrawerMaximum(double contentHeight) {
         if (contentHeight <= 0.0)
             return;
@@ -443,7 +514,9 @@ public final class WorkbenchController {
             outputDrawerHeight.setValue(maximum);
     }
 
-    /** Translates one accepted key gesture into a typed navigation transition. */
+    /**
+     * Translates one accepted key gesture into a typed navigation transition.
+     */
     private void handleNavigationKey(KeyEvent event) {
         WorkbenchNavigation.Transition transition = null;
         if (event.isControlDown()) {
@@ -465,11 +538,11 @@ public final class WorkbenchController {
         } else if (event.getCode() == KeyCode.F7) {
             transition = navigation.openInspector(navigationFrame.narrowMode()
                     ? new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
-                            WorkbenchNavigation.Landmark.INSPECTOR_LAUNCHER)
+                    WorkbenchNavigation.Landmark.INSPECTOR_LAUNCHER)
                     : currentSemanticFocus());
         } else if (event.getCode() == KeyCode.ESCAPE
                 && (navigationFrame.overlay() != WorkbenchNavigation.Overlay.NONE
-                        || navigationFrame.outputDrawerVisible())) {
+                || navigationFrame.outputDrawerVisible())) {
             transition = navigation.dismiss();
         }
         if (transition != null) {
@@ -478,19 +551,25 @@ public final class WorkbenchController {
         }
     }
 
-    /** Navigates from a rail gesture using the currently focused semantic launcher. */
+    /**
+     * Navigates from a rail gesture using the currently focused semantic launcher.
+     */
     private void navigate(WorkbenchNavigation.Destination destination) {
         applyNavigation(navigation.navigate(destination, currentSemanticFocus()));
     }
 
-    /** Commits one navigation frame before realizing its optional tokenized focus effect. */
+    /**
+     * Commits one navigation frame before realizing its optional tokenized focus effect.
+     */
     private void applyNavigation(WorkbenchNavigation.Transition transition) {
         navigationFrame = transition.frame();
         renderNavigation(navigationFrame);
         transition.focusTarget().ifPresent(this::requestFocus);
     }
 
-    /** Renders active Area, responsive panes, and Output visibility from one immutable navigation frame. */
+    /**
+     * Renders active Area, responsive panes, and Output visibility from one immutable navigation frame.
+     */
     private void renderNavigation(WorkbenchNavigation.Frame frame) {
         templatesAreaButton.setSelected(frame.activeArea() == WorkbenchNavigation.Area.TEMPLATES);
         morphsAreaButton.setSelected(frame.activeArea() == WorkbenchNavigation.Area.MORPHS);
@@ -524,7 +603,9 @@ public final class WorkbenchController {
             outputDrawer.toFront();
     }
 
-    /** Reparents the real side panes into one overlay so narrow mode never creates a second feature route. */
+    /**
+     * Reparents the real side panes into one overlay so narrow mode never creates a second feature route.
+     */
     private void renderResponsivePanes(WorkbenchNavigation.Frame frame) {
         areaPanes.getChildren().clear();
         overlayLayer.getChildren().clear();
@@ -550,7 +631,9 @@ public final class WorkbenchController {
         inspectorPane.setMaxWidth(frame.narrowMode() ? 320.0 : Region.USE_COMPUTED_SIZE);
     }
 
-    /** Resolves current JavaFX focus back into a semantic target safe to retain across re-rendering. */
+    /**
+     * Resolves current JavaFX focus back into a semantic target safe to retain across re-rendering.
+     */
     private WorkbenchNavigation.FocusTarget currentSemanticFocus() {
         Node focusOwner = stage != null && stage.getScene() != null ? stage.getScene().getFocusOwner() : null;
         WorkbenchNavigation.Landmark landmark;
@@ -578,7 +661,9 @@ public final class WorkbenchController {
         return new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(), landmark);
     }
 
-    /** Applies one semantic focus effect, falling back to the active Area's first editable control. */
+    /**
+     * Applies one semantic focus effect, falling back to the active Area's first editable control.
+     */
     private void requestFocus(WorkbenchNavigation.FocusTarget target) {
         Node node = resolveFocusNode(target);
         if (node == null || !node.isVisible() || node.getParent() == null)
@@ -589,7 +674,9 @@ public final class WorkbenchController {
             Platform.runLater(resolved::requestFocus);
     }
 
-    /** Maps a semantic target to the currently valid adapter node without retaining that node in navigation state. */
+    /**
+     * Maps a semantic target to the currently valid adapter node without retaining that node in navigation state.
+     */
     private Node resolveFocusNode(WorkbenchNavigation.FocusTarget target) {
         return switch (target.landmark()) {
             case RAIL -> areaButton(target.area());
@@ -605,7 +692,9 @@ public final class WorkbenchController {
         };
     }
 
-    /** Returns the rail button that semantically launches one full-page Area. */
+    /**
+     * Returns the rail button that semantically launches one full-page Area.
+     */
     private ToggleButton areaButton(WorkbenchNavigation.Area area) {
         return switch (area) {
             case TEMPLATES -> templatesAreaButton;
@@ -615,7 +704,9 @@ public final class WorkbenchController {
         };
     }
 
-    /** Dispatches one Project intent, renders its frame, and completes any chained tokenized platform effects. */
+    /**
+     * Dispatches one Project intent, renders its frame, and completes any chained tokenized platform effects.
+     */
     private void dispatch(WorkbenchProjectFlow.Intent intent) {
         if (intent == WorkbenchProjectFlow.Intent.CLOSE && projectFlow.jobs().frame().active()) {
             closeAfterActiveJob = true;
@@ -630,7 +721,9 @@ public final class WorkbenchController {
         }
     }
 
-    /** Completes synchronous platform effects in order while restoring their semantic launcher focus. */
+    /**
+     * Completes synchronous platform effects in order while restoring their semantic launcher focus.
+     */
     private void apply(WorkbenchProjectFlow.Update update) {
         WorkbenchProjectFlow.Update current = update;
         WorkbenchNavigation.FocusTarget returnTarget = null;
@@ -671,18 +764,9 @@ public final class WorkbenchController {
         }
     }
 
-    /** Converts a Project confirmation response into the matching typed dialog action. */
-    private static WorkbenchFeedback.DialogAction dialogAction(WorkbenchProjectFlow.Response response) {
-        return switch (response.kind()) {
-            case SAVE -> WorkbenchFeedback.DialogAction.SAVE;
-            case DISCARD -> WorkbenchFeedback.DialogAction.DISCARD;
-            case CANCELLED -> WorkbenchFeedback.DialogAction.CANCEL;
-            case PATH_SELECTED -> throw new IllegalArgumentException(
-                    "A Project confirmation cannot return a selected path");
-        };
-    }
-
-    /** Renders title, lifecycle summary, and complete structured diagnostics from one immutable Project frame. */
+    /**
+     * Renders title, lifecycle summary, and complete structured diagnostics from one immutable Project frame.
+     */
     private void render(WorkbenchProjectFlow.Frame frame) {
         stage.setTitle(frame.title());
         projectStatusText.setText(projectStatus(frame));
@@ -693,7 +777,9 @@ public final class WorkbenchController {
         }
     }
 
-    /** Projects one coordinator frame into global admission, progress, cancellation, Activity, and shutdown UI. */
+    /**
+     * Projects one coordinator frame into global admission, progress, cancellation, Activity, and shutdown UI.
+     */
     private void renderJobFrame(JobCoordinator.Frame frame) {
         Objects.requireNonNull(frame, "frame");
         boolean blocked = frame.active() || frame.shutdownRequested();
@@ -732,7 +818,9 @@ public final class WorkbenchController {
         }
     }
 
-    /** Renders truthful active phase progress and cancellation availability without inventing percentages. */
+    /**
+     * Renders truthful active phase progress and cancellation availability without inventing percentages.
+     */
     private void renderActiveJob(JobCoordinator.Attempt attempt) {
         JobCoordinator.Progress progress = attempt.progress();
         operationProgress.setManaged(true);
@@ -757,41 +845,43 @@ public final class WorkbenchController {
         cancelOperationButton.setAccessibleHelp(progress.cancellable()
                 ? "Cancel " + attempt.operation().name() + " at its next safe point."
                 : attempt.lifecycle() == JobCoordinator.Lifecycle.CANCELLING
-                        ? "Cancellation was accepted; waiting for a safe point."
-                        : "The operation is finishing an atomic commit and can no longer be cancelled.");
+                ? "Cancellation was accepted; waiting for a safe point."
+                : "The operation is finishing an atomic commit and can no longer be cancelled.");
     }
 
-    /** Publishes one terminal job consistently and opens a modal only for a failure requiring user action. */
+    /**
+     * Publishes one terminal job consistently and opens a modal only for a failure requiring user action.
+     */
     private void renderTerminalJob(JobCoordinator.Attempt attempt) {
         WorkbenchFeedback.Severity severity;
         WorkbenchFeedback.Disposition disposition;
         switch (attempt.lifecycle()) {
-        case COMPLETED:
-            severity = WorkbenchFeedback.Severity.SUCCESS;
-            disposition = WorkbenchFeedback.Disposition.COMPLETED;
-            break;
-        case COMPLETED_WITH_ISSUES:
-            severity = WorkbenchFeedback.Severity.WARNING;
-            disposition = WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES;
-            break;
-        case CANCELLED:
-            severity = WorkbenchFeedback.Severity.INFORMATION;
-            disposition = WorkbenchFeedback.Disposition.CANCELLED;
-            break;
-        case FAILED:
-            severity = WorkbenchFeedback.Severity.FAILURE;
-            disposition = WorkbenchFeedback.Disposition.FAILED;
-            break;
-        case RUNNING, CANCELLING, FINISHING:
-            throw new IllegalArgumentException("Only terminal attempts can publish terminal feedback");
-        default:
-            throw new IllegalStateException("Unsupported job lifecycle");
+            case COMPLETED:
+                severity = WorkbenchFeedback.Severity.SUCCESS;
+                disposition = WorkbenchFeedback.Disposition.COMPLETED;
+                break;
+            case COMPLETED_WITH_ISSUES:
+                severity = WorkbenchFeedback.Severity.WARNING;
+                disposition = WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES;
+                break;
+            case CANCELLED:
+                severity = WorkbenchFeedback.Severity.INFORMATION;
+                disposition = WorkbenchFeedback.Disposition.CANCELLED;
+                break;
+            case FAILED:
+                severity = WorkbenchFeedback.Severity.FAILURE;
+                disposition = WorkbenchFeedback.Disposition.FAILED;
+                break;
+            case RUNNING, CANCELLING, FINISHING:
+                throw new IllegalArgumentException("Only terminal attempts can publish terminal feedback");
+            default:
+                throw new IllegalStateException("Unsupported job lifecycle");
         }
         WorkbenchFeedback.JobDetails details = new WorkbenchFeedback.JobDetails(attempt.id().value(),
                 attempt.retryOf().map(JobCoordinator.AttemptId::value), attempt.operation().sourceLabels(),
                 attempt.operation().destinationLabels(), attempt.operation().capturedBasis(),
                 attempt.effectsCommitted(), attempt.diagnostics().stream()
-                        .map(JobCoordinator.Diagnostic::code).toList(),
+                .map(JobCoordinator.Diagnostic::code).toList(),
                 attempt.retryAvailable());
         WorkbenchFeedback.Notification notification = new WorkbenchFeedback.Notification(
                 attempt.operation().name(), severity, attempt.summary(), disposition);
@@ -801,14 +891,16 @@ public final class WorkbenchController {
             showJobFailure(attempt);
     }
 
-    /** Publishes and completes a typed failure dialog, translating Retry to a fresh linked attempt. */
+    /**
+     * Publishes and completes a typed failure dialog, translating Retry to a fresh linked attempt.
+     */
     private void showJobFailure(JobCoordinator.Attempt attempt) {
         String details = attempt.diagnostics().isEmpty()
                 ? attempt.summary()
                 : String.join(System.lineSeparator(), attempt.diagnostics().stream()
-                        .map(diagnostic -> diagnostic.code() + ": " + diagnostic.message()
-                                + diagnostic.details().map(value -> System.lineSeparator() + value).orElse(""))
-                        .toList());
+                .map(diagnostic -> diagnostic.code() + ": " + diagnostic.message()
+                        + diagnostic.details().map(value -> System.lineSeparator() + value).orElse(""))
+                .toList());
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
                 attempt.operation().name() + " failed", attempt.summary(), details, attempt.retryAvailable());
         WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
@@ -821,7 +913,9 @@ public final class WorkbenchController {
             projectFlow.jobs().retry(attempt.id());
     }
 
-    /** Publishes one Project outcome with validation/failure distinctions and a truthful terminal disposition. */
+    /**
+     * Publishes one Project outcome with validation/failure distinctions and a truthful terminal disposition.
+     */
     private void publishProjectFeedback(WorkbenchProjectFlow.Frame frame) {
         OperationDescription operation = operationDescription(activeOperation);
         long diagnosticCount = frame.diagnostics().size();
@@ -847,7 +941,9 @@ public final class WorkbenchController {
                 operation.name(), severity, message, disposition)));
     }
 
-    /** Renders one committed feedback frame without requesting focus or replaying any platform effect. */
+    /**
+     * Renders one committed feedback frame without requesting focus or replaying any platform effect.
+     */
     private void renderFeedback(WorkbenchFeedback.Frame frame) {
         frame.infoBar().ifPresentOrElse(value -> {
             infoBarCue.setText(value.cue());
@@ -875,39 +971,35 @@ public final class WorkbenchController {
         setSeverityStyle(statusText, status.severity());
     }
 
-    /** Keeps one severity style class on a feedback node so text/icon/boundary cues stay synchronized. */
-    private static void setSeverityStyle(Node node, WorkbenchFeedback.Severity severity) {
-        node.getStyleClass().removeAll("severity-information", "severity-validation", "severity-success",
-                "severity-warning", "severity-failure");
-        node.getStyleClass().add("severity-" + severity.name().toLowerCase(java.util.Locale.ROOT));
+    /**
+     * Typed user-facing operation wording kept together so Activity and terminal summaries cannot drift.
+     */
+    private record OperationDescription(String name, String completedText) {
+        /** Rejects incomplete wording values used by user-facing feedback projections. */
+        private OperationDescription {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(completedText, "completedText");
+        }
     }
 
-    /** Returns the one stable Activity name and terminal sentence fragment for a Project command. */
-    private static OperationDescription operationDescription(WorkbenchProjectFlow.Intent intent) {
-        if (intent == null)
-            return new OperationDescription("Project operation", "Project operation completed");
-        return switch (intent) {
-            case NEW -> new OperationDescription("New Project", "New Project created");
-            case OPEN -> new OperationDescription("Open Project", "Project opened");
-            case SAVE, SAVE_AS -> new OperationDescription("Save Project", "Project saved");
-            case CLOSE -> new OperationDescription("Close Project", "Project closed");
-        };
+    /**
+     * Profile persistence function whose checked failure becomes nonmodal feedback.
+     */
+    @FunctionalInterface
+    private interface ThemeChoiceSaver {
+        /**
+         * Persists one selected theme inside the active application profile.
+         */
+        void save(WorkbenchAppearance.ThemeChoice choice) throws IOException;
     }
 
-    /** Pluralizes the stable diagnostic count used by InfoBar, Activity, and status projections. */
-    private static String diagnosticSummary(long count) {
-        return count + (count == 1 ? " diagnostic" : " diagnostics");
-    }
-
-    /** Builds the stable role/name identity used to locate one Activity record without visible-order assumptions. */
-    private static String activityText(WorkbenchFeedback.ActivityRecord activity) {
-        return activity.cue() + " — " + activity.operation() + " — "
-                + activity.disposition().displayText() + ": " + activity.message();
-    }
-
-    /** List cell that exposes durable Activity time separately from its stable semantic locator name. */
+    /**
+     * List cell that exposes durable Activity time separately from its stable semantic locator name.
+     */
     private static final class ActivityCell extends ListCell<WorkbenchFeedback.ActivityRecord> {
-        /** Publishes text and timestamp accessibility state together whenever JavaFX reuses this cell. */
+        /**
+         * Publishes text and timestamp accessibility state together whenever JavaFX reuses this cell.
+         */
         @Override
         protected void updateItem(WorkbenchFeedback.ActivityRecord activity, boolean empty) {
             super.updateItem(activity, empty);
@@ -922,52 +1014,5 @@ public final class WorkbenchController {
             setAccessibleText(text);
             setAccessibleHelp(activityHelp(activity));
         }
-    }
-
-    /** Formats durable attempt linkage, captured inputs, effects, and diagnostics for assistive inspection. */
-    private static String activityHelp(WorkbenchFeedback.ActivityRecord activity) {
-        if (activity.jobDetails().isEmpty())
-            return "Timestamp: " + activity.occurredAt();
-        WorkbenchFeedback.JobDetails details = activity.jobDetails().orElseThrow();
-        return "Timestamp: " + activity.occurredAt()
-                + ". Attempt: " + details.attemptId()
-                + details.retryOf().map(value -> ". Retry of attempt: " + value).orElse("")
-                + ". Sources: " + (details.sources().isEmpty() ? "none" : String.join(", ", details.sources()))
-                + ". Destinations: "
-                + (details.destinations().isEmpty() ? "none" : String.join(", ", details.destinations()))
-                + details.capturedBasis().map(value -> ". Captured basis: " + value).orElse("")
-                + ". Effects committed: "
-                + (details.effectsCommitted().isEmpty() ? "none" : String.join(", ", details.effectsCommitted()))
-                + ". Diagnostics: "
-                + (details.diagnosticCodes().isEmpty() ? "none" : String.join(", ", details.diagnosticCodes()))
-                + ". Retry available: " + details.retryAvailable() + ".";
-    }
-
-    /** Typed user-facing operation wording kept together so Activity and terminal summaries cannot drift. */
-    private record OperationDescription(String name, String completedText) {
-        /** Rejects incomplete wording values used by user-facing feedback projections. */
-        private OperationDescription {
-            Objects.requireNonNull(name, "name");
-            Objects.requireNonNull(completedText, "completedText");
-        }
-    }
-
-    /** Profile persistence function whose checked failure becomes nonmodal feedback. */
-    @FunctionalInterface
-    private interface ThemeChoiceSaver {
-        /** Persists one selected theme inside the active application profile. */
-        void save(WorkbenchAppearance.ThemeChoice choice) throws IOException;
-    }
-
-    /** Derives a concise non-color Project lifecycle summary. */
-    private static String projectStatus(WorkbenchProjectFlow.Frame frame) {
-        if (frame.snapshot().isDirty())
-            return "Unsaved changes";
-        return frame.snapshot().getFileIdentity().isPresent() ? "Saved Project" : "Untitled Project";
-    }
-
-    /** Creates the conventional Control accelerator for one File command key. */
-    private static KeyCodeCombination shortcut(KeyCode code) {
-        return new KeyCodeCombination(code, KeyCombination.CONTROL_DOWN);
     }
 }

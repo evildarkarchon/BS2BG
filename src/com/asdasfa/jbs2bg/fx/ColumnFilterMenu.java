@@ -49,7 +49,9 @@ public final class ColumnFilterMenu<T> {
     private final FilteredTableAdapter<T, ?> adapter;
     private final FilterColumn<T> column;
     private final ObservableList<Choice> choices = FXCollections.observableArrayList();
-    /** UI-local narrowing of the checklist by the search box; never part of the filtering seam. */
+    /**
+     * UI-local narrowing of the checklist by the search box; never part of the filtering seam.
+     */
     private final FilteredList<Choice> shown = new FilteredList<>(choices);
     private final TextField searchBox = new TextField();
     private final ContextMenu contextMenu = new ContextMenu();
@@ -58,7 +60,7 @@ public final class ColumnFilterMenu<T> {
      * Builds the menu; the adapter attaches it to the matching table column.
      *
      * @param adapter owner that receives criteria and reset requests
-     * @param column the logical column this menu filters
+     * @param column  the logical column this menu filters
      */
     ColumnFilterMenu(FilteredTableAdapter<T, ?> adapter, FilterColumn<T> column) {
         this.adapter = Objects.requireNonNull(adapter, "adapter");
@@ -88,38 +90,68 @@ public final class ColumnFilterMenu<T> {
         contextMenu.getItems().add(item);
     }
 
-    /** @return the context menu to install on the table column */
+    /**
+     * A small funnel drawn from public shapes; marks a filtered column header.
+     */
+    static Node newFilterIndicator() {
+        Polygon funnel = new Polygon(0, 0, 10, 0, 6, 4.5, 6, 10, 4, 8.5, 4, 4.5);
+        funnel.getStyleClass().add("filter-indicator");
+        return funnel;
+    }
+
+    private static Button button(String text, Runnable action) {
+        Button button = new Button(text);
+        HBox.setHgrow(button, Priority.ALWAYS);
+        button.setOnAction(event -> action.run());
+        return button;
+    }
+
+    /**
+     * @return the context menu to install on the table column
+     */
     public ContextMenu getContextMenu() {
         return contextMenu;
     }
 
-    /** @return the distinct cell values of the source rows, sorted, with their checked state */
+    /**
+     * @return the distinct cell values of the source rows, sorted, with their checked state
+     */
     public List<Choice> getChoices() {
         return Collections.unmodifiableList(choices);
     }
 
-    /** @return the choices currently matching the search text, all choices when it is empty */
+    /**
+     * @return the choices currently matching the search text, all choices when it is empty
+     */
     public List<Choice> getShownChoices() {
         return Collections.unmodifiableList(new ArrayList<>(shown));
     }
 
-    /** @param text substring that narrows the checklist; empty shows every choice */
-    public void setSearchText(String text) {
-        searchBox.setText(text == null ? "" : text);
-    }
-
-    /** @return the current search text, never null */
+    /**
+     * @return the current search text, never null
+     */
     public String getSearchText() {
         return searchBox.getText() == null ? "" : searchBox.getText();
     }
 
-    /** Checks every choice; nothing is applied until {@link #apply()}. */
+    /**
+     * @param text substring that narrows the checklist; empty shows every choice
+     */
+    public void setSearchText(String text) {
+        searchBox.setText(text == null ? "" : text);
+    }
+
+    /**
+     * Checks every choice; nothing is applied until {@link #apply()}.
+     */
     public void selectAll() {
         for (Choice choice : choices)
             choice.setSelected(true);
     }
 
-    /** Unchecks every choice; nothing is applied until {@link #apply()}. */
+    /**
+     * Unchecks every choice; nothing is applied until {@link #apply()}.
+     */
     public void selectNone() {
         for (Choice choice : choices)
             choice.setSelected(false);
@@ -145,7 +177,9 @@ public final class ColumnFilterMenu<T> {
         contextMenu.hide();
     }
 
-    /** Clears the criteria of every column of the table and hides the menu. */
+    /**
+     * Clears the criteria of every column of the table and hides the menu.
+     */
     public void resetAll() {
         adapter.clearAllCriteria();
         contextMenu.hide();
@@ -156,7 +190,7 @@ public final class ColumnFilterMenu<T> {
      * unless the column's active criterion hides it. Called by the adapter on
      * every row reload and criteria change.
      *
-     * @param rows every source row, visible or not
+     * @param rows      every source row, visible or not
      * @param criterion the column's active criterion, or null when unfiltered
      */
     void refreshChoices(Collection<? extends T> rows, ColumnCriterion criterion) {
@@ -172,21 +206,9 @@ public final class ColumnFilterMenu<T> {
         choices.setAll(rebuilt);
     }
 
-    /** A small funnel drawn from public shapes; marks a filtered column header. */
-    static Node newFilterIndicator() {
-        Polygon funnel = new Polygon(0, 0, 10, 0, 6, 4.5, 6, 10, 4, 8.5, 4, 4.5);
-        funnel.getStyleClass().add("filter-indicator");
-        return funnel;
-    }
-
-    private static Button button(String text, Runnable action) {
-        Button button = new Button(text);
-        HBox.setHgrow(button, Priority.ALWAYS);
-        button.setOnAction(event -> action.run());
-        return button;
-    }
-
-    /** One distinct cell value and whether it stays visible. */
+    /**
+     * One distinct cell value and whether it stays visible.
+     */
     public static final class Choice {
 
         private final String value;
@@ -196,27 +218,37 @@ public final class ColumnFilterMenu<T> {
             this.value = Objects.requireNonNull(value, "value");
         }
 
-        /** @return the exact cell text */
+        /**
+         * @return the exact cell text
+         */
         public String getValue() {
             return value;
         }
 
-        /** @return true when the value is checked (kept visible on apply) */
+        /**
+         * @return true when the value is checked (kept visible on apply)
+         */
         public boolean isSelected() {
             return selected.get();
         }
 
-        /** @param selected whether the value is checked */
+        /**
+         * @param selected whether the value is checked
+         */
         public void setSelected(boolean selected) {
             this.selected.set(selected);
         }
 
-        /** @return the checked-state property the checklist cell binds to */
+        /**
+         * @return the checked-state property the checklist cell binds to
+         */
         public BooleanProperty selectedProperty() {
             return selected;
         }
 
-        /** The checklist cell's default string converter renders this text. */
+        /**
+         * The checklist cell's default string converter renders this text.
+         */
         @Override
         public String toString() {
             return value;

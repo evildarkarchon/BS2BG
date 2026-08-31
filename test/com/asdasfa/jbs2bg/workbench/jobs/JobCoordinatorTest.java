@@ -23,7 +23,44 @@ class JobCoordinatorTest {
 
     private static final Instant START = Instant.parse("2026-08-29T20:00:00Z");
 
-    /** One admitted job owns application-wide progress until its committed result becomes terminal. */
+    /**
+     * Creates a deterministic coordinator whose adapters never create threads or wait on wall time.
+     */
+    private static JobCoordinator coordinator(ManualExecutor worker) {
+        return coordinator(worker, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+    }
+
+    /**
+     * Creates a deterministic coordinator with an explicit callback-failure collection seam.
+     */
+    private static JobCoordinator coordinator(ManualExecutor worker, List<Throwable> callbackFailures) {
+        return coordinator(worker, callbackFailures::add);
+    }
+
+    /**
+     * Creates a deterministic coordinator whose failure sink is supplied by the calling test.
+     */
+    private static JobCoordinator coordinator(ManualExecutor worker,
+                                              java.util.function.Consumer<Throwable> failureSink) {
+        return coordinator(worker, failureSink, (delay, task) -> () -> {
+            // This slice never advances delayed cancellation status.
+        });
+    }
+
+    /**
+     * Creates a deterministic coordinator with caller-supplied failure and delay adapters.
+     */
+    private static JobCoordinator coordinator(ManualExecutor worker,
+                                              java.util.function.Consumer<Throwable> failureSink, JobCoordinator.DelayScheduler delayScheduler) {
+        return new JobCoordinator(worker, Runnable::run, Clock.fixed(START, ZoneOffset.UTC),
+                delayScheduler, failureSink);
+    }
+
+    /**
+     * One admitted job owns application-wide progress until its committed result becomes terminal.
+     */
     @Test
     void oneJobPublishesTruthfulProgressAndRefusesCompetingAdmission() {
         ManualExecutor worker = new ManualExecutor();
@@ -49,8 +86,8 @@ class JobCoordinatorTest {
                 new JobCoordinator.Operation("Save Project", List.of(), List.of("other.jbs2bg"), Optional.empty()),
                 context -> JobCoordinator.Result.completed("saved", "Project saved", List.of(),
                         List.of()), (attempt, result) -> {
-                            throw new AssertionError("Rejected work must never complete");
-                        }, Optional.empty()));
+            throw new AssertionError("Rejected work must never complete");
+        }, Optional.empty()));
 
         assertFalse(competing.admitted());
         assertEquals("Open Project", competing.activeOperation().orElseThrow());
@@ -68,7 +105,9 @@ class JobCoordinatorTest {
                 .anyMatch(attempt -> attempt.progress().percentage().orElse(-1) == 40)));
     }
 
-    /** Accepted cancellation wins before commit, remains idempotent, and cannot leak a completed effect. */
+    /**
+     * Accepted cancellation wins before commit, remains idempotent, and cannot leak a completed effect.
+     */
     @Test
     void acceptedCancellationPreventsLaterCommitAndSettlesOnlyAfterWorkerAcknowledgement() throws Exception {
         ManualExecutor worker = new ManualExecutor();
@@ -92,8 +131,8 @@ class JobCoordinatorTest {
                     return JobCoordinator.Result.completed("opened", "Project opened", List.of("Project published"),
                             List.of());
                 }, (attempt, result) -> {
-                    // Terminal state is asserted through the coordinator interface below.
-                }, Optional.empty()));
+            // Terminal state is asserted through the coordinator interface below.
+        }, Optional.empty()));
         Thread workerThread = worker.runNextAsync();
         assertTrue(entered.await(5, TimeUnit.SECONDS));
 
@@ -113,7 +152,9 @@ class JobCoordinatorTest {
         assertTrue(admission.attempt().isPresent());
     }
 
-    /** Commit winning first enters Finishing, disables cancellation, and preserves the worker's real completion. */
+    /**
+     * Commit winning first enters Finishing, disables cancellation, and preserves the worker's real completion.
+     */
     @Test
     void commitPhaseRefusesLateCancellation() throws Exception {
         ManualExecutor worker = new ManualExecutor();
@@ -122,14 +163,14 @@ class JobCoordinatorTest {
         CountDownLatch release = new CountDownLatch(1);
         coordinator.submit(new JobCoordinator.Submission<>(new JobCoordinator.Operation(
                 "Open Project", List.of("ready.jbs2bg"), List.of(), Optional.empty()), context -> {
-                    assertTrue(context.beginCommit("Publishing Project"));
-                    committing.countDown();
-                    release.await();
-                    return JobCoordinator.Result.completed("opened", "Project opened",
-                            List.of("Project published"), List.of());
-                }, (attempt, result) -> {
-                    // Terminal state is asserted through the coordinator interface below.
-                }, Optional.empty()));
+            assertTrue(context.beginCommit("Publishing Project"));
+            committing.countDown();
+            release.await();
+            return JobCoordinator.Result.completed("opened", "Project opened",
+                    List.of("Project published"), List.of());
+        }, (attempt, result) -> {
+            // Terminal state is asserted through the coordinator interface below.
+        }, Optional.empty()));
         Thread workerThread = worker.runNextAsync();
         assertTrue(committing.await(5, TimeUnit.SECONDS));
 
@@ -145,7 +186,9 @@ class JobCoordinatorTest {
                 coordinator.frame().attempt().orElseThrow().effectsCommitted());
     }
 
-    /** Retry recaptures current inputs and the coordinator stamps linkage to the selected terminal attempt. */
+    /**
+     * Retry recaptures current inputs and the coordinator stamps linkage to the selected terminal attempt.
+     */
     @Test
     void retryRecapturesInputsAndLinksAttemptsWithoutCallerSuppliedIdentity() {
         ManualExecutor worker = new ManualExecutor();
@@ -159,14 +202,14 @@ class JobCoordinatorTest {
                 (attempt, result) -> {
                     // Failure evidence is asserted through the terminal attempt below.
                 }, Optional.of(() -> {
-                    String recaptured = selectedSource.get();
-                    return new JobCoordinator.Submission<>(new JobCoordinator.Operation("Open Project",
-                            List.of(recaptured), List.of(), Optional.empty()),
-                            context -> JobCoordinator.Result.completed(recaptured, "Project opened",
-                                    List.of("Project published"), List.of()),
-                            (attempt, result) -> completedValues.add(result.value().orElseThrow()),
-                            Optional.empty());
-                }));
+            String recaptured = selectedSource.get();
+            return new JobCoordinator.Submission<>(new JobCoordinator.Operation("Open Project",
+                    List.of(recaptured), List.of(), Optional.empty()),
+                    context -> JobCoordinator.Result.completed(recaptured, "Project opened",
+                            List.of("Project published"), List.of()),
+                    (attempt, result) -> completedValues.add(result.value().orElseThrow()),
+                    Optional.empty());
+        }));
 
         JobCoordinator.AttemptId firstId = coordinator.submit(first).attempt().orElseThrow();
         worker.runNext();
@@ -182,7 +225,9 @@ class JobCoordinatorTest {
         assertEquals(List.of("retry.jbs2bg"), completedValues);
     }
 
-    /** A throwing observer is isolated and cannot prevent a healthy observer from receiving terminal state. */
+    /**
+     * A throwing observer is isolated and cannot prevent a healthy observer from receiving terminal state.
+     */
     @Test
     void observerFailureIsolatedFromOtherObserversAndJobDisposition() {
         ManualExecutor worker = new ManualExecutor();
@@ -212,7 +257,9 @@ class JobCoordinatorTest {
                 .anyMatch(diagnostic -> diagnostic.code().equals("JOB_OBSERVER_FAILED")));
     }
 
-    /** Attempt-bound progress is rejected after terminal completion and cannot overwrite newer state. */
+    /**
+     * Attempt-bound progress is rejected after terminal completion and cannot overwrite newer state.
+     */
     @Test
     void lateProgressCallbackIsRejectedAfterTerminalCompletion() {
         ManualExecutor worker = new ManualExecutor();
@@ -220,12 +267,12 @@ class JobCoordinatorTest {
         AtomicReference<JobCoordinator.Context> captured = new AtomicReference<>();
         coordinator.submit(new JobCoordinator.Submission<>(new JobCoordinator.Operation(
                 "Open Project", List.of("source.jbs2bg"), List.of(), Optional.empty()), context -> {
-                    captured.set(context);
-                    return JobCoordinator.Result.completed("opened", "Project opened",
-                            List.of("Project published"), List.of());
-                }, (attempt, result) -> {
-                    // The stale callback is invoked explicitly after this completion.
-                }, Optional.empty()));
+            captured.set(context);
+            return JobCoordinator.Result.completed("opened", "Project opened",
+                    List.of("Project published"), List.of());
+        }, (attempt, result) -> {
+            // The stale callback is invoked explicitly after this completion.
+        }, Optional.empty()));
         worker.runNext();
         JobCoordinator.Attempt terminal = coordinator.frame().attempt().orElseThrow();
 
@@ -239,7 +286,9 @@ class JobCoordinatorTest {
                 .anyMatch(diagnostic -> diagnostic.code().equals("JOB_STALE_COMMIT_REJECTED")));
     }
 
-    /** Shutdown rejects new admission and becomes ready only after accepted cancellation settles. */
+    /**
+     * Shutdown rejects new admission and becomes ready only after accepted cancellation settles.
+     */
     @Test
     void shutdownWaitsForActiveWorkerAcknowledgementWithoutAbandoningWork() throws Exception {
         ManualExecutor worker = new ManualExecutor();
@@ -248,14 +297,14 @@ class JobCoordinatorTest {
         CountDownLatch release = new CountDownLatch(1);
         coordinator.submit(new JobCoordinator.Submission<>(new JobCoordinator.Operation(
                 "Open Project", List.of("slow.jbs2bg"), List.of(), Optional.empty()), context -> {
-                    entered.countDown();
-                    release.await();
-                    context.checkCancellation();
-                    return JobCoordinator.Result.completed("opened", "Project opened",
-                            List.of("Project published"), List.of());
-                }, (attempt, result) -> {
-                    // Shutdown readiness is asserted through the published frame.
-                }, Optional.empty()));
+            entered.countDown();
+            release.await();
+            context.checkCancellation();
+            return JobCoordinator.Result.completed("opened", "Project opened",
+                    List.of("Project published"), List.of());
+        }, (attempt, result) -> {
+            // Shutdown readiness is asserted through the published frame.
+        }, Optional.empty()));
         Thread workerThread = worker.runNextAsync();
         assertTrue(entered.await(5, TimeUnit.SECONDS));
 
@@ -277,7 +326,9 @@ class JobCoordinatorTest {
         coordinator.close();
     }
 
-    /** Repeated cancellation schedules one watchdog and truthfully reports prolonged cancellation when fired. */
+    /**
+     * Repeated cancellation schedules one watchdog and truthfully reports prolonged cancellation when fired.
+     */
     @Test
     void cancellationWatchdogPublishesStillCancellingWithoutCompletingTheWorker() throws Exception {
         ManualExecutor worker = new ManualExecutor();
@@ -289,20 +340,20 @@ class JobCoordinatorTest {
         CountDownLatch release = new CountDownLatch(1);
         coordinator.submit(new JobCoordinator.Submission<>(new JobCoordinator.Operation(
                 "Open Project", List.of("slow.jbs2bg"), List.of(), Optional.empty()), context -> {
-                    entered.countDown();
-                    while (release.getCount() > 0) {
-                        try {
-                            release.await();
-                        } catch (InterruptedException ignored) {
-                            // This worker acknowledges cancellation only at the explicit release safe point.
-                        }
-                    }
-                    context.checkCancellation();
-                    return JobCoordinator.Result.completed("opened", "Project opened",
-                            List.of("Project published"), List.of());
-                }, (attempt, result) -> {
-                    // Watchdog state is asserted before terminal completion below.
-                }, Optional.empty()));
+            entered.countDown();
+            while (release.getCount() > 0) {
+                try {
+                    release.await();
+                } catch (InterruptedException ignored) {
+                    // This worker acknowledges cancellation only at the explicit release safe point.
+                }
+            }
+            context.checkCancellation();
+            return JobCoordinator.Result.completed("opened", "Project opened",
+                    List.of("Project published"), List.of());
+        }, (attempt, result) -> {
+            // Watchdog state is asserted before terminal completion below.
+        }, Optional.empty()));
         Thread workerThread = worker.runNextAsync();
         assertTrue(entered.await(5, TimeUnit.SECONDS));
 
@@ -321,7 +372,9 @@ class JobCoordinatorTest {
                 coordinator.frame().attempt().orElseThrow().lifecycle());
     }
 
-    /** A cancelled later dirty-close prompt can reopen admission after the active job settled. */
+    /**
+     * A cancelled later dirty-close prompt can reopen admission after the active job settled.
+     */
     @Test
     void readyShutdownGateCanResumeAdmission() {
         ManualExecutor worker = new ManualExecutor();
@@ -343,40 +396,17 @@ class JobCoordinatorTest {
         worker.runNext();
     }
 
-    /** Creates a deterministic coordinator whose adapters never create threads or wait on wall time. */
-    private static JobCoordinator coordinator(ManualExecutor worker) {
-        return coordinator(worker, failure -> {
-            throw new AssertionError("Unexpected callback failure", failure);
-        });
-    }
-
-    /** Creates a deterministic coordinator with an explicit callback-failure collection seam. */
-    private static JobCoordinator coordinator(ManualExecutor worker, List<Throwable> callbackFailures) {
-        return coordinator(worker, callbackFailures::add);
-    }
-
-    /** Creates a deterministic coordinator whose failure sink is supplied by the calling test. */
-    private static JobCoordinator coordinator(ManualExecutor worker,
-            java.util.function.Consumer<Throwable> failureSink) {
-        return coordinator(worker, failureSink, (delay, task) -> () -> {
-            // This slice never advances delayed cancellation status.
-        });
-    }
-
-    /** Creates a deterministic coordinator with caller-supplied failure and delay adapters. */
-    private static JobCoordinator coordinator(ManualExecutor worker,
-            java.util.function.Consumer<Throwable> failureSink, JobCoordinator.DelayScheduler delayScheduler) {
-        return new JobCoordinator(worker, Runnable::run, Clock.fixed(START, ZoneOffset.UTC),
-                delayScheduler, failureSink);
-    }
-
-    /** Single-action delay adapter that exposes scheduling and firing as deterministic test operations. */
+    /**
+     * Single-action delay adapter that exposes scheduling and firing as deterministic test operations.
+     */
     private static final class ManualDelayScheduler implements JobCoordinator.DelayScheduler {
         private Runnable action;
         private boolean cancelled;
         private int scheduledCount;
 
-        /** Stores the attempt-scoped watchdog without consulting wall time. */
+        /**
+         * Stores the attempt-scoped watchdog without consulting wall time.
+         */
         @Override
         public JobCoordinator.ScheduledAction schedule(java.time.Duration delay, Runnable task) {
             assertEquals(java.time.Duration.ofSeconds(5), delay);
@@ -385,12 +415,16 @@ class JobCoordinatorTest {
             return () -> cancelled = true;
         }
 
-        /** @return number of watchdogs scheduled */
+        /**
+         * @return number of watchdogs scheduled
+         */
         private int scheduledCount() {
             return scheduledCount;
         }
 
-        /** Runs the stored watchdog unless terminal completion cancelled it. */
+        /**
+         * Runs the stored watchdog unless terminal completion cancelled it.
+         */
         private void fire() {
             if (!cancelled)
                 action.run();

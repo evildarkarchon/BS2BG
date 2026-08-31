@@ -30,7 +30,7 @@ public final class VisibleSet<T, K> {
     /**
      * Captures parallel row and identity lists; only the view creates instances.
      *
-     * @param rows visible rows in presentation order
+     * @param rows       visible rows in presentation order
      * @param identities identity of each row, same order
      */
     VisibleSet(List<T> rows, List<K> identities) {
@@ -39,12 +39,16 @@ public final class VisibleSet<T, K> {
         this.identitySet = Collections.unmodifiableSet(new HashSet<>(identities));
     }
 
-    /** @return the immutable visible rows in presentation order */
+    /**
+     * @return the immutable visible rows in presentation order
+     */
     public List<T> getRows() {
         return rows;
     }
 
-    /** @return the immutable identities of the visible rows, in presentation order */
+    /**
+     * @return the immutable identities of the visible rows, in presentation order
+     */
     public List<K> getIdentities() {
         return identities;
     }
@@ -58,12 +62,16 @@ public final class VisibleSet<T, K> {
         return identitySet.contains(Objects.requireNonNull(identity, "identity"));
     }
 
-    /** @return number of visible rows */
+    /**
+     * @return number of visible rows
+     */
     public int size() {
         return rows.size();
     }
 
-    /** @return true when no row is visible */
+    /**
+     * @return true when no row is visible
+     */
     public boolean isEmpty() {
         return rows.isEmpty();
     }

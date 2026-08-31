@@ -39,7 +39,9 @@ class ProductionSourceGateTest {
     private static final Path SOURCE_ROOT = REPO_ROOT.resolve("src");
     private static final Path POM = REPO_ROOT.resolve("pom.xml");
 
-    /** Each entry: a token that must not appear in any production .java file, with the reason. */
+    /**
+     * Each entry: a token that must not appear in any production .java file, with the reason.
+     */
     private static final Map<Pattern, String> FORBIDDEN_IN_JAVA = Map.ofEntries(
             Map.entry(Pattern.compile("\\bcom\\.sun\\."), "private JDK/JavaFX package"),
             Map.entry(Pattern.compile("^\\s*import\\s+sun\\.", Pattern.MULTILINE), "private JDK package"),
@@ -54,11 +56,102 @@ class ProductionSourceGateTest {
             Map.entry(Pattern.compile("enable-preview"), "preview features"),
             Map.entry(Pattern.compile("jfx\\.incubator|javafx\\.incubator|javafx-incubator"), "JavaFX incubator module"));
 
-    /** Tokens forbidden in FXML and CSS resources. */
+    /**
+     * Tokens forbidden in FXML and CSS resources.
+     */
     private static final Map<Pattern, String> FORBIDDEN_IN_RESOURCES = Map.ofEntries(
             Map.entry(Pattern.compile("com[./]sun[./]"), "private JDK/JavaFX package"),
             Map.entry(Pattern.compile("modena"), "private Modena resource"),
             Map.entry(Pattern.compile("jfx[./]incubator"), "JavaFX incubator module"));
+
+    /**
+     * Appends one "path:line reason (match)" entry per forbidden pattern found in the file.
+     */
+    private static void scan(Path file, Map<Pattern, String> forbidden, List<String> violations) throws IOException {
+        String text = Files.readString(file, StandardCharsets.UTF_8);
+        for (Map.Entry<Pattern, String> rule : forbidden.entrySet()) {
+            var matcher = rule.getKey().matcher(text);
+            if (matcher.find()) {
+                int line = 1 + (int) text.substring(0, matcher.start()).chars().filter(c -> c == '\n').count();
+                violations.add(REPO_ROOT.relativize(file) + ":" + line + " " + rule.getValue() + " ("
+                        + matcher.group() + ")");
+            }
+        }
+    }
+
+    private static List<Path> productionFiles(String suffix) throws IOException {
+        assertTrue(Files.isDirectory(SOURCE_ROOT), "tests must run from the repository root; cwd is " + REPO_ROOT);
+        try (Stream<Path> files = Files.walk(SOURCE_ROOT)) {
+            return files.filter(Files::isRegularFile).filter(path -> path.toString().endsWith(suffix)).sorted()
+                    .toList();
+        }
+    }
+
+    private static Document parse(Path xml) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(false);
+        return factory.newDocumentBuilder().parse(xml.toFile());
+    }
+
+    private static String property(Document pom, String name) {
+        return child(child(pom.getDocumentElement(), "properties"), name).getTextContent().trim();
+    }
+
+    /**
+     * Every {@code <configuration>} nested under any maven-compiler-plugin element, wherever it appears in the pom.
+     */
+    private static List<Element> compilerPluginConfigurations(Document pom) {
+        List<Element> configurations = new ArrayList<>();
+        NodeList plugins = pom.getElementsByTagName("plugin");
+        for (int index = 0; index < plugins.getLength(); index++) {
+            Element plugin = (Element) plugins.item(index);
+            List<Element> artifactIds = children(plugin, "artifactId");
+            if (artifactIds.size() != 1 || !"maven-compiler-plugin".equals(artifactIds.get(0).getTextContent().trim()))
+                continue;
+            NodeList nested = plugin.getElementsByTagName("configuration");
+            for (int nestedIndex = 0; nestedIndex < nested.getLength(); nestedIndex++)
+                configurations.add((Element) nested.item(nestedIndex));
+        }
+        return configurations;
+    }
+
+    /**
+     * The build/plugins entry for the given artifact; fails when the pom does not configure it.
+     */
+    private static Element plugin(Document pom, String artifactId) {
+        Element plugins = child(child(pom.getDocumentElement(), "build"), "plugins");
+        return plugin(plugins, artifactId, "build/plugins");
+    }
+
+    /**
+     * The named plugin directly under a plugins element; fails with the supplied location when absent.
+     */
+    private static Element plugin(Element plugins, String artifactId, String location) {
+        for (Element plugin : children(plugins, "plugin"))
+            if (artifactId.equals(child(plugin, "artifactId").getTextContent().trim()))
+                return plugin;
+        throw new AssertionError("pom.xml must configure " + artifactId + " under " + location);
+    }
+
+    /**
+     * The single child element of that name; fails when there are zero or several.
+     */
+    private static Element child(Element parent, String name) {
+        List<Element> matches = children(parent, name);
+        assertEquals(1, matches.size(), parent.getTagName() + " must have exactly one <" + name + ">");
+        return matches.get(0);
+    }
+
+    private static List<Element> children(Element parent, String name) {
+        List<Element> matches = new ArrayList<>();
+        NodeList nodes = parent.getChildNodes();
+        for (int index = 0; index < nodes.getLength(); index++) {
+            Node node = nodes.item(index);
+            if (node instanceof Element && name.equals(node.getNodeName()))
+                matches.add((Element) node);
+        }
+        return matches;
+    }
 
     @Test
     void noProductionSourceUsesPrivateSkinReflectivePreviewOrIncubatorApis() throws IOException {
@@ -78,7 +171,9 @@ class ProductionSourceGateTest {
         assertEquals(List.of(), violations);
     }
 
-    /** No vendored ControlsFX filter (or any other copied third-party source tree) may return. */
+    /**
+     * No vendored ControlsFX filter (or any other copied third-party source tree) may return.
+     */
     @Test
     void theVendoredFilterIsGone() {
         assertFalse(Files.exists(SOURCE_ROOT.resolve(Paths.get("com", "asdasfa", "jbs2bg", "controlsfx"))),
@@ -121,7 +216,9 @@ class ProductionSourceGateTest {
         }
     }
 
-    /** Neither the POM nor the wrapper's JVM/Maven config may enable preview features. */
+    /**
+     * Neither the POM nor the wrapper's JVM/Maven config may enable preview features.
+     */
     @Test
     void previewFeaturesAreNotEnabledByAnyBuildInput() throws Exception {
         // Element text only: the pom's comments are allowed to say that the flag is forbidden.
@@ -176,12 +273,14 @@ class ProductionSourceGateTest {
 
         Element applicationPlugins = child(child(project, "build"), "plugins");
         assertTrue(children(applicationPlugins, "plugin").stream()
-                .noneMatch(candidate -> "rewrite-maven-plugin".equals(
-                        child(candidate, "artifactId").getTextContent().trim())),
+                        .noneMatch(candidate -> "rewrite-maven-plugin".equals(
+                                child(candidate, "artifactId").getTextContent().trim())),
                 "OpenRewrite must stay out of the default application build");
     }
 
-    /** The enforcer keeps JavaFX incubator artifacts out of the dependency graph. */
+    /**
+     * The enforcer keeps JavaFX incubator artifacts out of the dependency graph.
+     */
     @Test
     void enforcerBansJavaFxIncubatorModules() throws Exception {
         Document pom = parse(POM);
@@ -194,7 +293,9 @@ class ProductionSourceGateTest {
         }
     }
 
-    /** The selected bundled-vector icon stack ships alone; an unverified Ikonli fallback cannot drift back in. */
+    /**
+     * The selected bundled-vector icon stack ships alone; an unverified Ikonli fallback cannot drift back in.
+     */
     @Test
     void enforcerKeepsTheUnselectedIkonliStackOutOfTheImage() throws Exception {
         Document pom = parse(POM);
@@ -206,84 +307,5 @@ class ProductionSourceGateTest {
             assertFalse("org.kordamp.ikonli".equals(groupId),
                     "only the selected application-owned bundled vectors may ship");
         }
-    }
-
-    /** Appends one "path:line reason (match)" entry per forbidden pattern found in the file. */
-    private static void scan(Path file, Map<Pattern, String> forbidden, List<String> violations) throws IOException {
-        String text = Files.readString(file, StandardCharsets.UTF_8);
-        for (Map.Entry<Pattern, String> rule : forbidden.entrySet()) {
-            var matcher = rule.getKey().matcher(text);
-            if (matcher.find()) {
-                int line = 1 + (int) text.substring(0, matcher.start()).chars().filter(c -> c == '\n').count();
-                violations.add(REPO_ROOT.relativize(file) + ":" + line + " " + rule.getValue() + " ("
-                        + matcher.group() + ")");
-            }
-        }
-    }
-
-    private static List<Path> productionFiles(String suffix) throws IOException {
-        assertTrue(Files.isDirectory(SOURCE_ROOT), "tests must run from the repository root; cwd is " + REPO_ROOT);
-        try (Stream<Path> files = Files.walk(SOURCE_ROOT)) {
-            return files.filter(Files::isRegularFile).filter(path -> path.toString().endsWith(suffix)).sorted()
-                    .toList();
-        }
-    }
-
-    private static Document parse(Path xml) throws Exception {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setNamespaceAware(false);
-        return factory.newDocumentBuilder().parse(xml.toFile());
-    }
-
-    private static String property(Document pom, String name) {
-        return child(child(pom.getDocumentElement(), "properties"), name).getTextContent().trim();
-    }
-
-    /** Every {@code <configuration>} nested under any maven-compiler-plugin element, wherever it appears in the pom. */
-    private static List<Element> compilerPluginConfigurations(Document pom) {
-        List<Element> configurations = new ArrayList<>();
-        NodeList plugins = pom.getElementsByTagName("plugin");
-        for (int index = 0; index < plugins.getLength(); index++) {
-            Element plugin = (Element) plugins.item(index);
-            List<Element> artifactIds = children(plugin, "artifactId");
-            if (artifactIds.size() != 1 || !"maven-compiler-plugin".equals(artifactIds.get(0).getTextContent().trim()))
-                continue;
-            NodeList nested = plugin.getElementsByTagName("configuration");
-            for (int nestedIndex = 0; nestedIndex < nested.getLength(); nestedIndex++)
-                configurations.add((Element) nested.item(nestedIndex));
-        }
-        return configurations;
-    }
-
-    /** The build/plugins entry for the given artifact; fails when the pom does not configure it. */
-    private static Element plugin(Document pom, String artifactId) {
-        Element plugins = child(child(pom.getDocumentElement(), "build"), "plugins");
-        return plugin(plugins, artifactId, "build/plugins");
-    }
-
-    /** The named plugin directly under a plugins element; fails with the supplied location when absent. */
-    private static Element plugin(Element plugins, String artifactId, String location) {
-        for (Element plugin : children(plugins, "plugin"))
-            if (artifactId.equals(child(plugin, "artifactId").getTextContent().trim()))
-                return plugin;
-        throw new AssertionError("pom.xml must configure " + artifactId + " under " + location);
-    }
-
-    /** The single child element of that name; fails when there are zero or several. */
-    private static Element child(Element parent, String name) {
-        List<Element> matches = children(parent, name);
-        assertEquals(1, matches.size(), parent.getTagName() + " must have exactly one <" + name + ">");
-        return matches.get(0);
-    }
-
-    private static List<Element> children(Element parent, String name) {
-        List<Element> matches = new ArrayList<>();
-        NodeList nodes = parent.getChildNodes();
-        for (int index = 0; index < nodes.getLength(); index++) {
-            Node node = nodes.item(index);
-            if (node instanceof Element && name.equals(node.getNodeName()))
-                matches.add((Element) node);
-        }
-        return matches;
     }
 }

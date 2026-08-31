@@ -43,7 +43,44 @@ class FilteredTableAdapterTest {
     private static final NpcMorphAssignmentSnapshot DELTA = npc("Delta", "Dawnguard.esm", "DeltaEditor",
             "BretonRace");
 
-    /** The table renders the source rows in source order and the frozen visible set matches. */
+    private static TableColumn<NpcMorphAssignmentSnapshot, String> column(String header) {
+        return new TableColumn<>(header);
+    }
+
+    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId,
+                                                  String race) {
+        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, race, "1A696",
+                Collections.<String>emptyList());
+    }
+
+    private static List<String> values(List<ColumnFilterMenu.Choice> choices) {
+        List<String> values = new ArrayList<>();
+        for (ColumnFilterMenu.Choice choice : choices)
+            values.add(choice.getValue());
+        return values;
+    }
+
+    private static ColumnFilterMenu.Choice choice(ColumnFilterMenu<?> menu, String value) {
+        for (ColumnFilterMenu.Choice choice : menu.getChoices())
+            if (choice.getValue().equals(value))
+                return choice;
+        throw new AssertionError("no choice " + value + " in " + values(menu.getChoices()));
+    }
+
+    private static NpcMorphAssignmentIdentity identityOf(NpcMorphAssignmentSnapshot npc) {
+        return ProjectIdentities.npcMorphAssignment(npc);
+    }
+
+    private static List<NpcMorphAssignmentIdentity> identities(NpcMorphAssignmentSnapshot... npcs) {
+        List<NpcMorphAssignmentIdentity> identities = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot npc : npcs)
+            identities.add(ProjectIdentities.npcMorphAssignment(npc));
+        return identities;
+    }
+
+    /**
+     * The table renders the source rows in source order and the frozen visible set matches.
+     */
     @Test
     void sourceRowsRenderIntoTheTableInSourceOrder() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {
@@ -262,7 +299,9 @@ class FilteredTableAdapterTest {
         });
     }
 
-    /** One NPC Morph Assignment table wired the way the production controllers wire theirs. */
+    /**
+     * One NPC Morph Assignment table wired the way the production controllers wire theirs.
+     */
     private static final class Fixture {
         final TableView<NpcMorphAssignmentSnapshot> table = new TableView<>();
         final ObservableList<NpcMorphAssignmentSnapshot> source = FXCollections.observableArrayList();
@@ -287,40 +326,5 @@ class FilteredTableAdapterTest {
                     ProjectIdentities::npcMorphAssignment);
             adapter.setSource(source);
         }
-    }
-
-    private static TableColumn<NpcMorphAssignmentSnapshot, String> column(String header) {
-        return new TableColumn<>(header);
-    }
-
-    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId,
-            String race) {
-        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, race, "1A696",
-                Collections.<String>emptyList());
-    }
-
-    private static List<String> values(List<ColumnFilterMenu.Choice> choices) {
-        List<String> values = new ArrayList<>();
-        for (ColumnFilterMenu.Choice choice : choices)
-            values.add(choice.getValue());
-        return values;
-    }
-
-    private static ColumnFilterMenu.Choice choice(ColumnFilterMenu<?> menu, String value) {
-        for (ColumnFilterMenu.Choice choice : menu.getChoices())
-            if (choice.getValue().equals(value))
-                return choice;
-        throw new AssertionError("no choice " + value + " in " + values(menu.getChoices()));
-    }
-
-    private static NpcMorphAssignmentIdentity identityOf(NpcMorphAssignmentSnapshot npc) {
-        return ProjectIdentities.npcMorphAssignment(npc);
-    }
-
-    private static List<NpcMorphAssignmentIdentity> identities(NpcMorphAssignmentSnapshot... npcs) {
-        List<NpcMorphAssignmentIdentity> identities = new ArrayList<>();
-        for (NpcMorphAssignmentSnapshot npc : npcs)
-            identities.add(ProjectIdentities.npcMorphAssignment(npc));
-        return identities;
     }
 }

@@ -1,10 +1,5 @@
 package com.asdasfa.jbs2bg.build;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URL;
@@ -39,6 +34,8 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 /**
  * Public-JavaFX harness proving that every FXML graph in the build artifact
  * loads against its real controller on the pinned toolkit: the root window
@@ -52,7 +49,9 @@ import javafx.stage.Stage;
  */
 class FxmlGraphLoadingTest {
 
-    /** Repository-relative directory holding every FXML graph next to its controller. */
+    /**
+     * Repository-relative directory holding every FXML graph next to its controller.
+     */
     private static final Path FXML_DIRECTORY = Paths.get("src", "com", "asdasfa", "jbs2bg");
 
     private static final String STYLESHEET = Main.class.getResource("dark.css").toExternalForm();
@@ -60,23 +59,63 @@ class FxmlGraphLoadingTest {
     @TempDir
     Path temporaryDirectory;
 
-    /** The sole root graph binds to WorkbenchController and exposes every typed destination by semantic name. */
+    private static FXMLLoader load(String name) throws IOException {
+        FXMLLoader loader = new FXMLLoader(resource(name));
+        loader.load();
+        return loader;
+    }
+
+    private static URL resource(String name) {
+        URL url = Main.class.getResource(name);
+        assertNotNull(url, name + " must be on the classpath");
+        return url;
+    }
+
+    /**
+     * Asserts that FXMLLoader injected every {@code @FXML} field declared by the controller's class.
+     */
+    private static void assertEveryFxmlFieldInjected(Object controller) throws IllegalAccessException {
+        for (Field field : controller.getClass().getDeclaredFields()) {
+            if (field.getAnnotation(FXML.class) == null)
+                continue;
+            field.setAccessible(true);
+            assertNotNull(field.get(controller),
+                    controller.getClass().getSimpleName() + "." + field.getName() + " must be injected");
+        }
+    }
+
+    private static List<String> fxmlFiles(String prefix) throws IOException {
+        List<String> names = new ArrayList<>();
+        try (Stream<Path> files = Files.list(FXML_DIRECTORY)) {
+            files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.startsWith(prefix) && name.endsWith(".fxml"))
+                    .sorted()
+                    .forEach(names::add);
+        }
+        return names;
+    }
+
+    /**
+     * The sole root graph binds to WorkbenchController and exposes every typed destination by semantic name.
+     */
     @Test
     void rootWindowGraphLoadsWithItsController() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = load("workbench.fxml");
-            assertTrue(loader.getRoot() instanceof BorderPane, "workbench.fxml root");
+            assertInstanceOf(BorderPane.class, loader.getRoot(), "workbench.fxml root");
             WorkbenchController controller = loader.getController();
             assertNotNull(controller, "workbench.fxml must declare its controller");
             assertEveryFxmlFieldInjected(controller);
             assertEquals(List.of("Templates", "Morphs", "NPC Database", "Output", "Settings"),
                     List.of("templatesAreaButton", "morphsAreaButton", "npcDatabaseAreaButton",
-                            "outputAreaButton", "settingsAreaButton").stream()
+                                    "outputAreaButton", "settingsAreaButton").stream()
                             .map(id -> ((ToggleButton) loader.getNamespace().get(id)).getText()).toList());
         });
     }
 
-    /** The attached File commands render and mutate only through the authoritative Workbench Project flow. */
+    /**
+     * The attached File commands render and mutate only through the authoritative Workbench Project flow.
+     */
     @Test
     void attachedWorkbenchSaveCommandPublishesTheReturnedProjectFrame() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -104,7 +143,9 @@ class FxmlGraphLoadingTest {
         });
     }
 
-    /** Every popup graph in the source tree loads against a CustomController subclass. */
+    /**
+     * Every popup graph in the source tree loads against a CustomController subclass.
+     */
     @Test
     void everyPopupGraphLoadsWithItsController() throws Exception {
         List<String> popups = fxmlFiles("popup_");
@@ -112,10 +153,9 @@ class FxmlGraphLoadingTest {
         FxTestToolkit.runOnFxThread(() -> {
             for (String popup : popups) {
                 FXMLLoader loader = load(popup);
-                assertTrue(loader.getRoot() instanceof Parent, popup + " root");
+                assertInstanceOf(Parent.class, loader.getRoot(), popup + " root");
                 Object controller = loader.getController();
-                assertTrue(controller instanceof CustomController,
-                        popup + " must bind a CustomController, got " + controller);
+                assertInstanceOf(CustomController.class, controller, popup + " must bind a CustomController, got " + controller);
                 assertEveryFxmlFieldInjected(controller);
             }
         });
@@ -152,7 +192,9 @@ class FxmlGraphLoadingTest {
         });
     }
 
-    /** Every FXML graph on disk is one the build artifact serves, so none can be dropped silently. */
+    /**
+     * Every FXML graph on disk is one the build artifact serves, so none can be dropped silently.
+     */
     @Test
     void everyFxmlGraphOnDiskIsServedFromTheClasspath() throws IOException {
         List<String> graphs = fxmlFiles("");
@@ -161,39 +203,5 @@ class FxmlGraphLoadingTest {
         assertFalse(graphs.contains("main.fxml"), "the replaced legacy root graph must not ship");
         for (String graph : graphs)
             assertNotNull(Main.class.getResource(graph), graph + " must be on the classpath");
-    }
-
-    private static FXMLLoader load(String name) throws IOException {
-        FXMLLoader loader = new FXMLLoader(resource(name));
-        loader.load();
-        return loader;
-    }
-
-    private static URL resource(String name) {
-        URL url = Main.class.getResource(name);
-        assertNotNull(url, name + " must be on the classpath");
-        return url;
-    }
-
-    /** Asserts that FXMLLoader injected every {@code @FXML} field declared by the controller's class. */
-    private static void assertEveryFxmlFieldInjected(Object controller) throws IllegalAccessException {
-        for (Field field : controller.getClass().getDeclaredFields()) {
-            if (field.getAnnotation(FXML.class) == null)
-                continue;
-            field.setAccessible(true);
-            assertNotNull(field.get(controller),
-                    controller.getClass().getSimpleName() + "." + field.getName() + " must be injected");
-        }
-    }
-
-    private static List<String> fxmlFiles(String prefix) throws IOException {
-        List<String> names = new ArrayList<>();
-        try (Stream<Path> files = Files.list(FXML_DIRECTORY)) {
-            files.map(path -> path.getFileName().toString())
-                    .filter(name -> name.startsWith(prefix) && name.endsWith(".fxml"))
-                    .sorted()
-                    .forEach(names::add);
-        }
-        return names;
     }
 }

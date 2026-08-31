@@ -18,7 +18,9 @@ import javafx.stage.Stage;
 
 class JavaFxWorkbenchDialogsTest {
 
-    /** Destructive typed dialogs have an explicit owner, dialog semantics, and Cancel as default and escape. */
+    /**
+     * Destructive typed dialogs have an explicit owner, dialog semantics, and Cancel as default and escape.
+     */
     @Test
     void destructiveDialogRendersTheSafeTypedContract() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {

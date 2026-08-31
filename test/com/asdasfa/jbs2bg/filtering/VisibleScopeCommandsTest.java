@@ -1,11 +1,5 @@
 package com.asdasfa.jbs2bg.filtering;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,6 +20,8 @@ import com.asdasfa.jbs2bg.project.ProjectSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.UnchangedOutcome;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 /**
  * Characterizes the visible scope of every bulk command: each one freezes the
  * complete visible identity set of its table and submits exactly one Project
@@ -43,6 +39,55 @@ class VisibleScopeCommandsTest {
             "DeltaEditor");
 
     /**
+     * Seeds Alpha (Skyrim, [Alpha]), Beta (Skyrim, []), Gamma (Dawnguard, []),
+     * and Delta (Dawnguard, [Beta]) with Slider Presets Alpha and Beta.
+     */
+    private static ProjectSession seededSession() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.create("Beta"));
+        session.apply(NpcMorphAssignmentEdits.addNpcs(Arrays.asList(
+                new NpcMorphAssignmentSnapshot("Alpha", "Skyrim.esm", "AlphaEditor", "NordRace", "1", Arrays.asList("Alpha")),
+                npc("Beta", "Skyrim.esm", "BetaEditor"),
+                npc("Gamma", "Dawnguard.esm", "GammaEditor"),
+                new NpcMorphAssignmentSnapshot("Delta", "Dawnguard.esm", "DeltaEditor", "BretonRace", "4",
+                        Arrays.asList("Beta")))));
+        return session;
+    }
+
+    private static FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> npcView(
+            ProjectSession session) {
+        FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> view = new FilteredView<>(
+                NpcTableColumns.npcMorphAssignments(), ProjectIdentities::npcMorphAssignment);
+        view.setRows(session.getSnapshot().getNpcMorphAssignments());
+        return view;
+    }
+
+    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId) {
+        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, "NordRace", "1A696",
+                Collections.<String>emptyList());
+    }
+
+    private static List<NpcMorphAssignmentIdentity> identitiesOf(ProjectSnapshot snapshot) {
+        List<NpcMorphAssignmentIdentity> identities = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments())
+            identities.add(ProjectIdentities.npcMorphAssignment(npc));
+        return identities;
+    }
+
+    private static NpcMorphAssignmentSnapshot find(ProjectSnapshot snapshot, NpcMorphAssignmentIdentity identity) {
+        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments())
+            if (ProjectIdentities.npcMorphAssignment(npc).equals(identity))
+                return npc;
+        throw new AssertionError("missing " + identity);
+    }
+
+    private static List<String> presetsOf(ProjectSnapshot snapshot, NpcMorphAssignmentIdentity identity) {
+        return find(snapshot, identity).getSliderPresetNames();
+    }
+
+    /**
      * Clear NPC Morph Assignments removes exactly the visible NPC Morph
      * Assignments; hidden ones survive, and sorting does not widen the scope.
      */
@@ -55,7 +100,7 @@ class VisibleScopeCommandsTest {
 
         ProjectOutcome outcome = session.apply(VisibleScopeCommands.clearNpcMorphAssignments(view.visibleSet()));
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertEquals(Arrays.asList(DELTA, GAMMA), identitiesOf(outcome.getSnapshot()));
     }
 
@@ -71,13 +116,13 @@ class VisibleScopeCommandsTest {
 
         ProjectOutcome outcome = session.apply(VisibleScopeCommands.clearAssignments(view.visibleSet()));
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertEquals(Collections.emptyList(), presetsOf(outcome.getSnapshot(), ALPHA));
         assertEquals(Arrays.asList("Beta"), presetsOf(outcome.getSnapshot(), DELTA));
 
         // Nothing visible is assigned any more, so a repeat is Unchanged.
         view.setRows(session.getSnapshot().getNpcMorphAssignments());
-        assertTrue(session.apply(VisibleScopeCommands.clearAssignments(view.visibleSet())) instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, session.apply(VisibleScopeCommands.clearAssignments(view.visibleSet())));
     }
 
     /**
@@ -99,7 +144,7 @@ class VisibleScopeCommandsTest {
                 });
         ProjectOutcome outcome = session.apply(edit);
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertEquals(Arrays.asList(2), bounds);
         assertEquals(Arrays.asList("Alpha"), presetsOf(outcome.getSnapshot(), ALPHA));
         assertEquals(Arrays.asList("Beta"), presetsOf(outcome.getSnapshot(), BETA));
@@ -151,7 +196,7 @@ class VisibleScopeCommandsTest {
         ProjectEdit edit = VisibleScopeCommands.addAllNpcs(database.visibleSet(), () -> Arrays.asList("Beta"));
         ProjectOutcome outcome = session.apply(edit);
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         NpcMorphAssignmentIdentity epsilonIdentity = new NpcMorphAssignmentIdentity("Skyrim.esm", "EpsilonEditor");
         assertEquals(Arrays.asList(DELTA, GAMMA, ALPHA, BETA, epsilonIdentity), identitiesOf(outcome.getSnapshot()));
         assertEquals(Arrays.asList("Beta"), presetsOf(outcome.getSnapshot(), epsilonIdentity));
@@ -163,7 +208,7 @@ class VisibleScopeCommandsTest {
 
         ProjectEdit nothingNew = VisibleScopeCommands.addAllNpcs(database.visibleSet(),
                 () -> Collections.<String>emptyList());
-        assertTrue(session.apply(nothingNew) instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, session.apply(nothingNew));
     }
 
     /**
@@ -224,54 +269,5 @@ class VisibleScopeCommandsTest {
                 .getClass());
         assertEquals(ProjectIdentities.npcDatabaseEntry(entry), ProjectIdentities.npcMorphAssignment(npc));
         assertFalse(NpcTableColumns.npcMorphAssignments().isEmpty());
-    }
-
-    /**
-     * Seeds Alpha (Skyrim, [Alpha]), Beta (Skyrim, []), Gamma (Dawnguard, []),
-     * and Delta (Dawnguard, [Beta]) with Slider Presets Alpha and Beta.
-     */
-    private static ProjectSession seededSession() {
-        ProjectSession session = ProjectSessions.create();
-        session.newProject();
-        session.apply(SliderPresetEdits.create("Alpha"));
-        session.apply(SliderPresetEdits.create("Beta"));
-        session.apply(NpcMorphAssignmentEdits.addNpcs(Arrays.asList(
-                new NpcMorphAssignmentSnapshot("Alpha", "Skyrim.esm", "AlphaEditor", "NordRace", "1", Arrays.asList("Alpha")),
-                npc("Beta", "Skyrim.esm", "BetaEditor"),
-                npc("Gamma", "Dawnguard.esm", "GammaEditor"),
-                new NpcMorphAssignmentSnapshot("Delta", "Dawnguard.esm", "DeltaEditor", "BretonRace", "4",
-                        Arrays.asList("Beta")))));
-        return session;
-    }
-
-    private static FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> npcView(
-            ProjectSession session) {
-        FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> view = new FilteredView<>(
-                NpcTableColumns.npcMorphAssignments(), ProjectIdentities::npcMorphAssignment);
-        view.setRows(session.getSnapshot().getNpcMorphAssignments());
-        return view;
-    }
-
-    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId) {
-        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, "NordRace", "1A696",
-                Collections.<String>emptyList());
-    }
-
-    private static List<NpcMorphAssignmentIdentity> identitiesOf(ProjectSnapshot snapshot) {
-        List<NpcMorphAssignmentIdentity> identities = new ArrayList<>();
-        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments())
-            identities.add(ProjectIdentities.npcMorphAssignment(npc));
-        return identities;
-    }
-
-    private static NpcMorphAssignmentSnapshot find(ProjectSnapshot snapshot, NpcMorphAssignmentIdentity identity) {
-        for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments())
-            if (ProjectIdentities.npcMorphAssignment(npc).equals(identity))
-                return npc;
-        throw new AssertionError("missing " + identity);
-    }
-
-    private static List<String> presetsOf(ProjectSnapshot snapshot, NpcMorphAssignmentIdentity identity) {
-        return find(snapshot, identity).getSliderPresetNames();
     }
 }

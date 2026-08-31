@@ -23,6 +23,68 @@ import org.junit.jupiter.api.Test;
 class ProjectTest {
 
     /**
+     * Builds the shared fixture: Alpha and Beta, one target referencing both, one
+     * target referencing Beta, one NPC referencing Alpha, one NPC referencing both.
+     */
+    private static Project project() {
+        return Project.from(snapshot(Arrays.asList(preset("Alpha"), preset("Beta")),
+                Arrays.asList(new CustomMorphTargetSnapshot("Both", Arrays.asList("Alpha", "Beta")),
+                        new CustomMorphTargetSnapshot("OnlyBeta", Arrays.asList("Beta"))),
+                Arrays.asList(npc("Lydia", "Skyrim.esm", "HousecarlWhiterun", Arrays.asList("Alpha")),
+                        npc("Serana", "Dawnguard.esm", "Serana", Arrays.asList("Alpha", "Beta")))));
+    }
+
+    private static ProjectSnapshot snapshot(List<SliderPresetSnapshot> presets,
+                                            List<CustomMorphTargetSnapshot> targets, List<NpcMorphAssignmentSnapshot> npcs) {
+        return new ProjectSnapshot(presets, targets, npcs, Optional.empty(), true,
+                ProjectLifecycleStatus.UNTITLED);
+    }
+
+    private static SliderPresetSnapshot preset(String name) {
+        return new SliderPresetSnapshot(name, false, Arrays.asList(
+                new SliderChoiceSnapshot("Waist", true, Integer.valueOf(20), Integer.valueOf(80), 20, 80, 0, 100,
+                        false)));
+    }
+
+    /**
+     * Copies a Slider Preset into a distinct instance with equal observable values.
+     */
+    private static SliderPresetSnapshot copy(SliderPresetSnapshot source) {
+        return new SliderPresetSnapshot(source.getName(), source.isUunp(),
+                new ArrayList<>(source.getSliderChoices()));
+    }
+
+    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId,
+                                                  List<String> sliderPresetNames) {
+        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, "NordRace", "000A2C94",
+                sliderPresetNames);
+    }
+
+    private static List<String> names(List<SliderPresetSnapshot> presets) {
+        List<String> names = new ArrayList<>();
+        for (SliderPresetSnapshot preset : presets)
+            names.add(preset.getName());
+        return names;
+    }
+
+    private static List<String> targetNames(List<CustomMorphTargetSnapshot> targets) {
+        List<String> names = new ArrayList<>();
+        for (CustomMorphTargetSnapshot target : targets)
+            names.add(target.getName());
+        return names;
+    }
+
+    /**
+     * Renders each NPC Morph Assignment's identity as {@code plugin/editorId} in collection order.
+     */
+    private static List<String> identities(List<NpcMorphAssignmentSnapshot> npcs) {
+        List<String> identities = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot npc : npcs)
+            identities.add(npc.getPluginName() + "/" + npc.getEditorId());
+        return identities;
+    }
+
+    /**
      * Proves that every operation whose result equals the current content hands
      * back the identical instance, which is how the session tells Unchanged from
      * Changed without comparing values itself.
@@ -184,7 +246,7 @@ class ProjectTest {
                 Arrays.asList(new CustomMorphTargetSnapshot("b", Collections.<String>emptyList()),
                         new CustomMorphTargetSnapshot("A", Collections.<String>emptyList())),
                 Arrays.asList(new NpcMorphAssignmentSnapshot("Two", "b.esp", "a", "Race", "000002",
-                        Collections.<String>emptyList()),
+                                Collections.<String>emptyList()),
                         new NpcMorphAssignmentSnapshot("One", "A.esp", "z", "Race", "000001",
                                 Collections.<String>emptyList())),
                 Optional.empty(), true, ProjectLifecycleStatus.UNTITLED));
@@ -241,8 +303,8 @@ class ProjectTest {
         assertEquals(Arrays.asList("Zulu"), npcs.getNpcMorphAssignments().get(2).getSliderPresetNames());
 
         npcs = npcs.fillEmptyNpcMorphAssignments(Arrays.asList(
-                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("DAWNGUARD.ESM", "zuluEditor"), "ECHO"),
-                new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("skyrim.esm", "alphaeditor"), "alpha")))
+                        new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("DAWNGUARD.ESM", "zuluEditor"), "ECHO"),
+                        new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("skyrim.esm", "alphaeditor"), "alpha")))
                 .getProject();
         assertEquals(Arrays.asList("Echo"), npcs.getNpcMorphAssignments().get(0).getSliderPresetNames());
         assertEquals(Arrays.asList("Zulu"), npcs.getNpcMorphAssignments().get(2).getSliderPresetNames(),
@@ -393,63 +455,5 @@ class ProjectTest {
                 () -> project.removeNpcMorphAssignment(new NpcMorphAssignmentIdentity("Missing.esp", "Missing")));
         assertThrows(IllegalArgumentException.class,
                 () -> project.clearSliderPresetAssignments(Arrays.asList(missingNpc)));
-    }
-
-    /**
-     * Builds the shared fixture: Alpha and Beta, one target referencing both, one
-     * target referencing Beta, one NPC referencing Alpha, one NPC referencing both.
-     */
-    private static Project project() {
-        return Project.from(snapshot(Arrays.asList(preset("Alpha"), preset("Beta")),
-                Arrays.asList(new CustomMorphTargetSnapshot("Both", Arrays.asList("Alpha", "Beta")),
-                        new CustomMorphTargetSnapshot("OnlyBeta", Arrays.asList("Beta"))),
-                Arrays.asList(npc("Lydia", "Skyrim.esm", "HousecarlWhiterun", Arrays.asList("Alpha")),
-                        npc("Serana", "Dawnguard.esm", "Serana", Arrays.asList("Alpha", "Beta")))));
-    }
-
-    private static ProjectSnapshot snapshot(List<SliderPresetSnapshot> presets,
-            List<CustomMorphTargetSnapshot> targets, List<NpcMorphAssignmentSnapshot> npcs) {
-        return new ProjectSnapshot(presets, targets, npcs, Optional.empty(), true,
-                ProjectLifecycleStatus.UNTITLED);
-    }
-
-    private static SliderPresetSnapshot preset(String name) {
-        return new SliderPresetSnapshot(name, false, Arrays.asList(
-                new SliderChoiceSnapshot("Waist", true, Integer.valueOf(20), Integer.valueOf(80), 20, 80, 0, 100,
-                        false)));
-    }
-
-    /** Copies a Slider Preset into a distinct instance with equal observable values. */
-    private static SliderPresetSnapshot copy(SliderPresetSnapshot source) {
-        return new SliderPresetSnapshot(source.getName(), source.isUunp(),
-                new ArrayList<>(source.getSliderChoices()));
-    }
-
-    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId,
-            List<String> sliderPresetNames) {
-        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, "NordRace", "000A2C94",
-                sliderPresetNames);
-    }
-
-    private static List<String> names(List<SliderPresetSnapshot> presets) {
-        List<String> names = new ArrayList<>();
-        for (SliderPresetSnapshot preset : presets)
-            names.add(preset.getName());
-        return names;
-    }
-
-    private static List<String> targetNames(List<CustomMorphTargetSnapshot> targets) {
-        List<String> names = new ArrayList<>();
-        for (CustomMorphTargetSnapshot target : targets)
-            names.add(target.getName());
-        return names;
-    }
-
-    /** Renders each NPC Morph Assignment's identity as {@code plugin/editorId} in collection order. */
-    private static List<String> identities(List<NpcMorphAssignmentSnapshot> npcs) {
-        List<String> identities = new ArrayList<>();
-        for (NpcMorphAssignmentSnapshot npc : npcs)
-            identities.add(npc.getPluginName() + "/" + npc.getEditorId());
-        return identities;
     }
 }

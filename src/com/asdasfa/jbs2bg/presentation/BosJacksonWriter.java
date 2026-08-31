@@ -20,7 +20,9 @@ import tools.jackson.core.util.DefaultPrettyPrinter;
 import tools.jackson.core.util.Separators;
 import tools.jackson.core.util.Separators.Spacing;
 
-/** Package-owned Jackson streaming writer for the exact BoS byte contract. */
+/**
+ * Package-owned Jackson streaming writer for the exact BoS byte contract.
+ */
 final class BosJacksonWriter {
     private static final Pattern JSON_NUMBER = Pattern.compile("-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?");
     private static final JsonFactory JSON_FACTORY = JacksonJson.canonicalWriterFactory().rebuild()
@@ -82,7 +84,9 @@ final class BosJacksonWriter {
         return new Utf8Json(output.toByteArray());
     }
 
-    /** Rejects numeric spellings that cannot be emitted as finite JSON numbers without normalization. */
+    /**
+     * Rejects numeric spellings that cannot be emitted as finite JSON numbers without normalization.
+     */
     private static void validateNumber(String lexeme) {
         if (lexeme == null || !JSON_NUMBER.matcher(lexeme).matches())
             throw new IllegalArgumentException("BoS numeric lexeme is not valid JSON: " + lexeme);
@@ -95,13 +99,13 @@ final class BosJacksonWriter {
      * Ordered, already-calculated BoS values passed across the presentation-owned writer seam.
      * Lists are copied so validation and byte generation observe one immutable value.
      *
-     * @param bodyName output body name
+     * @param bodyName    output body name
      * @param sliderNames ordered slider names
-     * @param highValues ordered high-endpoint JSON number lexemes
-     * @param lowValues ordered low-endpoint JSON number lexemes
+     * @param highValues  ordered high-endpoint JSON number lexemes
+     * @param lowValues   ordered low-endpoint JSON number lexemes
      */
     record BosDocument(String bodyName, List<String> sliderNames, List<String> highValues,
-            List<String> lowValues) {
+                       List<String> lowValues) {
         BosDocument {
             bodyName = Objects.requireNonNull(bodyName, "bodyName");
             sliderNames = List.copyOf(sliderNames);
@@ -127,7 +131,9 @@ final class BosJacksonWriter {
             return printer;
         }
 
-        /** @return true so every generator created with this context installs the BoS printer */
+        /**
+         * @return true so every generator created with this context installs the BoS printer
+         */
         @Override
         public boolean hasPrettyPrinter() {
             return true;
@@ -138,7 +144,9 @@ final class BosJacksonWriter {
         private static final long serialVersionUID = 1L;
         private final int[] asciiEscapes = CharacterEscapes.standardAsciiEscapesForJSON();
 
-        /** @return a defensive copy of the minimal-json-compatible ASCII escape table */
+        /**
+         * @return a defensive copy of the minimal-json-compatible ASCII escape table
+         */
         @Override
         public int[] getEscapeCodesForAscii() {
             return asciiEscapes.clone();

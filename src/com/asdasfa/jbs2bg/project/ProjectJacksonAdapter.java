@@ -40,7 +40,9 @@ import tools.jackson.core.TokenStreamLocation;
 final class ProjectJacksonAdapter {
 
     private static final String WRITE_FAILED_CODE = "PROJECT_JSON_WRITE_FAILED";
-    /** Bounds publication traffic while preserving byte-measured progress and cancellation checks on every chunk. */
+    /**
+     * Bounds publication traffic while preserving byte-measured progress and cancellation checks on every chunk.
+     */
     private static final long PROGRESS_REPORT_BYTES = 256L * 1024L;
     private static final Comparator<String> CASE_INSENSITIVE_ORDER = String::compareToIgnoreCase;
     private static final Set<String> ROOT_FIELDS = Set.of("SliderPresets", "CustomMorphTargets", "MorphedNPCs");
@@ -49,6 +51,7 @@ final class ProjectJacksonAdapter {
             "pctMax");
     private static final Set<String> TARGET_FIELDS = Set.of("SliderPresets");
     private static final Set<String> NPC_FIELDS = Set.of("Mod", "EditorId", "Race", "FormId", "SliderPresets");
+
     private ProjectJacksonAdapter() {
     }
 
@@ -68,7 +71,7 @@ final class ProjectJacksonAdapter {
     /**
      * Reads one candidate with cooperative cancellation and measured byte progress.
      *
-     * @param source Project fixture or source file
+     * @param source  Project fixture or source file
      * @param context operation context retained only for this synchronous parse
      * @return immutable candidate and ordered recovery diagnostics
      * @throws ProjectFormatException for I/O, syntax, schema, domain, or limit failure
@@ -98,7 +101,7 @@ final class ProjectJacksonAdapter {
                     : ProjectOperationProgress.indeterminate("Reading Project"));
             UniversalDetector detector = new UniversalDetector();
             try (InputStream input = Files.newInputStream(normalizedSource);
-                    ByteArrayOutputStream output = new ByteArrayOutputStream((int) sourceSize)) {
+                 ByteArrayOutputStream output = new ByteArrayOutputStream((int) sourceSize)) {
                 byte[] buffer = new byte[8192];
                 long completed = 0;
                 long lastReported = 0;
@@ -194,7 +197,9 @@ final class ProjectJacksonAdapter {
         return output.toByteArray();
     }
 
-    /** Parses the root fields without assuming their encounter order. */
+    /**
+     * Parses the root fields without assuming their encounter order.
+     */
     private static ParsedProject readDocument(Reader reader) {
         require(reader.next("/"), JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_STRUCTURE_INVALID, reader,
                 "/", "The Project document root must be an object.");
@@ -226,7 +231,9 @@ final class ProjectJacksonAdapter {
         return new ParsedProject(presets, targets, npcMorphAssignments);
     }
 
-    /** Parses the dynamic Slider Preset catalog and applies legacy name normalization. */
+    /**
+     * Parses the dynamic Slider Preset catalog and applies legacy name normalization.
+     */
     private static List<SliderPresetSnapshot> readSliderPresets(Reader reader, JsonToken token, String path) {
         require(token, JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_STRUCTURE_INVALID, reader, path,
                 "Project member 'SliderPresets' must be an object.");
@@ -253,7 +260,9 @@ final class ProjectJacksonAdapter {
         return presets;
     }
 
-    /** Parses one fixed-schema Slider Preset object. */
+    /**
+     * Parses one fixed-schema Slider Preset object.
+     */
     private static SliderPresetSnapshot readSliderPreset(Reader reader, JsonToken token, String path, String name) {
         require(token, JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, reader, path,
                 "A Slider Preset must be an object.");
@@ -301,7 +310,9 @@ final class ProjectJacksonAdapter {
         return new ExplicitChoices(choices, representedNames);
     }
 
-    /** Parses one fixed-schema explicit slider choice with exact integer lexemes. */
+    /**
+     * Parses one fixed-schema explicit slider choice with exact integer lexemes.
+     */
     private static RawChoice readSliderChoice(Reader reader, JsonToken token, String path) {
         require(token, JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, reader, path,
                 "A slider choice must be an object.");
@@ -349,7 +360,9 @@ final class ProjectJacksonAdapter {
         return new RawChoice(name, enabled.booleanValue(), small, big, minimum.intValue(), maximum.intValue());
     }
 
-    /** Parses the dynamic Custom Morph Target catalog without resolving references yet. */
+    /**
+     * Parses the dynamic Custom Morph Target catalog without resolving references yet.
+     */
     private static List<RawTarget> readCustomMorphTargets(Reader reader, JsonToken token, String path) {
         require(token, JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_STRUCTURE_INVALID, reader, path,
                 "Project member 'CustomMorphTargets' must be an object.");
@@ -374,7 +387,9 @@ final class ProjectJacksonAdapter {
         return targets;
     }
 
-    /** Parses one fixed-schema Custom Morph Target object. */
+    /**
+     * Parses one fixed-schema Custom Morph Target object.
+     */
     private static RawTarget readCustomMorphTarget(Reader reader, JsonToken token, String path, String name) {
         require(token, JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, reader, path,
                 "A Custom Morph Target must be an object.");
@@ -391,7 +406,9 @@ final class ProjectJacksonAdapter {
         return new RawTarget(name, assignments);
     }
 
-    /** Parses the NPC Morph Assignment catalog while permitting repeated display-name members. */
+    /**
+     * Parses the NPC Morph Assignment catalog while permitting repeated display-name members.
+     */
     private static List<RawNpcMorphAssignment> readNpcMorphAssignments(Reader reader, JsonToken token, String path) {
         require(token, JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_STRUCTURE_INVALID, reader, path,
                 "Project member 'MorphedNPCs' must be an object.");
@@ -415,7 +432,9 @@ final class ProjectJacksonAdapter {
         return assignments;
     }
 
-    /** Parses one fixed-schema NPC Morph Assignment object. */
+    /**
+     * Parses one fixed-schema NPC Morph Assignment object.
+     */
     private static RawNpcMorphAssignment readNpcMorphAssignment(
             Reader reader, JsonToken token, String path, String displayName) {
         require(token, JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, reader, path,
@@ -449,7 +468,9 @@ final class ProjectJacksonAdapter {
         return new RawNpcMorphAssignment(displayName, pluginName, editorId, race, formId, assignments);
     }
 
-    /** Parses one assignment array and rejects case-insensitive repetitions in encounter order. */
+    /**
+     * Parses one assignment array and rejects case-insensitive repetitions in encounter order.
+     */
     private static List<AssignmentReference> readAssignments(Reader reader, JsonToken token, String path) {
         require(token, JsonToken.START_ARRAY, ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, reader, path,
                 "A Slider Preset assignment collection must be an array.");
@@ -470,7 +491,9 @@ final class ProjectJacksonAdapter {
         return assignments;
     }
 
-    /** Resolves references, creates ordered diagnostics, and performs the final aggregate validation. */
+    /**
+     * Resolves references, creates ordered diagnostics, and performs the final aggregate validation.
+     */
     private static Candidate finishCandidate(Path source, ParsedProject parsed) {
         Map<String, String> presetNames = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (SliderPresetSnapshot preset : parsed.presets())
@@ -510,9 +533,11 @@ final class ProjectJacksonAdapter {
         }
     }
 
-    /** Resolves canonical names and records missing references as ordered recovery diagnostics. */
+    /**
+     * Resolves canonical names and records missing references as ordered recovery diagnostics.
+     */
     private static List<String> resolveAssignments(Path source, List<AssignmentReference> rawAssignments,
-            Map<String, String> presetNames, List<ProjectDiagnostic> diagnostics) {
+                                                   Map<String, String> presetNames, List<ProjectDiagnostic> diagnostics) {
         List<String> resolved = new ArrayList<>();
         for (AssignmentReference assignment : rawAssignments) {
             String canonical = presetNames.get(assignment.name().trim());
@@ -530,7 +555,9 @@ final class ProjectJacksonAdapter {
         return resolved;
     }
 
-    /** Writes all three Project catalogs in deterministic root order. */
+    /**
+     * Writes all three Project catalogs in deterministic root order.
+     */
     private static void writeProject(JsonGenerator generator, Project project) {
         generator.writeStartObject();
         generator.writeName("SliderPresets");
@@ -542,7 +569,9 @@ final class ProjectJacksonAdapter {
         generator.writeEndObject();
     }
 
-    /** Writes Slider Presets while preserving explicit nulls and omission of unchanged synthesized defaults. */
+    /**
+     * Writes Slider Presets while preserving explicit nulls and omission of unchanged synthesized defaults.
+     */
     private static void writeSliderPresets(JsonGenerator generator, List<SliderPresetSnapshot> presets) {
         generator.writeStartObject();
         for (SliderPresetSnapshot preset : presets) {
@@ -561,7 +590,9 @@ final class ProjectJacksonAdapter {
         generator.writeEndObject();
     }
 
-    /** Writes one explicit Slider Choice in the established fixed-field order. */
+    /**
+     * Writes one explicit Slider Choice in the established fixed-field order.
+     */
     private static void writeSliderChoice(JsonGenerator generator, SliderChoiceSnapshot choice) {
         generator.writeStartObject();
         generator.writeStringProperty("name", choice.getName());
@@ -579,13 +610,17 @@ final class ProjectJacksonAdapter {
         generator.writeEndObject();
     }
 
-    /** Reports whether a synthesized default still has the intentionally omitted persisted state. */
+    /**
+     * Reports whether a synthesized default still has the intentionally omitted persisted state.
+     */
     private static boolean isOmittedMissingDefault(SliderChoiceSnapshot choice) {
         return choice.isMissingDefault() && choice.isEnabled()
                 && choice.getPercentageMinimum() == 100 && choice.getPercentageMaximum() == 100;
     }
 
-    /** Writes canonical Custom Morph Targets and their canonical assignment names. */
+    /**
+     * Writes canonical Custom Morph Targets and their canonical assignment names.
+     */
     private static void writeTargets(JsonGenerator generator, List<CustomMorphTargetSnapshot> targets) {
         generator.writeStartObject();
         for (CustomMorphTargetSnapshot target : targets) {
@@ -598,7 +633,9 @@ final class ProjectJacksonAdapter {
         generator.writeEndObject();
     }
 
-    /** Writes NPC Morph Assignments, deliberately retaining repeated display-name members. */
+    /**
+     * Writes NPC Morph Assignments, deliberately retaining repeated display-name members.
+     */
     private static void writeNpcMorphAssignments(
             JsonGenerator generator, List<NpcMorphAssignmentSnapshot> assignments) {
         generator.writeStartObject();
@@ -616,7 +653,9 @@ final class ProjectJacksonAdapter {
         generator.writeEndObject();
     }
 
-    /** Writes one deterministic array of canonical Slider Preset names. */
+    /**
+     * Writes one deterministic array of canonical Slider Preset names.
+     */
     private static void writeAssignments(JsonGenerator generator, List<String> assignments) {
         generator.writeStartArray();
         for (String assignment : assignments)
@@ -624,7 +663,9 @@ final class ProjectJacksonAdapter {
         generator.writeEndArray();
     }
 
-    /** Returns one supported fixed-schema name and rejects unknown or repeated fields. */
+    /**
+     * Returns one supported fixed-schema name and rejects unknown or repeated fields.
+     */
     private static String fixedMember(Reader reader, Set<String> seen, Set<String> supported, String ownerPath) {
         String name = reader.propertyName(ownerPath);
         String path = child(ownerPath, name);
@@ -639,7 +680,9 @@ final class ProjectJacksonAdapter {
         return name;
     }
 
-    /** Reads one required string token and enforces the owned UTF-8 token-byte limit. */
+    /**
+     * Reads one required string token and enforces the owned UTF-8 token-byte limit.
+     */
     private static String readString(Reader reader, JsonToken token, String path) {
         require(token, JsonToken.VALUE_STRING, ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, reader, path,
                 "Project member must be a string.");
@@ -648,7 +691,9 @@ final class ProjectJacksonAdapter {
         return value;
     }
 
-    /** Reads one required boolean token without coercion. */
+    /**
+     * Reads one required boolean token without coercion.
+     */
     private static boolean readBoolean(Reader reader, JsonToken token, String path) {
         if (token == JsonToken.VALUE_TRUE)
             return true;
@@ -658,7 +703,9 @@ final class ProjectJacksonAdapter {
                 "Project member must be a boolean.");
     }
 
-    /** Reads one exact signed 32-bit integer lexeme without numeric coercion. */
+    /**
+     * Reads one exact signed 32-bit integer lexeme without numeric coercion.
+     */
     private static int readInteger(Reader reader, JsonToken token, String path) {
         if (token != JsonToken.VALUE_NUMBER_INT && token != JsonToken.VALUE_NUMBER_FLOAT) {
             throw reader.failure(ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, path,
@@ -673,14 +720,18 @@ final class ProjectJacksonAdapter {
         }
     }
 
-    /** Reads one explicit null or exact signed 32-bit integer lexeme. */
+    /**
+     * Reads one explicit null or exact signed 32-bit integer lexeme.
+     */
     private static Integer readNullableInteger(Reader reader, JsonToken token, String path) {
         if (token == JsonToken.VALUE_NULL)
             return null;
         return Integer.valueOf(readInteger(reader, token, path));
     }
 
-    /** Rejects absent required members while keeping explicit null distinguishable. */
+    /**
+     * Rejects absent required members while keeping explicit null distinguishable.
+     */
     private static void requireSeen(boolean seen, Reader reader, String path, String memberName) {
         if (!seen) {
             throw reader.failure(ProjectDiagnosticCodes.PROJECT_STRUCTURE_INVALID, path,
@@ -688,7 +739,9 @@ final class ProjectJacksonAdapter {
         }
     }
 
-    /** Rejects absent required non-null values after a fixed-schema object closes. */
+    /**
+     * Rejects absent required non-null values after a fixed-schema object closes.
+     */
     private static void requirePresent(Object value, Reader reader, String path, String memberName) {
         if (value == null) {
             throw reader.failure(ProjectDiagnosticCodes.PROJECT_STRUCTURE_INVALID, path,
@@ -696,14 +749,18 @@ final class ProjectJacksonAdapter {
         }
     }
 
-    /** Requires an exact token kind without enabling Jackson coercion. */
+    /**
+     * Requires an exact token kind without enabling Jackson coercion.
+     */
     private static void require(JsonToken actual, JsonToken expected, String code, Reader reader, String path,
-            String message) {
+                                String message) {
         if (actual != expected)
             throw reader.failure(code, path, message);
     }
 
-    /** Enforces the accepted one-MiB UTF-8 limit for names and string values. */
+    /**
+     * Enforces the accepted one-MiB UTF-8 limit for names and string values.
+     */
     private static void requireTextLimit(Reader reader, String value, String path, String kind) {
         if (JacksonJson.exceedsTextLimit(value)) {
             throw reader.failure(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, path,
@@ -711,12 +768,16 @@ final class ProjectJacksonAdapter {
         }
     }
 
-    /** Appends one RFC 6901-escaped member segment to a Project path. */
+    /**
+     * Appends one RFC 6901-escaped member segment to a Project path.
+     */
     private static String child(String owner, String name) {
         return JacksonJson.memberPath(owner, name);
     }
 
-    /** Applies the form-ID normalization historically used by Project loading. */
+    /**
+     * Applies the form-ID normalization historically used by Project loading.
+     */
     private static String normalizeFormId(String value) {
         String normalized = value.trim();
         if (normalized.length() > 6)
@@ -724,41 +785,55 @@ final class ProjectJacksonAdapter {
         return normalized.replaceFirst("^0+(?!$)", "");
     }
 
-    /** Returns a present source coordinate only when the parser supplied one. */
+    /**
+     * Returns a present source coordinate only when the parser supplied one.
+     */
     private static OptionalInt optionalCoordinate(int value) {
         return value > 0 ? OptionalInt.of(value) : OptionalInt.empty();
     }
 
-    /** Normalizes a Jackson line coordinate to the stable one-based contract. */
+    /**
+     * Normalizes a Jackson line coordinate to the stable one-based contract.
+     */
     private static int line(TokenStreamLocation location) {
         return location == null ? 0 : Math.max(1, location.getLineNr());
     }
 
-    /** Normalizes a Jackson column coordinate to the stable one-based contract. */
+    /**
+     * Normalizes a Jackson column coordinate to the stable one-based contract.
+     */
     private static int column(TokenStreamLocation location) {
         return location == null ? 0 : Math.max(1, location.getColumnNr());
     }
 
-    /** Builds a codec-free failure from a parser location. */
+    /**
+     * Builds a codec-free failure from a parser location.
+     */
     private static ProjectFormatException failure(String code, String source, String path,
-            TokenStreamLocation location, String message) {
+                                                  TokenStreamLocation location, String message) {
         return failure(code, source, path, line(location), column(location), message);
     }
 
-    /** Builds a codec-free failure from already normalized fields. */
+    /**
+     * Builds a codec-free failure from already normalized fields.
+     */
     private static ProjectFormatException failure(String code, String source, String path, int line, int column,
-            String message) {
+                                                  String message) {
         return new ProjectFormatException(code, source, path, line, column,
                 message == null || message.isBlank() ? "Project JSON processing failed." : message);
     }
 
-    /** Returns a non-empty diagnostic message without retaining the source exception. */
+    /**
+     * Returns a non-empty diagnostic message without retaining the source exception.
+     */
     private static String readableMessage(Throwable exception, String fallback) {
         String message = exception.getMessage();
         return message == null || message.isBlank() ? fallback : message;
     }
 
-    /** Complete immutable result of reading one Project candidate. */
+    /**
+     * Complete immutable result of reading one Project candidate.
+     */
     record Candidate(ProjectSnapshot snapshot, List<ProjectDiagnostic> diagnostics) {
         Candidate {
             Objects.requireNonNull(snapshot, "snapshot");
@@ -766,134 +841,45 @@ final class ProjectJacksonAdapter {
         }
     }
 
-    /** Stable adapter failure with no Jackson type or cause in its surface contract. */
-    static final class ProjectFormatException extends RuntimeException {
-        private static final long serialVersionUID = 1L;
-        private final String code;
-        private final String source;
-        private final String path;
-        private final int line;
-        private final int column;
-
-        /** Creates one stable Project-format failure. */
-        ProjectFormatException(String code, String source, String path, int line, int column, String message) {
-            super(message);
-            this.code = code;
-            this.source = source;
-            this.path = path;
-            this.line = line;
-            this.column = column;
-        }
-
-        /** @return stable machine-readable failure code */
-        String code() {
-            return code;
-        }
-
-        /** @return stable source description */
-        String source() {
-            return source;
-        }
-
-        /** @return escaped JSON-pointer-like failure path */
-        String path() {
-            return path;
-        }
-
-        /** @return one-based line, or zero when unavailable */
-        int line() {
-            return line;
-        }
-
-        /** @return one-based column, or zero when unavailable */
-        int column() {
-            return column;
-        }
-    }
-
-    /** Parser cursor that retains the best stable path when Jackson reports a failure. */
-    private static final class Reader {
-        private final JsonParser parser;
-        private final String source;
-        private final ProjectOperationContext context;
-        private String path = "/";
-
-        /**
-         * Wraps one parser with the stable source description used for every translated failure.
-         *
-         * @param parser Jackson cursor contained within this adapter
-         * @param source normalized source-file description
-         * @param context operation context checked before every parser advance
-         */
-        Reader(JsonParser parser, String source, ProjectOperationContext context) {
-            this.parser = parser;
-            this.source = source;
-            this.context = context;
-        }
-
-        /** Advances the stream after recording the path the next token belongs to. */
-        JsonToken next(String requestedPath) {
-            context.checkCancellation();
-            path = requestedPath;
-            return parser.nextToken();
-        }
-
-        /** Returns the current property name after enforcing its UTF-8 byte limit. */
-        String propertyName(String ownerPath) {
-            String name = parser.currentName();
-            requireTextLimit(this, name, child(ownerPath, name), "member name");
-            return name;
-        }
-
-        /** Returns the current string or numeric token text. */
-        String string() {
-            return parser.getString();
-        }
-
-        /** @return current token location */
-        TokenStreamLocation location() {
-            return parser.currentTokenLocation();
-        }
-
-        /** @return best path for a syntax or limit exception */
-        String failurePath() {
-            String contextPath = parser.streamReadContext().pathAsPointer().toString();
-            return contextPath.isEmpty() ? path : contextPath;
-        }
-
-        /** Builds a failure at the parser's current token. */
-        ProjectFormatException failure(String code, String requestedPath, String message) {
-            return ProjectJacksonAdapter.failure(code, source, requestedPath, location(), message);
-        }
-    }
-
-    /** Parsed root values before references are resolved. */
+    /**
+     * Parsed root values before references are resolved.
+     */
     private record ParsedProject(List<SliderPresetSnapshot> presets, List<RawTarget> targets,
-            List<RawNpcMorphAssignment> npcMorphAssignments) {
+                                 List<RawNpcMorphAssignment> npcMorphAssignments) {
     }
 
-    /** Custom Morph Target value retaining unresolved assignment locations. */
+    /**
+     * Custom Morph Target value retaining unresolved assignment locations.
+     */
     private record RawTarget(String name, List<AssignmentReference> assignments) {
     }
 
-    /** NPC Morph Assignment value retaining unresolved assignment locations. */
+    /**
+     * NPC Morph Assignment value retaining unresolved assignment locations.
+     */
     private record RawNpcMorphAssignment(String displayName, String pluginName, String editorId,
-            String race, String formId, List<AssignmentReference> assignments) {
+                                         String race, String formId, List<AssignmentReference> assignments) {
     }
 
-    /** Persisted assignment string plus its naturally available source position. */
+    /**
+     * Persisted assignment string plus its naturally available source position.
+     */
     private record AssignmentReference(String name, String path, int line, int column) {
     }
 
-    /** Parsed explicit choice before the containing preset's Settings profile is known. */
+    /**
+     * Parsed explicit choice before the containing preset's Settings profile is known.
+     */
     private record RawChoice(String name, boolean enabled, Integer storedSmall, Integer storedBig,
-            int percentageMinimum, int percentageMaximum) {
+                             int percentageMinimum, int percentageMaximum) {
     }
 
-    /** Explicit choices plus their represented identities, used while applying defaults. */
+    /**
+     * Explicit choices plus their represented identities, used while applying defaults.
+     */
     private record ExplicitChoices(List<RawChoice> choices, Set<String> representedNames) {
         /** Returns explicit choices plus synthesized defaults for the selected Settings profile. */
-        List<SliderChoiceSnapshot> withDefaults(boolean uunp) {
+        List<SliderChoiceSnapshot> withDefaults ( boolean uunp){
             List<SliderChoiceSnapshot> completed = new ArrayList<>();
             for (RawChoice choice : choices) {
                 completed.add(new SliderChoiceSnapshot(choice.name(), choice.enabled(), choice.storedSmall(),
@@ -905,6 +891,135 @@ final class ProjectJacksonAdapter {
             completed.addAll(SliderChoiceDefaults.synthesizeMissing(representedNames, uunp));
             completed.sort(Comparator.comparing(SliderChoiceSnapshot::getName, CASE_INSENSITIVE_ORDER));
             return Collections.unmodifiableList(completed);
+        }
+    }
+
+    /**
+     * Stable adapter failure with no Jackson type or cause in its surface contract.
+     */
+    static final class ProjectFormatException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+        private final String code;
+        private final String source;
+        private final String path;
+        private final int line;
+        private final int column;
+
+        /**
+         * Creates one stable Project-format failure.
+         */
+        ProjectFormatException(String code, String source, String path, int line, int column, String message) {
+            super(message);
+            this.code = code;
+            this.source = source;
+            this.path = path;
+            this.line = line;
+            this.column = column;
+        }
+
+        /**
+         * @return stable machine-readable failure code
+         */
+        String code() {
+            return code;
+        }
+
+        /**
+         * @return stable source description
+         */
+        String source() {
+            return source;
+        }
+
+        /**
+         * @return escaped JSON-pointer-like failure path
+         */
+        String path() {
+            return path;
+        }
+
+        /**
+         * @return one-based line, or zero when unavailable
+         */
+        int line() {
+            return line;
+        }
+
+        /**
+         * @return one-based column, or zero when unavailable
+         */
+        int column() {
+            return column;
+        }
+    }
+
+    /**
+     * Parser cursor that retains the best stable path when Jackson reports a failure.
+     */
+    private static final class Reader {
+        private final JsonParser parser;
+        private final String source;
+        private final ProjectOperationContext context;
+        private String path = "/";
+
+        /**
+         * Wraps one parser with the stable source description used for every translated failure.
+         *
+         * @param parser  Jackson cursor contained within this adapter
+         * @param source  normalized source-file description
+         * @param context operation context checked before every parser advance
+         */
+        Reader(JsonParser parser, String source, ProjectOperationContext context) {
+            this.parser = parser;
+            this.source = source;
+            this.context = context;
+        }
+
+        /**
+         * Advances the stream after recording the path the next token belongs to.
+         */
+        JsonToken next(String requestedPath) {
+            context.checkCancellation();
+            path = requestedPath;
+            return parser.nextToken();
+        }
+
+        /**
+         * Returns the current property name after enforcing its UTF-8 byte limit.
+         */
+        String propertyName(String ownerPath) {
+            String name = parser.currentName();
+            requireTextLimit(this, name, child(ownerPath, name), "member name");
+            return name;
+        }
+
+        /**
+         * Returns the current string or numeric token text.
+         */
+        String string() {
+            return parser.getString();
+        }
+
+        /**
+         * @return current token location
+         */
+        TokenStreamLocation location() {
+            return parser.currentTokenLocation();
+        }
+
+        /**
+         * @return best path for a syntax or limit exception
+         */
+        String failurePath() {
+            String contextPath = parser.streamReadContext().pathAsPointer().toString();
+            return contextPath.isEmpty() ? path : contextPath;
+        }
+
+        /**
+         * Builds a failure at the parser's current token.
+         */
+        ProjectFormatException failure(String code, String requestedPath, String message) {
+            return ProjectJacksonAdapter.failure(code, source, requestedPath, location(), message);
         }
     }
 }

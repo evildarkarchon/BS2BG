@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Test;
 
 class WorkbenchNavigationTest {
 
-    /** A typed Area destination changes the active Area and requests its first semantic content target. */
+    /**
+     * A typed Area destination changes the active Area and requests its first semantic content target.
+     */
     @Test
     void typedAreaNavigationEntersTheDestinationPredictably() {
         WorkbenchNavigation navigation = new WorkbenchNavigation();
@@ -26,7 +28,9 @@ class WorkbenchNavigationTest {
                 WorkbenchNavigation.Landmark.PRIMARY_CONTENT), transition.focusTarget().orElseThrow());
     }
 
-    /** User-invoked Output toggles the drawer without replacing the active Area and restores prior focus. */
+    /**
+     * User-invoked Output toggles the drawer without replacing the active Area and restores prior focus.
+     */
     @Test
     void outputDestinationPreservesTheAreaAndRestoresItsLauncherFocus() {
         WorkbenchNavigation navigation = new WorkbenchNavigation();
@@ -52,7 +56,9 @@ class WorkbenchNavigationTest {
         assertEquals(editor, closed.focusTarget().orElseThrow());
     }
 
-    /** Rail-opened Output restores the distinct drawer launcher rather than the active Area's rail button. */
+    /**
+     * Rail-opened Output restores the distinct drawer launcher rather than the active Area's rail button.
+     */
     @Test
     void railOpenedOutputRestoresTheOutputLauncher() {
         WorkbenchNavigation navigation = new WorkbenchNavigation();
@@ -66,7 +72,9 @@ class WorkbenchNavigationTest {
         assertEquals(outputLauncher, closed.focusTarget().orElseThrow());
     }
 
-    /** Automatic completion reveal makes Output visible without changing Area or stealing keyboard focus. */
+    /**
+     * Automatic completion reveal makes Output visible without changing Area or stealing keyboard focus.
+     */
     @Test
     void automaticOutputRevealHasNoFocusEffect() {
         WorkbenchNavigation navigation = new WorkbenchNavigation();
@@ -82,7 +90,9 @@ class WorkbenchNavigationTest {
         assertTrue(revealed.focusTarget().isEmpty());
     }
 
-    /** F6 follows semantic landmark order through durable Activity and loops across the wide Workbench. */
+    /**
+     * F6 follows semantic landmark order through durable Activity and loops across the wide Workbench.
+     */
     @Test
     void f6CyclesTheOpenWideWorkbenchLandmarksCoherently() {
         WorkbenchNavigation navigation = new WorkbenchNavigation();
@@ -91,21 +101,23 @@ class WorkbenchNavigationTest {
                 WorkbenchNavigation.Landmark.RAIL);
         navigation.navigate(WorkbenchNavigation.Destination.OUTPUT, current);
 
-        for (WorkbenchNavigation.Landmark expected : new WorkbenchNavigation.Landmark[] {
+        for (WorkbenchNavigation.Landmark expected : new WorkbenchNavigation.Landmark[]{
                 WorkbenchNavigation.Landmark.PRIMARY_CONTENT,
                 WorkbenchNavigation.Landmark.EDITOR,
                 WorkbenchNavigation.Landmark.INSPECTOR,
                 WorkbenchNavigation.Landmark.OUTPUT,
                 WorkbenchNavigation.Landmark.ACTIVITY,
                 WorkbenchNavigation.Landmark.STATUS,
-                WorkbenchNavigation.Landmark.RAIL }) {
+                WorkbenchNavigation.Landmark.RAIL}) {
             current = navigation.cycleFocus(current).focusTarget().orElseThrow();
             assertEquals(expected, current.landmark());
             assertEquals(WorkbenchNavigation.Area.TEMPLATES, current.area());
         }
     }
 
-    /** Below 1200 logical pixels side content becomes dismissible overlays over the still-inline editor. */
+    /**
+     * Below 1200 logical pixels side content becomes dismissible overlays over the still-inline editor.
+     */
     @Test
     void narrowModeUsesSideOverlaysAndReturnsFocusToTheirSemanticLauncher() {
         WorkbenchNavigation navigation = new WorkbenchNavigation();
@@ -133,7 +145,9 @@ class WorkbenchNavigationTest {
         assertTrue(widened.focusTarget().isEmpty());
     }
 
-    /** Narrow Area navigation opens primary content as the predictable entry surface. */
+    /**
+     * Narrow Area navigation opens primary content as the predictable entry surface.
+     */
     @Test
     void narrowAreaNavigationOpensPrimaryContentFromItsRailLauncher() {
         WorkbenchNavigation navigation = new WorkbenchNavigation();

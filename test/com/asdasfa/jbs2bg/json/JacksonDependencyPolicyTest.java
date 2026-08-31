@@ -12,14 +12,51 @@ import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 
-/** Locks the exact Jackson dependency and its repository-owned implementation boundary. */
+/**
+ * Locks the exact Jackson dependency and its repository-owned implementation boundary.
+ */
 final class JacksonDependencyPolicyTest {
     private static final List<String> FORMAT_ADAPTERS = List.of(
             "src/com/asdasfa/jbs2bg/project/ProjectJacksonAdapter.java",
             "src/com/asdasfa/jbs2bg/data/SettingsJacksonAdapter.java",
             "src/com/asdasfa/jbs2bg/presentation/BosJacksonWriter.java");
 
-    /** Verifies the selected Core-only LTS coordinate cannot drift through a property or transitive codec. */
+    /**
+     * Reports whether one source imports a Jackson type without hiding I/O failures from the policy test.
+     */
+    private static boolean importsJackson(Path source) {
+        try {
+            return Files.readString(source).contains("import tools.jackson.");
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not inspect source import policy: " + source, exception);
+        }
+    }
+
+    /**
+     * Reports whether one production source imports the retired JSON codec.
+     */
+    private static boolean importsMinimalJson(Path source) {
+        try {
+            return Files.readString(source).contains("import com.eclipsesource.json");
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not inspect source import policy: " + source, exception);
+        }
+    }
+
+    /**
+     * Reports whether production source calls the internal-only Jackson policy support class.
+     */
+    private static boolean referencesInternalJacksonPolicy(Path source) {
+        try {
+            return Files.readString(source).contains("JacksonJson.");
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not inspect internal JSON policy calls: " + source, exception);
+        }
+    }
+
+    /**
+     * Verifies the selected Core-only LTS coordinate cannot drift through a property or transitive codec.
+     */
     @Test
     void pinsJacksonCoreOnlyAtVersionThreeOneFive() throws IOException {
         String pom = Files.readString(Path.of("pom.xml"));
@@ -30,7 +67,9 @@ final class JacksonDependencyPolicyTest {
         assertFalse(pom.contains("jackson-databind"));
     }
 
-    /** Verifies the retired codec and its temporary differential reader cannot remain in the checkpoint. */
+    /**
+     * Verifies the retired codec and its temporary differential reader cannot remain in the checkpoint.
+     */
     @Test
     void removesMinimalJsonAndTheTemporaryProjectComparisonReader() throws IOException {
         String pom = Files.readString(Path.of("pom.xml"));
@@ -39,7 +78,7 @@ final class JacksonDependencyPolicyTest {
         assertFalse(Files.exists(Path.of(
                 "test/com/asdasfa/jbs2bg/project/LegacyProjectFileLoader.java")));
         try (var productionSources = Files.walk(Path.of("src"));
-                var testSources = Files.walk(Path.of("test"))) {
+             var testSources = Files.walk(Path.of("test"))) {
             List<String> importers = Stream.concat(productionSources, testSources)
                     .filter(path -> path.toString().endsWith(".java"))
                     .filter(path -> !path.getFileName().toString().equals("JacksonDependencyPolicyTest.java"))
@@ -51,7 +90,9 @@ final class JacksonDependencyPolicyTest {
         }
     }
 
-    /** Verifies dependency convergence and the retired codec are enforced across the resolved graph. */
+    /**
+     * Verifies dependency convergence and the retired codec are enforced across the resolved graph.
+     */
     @Test
     void enforcesConvergenceAndBansMinimalJsonTransitively() throws IOException {
         String pom = Files.readString(Path.of("pom.xml"));
@@ -60,7 +101,9 @@ final class JacksonDependencyPolicyTest {
         assertTrue(pom.contains("<exclude>com.eclipsesource.minimal-json:*</exclude>"));
     }
 
-    /** Verifies no Jackson type crosses the internal implementation or three format-adapter allowlist. */
+    /**
+     * Verifies no Jackson type crosses the internal implementation or three format-adapter allowlist.
+     */
     @Test
     void confinesJacksonImportsToInternalsAndFormatAdapters() throws IOException {
         try (var sources = Files.walk(Path.of("src"))) {
@@ -80,7 +123,9 @@ final class JacksonDependencyPolicyTest {
         }
     }
 
-    /** Verifies Project publication has one owned writer route and no dormant minimal-json serializer. */
+    /**
+     * Verifies Project publication has one owned writer route and no dormant minimal-json serializer.
+     */
     @Test
     void projectPublicationUsesOnlyTheOwnedJacksonWriter() throws IOException {
         String publisher = Files.readString(
@@ -131,33 +176,6 @@ final class JacksonDependencyPolicyTest {
                     .toList();
 
             assertEquals(FORMAT_ADAPTERS.stream().sorted().toList(), callers);
-        }
-    }
-
-    /** Reports whether one source imports a Jackson type without hiding I/O failures from the policy test. */
-    private static boolean importsJackson(Path source) {
-        try {
-            return Files.readString(source).contains("import tools.jackson.");
-        } catch (IOException exception) {
-            throw new IllegalStateException("Could not inspect source import policy: " + source, exception);
-        }
-    }
-
-    /** Reports whether one production source imports the retired JSON codec. */
-    private static boolean importsMinimalJson(Path source) {
-        try {
-            return Files.readString(source).contains("import com.eclipsesource.json");
-        } catch (IOException exception) {
-            throw new IllegalStateException("Could not inspect source import policy: " + source, exception);
-        }
-    }
-
-    /** Reports whether production source calls the internal-only Jackson policy support class. */
-    private static boolean referencesInternalJacksonPolicy(Path source) {
-        try {
-            return Files.readString(source).contains("JacksonJson.");
-        } catch (IOException exception) {
-            throw new IllegalStateException("Could not inspect internal JSON policy calls: " + source, exception);
         }
     }
 }

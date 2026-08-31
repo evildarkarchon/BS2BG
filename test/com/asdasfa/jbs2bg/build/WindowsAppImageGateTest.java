@@ -33,13 +33,73 @@ class WindowsAppImageGateTest {
 
     private static final Path POM = Paths.get("").toAbsolutePath().resolve("pom.xml");
 
-    /** Staging directory (relative to target/) that jpackage receives through {@code --input}. */
+    /**
+     * Staging directory (relative to target/) that jpackage receives through {@code --input}.
+     */
     private static final String STAGING_DIRECTORY = "${project.build.directory}/app-image-input";
 
-    /** Surefire forwards the {@code bs2bg.app.version} POM property so the pom stays the single place that names it. */
+    /**
+     * Surefire forwards the {@code bs2bg.app.version} POM property so the pom stays the single place that names it.
+     */
     private static final String APP_VERSION_PROPERTY = "bs2bg.app.version";
 
-    /** The version jpackage stamps (--app-version) is the version the About dialog shows. */
+    /**
+     * Substitutes one level of {@code ${name}} references from the pom's own {@code <properties>}; built-in
+     * Maven properties such as {@code project.build.directory} are left as written so the expected literal
+     * can name them directly.
+     */
+    private static String resolve(Document pom, String text) {
+        String resolved = text.trim();
+        Element properties = child(pom.getDocumentElement(), "properties");
+        NodeList nodes = properties.getChildNodes();
+        for (int index = 0; index < nodes.getLength(); index++) {
+            Node node = nodes.item(index);
+            if (node instanceof Element)
+                resolved = resolved.replace("${" + node.getNodeName() + "}", node.getTextContent().trim());
+        }
+        return resolved;
+    }
+
+    private static Document parse(Path xml) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(false);
+        return factory.newDocumentBuilder().parse(xml.toFile());
+    }
+
+    /**
+     * The build/plugins entry for the given artifact; fails when the pom does not configure it.
+     */
+    private static Element plugin(Document pom, String artifactId) {
+        Element plugins = child(child(pom.getDocumentElement(), "build"), "plugins");
+        for (Element plugin : children(plugins, "plugin"))
+            if (artifactId.equals(child(plugin, "artifactId").getTextContent().trim()))
+                return plugin;
+        throw new AssertionError("pom.xml must configure " + artifactId + " under build/plugins");
+    }
+
+    /**
+     * The single child element of that name; fails when there are zero or several.
+     */
+    private static Element child(Element parent, String name) {
+        List<Element> matches = children(parent, name);
+        assertEquals(1, matches.size(), parent.getTagName() + " must have exactly one <" + name + ">");
+        return matches.get(0);
+    }
+
+    private static List<Element> children(Element parent, String name) {
+        List<Element> matches = new ArrayList<>();
+        NodeList nodes = parent.getChildNodes();
+        for (int index = 0; index < nodes.getLength(); index++) {
+            Node node = nodes.item(index);
+            if (node instanceof Element && name.equals(node.getNodeName()))
+                matches.add((Element) node);
+        }
+        return matches;
+    }
+
+    /**
+     * The version jpackage stamps (--app-version) is the version the About dialog shows.
+     */
     @Test
     void applicationVersionIsPinnedOnceForTheLauncherAndTheImage() {
         String pinned = System.getProperty(APP_VERSION_PROPERTY);
@@ -48,7 +108,9 @@ class WindowsAppImageGateTest {
         assertEquals(Main.APP_VERSION, pinned, "pom bs2bg.app.version must equal the version Main displays");
     }
 
-    /** The application jar lands in the staging directory with the launcher as its main class. */
+    /**
+     * The application jar lands in the staging directory with the launcher as its main class.
+     */
     @Test
     void applicationJarIsStagedWithTheLauncherAsMainClass() throws Exception {
         Document pom = parse(POM);
@@ -61,7 +123,9 @@ class WindowsAppImageGateTest {
                 "the jar manifest must name the non-Application launcher");
     }
 
-    /** Every runtime-scoped dependency is copied beside the jar; JavaFX comes from the bundled runtime instead. */
+    /**
+     * Every runtime-scoped dependency is copied beside the jar; JavaFX comes from the bundled runtime instead.
+     */
     @Test
     void runtimeDependenciesAreStagedBesideTheJarWithoutJavaFx() throws Exception {
         Document pom = parse(POM);
@@ -94,55 +158,5 @@ class WindowsAppImageGateTest {
             assertEquals("provided", scope.get(0).getTextContent().trim(),
                     child(dependency, "artifactId").getTextContent().trim() + " must be provided by the bundled runtime");
         }
-    }
-
-    /**
-     * Substitutes one level of {@code ${name}} references from the pom's own {@code <properties>}; built-in
-     * Maven properties such as {@code project.build.directory} are left as written so the expected literal
-     * can name them directly.
-     */
-    private static String resolve(Document pom, String text) {
-        String resolved = text.trim();
-        Element properties = child(pom.getDocumentElement(), "properties");
-        NodeList nodes = properties.getChildNodes();
-        for (int index = 0; index < nodes.getLength(); index++) {
-            Node node = nodes.item(index);
-            if (node instanceof Element)
-                resolved = resolved.replace("${" + node.getNodeName() + "}", node.getTextContent().trim());
-        }
-        return resolved;
-    }
-
-    private static Document parse(Path xml) throws Exception {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setNamespaceAware(false);
-        return factory.newDocumentBuilder().parse(xml.toFile());
-    }
-
-    /** The build/plugins entry for the given artifact; fails when the pom does not configure it. */
-    private static Element plugin(Document pom, String artifactId) {
-        Element plugins = child(child(pom.getDocumentElement(), "build"), "plugins");
-        for (Element plugin : children(plugins, "plugin"))
-            if (artifactId.equals(child(plugin, "artifactId").getTextContent().trim()))
-                return plugin;
-        throw new AssertionError("pom.xml must configure " + artifactId + " under build/plugins");
-    }
-
-    /** The single child element of that name; fails when there are zero or several. */
-    private static Element child(Element parent, String name) {
-        List<Element> matches = children(parent, name);
-        assertEquals(1, matches.size(), parent.getTagName() + " must have exactly one <" + name + ">");
-        return matches.get(0);
-    }
-
-    private static List<Element> children(Element parent, String name) {
-        List<Element> matches = new ArrayList<>();
-        NodeList nodes = parent.getChildNodes();
-        for (int index = 0; index < nodes.getLength(); index++) {
-            Node node = nodes.item(index);
-            if (node instanceof Element && name.equals(node.getNodeName()))
-                matches.add((Element) node);
-        }
-        return matches;
     }
 }

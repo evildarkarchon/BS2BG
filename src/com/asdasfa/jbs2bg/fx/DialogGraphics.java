@@ -27,21 +27,16 @@ import javafx.scene.text.TextAlignment;
  */
 public final class DialogGraphics {
 
-    /** Edge length, in pixels, of the graphic every dialog shows and uses as its window icon. */
+    /**
+     * Edge length, in pixels, of the graphic every dialog shows and uses as its window icon.
+     */
     public static final int ICON_SIZE = 64;
-
-    /** The meaning a dialog conveys; each has one graphic. */
-    public enum Semantic {
-        INFORMATION, ERROR, WARNING, CONFIRMATION
-    }
-
     private static final Color INFORMATION_FILL = Color.web("#2f7fd6");
     private static final Color ERROR_FILL = Color.web("#d32f2f");
     private static final Color WARNING_FILL = Color.web("#f2a900");
     private static final Color CONFIRMATION_FILL = Color.web("#3c8f5b");
     private static final Color GLYPH = Color.WHITE;
     private static final Color WARNING_GLYPH = Color.web("#2b2b2b");
-
     private DialogGraphics() {
     }
 
@@ -49,9 +44,9 @@ public final class DialogGraphics {
      * Renders one semantic graphic.
      *
      * @param semantic the dialog meaning to depict
-     * @param size width and height in pixels
+     * @param size     width and height in pixels
      * @return a fresh image with a transparent background
-     * @throws NullPointerException when semantic is null
+     * @throws NullPointerException     when semantic is null
      * @throws IllegalArgumentException when size is not positive
      */
     public static Image image(Semantic semantic, int size) {
@@ -71,7 +66,7 @@ public final class DialogGraphics {
      * Builds the vector graphic for one semantic.
      *
      * @param semantic the dialog meaning to depict
-     * @param size width and height in pixels
+     * @param size     width and height in pixels
      * @return a node whose layout bounds are the {@code size} square
      */
     public static Node node(Semantic semantic, double size) {
@@ -79,16 +74,16 @@ public final class DialogGraphics {
         double centre = size / 2;
         double radius = size * 0.46;
         switch (semantic) {
-        case INFORMATION:
-            return new Group(disc(centre, radius, INFORMATION_FILL), glyph("i", size, GLYPH));
-        case ERROR:
-            return new Group(disc(centre, radius, ERROR_FILL), cross(size));
-        case WARNING:
-            return new Group(triangle(size), glyph("!", size * 0.9, WARNING_GLYPH));
-        case CONFIRMATION:
-            return new Group(disc(centre, radius, CONFIRMATION_FILL), glyph("?", size, GLYPH));
-        default:
-            throw new IllegalArgumentException("unknown semantic " + semantic);
+            case INFORMATION:
+                return new Group(disc(centre, radius, INFORMATION_FILL), glyph("i", size, GLYPH));
+            case ERROR:
+                return new Group(disc(centre, radius, ERROR_FILL), cross(size));
+            case WARNING:
+                return new Group(triangle(size), glyph("!", size * 0.9, WARNING_GLYPH));
+            case CONFIRMATION:
+                return new Group(disc(centre, radius, CONFIRMATION_FILL), glyph("?", size, GLYPH));
+            default:
+                throw new IllegalArgumentException("unknown semantic " + semantic);
         }
     }
 
@@ -113,7 +108,7 @@ public final class DialogGraphics {
         double to = size * 0.68;
         Line down = new Line(from, from, to, to);
         Line up = new Line(from, to, to, from);
-        for (Line line : new Line[] { down, up }) {
+        for (Line line : new Line[]{down, up}) {
             line.setStroke(GLYPH);
             line.setStrokeWidth(size * 0.09);
             line.setStrokeLineCap(StrokeLineCap.ROUND);
@@ -121,7 +116,9 @@ public final class DialogGraphics {
         return new Group(down, up);
     }
 
-    /** A bold glyph centred on the {@code size} square. */
+    /**
+     * A bold glyph centred on the {@code size} square.
+     */
     private static Node glyph(String text, double size, Color fill) {
         Text glyph = new Text(text);
         glyph.setFont(Font.font("System", FontWeight.BOLD, size * 0.62));
@@ -132,5 +129,12 @@ public final class DialogGraphics {
         glyph.setX(size / 2 - glyph.getLayoutBounds().getWidth() / 2);
         glyph.setY(size / 2);
         return glyph;
+    }
+
+    /**
+     * The meaning a dialog conveys; each has one graphic.
+     */
+    public enum Semantic {
+        INFORMATION, ERROR, WARNING, CONFIRMATION
     }
 }

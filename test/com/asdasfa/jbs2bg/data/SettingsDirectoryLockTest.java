@@ -15,8 +15,45 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** Proves the Settings writer lock serializes independent application processes, not only JVM threads. */
+/**
+ * Proves the Settings writer lock serializes independent application processes, not only JVM threads.
+ */
 final class SettingsDirectoryLockTest {
+    /**
+     * Resolves the exact Java executable running the Maven test process.
+     */
+    private static String javaExecutable() {
+        String executable = System.getProperty("os.name", "").startsWith("Windows") ? "java.exe" : "java";
+        return Path.of(System.getProperty("java.home"), "bin", executable).toString();
+    }
+
+    /**
+     * Returns Surefire's complete test class path, falling back to the current JVM class path.
+     */
+    private static String testClassPath() {
+        return System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
+    }
+
+    /**
+     * Waits for the child signal without depending on process output buffering.
+     */
+    private static boolean awaitFile(Path marker, Duration timeout) throws InterruptedException {
+        Instant deadline = Instant.now().plus(timeout);
+        while (Instant.now().isBefore(deadline)) {
+            if (Files.isRegularFile(marker))
+                return true;
+            Thread.sleep(10);
+        }
+        return Files.isRegularFile(marker);
+    }
+
+    /**
+     * Reads completed child output for assertion diagnostics.
+     */
+    private static String readOutput(Process process) throws IOException {
+        return new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    }
+
     /**
      * Holds the production lock in the test JVM and requires a child JVM to wait before creating either file.
      *
@@ -51,32 +88,5 @@ final class SettingsDirectoryLockTest {
                 child.waitFor(10, TimeUnit.SECONDS);
             }
         }
-    }
-
-    /** Resolves the exact Java executable running the Maven test process. */
-    private static String javaExecutable() {
-        String executable = System.getProperty("os.name", "").startsWith("Windows") ? "java.exe" : "java";
-        return Path.of(System.getProperty("java.home"), "bin", executable).toString();
-    }
-
-    /** Returns Surefire's complete test class path, falling back to the current JVM class path. */
-    private static String testClassPath() {
-        return System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
-    }
-
-    /** Waits for the child signal without depending on process output buffering. */
-    private static boolean awaitFile(Path marker, Duration timeout) throws InterruptedException {
-        Instant deadline = Instant.now().plus(timeout);
-        while (Instant.now().isBefore(deadline)) {
-            if (Files.isRegularFile(marker))
-                return true;
-            Thread.sleep(10);
-        }
-        return Files.isRegularFile(marker);
-    }
-
-    /** Reads completed child output for assertion diagnostics. */
-    private static String readOutput(Process process) throws IOException {
-        return new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
     }
 }

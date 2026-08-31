@@ -62,17 +62,17 @@ public final class VisibleScopeCommands {
      * Morph Assignment that currently has none. Visible NPCs that already have an
      * assignment and every hidden NPC are left alone.
      *
-     * @param scope frozen visible NPC Morph Assignments
+     * @param scope             frozen visible NPC Morph Assignments
      * @param sliderPresetNames the caller-selected Slider Presets to draw from
-     * @param randomIndex draws an index in {@code [0, bound)} for the given bound;
-     *        invoked once per empty visible NPC
+     * @param randomIndex       draws an index in {@code [0, bound)} for the given bound;
+     *                          invoked once per empty visible NPC
      * @return one atomic fill edit carrying every completed choice
-     * @throws NullPointerException when an argument or name is null
+     * @throws NullPointerException     when an argument or name is null
      * @throws IllegalArgumentException when no Slider Preset is offered, or the
-     *         draw returns an index outside {@code [0, bound)}
+     *                                  draw returns an index outside {@code [0, bound)}
      */
     public static ProjectEdit fillEmpty(VisibleSet<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> scope,
-            List<String> sliderPresetNames, IntUnaryOperator randomIndex) {
+                                        List<String> sliderPresetNames, IntUnaryOperator randomIndex) {
         Objects.requireNonNull(scope, "scope");
         List<String> names = new ArrayList<>(Objects.requireNonNull(sliderPresetNames, "sliderPresetNames"));
         Objects.requireNonNull(randomIndex, "randomIndex");
@@ -98,14 +98,14 @@ public final class VisibleScopeCommands {
      * Morph Assignment in one atomic edit. Entries whose identity is already in
      * the Project are no-ops for the session.
      *
-     * @param scope frozen visible NPC Database entries
+     * @param scope               frozen visible NPC Database entries
      * @param sliderPresetChooser completes the optional random assignment for one
-     *        entry; invoked once per visible entry and may return an empty list
+     *                            entry; invoked once per visible entry and may return an empty list
      * @return one atomic bulk add edit with copied source values
      * @throws NullPointerException when an argument or a chosen list is null
      */
     public static ProjectEdit addAllNpcs(VisibleSet<NPC, NpcMorphAssignmentIdentity> scope,
-            Supplier<List<String>> sliderPresetChooser) {
+                                         Supplier<List<String>> sliderPresetChooser) {
         Objects.requireNonNull(scope, "scope");
         Objects.requireNonNull(sliderPresetChooser, "sliderPresetChooser");
         List<NpcMorphAssignmentSnapshot> sources = new ArrayList<>(scope.size());

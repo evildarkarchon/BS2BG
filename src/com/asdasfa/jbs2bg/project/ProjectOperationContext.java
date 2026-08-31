@@ -3,10 +3,23 @@ package com.asdasfa.jbs2bg.project;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 
-/** JavaFX-independent cancellation, progress, and atomic-publication seam for synchronous Project operations. */
+/**
+ * JavaFX-independent cancellation, progress, and atomic-publication seam for synchronous Project operations.
+ */
 public interface ProjectOperationContext {
 
-    /** @return true after cancellation has won before the operation's irreversible publication */
+    /**
+     * Returns a context for existing synchronous callers that neither cancel nor retain progress.
+     *
+     * @return shared non-cancellable context
+     */
+    static ProjectOperationContext nonCancellable() {
+        return NonCancellableProjectOperationContext.INSTANCE;
+    }
+
+    /**
+     * @return true after cancellation has won before the operation's irreversible publication
+     */
     boolean cancellationRequested();
 
     /**
@@ -24,42 +37,43 @@ public interface ProjectOperationContext {
      */
     boolean beginCommit(String phase);
 
-    /** Throws at an ordinary safe point after cancellation has been accepted. */
+    /**
+     * Throws at an ordinary safe point after cancellation has been accepted.
+     */
     default void checkCancellation() {
         if (cancellationRequested())
             throw new CancellationException("Project operation cancellation was accepted");
     }
-
-    /**
-     * Returns a context for existing synchronous callers that neither cancel nor retain progress.
-     *
-     * @return shared non-cancellable context
-     */
-    static ProjectOperationContext nonCancellable() {
-        return NonCancellableProjectOperationContext.INSTANCE;
-    }
 }
 
-/** Package-owned stateless compatibility context kept out of the public operation interface. */
+/**
+ * Package-owned stateless compatibility context kept out of the public operation interface.
+ */
 final class NonCancellableProjectOperationContext implements ProjectOperationContext {
     static final ProjectOperationContext INSTANCE = new NonCancellableProjectOperationContext();
 
     private NonCancellableProjectOperationContext() {
     }
 
-    /** This compatibility path never requests cancellation. */
+    /**
+     * This compatibility path never requests cancellation.
+     */
     @Override
     public boolean cancellationRequested() {
         return false;
     }
 
-    /** Existing synchronous callers intentionally discard intermediate progress. */
+    /**
+     * Existing synchronous callers intentionally discard intermediate progress.
+     */
     @Override
     public void report(ProjectOperationProgress progress) {
         Objects.requireNonNull(progress, "progress");
     }
 
-    /** Existing synchronous callers always permit the final publication. */
+    /**
+     * Existing synchronous callers always permit the final publication.
+     */
     @Override
     public boolean beginCommit(String phase) {
         String required = Objects.requireNonNull(phase, "phase").trim();

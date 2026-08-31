@@ -18,10 +18,14 @@ import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 
-/** Verifies transactional publication through the JavaFX-independent BoS artifact seam. */
+/**
+ * Verifies transactional publication through the JavaFX-independent BoS artifact seam.
+ */
 final class BosArtifactPublisherTest {
 
-    /** Batch publication writes the owned bytes and leaves unrelated JSON untouched. */
+    /**
+     * Batch publication writes the owned bytes and leaves unrelated JSON untouched.
+     */
     @Test
     void publishesCanonicalBytesWithoutDeletingUnrelatedJson(@TempDir Path targetDirectory) throws Exception {
         ProjectSession session = ProjectSessions.create();
@@ -42,7 +46,9 @@ final class BosArtifactPublisherTest {
         assertEquals("preserved", Files.readString(unrelated, StandardCharsets.UTF_8));
     }
 
-    /** A chosen-file export replaces one destination from the same owned byte array. */
+    /**
+     * A chosen-file export replaces one destination from the same owned byte array.
+     */
     @Test
     void publishesOneCanonicalArtifactToTheChosenDestination(@TempDir Path targetDirectory) throws Exception {
         ProjectSession session = ProjectSessions.create();
@@ -58,7 +64,9 @@ final class BosArtifactPublisherTest {
         assertArrayEquals(artifact.getBytes(), Files.readAllBytes(destination));
     }
 
-    /** Batch preflight rejects one unsafe destination before replacing any prior file. */
+    /**
+     * Batch preflight rejects one unsafe destination before replacing any prior file.
+     */
     @Test
     void preflightsTheCompleteTargetSetBeforePublishing(@TempDir Path targetDirectory) throws Exception {
         ProjectSession session = ProjectSessions.create();
@@ -79,7 +87,9 @@ final class BosArtifactPublisherTest {
         }
     }
 
-    /** A failure after the first backup restores every prior destination and removes staging. */
+    /**
+     * A failure after the first backup restores every prior destination and removes staging.
+     */
     @Test
     void rollsBackPriorBackupsWhenALaterDestinationCannotMove(@TempDir Path targetDirectory) throws Exception {
         ProjectSession session = ProjectSessions.create();

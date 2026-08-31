@@ -7,24 +7,24 @@ import java.util.List;
  */
 public final class ChangedOutcome extends ProjectOutcome {
 
-	/**
-	 * Creates a changed outcome without diagnostics.
-	 *
-	 * @param snapshot latest coherent Project snapshot
-	 * @throws NullPointerException when snapshot is null
-	 */
-	public ChangedOutcome(ProjectSnapshot snapshot) {
-		super(snapshot);
-	}
+    /**
+     * Creates a changed outcome without diagnostics.
+     *
+     * @param snapshot latest coherent Project snapshot
+     * @throws NullPointerException when snapshot is null
+     */
+    public ChangedOutcome(ProjectSnapshot snapshot) {
+        super(snapshot);
+    }
 
-	/**
-	 * Creates a changed outcome with diagnostics such as recovery warnings.
-	 *
-	 * @param snapshot latest coherent Project snapshot
-	 * @param diagnostics structured diagnostics in source order
-	 * @throws NullPointerException when snapshot, diagnostics, or a diagnostic is null
-	 */
-	public ChangedOutcome(ProjectSnapshot snapshot, List<ProjectDiagnostic> diagnostics) {
-		super(snapshot, diagnostics);
-	}
+    /**
+     * Creates a changed outcome with diagnostics such as recovery warnings.
+     *
+     * @param snapshot    latest coherent Project snapshot
+     * @param diagnostics structured diagnostics in source order
+     * @throws NullPointerException when snapshot, diagnostics, or a diagnostic is null
+     */
+    public ChangedOutcome(ProjectSnapshot snapshot, List<ProjectDiagnostic> diagnostics) {
+        super(snapshot, diagnostics);
+    }
 }

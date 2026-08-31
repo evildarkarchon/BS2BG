@@ -6,16 +6,16 @@ package com.asdasfa.jbs2bg.project;
  */
 public final class ProjectSessions {
 
-	private ProjectSessions() {
-	}
+    private ProjectSessions() {
+    }
 
-	/**
-	 * Creates a thread-safe session. Callers establish its first active Project with
-	 * {@link ProjectSession#newProject()} or {@link ProjectSession#open(java.nio.file.Path)}.
-	 *
-	 * @return a new ProjectSession
-	 */
-	public static ProjectSession create() {
-		return new DefaultProjectSession();
-	}
+    /**
+     * Creates a thread-safe session. Callers establish its first active Project with
+     * {@link ProjectSession#newProject()} or {@link ProjectSession#open(java.nio.file.Path)}.
+     *
+     * @return a new ProjectSession
+     */
+    public static ProjectSession create() {
+        return new DefaultProjectSession();
+    }
 }

@@ -37,11 +37,11 @@ final class ProjectFileWriter {
      * replacement attempt.
      *
      * @param snapshot immutable Project content to persist
-     * @param target requested destination file
+     * @param target   requested destination file
      * @throws NullPointerException when snapshot or target is null
-     * @throws IOException when the temporary file cannot be written or installed
-     * @throws RuntimeException when the filesystem provider reports an unchecked
-     *         environmental failure
+     * @throws IOException          when the temporary file cannot be written or installed
+     * @throws RuntimeException     when the filesystem provider reports an unchecked
+     *                              environmental failure
      */
     static void write(ProjectSnapshot snapshot, Path target) throws IOException {
         write(snapshot, target, ProjectOperationContext.nonCancellable());
@@ -51,9 +51,9 @@ final class ProjectFileWriter {
      * Persists one snapshot with measured staging progress and a cancellation-linearized replacement.
      *
      * @param snapshot immutable Project content to persist
-     * @param target requested destination file
-     * @param context operation context retained for this synchronous write
-     * @throws IOException when staging or replacement fails
+     * @param target   requested destination file
+     * @param context  operation context retained for this synchronous write
+     * @throws IOException           when staging or replacement fails
      * @throws CancellationException when cancellation wins before replacement
      */
     static void write(ProjectSnapshot snapshot, Path target, ProjectOperationContext context) throws IOException {
@@ -110,7 +110,7 @@ final class ProjectFileWriter {
      * preserving the operation failure as the primary diagnostic cause.
      *
      * @param temporary staging file to remove
-     * @param failure primary persistence failure
+     * @param failure   primary persistence failure
      */
     private static void cleanupTemporary(Path temporary, Throwable failure) {
         try {
@@ -126,7 +126,7 @@ final class ProjectFileWriter {
      * destination path can be replaced.
      *
      * @param temporary sibling temporary file
-     * @param content serialized UTF-8 Project bytes
+     * @param content   serialized UTF-8 Project bytes
      * @throws IOException when writing or flushing fails
      */
     private static void writeAndFlush(Path temporary, byte[] content, ProjectOperationContext context)
@@ -153,7 +153,7 @@ final class ProjectFileWriter {
      * Unsupported providers fail truthfully instead of risking a non-atomic move.
      *
      * @param temporary completed sibling temporary file
-     * @param target normalized destination path
+     * @param target    normalized destination path
      * @throws IOException when replacement fails
      */
     private static void replace(Path temporary, Path target) throws IOException {

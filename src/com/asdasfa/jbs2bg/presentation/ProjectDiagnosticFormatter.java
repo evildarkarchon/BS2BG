@@ -7,7 +7,9 @@ import java.util.Objects;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.SourceLocation;
 
-/** Formats complete structured Project diagnostics for presentation without losing source coordinates. */
+/**
+ * Formats complete structured Project diagnostics for presentation without losing source coordinates.
+ */
 public final class ProjectDiagnosticFormatter {
 
     private ProjectDiagnosticFormatter() {
@@ -31,7 +33,9 @@ public final class ProjectDiagnosticFormatter {
         return text.toString();
     }
 
-    /** Appends every available stable coordinate from one immutable Project source location. */
+    /**
+     * Appends every available stable coordinate from one immutable Project source location.
+     */
     private static void appendLocation(StringBuilder text, SourceLocation location) {
         boolean hasLocation = false;
         if (location.getPath().isPresent()) {

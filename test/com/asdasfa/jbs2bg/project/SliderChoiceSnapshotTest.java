@@ -7,10 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-/** Verifies immutable copy operations used by JavaFX slider-choice editors. */
+/**
+ * Verifies immutable copy operations used by JavaFX slider-choice editors.
+ */
 class SliderChoiceSnapshotTest {
 
-    /** Ensures enabled-state copies retain every unrelated observable value. */
+    /**
+     * Ensures enabled-state copies retain every unrelated observable value.
+     */
     @Test
     void withEnabledChangesOnlyEnabledState() {
         SliderChoiceSnapshot source = new SliderChoiceSnapshot("Waist", true, Integer.valueOf(20),
@@ -29,7 +33,9 @@ class SliderChoiceSnapshotTest {
         assertFalse(changed.isMissingDefault());
     }
 
-    /** Ensures percentage copies retain nullable stored values and synthesized identity. */
+    /**
+     * Ensures percentage copies retain nullable stored values and synthesized identity.
+     */
     @Test
     void withPercentageRangeChangesOnlyRange() {
         SliderChoiceSnapshot source = new SliderChoiceSnapshot("Breasts", true, null, null, 0, 100,
@@ -48,7 +54,9 @@ class SliderChoiceSnapshotTest {
         assertTrue(changed.isMissingDefault());
     }
 
-    /** Ensures a synthesized default cannot claim a stored value on either endpoint. */
+    /**
+     * Ensures a synthesized default cannot claim a stored value on either endpoint.
+     */
     @Test
     void synthesizedDefaultRejectsStoredValues() {
         assertThrows(IllegalArgumentException.class, () -> new SliderChoiceSnapshot("Waist", true,

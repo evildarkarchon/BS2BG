@@ -45,9 +45,13 @@ public final class FilteredTableAdapter<T, K> {
     private final ChangeListener<T> tableSelectionListener = (observable, previous, selected) -> onTableSelection(
             selected);
     private ObservableList<? extends T> source;
-    /** Copy of the source rows the view currently holds; feeds every column checklist. */
+    /**
+     * Copy of the source rows the view currently holds; feeds every column checklist.
+     */
     private List<T> rows = new ArrayList<>();
-    /** Visible set rendered by the last {@link #render()}; its identities locate rows for selection. */
+    /**
+     * Visible set rendered by the last {@link #render()}; its identities locate rows for selection.
+     */
     private VisibleSet<T, K> rendered;
     /**
      * True while the adapter itself is replacing the table's items. TableView
@@ -57,7 +61,7 @@ public final class FilteredTableAdapter<T, K> {
     private boolean rendering;
 
     private FilteredTableAdapter(TableView<T> table, List<FilterColumn<T>> columns,
-            Function<? super T, ? extends K> identity) {
+                                 Function<? super T, ? extends K> identity) {
         this.table = Objects.requireNonNull(table, "table");
         this.view = new FilteredView<>(columns, identity);
         this.columnsByTableColumn = mapLeafColumns(table, columns);
@@ -80,20 +84,49 @@ public final class FilteredTableAdapter<T, K> {
      * are replaced by ones the adapter owns; callers must not set items on the
      * table afterwards.
      *
-     * @param table table to drive; every leaf column's header text must name a
-     *        filter column
-     * @param columns filterable columns; IDs are the table's column header texts
+     * @param table    table to drive; every leaf column's header text must name a
+     *                 filter column
+     * @param columns  filterable columns; IDs are the table's column header texts
      * @param identity derives the logical identity of a row
-     * @param <T> row type
-     * @param <K> identity type
+     * @param <T>      row type
+     * @param <K>      identity type
      * @return the attached adapter
-     * @throws NullPointerException when an argument is null
+     * @throws NullPointerException     when an argument is null
      * @throws IllegalArgumentException when a leaf table column has no filter
-     *         column of the same ID, so that no column can silently be unsortable
+     *                                  column of the same ID, so that no column can silently be unsortable
      */
     public static <T, K> FilteredTableAdapter<T, K> attach(TableView<T> table, List<FilterColumn<T>> columns,
-            Function<? super T, ? extends K> identity) {
+                                                           Function<? super T, ? extends K> identity) {
         return new FilteredTableAdapter<>(table, columns, identity);
+    }
+
+    /**
+     * Pairs every leaf table column with the filter column of the same ID.
+     */
+    private static <T> Map<TableColumn<T, ?>, FilterColumn<T>> mapLeafColumns(TableView<T> table,
+                                                                              List<FilterColumn<T>> columns) {
+        Map<String, FilterColumn<T>> byId = new LinkedHashMap<>();
+        for (FilterColumn<T> column : columns)
+            byId.put(column.getId(), column);
+        Map<TableColumn<T, ?>, FilterColumn<T>> mapped = new LinkedHashMap<>();
+        for (TableColumn<T, ?> leaf : leafColumns(table.getColumns())) {
+            FilterColumn<T> column = byId.get(leaf.getText());
+            if (column == null)
+                throw new IllegalArgumentException("table column '" + leaf.getText() + "' has no filter column");
+            mapped.put(leaf, column);
+        }
+        return mapped;
+    }
+
+    private static <T> List<TableColumn<T, ?>> leafColumns(List<TableColumn<T, ?>> columns) {
+        List<TableColumn<T, ?>> leaves = new ArrayList<>();
+        for (TableColumn<T, ?> column : columns) {
+            if (column.getColumns().isEmpty())
+                leaves.add(column);
+            else
+                leaves.addAll(leafColumns(column.getColumns()));
+        }
+        return leaves;
     }
 
     /**
@@ -128,7 +161,7 @@ public final class FilteredTableAdapter<T, K> {
      *
      * @param identity logical identity to select
      * @return true when the row is visible and is now selected in the table;
-     *         false leaves the previous selection untouched
+     * false leaves the previous selection untouched
      * @throws NullPointerException when identity is null
      */
     public boolean select(K identity) {
@@ -138,13 +171,17 @@ public final class FilteredTableAdapter<T, K> {
         return true;
     }
 
-    /** Clears the logical selection and the table's selection. */
+    /**
+     * Clears the logical selection and the table's selection.
+     */
     public void clearSelection() {
         view.clearSelection();
         syncTableSelection();
     }
 
-    /** @return the selected identity, always a member of the visible set */
+    /**
+     * @return the selected identity, always a member of the visible set
+     */
     public Optional<K> getSelection() {
         return view.getSelection();
     }
@@ -181,18 +218,24 @@ public final class FilteredTableAdapter<T, K> {
         afterCriteriaChanged();
     }
 
-    /** Removes every criterion and re-renders; the selection, if still present, is kept. */
+    /**
+     * Removes every criterion and re-renders; the selection, if still present, is kept.
+     */
     public void clearAllCriteria() {
         view.clearAllCriteria();
         afterCriteriaChanged();
     }
 
-    /** @return the active criteria, immutable, in column order */
+    /**
+     * @return the active criteria, immutable, in column order
+     */
     public List<ColumnCriterion> getCriteria() {
         return view.getCriteria();
     }
 
-    /** @return true when at least one column criterion is active */
+    /**
+     * @return true when at least one column criterion is active
+     */
     public boolean isFiltered() {
         return view.isFiltered();
     }
@@ -202,7 +245,7 @@ public final class FilteredTableAdapter<T, K> {
      * sees it; type-ahead search uses the leading column's text.
      *
      * @param column a leaf column of the table
-     * @param row row to read
+     * @param row    row to read
      * @return the non-null cell text
      * @throws IllegalArgumentException when the column is not one of the table's leaf columns
      */
@@ -228,7 +271,9 @@ public final class FilteredTableAdapter<T, K> {
         refreshMenus();
     }
 
-    /** Rebuilds every checklist from the current rows and marks filtered column headers. */
+    /**
+     * Rebuilds every checklist from the current rows and marks filtered column headers.
+     */
     private void refreshMenus() {
         Map<String, ColumnCriterion> criteria = new LinkedHashMap<>();
         for (ColumnCriterion criterion : view.getCriteria())
@@ -240,7 +285,9 @@ public final class FilteredTableAdapter<T, K> {
         }
     }
 
-    /** Sort policy body: mirrors the table's sort order into the view, then re-renders. */
+    /**
+     * Sort policy body: mirrors the table's sort order into the view, then re-renders.
+     */
     private boolean applySortOrder() {
         if (rendering)
             return true;
@@ -274,7 +321,9 @@ public final class FilteredTableAdapter<T, K> {
         }
     }
 
-    /** Makes the table's selection equal to the view's selection without echoing back. */
+    /**
+     * Makes the table's selection equal to the view's selection without echoing back.
+     */
     private void syncTableSelection() {
         boolean wasRendering = rendering;
         rendering = true;
@@ -290,7 +339,9 @@ public final class FilteredTableAdapter<T, K> {
         }
     }
 
-    /** Table gesture: a user (or JavaFX) changed the selected row. */
+    /**
+     * Table gesture: a user (or JavaFX) changed the selected row.
+     */
     private void onTableSelection(T selected) {
         if (rendering)
             return;
@@ -301,32 +352,5 @@ public final class FilteredTableAdapter<T, K> {
         int index = items.indexOf(selected);
         if (index >= 0)
             view.select(rendered.getIdentities().get(index));
-    }
-
-    /** Pairs every leaf table column with the filter column of the same ID. */
-    private static <T> Map<TableColumn<T, ?>, FilterColumn<T>> mapLeafColumns(TableView<T> table,
-            List<FilterColumn<T>> columns) {
-        Map<String, FilterColumn<T>> byId = new LinkedHashMap<>();
-        for (FilterColumn<T> column : columns)
-            byId.put(column.getId(), column);
-        Map<TableColumn<T, ?>, FilterColumn<T>> mapped = new LinkedHashMap<>();
-        for (TableColumn<T, ?> leaf : leafColumns(table.getColumns())) {
-            FilterColumn<T> column = byId.get(leaf.getText());
-            if (column == null)
-                throw new IllegalArgumentException("table column '" + leaf.getText() + "' has no filter column");
-            mapped.put(leaf, column);
-        }
-        return mapped;
-    }
-
-    private static <T> List<TableColumn<T, ?>> leafColumns(List<TableColumn<T, ?>> columns) {
-        List<TableColumn<T, ?>> leaves = new ArrayList<>();
-        for (TableColumn<T, ?> column : columns) {
-            if (column.getColumns().isEmpty())
-                leaves.add(column);
-            else
-                leaves.addAll(leafColumns(column.getColumns()));
-        }
-        return leaves;
     }
 }

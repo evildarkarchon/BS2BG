@@ -1,12 +1,5 @@
 package com.asdasfa.jbs2bg.project;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -43,15 +36,243 @@ import org.junit.jupiter.api.Test;
 
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 class ProjectSessionTest {
 
-    /** Publishes empty profiles so session unit tests synthesize only choices they explicitly request. */
+    private static void assertOutcomeMethod(String name, Class<?>... parameterTypes) throws Exception {
+        assertEquals(ProjectOutcome.class, ProjectSession.class.getMethod(name, parameterTypes).getReturnType());
+    }
+
+    /**
+     * Recursively rejects forbidden raw, array, and generic contract types.
+     */
+    private static void assertExternalType(Type type) {
+        if (type instanceof Class<?>) {
+            Class<?> rawType = (Class<?>) type;
+            if (rawType.isArray()) {
+                assertExternalType(rawType.getComponentType());
+                return;
+            }
+            assertFalse(rawType.getName().startsWith("javafx."),
+                    "JavaFX leaked through ProjectSession: " + rawType);
+            assertFalse(rawType.getName().startsWith("com.asdasfa.jbs2bg.data."),
+                    "Legacy mutable Project type leaked through ProjectSession: " + rawType);
+            return;
+        }
+        if (type instanceof ParameterizedType) {
+            ParameterizedType parameterized = (ParameterizedType) type;
+            assertExternalType(parameterized.getRawType());
+            for (Type argument : parameterized.getActualTypeArguments())
+                assertExternalType(argument);
+            return;
+        }
+        if (type instanceof GenericArrayType) {
+            assertExternalType(((GenericArrayType) type).getGenericComponentType());
+            return;
+        }
+        if (type instanceof WildcardType) {
+            WildcardType wildcard = (WildcardType) type;
+            for (Type bound : wildcard.getLowerBounds())
+                assertExternalType(bound);
+            for (Type bound : wildcard.getUpperBounds())
+                assertExternalType(bound);
+            return;
+        }
+        if (type instanceof TypeVariable<?>) {
+            TypeVariable<?> variable = (TypeVariable<?>) type;
+            for (Type bound : variable.getBounds()) {
+                if (bound != variable)
+                    assertExternalType(bound);
+            }
+        }
+    }
+
+    /**
+     * Scans compiled implementation references so a JavaFX local/helper dependency
+     * cannot evade signature-only reflection checks.
+     */
+    private static void assertClassDoesNotReferenceJavaFx(Class<?> implementation) throws IOException {
+        String resourceName = implementation.getSimpleName() + ".class";
+        try (InputStream input = implementation.getResourceAsStream(resourceName)) {
+            assertNotNull(input, "Missing implementation bytecode resource: " + resourceName);
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = input.read(buffer)) >= 0)
+                bytes.write(buffer, 0, read);
+            String constantPool = new String(bytes.toByteArray(), StandardCharsets.ISO_8859_1);
+            assertFalse(constantPool.contains("javafx/"),
+                    "JavaFX leaked into ProjectSession implementation bytecode");
+        }
+    }
+
+    private static void assertCompleteNewProject(ProjectSnapshot snapshot) {
+        assertTrue(snapshot.getSliderPresets().isEmpty());
+        assertTrue(snapshot.getCustomMorphTargets().isEmpty());
+        assertTrue(snapshot.getNpcMorphAssignments().isEmpty());
+        assertFalse(snapshot.getFileIdentity().isPresent());
+        assertFalse(snapshot.isDirty());
+        assertEquals(ProjectLifecycleStatus.UNTITLED, snapshot.getLifecycleStatus());
+    }
+
+    /**
+     * Asserts that both relationship collections agree with the one published preset name.
+     */
+    private static void assertWholeRelationshipCascade(ProjectSnapshot snapshot) {
+        assertEquals(1, snapshot.getSliderPresets().size());
+        assertEquals(1, snapshot.getCustomMorphTargets().size());
+        assertEquals(1, snapshot.getNpcMorphAssignments().size());
+        String presetName = snapshot.getSliderPresets().get(0).getName();
+        assertTrue(presetName.equals("Alpha") || presetName.equals("Beta"));
+        assertEquals(Collections.singletonList(presetName),
+                snapshot.getCustomMorphTargets().get(0).getSliderPresetNames());
+        assertEquals(Collections.singletonList(presetName),
+                snapshot.getNpcMorphAssignments().get(0).getSliderPresetNames());
+    }
+
+    /**
+     * Extracts the ordered Slider Preset names exposed by a session snapshot.
+     *
+     * @param snapshot immutable Project state to inspect
+     * @return names in snapshot order
+     */
+    private static List<String> sliderPresetNames(ProjectSnapshot snapshot) {
+        List<String> names = new ArrayList<>();
+        for (SliderPresetSnapshot preset : snapshot.getSliderPresets())
+            names.add(preset.getName());
+        return names;
+    }
+
+    /**
+     * Extracts the ordered slider-choice names exposed by a Slider Preset.
+     *
+     * @param preset immutable Slider Preset value to inspect
+     * @return choice names in snapshot order
+     */
+    private static List<String> sliderChoiceNames(SliderPresetSnapshot preset) {
+        List<String> names = new ArrayList<>();
+        for (SliderChoiceSnapshot choice : preset.getSliderChoices())
+            names.add(choice.getName());
+        return names;
+    }
+
+    /**
+     * Extracts the ordered Custom Morph Target names exposed by a session snapshot.
+     *
+     * @param snapshot immutable Project state to inspect
+     * @return names in snapshot order
+     */
+    private static List<String> customMorphTargetNames(ProjectSnapshot snapshot) {
+        List<String> names = new ArrayList<>();
+        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets())
+            names.add(target.getName());
+        return names;
+    }
+
+    /**
+     * Creates copied NPC source values without assigned Slider Presets for concise
+     * ProjectSession behavior tests.
+     *
+     * @param displayName NPC display name
+     * @param pluginName  source plugin name
+     * @param editorId    NPC editor ID
+     * @return immutable source values ready for an NPC-add edit
+     */
+    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId) {
+        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, "NordRace", "123456",
+                Collections.<String>emptyList());
+    }
+
+    /**
+     * Extracts ordered NPC plugin/editor identities from a Project snapshot.
+     *
+     * @param snapshot immutable Project state to inspect
+     * @return identities in snapshot order
+     */
+    private static List<String> npcIdentities(ProjectSnapshot snapshot) {
+        List<String> identities = new ArrayList<>();
+        for (NpcMorphAssignmentSnapshot assignment : snapshot.getNpcMorphAssignments())
+            identities.add(assignment.getPluginName() + "/" + assignment.getEditorId());
+        return identities;
+    }
+
+    /**
+     * Returns one NPC's immutable assigned Slider Preset names by editor ID.
+     *
+     * @param snapshot immutable Project state to inspect
+     * @param editorId editor ID to resolve without regard to case
+     * @return immutable assigned Slider Preset names
+     * @throws AssertionError when no NPC has the requested editor ID
+     */
+    private static List<String> npcAssignments(ProjectSnapshot snapshot, String editorId) {
+        for (NpcMorphAssignmentSnapshot assignment : snapshot.getNpcMorphAssignments()) {
+            if (assignment.getEditorId().equalsIgnoreCase(editorId))
+                return assignment.getSliderPresetNames();
+        }
+        throw new AssertionError("Missing NPC Morph Assignment: " + editorId);
+    }
+
+    /**
+     * Asserts the common structured naming rejection contract.
+     *
+     * @param outcome  rejected session operation
+     * @param code     expected stable diagnostic code
+     * @param snapshot exact prior snapshot that must be preserved
+     */
+    private static void assertRejectedWithCode(ProjectOutcome outcome, String code, ProjectSnapshot snapshot) {
+        assertInstanceOf(RejectedOutcome.class, outcome);
+        assertSame(snapshot, outcome.getSnapshot());
+        assertEquals(code, outcome.getDiagnostics().get(0).getCode());
+        assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
+        assertEquals("slider-preset.name",
+                outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
+    }
+
+    /**
+     * Asserts the structured Custom Morph Target naming rejection contract.
+     *
+     * @param outcome  rejected session operation
+     * @param code     expected stable diagnostic code
+     * @param snapshot exact prior snapshot that must be preserved
+     */
+    private static void assertCustomMorphTargetRejected(ProjectOutcome outcome, String code,
+                                                        ProjectSnapshot snapshot) {
+        assertInstanceOf(RejectedOutcome.class, outcome);
+        assertSame(snapshot, outcome.getSnapshot());
+        assertEquals(code, outcome.getDiagnostics().get(0).getCode());
+        assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
+        assertEquals("custom-morph-target.name",
+                outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
+    }
+
+    /**
+     * Asserts the common structured NPC identity rejection contract.
+     *
+     * @param outcome  rejected session operation
+     * @param code     expected stable diagnostic code
+     * @param snapshot exact prior snapshot that must be preserved
+     */
+    private static void assertNpcRejected(ProjectOutcome outcome, String code, ProjectSnapshot snapshot) {
+        assertInstanceOf(RejectedOutcome.class, outcome);
+        assertSame(snapshot, outcome.getSnapshot());
+        assertEquals(code, outcome.getDiagnostics().get(0).getCode());
+        assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
+        assertEquals("npc-morph-assignment.identity",
+                outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
+    }
+
+    /**
+     * Publishes empty profiles so session unit tests synthesize only choices they explicitly request.
+     */
     @BeforeEach
     void initializeEmptySettings() {
         SettingsTestSupport.installDefaults(Collections.emptyMap(), Collections.emptyMap());
     }
 
-    /** Restores the checked-in Settings pair after each process-wide session test. */
+    /**
+     * Restores the checked-in Settings pair after each process-wide session test.
+     */
     @AfterEach
     void restoreSettings() {
         SettingsTestSupport.restoreRepositorySettings();
@@ -70,7 +291,7 @@ class ProjectSessionTest {
         ProjectSnapshot snapshot = outcome.getSnapshot();
 
         assertEquals(ProjectLifecycleStatus.NO_PROJECT, before.getLifecycleStatus());
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertNotSame(before, snapshot);
         assertSame(snapshot, session.getSnapshot());
         assertTrue(snapshot.getSliderPresets().isEmpty());
@@ -93,7 +314,7 @@ class ProjectSessionTest {
         ProjectSnapshot first = session.newProject().getSnapshot();
 
         ProjectOutcome repeated = session.newProject();
-        assertTrue(repeated instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, repeated);
         assertSame(first, repeated.getSnapshot());
         assertSame(first, session.getSnapshot());
 
@@ -103,13 +324,15 @@ class ProjectSessionTest {
         assertTrue(session.getSnapshot().getSliderPresets().isEmpty());
 
         ProjectOutcome replaced = session.newProject();
-        assertTrue(replaced instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, replaced);
         assertNotSame(first, replaced.getSnapshot());
         assertFalse(replaced.getSnapshot().isDirty());
         assertSame(replaced.getSnapshot(), session.getSnapshot());
     }
 
-    /** Project content versions advance only when the session publishes changed Project content. */
+    /**
+     * Project content versions advance only when the session publishes changed Project content.
+     */
     @Test
     void contentVersionAdvancesForNewAndContentMutationButNotForUnchangedOrRejectedWork() {
         ProjectSession session = ProjectSessions.create();
@@ -128,7 +351,9 @@ class ProjectSessionTest {
         assertEquals(editedVersion, duplicate.getSnapshot().getContentVersion());
     }
 
-    /** Content-version equality remains scoped to one ProjectSession even at matching transition counts. */
+    /**
+     * Content-version equality remains scoped to one ProjectSession even at matching transition counts.
+     */
     @Test
     void contentVersionsFromDifferentSessionsNeverCompareEqual() {
         ProjectSession first = ProjectSessions.create();
@@ -242,7 +467,7 @@ class ProjectSessionTest {
 
         ProjectOutcome outcome = session.apply(unsupported);
 
-        assertTrue(outcome instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, outcome);
         assertSame(before, outcome.getSnapshot());
         assertSame(before, session.getSnapshot());
         assertEquals("PROJECT_EDIT_UNSUPPORTED", outcome.getDiagnostics().get(0).getCode());
@@ -261,8 +486,8 @@ class ProjectSessionTest {
         ProjectOutcome first = session.apply(SliderPresetEdits.create(" beta "));
         ProjectOutcome second = session.apply(SliderPresetEdits.create("Alpha"));
 
-        assertTrue(first instanceof ChangedOutcome);
-        assertTrue(second instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, first);
+        assertInstanceOf(ChangedOutcome.class, second);
         assertEquals(Arrays.asList("Alpha", "beta"), sliderPresetNames(second.getSnapshot()));
         assertFalse(second.getSnapshot().getSliderPresets().get(0).isUunp());
         assertTrue(second.getSnapshot().getSliderPresets().get(0).getSliderChoices().isEmpty());
@@ -306,8 +531,8 @@ class ProjectSessionTest {
         ProjectOutcome first = session.apply(CustomMorphTargetEdits.create(" zeta|Female "));
         ProjectOutcome second = session.apply(CustomMorphTargetEdits.create("Alpha"));
 
-        assertTrue(first instanceof ChangedOutcome);
-        assertTrue(second instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, first);
+        assertInstanceOf(ChangedOutcome.class, second);
         assertEquals(Arrays.asList("Alpha", "zeta|Female"), customMorphTargetNames(second.getSnapshot()));
         assertTrue(second.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
         assertTrue(second.getSnapshot().isDirty());
@@ -330,7 +555,7 @@ class ProjectSessionTest {
         ProjectOutcome created = session.apply(
                 CustomMorphTargetEdits.create(" All|Female ", Arrays.asList("zulu", "ALPHA")));
 
-        assertTrue(created instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, created);
         assertEquals(Arrays.asList("alpha", "Zulu"),
                 created.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames());
 
@@ -384,8 +609,8 @@ class ProjectSessionTest {
         ProjectOutcome second = session.apply(CustomMorphTargetEdits.addSliderPreset("All|Female", "ALPHA"));
         ProjectSnapshot assigned = second.getSnapshot();
 
-        assertTrue(first instanceof ChangedOutcome);
-        assertTrue(second instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, first);
+        assertInstanceOf(ChangedOutcome.class, second);
         assertEquals(Arrays.asList("alpha", "Zulu"),
                 assigned.getCustomMorphTargets().get(0).getSliderPresetNames());
         assertTrue(assigned.isDirty());
@@ -393,7 +618,7 @@ class ProjectSessionTest {
         ProjectOutcome duplicate = session.apply(
                 CustomMorphTargetEdits.addSliderPreset("ALL|female", "Alpha"));
 
-        assertTrue(duplicate instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, duplicate);
         assertSame(assigned, duplicate.getSnapshot());
         assertSame(assigned, session.getSnapshot());
     }
@@ -413,7 +638,7 @@ class ProjectSessionTest {
         ProjectOutcome added = session.apply(CustomMorphTargetEdits.addSliderPresets("all|FEMALE",
                 Arrays.asList("zulu", "ALPHA", "alpha")));
 
-        assertTrue(added instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, added);
         assertEquals(Arrays.asList("alpha", "Zulu"),
                 added.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames());
 
@@ -440,21 +665,21 @@ class ProjectSessionTest {
 
         ProjectOutcome removed = session.apply(
                 CustomMorphTargetEdits.removeSliderPreset("all|female", "ALPHA"));
-        assertTrue(removed instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, removed);
         assertEquals(Arrays.asList("beta"),
                 removed.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames());
 
         ProjectOutcome missing = session.apply(
                 CustomMorphTargetEdits.removeSliderPreset("All|Female", "Alpha"));
-        assertTrue(missing instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, missing);
         assertSame(removed.getSnapshot(), missing.getSnapshot());
 
         ProjectOutcome cleared = session.apply(CustomMorphTargetEdits.clearSliderPresets("ALL|FEMALE"));
-        assertTrue(cleared instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, cleared);
         assertTrue(cleared.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
 
         ProjectOutcome alreadyEmpty = session.apply(CustomMorphTargetEdits.clearSliderPresets("All|Female"));
-        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, alreadyEmpty);
         assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
         assertTrue(alreadyEmpty.getSnapshot().isDirty());
     }
@@ -471,7 +696,7 @@ class ProjectSessionTest {
         session.apply(CustomMorphTargetEdits.create("beta|Female"));
 
         ProjectOutcome deleted = session.apply(CustomMorphTargetEdits.delete("ALPHA"));
-        assertTrue(deleted instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, deleted);
         assertEquals(Arrays.asList("beta|Female"), customMorphTargetNames(deleted.getSnapshot()));
 
         ProjectOutcome missing = session.apply(CustomMorphTargetEdits.delete("missing"));
@@ -479,12 +704,12 @@ class ProjectSessionTest {
                 deleted.getSnapshot());
 
         ProjectOutcome cleared = session.apply(CustomMorphTargetEdits.clear());
-        assertTrue(cleared instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, cleared);
         assertTrue(cleared.getSnapshot().getCustomMorphTargets().isEmpty());
         assertTrue(cleared.getSnapshot().isDirty());
 
         ProjectOutcome alreadyEmpty = session.apply(CustomMorphTargetEdits.clear());
-        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, alreadyEmpty);
         assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
     }
 
@@ -504,7 +729,7 @@ class ProjectSessionTest {
         ProjectOutcome added = session.apply(NpcMorphAssignmentEdits.addNpc(source));
         callerAssignments.clear();
 
-        assertTrue(added instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, added);
         NpcMorphAssignmentSnapshot assignment = added.getSnapshot().getNpcMorphAssignments().get(0);
         assertNotSame(source, assignment);
         assertEquals("Lydia", assignment.getDisplayName());
@@ -519,7 +744,7 @@ class ProjectSessionTest {
                 new ArrayList<String>());
         ProjectOutcome duplicate = session.apply(NpcMorphAssignmentEdits.addNpc(sameIdentity));
 
-        assertTrue(duplicate instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, duplicate);
         assertSame(added.getSnapshot(), duplicate.getSnapshot());
         assertSame(duplicate.getSnapshot(), session.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_DUPLICATE,
@@ -558,11 +783,11 @@ class ProjectSessionTest {
         ProjectOutcome second = session.apply(NpcMorphAssignmentEdits.addSliderPreset(lydia, "ALPHA"));
         ProjectOutcome duplicate = session.apply(NpcMorphAssignmentEdits.addSliderPreset(lydia, "alpha"));
 
-        assertTrue(first instanceof ChangedOutcome);
-        assertTrue(second instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, first);
+        assertInstanceOf(ChangedOutcome.class, second);
         assertEquals(Arrays.asList("alpha", "Zulu"),
                 second.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames());
-        assertTrue(duplicate instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, duplicate);
         assertSame(second.getSnapshot(), duplicate.getSnapshot());
 
         ProjectOutcome removed = session.apply(NpcMorphAssignmentEdits.removeSliderPreset(lydia, "ALPHA"));
@@ -570,14 +795,14 @@ class ProjectSessionTest {
         ProjectOutcome cleared = session.apply(NpcMorphAssignmentEdits.clearSliderPresets(lydia));
         ProjectOutcome alreadyEmpty = session.apply(NpcMorphAssignmentEdits.clearSliderPresets(lydia));
 
-        assertTrue(removed instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, removed);
         assertEquals(Arrays.asList("Zulu"),
                 removed.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames());
-        assertTrue(alreadyRemoved instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, alreadyRemoved);
         assertSame(removed.getSnapshot(), alreadyRemoved.getSnapshot());
-        assertTrue(cleared instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, cleared);
         assertTrue(cleared.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames().isEmpty());
-        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, alreadyEmpty);
         assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
     }
 
@@ -597,7 +822,7 @@ class ProjectSessionTest {
         ProjectOutcome added = session.apply(NpcMorphAssignmentEdits.addSliderPresets(lydia,
                 Arrays.asList("zulu", "ALPHA", "alpha")));
 
-        assertTrue(added instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, added);
         assertEquals(Arrays.asList("alpha", "Zulu"),
                 added.getSnapshot().getNpcMorphAssignments().get(0).getSliderPresetNames());
 
@@ -632,21 +857,21 @@ class ProjectSessionTest {
         ProjectOutcome noMatches = session.apply(NpcMorphAssignmentEdits.removeNpcs(Arrays.asList(
                 new NpcMorphAssignmentIdentity("Missing.esm", "Missing"))));
 
-        assertTrue(removed instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, removed);
         assertEquals(Arrays.asList("Dawnguard.esm/ZuluEditor", "skyrim.ESM/AlphaEditor"),
                 npcIdentities(removed.getSnapshot()));
         assertNpcRejected(missing, ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND, removed.getSnapshot());
-        assertTrue(filtered instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, filtered);
         assertEquals(Arrays.asList("skyrim.ESM/AlphaEditor"), npcIdentities(filtered.getSnapshot()));
-        assertTrue(noMatches instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, noMatches);
         assertSame(filtered.getSnapshot(), noMatches.getSnapshot());
 
         ProjectOutcome cleared = session.apply(NpcMorphAssignmentEdits.clearNpcs());
         ProjectOutcome alreadyEmpty = session.apply(NpcMorphAssignmentEdits.clearNpcs());
 
-        assertTrue(cleared instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, cleared);
         assertTrue(cleared.getSnapshot().getNpcMorphAssignments().isEmpty());
-        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, alreadyEmpty);
         assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
     }
 
@@ -668,7 +893,7 @@ class ProjectSessionTest {
 
         ProjectOutcome added = session.apply(request);
 
-        assertTrue(added instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, added);
         assertEquals(Arrays.asList("Skyrim.esm/BetaEditor", "Skyrim.esm/GammaEditor"),
                 npcIdentities(added.getSnapshot()));
         assertEquals(Arrays.asList("Alpha"),
@@ -677,7 +902,7 @@ class ProjectSessionTest {
         ProjectOutcome duplicates = session.apply(NpcMorphAssignmentEdits.addNpcs(Arrays.asList(
                 npc("Changed", "SKYRIM.ESM", "betaeditor"),
                 npc("Changed", "SKYRIM.ESM", "gammaeditor"))));
-        assertTrue(duplicates instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, duplicates);
         assertSame(added.getSnapshot(), duplicates.getSnapshot());
 
         NpcMorphAssignmentSnapshot valid = npc("Delta", "Skyrim.esm", "DeltaEditor");
@@ -687,7 +912,7 @@ class ProjectSessionTest {
 
         ProjectOutcome rejected = session.apply(NpcMorphAssignmentEdits.addNpcs(Arrays.asList(valid, invalid)));
 
-        assertTrue(rejected instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, rejected);
         assertSame(beforeRejectedBatch, rejected.getSnapshot());
         assertSame(beforeRejectedBatch, session.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND, rejected.getDiagnostics().get(0).getCode());
@@ -718,14 +943,14 @@ class ProjectSessionTest {
 
         ProjectOutcome filled = session.apply(fillRequest);
 
-        assertTrue(filled instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, filled);
         assertEquals(Arrays.asList("beta"), npcAssignments(filled.getSnapshot(), "FirstEditor"));
         assertEquals(Arrays.asList("Alpha"), npcAssignments(filled.getSnapshot(), "OccupiedEditor"));
         assertEquals(Arrays.asList("Alpha"), npcAssignments(filled.getSnapshot(), "SecondEditor"));
 
         ProjectOutcome noEligible = session.apply(NpcMorphAssignmentEdits.fillEmpty(Arrays.asList(
                 new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("Skyrim.esm", "firsteditor"), "Alpha"))));
-        assertTrue(noEligible instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, noEligible);
         assertSame(filled.getSnapshot(), noEligible.getSnapshot());
 
         session.apply(NpcMorphAssignmentEdits.addNpc(npc("Third", "Skyrim.esm", "ThirdEditor")));
@@ -736,7 +961,7 @@ class ProjectSessionTest {
                 new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("Skyrim.esm", "fourtheditor"),
                         "Missing Preset"))));
 
-        assertTrue(rejected instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, rejected);
         assertSame(beforeRejectedFill, rejected.getSnapshot());
         assertSame(beforeRejectedFill, session.getSnapshot());
         assertTrue(npcAssignments(rejected.getSnapshot(), "ThirdEditor").isEmpty());
@@ -763,13 +988,13 @@ class ProjectSessionTest {
 
         ProjectOutcome cleared = session.apply(clearRequest);
 
-        assertTrue(cleared instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, cleared);
         assertTrue(npcAssignments(cleared.getSnapshot(), "FirstEditor").isEmpty());
         assertEquals(Arrays.asList("Alpha"), npcAssignments(cleared.getSnapshot(), "SecondEditor"));
 
         ProjectOutcome alreadyEmpty = session.apply(NpcMorphAssignmentEdits.clearSliderPresetsForNpcs(Arrays.asList(
                 new NpcMorphAssignmentIdentity("Skyrim.esm", "firsteditor"))));
-        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, alreadyEmpty);
         assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
 
         ProjectSnapshot beforeRejected = session.getSnapshot();
@@ -798,7 +1023,7 @@ class ProjectSessionTest {
 
         ProjectOutcome renamed = session.apply(SliderPresetEdits.rename("ALPHA", " Gamma "));
 
-        assertTrue(renamed instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, renamed);
         assertEquals(Arrays.asList("beta", "Gamma"), npcAssignments(renamed.getSnapshot(), "HousecarlWhiterun"));
         NpcMorphAssignmentSnapshot retained = renamed.getSnapshot().getNpcMorphAssignments().get(0);
         assertEquals("Lydia", retained.getDisplayName());
@@ -807,12 +1032,12 @@ class ProjectSessionTest {
         assertEquals(Arrays.asList("Alpha", "beta"), source.getSliderPresetNames());
 
         ProjectOutcome deleted = session.apply(SliderPresetEdits.delete("gamma"));
-        assertTrue(deleted instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, deleted);
         assertEquals(Arrays.asList("beta"), npcAssignments(deleted.getSnapshot(), "HousecarlWhiterun"));
         assertEquals(Arrays.asList("Alpha", "beta"), source.getSliderPresetNames());
 
         ProjectOutcome cleared = session.apply(SliderPresetEdits.clear());
-        assertTrue(cleared instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, cleared);
         assertEquals(1, cleared.getSnapshot().getNpcMorphAssignments().size());
         assertTrue(npcAssignments(cleared.getSnapshot(), "HousecarlWhiterun").isEmpty());
         assertEquals(Arrays.asList("Alpha", "beta"), source.getSliderPresetNames());
@@ -829,7 +1054,7 @@ class ProjectSessionTest {
 
         ProjectOutcome beforeActiveProject = session.apply(NpcMorphAssignmentEdits.clearNpcs());
 
-        assertTrue(beforeActiveProject instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, beforeActiveProject);
         assertSame(noProject, beforeActiveProject.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED,
                 beforeActiveProject.getDiagnostics().get(0).getCode());
@@ -844,7 +1069,7 @@ class ProjectSessionTest {
                 session.apply(NpcMorphAssignmentEdits.clearNpcs()));
 
         for (ProjectOutcome outcome : noOps) {
-            assertTrue(outcome instanceof UnchangedOutcome);
+            assertInstanceOf(UnchangedOutcome.class, outcome);
             assertSame(clean, outcome.getSnapshot());
             assertFalse(outcome.getSnapshot().isDirty());
         }
@@ -872,11 +1097,11 @@ class ProjectSessionTest {
                         Arrays.asList("Missing Preset"))));
 
         assertNpcRejected(missingNpc, ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND, before);
-        assertTrue(missingPreset instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, missingPreset);
         assertSame(before, missingPreset.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND,
                 missingPreset.getDiagnostics().get(0).getCode());
-        assertTrue(invalidSourceAssignments instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, invalidSourceAssignments);
         assertSame(before, invalidSourceAssignments.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND,
                 invalidSourceAssignments.getDiagnostics().get(0).getCode());
@@ -902,7 +1127,7 @@ class ProjectSessionTest {
         ProjectOutcome renamed = session.apply(SliderPresetEdits.rename("ALPHA", " Gamma "));
         ProjectSnapshot snapshot = renamed.getSnapshot();
 
-        assertTrue(renamed instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, renamed);
         assertEquals(Arrays.asList("beta", "Gamma"), sliderPresetNames(snapshot));
         assertEquals(Arrays.asList("All|Male", "Zeta|Female"), customMorphTargetNames(snapshot));
         assertEquals(Arrays.asList("beta", "Gamma"),
@@ -932,7 +1157,7 @@ class ProjectSessionTest {
         ProjectOutcome deleted = session.apply(SliderPresetEdits.delete("ALPHA"));
         ProjectSnapshot afterDelete = deleted.getSnapshot();
 
-        assertTrue(deleted instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, deleted);
         assertEquals(Arrays.asList("beta"), sliderPresetNames(afterDelete));
         assertEquals(Arrays.asList("beta"),
                 afterDelete.getCustomMorphTargets().get(0).getSliderPresetNames());
@@ -941,7 +1166,7 @@ class ProjectSessionTest {
         ProjectOutcome cleared = session.apply(SliderPresetEdits.clear());
         ProjectSnapshot afterClear = cleared.getSnapshot();
 
-        assertTrue(cleared instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, cleared);
         assertTrue(afterClear.getSliderPresets().isEmpty());
         assertTrue(afterClear.getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
         assertTrue(afterClear.getCustomMorphTargets().get(1).getSliderPresetNames().isEmpty());
@@ -970,9 +1195,9 @@ class ProjectSessionTest {
         ProjectOutcome secondChoice = session.apply(SliderPresetEdits.setSliderChoice("Alpha", arms));
         ProjectSnapshot changed = secondChoice.getSnapshot();
 
-        assertTrue(uunp instanceof ChangedOutcome);
-        assertTrue(firstChoice instanceof ChangedOutcome);
-        assertTrue(secondChoice instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, uunp);
+        assertInstanceOf(ChangedOutcome.class, firstChoice);
+        assertInstanceOf(ChangedOutcome.class, secondChoice);
         SliderPresetSnapshot preset = changed.getSliderPresets().get(0);
         assertTrue(preset.isUunp());
         assertEquals(Arrays.asList("Arms", "Waist"), sliderChoiceNames(preset));
@@ -990,9 +1215,9 @@ class ProjectSessionTest {
         ProjectOutcome unchangedUunp = session.apply(SliderPresetEdits.setUunp("Alpha", true));
         ProjectOutcome unchangedChoice = session.apply(SliderPresetEdits.setSliderChoice("Alpha", waist));
 
-        assertTrue(unchangedUunp instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, unchangedUunp);
         assertSame(changed, unchangedUunp.getSnapshot());
-        assertTrue(unchangedChoice instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, unchangedChoice);
         assertSame(changed, unchangedChoice.getSnapshot());
         assertTrue(changed.isDirty());
     }
@@ -1013,7 +1238,7 @@ class ProjectSessionTest {
         ProjectOutcome duplicated = session.apply(SliderPresetEdits.duplicate("alpha", " beta "));
         ProjectSnapshot duplicatedSnapshot = duplicated.getSnapshot();
 
-        assertTrue(duplicated instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, duplicated);
         assertEquals(Arrays.asList("Alpha", "beta"), sliderPresetNames(duplicatedSnapshot));
         SliderPresetSnapshot source = duplicatedSnapshot.getSliderPresets().get(0);
         SliderPresetSnapshot copy = duplicatedSnapshot.getSliderPresets().get(1);
@@ -1046,16 +1271,16 @@ class ProjectSessionTest {
         ProjectOutcome caseOnly = session.apply(SliderPresetEdits.rename("BRAVO", "BRAVO"));
         ProjectOutcome reordered = session.apply(SliderPresetEdits.rename("delta", " Alpha "));
 
-        assertTrue(caseOnly instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, caseOnly);
         assertEquals("BRAVO", caseOnly.getSnapshot().getSliderPresets().get(0).getName());
         assertTrue(caseOnly.getSnapshot().getSliderPresets().get(0).isUunp());
         assertEquals(Arrays.asList("Waist"),
                 sliderChoiceNames(caseOnly.getSnapshot().getSliderPresets().get(0)));
-        assertTrue(reordered instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, reordered);
         assertEquals(Arrays.asList("Alpha", "BRAVO"), sliderPresetNames(reordered.getSnapshot()));
 
         ProjectOutcome unchangedRename = session.apply(SliderPresetEdits.rename("alpha", " Alpha "));
-        assertTrue(unchangedRename instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, unchangedRename);
         assertSame(reordered.getSnapshot(), unchangedRename.getSnapshot());
 
         SliderChoiceSnapshot arms = new SliderChoiceSnapshot("Arms", false, Integer.valueOf(5),
@@ -1064,7 +1289,7 @@ class ProjectSessionTest {
                 Arrays.asList(waist, arms));
         ProjectOutcome updated = session.apply(SliderPresetEdits.update("bravo", replacement));
 
-        assertTrue(updated instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, updated);
         assertEquals(Arrays.asList("Alpha", "charlie"), sliderPresetNames(updated.getSnapshot()));
         SliderPresetSnapshot updatedPreset = updated.getSnapshot().getSliderPresets().get(1);
         assertFalse(updatedPreset.isUunp());
@@ -1073,7 +1298,7 @@ class ProjectSessionTest {
         SliderPresetSnapshot sameReplacement = new SliderPresetSnapshot("charlie", false,
                 Arrays.asList(arms, waist));
         ProjectOutcome unchangedUpdate = session.apply(SliderPresetEdits.update("CHARLIE", sameReplacement));
-        assertTrue(unchangedUpdate instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, unchangedUpdate);
         assertSame(updated.getSnapshot(), unchangedUpdate.getSnapshot());
     }
 
@@ -1089,7 +1314,7 @@ class ProjectSessionTest {
         session.apply(SliderPresetEdits.create("beta"));
 
         ProjectOutcome deleted = session.apply(SliderPresetEdits.delete("ALPHA"));
-        assertTrue(deleted instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, deleted);
         assertEquals(Arrays.asList("beta"), sliderPresetNames(deleted.getSnapshot()));
 
         ProjectOutcome missing = session.apply(SliderPresetEdits.delete("missing"));
@@ -1097,12 +1322,12 @@ class ProjectSessionTest {
                 deleted.getSnapshot());
 
         ProjectOutcome cleared = session.apply(SliderPresetEdits.clear());
-        assertTrue(cleared instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, cleared);
         assertTrue(cleared.getSnapshot().getSliderPresets().isEmpty());
         assertTrue(cleared.getSnapshot().isDirty());
 
         ProjectOutcome alreadyEmpty = session.apply(SliderPresetEdits.clear());
-        assertTrue(alreadyEmpty instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, alreadyEmpty);
         assertSame(cleared.getSnapshot(), alreadyEmpty.getSnapshot());
     }
 
@@ -1117,7 +1342,7 @@ class ProjectSessionTest {
 
         ProjectOutcome outcome = session.apply(SliderPresetEdits.create("Alpha"));
 
-        assertTrue(outcome instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, outcome);
         assertSame(before, outcome.getSnapshot());
         assertSame(before, session.getSnapshot());
         assertFalse(before.isDirty());
@@ -1249,7 +1474,7 @@ class ProjectSessionTest {
                 for (int iteration = 0; iteration < renameCount; iteration++) {
                     String nextName = currentName.equals("Alpha") ? "Beta" : "Alpha";
                     ProjectOutcome outcome = session.apply(SliderPresetEdits.rename(currentName, nextName));
-                    assertTrue(outcome instanceof ChangedOutcome);
+                    assertInstanceOf(ChangedOutcome.class, outcome);
                     currentName = nextName;
                 }
                 return null;
@@ -1275,223 +1500,5 @@ class ProjectSessionTest {
             executor.shutdownNow();
             assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
         }
-    }
-
-    private static void assertOutcomeMethod(String name, Class<?>... parameterTypes) throws Exception {
-        assertEquals(ProjectOutcome.class, ProjectSession.class.getMethod(name, parameterTypes).getReturnType());
-    }
-
-    /** Recursively rejects forbidden raw, array, and generic contract types. */
-    private static void assertExternalType(Type type) {
-        if (type instanceof Class<?>) {
-            Class<?> rawType = (Class<?>) type;
-            if (rawType.isArray()) {
-                assertExternalType(rawType.getComponentType());
-                return;
-            }
-            assertFalse(rawType.getName().startsWith("javafx."),
-                    "JavaFX leaked through ProjectSession: " + rawType);
-            assertFalse(rawType.getName().startsWith("com.asdasfa.jbs2bg.data."),
-                    "Legacy mutable Project type leaked through ProjectSession: " + rawType);
-            return;
-        }
-        if (type instanceof ParameterizedType) {
-            ParameterizedType parameterized = (ParameterizedType) type;
-            assertExternalType(parameterized.getRawType());
-            for (Type argument : parameterized.getActualTypeArguments())
-                assertExternalType(argument);
-            return;
-        }
-        if (type instanceof GenericArrayType) {
-            assertExternalType(((GenericArrayType) type).getGenericComponentType());
-            return;
-        }
-        if (type instanceof WildcardType) {
-            WildcardType wildcard = (WildcardType) type;
-            for (Type bound : wildcard.getLowerBounds())
-                assertExternalType(bound);
-            for (Type bound : wildcard.getUpperBounds())
-                assertExternalType(bound);
-            return;
-        }
-        if (type instanceof TypeVariable<?>) {
-            TypeVariable<?> variable = (TypeVariable<?>) type;
-            for (Type bound : variable.getBounds()) {
-                if (bound != variable)
-                    assertExternalType(bound);
-            }
-        }
-    }
-
-    /**
-     * Scans compiled implementation references so a JavaFX local/helper dependency
-     * cannot evade signature-only reflection checks.
-     */
-    private static void assertClassDoesNotReferenceJavaFx(Class<?> implementation) throws IOException {
-        String resourceName = implementation.getSimpleName() + ".class";
-        try (InputStream input = implementation.getResourceAsStream(resourceName)) {
-            assertTrue(input != null, "Missing implementation bytecode resource: " + resourceName);
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = input.read(buffer)) >= 0)
-                bytes.write(buffer, 0, read);
-            String constantPool = new String(bytes.toByteArray(), StandardCharsets.ISO_8859_1);
-            assertFalse(constantPool.contains("javafx/"),
-                    "JavaFX leaked into ProjectSession implementation bytecode");
-        }
-    }
-
-    private static void assertCompleteNewProject(ProjectSnapshot snapshot) {
-        assertTrue(snapshot.getSliderPresets().isEmpty());
-        assertTrue(snapshot.getCustomMorphTargets().isEmpty());
-        assertTrue(snapshot.getNpcMorphAssignments().isEmpty());
-        assertFalse(snapshot.getFileIdentity().isPresent());
-        assertFalse(snapshot.isDirty());
-        assertEquals(ProjectLifecycleStatus.UNTITLED, snapshot.getLifecycleStatus());
-    }
-
-    /** Asserts that both relationship collections agree with the one published preset name. */
-    private static void assertWholeRelationshipCascade(ProjectSnapshot snapshot) {
-        assertEquals(1, snapshot.getSliderPresets().size());
-        assertEquals(1, snapshot.getCustomMorphTargets().size());
-        assertEquals(1, snapshot.getNpcMorphAssignments().size());
-        String presetName = snapshot.getSliderPresets().get(0).getName();
-        assertTrue(presetName.equals("Alpha") || presetName.equals("Beta"));
-        assertEquals(Collections.singletonList(presetName),
-                snapshot.getCustomMorphTargets().get(0).getSliderPresetNames());
-        assertEquals(Collections.singletonList(presetName),
-                snapshot.getNpcMorphAssignments().get(0).getSliderPresetNames());
-    }
-
-    /**
-     * Extracts the ordered Slider Preset names exposed by a session snapshot.
-     *
-     * @param snapshot immutable Project state to inspect
-     * @return names in snapshot order
-     */
-    private static List<String> sliderPresetNames(ProjectSnapshot snapshot) {
-        List<String> names = new ArrayList<>();
-        for (SliderPresetSnapshot preset : snapshot.getSliderPresets())
-            names.add(preset.getName());
-        return names;
-    }
-
-    /**
-     * Extracts the ordered slider-choice names exposed by a Slider Preset.
-     *
-     * @param preset immutable Slider Preset value to inspect
-     * @return choice names in snapshot order
-     */
-    private static List<String> sliderChoiceNames(SliderPresetSnapshot preset) {
-        List<String> names = new ArrayList<>();
-        for (SliderChoiceSnapshot choice : preset.getSliderChoices())
-            names.add(choice.getName());
-        return names;
-    }
-
-    /**
-     * Extracts the ordered Custom Morph Target names exposed by a session snapshot.
-     *
-     * @param snapshot immutable Project state to inspect
-     * @return names in snapshot order
-     */
-    private static List<String> customMorphTargetNames(ProjectSnapshot snapshot) {
-        List<String> names = new ArrayList<>();
-        for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets())
-            names.add(target.getName());
-        return names;
-    }
-
-    /**
-     * Creates copied NPC source values without assigned Slider Presets for concise
-     * ProjectSession behavior tests.
-     *
-     * @param displayName NPC display name
-     * @param pluginName source plugin name
-     * @param editorId NPC editor ID
-     * @return immutable source values ready for an NPC-add edit
-     */
-    private static NpcMorphAssignmentSnapshot npc(String displayName, String pluginName, String editorId) {
-        return new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId, "NordRace", "123456",
-                Collections.<String>emptyList());
-    }
-
-    /**
-     * Extracts ordered NPC plugin/editor identities from a Project snapshot.
-     *
-     * @param snapshot immutable Project state to inspect
-     * @return identities in snapshot order
-     */
-    private static List<String> npcIdentities(ProjectSnapshot snapshot) {
-        List<String> identities = new ArrayList<>();
-        for (NpcMorphAssignmentSnapshot assignment : snapshot.getNpcMorphAssignments())
-            identities.add(assignment.getPluginName() + "/" + assignment.getEditorId());
-        return identities;
-    }
-
-    /**
-     * Returns one NPC's immutable assigned Slider Preset names by editor ID.
-     *
-     * @param snapshot immutable Project state to inspect
-     * @param editorId editor ID to resolve without regard to case
-     * @return immutable assigned Slider Preset names
-     * @throws AssertionError when no NPC has the requested editor ID
-     */
-    private static List<String> npcAssignments(ProjectSnapshot snapshot, String editorId) {
-        for (NpcMorphAssignmentSnapshot assignment : snapshot.getNpcMorphAssignments()) {
-            if (assignment.getEditorId().equalsIgnoreCase(editorId))
-                return assignment.getSliderPresetNames();
-        }
-        throw new AssertionError("Missing NPC Morph Assignment: " + editorId);
-    }
-
-    /**
-     * Asserts the common structured naming rejection contract.
-     *
-     * @param outcome rejected session operation
-     * @param code expected stable diagnostic code
-     * @param snapshot exact prior snapshot that must be preserved
-     */
-    private static void assertRejectedWithCode(ProjectOutcome outcome, String code, ProjectSnapshot snapshot) {
-        assertTrue(outcome instanceof RejectedOutcome);
-        assertSame(snapshot, outcome.getSnapshot());
-        assertEquals(code, outcome.getDiagnostics().get(0).getCode());
-        assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
-        assertEquals("slider-preset.name",
-                outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
-    }
-
-    /**
-     * Asserts the structured Custom Morph Target naming rejection contract.
-     *
-     * @param outcome rejected session operation
-     * @param code expected stable diagnostic code
-     * @param snapshot exact prior snapshot that must be preserved
-     */
-    private static void assertCustomMorphTargetRejected(ProjectOutcome outcome, String code,
-            ProjectSnapshot snapshot) {
-        assertTrue(outcome instanceof RejectedOutcome);
-        assertSame(snapshot, outcome.getSnapshot());
-        assertEquals(code, outcome.getDiagnostics().get(0).getCode());
-        assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
-        assertEquals("custom-morph-target.name",
-                outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
-    }
-
-    /**
-     * Asserts the common structured NPC identity rejection contract.
-     *
-     * @param outcome rejected session operation
-     * @param code expected stable diagnostic code
-     * @param snapshot exact prior snapshot that must be preserved
-     */
-    private static void assertNpcRejected(ProjectOutcome outcome, String code, ProjectSnapshot snapshot) {
-        assertTrue(outcome instanceof RejectedOutcome);
-        assertSame(snapshot, outcome.getSnapshot());
-        assertEquals(code, outcome.getDiagnostics().get(0).getCode());
-        assertEquals(DiagnosticSeverity.ERROR, outcome.getDiagnostics().get(0).getSeverity());
-        assertEquals("npc-morph-assignment.identity",
-                outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
     }
 }

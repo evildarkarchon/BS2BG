@@ -40,7 +40,7 @@ public final class NpcMorphAssignmentEdits {
     /**
      * Requests assignment of one existing Slider Preset to an NPC Morph Assignment.
      *
-     * @param identity existing NPC Morph Assignment identity
+     * @param identity         existing NPC Morph Assignment identity
      * @param sliderPresetName existing Slider Preset name
      * @return an immutable assignment-add request
      */
@@ -52,7 +52,7 @@ public final class NpcMorphAssignmentEdits {
      * Requests atomic assignment of several existing Slider Presets to one NPC
      * Morph Assignment. Duplicate requested or existing relationships are no-ops.
      *
-     * @param identity existing NPC Morph Assignment identity
+     * @param identity          existing NPC Morph Assignment identity
      * @param sliderPresetNames caller-selected Slider Preset names
      * @return an immutable assignment-batch request
      */
@@ -63,7 +63,7 @@ public final class NpcMorphAssignmentEdits {
     /**
      * Requests removal of one Slider Preset relationship from an NPC Morph Assignment.
      *
-     * @param identity existing NPC Morph Assignment identity
+     * @param identity         existing NPC Morph Assignment identity
      * @param sliderPresetName assigned Slider Preset name
      * @return an immutable assignment-remove request
      */
@@ -131,11 +131,15 @@ public final class NpcMorphAssignmentEdits {
         return new FillEmpty(choices);
     }
 
-    /** Identifies the closed family of NPC Morph Assignment requests. */
+    /**
+     * Identifies the closed family of NPC Morph Assignment requests.
+     */
     interface NpcMorphAssignmentEdit extends ProjectEdit {
     }
 
-    /** Immutable NPC-add request interpreted only by the ProjectSession module. */
+    /**
+     * Immutable NPC-add request interpreted only by the ProjectSession module.
+     */
     static final class AddNpc implements NpcMorphAssignmentEdit {
         private final NpcMorphAssignmentSnapshot source;
 
@@ -148,13 +152,17 @@ public final class NpcMorphAssignmentEdits {
             this.source = source;
         }
 
-        /** @return the immutable source values, or null when omitted */
+        /**
+         * @return the immutable source values, or null when omitted
+         */
         NpcMorphAssignmentSnapshot getSource() {
             return source;
         }
     }
 
-    /** Immutable filtered bulk NPC-add request interpreted only by ProjectSession. */
+    /**
+     * Immutable filtered bulk NPC-add request interpreted only by ProjectSession.
+     */
     static final class AddNpcs implements NpcMorphAssignmentEdit {
         private final List<NpcMorphAssignmentSnapshot> sources;
 
@@ -167,13 +175,17 @@ public final class NpcMorphAssignmentEdits {
             this.sources = sources == null ? null : ImmutableValues.copyOf(sources, "sources");
         }
 
-        /** @return immutable filtered source values, or null when omitted */
+        /**
+         * @return immutable filtered source values, or null when omitted
+         */
         List<NpcMorphAssignmentSnapshot> getSources() {
             return sources;
         }
     }
 
-    /** Immutable assignment-add request interpreted only by ProjectSession. */
+    /**
+     * Immutable assignment-add request interpreted only by ProjectSession.
+     */
     static final class AddSliderPreset implements NpcMorphAssignmentEdit {
         private final NpcMorphAssignmentIdentity identity;
         private final String sliderPresetName;
@@ -181,7 +193,7 @@ public final class NpcMorphAssignmentEdits {
         /**
          * Captures both relationship endpoints for session validation.
          *
-         * @param identity existing NPC identity
+         * @param identity         existing NPC identity
          * @param sliderPresetName requested Slider Preset name
          */
         AddSliderPreset(NpcMorphAssignmentIdentity identity, String sliderPresetName) {
@@ -189,18 +201,24 @@ public final class NpcMorphAssignmentEdits {
             this.sliderPresetName = sliderPresetName;
         }
 
-        /** @return the requested NPC identity, or null when omitted */
+        /**
+         * @return the requested NPC identity, or null when omitted
+         */
         NpcMorphAssignmentIdentity getIdentity() {
             return identity;
         }
 
-        /** @return the requested Slider Preset name */
+        /**
+         * @return the requested Slider Preset name
+         */
         String getSliderPresetName() {
             return sliderPresetName;
         }
     }
 
-    /** Immutable assignment-batch request interpreted only by ProjectSession. */
+    /**
+     * Immutable assignment-batch request interpreted only by ProjectSession.
+     */
     static final class AddSliderPresets implements NpcMorphAssignmentEdit {
         private final NpcMorphAssignmentIdentity identity;
         private final List<String> sliderPresetNames;
@@ -208,7 +226,7 @@ public final class NpcMorphAssignmentEdits {
         /**
          * Defensively captures one NPC identity and the selected relationship set.
          *
-         * @param identity existing NPC identity
+         * @param identity          existing NPC identity
          * @param sliderPresetNames selected Slider Preset names, or null for validation
          */
         AddSliderPresets(NpcMorphAssignmentIdentity identity, List<String> sliderPresetNames) {
@@ -217,18 +235,24 @@ public final class NpcMorphAssignmentEdits {
                     : ImmutableValues.copyOf(sliderPresetNames, "sliderPresetNames");
         }
 
-        /** @return the requested NPC identity, or null when omitted */
+        /**
+         * @return the requested NPC identity, or null when omitted
+         */
         NpcMorphAssignmentIdentity getIdentity() {
             return identity;
         }
 
-        /** @return immutable selected Slider Preset names, or null when omitted */
+        /**
+         * @return immutable selected Slider Preset names, or null when omitted
+         */
         List<String> getSliderPresetNames() {
             return sliderPresetNames;
         }
     }
 
-    /** Immutable assignment-remove request interpreted only by ProjectSession. */
+    /**
+     * Immutable assignment-remove request interpreted only by ProjectSession.
+     */
     static final class RemoveSliderPreset implements NpcMorphAssignmentEdit {
         private final NpcMorphAssignmentIdentity identity;
         private final String sliderPresetName;
@@ -236,7 +260,7 @@ public final class NpcMorphAssignmentEdits {
         /**
          * Captures both relationship endpoints for session validation.
          *
-         * @param identity existing NPC identity
+         * @param identity         existing NPC identity
          * @param sliderPresetName assigned Slider Preset name
          */
         RemoveSliderPreset(NpcMorphAssignmentIdentity identity, String sliderPresetName) {
@@ -244,18 +268,24 @@ public final class NpcMorphAssignmentEdits {
             this.sliderPresetName = sliderPresetName;
         }
 
-        /** @return the requested NPC identity, or null when omitted */
+        /**
+         * @return the requested NPC identity, or null when omitted
+         */
         NpcMorphAssignmentIdentity getIdentity() {
             return identity;
         }
 
-        /** @return the requested Slider Preset name */
+        /**
+         * @return the requested Slider Preset name
+         */
         String getSliderPresetName() {
             return sliderPresetName;
         }
     }
 
-    /** Immutable assignment-clear request interpreted only by ProjectSession. */
+    /**
+     * Immutable assignment-clear request interpreted only by ProjectSession.
+     */
     static final class ClearSliderPresets implements NpcMorphAssignmentEdit {
         private final NpcMorphAssignmentIdentity identity;
 
@@ -268,13 +298,17 @@ public final class NpcMorphAssignmentEdits {
             this.identity = identity;
         }
 
-        /** @return the requested NPC identity, or null when omitted */
+        /**
+         * @return the requested NPC identity, or null when omitted
+         */
         NpcMorphAssignmentIdentity getIdentity() {
             return identity;
         }
     }
 
-    /** Immutable filtered assignment-clear request interpreted by ProjectSession. */
+    /**
+     * Immutable filtered assignment-clear request interpreted by ProjectSession.
+     */
     static final class ClearSliderPresetsForNpcs implements NpcMorphAssignmentEdit {
         private final List<NpcMorphAssignmentIdentity> identities;
 
@@ -287,13 +321,17 @@ public final class NpcMorphAssignmentEdits {
             this.identities = identities == null ? null : ImmutableValues.copyOf(identities, "identities");
         }
 
-        /** @return immutable selected identities, or null when omitted */
+        /**
+         * @return immutable selected identities, or null when omitted
+         */
         List<NpcMorphAssignmentIdentity> getIdentities() {
             return identities;
         }
     }
 
-    /** Immutable single-NPC removal request interpreted only by ProjectSession. */
+    /**
+     * Immutable single-NPC removal request interpreted only by ProjectSession.
+     */
     static final class RemoveNpc implements NpcMorphAssignmentEdit {
         private final NpcMorphAssignmentIdentity identity;
 
@@ -306,13 +344,17 @@ public final class NpcMorphAssignmentEdits {
             this.identity = identity;
         }
 
-        /** @return the requested NPC identity, or null when omitted */
+        /**
+         * @return the requested NPC identity, or null when omitted
+         */
         NpcMorphAssignmentIdentity getIdentity() {
             return identity;
         }
     }
 
-    /** Immutable filtered NPC removal request interpreted only by ProjectSession. */
+    /**
+     * Immutable filtered NPC removal request interpreted only by ProjectSession.
+     */
     static final class RemoveNpcs implements NpcMorphAssignmentEdit {
         private final List<NpcMorphAssignmentIdentity> identities;
 
@@ -325,19 +367,25 @@ public final class NpcMorphAssignmentEdits {
             this.identities = identities == null ? null : ImmutableValues.copyOf(identities, "identities");
         }
 
-        /** @return immutable selected identities, or null when omitted */
+        /**
+         * @return immutable selected identities, or null when omitted
+         */
         List<NpcMorphAssignmentIdentity> getIdentities() {
             return identities;
         }
     }
 
-    /** Immutable clear-all-NPC request interpreted only by ProjectSession. */
+    /**
+     * Immutable clear-all-NPC request interpreted only by ProjectSession.
+     */
     static final class ClearNpcs implements NpcMorphAssignmentEdit {
         private ClearNpcs() {
         }
     }
 
-    /** Immutable fill-empty request interpreted only by ProjectSession. */
+    /**
+     * Immutable fill-empty request interpreted only by ProjectSession.
+     */
     static final class FillEmpty implements NpcMorphAssignmentEdit {
         private final List<NpcSliderPresetChoice> choices;
 
@@ -350,7 +398,9 @@ public final class NpcMorphAssignmentEdits {
             this.choices = choices == null ? null : ImmutableValues.copyOf(choices, "choices");
         }
 
-        /** @return immutable explicit decisions, or null when omitted */
+        /**
+         * @return immutable explicit decisions, or null when omitted
+         */
         List<NpcSliderPresetChoice> getChoices() {
             return choices;
         }

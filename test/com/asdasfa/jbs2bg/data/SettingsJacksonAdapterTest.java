@@ -1,11 +1,5 @@
 package com.asdasfa.jbs2bg.data;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -23,11 +17,46 @@ import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 
-/** Locks paired production Settings semantics and their generated-output consumption. */
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Locks paired production Settings semantics and their generated-output consumption.
+ */
 final class SettingsJacksonAdapterTest {
     private static final Path FIXTURE_ROOT = Path.of("test-resources", "json-oracles", "settings");
 
-    /** Restores the repository Settings pair after every process-wide publication test. */
+    /**
+     * Reads one invalid Standard fixture with the permanent valid UUNP partner.
+     */
+    private static SettingsJacksonAdapter.SettingsFormatException assertFixtureFailure(String fixtureName) {
+        SettingsJacksonAdapter.SettingsFormatException exception = assertThrows(
+                SettingsJacksonAdapter.SettingsFormatException.class,
+                () -> SettingsJacksonAdapter.readPair(fixture(fixtureName), fixture("uunp.json")));
+        assertEquals(fixture(fixtureName).toString(), exception.source());
+        return exception;
+    }
+
+    /**
+     * Reads canonical fixture text as repository LF bytes so Git's Windows checkout policy cannot
+     * turn a Settings whitespace choice into a platform-dependent test result.
+     *
+     * @throws IOException when the permanent fixture cannot be read
+     */
+    private static byte[] canonicalFixtureBytes(String name) throws IOException {
+        return Files.readString(fixture(name), StandardCharsets.UTF_8)
+                .replace("\r\n", "\n").getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Resolves one permanent Settings oracle from the repository fixture root.
+     */
+    private static Path fixture(String name) {
+        return FIXTURE_ROOT.resolve(name);
+    }
+
+    /**
+     * Restores the repository Settings pair after every process-wide publication test.
+     */
     @AfterEach
     void restoreRepositorySettings() {
         SettingsTestSupport.restoreRepositorySettings();
@@ -105,7 +134,9 @@ final class SettingsJacksonAdapterTest {
         }
     }
 
-    /** A nonexistent working directory is classified structurally as lock acquisition, not by message text. */
+    /**
+     * A nonexistent working directory is classified structurally as lock acquisition, not by message text.
+     */
     @Test
     void missingWorkingDirectoryProducesTheOwnedLockFailure(@TempDir Path directory) {
         Path missing = directory.resolve("missing");
@@ -238,14 +269,16 @@ final class SettingsJacksonAdapterTest {
                 "legacy-project-semantics.jbs2bg"));
         ProjectGeneratedOutput output = ProjectOutputFormatter.generate(opened.getSnapshot(), false);
 
-        assertTrue(opened instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, opened);
         assertEquals("CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0",
                 output.getTemplateLinesByPresetName().get("CBBE Curvy"));
         assertEquals("UUNP Athletic=Arms@0.25:0.75",
                 output.getTemplateLinesByPresetName().get("UUNP Athletic"));
     }
 
-    /** Verifies paired semantics, forward-compatible warnings, float conversion, and first-entry deduplication. */
+    /**
+     * Verifies paired semantics, forward-compatible warnings, float conversion, and first-entry deduplication.
+     */
     @Test
     void pairedFixtureProducesOneDetachedCandidateWithDefaultsWarningsAndDeduplication() {
         SettingsJacksonAdapter.SettingsCandidate candidate = SettingsJacksonAdapter.readPair(
@@ -288,7 +321,9 @@ final class SettingsJacksonAdapterTest {
         assertArrayEquals(expectedStandard, encoded.standardUtf8());
     }
 
-    /** Rejects duplicate fixed fields and dynamic slider keys at their stable member paths. */
+    /**
+     * Rejects duplicate fixed fields and dynamic slider keys at their stable member paths.
+     */
     @Test
     void duplicateFixedAndDynamicMembersAreRejected() {
         SettingsJacksonAdapter.SettingsFormatException fixed = assertThrows(
@@ -304,7 +339,9 @@ final class SettingsJacksonAdapterTest {
         assertEquals("/Defaults/Arms", dynamic.path());
     }
 
-    /** Rejects finite-conversion overflow while retaining an actionable source, path, and coordinates. */
+    /**
+     * Rejects finite-conversion overflow while retaining an actionable source, path, and coordinates.
+     */
     @Test
     void nonFiniteFloatConversionIsRejected() {
         SettingsJacksonAdapter.SettingsFormatException exception = assertFixtureFailure("non-finite.json");
@@ -315,7 +352,9 @@ final class SettingsJacksonAdapterTest {
         assertTrue(exception.column() > 0);
     }
 
-    /** Translates malformed syntax and owned stream-limit failures without exposing Jackson exceptions. */
+    /**
+     * Translates malformed syntax and owned stream-limit failures without exposing Jackson exceptions.
+     */
     @Test
     void malformedAndResourceLimitFixturesProduceStableDiagnostics() {
         SettingsJacksonAdapter.SettingsFormatException malformed = assertFixtureFailure("malformed.json");
@@ -355,32 +394,9 @@ final class SettingsJacksonAdapterTest {
         assertThrows(UnsupportedOperationException.class, () -> published.diagnostics().clear());
     }
 
-    /** Reads one invalid Standard fixture with the permanent valid UUNP partner. */
-    private static SettingsJacksonAdapter.SettingsFormatException assertFixtureFailure(String fixtureName) {
-        SettingsJacksonAdapter.SettingsFormatException exception = assertThrows(
-                SettingsJacksonAdapter.SettingsFormatException.class,
-                () -> SettingsJacksonAdapter.readPair(fixture(fixtureName), fixture("uunp.json")));
-        assertEquals(fixture(fixtureName).toString(), exception.source());
-        return exception;
-    }
-
     /**
-     * Reads canonical fixture text as repository LF bytes so Git's Windows checkout policy cannot
-     * turn a Settings whitespace choice into a platform-dependent test result.
-     *
-     * @throws IOException when the permanent fixture cannot be read
+     * One required invalid production fixture and its stable owned diagnostic identity.
      */
-    private static byte[] canonicalFixtureBytes(String name) throws IOException {
-        return Files.readString(fixture(name), StandardCharsets.UTF_8)
-                .replace("\r\n", "\n").getBytes(StandardCharsets.UTF_8);
-    }
-
-    /** Resolves one permanent Settings oracle from the repository fixture root. */
-    private static Path fixture(String name) {
-        return FIXTURE_ROOT.resolve(name);
-    }
-
-    /** One required invalid production fixture and its stable owned diagnostic identity. */
     private record InvalidProductionFixture(String name, String code, String path) {
     }
 }

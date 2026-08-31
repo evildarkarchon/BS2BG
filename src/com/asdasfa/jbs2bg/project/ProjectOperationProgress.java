@@ -3,16 +3,18 @@ package com.asdasfa.jbs2bg.project;
 import java.util.Objects;
 import java.util.OptionalLong;
 
-/** Truthful Project-operation phase with either measured real units or indeterminate progress. */
+/**
+ * Truthful Project-operation phase with either measured real units or indeterminate progress.
+ */
 public record ProjectOperationProgress(String phase, OptionalLong completedUnits, OptionalLong totalUnits) {
 
     /** Creates an indeterminate phase without inventing a percentage. */
-    public static ProjectOperationProgress indeterminate(String phase) {
+    public static ProjectOperationProgress indeterminate (String phase){
         return new ProjectOperationProgress(phase, OptionalLong.empty(), OptionalLong.empty());
     }
 
     /** Creates measured progress whose percentage can be derived from real adapter units. */
-    public static ProjectOperationProgress determinate(String phase, long completedUnits, long totalUnits) {
+    public static ProjectOperationProgress determinate (String phase,long completedUnits, long totalUnits){
         return new ProjectOperationProgress(phase, OptionalLong.of(completedUnits), OptionalLong.of(totalUnits));
     }
 

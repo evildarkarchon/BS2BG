@@ -28,7 +28,9 @@ import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
  */
 final class SliderChoiceDefaults {
 
-    /** Canonical slider-choice order: slider name, without regard to case. */
+    /**
+     * Canonical slider-choice order: slider name, without regard to case.
+     */
     private static final Comparator<SliderChoiceSnapshot> NAME_ORDER = new Comparator<SliderChoiceSnapshot>() {
         @Override
         public int compare(SliderChoiceSnapshot left, SliderChoiceSnapshot right) {
@@ -43,9 +45,9 @@ final class SliderChoiceDefaults {
      * Resolves the effective small value, deferring to the mode's Slider settings
      * when no value is stored.
      *
-     * @param name slider name used by settings lookup
+     * @param name   slider name used by settings lookup
      * @param stored persisted small value, or null to use the configured default
-     * @param uunp whether the UUNP defaults apply
+     * @param uunp   whether the UUNP defaults apply
      * @return stored value, configured default as a percentage, or zero when unconfigured
      */
     static int effectiveSmall(String name, Integer stored, boolean uunp) {
@@ -58,9 +60,9 @@ final class SliderChoiceDefaults {
      * Resolves the effective big value, deferring to the mode's Slider settings
      * when no value is stored.
      *
-     * @param name slider name used by settings lookup
+     * @param name   slider name used by settings lookup
      * @param stored persisted big value, or null to use the configured default
-     * @param uunp whether the UUNP defaults apply
+     * @param uunp   whether the UUNP defaults apply
      * @return stored value, configured default as a percentage, or zero when unconfigured
      */
     static int effectiveBig(String name, Integer stored, boolean uunp) {
@@ -74,7 +76,7 @@ final class SliderChoiceDefaults {
      * requested mode whose name is not already represented.
      *
      * @param representedNames slider names already present, compared without regard to case
-     * @param uunp whether the UUNP defaults apply
+     * @param uunp             whether the UUNP defaults apply
      * @return synthesized choices in settings order; callers sort as needed
      */
     static List<SliderChoiceSnapshot> synthesizeMissing(Set<String> representedNames, boolean uunp) {
@@ -97,7 +99,7 @@ final class SliderChoiceDefaults {
      * requested mode's missing defaults are synthesized afresh.
      *
      * @param choices current complete choices of the Slider Preset
-     * @param uunp whether the UUNP defaults apply to the rebuilt list
+     * @param uunp    whether the UUNP defaults apply to the rebuilt list
      * @return complete choices in canonical case-insensitive order
      */
     static List<SliderChoiceSnapshot> rebuildForMode(List<SliderChoiceSnapshot> choices, boolean uunp) {
@@ -122,9 +124,9 @@ final class SliderChoiceDefaults {
      * would silently change generated output across a save/reopen cycle.
      *
      * @param choice caller-supplied choice
-     * @param uunp whether the UUNP defaults apply
+     * @param uunp   whether the UUNP defaults apply
      * @return an immutable copy with mode-consistent effective values and every
-     *         other value preserved
+     * other value preserved
      */
     static SliderChoiceSnapshot resolveEffective(SliderChoiceSnapshot choice, boolean uunp) {
         Integer storedSmall = choice.getStoredSmallValue().isPresent()
@@ -157,7 +159,7 @@ final class SliderChoiceDefaults {
      * identity, so "Breasts" replaces "breasts". The input is never mutated.
      *
      * @param choices current choices, in any order
-     * @param choice replacement or new choice
+     * @param choice  replacement or new choice
      * @return a new list in canonical order carrying the choice
      */
     static List<SliderChoiceSnapshot> withChoice(List<SliderChoiceSnapshot> choices, SliderChoiceSnapshot choice) {
@@ -189,7 +191,7 @@ final class SliderChoiceDefaults {
      * choice, preserving list order.
      *
      * @param choices caller-supplied choices
-     * @param uunp whether the UUNP defaults apply
+     * @param uunp    whether the UUNP defaults apply
      * @return a new list of mode-consistent copies in the same order
      */
     static List<SliderChoiceSnapshot> resolveEffective(List<SliderChoiceSnapshot> choices, boolean uunp) {

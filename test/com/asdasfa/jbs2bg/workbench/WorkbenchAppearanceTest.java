@@ -12,7 +12,9 @@ class WorkbenchAppearanceTest {
     @TempDir
     Path temporaryDirectory;
 
-    /** System selection follows a live operating-system color-scheme change. */
+    /**
+     * System selection follows a live operating-system color-scheme change.
+     */
     @Test
     void systemSelectionFollowsTheOperatingSystemColorScheme() {
         WorkbenchAppearance appearance = new WorkbenchAppearance(
@@ -28,7 +30,9 @@ class WorkbenchAppearanceTest {
         assertEquals(WorkbenchAppearance.EffectiveTheme.DARK, changed.effectiveTheme());
     }
 
-    /** High Contrast overrides an explicit choice temporarily and ending it restores that choice. */
+    /**
+     * High Contrast overrides an explicit choice temporarily and ending it restores that choice.
+     */
     @Test
     void highContrastTemporarilyOverridesTheSelectedTheme() {
         WorkbenchAppearance appearance = new WorkbenchAppearance(
@@ -47,7 +51,9 @@ class WorkbenchAppearanceTest {
         assertEquals(WorkbenchAppearance.EffectiveTheme.DARK, restored.effectiveTheme());
     }
 
-    /** Reduced-motion changes are projected live without changing the selected or effective theme. */
+    /**
+     * Reduced-motion changes are projected live without changing the selected or effective theme.
+     */
     @Test
     void reducedMotionChangesAreProjectedLive() {
         WorkbenchAppearance appearance = new WorkbenchAppearance(
@@ -62,7 +68,9 @@ class WorkbenchAppearanceTest {
         assertEquals(true, changed.reducedMotion());
     }
 
-    /** High Contrast tokens come from the live Windows system-color snapshot rather than an app palette. */
+    /**
+     * High Contrast tokens come from the live Windows system-color snapshot rather than an app palette.
+     */
     @Test
     void highContrastUsesThePlatformSystemColors() {
         WorkbenchAppearance.SystemColors colors = new WorkbenchAppearance.SystemColors(
@@ -84,7 +92,9 @@ class WorkbenchAppearanceTest {
         assertEquals("#080808", palette.disabledText());
     }
 
-    /** A manual theme choice takes effect immediately and remains selected while the system is dark. */
+    /**
+     * A manual theme choice takes effect immediately and remains selected while the system is dark.
+     */
     @Test
     void manualThemeChoiceOverridesTheSystemColorScheme() {
         WorkbenchAppearance appearance = new WorkbenchAppearance(
@@ -97,7 +107,9 @@ class WorkbenchAppearanceTest {
         assertEquals(WorkbenchAppearance.EffectiveTheme.LIGHT, selected.effectiveTheme());
     }
 
-    /** The selected theme survives a new store instance while a missing selection defaults safely to System. */
+    /**
+     * The selected theme survives a new store instance while a missing selection defaults safely to System.
+     */
     @Test
     void selectedThemePersistsInThePreviewProfile() throws Exception {
         WorkbenchAppearanceStore initial = new WorkbenchAppearanceStore(temporaryDirectory);
@@ -109,7 +121,9 @@ class WorkbenchAppearanceTest {
         assertEquals(WorkbenchAppearance.ThemeChoice.DARK, restarted.load());
     }
 
-    /** Theme choices expose the accepted title-case text used by the keyboard-accessible selector. */
+    /**
+     * Theme choices expose the accepted title-case text used by the keyboard-accessible selector.
+     */
     @Test
     void themeChoicesHaveStableUserFacingNames() {
         assertEquals("System", WorkbenchAppearance.ThemeChoice.SYSTEM.toString());

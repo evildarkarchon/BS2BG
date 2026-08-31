@@ -15,7 +15,9 @@ import javafx.application.Platform;
  */
 public final class FxTestToolkit {
 
-    /** Upper bound for any single FX-thread test body; generous for a cold toolkit. */
+    /**
+     * Upper bound for any single FX-thread test body; generous for a cold toolkit.
+     */
     public static final long TIMEOUT_SECONDS = 30;
 
     private static volatile boolean started;
@@ -84,7 +86,9 @@ public final class FxTestToolkit {
         }
     }
 
-    /** A test body that may throw checked exceptions. */
+    /**
+     * A test body that may throw checked exceptions.
+     */
     @FunctionalInterface
     public interface FxBody {
         void run() throws Exception;

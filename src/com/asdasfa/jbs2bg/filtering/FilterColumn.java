@@ -26,18 +26,20 @@ public final class FilterColumn<T> {
     /**
      * Defines a column.
      *
-     * @param id stable column ID, unique within one view
+     * @param id        stable column ID, unique within one view
      * @param cellValue derives the cell text of a row; may return null
-     * @param <T> row type
+     * @param <T>       row type
      * @return the immutable column definition
-     * @throws NullPointerException when an argument is null
+     * @throws NullPointerException     when an argument is null
      * @throws IllegalArgumentException when the ID is blank
      */
     public static <T> FilterColumn<T> of(String id, Function<? super T, String> cellValue) {
         return new FilterColumn<>(id, cellValue);
     }
 
-    /** @return the stable column ID */
+    /**
+     * @return the stable column ID
+     */
     public String getId() {
         return id;
     }

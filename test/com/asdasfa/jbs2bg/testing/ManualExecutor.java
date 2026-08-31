@@ -7,24 +7,32 @@ import java.util.Objects;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/** FIFO executor that makes worker execution and completion explicit in deterministic tests. */
+/**
+ * FIFO executor that makes worker execution and completion explicit in deterministic tests.
+ */
 public final class ManualExecutor extends AbstractExecutorService {
     private final Deque<Runnable> tasks = new ArrayDeque<>();
     private boolean shutdown;
 
-    /** Queues one worker action until the owning test advances it. */
+    /**
+     * Queues one worker action until the owning test advances it.
+     */
     @Override
     public void execute(Runnable command) {
         tasks.addLast(Objects.requireNonNull(command, "command"));
     }
 
-    /** Prevents later test submissions without discarding queued work. */
+    /**
+     * Prevents later test submissions without discarding queued work.
+     */
     @Override
     public void shutdown() {
         shutdown = true;
     }
 
-    /** Prevents later work and returns every queued action without running it. */
+    /**
+     * Prevents later work and returns every queued action without running it.
+     */
     @Override
     public List<Runnable> shutdownNow() {
         shutdown = true;
@@ -33,26 +41,34 @@ public final class ManualExecutor extends AbstractExecutorService {
         return remaining;
     }
 
-    /** @return whether shutdown was requested */
+    /**
+     * @return whether shutdown was requested
+     */
     @Override
     public boolean isShutdown() {
         return shutdown;
     }
 
-    /** @return whether shutdown was requested after the deterministic queue drained */
+    /**
+     * @return whether shutdown was requested after the deterministic queue drained
+     */
     @Override
     public boolean isTerminated() {
         return shutdown && tasks.isEmpty();
     }
 
-    /** Deterministic tests never block for executor termination. */
+    /**
+     * Deterministic tests never block for executor termination.
+     */
     @Override
     public boolean awaitTermination(long timeout, TimeUnit unit) {
         Objects.requireNonNull(unit, "unit");
         return isTerminated();
     }
 
-    /** Runs the oldest queued worker action on the calling thread. */
+    /**
+     * Runs the oldest queued worker action on the calling thread.
+     */
     public void runNext() {
         tasks.removeFirst().run();
     }

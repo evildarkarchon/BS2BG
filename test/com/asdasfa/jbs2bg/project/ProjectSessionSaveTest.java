@@ -1,11 +1,5 @@
 package com.asdasfa.jbs2bg.project;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,12 +7,16 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 class ProjectSessionSaveTest {
 
     @TempDir
     Path tempDirectory;
 
-    /** Save requires an active Project before file-identity validation can apply. */
+    /**
+     * Save requires an active Project before file-identity validation can apply.
+     */
     @Test
     void saveBeforeActiveProjectRejectsAndPreservesTheNoProjectSnapshot() {
         ProjectSession session = ProjectSessions.create();
@@ -26,7 +24,7 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.save();
 
-        assertTrue(outcome instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, outcome);
         assertSame(before, outcome.getSnapshot());
         assertSame(before, session.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED,
@@ -46,14 +44,16 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.save();
 
-        assertTrue(outcome instanceof RejectedOutcome);
+        assertInstanceOf(RejectedOutcome.class, outcome);
         assertSame(dirty, outcome.getSnapshot());
         assertSame(dirty, session.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.FILE_IDENTITY_REQUIRED,
                 outcome.getDiagnostics().get(0).getCode());
     }
 
-    /** New Project atomically discards dirty file-backed state and is idempotent thereafter. */
+    /**
+     * New Project atomically discards dirty file-backed state and is idempotent thereafter.
+     */
     @Test
     void newProjectReplacesDirtyFileBackedStateAndThenReturnsUnchanged() {
         ProjectSession session = ProjectSessions.create();
@@ -67,12 +67,12 @@ class ProjectSessionSaveTest {
 
         assertTrue(dirtyFileBacked.isDirty());
         assertTrue(dirtyFileBacked.getFileIdentity().isPresent());
-        assertTrue(replaced instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, replaced);
         assertTrue(replaced.getSnapshot().getSliderPresets().isEmpty());
         assertFalse(replaced.getSnapshot().getFileIdentity().isPresent());
         assertFalse(replaced.getSnapshot().isDirty());
         assertEquals(ProjectLifecycleStatus.UNTITLED, replaced.getSnapshot().getLifecycleStatus());
-        assertTrue(repeated instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, repeated);
         assertSame(replaced.getSnapshot(), repeated.getSnapshot());
         assertSame(repeated.getSnapshot(), session.getSnapshot());
     }
@@ -90,7 +90,7 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.saveAs(target);
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertSame(outcome.getSnapshot(), session.getSnapshot());
         assertFalse(outcome.getSnapshot().isDirty());
         assertEquals(ProjectLifecycleStatus.FILE_BACKED, outcome.getSnapshot().getLifecycleStatus());
@@ -98,7 +98,7 @@ class ProjectSessionSaveTest {
         assertTrue(dirty.isDirty());
 
         ProjectOutcome reopened = ProjectSessions.create().open(target);
-        assertTrue(reopened instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, reopened);
         assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().get(0).getName());
     }
 
@@ -123,11 +123,11 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.saveAs(target);
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertFalse(outcome.getSnapshot().isDirty());
         assertEquals(target.toAbsolutePath().normalize(), outcome.getSnapshot().getFileIdentity().get());
         ProjectOutcome reopened = ProjectSessions.create().open(target);
-        assertTrue(reopened instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, reopened);
         assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().get(0).getName());
         try (java.util.stream.Stream<Path> siblings = Files.list(tempDirectory)) {
             assertEquals(1, siblings.count(), "no staging file may be left beside the saved Project");
@@ -149,14 +149,14 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.save();
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertSame(outcome.getSnapshot(), session.getSnapshot());
         assertFalse(outcome.getSnapshot().isDirty());
         assertEquals(target.toAbsolutePath().normalize(), outcome.getSnapshot().getFileIdentity().get());
         assertTrue(dirty.isDirty());
 
         ProjectOutcome reopened = ProjectSessions.create().open(target);
-        assertTrue(reopened instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, reopened);
         assertEquals(2, reopened.getSnapshot().getSliderPresets().size());
         assertEquals("Bravo", reopened.getSnapshot().getSliderPresets().get(1).getName());
     }
@@ -180,7 +180,7 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.save();
 
-        assertTrue(outcome instanceof UnchangedOutcome);
+        assertInstanceOf(UnchangedOutcome.class, outcome);
         assertSame(clean, outcome.getSnapshot());
         assertSame(clean, session.getSnapshot());
         ProjectOutcome reopened = ProjectSessions.create().open(target);
@@ -208,7 +208,7 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.saveAs(blockedTarget);
 
-        assertTrue(outcome instanceof FailedOutcome);
+        assertInstanceOf(FailedOutcome.class, outcome);
         assertSame(dirty, outcome.getSnapshot());
         assertSame(dirty, session.getSnapshot());
         assertTrue(outcome.getSnapshot().isDirty());
@@ -222,7 +222,7 @@ class ProjectSessionSaveTest {
                 outcome.getDiagnostics().get(0).getSourceLocation().getPath().get());
         try (var siblings = Files.list(tempDirectory)) {
             assertFalse(siblings.anyMatch(path -> path.getFileName().toString()
-                    .startsWith(".blocked-target.jbs2bg-")),
+                            .startsWith(".blocked-target.jbs2bg-")),
                     "failed replacement must not leave a sibling staging file");
         }
     }
@@ -247,7 +247,7 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.save();
 
-        assertTrue(outcome instanceof FailedOutcome);
+        assertInstanceOf(FailedOutcome.class, outcome);
         assertSame(dirty, outcome.getSnapshot());
         assertSame(dirty, session.getSnapshot());
         assertTrue(outcome.getSnapshot().isDirty());
@@ -273,10 +273,10 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.saveAs(target);
 
-        assertTrue(outcome instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, outcome);
         assertFalse(outcome.getSnapshot().isDirty());
         ProjectOutcome reopened = ProjectSessions.create().open(target);
-        assertTrue(reopened instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, reopened);
         assertEquals("Replacement", reopened.getSnapshot().getSliderPresets().get(0).getName());
     }
 
@@ -300,7 +300,7 @@ class ProjectSessionSaveTest {
 
         assertTrue(recovered.isDirty());
         assertEquals(ProjectLifecycleStatus.RECOVERED, recovered.getLifecycleStatus());
-        assertTrue(saved instanceof ChangedOutcome);
+        assertInstanceOf(ChangedOutcome.class, saved);
         assertFalse(saved.getSnapshot().isDirty());
         assertEquals(ProjectLifecycleStatus.FILE_BACKED, saved.getSnapshot().getLifecycleStatus());
         assertEquals(target.toAbsolutePath().normalize(), saved.getSnapshot().getFileIdentity().get());
@@ -309,7 +309,9 @@ class ProjectSessionSaveTest {
         assertTrue(reopened.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
     }
 
-    /** Cancellation after staging preserves destination bytes, dirty identity, and the opaque content version. */
+    /**
+     * Cancellation after staging preserves destination bytes, dirty identity, and the opaque content version.
+     */
     @Test
     void cancellationBeforeReplacementPreservesDestinationAndDirtyProject() throws Exception {
         Path target = tempDirectory.resolve("cancelled-replacement.jbs2bg");
@@ -345,14 +347,14 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome outcome = session.saveAs(target, context);
 
-        assertTrue(outcome instanceof CancelledOutcome);
+        assertInstanceOf(CancelledOutcome.class, outcome);
         assertSame(dirty, outcome.getSnapshot());
         assertSame(dirty, session.getSnapshot());
         assertEquals(dirty.getContentVersion(), outcome.getSnapshot().getContentVersion());
         assertArrayEquals(previous, Files.readAllBytes(target));
         try (var siblings = Files.list(tempDirectory)) {
             assertFalse(siblings.anyMatch(path -> path.getFileName().toString()
-                    .startsWith(".cancelled-replacement.jbs2bg-")),
+                            .startsWith(".cancelled-replacement.jbs2bg-")),
                     "cancelled replacement must remove its sibling staging file");
         }
     }

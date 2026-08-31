@@ -33,14 +33,27 @@ import javafx.application.Application;
  */
 class LauncherTest {
 
-    /** The JDK launcher must never see an {@code Application} subclass as the main class of the image. */
+    /**
+     * The directory javac emitted production classes into (target/classes), located from a production class.
+     */
+    private static Path productionClassesRoot() throws URISyntaxException {
+        Path root = Paths.get(ProjectSession.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        assertTrue(Files.isDirectory(root), "production classes must be on the test classpath as a directory: " + root);
+        return root;
+    }
+
+    /**
+     * The JDK launcher must never see an {@code Application} subclass as the main class of the image.
+     */
     @Test
     void launcherIsNotAJavaFxApplication() {
         assertFalse(Application.class.isAssignableFrom(Launcher.class),
                 "Launcher must not extend javafx.application.Application");
     }
 
-    /** jpackage's {@code --main-class} needs a conventional {@code public static void main(String[])}. */
+    /**
+     * jpackage's {@code --main-class} needs a conventional {@code public static void main(String[])}.
+     */
     @Test
     void launcherExposesAPlainMainEntrypoint() throws NoSuchMethodException {
         Method main = Launcher.class.getMethod("main", String[].class);
@@ -71,12 +84,5 @@ class LauncherTest {
         }
         assertEquals(List.of(Main.class.getName()), applications,
                 "Main must remain the sole javafx.application.Application in the production classes");
-    }
-
-    /** The directory javac emitted production classes into (target/classes), located from a production class. */
-    private static Path productionClassesRoot() throws URISyntaxException {
-        Path root = Paths.get(ProjectSession.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-        assertTrue(Files.isDirectory(root), "production classes must be on the test classpath as a directory: " + root);
-        return root;
     }
 }

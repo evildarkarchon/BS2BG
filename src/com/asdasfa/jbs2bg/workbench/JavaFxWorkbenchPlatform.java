@@ -7,40 +7,14 @@ import java.util.Optional;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
-/** JavaFX implementation of Workbench file choosers, confirmations, and final window closure. */
+/**
+ * JavaFX implementation of Workbench file choosers, confirmations, and final window closure.
+ */
 final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
 
-    /** Completes the requested modal effect using public JavaFX dialogs owned by the Workbench window. */
-    @Override
-    public WorkbenchProjectFlow.Response complete(WorkbenchProjectFlow.Effect effect, Stage owner) {
-        Objects.requireNonNull(effect, "effect");
-        Objects.requireNonNull(owner, "owner");
-        return switch (effect.kind()) {
-        case CHOOSE_OPEN_PATH -> chooseProject(owner, false);
-        case CHOOSE_SAVE_PATH -> chooseProject(owner, true);
-        case CONFIRM_NEW, CONFIRM_OPEN -> response(JavaFxWorkbenchDialogs.show(
-                dialogSpec(effect.kind()).orElseThrow(), owner));
-        case CONFIRM_CLOSE -> response(JavaFxWorkbenchDialogs.show(
-                dialogSpec(effect.kind()).orElseThrow(), owner));
-        case CLOSE_WINDOW -> throw new IllegalArgumentException("CLOSE_WINDOW is not a modal platform effect");
-        };
-    }
-
-    /** Shows a typed failure dialog only after durable feedback state has published it. */
-    @Override
-    public WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
-        if (Objects.requireNonNull(spec, "spec").kind() != WorkbenchFeedback.DialogKind.FAILURE)
-            throw new IllegalArgumentException("Only failure dialogs use the failure platform seam");
-        return JavaFxWorkbenchDialogs.show(spec, Objects.requireNonNull(owner, "owner"));
-    }
-
-    /** Closes the JavaFX Stage after the Project flow has already entered its terminal state. */
-    @Override
-    public void closeWindow(Stage owner) {
-        Objects.requireNonNull(owner, "owner").close();
-    }
-
-    /** Shows the native Open or Save chooser and translates cancellation without inventing a path. */
+    /**
+     * Shows the native Open or Save chooser and translates cancellation without inventing a path.
+     */
     private static WorkbenchProjectFlow.Response chooseProject(Stage owner, boolean save) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(save ? "Save BS2BG Project" : "Open BS2BG Project");
@@ -74,7 +48,7 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
      *
      * @param action action returned by the typed dialog
      * @return ordinary Project-flow response
-     * @throws NullPointerException when action is null
+     * @throws NullPointerException     when action is null
      * @throws IllegalArgumentException when action belongs only to failure dialogs
      */
     private static WorkbenchProjectFlow.Response response(WorkbenchFeedback.DialogAction action) {
@@ -85,5 +59,41 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
             case COPY_DETAILS, RETRY -> throw new IllegalArgumentException(
                     action + " is not a Project confirmation response");
         };
+    }
+
+    /**
+     * Completes the requested modal effect using public JavaFX dialogs owned by the Workbench window.
+     */
+    @Override
+    public WorkbenchProjectFlow.Response complete(WorkbenchProjectFlow.Effect effect, Stage owner) {
+        Objects.requireNonNull(effect, "effect");
+        Objects.requireNonNull(owner, "owner");
+        return switch (effect.kind()) {
+            case CHOOSE_OPEN_PATH -> chooseProject(owner, false);
+            case CHOOSE_SAVE_PATH -> chooseProject(owner, true);
+            case CONFIRM_NEW, CONFIRM_OPEN -> response(JavaFxWorkbenchDialogs.show(
+                    dialogSpec(effect.kind()).orElseThrow(), owner));
+            case CONFIRM_CLOSE -> response(JavaFxWorkbenchDialogs.show(
+                    dialogSpec(effect.kind()).orElseThrow(), owner));
+            case CLOSE_WINDOW -> throw new IllegalArgumentException("CLOSE_WINDOW is not a modal platform effect");
+        };
+    }
+
+    /**
+     * Shows a typed failure dialog only after durable feedback state has published it.
+     */
+    @Override
+    public WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+        if (Objects.requireNonNull(spec, "spec").kind() != WorkbenchFeedback.DialogKind.FAILURE)
+            throw new IllegalArgumentException("Only failure dialogs use the failure platform seam");
+        return JavaFxWorkbenchDialogs.show(spec, Objects.requireNonNull(owner, "owner"));
+    }
+
+    /**
+     * Closes the JavaFX Stage after the Project flow has already entered its terminal state.
+     */
+    @Override
+    public void closeWindow(Stage owner) {
+        Objects.requireNonNull(owner, "owner").close();
     }
 }

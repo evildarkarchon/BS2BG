@@ -1,10 +1,5 @@
 package com.asdasfa.jbs2bg.workbench;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -14,6 +9,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 
+import javafx.scene.shape.SVGPath;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -48,12 +44,32 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 class WorkbenchControllerTest {
 
     @TempDir
     Path temporaryDirectory;
 
-    /** Open consumes a platform-selected path and renders recovery state and diagnostics from the returned frame. */
+    /**
+     * Delivers one Control accelerator to the Workbench root through the same key-event seam as JavaFX.
+     */
+    private static void sendControlKey(Parent root, KeyCode code) {
+        root.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code,
+                false, true, false, false));
+    }
+
+    /**
+     * Delivers one unmodified navigation key to the Workbench root.
+     */
+    private static void sendKey(Parent root, KeyCode code) {
+        root.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code,
+                false, false, false, false));
+    }
+
+    /**
+     * Open consumes a platform-selected path and renders recovery state and diagnostics from the returned frame.
+     */
     @Test
     void openCommandRendersTheAuthoritativeRecoveredFrame() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -98,7 +114,9 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Exit cancellation keeps the dirty window alive; a later Discard closes it exactly once. */
+    /**
+     * Exit cancellation keeps the dirty window alive; a later Discard closes it exactly once.
+     */
     @Test
     void dirtyExitCanBeCancelledBeforeDiscardClosesTheWindow() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -132,7 +150,9 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Malformed Open keeps the ProjectSession code, source path, JSON element, line, and column visible. */
+    /**
+     * Malformed Open keeps the ProjectSession code, source path, JSON element, line, and column visible.
+     */
     @Test
     void malformedOpenRendersCompleteSourceCoordinates() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -160,7 +180,9 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** A failed Activity exposes Retry, which re-reads the source and publishes coordinator-owned linkage. */
+    /**
+     * A failed Activity exposes Retry, which re-reads the source and publishes coordinator-owned linkage.
+     */
     @Test
     void failedOpenActivityCanRetryWithFreshlyCapturedInputs() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -198,7 +220,9 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Active Open disables global launchers, exposes progress, and accepts deterministic pre-start cancellation. */
+    /**
+     * Active Open disables global launchers, exposes progress, and accepts deterministic pre-start cancellation.
+     */
     @Test
     void activeJobOwnsAdmissionProgressAndCancelControls() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -210,8 +234,8 @@ class WorkbenchControllerTest {
                 (delay, action) -> () -> {
                     // Pre-start cancellation settles before prolonged feedback is relevant.
                 }, failure -> {
-                    throw new AssertionError("Unexpected callback failure", failure);
-                });
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
                 "BS2BG Preview", ProjectSessions.create(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
@@ -260,7 +284,9 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Ctrl+1..5 use typed navigation, with Output toggling a drawer instead of replacing the active Area. */
+    /**
+     * Ctrl+1..5 use typed navigation, with Output toggling a drawer instead of replacing the active Area.
+     */
     @Test
     void keyboardNavigationPreservesTheActiveAreaWhenOutputToggles() throws Exception {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
@@ -302,7 +328,9 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** F6 follows semantic landmarks, and closing user-opened Output restores the exact prior focus target. */
+    /**
+     * F6 follows semantic landmarks, and closing user-opened Output restores the exact prior focus target.
+     */
     @Test
     void semanticFocusTraversalAndOutputFocusRestorationArePredictable() throws Exception {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
@@ -340,7 +368,9 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Generated Output may reveal the drawer without moving focus away from the active editor. */
+    /**
+     * Generated Output may reveal the drawer without moving focus away from the active editor.
+     */
     @Test
     void automaticOutputRevealUsesTheProductionAdapterWithoutStealingFocus() throws Exception {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
@@ -366,7 +396,9 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Theme selection applies live token state while rail icons stay decorative beside their text labels. */
+    /**
+     * Theme selection applies live token state while rail icons stay decorative beside their text labels.
+     */
     @Test
     void themeChoiceAndSemanticIconsRenderThroughTheLoadedWorkbench() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -389,14 +421,16 @@ class WorkbenchControllerTest {
             assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-light")));
             assertEquals("Light theme", ((Label) loader.getNamespace().get("appearanceStateText")).getText());
             ToggleButton templates = (ToggleButton) loader.getNamespace().get("templatesAreaButton");
-            assertTrue(templates.getGraphic() instanceof javafx.scene.shape.SVGPath);
+            assertInstanceOf(SVGPath.class, templates.getGraphic());
             assertEquals(AccessibleRole.NODE, templates.getGraphic().getAccessibleRole());
             assertEquals("Semantic icon: Templates. Keyboard shortcut: Ctrl+1.", templates.getAccessibleHelp());
             stage.close();
         });
     }
 
-    /** At the accepted breakpoint, real side panes move into overlays and Esc returns focus to each launcher. */
+    /**
+     * At the accepted breakpoint, real side panes move into overlays and Esc returns focus to each launcher.
+     */
     @Test
     void narrowLayoutKeepsTheEditorInlineAndUsesFocusRestoringSideOverlays() throws Exception {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
@@ -446,35 +480,31 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Delivers one Control accelerator to the Workbench root through the same key-event seam as JavaFX. */
-    private static void sendControlKey(Parent root, KeyCode code) {
-        root.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code,
-                false, true, false, false));
-    }
-
-    /** Delivers one unmodified navigation key to the Workbench root. */
-    private static void sendKey(Parent root, KeyCode code) {
-        root.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code,
-                false, false, false, false));
-    }
-
-    /** Test adapter for modal platform effects; responses are consumed in user-interaction order. */
+    /**
+     * Test adapter for modal platform effects; responses are consumed in user-interaction order.
+     */
     private static final class RecordingPlatform implements WorkbenchPlatform {
         private final Deque<WorkbenchProjectFlow.Response> responses = new ArrayDeque<>();
         private int closeCount;
 
-        /** Adds the next chooser or confirmation result. */
+        /**
+         * Adds the next chooser or confirmation result.
+         */
         void respondWith(WorkbenchProjectFlow.Response response) {
             responses.addLast(response);
         }
 
-        /** Returns the next scripted real-platform result. */
+        /**
+         * Returns the next scripted real-platform result.
+         */
         @Override
         public WorkbenchProjectFlow.Response complete(WorkbenchProjectFlow.Effect effect, Stage owner) {
             return responses.removeFirst();
         }
 
-        /** Records the at-most-once final close effect without closing the test Stage. */
+        /**
+         * Records the at-most-once final close effect without closing the test Stage.
+         */
         @Override
         public void closeWindow(Stage owner) {
             closeCount++;

@@ -14,7 +14,7 @@ public final class NpcMorphAssignmentIdentity {
      * Creates an identity compared without regard to case.
      *
      * @param pluginName source plugin or mod name
-     * @param editorId NPC editor ID
+     * @param editorId   NPC editor ID
      * @throws NullPointerException when either identity field is null
      */
     public NpcMorphAssignmentIdentity(String pluginName, String editorId) {
@@ -22,12 +22,32 @@ public final class NpcMorphAssignmentIdentity {
         this.editorId = Objects.requireNonNull(editorId, "editorId");
     }
 
-    /** @return the plugin or mod name identity field */
+    /**
+     * Folds each character using the same upper-then-lower rule used by Java's
+     * case-insensitive String comparison, keeping equal values hash-compatible.
+     *
+     * @param value identity field to hash
+     * @return hash code consistent with {@link String#equalsIgnoreCase(String)}
+     */
+    private static int caseInsensitiveHash(String value) {
+        int hash = 0;
+        for (int index = 0; index < value.length(); index++) {
+            char folded = Character.toLowerCase(Character.toUpperCase(value.charAt(index)));
+            hash = 31 * hash + folded;
+        }
+        return hash;
+    }
+
+    /**
+     * @return the plugin or mod name identity field
+     */
     public String getPluginName() {
         return pluginName;
     }
 
-    /** @return the editor ID identity field */
+    /**
+     * @return the editor ID identity field
+     */
     public String getEditorId() {
         return editorId;
     }
@@ -56,21 +76,5 @@ public final class NpcMorphAssignmentIdentity {
     @Override
     public int hashCode() {
         return 31 * caseInsensitiveHash(pluginName) + caseInsensitiveHash(editorId);
-    }
-
-    /**
-     * Folds each character using the same upper-then-lower rule used by Java's
-     * case-insensitive String comparison, keeping equal values hash-compatible.
-     *
-     * @param value identity field to hash
-     * @return hash code consistent with {@link String#equalsIgnoreCase(String)}
-     */
-    private static int caseInsensitiveHash(String value) {
-        int hash = 0;
-        for (int index = 0; index < value.length(); index++) {
-            char folded = Character.toLowerCase(Character.toUpperCase(value.charAt(index)));
-            hash = 31 * hash + folded;
-        }
-        return hash;
     }
 }

@@ -30,7 +30,22 @@ class WorkbenchProjectFlowTest {
     @TempDir
     Path temporaryDirectory;
 
-    /** Save As adopts a normalized Project identity only after ProjectSession publishes a successful save. */
+    /**
+     * Creates a deterministic coordinator whose publication callbacks execute in submission order.
+     */
+    private static JobCoordinator coordinator(ManualExecutor worker) {
+        return new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // These tests settle operations before prolonged-cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+    }
+
+    /**
+     * Save As adopts a normalized Project identity only after ProjectSession publishes a successful save.
+     */
     @Test
     void saveAsAdoptsNormalizedIdentityAndLeavesProjectClean() {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -50,7 +65,9 @@ class WorkbenchProjectFlowTest {
         assertEquals("BS2BG Preview - saved-project.jbs2bg", saved.frame().title());
     }
 
-    /** A recovered Open publishes its adopted identity, dirty state, and ordered structured diagnostics together. */
+    /**
+     * A recovered Open publishes its adopted identity, dirty state, and ordered structured diagnostics together.
+     */
     @Test
     void recoveredOpenPublishesOneCoherentDirtyFrame() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -75,7 +92,9 @@ class WorkbenchProjectFlowTest {
         assertEquals("BS2BG Preview - *recovery-source.jbs2bg", opened.frame().title());
     }
 
-    /** Open returns immediately after admission, retaining its captured path and basis until worker completion. */
+    /**
+     * Open returns immediately after admission, retaining its captured path and basis until worker completion.
+     */
     @Test
     void openRunsThroughCentralAdmissionWithCapturedInputsAndTruthfulProgress() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -110,7 +129,9 @@ class WorkbenchProjectFlowTest {
                 flow.frame().snapshot().getFileIdentity().orElseThrow());
     }
 
-    /** A changed captured basis refuses stale Open publication and retains zero committed effects. */
+    /**
+     * A changed captured basis refuses stale Open publication and retains zero committed effects.
+     */
     @Test
     void staleOpenCompletionCannotOverwriteANewerProjectContentVersion() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -137,7 +158,9 @@ class WorkbenchProjectFlowTest {
                 .anyMatch(preset -> preset.getName().equals("Newer content")));
     }
 
-    /** A source changed after admission is stale even when its replacement remains a valid Project document. */
+    /**
+     * A source changed after admission is stale even when its replacement remains a valid Project document.
+     */
     @Test
     void changedOpenSourceCannotPublishAsTheCapturedInput() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -166,7 +189,9 @@ class WorkbenchProjectFlowTest {
         assertEquals(before, flow.frame());
     }
 
-    /** New keeps a dirty Project intact until the user explicitly confirms its replacement. */
+    /**
+     * New keeps a dirty Project intact until the user explicitly confirms its replacement.
+     */
     @Test
     void dirtyNewCanBeCancelledOrExplicitlyDiscarded() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -201,7 +226,9 @@ class WorkbenchProjectFlowTest {
         assertEquals("BS2BG Preview", replaced.frame().title());
     }
 
-    /** Save uses the adopted identity and clears recovery dirtiness without asking for another path. */
+    /**
+     * Save uses the adopted identity and clears recovery dirtiness without asking for another path.
+     */
     @Test
     void saveUsesTheAdoptedIdentityOfARecoveredProject() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -225,7 +252,9 @@ class WorkbenchProjectFlowTest {
         assertEquals("BS2BG Preview - recovery-source.jbs2bg", saved.frame().title());
     }
 
-    /** Dirty shutdown preserves the Project on Cancel and closes at most once after explicit Discard. */
+    /**
+     * Dirty shutdown preserves the Project on Cancel and closes at most once after explicit Discard.
+     */
     @Test
     void dirtyCloseCanBeCancelledBeforeDiscardClosesExactlyOnce() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -262,7 +291,9 @@ class WorkbenchProjectFlowTest {
         assertTrue(repeated.effect().isEmpty());
     }
 
-    /** Dirty shutdown can save through the adopted identity and closes only after the clean outcome publishes. */
+    /**
+     * Dirty shutdown can save through the adopted identity and closes only after the clean outcome publishes.
+     */
     @Test
     void dirtyCloseSavesBeforePublishingTheCloseEffect() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -287,7 +318,9 @@ class WorkbenchProjectFlowTest {
         assertEquals(WorkbenchProjectFlow.EffectKind.CLOSE_WINDOW, saved.effect().orElseThrow().kind());
     }
 
-    /** A failed close-save keeps the window and exact dirty Project active with its failure diagnostics. */
+    /**
+     * A failed close-save keeps the window and exact dirty Project active with its failure diagnostics.
+     */
     @Test
     void failedCloseSavePreservesUnsavedWorkAndDoesNotClose() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -318,7 +351,9 @@ class WorkbenchProjectFlowTest {
         assertTrue(failed.effect().isEmpty());
     }
 
-    /** A stale chooser callback cannot consume a newer effect or invoke a Project operation. */
+    /**
+     * A stale chooser callback cannot consume a newer effect or invoke a Project operation.
+     */
     @Test
     void staleEffectResponseIsRejectedWithoutConsumingTheCurrentEffect() {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -342,7 +377,9 @@ class WorkbenchProjectFlowTest {
         assertTrue(Files.isRegularFile(temporaryDirectory.resolve("current-target.jbs2bg")));
     }
 
-    /** Open replaces a dirty Project only after confirmation and then asks for the source path. */
+    /**
+     * Open replaces a dirty Project only after confirmation and then asks for the source path.
+     */
     @Test
     void dirtyOpenConfirmsBeforeLaunchingTheChooser() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -375,7 +412,9 @@ class WorkbenchProjectFlowTest {
                 opened.frame().snapshot().getFileIdentity().orElseThrow());
     }
 
-    /** Saving an untitled dirty Project during shutdown continues through Save As before the final close effect. */
+    /**
+     * Saving an untitled dirty Project during shutdown continues through Save As before the final close effect.
+     */
     @Test
     void dirtyUntitledCloseChoosesAPathBeforeClosing() {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -399,17 +438,6 @@ class WorkbenchProjectFlowTest {
         assertTrue(saved.frame().closed());
         assertEquals(WorkbenchProjectFlow.EffectKind.CLOSE_WINDOW, saved.effect().orElseThrow().kind());
         assertTrue(Files.isRegularFile(temporaryDirectory.resolve("saved-on-close.jbs2bg")));
-    }
-
-    /** Creates a deterministic coordinator whose publication callbacks execute in submission order. */
-    private static JobCoordinator coordinator(ManualExecutor worker) {
-        return new JobCoordinator(worker, Runnable::run,
-                Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // These tests settle operations before prolonged-cancellation feedback is relevant.
-                }, failure -> {
-                    throw new AssertionError("Unexpected coordinator callback failure", failure);
-                });
     }
 
 }

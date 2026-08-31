@@ -14,7 +14,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
-/** Stages canonical Standard and UUNP documents before publishing the pair into one directory. */
+/**
+ * Stages canonical Standard and UUNP documents before publishing the pair into one directory.
+ */
 final class SettingsPairPublisher {
     private static final String STAGING_PREFIX = ".bs2bg-settings-stage-";
     private static final String COMMITTED_MARKER = "committed";
@@ -27,9 +29,9 @@ final class SettingsPairPublisher {
      * Restores an interrupted, uncommitted Settings transaction before either source is parsed.
      * A committed transaction is only cleaned because both replacements were already installed.
      *
-     * @param directory working directory that owns the production Settings filenames
+     * @param directory      working directory that owns the production Settings filenames
      * @param standardTarget Standard Settings destination
-     * @param uunpTarget UUNP Settings destination
+     * @param uunpTarget     UUNP Settings destination
      * @return true when an uncommitted transaction was rolled back
      * @throws IOException when recovery state is ambiguous or cannot restore a coherent pair
      */
@@ -69,7 +71,9 @@ final class SettingsPairPublisher {
         }
     }
 
-    /** Restores one backup or removes a target that did not exist before the interrupted command. */
+    /**
+     * Restores one backup or removes a target that did not exist before the interrupted command.
+     */
     private static void recoverMember(Path transaction, String member, Path target) throws IOException {
         Path backup = transaction.resolve(member + ".backup");
         Path absent = transaction.resolve(member + ".absent");
@@ -94,12 +98,12 @@ final class SettingsPairPublisher {
      * Writes and flushes both documents before either production filename is installed.
      *
      * @param standardTarget Standard Settings destination
-     * @param uunpTarget UUNP Settings destination
-     * @param pair defensively owned canonical Settings bytes
+     * @param uunpTarget     UUNP Settings destination
+     * @param pair           defensively owned canonical Settings bytes
      * @throws IOException when preflight, staging, installation, or cleanup fails
      */
     static void publish(Path standardTarget, Path uunpTarget,
-            SettingsJacksonAdapter.SettingsPairBytes pair) throws IOException {
+                        SettingsJacksonAdapter.SettingsPairBytes pair) throws IOException {
         publish(standardTarget, uunpTarget, pair, SettingsPairPublisher::moveAtomically);
     }
 
@@ -107,13 +111,13 @@ final class SettingsPairPublisher {
      * Internal fault seam for deterministic later-install and rollback coverage.
      *
      * @param standardTarget Standard Settings destination
-     * @param uunpTarget UUNP Settings destination
-     * @param pair defensively owned canonical Settings bytes
-     * @param atomicMove same-filesystem move used for backup, install, and rollback
+     * @param uunpTarget     UUNP Settings destination
+     * @param pair           defensively owned canonical Settings bytes
+     * @param atomicMove     same-filesystem move used for backup, install, and rollback
      * @throws IOException when the pair cannot be published or fully restored
      */
     static void publish(Path standardTarget, Path uunpTarget,
-            SettingsJacksonAdapter.SettingsPairBytes pair, AtomicMove atomicMove) throws IOException {
+                        SettingsJacksonAdapter.SettingsPairBytes pair, AtomicMove atomicMove) throws IOException {
         Objects.requireNonNull(pair, "pair");
         Objects.requireNonNull(atomicMove, "atomicMove");
         Path standard = normalizeTarget(standardTarget);
@@ -174,10 +178,12 @@ final class SettingsPairPublisher {
         }
     }
 
-    /** Stages and forces the marker before one atomic rename becomes the sole publication commit point. */
+    /**
+     * Stages and forces the marker before one atomic rename becomes the sole publication commit point.
+     */
     private static void commit(Path stagingDirectory, AtomicMove atomicMove) throws IOException {
         Path stagedMarker = stagingDirectory.resolve(COMMITTED_STAGED_MARKER);
-        writeAndFlush(stagedMarker, new byte[] {1});
+        writeAndFlush(stagedMarker, new byte[]{1});
         atomicMove.move(stagedMarker, stagingDirectory.resolve(COMMITTED_MARKER));
     }
 
@@ -199,13 +205,17 @@ final class SettingsPairPublisher {
         return true;
     }
 
-    /** Records a missing prior destination so restart recovery knows to remove a partly installed new file. */
+    /**
+     * Records a missing prior destination so restart recovery knows to remove a partly installed new file.
+     */
     private static void markPriorAbsence(Publication publication) throws IOException {
         if (!publication.existed)
             writeAndFlush(publication.absentMarker, new byte[0]);
     }
 
-    /** Copies and flushes an existing destination before atomically exposing its complete backup marker. */
+    /**
+     * Copies and flushes an existing destination before atomically exposing its complete backup marker.
+     */
     private static void preparePrior(Publication publication, AtomicMove atomicMove) throws IOException {
         if (!publication.existed)
             return;
@@ -214,15 +224,19 @@ final class SettingsPairPublisher {
         atomicMove.move(publication.backupStaged, publication.backup);
     }
 
-    /** Installs one fully staged replacement after both durable prior-state records exist. */
+    /**
+     * Installs one fully staged replacement after both durable prior-state records exist.
+     */
     private static void install(Publication publication, AtomicMove atomicMove) throws IOException {
         atomicMove.move(publication.staged, publication.target);
     }
 
-    /** Restores both prior destinations from durable markers in reverse installation order. */
+    /**
+     * Restores both prior destinations from durable markers in reverse installation order.
+     */
     private static IOException rollback(Publication first, Publication second, AtomicMove atomicMove) {
         IOException failure = null;
-        for (Publication publication : new Publication[] {first, second}) {
+        for (Publication publication : new Publication[]{first, second}) {
             try {
                 if (Files.exists(publication.backup, LinkOption.NOFOLLOW_LINKS)) {
                     atomicMove.move(publication.backup, publication.target);
@@ -242,7 +256,9 @@ final class SettingsPairPublisher {
         return failure;
     }
 
-    /** Requires rollback or restart recovery to leave exactly the recorded prior member state. */
+    /**
+     * Requires rollback or restart recovery to leave exactly the recorded prior member state.
+     */
     private static void requireRestored(Path target, boolean shouldExist) throws IOException {
         boolean regular = Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(target);
         if (shouldExist && !regular)
@@ -251,7 +267,9 @@ final class SettingsPairPublisher {
             throw new IOException("Settings prior absence was not restored: " + target);
     }
 
-    /** Resolves one replaceable target beneath an existing working directory. */
+    /**
+     * Resolves one replaceable target beneath an existing working directory.
+     */
     private static Path normalizeTarget(Path target) throws IOException {
         Path normalized = Objects.requireNonNull(target, "target").toAbsolutePath().normalize();
         Path parent = normalized.getParent();
@@ -259,19 +277,23 @@ final class SettingsPairPublisher {
             throw new IOException("Settings target parent is not an existing directory: " + parent);
         if (Files.exists(normalized, LinkOption.NOFOLLOW_LINKS)
                 && (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)
-                        || Files.isSymbolicLink(normalized)))
+                || Files.isSymbolicLink(normalized)))
             throw new IOException("Settings destination is not a replaceable regular file: " + normalized);
         return normalized;
     }
 
-    /** Forces a copied backup before its complete marker can be atomically installed. */
+    /**
+     * Forces a copied backup before its complete marker can be atomically installed.
+     */
     private static void forceExisting(Path target) throws IOException {
         try (FileChannel channel = FileChannel.open(target, StandardOpenOption.WRITE)) {
             channel.force(true);
         }
     }
 
-    /** Writes every byte and forces file content before a destination move can begin. */
+    /**
+     * Writes every byte and forces file content before a destination move can begin.
+     */
     private static void writeAndFlush(Path target, byte[] bytes) throws IOException {
         try (FileChannel channel = FileChannel.open(target, StandardOpenOption.CREATE_NEW,
                 StandardOpenOption.WRITE)) {
@@ -282,7 +304,9 @@ final class SettingsPairPublisher {
         }
     }
 
-    /** Requires a same-filesystem atomic replacement for each published Settings member. */
+    /**
+     * Requires a same-filesystem atomic replacement for each published Settings member.
+     */
     private static void moveAtomically(Path source, Path target) throws IOException {
         try {
             Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
@@ -291,7 +315,9 @@ final class SettingsPairPublisher {
         }
     }
 
-    /** Removes the command-owned staging tree after successful publication or a failed attempt. */
+    /**
+     * Removes the command-owned staging tree after successful publication or a failed attempt.
+     */
     private static void deleteTree(Path directory) throws IOException {
         try (Stream<Path> paths = Files.walk(directory)) {
             for (Path path : paths.sorted(Comparator.reverseOrder()).toList())
@@ -299,7 +325,9 @@ final class SettingsPairPublisher {
         }
     }
 
-    /** Same-filesystem move operation injected only within the package for deterministic transaction tests. */
+    /**
+     * Same-filesystem move operation injected only within the package for deterministic transaction tests.
+     */
     @FunctionalInterface
     interface AtomicMove {
         /**
@@ -312,7 +340,9 @@ final class SettingsPairPublisher {
         void move(Path source, Path target) throws IOException;
     }
 
-    /** Mutable command-local state for one member of the paired Settings publication. */
+    /**
+     * Mutable command-local state for one member of the paired Settings publication.
+     */
     private static final class Publication {
         private final Path target;
         private final boolean existed;
@@ -321,7 +351,9 @@ final class SettingsPairPublisher {
         private final Path backup;
         private final Path absentMarker;
 
-        /** Captures one fully preflighted destination before staging or backup begins. */
+        /**
+         * Captures one fully preflighted destination before staging or backup begins.
+         */
         private Publication(Path target, boolean existed, Path staged, Path backup, Path absentMarker) {
             this.target = target;
             this.existed = existed;

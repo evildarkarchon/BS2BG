@@ -14,9 +14,29 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** Verifies transactional filesystem publication for the two production Settings filenames. */
+/**
+ * Verifies transactional filesystem publication for the two production Settings filenames.
+ */
 final class SettingsPairPublisherTest {
     private static final Path FIXTURE_ROOT = Path.of("test-resources", "json-oracles", "settings");
+
+    /**
+     * Creates canonical replacement bytes from the permanent paired Settings fixtures.
+     */
+    private static SettingsJacksonAdapter.SettingsPairBytes replacementPair() {
+        return SettingsJacksonAdapter.writePair(SettingsJacksonAdapter.readPair(
+                FIXTURE_ROOT.resolve("standard.json"), FIXTURE_ROOT.resolve("uunp.json")));
+    }
+
+    /**
+     * Requires the transaction namespace to be empty after complete publication or rollback.
+     */
+    private static void assertNoTransactions(Path directory) throws IOException {
+        try (var entries = Files.list(directory)) {
+            assertTrue(entries.noneMatch(path -> path.getFileName().toString()
+                    .startsWith(".bs2bg-settings-stage-")));
+        }
+    }
 
     /**
      * Injects a failure while installing the later member and requires both prior destination bytes to return.
@@ -228,19 +248,5 @@ final class SettingsPairPublisherTest {
         assertArrayEquals(priorStandard, Files.readAllBytes(standard));
         assertArrayEquals(priorUunp, Files.readAllBytes(uunp));
         assertNoTransactions(directory);
-    }
-
-    /** Creates canonical replacement bytes from the permanent paired Settings fixtures. */
-    private static SettingsJacksonAdapter.SettingsPairBytes replacementPair() {
-        return SettingsJacksonAdapter.writePair(SettingsJacksonAdapter.readPair(
-                FIXTURE_ROOT.resolve("standard.json"), FIXTURE_ROOT.resolve("uunp.json")));
-    }
-
-    /** Requires the transaction namespace to be empty after complete publication or rollback. */
-    private static void assertNoTransactions(Path directory) throws IOException {
-        try (var entries = Files.list(directory)) {
-            assertTrue(entries.noneMatch(path -> path.getFileName().toString()
-                    .startsWith(".bs2bg-settings-stage-")));
-        }
     }
 }

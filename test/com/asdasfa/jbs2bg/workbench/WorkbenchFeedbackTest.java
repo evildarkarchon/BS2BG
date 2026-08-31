@@ -12,7 +12,9 @@ class WorkbenchFeedbackTest {
 
     private static final Instant FIXED_TIME = Instant.parse("2026-08-29T12:00:00Z");
 
-    /** Every outcome projects the same severity, text cue, and semantic icon across all feedback surfaces. */
+    /**
+     * Every outcome projects the same severity, text cue, and semantic icon across all feedback surfaces.
+     */
     @Test
     void outcomeSeverityProjectsConsistentlyAcrossInfoBarActivityAndStatus() {
         WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.fixed(FIXED_TIME, ZoneOffset.UTC));
@@ -35,7 +37,9 @@ class WorkbenchFeedbackTest {
         assertEquals(FIXED_TIME, activity.occurredAt());
     }
 
-    /** Validation, success, warning, and failure each retain an independent non-color cue and vector request. */
+    /**
+     * Validation, success, warning, and failure each retain an independent non-color cue and vector request.
+     */
     @Test
     void everyAcceptedOutcomeSeverityHasAStableNonColorProjection() {
         java.util.Map<WorkbenchFeedback.Severity, String> cues = java.util.Map.of(
@@ -59,7 +63,9 @@ class WorkbenchFeedbackTest {
         }
     }
 
-    /** Dismissing transient inline feedback never deletes the durable Activity record or terminal status. */
+    /**
+     * Dismissing transient inline feedback never deletes the durable Activity record or terminal status.
+     */
     @Test
     void dismissingInfoBarRetainsDurableActivityAndStatus() {
         WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.fixed(FIXED_TIME, ZoneOffset.UTC));
@@ -75,7 +81,9 @@ class WorkbenchFeedbackTest {
         assertEquals("Project saved.", dismissed.status().message());
     }
 
-    /** Destructive dialogs publish a safe Cancel default and accept only the matching tokenized answer. */
+    /**
+     * Destructive dialogs publish a safe Cancel default and accept only the matching tokenized answer.
+     */
     @Test
     void typedDialogStateRejectsStaleAnswersAndDefaultsDestructiveActionsToCancel() {
         WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.fixed(FIXED_TIME, ZoneOffset.UTC));
@@ -101,7 +109,9 @@ class WorkbenchFeedbackTest {
         assertEquals(WorkbenchFeedback.DialogAction.DISCARD, answered.result().orElseThrow().action());
     }
 
-    /** Failure dialogs expose copyable details and contextual Retry while Close remains the safe default. */
+    /**
+     * Failure dialogs expose copyable details and contextual Retry while Close remains the safe default.
+     */
     @Test
     void failureDialogUsesTheAcceptedTypedActions() {
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
@@ -118,7 +128,9 @@ class WorkbenchFeedbackTest {
         assertEquals(WorkbenchFeedback.DialogAction.CLOSE, spec.cancelAction());
     }
 
-    /** Dirty shutdown remains typed and exposes Save and Discard while Cancel is both default and escape. */
+    /**
+     * Dirty shutdown remains typed and exposes Save and Discard while Cancel is both default and escape.
+     */
     @Test
     void dirtyCloseDialogKeepsCancelAsTheSafeDefault() {
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.unsavedClose(

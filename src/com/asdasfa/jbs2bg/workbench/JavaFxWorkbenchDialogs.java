@@ -17,7 +17,9 @@ import javafx.scene.input.ClipboardContent;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
-/** Standard-JavaFX renderer for typed Workbench confirmation and failure dialogs. */
+/**
+ * Standard-JavaFX renderer for typed Workbench confirmation and failure dialogs.
+ */
 final class JavaFxWorkbenchDialogs {
     private static final Map<WorkbenchFeedback.DialogAction, ButtonType> BUTTON_TYPES = buttonTypes();
 
@@ -27,7 +29,7 @@ final class JavaFxWorkbenchDialogs {
     /**
      * Shows one owned application-modal dialog and returns its typed action.
      *
-     * @param spec complete typed request already published in durable presentation state
+     * @param spec  complete typed request already published in durable presentation state
      * @param owner semantic launcher window that regains focus after the modal closes
      * @return selected action, or the request's cancel action for window-manager dismissal
      */
@@ -36,7 +38,9 @@ final class JavaFxWorkbenchDialogs {
         return dialog.showAndWait().orElse(spec.cancelAction());
     }
 
-    /** Builds one owned dialog graph so toolkit tests and the real modal path share the same interface. */
+    /**
+     * Builds one owned dialog graph so toolkit tests and the real modal path share the same interface.
+     */
     static Dialog<WorkbenchFeedback.DialogAction> create(WorkbenchFeedback.DialogSpec spec, Stage owner) {
         WorkbenchFeedback.DialogSpec request = Objects.requireNonNull(spec, "spec");
         Dialog<WorkbenchFeedback.DialogAction> dialog = new Dialog<>();
@@ -74,12 +78,16 @@ final class JavaFxWorkbenchDialogs {
         return dialog;
     }
 
-    /** Returns the stable ButtonType shared by creation, lookup, and result conversion. */
+    /**
+     * Returns the stable ButtonType shared by creation, lookup, and result conversion.
+     */
     static ButtonType buttonType(WorkbenchFeedback.DialogAction action) {
         return BUTTON_TYPES.get(Objects.requireNonNull(action, "action"));
     }
 
-    /** Creates the complete typed-to-JavaFX button mapping exactly once. */
+    /**
+     * Creates the complete typed-to-JavaFX button mapping exactly once.
+     */
     private static Map<WorkbenchFeedback.DialogAction, ButtonType> buttonTypes() {
         Map<WorkbenchFeedback.DialogAction, ButtonType> values =
                 new EnumMap<>(WorkbenchFeedback.DialogAction.class);
@@ -98,7 +106,9 @@ final class JavaFxWorkbenchDialogs {
         return Map.copyOf(values);
     }
 
-    /** Converts a returned JavaFX ButtonType to the Workbench dialog action. */
+    /**
+     * Converts a returned JavaFX ButtonType to the Workbench dialog action.
+     */
     private static WorkbenchFeedback.DialogAction actionFor(ButtonType value) {
         for (Map.Entry<WorkbenchFeedback.DialogAction, ButtonType> entry : BUTTON_TYPES.entrySet()) {
             if (entry.getValue() == value)
@@ -107,14 +117,18 @@ final class JavaFxWorkbenchDialogs {
         return null;
     }
 
-    /** Copies complete failure details through the public JavaFX clipboard interface. */
+    /**
+     * Copies complete failure details through the public JavaFX clipboard interface.
+     */
     private static void copyDetails(String details) {
         ClipboardContent content = new ClipboardContent();
         content.putString(details);
         Clipboard.getSystemClipboard().setContent(content);
     }
 
-    /** Removes mnemonic markers from the stable accessible button name. */
+    /**
+     * Removes mnemonic markers from the stable accessible button name.
+     */
     private static String buttonLabel(WorkbenchFeedback.DialogAction action) {
         return buttonType(action).getText().replace("_", "");
     }

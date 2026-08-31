@@ -42,6 +42,55 @@ import javafx.collections.ObservableList;
 class ProjectPresentationTest {
 
     /**
+     * Creates a presentation read model from the canonical New Project outcome.
+     */
+    private static ProjectPresentation newPresentation() {
+        ProjectSession session = ProjectSessions.create();
+        ProjectOutcome outcome = session.newProject();
+        return new ProjectPresentation("jBS2BG", outcome.getSnapshot());
+    }
+
+    /**
+     * Builds a representative immutable Project snapshot from independent literals.
+     */
+    private static ProjectSnapshot populatedSnapshot(Path fileIdentity, boolean dirty) {
+        SliderChoiceSnapshot choice = new SliderChoiceSnapshot("Waist", true, Integer.valueOf(25),
+                Integer.valueOf(75), 25, 75, 10, 90, false);
+        SliderPresetSnapshot preset = new SliderPresetSnapshot("Athletic", false,
+                Collections.singletonList(choice));
+        CustomMorphTargetSnapshot target = new CustomMorphTargetSnapshot("All|Female",
+                Collections.singletonList("Athletic"));
+        NpcMorphAssignmentSnapshot npc = new NpcMorphAssignmentSnapshot("Aela", "Skyrim.esm", "FemaleNord",
+                "NordRace", "1A696", Collections.singletonList("Athletic"));
+        return new ProjectSnapshot(Collections.singletonList(preset), Collections.singletonList(target),
+                Arrays.asList(npc), Optional.of(fileIdentity), dirty, ProjectLifecycleStatus.FILE_BACKED);
+    }
+
+    /**
+     * Verifies one observable getter's immutable generic element contract.
+     *
+     * @param getterName        public ProjectPresentation collection getter
+     * @param snapshotType      required immutable element type
+     * @param expectedAccessors complete public API allowed on the immutable value
+     * @throws Exception when the getter is absent or its reflective signature cannot
+     *                   be inspected
+     */
+    private static void assertImmutableSnapshotGetter(String getterName, Class<?> snapshotType,
+                                                      String... expectedAccessors) throws Exception {
+        Method getter = ProjectPresentation.class.getMethod(getterName);
+        assertEquals(ObservableList.class, getter.getReturnType());
+        ParameterizedType returnType = (ParameterizedType) getter.getGenericReturnType();
+        assertEquals(snapshotType, returnType.getActualTypeArguments()[0]);
+
+        List<String> publicApi = new ArrayList<>();
+        for (Method method : snapshotType.getDeclaredMethods())
+            if (Modifier.isPublic(method.getModifiers()))
+                publicApi.add(method.getName());
+        Collections.sort(publicApi);
+        assertEquals(Arrays.asList(expectedAccessors), publicApi);
+    }
+
+    /**
      * Locks the presentation collection seam to immutable Project snapshot values
      * without public mutation routes on the exposed element types.
      *
@@ -113,7 +162,7 @@ class ProjectPresentationTest {
                 "Could not parse source.");
         ProjectDiagnostic missingDiagnostic = new ProjectDiagnostic("PROJECT_FILE_READ_FAILED",
                 DiagnosticSeverity.ERROR, new SourceLocation(Optional.of(Paths.get("imports", "missing.xml")),
-                        Optional.of("/"), OptionalInt.empty(), OptionalInt.empty()),
+                Optional.of("/"), OptionalInt.empty(), OptionalInt.empty()),
                 "The source could not be read.");
         List<ProjectDiagnostic> diagnostics = Arrays.asList(diagnostic, missingDiagnostic);
         // Non-changed outcomes always carry the session's current snapshot, which the
@@ -132,8 +181,8 @@ class ProjectPresentationTest {
         assertTrue(failed.hasErrorDiagnostics());
         assertSame(renderedBeforeFailure, presentation.getSliderPresets().get(0));
         assertEquals("ERROR [XML_PARSE_FAILED] broken.xml / Preset (line 3, column 7): Could not parse source."
-                + System.lineSeparator()
-                + "ERROR [PROJECT_FILE_READ_FAILED] missing.xml: The source could not be read.",
+                        + System.lineSeparator()
+                        + "ERROR [PROJECT_FILE_READ_FAILED] missing.xml: The source could not be read.",
                 failed.getDiagnosticText());
         assertEquals("jBS2BG - example.jbs2bg", presentation.getWindowTitle());
         assertFalse(presentation.requiresDiscardConfirmation());
@@ -228,50 +277,5 @@ class ProjectPresentationTest {
         assertThrows(UnsupportedOperationException.class, () -> presentation.getSliderPresets().clear());
         assertThrows(UnsupportedOperationException.class, () -> presentation.getCustomMorphTargets().clear());
         assertThrows(UnsupportedOperationException.class, () -> presentation.getNpcMorphAssignments().clear());
-    }
-
-    /** Creates a presentation read model from the canonical New Project outcome. */
-    private static ProjectPresentation newPresentation() {
-        ProjectSession session = ProjectSessions.create();
-        ProjectOutcome outcome = session.newProject();
-        return new ProjectPresentation("jBS2BG", outcome.getSnapshot());
-    }
-
-    /** Builds a representative immutable Project snapshot from independent literals. */
-    private static ProjectSnapshot populatedSnapshot(Path fileIdentity, boolean dirty) {
-        SliderChoiceSnapshot choice = new SliderChoiceSnapshot("Waist", true, Integer.valueOf(25),
-                Integer.valueOf(75), 25, 75, 10, 90, false);
-        SliderPresetSnapshot preset = new SliderPresetSnapshot("Athletic", false,
-                Collections.singletonList(choice));
-        CustomMorphTargetSnapshot target = new CustomMorphTargetSnapshot("All|Female",
-                Collections.singletonList("Athletic"));
-        NpcMorphAssignmentSnapshot npc = new NpcMorphAssignmentSnapshot("Aela", "Skyrim.esm", "FemaleNord",
-                "NordRace", "1A696", Collections.singletonList("Athletic"));
-        return new ProjectSnapshot(Collections.singletonList(preset), Collections.singletonList(target),
-                Arrays.asList(npc), Optional.of(fileIdentity), dirty, ProjectLifecycleStatus.FILE_BACKED);
-    }
-
-    /**
-     * Verifies one observable getter's immutable generic element contract.
-     *
-     * @param getterName public ProjectPresentation collection getter
-     * @param snapshotType required immutable element type
-     * @param expectedAccessors complete public API allowed on the immutable value
-     * @throws Exception when the getter is absent or its reflective signature cannot
-     *         be inspected
-     */
-    private static void assertImmutableSnapshotGetter(String getterName, Class<?> snapshotType,
-            String... expectedAccessors) throws Exception {
-        Method getter = ProjectPresentation.class.getMethod(getterName);
-        assertEquals(ObservableList.class, getter.getReturnType());
-        ParameterizedType returnType = (ParameterizedType) getter.getGenericReturnType();
-        assertEquals(snapshotType, returnType.getActualTypeArguments()[0]);
-
-        List<String> publicApi = new ArrayList<>();
-        for (Method method : snapshotType.getDeclaredMethods())
-            if (Modifier.isPublic(method.getModifiers()))
-                publicApi.add(method.getName());
-        Collections.sort(publicApi);
-        assertEquals(Arrays.asList(expectedAccessors), publicApi);
     }
 }

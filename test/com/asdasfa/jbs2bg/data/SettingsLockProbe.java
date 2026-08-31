@@ -4,7 +4,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Child-JVM entry point used to prove Settings initialization honors the operating-system directory lock. */
+/**
+ * Child-JVM entry point used to prove Settings initialization honors the operating-system directory lock.
+ */
 public final class SettingsLockProbe {
     private SettingsLockProbe() {
     }

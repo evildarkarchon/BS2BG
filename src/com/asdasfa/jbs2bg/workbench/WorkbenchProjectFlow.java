@@ -34,34 +34,129 @@ import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
  */
 public final class WorkbenchProjectFlow {
 
-    /** User-level Project lifecycle requests accepted by the Workbench kernel. */
-    public enum Intent {
-        CLOSE,
-        NEW,
-        OPEN,
-        SAVE,
-        SAVE_AS
+    private final String applicationName;
+    private final ProjectSession projectSession;
+    private final JobCoordinator jobs;
+    private long sequence;
+    private long nextEffectToken;
+    private Frame frame;
+    private Effect pendingEffect;
+    private Intent pendingIntent;
+    /**
+     * Creates the sole Workbench Project flow and establishes its initial clean New Project.
+     *
+     * @param applicationName stable base window title
+     * @param projectSession  authoritative synchronous Project session
+     */
+    public WorkbenchProjectFlow(String applicationName, ProjectSession projectSession) {
+        this(applicationName, projectSession, directCoordinator());
+    }
+    /**
+     * Creates the sole Workbench Project flow on an injected application-wide job coordinator.
+     *
+     * @param applicationName stable base window title
+     * @param projectSession  authoritative synchronous Project session
+     * @param jobs            application-wide admission, progress, cancellation, retry, and shutdown owner
+     */
+    public WorkbenchProjectFlow(String applicationName, ProjectSession projectSession, JobCoordinator jobs) {
+        this.applicationName = requireApplicationName(applicationName);
+        this.projectSession = Objects.requireNonNull(projectSession, "projectSession");
+        this.jobs = Objects.requireNonNull(jobs, "jobs");
+        this.nextEffectToken = 1;
+        publish(projectSession.newProject());
     }
 
-    /** Platform effect kinds produced by Project lifecycle requests. */
-    public enum EffectKind {
-        CLOSE_WINDOW,
-        CONFIRM_CLOSE,
-        CONFIRM_NEW,
-        CONFIRM_OPEN,
-        CHOOSE_OPEN_PATH,
-        CHOOSE_SAVE_PATH
+    /**
+     * Reports whether persistence produced a usable clean Project rather than a typed rejection or failure.
+     */
+    private static boolean completedSuccessfully(ProjectOutcome outcome) {
+        return !(outcome instanceof FailedOutcome) && !(outcome instanceof RejectedOutcome)
+                && !outcome.getSnapshot().isDirty();
     }
 
-    /** Complete family of values a chooser or confirmation may return. */
-    public enum ResponseKind {
-        PATH_SELECTED,
-        CANCELLED,
-        DISCARD,
-        SAVE
+    /**
+     * Adds the canonical extension without changing a caller-supplied case-insensitive match.
+     */
+    private static Path projectPath(Path selected) {
+        Path normalized = selected.toAbsolutePath().normalize();
+        Path fileName = normalized.getFileName();
+        String name = fileName == null ? normalized.toString() : fileName.toString();
+        if (name.toLowerCase(Locale.ROOT).endsWith(".jbs2bg"))
+            return normalized;
+        Path parent = normalized.getParent();
+        String extended = name + ".jbs2bg";
+        return parent == null ? Path.of(extended).toAbsolutePath().normalize() : parent.resolve(extended);
     }
 
-    /** Immutable platform effect carrying the token required by its response. */
+    /**
+     * Validates the user-visible application title once at construction.
+     */
+    private static String requireApplicationName(String name) {
+        Objects.requireNonNull(name, "applicationName");
+        if (name.isBlank())
+            throw new IllegalArgumentException("applicationName must not be blank");
+        return name;
+    }
+
+    /**
+     * Classifies one typed Project outcome into durable job disposition, effects, and diagnostics.
+     */
+    private static JobCoordinator.Result<ProjectOutcome> openResult(ProjectOutcome outcome,
+                                                                    Optional<String> staleReason) {
+        List<JobCoordinator.Diagnostic> diagnostics = outcome.getDiagnostics().stream()
+                .map(WorkbenchProjectFlow::jobDiagnostic)
+                .toList();
+        if (staleReason.isPresent()) {
+            List<JobCoordinator.Diagnostic> staleDiagnostics = new java.util.ArrayList<>(diagnostics);
+            staleDiagnostics.add(new JobCoordinator.Diagnostic("STALE_RESULT",
+                    "Open result was not published because " + staleReason.orElseThrow() + ".",
+                    Optional.empty()));
+            return JobCoordinator.Result.completedWithIssues(outcome, "Open result was stale.", List.of(),
+                    staleDiagnostics);
+        }
+        if (outcome instanceof CancelledOutcome)
+            return JobCoordinator.Result.cancelled(outcome, "Open Project cancelled.", List.of(), diagnostics);
+        if (outcome instanceof FailedOutcome || outcome instanceof RejectedOutcome)
+            return JobCoordinator.Result.failed(outcome,
+                    "Open Project failed with " + diagnosticSummary(diagnostics.size()) + ".", diagnostics);
+        if (diagnostics.isEmpty())
+            return JobCoordinator.Result.completed(outcome, "Project opened.", List.of("Project published"),
+                    diagnostics);
+        return JobCoordinator.Result.completedWithIssues(outcome,
+                "Project opened with " + diagnosticSummary(diagnostics.size()) + ".",
+                List.of("Project published"), diagnostics);
+    }
+
+    /**
+     * Pluralizes the stable diagnostic count used in terminal Open summaries.
+     */
+    private static String diagnosticSummary(int count) {
+        return count + (count == 1 ? " diagnostic" : " diagnostics");
+    }
+
+    /**
+     * Converts one structured Project diagnostic without introducing presentation or JavaFX dependencies.
+     */
+    private static JobCoordinator.Diagnostic jobDiagnostic(ProjectDiagnostic diagnostic) {
+        return new JobCoordinator.Diagnostic(diagnostic.getCode(), diagnostic.getMessage(),
+                Optional.of(ProjectDiagnosticFormatter.format(List.of(diagnostic))));
+    }
+
+    /**
+     * Builds the immediate coordinator retained by synchronous kernel tests and compatibility callers.
+     */
+    private static JobCoordinator directCoordinator() {
+        return new JobCoordinator(new DirectExecutorService(), Runnable::run, Clock.systemUTC(),
+                (delay, action) -> () -> {
+                    // Immediate compatibility work cannot remain in Cancelling long enough for this timer.
+                }, failure -> {
+            // Compatibility callers have no technical diagnostics surface; the coordinator still retains it.
+        });
+    }
+
+    /**
+     * Immutable platform effect carrying the token required by its response.
+     */
     public record Effect(long token, EffectKind kind) {
         /** Requires a positive token and non-null effect kind. */
         public Effect {
@@ -71,39 +166,43 @@ public final class WorkbenchProjectFlow {
         }
     }
 
-    /** Immutable response from a completed platform effect. */
+    /**
+     * Immutable response from a completed platform effect.
+     */
     public record Response(ResponseKind kind, Path selectedPath) {
         /** Creates a response for a user-selected local path. */
-        public static Response selected(Path path) {
+        public static Response selected (Path path){
             return new Response(ResponseKind.PATH_SELECTED, Objects.requireNonNull(path, "path"));
         }
 
         /** Creates a response for a cancelled chooser or confirmation. */
-        public static Response cancelled() {
+        public static Response cancelled () {
             return new Response(ResponseKind.CANCELLED, null);
         }
 
         /** Creates a response that explicitly discards the dirty Project before continuing. */
-        public static Response discard() {
+        public static Response discard () {
             return new Response(ResponseKind.DISCARD, null);
         }
 
         /** Creates a response that saves the dirty Project before continuing. */
-        public static Response save() {
+        public static Response save () {
             return new Response(ResponseKind.SAVE, null);
         }
 
         /** Requires a path only for the selected-path response kind. */
         public Response {
             Objects.requireNonNull(kind, "kind");
-            if ((kind == ResponseKind.PATH_SELECTED) != (selectedPath != null))
+            if ((kind == ResponseKind.PATH_SELECTED) == (selectedPath == null))
                 throw new IllegalArgumentException("selectedPath must be present only for PATH_SELECTED");
         }
     }
 
-    /** Coherent Workbench projection of one completely published Project outcome. */
+    /**
+     * Coherent Workbench projection of one completely published Project outcome.
+     */
     public record Frame(long sequence, ProjectSnapshot snapshot, List<ProjectDiagnostic> diagnostics, String title,
-            boolean closed) {
+                        boolean closed) {
         /** Defensively owns the diagnostics associated with this publication. */
         public Frame {
             if (sequence <= 0)
@@ -114,7 +213,9 @@ public final class WorkbenchProjectFlow {
         }
     }
 
-    /** Result of one intent or platform response, including any next platform effect. */
+    /**
+     * Result of one intent or platform response, including any next platform effect.
+     */
     public record Update(boolean accepted, Frame frame, Optional<Effect> effect) {
         /** Requires a coherent frame and non-null optional effect. */
         public Update {
@@ -123,46 +224,16 @@ public final class WorkbenchProjectFlow {
         }
     }
 
-    private final String applicationName;
-    private final ProjectSession projectSession;
-    private final JobCoordinator jobs;
-    private long sequence;
-    private long nextEffectToken;
-    private Frame frame;
-    private Effect pendingEffect;
-    private Intent pendingIntent;
-
     /**
-     * Creates the sole Workbench Project flow and establishes its initial clean New Project.
-     *
-     * @param applicationName stable base window title
-     * @param projectSession authoritative synchronous Project session
+     * @return the latest immutable, completely published Workbench Project frame
      */
-    public WorkbenchProjectFlow(String applicationName, ProjectSession projectSession) {
-        this(applicationName, projectSession, directCoordinator());
-    }
-
-    /**
-     * Creates the sole Workbench Project flow on an injected application-wide job coordinator.
-     *
-     * @param applicationName stable base window title
-     * @param projectSession authoritative synchronous Project session
-     * @param jobs application-wide admission, progress, cancellation, retry, and shutdown owner
-     */
-    public WorkbenchProjectFlow(String applicationName, ProjectSession projectSession, JobCoordinator jobs) {
-        this.applicationName = requireApplicationName(applicationName);
-        this.projectSession = Objects.requireNonNull(projectSession, "projectSession");
-        this.jobs = Objects.requireNonNull(jobs, "jobs");
-        this.nextEffectToken = 1;
-        publish(projectSession.newProject());
-    }
-
-    /** @return the latest immutable, completely published Workbench Project frame */
     public Frame frame() {
         return frame;
     }
 
-    /** @return application-wide job coordinator used by this flow and its Workbench adapter */
+    /**
+     * @return application-wide job coordinator used by this flow and its Workbench adapter
+     */
     public JobCoordinator jobs() {
         return jobs;
     }
@@ -189,10 +260,10 @@ public final class WorkbenchProjectFlow {
         }
         pendingIntent = intent;
         EffectKind kind = switch (intent) {
-        case CLOSE -> EffectKind.CONFIRM_CLOSE;
-        case NEW -> EffectKind.CONFIRM_NEW;
-        case OPEN -> frame.snapshot().isDirty() ? EffectKind.CONFIRM_OPEN : EffectKind.CHOOSE_OPEN_PATH;
-        case SAVE, SAVE_AS -> EffectKind.CHOOSE_SAVE_PATH;
+            case CLOSE -> EffectKind.CONFIRM_CLOSE;
+            case NEW -> EffectKind.CONFIRM_NEW;
+            case OPEN -> frame.snapshot().isDirty() ? EffectKind.CONFIRM_OPEN : EffectKind.CHOOSE_OPEN_PATH;
+            case SAVE, SAVE_AS -> EffectKind.CHOOSE_SAVE_PATH;
         };
         pendingEffect = new Effect(nextEffectToken++, kind);
         return accepted(pendingEffect);
@@ -231,7 +302,7 @@ public final class WorkbenchProjectFlow {
     /**
      * Completes one pending platform effect. A missing or stale token is rejected without invoking ProjectSession.
      *
-     * @param token token of the effect being completed
+     * @param token    token of the effect being completed
      * @param response selected platform value
      * @return the resulting Project frame, or the unchanged frame for a stale response
      */
@@ -285,10 +356,10 @@ public final class WorkbenchProjectFlow {
             return admission.admitted() ? accepted(null) : rejected();
         }
         ProjectOutcome outcome = switch (completedIntent) {
-        case CLOSE -> projectSession.saveAs(projectPath(response.selectedPath()));
-        case NEW -> throw new IllegalStateException("New Project cannot complete from a path chooser");
-        case OPEN -> throw new AssertionError("Open is admitted through the application job coordinator");
-        case SAVE, SAVE_AS -> projectSession.saveAs(projectPath(response.selectedPath()));
+            case CLOSE -> projectSession.saveAs(projectPath(response.selectedPath()));
+            case NEW -> throw new IllegalStateException("New Project cannot complete from a path chooser");
+            case OPEN -> throw new AssertionError("Open is admitted through the application job coordinator");
+            case SAVE, SAVE_AS -> projectSession.saveAs(projectPath(response.selectedPath()));
         };
         publish(outcome);
         if (completedIntent == Intent.CLOSE && completedSuccessfully(outcome))
@@ -296,25 +367,25 @@ public final class WorkbenchProjectFlow {
         return accepted(null);
     }
 
-    /** Clears a consumed effect and its continuation together. */
+    /**
+     * Clears a consumed effect and its continuation together.
+     */
     private void clearPendingEffect() {
         pendingEffect = null;
         pendingIntent = null;
     }
 
-    /** Rejects immediate legacy feature work while the lifecycle state machine owns a platform effect. */
+    /**
+     * Rejects immediate legacy feature work while the lifecycle state machine owns a platform effect.
+     */
     private void requireImmediateOperation() {
         if (frame.closed() || pendingEffect != null || jobs.frame().active())
             throw new IllegalStateException("Workbench Project flow is not accepting immediate operations");
     }
 
-    /** Reports whether persistence produced a usable clean Project rather than a typed rejection or failure. */
-    private static boolean completedSuccessfully(ProjectOutcome outcome) {
-        return !(outcome instanceof FailedOutcome) && !(outcome instanceof RejectedOutcome)
-                && !outcome.getSnapshot().isDirty();
-    }
-
-    /** Publishes exactly one ProjectSession outcome as the next coherent Workbench frame. */
+    /**
+     * Publishes exactly one ProjectSession outcome as the next coherent Workbench frame.
+     */
     private void publish(ProjectOutcome outcome) {
         ProjectOutcome required = Objects.requireNonNull(outcome, "outcome");
         sequence++;
@@ -322,25 +393,17 @@ public final class WorkbenchProjectFlow {
                 false);
     }
 
-    /** Marks the flow closed before emitting its single final-window effect. */
+    /**
+     * Marks the flow closed before emitting its single final-window effect.
+     */
     private Update closeWindow() {
         frame = new Frame(frame.sequence(), frame.snapshot(), frame.diagnostics(), frame.title(), true);
         return accepted(new Effect(nextEffectToken++, EffectKind.CLOSE_WINDOW));
     }
 
-    /** Adds the canonical extension without changing a caller-supplied case-insensitive match. */
-    private static Path projectPath(Path selected) {
-        Path normalized = selected.toAbsolutePath().normalize();
-        Path fileName = normalized.getFileName();
-        String name = fileName == null ? normalized.toString() : fileName.toString();
-        if (name.toLowerCase(Locale.ROOT).endsWith(".jbs2bg"))
-            return normalized;
-        Path parent = normalized.getParent();
-        String extended = name + ".jbs2bg";
-        return parent == null ? Path.of(extended).toAbsolutePath().normalize() : parent.resolve(extended);
-    }
-
-    /** Derives the Project title from the same immutable snapshot published in the frame. */
+    /**
+     * Derives the Project title from the same immutable snapshot published in the frame.
+     */
     private String title(ProjectSnapshot snapshot) {
         String dirty = snapshot.isDirty() ? "*" : "";
         if (snapshot.getFileIdentity().isEmpty())
@@ -350,25 +413,23 @@ public final class WorkbenchProjectFlow {
         return applicationName + " - " + dirty + (fileName == null ? identity : fileName);
     }
 
-    /** Validates the user-visible application title once at construction. */
-    private static String requireApplicationName(String name) {
-        Objects.requireNonNull(name, "applicationName");
-        if (name.isBlank())
-            throw new IllegalArgumentException("applicationName must not be blank");
-        return name;
-    }
-
-    /** Returns an accepted update and optionally carries the next platform effect. */
+    /**
+     * Returns an accepted update and optionally carries the next platform effect.
+     */
     private Update accepted(Effect effect) {
         return new Update(true, frame, Optional.ofNullable(effect));
     }
 
-    /** Returns the unchanged frame for a request that cannot be accepted. */
+    /**
+     * Returns the unchanged frame for a request that cannot be accepted.
+     */
     private Update rejected() {
         return new Update(false, frame, Optional.empty());
     }
 
-    /** Captures one Open attempt and its retry factory without retaining mutable chooser or Project state. */
+    /**
+     * Captures one Open attempt and its retry factory without retaining mutable chooser or Project state.
+     */
     private JobCoordinator.Submission<ProjectOutcome> openSubmission(Path source) {
         Path capturedSource = Objects.requireNonNull(source, "source").toAbsolutePath().normalize();
         ProjectContentVersion capturedBasis = projectSession.getSnapshot().getContentVersion();
@@ -388,55 +449,117 @@ public final class WorkbenchProjectFlow {
         }, Optional.of(() -> openSubmission(capturedSource)));
     }
 
-    /** Classifies one typed Project outcome into durable job disposition, effects, and diagnostics. */
-    private static JobCoordinator.Result<ProjectOutcome> openResult(ProjectOutcome outcome,
-            Optional<String> staleReason) {
-        List<JobCoordinator.Diagnostic> diagnostics = outcome.getDiagnostics().stream()
-                .map(WorkbenchProjectFlow::jobDiagnostic)
-                .toList();
-        if (staleReason.isPresent()) {
-            List<JobCoordinator.Diagnostic> staleDiagnostics = new java.util.ArrayList<>(diagnostics);
-            staleDiagnostics.add(new JobCoordinator.Diagnostic("STALE_RESULT",
-                    "Open result was not published because " + staleReason.orElseThrow() + ".",
-                    Optional.empty()));
-            return JobCoordinator.Result.completedWithIssues(outcome, "Open result was stale.", List.of(),
-                    staleDiagnostics);
+    /**
+     * Lightweight filesystem identity used to reject an Open whose selected source changed in flight.
+     */
+    private record OpenSourceStamp(boolean readable, long size, FileTime modifiedAt, String fileKey) {
+        /** Captures stable basic attributes without reading Project bytes on the JavaFX publication lane. */
+        private static OpenSourceStamp capture (Path source){
+            try {
+                BasicFileAttributes attributes = Files.readAttributes(source, BasicFileAttributes.class);
+                return new OpenSourceStamp(true, attributes.size(), attributes.lastModifiedTime(),
+                        Objects.toString(attributes.fileKey(), ""));
+            } catch (IOException exception) {
+                return new OpenSourceStamp(false, -1L, FileTime.fromMillis(0L), "");
+            }
         }
-        if (outcome instanceof CancelledOutcome)
-            return JobCoordinator.Result.cancelled(outcome, "Open Project cancelled.", List.of(), diagnostics);
-        if (outcome instanceof FailedOutcome || outcome instanceof RejectedOutcome)
-            return JobCoordinator.Result.failed(outcome,
-                    "Open Project failed with " + diagnosticSummary(diagnostics.size()) + ".", diagnostics);
-        if (diagnostics.isEmpty())
-            return JobCoordinator.Result.completed(outcome, "Project opened.", List.of("Project published"),
-                    diagnostics);
-        return JobCoordinator.Result.completedWithIssues(outcome,
-                "Project opened with " + diagnosticSummary(diagnostics.size()) + ".",
-                List.of("Project published"), diagnostics);
     }
 
-    /** Pluralizes the stable diagnostic count used in terminal Open summaries. */
-    private static String diagnosticSummary(int count) {
-        return count + (count == 1 ? " diagnostic" : " diagnostics");
+    /**
+     * User-level Project lifecycle requests accepted by the Workbench kernel.
+     */
+    public enum Intent {
+        CLOSE,
+        NEW,
+        OPEN,
+        SAVE,
+        SAVE_AS
     }
 
-    /** Converts one structured Project diagnostic without introducing presentation or JavaFX dependencies. */
-    private static JobCoordinator.Diagnostic jobDiagnostic(ProjectDiagnostic diagnostic) {
-        return new JobCoordinator.Diagnostic(diagnostic.getCode(), diagnostic.getMessage(),
-                Optional.of(ProjectDiagnosticFormatter.format(List.of(diagnostic))));
+    /**
+     * Platform effect kinds produced by Project lifecycle requests.
+     */
+    public enum EffectKind {
+        CLOSE_WINDOW,
+        CONFIRM_CLOSE,
+        CONFIRM_NEW,
+        CONFIRM_OPEN,
+        CHOOSE_OPEN_PATH,
+        CHOOSE_SAVE_PATH
     }
 
-    /** Builds the immediate coordinator retained by synchronous kernel tests and compatibility callers. */
-    private static JobCoordinator directCoordinator() {
-        return new JobCoordinator(new DirectExecutorService(), Runnable::run, Clock.systemUTC(),
-                (delay, action) -> () -> {
-                    // Immediate compatibility work cannot remain in Cancelling long enough for this timer.
-                }, failure -> {
-                    // Compatibility callers have no technical diagnostics surface; the coordinator still retains it.
-                });
+    /**
+     * Complete family of values a chooser or confirmation may return.
+     */
+    public enum ResponseKind {
+        PATH_SELECTED,
+        CANCELLED,
+        DISCARD,
+        SAVE
     }
 
-    /** Project-operation adapter bound to one captured content version and one coordinator attempt. */
+    /**
+     * ExecutorService adapter that runs one submitted task inline for compatibility tests.
+     */
+    private static final class DirectExecutorService extends AbstractExecutorService {
+        private boolean shutdown;
+
+        /**
+         * Rejects no task before shutdown and runs accepted work on the calling thread.
+         */
+        @Override
+        public void execute(Runnable command) {
+            if (shutdown)
+                throw new java.util.concurrent.RejectedExecutionException("Direct coordinator is shut down");
+            Objects.requireNonNull(command, "command").run();
+        }
+
+        /**
+         * Prevents later compatibility submissions.
+         */
+        @Override
+        public void shutdown() {
+            shutdown = true;
+        }
+
+        /**
+         * Prevents later work; inline execution leaves no queued tasks to return.
+         */
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown = true;
+            return List.of();
+        }
+
+        /**
+         * @return whether shutdown was requested
+         */
+        @Override
+        public boolean isShutdown() {
+            return shutdown;
+        }
+
+        /**
+         * @return whether shutdown was requested, since inline work never remains queued
+         */
+        @Override
+        public boolean isTerminated() {
+            return shutdown;
+        }
+
+        /**
+         * Inline work is already settled whenever this method is reached.
+         */
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            Objects.requireNonNull(unit, "unit");
+            return shutdown;
+        }
+    }
+
+    /**
+     * Project-operation adapter bound to one captured content version and one coordinator attempt.
+     */
     private final class OpenOperationContext implements ProjectOperationContext {
         private final JobCoordinator.Context jobContext;
         private final ProjectContentVersion capturedBasis;
@@ -444,22 +567,28 @@ public final class WorkbenchProjectFlow {
         private final OpenSourceStamp capturedSourceStamp;
         private String staleReason;
 
-        /** Captures immutable freshness state for exactly one Open worker invocation. */
+        /**
+         * Captures immutable freshness state for exactly one Open worker invocation.
+         */
         private OpenOperationContext(JobCoordinator.Context jobContext, ProjectContentVersion capturedBasis,
-                Path capturedSource, OpenSourceStamp capturedSourceStamp) {
+                                     Path capturedSource, OpenSourceStamp capturedSourceStamp) {
             this.jobContext = Objects.requireNonNull(jobContext, "jobContext");
             this.capturedBasis = Objects.requireNonNull(capturedBasis, "capturedBasis");
             this.capturedSource = Objects.requireNonNull(capturedSource, "capturedSource");
             this.capturedSourceStamp = Objects.requireNonNull(capturedSourceStamp, "capturedSourceStamp");
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean cancellationRequested() {
             return jobContext.cancellationRequested();
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void report(ProjectOperationProgress progress) {
             ProjectOperationProgress reported = Objects.requireNonNull(progress, "progress");
@@ -473,7 +602,9 @@ public final class WorkbenchProjectFlow {
             jobContext.report(jobProgress);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean beginCommit(String phase) {
             if (!capturedBasis.equals(projectSession.getSnapshot().getContentVersion())) {
@@ -487,68 +618,11 @@ public final class WorkbenchProjectFlow {
             return jobContext.beginCommit(phase);
         }
 
-        /** @return freshness reason when input change, rather than cancellation, refused publication */
+        /**
+         * @return freshness reason when input change, rather than cancellation, refused publication
+         */
         private Optional<String> staleReason() {
             return Optional.ofNullable(staleReason);
-        }
-    }
-
-    /** Lightweight filesystem identity used to reject an Open whose selected source changed in flight. */
-    private record OpenSourceStamp(boolean readable, long size, FileTime modifiedAt, String fileKey) {
-        /** Captures stable basic attributes without reading Project bytes on the JavaFX publication lane. */
-        private static OpenSourceStamp capture(Path source) {
-            try {
-                BasicFileAttributes attributes = Files.readAttributes(source, BasicFileAttributes.class);
-                return new OpenSourceStamp(true, attributes.size(), attributes.lastModifiedTime(),
-                        Objects.toString(attributes.fileKey(), ""));
-            } catch (IOException exception) {
-                return new OpenSourceStamp(false, -1L, FileTime.fromMillis(0L), "");
-            }
-        }
-    }
-
-    /** ExecutorService adapter that runs one submitted task inline for compatibility tests. */
-    private static final class DirectExecutorService extends AbstractExecutorService {
-        private boolean shutdown;
-
-        /** Rejects no task before shutdown and runs accepted work on the calling thread. */
-        @Override
-        public void execute(Runnable command) {
-            if (shutdown)
-                throw new java.util.concurrent.RejectedExecutionException("Direct coordinator is shut down");
-            Objects.requireNonNull(command, "command").run();
-        }
-
-        /** Prevents later compatibility submissions. */
-        @Override
-        public void shutdown() {
-            shutdown = true;
-        }
-
-        /** Prevents later work; inline execution leaves no queued tasks to return. */
-        @Override
-        public List<Runnable> shutdownNow() {
-            shutdown = true;
-            return List.of();
-        }
-
-        /** @return whether shutdown was requested */
-        @Override
-        public boolean isShutdown() {
-            return shutdown;
-        }
-
-        /** @return whether shutdown was requested, since inline work never remains queued */
-        @Override
-        public boolean isTerminated() {
-            return shutdown;
-        }
-
-        /** Inline work is already settled whenever this method is reached. */
-        @Override
-        public boolean awaitTermination(long timeout, TimeUnit unit) {
-            Objects.requireNonNull(unit, "unit");
-            return shutdown;
         }
     }
 }

@@ -21,10 +21,14 @@ import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 
-/** Freezes exact BoS bytes produced by the owned Jackson writer and production formatter. */
+/**
+ * Freezes exact BoS bytes produced by the owned Jackson writer and production formatter.
+ */
 final class BosJacksonWriterTest {
 
-    /** Covers the complete escaping, ordering, numeric-lexeme, UTF-8, BOM, and newline profile. */
+    /**
+     * Covers the complete escaping, ordering, numeric-lexeme, UTF-8, BOM, and newline profile.
+     */
     @Test
     void writesCanonicalUtf8OrderingEscapesAndNewlinePolicy() throws Exception {
         BosJacksonWriter.BosDocument document = new BosJacksonWriter.BosDocument(
@@ -43,7 +47,9 @@ final class BosJacksonWriterTest {
         assertEquals(new String(expected, StandardCharsets.UTF_8), written.text());
     }
 
-    /** Covers empty-object spelling and defensive byte ownership at the adapter result seam. */
+    /**
+     * Covers empty-object spelling and defensive byte ownership at the adapter result seam.
+     */
     @Test
     void writesTheEmptyDocumentGoldenAndDefensivelyOwnsItsBytes() throws Exception {
         byte[] expected = Files.readAllBytes(Path.of("test-resources", "json-oracles", "bos", "empty.json"));
@@ -93,7 +99,9 @@ final class BosJacksonWriterTest {
         }
     }
 
-    /** Proves invalid structure or non-finite/unrepresentable lexemes fail before a value can publish. */
+    /**
+     * Proves invalid structure or non-finite/unrepresentable lexemes fail before a value can publish.
+     */
     @Test
     void rejectsInvalidNumericDocumentsBeforeReturningCanonicalBytes() {
         assertThrows(IllegalArgumentException.class, () -> BosJacksonWriter.write(
@@ -104,7 +112,9 @@ final class BosJacksonWriterTest {
         }
     }
 
-    /** Production reports non-finite calculations only after retaining every attempted filename mapping. */
+    /**
+     * Production reports non-finite calculations only after retaining every attempted filename mapping.
+     */
     @Test
     void rejectsNonFiniteProductionValuesWithCompleteMappingsAndDiagnostics() {
         SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());
@@ -131,7 +141,9 @@ final class BosJacksonWriterTest {
         }
     }
 
-    /** Filename and finite-input overflow failures are reported together before publishing. */
+    /**
+     * Filename and finite-input overflow failures are reported together before publishing.
+     */
     @Test
     void reportsFilenameAndNonFiniteFailuresTogetherBeforePublishing() {
         SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());

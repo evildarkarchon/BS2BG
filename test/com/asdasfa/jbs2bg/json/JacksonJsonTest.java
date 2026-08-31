@@ -14,10 +14,34 @@ import java.util.Properties;
 
 import org.junit.jupiter.api.Test;
 
-/** Verifies the repository-owned strict Jackson profiles independently of production routing. */
+/**
+ * Verifies the repository-owned strict Jackson profiles independently of production routing.
+ */
 final class JacksonJsonTest {
 
-    /** Exact duplicates reject at the escaped member path with one-based source coordinates. */
+    /**
+     * Verifies one Settings payload rejects through the stable resource-limit translation.
+     */
+    private static void assertResourceLimit(byte[] document) {
+        assertResourceLimit(JsonProfile.SETTINGS, document);
+    }
+
+    /**
+     * Verifies one payload rejects through the selected profile's stable resource-limit translation.
+     */
+    private static void assertResourceLimit(JsonProfile profile, byte[] document) {
+        JsonFormatException exception = assertThrows(JsonFormatException.class,
+                () -> JacksonJson.validate("limited.json", profile, document));
+
+        assertEquals("JSON_RESOURCE_LIMIT", exception.code());
+        assertEquals("limited.json", exception.source());
+        assertTrue(exception.line() > 0);
+        assertTrue(exception.column() > 0);
+    }
+
+    /**
+     * Exact duplicates reject at the escaped member path with one-based source coordinates.
+     */
     @Test
     void duplicateMemberReportsStablePathAndCoordinates() {
         JsonFormatException exception = assertThrows(JsonFormatException.class,
@@ -30,7 +54,9 @@ final class JacksonJsonTest {
         assertTrue(exception.column() > 1);
     }
 
-    /** The one legacy display-name map permits repeats without weakening any other object. */
+    /**
+     * The one legacy display-name map permits repeats without weakening any other object.
+     */
     @Test
     void projectProfileAllowsOnlyTheLegacyRepeatedNpcDisplayNameLocation() {
         byte[] repeatedNpcNames = ("""
@@ -42,7 +68,9 @@ final class JacksonJsonTest {
                 repeatedNpcNames));
     }
 
-    /** Array indexes and RFC 6901 escaping remain stable when a nested duplicate is diagnosed. */
+    /**
+     * Array indexes and RFC 6901 escaping remain stable when a nested duplicate is diagnosed.
+     */
     @Test
     void nestedDuplicateReportsEscapedArrayMemberPath() {
         JsonFormatException exception = assertThrows(JsonFormatException.class,
@@ -52,7 +80,9 @@ final class JacksonJsonTest {
         assertEquals("/array/0/a~1b~0c", exception.path());
     }
 
-    /** Trailing documents reject without retaining a Jackson exception in the translated cause chain. */
+    /**
+     * Trailing documents reject without retaining a Jackson exception in the translated cause chain.
+     */
     @Test
     void trailingDocumentReportsSyntaxWithoutLeakingJackson() {
         JsonFormatException exception = assertThrows(JsonFormatException.class,
@@ -66,7 +96,9 @@ final class JacksonJsonTest {
                 || !exception.getCause().getClass().getName().startsWith("tools.jackson"));
     }
 
-    /** Project integers accept only the exact signed Java integer lexical and range contract. */
+    /**
+     * Project integers accept only the exact signed Java integer lexical and range contract.
+     */
     @Test
     void projectIntegerUsesExactJavaLexicalContract() {
         assertEquals(0, JacksonJson.parseProjectInteger("-0"));
@@ -77,7 +109,9 @@ final class JacksonJsonTest {
                 () -> JacksonJson.parseProjectInteger("2147483648")).code());
     }
 
-    /** Nesting beyond the owned depth limit rejects with a trustworthy source coordinate. */
+    /**
+     * Nesting beyond the owned depth limit rejects with a trustworthy source coordinate.
+     */
     @Test
     void projectProfileRejectsNestingBeyondOwnedLimit() {
         String document = "[".repeat(65) + "]".repeat(65);
@@ -91,7 +125,9 @@ final class JacksonJsonTest {
         assertTrue(exception.column() > 0);
     }
 
-    /** Document bytes, tokens, UTF-8 text bytes, and numeric lexemes each enforce the named Settings profile. */
+    /**
+     * Document bytes, tokens, UTF-8 text bytes, and numeric lexemes each enforce the named Settings profile.
+     */
     @Test
     void settingsProfileEnforcesOwnedDocumentTokenTextAndNumberLimits() {
         byte[] oversizedDocument = new byte[(8 * 1024 * 1024) + 1];
@@ -107,7 +143,9 @@ final class JacksonJsonTest {
         assertResourceLimit(("[" + "1".repeat(129) + "]").getBytes(StandardCharsets.UTF_8));
     }
 
-    /** The permanent Project profile descriptor drives actual 64 MiB and five-million-token boundaries. */
+    /**
+     * The permanent Project profile descriptor drives actual 64 MiB and five-million-token boundaries.
+     */
     @Test
     void projectProfileEnforcesItsPermanentDocumentAndTokenLimits() throws IOException {
         Properties limits = new Properties();
@@ -126,21 +164,5 @@ final class JacksonJsonTest {
 
         String tooManyTokens = "[" + "0,".repeat(maximumTokens) + "0]";
         assertResourceLimit(JsonProfile.PROJECT, tooManyTokens.getBytes(StandardCharsets.UTF_8));
-    }
-
-    /** Verifies one Settings payload rejects through the stable resource-limit translation. */
-    private static void assertResourceLimit(byte[] document) {
-        assertResourceLimit(JsonProfile.SETTINGS, document);
-    }
-
-    /** Verifies one payload rejects through the selected profile's stable resource-limit translation. */
-    private static void assertResourceLimit(JsonProfile profile, byte[] document) {
-        JsonFormatException exception = assertThrows(JsonFormatException.class,
-                () -> JacksonJson.validate("limited.json", profile, document));
-
-        assertEquals("JSON_RESOURCE_LIMIT", exception.code());
-        assertEquals("limited.json", exception.source());
-        assertTrue(exception.line() > 0);
-        assertTrue(exception.column() > 0);
     }
 }

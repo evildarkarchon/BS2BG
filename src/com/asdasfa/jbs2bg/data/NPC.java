@@ -8,65 +8,77 @@ import java.util.Objects;
  */
 public final class NPC {
 
-	private final String mod;
-	private final String name;
-	private final String editorId;
-	private final String race;
-	private final String formId;
+    private final String mod;
+    private final String name;
+    private final String editorId;
+    private final String race;
+    private final String formId;
 
-	/**
-	 * Parses one legacy NPC text row for the session-scoped NPC Database.
-	 *
-	 * @param line pipe-delimited plugin, name, editor ID, race, and form ID values
-	 * @throws NullPointerException when line is null
-	 * @throws IllegalArgumentException when the row does not contain every required value
-	 */
-	public NPC(String line) {
-		String[] values = Objects.requireNonNull(line, "line").split("\\|");
-		if (values.length < 5)
-			throw new IllegalArgumentException("NPC row must contain plugin, name, editor ID, race, and form ID");
-		for (int index = 0; index < values.length; index++)
-			values[index] = values[index].trim();
+    /**
+     * Parses one legacy NPC text row for the session-scoped NPC Database.
+     *
+     * @param line pipe-delimited plugin, name, editor ID, race, and form ID values
+     * @throws NullPointerException     when line is null
+     * @throws IllegalArgumentException when the row does not contain every required value
+     */
+    public NPC(String line) {
+        String[] values = Objects.requireNonNull(line, "line").split("\\|");
+        if (values.length < 5)
+            throw new IllegalArgumentException("NPC row must contain plugin, name, editor ID, race, and form ID");
+        for (int index = 0; index < values.length; index++)
+            values[index] = values[index].trim();
 
-		mod = values[0];
-		editorId = values[2];
-		String displayName = values[1];
-		name = displayName.isEmpty() ? "Unnamed (" + editorId + ")" : displayName;
-		String[] raceParts = values[3].split("\"");
-		race = raceParts[0].trim();
-		formId = normalizeFormId(values[4]);
-	}
+        mod = values[0];
+        editorId = values[2];
+        String displayName = values[1];
+        name = displayName.isEmpty() ? "Unnamed (" + editorId + ")" : displayName;
+        String[] raceParts = values[3].split("\"");
+        race = raceParts[0].trim();
+        formId = normalizeFormId(values[4]);
+    }
 
-	/** @return source plugin or mod name */
-	public String getMod() {
-		return mod;
-	}
+    /**
+     * Normalizes a legacy load-order-prefixed form ID for Project promotion.
+     */
+    private static String normalizeFormId(String value) {
+        String normalized = value.trim();
+        if (normalized.length() > 6)
+            normalized = normalized.substring(normalized.length() - 6);
+        return normalized.replaceFirst("^0+(?!$)", "");
+    }
 
-	/** @return NPC display name */
-	public String getName() {
-		return name;
-	}
+    /**
+     * @return source plugin or mod name
+     */
+    public String getMod() {
+        return mod;
+    }
 
-	/** @return NPC editor ID */
-	public String getEditorId() {
-		return editorId;
-	}
+    /**
+     * @return NPC display name
+     */
+    public String getName() {
+        return name;
+    }
 
-	/** @return NPC race */
-	public String getRace() {
-		return race;
-	}
+    /**
+     * @return NPC editor ID
+     */
+    public String getEditorId() {
+        return editorId;
+    }
 
-	/** @return normalized six-digit-or-shorter form ID */
-	public String getFormId() {
-		return formId;
-	}
+    /**
+     * @return NPC race
+     */
+    public String getRace() {
+        return race;
+    }
 
-	/** Normalizes a legacy load-order-prefixed form ID for Project promotion. */
-	private static String normalizeFormId(String value) {
-		String normalized = value.trim();
-		if (normalized.length() > 6)
-			normalized = normalized.substring(normalized.length() - 6);
-		return normalized.replaceFirst("^0+(?!$)", "");
-	}
+    /**
+     * @return normalized six-digit-or-shorter form ID
+     */
+    public String getFormId() {
+        return formId;
+    }
 }

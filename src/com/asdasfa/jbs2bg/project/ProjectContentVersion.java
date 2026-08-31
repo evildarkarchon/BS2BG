@@ -11,7 +11,9 @@ public final class ProjectContentVersion {
     private final Object sessionScope;
     private final long sequence;
 
-    /** Creates one token for a session-owned scope and transition sequence. */
+    /**
+     * Creates one token for a session-owned scope and transition sequence.
+     */
     private ProjectContentVersion(Object sessionScope, long sequence) {
         this.sessionScope = Objects.requireNonNull(sessionScope, "sessionScope");
         if (sequence < 0)
@@ -19,35 +21,47 @@ public final class ProjectContentVersion {
         this.sequence = sequence;
     }
 
-    /** @return initial token for a newly created ProjectSession */
+    /**
+     * @return initial token for a newly created ProjectSession
+     */
     static ProjectContentVersion initial(Object sessionScope) {
         return new ProjectContentVersion(sessionScope, 0);
     }
 
-    /** @return detached token used only by snapshots assembled outside a ProjectSession */
+    /**
+     * @return detached token used only by snapshots assembled outside a ProjectSession
+     */
     static ProjectContentVersion detached() {
         return initial(new Object());
     }
 
-    /** @return next token in the same opaque session scope */
+    /**
+     * @return next token in the same opaque session scope
+     */
     ProjectContentVersion next() {
         return new ProjectContentVersion(sessionScope, Math.addExact(sequence, 1));
     }
 
-    /** Content versions compare only by their hidden session scope and transition identity. */
+    /**
+     * Content versions compare only by their hidden session scope and transition identity.
+     */
     @Override
     public boolean equals(Object other) {
         return this == other || other instanceof ProjectContentVersion version
                 && sessionScope == version.sessionScope && sequence == version.sequence;
     }
 
-    /** Hashing preserves equality without exposing an orderable version number. */
+    /**
+     * Hashing preserves equality without exposing an orderable version number.
+     */
     @Override
     public int hashCode() {
         return 31 * System.identityHashCode(sessionScope) + Long.hashCode(sequence);
     }
 
-    /** Returns a diagnostic label; callers must not parse it or use it for freshness decisions. */
+    /**
+     * Returns a diagnostic label; callers must not parse it or use it for freshness decisions.
+     */
     @Override
     public String toString() {
         return "Project content version " + sequence + "@"

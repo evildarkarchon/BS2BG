@@ -14,8 +14,8 @@ public final class ProjectPresentationUpdate {
      * Captures the presentation-only effects of one rendered outcome.
      *
      * @param invalidatesGeneratedOutput whether generated output must be discarded
-     * @param diagnosticText formatted user-readable diagnostics, possibly empty
-     * @param errorDiagnostics whether any diagnostic has error severity
+     * @param diagnosticText             formatted user-readable diagnostics, possibly empty
+     * @param errorDiagnostics           whether any diagnostic has error severity
      */
     ProjectPresentationUpdate(boolean invalidatesGeneratedOutput, String diagnosticText, boolean errorDiagnostics) {
         this.invalidatesGeneratedOutput = invalidatesGeneratedOutput;
@@ -25,24 +25,30 @@ public final class ProjectPresentationUpdate {
 
     /**
      * @return true only when the rendered outcome changed Project content (Slider
-     *         Presets, Custom Morph Targets, or NPC Morph Assignments); dirty-flag or
-     *         file-identity changes alone, such as a save, do not invalidate
+     * Presets, Custom Morph Targets, or NPC Morph Assignments); dirty-flag or
+     * file-identity changes alone, such as a save, do not invalidate
      */
     public boolean invalidatesGeneratedOutput() {
         return invalidatesGeneratedOutput;
     }
 
-    /** @return true when the outcome supplied at least one diagnostic */
+    /**
+     * @return true when the outcome supplied at least one diagnostic
+     */
     public boolean hasDiagnostics() {
         return !diagnosticText.isEmpty();
     }
 
-    /** @return true when at least one diagnostic has error severity */
+    /**
+     * @return true when at least one diagnostic has error severity
+     */
     public boolean hasErrorDiagnostics() {
         return errorDiagnostics;
     }
 
-    /** @return formatted diagnostic text suitable for a presentation notification */
+    /**
+     * @return formatted diagnostic text suitable for a presentation notification
+     */
     public String getDiagnosticText() {
         return diagnosticText;
     }

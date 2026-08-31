@@ -11,7 +11,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Owns the one validated Standard/UUNP Settings value consumed by the application. */
+/**
+ * Owns the one validated Standard/UUNP Settings value consumed by the application.
+ */
 public final class Settings {
     private static volatile LiveSettings liveSettings = LiveSettings.empty();
 
@@ -65,7 +67,9 @@ public final class Settings {
         return InitializationResult.success(diagnostics);
     }
 
-    /** Loads existing sources and transactionally creates a canonical pair when either legacy file is absent. */
+    /**
+     * Loads existing sources and transactionally creates a canonical pair when either legacy file is absent.
+     */
     private static SettingsJacksonAdapter.SettingsCandidate loadCandidate(Path standardSource, Path uunpSource)
             throws IOException {
         boolean standardExists = Files.exists(standardSource);
@@ -85,7 +89,9 @@ public final class Settings {
         return candidate;
     }
 
-    /** Builds the exact legacy defaults as one detached candidate for first-run paired publication. */
+    /**
+     * Builds the exact legacy defaults as one detached candidate for first-run paired publication.
+     */
     private static SettingsJacksonAdapter.SettingsCandidate defaultCandidate() {
         Map<String, SettingsJacksonAdapter.DefaultValue> standardDefaults = new LinkedHashMap<>();
         standardDefaults.put("Breasts", new SettingsJacksonAdapter.DefaultValue(0.2f, 1f));
@@ -109,15 +115,17 @@ public final class Settings {
 
         SettingsJacksonAdapter.SettingsProfile standard = new SettingsJacksonAdapter.SettingsProfile(
                 standardDefaults, Collections.emptyMap(), List.of("Breasts", "BreastsSmall", "NippleDistance",
-                        "NippleSize", "ButtCrack", "Butt", "ButtSmall", "Legs", "Ankles", "Arms",
-                        "ShoulderWidth"));
+                "NippleSize", "ButtCrack", "Butt", "ButtSmall", "Legs", "Ankles", "Arms",
+                "ShoulderWidth"));
         SettingsJacksonAdapter.SettingsProfile uunp = new SettingsJacksonAdapter.SettingsProfile(
                 uunpDefaults, Collections.emptyMap(), List.of("Breasts", "BreastsSmall", "NippleDistance",
-                        "NippleSize", "Arms", "ShoulderWidth", "ButtCrack", "Butt", "ButtSmall", "Legs"));
+                "NippleSize", "Arms", "ShoulderWidth", "ButtCrack", "Butt", "ButtSmall", "Legs"));
         return new SettingsJacksonAdapter.SettingsCandidate(standard, uunp, Collections.emptyList());
     }
 
-    /** Constructs the entire replacement value before one volatile assignment makes the pair live. */
+    /**
+     * Constructs the entire replacement value before one volatile assignment makes the pair live.
+     */
     private static void publish(SettingsJacksonAdapter.SettingsCandidate candidate) {
         liveSettings = LiveSettings.from(candidate);
     }
@@ -142,12 +150,16 @@ public final class Settings {
         return liveSettings.uunpMultipliers.getOrDefault(sliderName, Float.valueOf(1f));
     }
 
-    /** @return immutable Standard defaults in source encounter order */
+    /**
+     * @return immutable Standard defaults in source encounter order
+     */
     public static Map<String, DefaultSliderValue> getDefaultsMap() {
         return liveSettings.standardDefaults;
     }
 
-    /** @return immutable UUNP defaults in source encounter order */
+    /**
+     * @return immutable UUNP defaults in source encounter order
+     */
     public static Map<String, DefaultSliderValue> getDefaultsMapUUNP() {
         return liveSettings.uunpDefaults;
     }
@@ -192,7 +204,9 @@ public final class Settings {
         return percentage(liveSettings.uunpDefaults.get(name), false);
     }
 
-    /** Converts one optional endpoint to the legacy truncated percentage. */
+    /**
+     * Converts one optional endpoint to the legacy truncated percentage.
+     */
     private static int percentage(DefaultSliderValue value, boolean small) {
         if (value == null)
             return 0;
@@ -219,7 +233,9 @@ public final class Settings {
         return containsIgnoreCase(liveSettings.uunpInverted, sliderName);
     }
 
-    /** Performs the legacy case-insensitive inversion lookup over an immutable encounter-ordered list. */
+    /**
+     * Performs the legacy case-insensitive inversion lookup over an immutable encounter-ordered list.
+     */
     private static boolean containsIgnoreCase(List<String> values, String expected) {
         for (String value : values) {
             if (value.equalsIgnoreCase(expected))
@@ -228,191 +244,13 @@ public final class Settings {
         return false;
     }
 
-    /** Ordered non-blocking warning emitted while reading or recovering Settings. */
-    public static final class Diagnostic {
-        private final String code;
-        private final String source;
-        private final String path;
-        private final String message;
-
-        /** Creates one immutable warning translated at the Settings package boundary. */
-        private Diagnostic(String code, String source, String path, String message) {
-            this.code = code;
-            this.source = source;
-            this.path = path;
-            this.message = message;
-        }
-
-        /** Converts an internal adapter warning without exposing Jackson or adapter types. */
-        private static Diagnostic fromAdapter(SettingsJacksonAdapter.SettingsDiagnostic diagnostic) {
-            return new Diagnostic(diagnostic.code(), diagnostic.source(), diagnostic.path(), diagnostic.message());
-        }
-
-        /** Creates the ordered warning emitted after restoring an interrupted paired publication. */
-        private static Diagnostic recovered(Path directory) {
-            return new Diagnostic("SETTINGS_PUBLICATION_RECOVERED", directory.toString(), "/",
-                    "An interrupted Settings publication was rolled back before loading.");
-        }
-
-        /** @return stable machine-readable warning code */
-        public String getCode() {
-            return code;
-        }
-
-        /** @return source Settings filename */
-        public String getSource() {
-            return source;
-        }
-
-        /** @return escaped JSON-pointer-like member path */
-        public String getPath() {
-            return path;
-        }
-
-        /** @return human-readable warning */
-        public String getMessage() {
-            return message;
-        }
-    }
-
-    /** Stable Settings rejection with an owned code, source, member path, and optional coordinate. */
-    public static final class Failure {
-        private final String code;
-        private final String source;
-        private final String path;
-        private final int line;
-        private final int column;
-        private final String message;
-
-        /** Creates one immutable failure translated at the Settings package boundary. */
-        private Failure(String code, String source, String path, int line, int column, String message) {
-            this.code = code;
-            this.source = source;
-            this.path = path;
-            this.line = line;
-            this.column = column;
-            this.message = message;
-        }
-
-        /** Converts an internal adapter rejection without leaking its exception type. */
-        private static Failure fromAdapter(SettingsJacksonAdapter.SettingsFormatException exception) {
-            return new Failure(exception.code(), exception.source(), exception.path(), exception.line(),
-                    exception.column(), exception.getMessage());
-        }
-
-        /** Converts a structurally classified persistence I/O failure into the stable Settings failure surface. */
-        private static Failure fromIo(String code, Path directory, IOException exception) {
-            String message = exception.getMessage() == null ? "Settings files could not be published."
-                    : exception.getMessage();
-            return new Failure(code, directory.toString(), "/", 0, 0, message);
-        }
-
-        /** @return stable machine-readable Settings code */
-        public String getCode() {
-            return code;
-        }
-
-        /** @return source Settings filename */
-        public String getSource() {
-            return source;
-        }
-
-        /** @return escaped JSON-pointer-like member path */
-        public String getPath() {
-            return path;
-        }
-
-        /** @return one-based line, or zero when no source coordinate exists */
-        public int getLine() {
-            return line;
-        }
-
-        /** @return one-based column, or zero when no source coordinate exists */
-        public int getColumn() {
-            return column;
-        }
-
-        /** @return human-readable rejection detail */
-        public String getMessage() {
-            return message;
-        }
-
-        /** @return one line suitable for the startup failure notification */
-        public String formatForDisplay() {
-            String coordinate = line > 0 && column > 0 ? " (line " + line + ", column " + column + ")" : "";
-            return code + ": " + source + " " + path + coordinate + System.lineSeparator() + message;
-        }
-    }
-
-    /** Result of attempting to publish one Settings pair into the live lookup state. */
-    public static final class InitializationResult {
-        private final List<Diagnostic> diagnostics;
-        private final Failure failure;
-
-        /** Creates one immutable success or failure result. */
-        private InitializationResult(List<Diagnostic> diagnostics, Failure failure) {
-            this.diagnostics = List.copyOf(diagnostics);
-            this.failure = failure;
-        }
-
-        /** Returns one successful result carrying ordered non-blocking warnings. */
-        private static InitializationResult success(List<Diagnostic> diagnostics) {
-            return new InitializationResult(diagnostics, null);
-        }
-
-        /** Returns one rejected result carrying the stable blocking diagnostic. */
-        private static InitializationResult failure(Failure failure) {
-            return new InitializationResult(Collections.emptyList(), Objects.requireNonNull(failure, "failure"));
-        }
-
-        /** @return true only when both validated profiles became live */
-        public boolean isSuccessful() {
-            return failure == null;
-        }
-
-        /** @return ordered forward-compatibility and recovery warnings from the published pair */
-        public List<Diagnostic> getDiagnostics() {
-            return diagnostics;
-        }
-
-        /** @return the blocking diagnostic when publication was rejected */
-        public Optional<Failure> getFailure() {
-            return Optional.ofNullable(failure);
-        }
-    }
-
-    /** Immutable Slider endpoint defaults exposed to Project value construction. */
-    public static final class DefaultSliderValue {
-        private final float valueSmall;
-        private final float valueBig;
-
-        /**
-         * Creates one endpoint pair.
-         *
-         * @param valueSmall small endpoint expressed as a float fraction
-         * @param valueBig big endpoint expressed as a float fraction
-         */
-        public DefaultSliderValue(float valueSmall, float valueBig) {
-            this.valueSmall = valueSmall;
-            this.valueBig = valueBig;
-        }
-
-        /** @return small endpoint float fraction */
-        public float getValueSmall() {
-            return valueSmall;
-        }
-
-        /** @return big endpoint float fraction */
-        public float getValueBig() {
-            return valueBig;
-        }
-    }
-
-    /** One immutable application-facing value containing both Settings profiles. */
+    /**
+     * One immutable application-facing value containing both Settings profiles.
+     */
     private record LiveSettings(Map<String, DefaultSliderValue> standardDefaults,
-            Map<String, Float> standardMultipliers, List<String> standardInverted,
-            Map<String, DefaultSliderValue> uunpDefaults, Map<String, Float> uunpMultipliers,
-            List<String> uunpInverted) {
+                                Map<String, Float> standardMultipliers, List<String> standardInverted,
+                                Map<String, DefaultSliderValue> uunpDefaults, Map<String, Float> uunpMultipliers,
+                                List<String> uunpInverted) {
         /** Creates an immutable, defensively owned live value. */
         private LiveSettings {
             standardDefaults = Collections.unmodifiableMap(new LinkedHashMap<>(standardDefaults));
@@ -424,7 +262,7 @@ public final class Settings {
         }
 
         /** Converts the detached adapter candidate without retaining any adapter-owned mutable input. */
-        private static LiveSettings from(SettingsJacksonAdapter.SettingsCandidate candidate) {
+        private static LiveSettings from (SettingsJacksonAdapter.SettingsCandidate candidate){
             return new LiveSettings(convertDefaults(candidate.standard().defaults()),
                     candidate.standard().multipliers(), candidate.standard().inverted(),
                     convertDefaults(candidate.uunp().defaults()), candidate.uunp().multipliers(),
@@ -432,20 +270,258 @@ public final class Settings {
         }
 
         /** Creates the pre-initialization empty value used before application startup. */
-        private static LiveSettings empty() {
+        private static LiveSettings empty () {
             return new LiveSettings(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyList(),
                     Collections.emptyMap(), Collections.emptyMap(), Collections.emptyList());
         }
 
         /** Converts adapter endpoint records into the application-facing immutable endpoint values. */
-        private static Map<String, DefaultSliderValue> convertDefaults(
-                Map<String, SettingsJacksonAdapter.DefaultValue> source) {
+        private static Map<String, DefaultSliderValue> convertDefaults (
+                Map < String, SettingsJacksonAdapter.DefaultValue > source){
             Map<String, DefaultSliderValue> converted = new LinkedHashMap<>();
             for (Map.Entry<String, SettingsJacksonAdapter.DefaultValue> entry : source.entrySet()) {
                 converted.put(entry.getKey(), new DefaultSliderValue(entry.getValue().valueSmall(),
                         entry.getValue().valueBig()));
             }
             return converted;
+        }
+    }
+
+    /**
+     * Ordered non-blocking warning emitted while reading or recovering Settings.
+     */
+    public static final class Diagnostic {
+        private final String code;
+        private final String source;
+        private final String path;
+        private final String message;
+
+        /**
+         * Creates one immutable warning translated at the Settings package boundary.
+         */
+        private Diagnostic(String code, String source, String path, String message) {
+            this.code = code;
+            this.source = source;
+            this.path = path;
+            this.message = message;
+        }
+
+        /**
+         * Converts an internal adapter warning without exposing Jackson or adapter types.
+         */
+        private static Diagnostic fromAdapter(SettingsJacksonAdapter.SettingsDiagnostic diagnostic) {
+            return new Diagnostic(diagnostic.code(), diagnostic.source(), diagnostic.path(), diagnostic.message());
+        }
+
+        /**
+         * Creates the ordered warning emitted after restoring an interrupted paired publication.
+         */
+        private static Diagnostic recovered(Path directory) {
+            return new Diagnostic("SETTINGS_PUBLICATION_RECOVERED", directory.toString(), "/",
+                    "An interrupted Settings publication was rolled back before loading.");
+        }
+
+        /**
+         * @return stable machine-readable warning code
+         */
+        public String getCode() {
+            return code;
+        }
+
+        /**
+         * @return source Settings filename
+         */
+        public String getSource() {
+            return source;
+        }
+
+        /**
+         * @return escaped JSON-pointer-like member path
+         */
+        public String getPath() {
+            return path;
+        }
+
+        /**
+         * @return human-readable warning
+         */
+        public String getMessage() {
+            return message;
+        }
+    }
+
+    /**
+     * Stable Settings rejection with an owned code, source, member path, and optional coordinate.
+     */
+    public static final class Failure {
+        private final String code;
+        private final String source;
+        private final String path;
+        private final int line;
+        private final int column;
+        private final String message;
+
+        /**
+         * Creates one immutable failure translated at the Settings package boundary.
+         */
+        private Failure(String code, String source, String path, int line, int column, String message) {
+            this.code = code;
+            this.source = source;
+            this.path = path;
+            this.line = line;
+            this.column = column;
+            this.message = message;
+        }
+
+        /**
+         * Converts an internal adapter rejection without leaking its exception type.
+         */
+        private static Failure fromAdapter(SettingsJacksonAdapter.SettingsFormatException exception) {
+            return new Failure(exception.code(), exception.source(), exception.path(), exception.line(),
+                    exception.column(), exception.getMessage());
+        }
+
+        /**
+         * Converts a structurally classified persistence I/O failure into the stable Settings failure surface.
+         */
+        private static Failure fromIo(String code, Path directory, IOException exception) {
+            String message = exception.getMessage() == null ? "Settings files could not be published."
+                    : exception.getMessage();
+            return new Failure(code, directory.toString(), "/", 0, 0, message);
+        }
+
+        /**
+         * @return stable machine-readable Settings code
+         */
+        public String getCode() {
+            return code;
+        }
+
+        /**
+         * @return source Settings filename
+         */
+        public String getSource() {
+            return source;
+        }
+
+        /**
+         * @return escaped JSON-pointer-like member path
+         */
+        public String getPath() {
+            return path;
+        }
+
+        /**
+         * @return one-based line, or zero when no source coordinate exists
+         */
+        public int getLine() {
+            return line;
+        }
+
+        /**
+         * @return one-based column, or zero when no source coordinate exists
+         */
+        public int getColumn() {
+            return column;
+        }
+
+        /**
+         * @return human-readable rejection detail
+         */
+        public String getMessage() {
+            return message;
+        }
+
+        /**
+         * @return one line suitable for the startup failure notification
+         */
+        public String formatForDisplay() {
+            String coordinate = line > 0 && column > 0 ? " (line " + line + ", column " + column + ")" : "";
+            return code + ": " + source + " " + path + coordinate + System.lineSeparator() + message;
+        }
+    }
+
+    /**
+     * Result of attempting to publish one Settings pair into the live lookup state.
+     */
+    public static final class InitializationResult {
+        private final List<Diagnostic> diagnostics;
+        private final Failure failure;
+
+        /**
+         * Creates one immutable success or failure result.
+         */
+        private InitializationResult(List<Diagnostic> diagnostics, Failure failure) {
+            this.diagnostics = List.copyOf(diagnostics);
+            this.failure = failure;
+        }
+
+        /**
+         * Returns one successful result carrying ordered non-blocking warnings.
+         */
+        private static InitializationResult success(List<Diagnostic> diagnostics) {
+            return new InitializationResult(diagnostics, null);
+        }
+
+        /**
+         * Returns one rejected result carrying the stable blocking diagnostic.
+         */
+        private static InitializationResult failure(Failure failure) {
+            return new InitializationResult(Collections.emptyList(), Objects.requireNonNull(failure, "failure"));
+        }
+
+        /**
+         * @return true only when both validated profiles became live
+         */
+        public boolean isSuccessful() {
+            return failure == null;
+        }
+
+        /**
+         * @return ordered forward-compatibility and recovery warnings from the published pair
+         */
+        public List<Diagnostic> getDiagnostics() {
+            return diagnostics;
+        }
+
+        /**
+         * @return the blocking diagnostic when publication was rejected
+         */
+        public Optional<Failure> getFailure() {
+            return Optional.ofNullable(failure);
+        }
+    }
+
+    /**
+     * Immutable Slider endpoint defaults exposed to Project value construction.
+     */
+    public static final class DefaultSliderValue {
+        private final float valueSmall;
+        private final float valueBig;
+
+        /**
+         * Creates one endpoint pair.
+         *
+         * @param valueSmall small endpoint expressed as a float fraction
+         * @param valueBig   big endpoint expressed as a float fraction
+         */
+        public DefaultSliderValue(float valueSmall, float valueBig) {
+            this.valueSmall = valueSmall;
+            this.valueBig = valueBig;
+        }
+
+        /**
+         * @return small endpoint float fraction
+         */
+        public float getValueSmall() {
+            return valueSmall;
+        }
+
+        /**
+         * @return big endpoint float fraction
+         */
+        public float getValueBig() {
+            return valueBig;
         }
     }
 }

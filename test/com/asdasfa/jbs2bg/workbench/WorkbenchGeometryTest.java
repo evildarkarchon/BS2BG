@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 
 class WorkbenchGeometryTest {
 
-    /** Client minimums are converted from measured decorations rather than fixed platform guesses. */
+    /**
+     * Client minimums are converted from measured decorations rather than fixed platform guesses.
+     */
     @Test
     void measuredDecorationsProduceAnEightHundredBySixHundredClientMinimum() {
         assertEquals(830.0, WorkbenchGeometry.minimumWindowWidth(1100.0, 1070.0));

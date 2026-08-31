@@ -17,7 +17,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
 
-/** Stages and transactionally replaces complete sets of canonical BoS artifacts. */
+/**
+ * Stages and transactionally replaces complete sets of canonical BoS artifacts.
+ */
 public final class BosArtifactPublisher {
     private static final String STAGING_PREFIX = ".bs2bg-bos-stage-";
 
@@ -29,7 +31,7 @@ public final class BosArtifactPublisher {
      * set with rollback while preserving unrelated files.
      *
      * @param targetDirectory existing destination directory
-     * @param output immutable generated output containing the complete artifact set
+     * @param output          immutable generated output containing the complete artifact set
      * @throws IOException when preflight, staging, replacement, or rollback fails
      */
     public static void publishAll(Path targetDirectory, ProjectGeneratedOutput output) throws IOException {
@@ -41,8 +43,8 @@ public final class BosArtifactPublisher {
      * operating-system file-lock behavior.
      *
      * @param targetDirectory existing destination directory
-     * @param output immutable generated output containing the complete artifact set
-     * @param atomicMove same-filesystem move operation used for install and rollback
+     * @param output          immutable generated output containing the complete artifact set
+     * @param atomicMove      same-filesystem move operation used for install and rollback
      * @throws IOException when preflight, staging, replacement, or rollback fails
      */
     static void publishAll(Path targetDirectory, ProjectGeneratedOutput output, AtomicMove atomicMove)
@@ -59,7 +61,7 @@ public final class BosArtifactPublisher {
      * bytes.
      *
      * @param destination selected output file
-     * @param artifact immutable canonical BoS artifact
+     * @param artifact    immutable canonical BoS artifact
      * @throws IOException when the destination cannot be safely staged or replaced
      */
     public static void publish(Path destination, BosJsonArtifact artifact) throws IOException {
@@ -77,7 +79,9 @@ public final class BosArtifactPublisher {
                 BosArtifactPublisher::moveAtomically);
     }
 
-    /** Stages, installs, and rolls back one fully preflighted publication command. */
+    /**
+     * Stages, installs, and rolls back one fully preflighted publication command.
+     */
     private static void publishSet(Path directory, List<Publication> publications, AtomicMove atomicMove)
             throws IOException {
         if (publications.isEmpty())
@@ -111,7 +115,9 @@ public final class BosArtifactPublisher {
         }
     }
 
-    /** Resolves and verifies the command's existing directory before any staging begins. */
+    /**
+     * Resolves and verifies the command's existing directory before any staging begins.
+     */
     private static Path normalizeDirectory(Path targetDirectory) throws IOException {
         Path directory = Objects.requireNonNull(targetDirectory, "targetDirectory").toAbsolutePath().normalize();
         if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS))
@@ -119,7 +125,9 @@ public final class BosArtifactPublisher {
         return directory;
     }
 
-    /** Resolves all mapped destinations and rejects unsafe or ambiguous existing entries. */
+    /**
+     * Resolves all mapped destinations and rejects unsafe or ambiguous existing entries.
+     */
     private static List<Publication> preflight(Path directory, List<BosJsonArtifact> artifacts)
             throws IOException {
         Map<String, List<Path>> existingByCaseInsensitiveName = new HashMap<>();
@@ -160,7 +168,9 @@ public final class BosArtifactPublisher {
         return publications;
     }
 
-    /** Writes and forces every canonical byte array into the command-owned staging directory. */
+    /**
+     * Writes and forces every canonical byte array into the command-owned staging directory.
+     */
     private static void stageArtifacts(Path stagingDirectory, List<Publication> publications) throws IOException {
         for (Publication publication : publications) {
             Path staged = stagingDirectory.resolve(publication.index + ".staged");
@@ -175,9 +185,11 @@ public final class BosArtifactPublisher {
         }
     }
 
-    /** Moves every prior destination aside before atomically installing all staged artifacts. */
+    /**
+     * Moves every prior destination aside before atomically installing all staged artifacts.
+     */
     private static void installArtifacts(Path stagingDirectory, List<Publication> publications,
-            AtomicMove atomicMove) throws IOException {
+                                         AtomicMove atomicMove) throws IOException {
         for (Publication publication : publications) {
             if (publication.existing == null)
                 continue;
@@ -190,7 +202,9 @@ public final class BosArtifactPublisher {
         }
     }
 
-    /** Restores every pre-command destination after an installation failure. */
+    /**
+     * Restores every pre-command destination after an installation failure.
+     */
     private static IOException rollback(List<Publication> publications, AtomicMove atomicMove) {
         IOException rollbackFailure = null;
         for (int index = publications.size() - 1; index >= 0; index--) {
@@ -209,7 +223,9 @@ public final class BosArtifactPublisher {
         return rollbackFailure;
     }
 
-    /** Requires same-filesystem atomic moves for both installation and rollback. */
+    /**
+     * Requires same-filesystem atomic moves for both installation and rollback.
+     */
     private static void moveAtomically(Path source, Path target) throws IOException {
         try {
             Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
@@ -218,7 +234,9 @@ public final class BosArtifactPublisher {
         }
     }
 
-    /** Removes one command-owned staging tree after success or a complete rollback. */
+    /**
+     * Removes one command-owned staging tree after success or a complete rollback.
+     */
     private static void deleteTree(Path directory) throws IOException {
         try (Stream<Path> paths = Files.walk(directory)) {
             for (Path path : paths.sorted(Comparator.reverseOrder()).toList())
@@ -226,7 +244,9 @@ public final class BosArtifactPublisher {
         }
     }
 
-    /** Same-filesystem move operation injected only inside the package for deterministic rollback tests. */
+    /**
+     * Same-filesystem move operation injected only inside the package for deterministic rollback tests.
+     */
     @FunctionalInterface
     interface AtomicMove {
         /**
@@ -239,7 +259,9 @@ public final class BosArtifactPublisher {
         void move(Path source, Path target) throws IOException;
     }
 
-    /** Mutable command-local publication state; never crosses the module interface. */
+    /**
+     * Mutable command-local publication state; never crosses the module interface.
+     */
     private static final class Publication {
         private final BosJsonArtifact artifact;
         private final Path target;
@@ -249,7 +271,9 @@ public final class BosArtifactPublisher {
         private Path backup;
         private boolean installed;
 
-        /** Captures one preflighted destination before any staging or replacement occurs. */
+        /**
+         * Captures one preflighted destination before any staging or replacement occurs.
+         */
         Publication(BosJsonArtifact artifact, Path target, Path existing, int index) {
             this.artifact = artifact;
             this.target = target;

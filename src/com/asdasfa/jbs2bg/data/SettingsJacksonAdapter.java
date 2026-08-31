@@ -24,7 +24,9 @@ import tools.jackson.core.ObjectReadContext;
 import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.TokenStreamLocation;
 
-/** Owns the production JSON format boundary for paired Standard and UUNP Settings documents. */
+/**
+ * Owns the production JSON format boundary for paired Standard and UUNP Settings documents.
+ */
 final class SettingsJacksonAdapter {
     private SettingsJacksonAdapter() {
     }
@@ -34,7 +36,7 @@ final class SettingsJacksonAdapter {
      * No live Settings collection is mutated when either source fails.
      *
      * @param standardSource Standard Settings JSON
-     * @param uunpSource UUNP Settings JSON
+     * @param uunpSource     UUNP Settings JSON
      * @return detached pair and ordered non-blocking diagnostics
      * @throws SettingsFormatException when either document is invalid
      */
@@ -53,7 +55,7 @@ final class SettingsJacksonAdapter {
      *
      * @param candidate detached validated Settings candidate
      * @return canonical Standard and UUNP UTF-8 documents
-     * @throws NullPointerException when the candidate is null
+     * @throws NullPointerException    when the candidate is null
      * @throws SettingsFormatException when an in-memory value cannot be represented as Settings JSON
      */
     static SettingsPairBytes writePair(SettingsCandidate candidate) {
@@ -108,7 +110,9 @@ final class SettingsJacksonAdapter {
         return output.toByteArray();
     }
 
-    /** Writes one finite float property while retaining Java float spelling, including signed zero. */
+    /**
+     * Writes one finite float property while retaining Java float spelling, including signed zero.
+     */
     private static void writeFiniteNumber(JsonGenerator generator, String name, float value, String path) {
         if (!Float.isFinite(value))
             throw new SettingsFormatException("SETTINGS_NUMBER_NON_FINITE", "<detached-settings>", path, 0, 0,
@@ -147,7 +151,7 @@ final class SettingsJacksonAdapter {
      * the last trustworthy parser coordinate.
      */
     private static SettingsProfile readProfile(JsonParser parser, Path source,
-            List<SettingsDiagnostic> diagnostics) {
+                                               List<SettingsDiagnostic> diagnostics) {
         try {
             require(parser.nextToken(), JsonToken.START_OBJECT, source, "/", parser);
             Map<String, DefaultValue> defaults = new LinkedHashMap<>();
@@ -197,9 +201,11 @@ final class SettingsJacksonAdapter {
         }
     }
 
-    /** Translates a Jackson syntax or constraint failure to the stable Settings diagnostic vocabulary. */
+    /**
+     * Translates a Jackson syntax or constraint failure to the stable Settings diagnostic vocabulary.
+     */
     private static SettingsFormatException jacksonFailure(JacksonException exception, Path source, String path,
-            TokenStreamLocation location) {
+                                                          TokenStreamLocation location) {
         String code = JacksonJson.isConstraintFailure(exception)
                 ? "SETTINGS_RESOURCE_LIMIT" : "SETTINGS_JSON_MALFORMED";
         return failure(code, source, path, location, exception.getOriginalMessage());
@@ -210,7 +216,7 @@ final class SettingsJacksonAdapter {
      * forward-compatible warnings for unknown fields inside each fixed-schema slider object.
      */
     private static void readDefaults(JsonParser parser, JsonToken token, Path source, String path,
-            Map<String, DefaultValue> destination, List<SettingsDiagnostic> diagnostics) {
+                                     Map<String, DefaultValue> destination, List<SettingsDiagnostic> diagnostics) {
         require(token, JsonToken.START_OBJECT, source, path, parser);
         Set<String> names = new LinkedHashSet<>();
         while (parser.nextToken() != JsonToken.END_OBJECT) {
@@ -242,9 +248,11 @@ final class SettingsJacksonAdapter {
         }
     }
 
-    /** Reads dynamic finite multiplier values while rejecting exact duplicate Slider keys. */
+    /**
+     * Reads dynamic finite multiplier values while rejecting exact duplicate Slider keys.
+     */
     private static void readMultipliers(JsonParser parser, JsonToken token, Path source, String path,
-            Map<String, Float> destination) {
+                                        Map<String, Float> destination) {
         require(token, JsonToken.START_OBJECT, source, path, parser);
         Set<String> names = new LinkedHashSet<>();
         while (parser.nextToken() != JsonToken.END_OBJECT) {
@@ -256,9 +264,11 @@ final class SettingsJacksonAdapter {
         }
     }
 
-    /** Reads string identities and canonically deduplicates them by first case-insensitive encounter. */
+    /**
+     * Reads string identities and canonically deduplicates them by first case-insensitive encounter.
+     */
     private static void readInverted(JsonParser parser, JsonToken token, Path source, String path,
-            List<String> destination) {
+                                     List<String> destination) {
         require(token, JsonToken.START_ARRAY, source, path, parser);
         Set<String> identities = new LinkedHashSet<>();
         int index = 0;
@@ -272,7 +282,9 @@ final class SettingsJacksonAdapter {
         }
     }
 
-    /** Converts an ordinary JSON number through the accepted finite Java-float compatibility path. */
+    /**
+     * Converts an ordinary JSON number through the accepted finite Java-float compatibility path.
+     */
     private static float finiteFloat(JsonParser parser, JsonToken token, Path source, String path) {
         if (token != JsonToken.VALUE_NUMBER_INT && token != JsonToken.VALUE_NUMBER_FLOAT)
             throw failure("SETTINGS_VALUE_TYPE_INVALID", source, path, parser.currentTokenLocation(),
@@ -284,7 +296,9 @@ final class SettingsJacksonAdapter {
         return value;
     }
 
-    /** Returns one property name after token-kind and UTF-8 resource-limit validation. */
+    /**
+     * Returns one property name after token-kind and UTF-8 resource-limit validation.
+     */
     private static String requireName(JsonParser parser, Path source, String ownerPath) {
         require(parser.currentToken(), JsonToken.PROPERTY_NAME, source, ownerPath, parser);
         String name = parser.currentName();
@@ -292,21 +306,27 @@ final class SettingsJacksonAdapter {
         return name;
     }
 
-    /** Requires one exact streaming token kind without enabling Jackson coercion. */
+    /**
+     * Requires one exact streaming token kind without enabling Jackson coercion.
+     */
     private static void require(JsonToken actual, JsonToken expected, Path source, String path,
-            JsonParser parser) {
+                                JsonParser parser) {
         if (actual != expected)
             throw failure("SETTINGS_VALUE_TYPE_INVALID", source, path, parser.currentTokenLocation(),
                     "Expected " + expected + " but found " + actual + ".");
     }
 
-    /** Creates the stable duplicate-member rejection at the member token's coordinate. */
+    /**
+     * Creates the stable duplicate-member rejection at the member token's coordinate.
+     */
     private static SettingsFormatException duplicate(Path source, String path, JsonParser parser) {
         return failure("SETTINGS_MEMBER_DUPLICATE", source, path, parser.currentTokenLocation(),
                 "Settings member occurs more than once.");
     }
 
-    /** Rejects a member name or string value that crosses the shared one-MiB UTF-8 limit. */
+    /**
+     * Rejects a member name or string value that crosses the shared one-MiB UTF-8 limit.
+     */
     private static void requireTextLimit(Path source, String path, String value, String kind, JsonParser parser) {
         if (JacksonJson.exceedsTextLimit(value)) {
             throw failure("SETTINGS_RESOURCE_LIMIT", source, path, parser.currentTokenLocation(),
@@ -314,31 +334,41 @@ final class SettingsJacksonAdapter {
         }
     }
 
-    /** Appends one RFC 6901-style escaped member segment to a Settings diagnostic path. */
+    /**
+     * Appends one RFC 6901-style escaped member segment to a Settings diagnostic path.
+     */
     private static String child(String owner, String name) {
         return JacksonJson.memberPath(owner, name);
     }
 
-    /** Translates an optional Jackson coordinate into a stable Settings failure. */
+    /**
+     * Translates an optional Jackson coordinate into a stable Settings failure.
+     */
     private static SettingsFormatException failure(String code, Path source, String path,
-            TokenStreamLocation location, String message) {
+                                                   TokenStreamLocation location, String message) {
         return failure(code, source, path, location == null ? 0 : Math.max(1, location.getLineNr()),
                 location == null ? 0 : Math.max(1, location.getColumnNr()), message);
     }
 
-    /** Creates the codec-free Settings exception at already normalized coordinates. */
+    /**
+     * Creates the codec-free Settings exception at already normalized coordinates.
+     */
     private static SettingsFormatException failure(String code, Path source, String path,
-            int line, int column, String message) {
+                                                   int line, int column, String message) {
         return new SettingsFormatException(code, source.toString(), path, line, column, message);
     }
 
-    /** One Settings slider's effective endpoint defaults after omission handling. */
+    /**
+     * One Settings slider's effective endpoint defaults after omission handling.
+     */
     record DefaultValue(float valueSmall, float valueBig) {
     }
 
-    /** Detached immutable Settings profile in canonical encounter order. */
+    /**
+     * Detached immutable Settings profile in canonical encounter order.
+     */
     record SettingsProfile(Map<String, DefaultValue> defaults, Map<String, Float> multipliers,
-            List<String> inverted) {
+                           List<String> inverted) {
         SettingsProfile {
             defaults = Collections.unmodifiableMap(new LinkedHashMap<>(defaults));
             multipliers = Collections.unmodifiableMap(new LinkedHashMap<>(multipliers));
@@ -346,41 +376,55 @@ final class SettingsJacksonAdapter {
         }
     }
 
-    /** Ordered forward-compatibility warning for one ignored Settings member. */
+    /**
+     * Ordered forward-compatibility warning for one ignored Settings member.
+     */
     record SettingsDiagnostic(String code, String source, String path, String message) {
     }
 
-    /** Pairwise publication unit containing both validated profiles and their ordered warnings. */
+    /**
+     * Pairwise publication unit containing both validated profiles and their ordered warnings.
+     */
     record SettingsCandidate(SettingsProfile standard, SettingsProfile uunp,
-            List<SettingsDiagnostic> diagnostics) {
+                             List<SettingsDiagnostic> diagnostics) {
         SettingsCandidate {
             diagnostics = List.copyOf(diagnostics);
         }
     }
 
-    /** Immutable, defensively owned canonical bytes for pairwise Settings publication. */
+    /**
+     * Immutable, defensively owned canonical bytes for pairwise Settings publication.
+     */
     static final class SettingsPairBytes {
         private final byte[] standardUtf8;
         private final byte[] uunpUtf8;
 
-        /** Takes defensive ownership so neither the writer nor a caller can alter published bytes. */
+        /**
+         * Takes defensive ownership so neither the writer nor a caller can alter published bytes.
+         */
         private SettingsPairBytes(byte[] standardUtf8, byte[] uunpUtf8) {
             this.standardUtf8 = standardUtf8.clone();
             this.uunpUtf8 = uunpUtf8.clone();
         }
 
-        /** Returns an independent copy of the canonical Standard Settings document. */
+        /**
+         * Returns an independent copy of the canonical Standard Settings document.
+         */
         byte[] standardUtf8() {
             return standardUtf8.clone();
         }
 
-        /** Returns an independent copy of the canonical UUNP Settings document. */
+        /**
+         * Returns an independent copy of the canonical UUNP Settings document.
+         */
         byte[] uunpUtf8() {
             return uunpUtf8.clone();
         }
     }
 
-    /** Stable Settings failure translated at the format-adapter boundary. */
+    /**
+     * Stable Settings failure translated at the format-adapter boundary.
+     */
     static final class SettingsFormatException extends RuntimeException {
         private static final long serialVersionUID = 1L;
         private final String code;
@@ -389,7 +433,9 @@ final class SettingsJacksonAdapter {
         private final int line;
         private final int column;
 
-        /** Creates one codec-free Settings failure at a stable source path and coordinate. */
+        /**
+         * Creates one codec-free Settings failure at a stable source path and coordinate.
+         */
         SettingsFormatException(String code, String source, String path, int line, int column, String message) {
             super(message);
             this.code = code;

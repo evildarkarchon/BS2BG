@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/** Rejects a BoS command with its complete filename mappings and ordered diagnostics. */
+/**
+ * Rejects a BoS command with its complete filename mappings and ordered diagnostics.
+ */
 public final class BosOutputException extends IllegalArgumentException {
     private static final long serialVersionUID = 1L;
 
@@ -15,7 +17,7 @@ public final class BosOutputException extends IllegalArgumentException {
      * Freezes every attempted mapping and validation failure before the exception crosses the seam.
      *
      * @param fileNameMappings complete mappings in Slider Preset order
-     * @param diagnostics ordered reasons the command was rejected
+     * @param diagnostics      ordered reasons the command was rejected
      */
     BosOutputException(List<BosFileNameMapping> fileNameMappings, List<BosOutputDiagnostic> diagnostics) {
         super(formatMessage(fileNameMappings, diagnostics));
@@ -23,19 +25,11 @@ public final class BosOutputException extends IllegalArgumentException {
         this.diagnostics = new ArrayList<>(diagnostics);
     }
 
-    /** @return immutable complete mappings in Slider Preset order */
-    public List<BosFileNameMapping> getFileNameMappings() {
-        return Collections.unmodifiableList(fileNameMappings);
-    }
-
-    /** @return immutable ordered diagnostics */
-    public List<BosOutputDiagnostic> getDiagnostics() {
-        return Collections.unmodifiableList(diagnostics);
-    }
-
-    /** Builds the complete user-facing report carried through asynchronous UI failures. */
+    /**
+     * Builds the complete user-facing report carried through asynchronous UI failures.
+     */
     private static String formatMessage(List<BosFileNameMapping> mappings,
-            List<BosOutputDiagnostic> diagnostics) {
+                                        List<BosOutputDiagnostic> diagnostics) {
         StringBuilder message = new StringBuilder("BoS output was rejected.\nFilename mappings:");
         for (BosFileNameMapping mapping : mappings)
             message.append("\n  ").append(mapping.formatForDisplay());
@@ -49,10 +43,12 @@ public final class BosOutputException extends IllegalArgumentException {
         return message.toString();
     }
 
-    /** Escapes control characters so Project-authored names cannot forge report lines. */
+    /**
+     * Escapes control characters so Project-authored names cannot forge report lines.
+     */
     static String escape(String value) {
         StringBuilder escaped = new StringBuilder(value.length());
-        for (int offset = 0; offset < value.length();) {
+        for (int offset = 0; offset < value.length(); ) {
             int codePoint = value.codePointAt(offset);
             switch (codePoint) {
                 case '\n' -> escaped.append("\\n");
@@ -68,5 +64,19 @@ public final class BosOutputException extends IllegalArgumentException {
             offset += Character.charCount(codePoint);
         }
         return escaped.toString();
+    }
+
+    /**
+     * @return immutable complete mappings in Slider Preset order
+     */
+    public List<BosFileNameMapping> getFileNameMappings() {
+        return Collections.unmodifiableList(fileNameMappings);
+    }
+
+    /**
+     * @return immutable ordered diagnostics
+     */
+    public List<BosOutputDiagnostic> getDiagnostics() {
+        return Collections.unmodifiableList(diagnostics);
     }
 }

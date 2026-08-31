@@ -36,7 +36,7 @@ public final class ProjectPresentation {
      *
      * @param applicationName base application title
      * @param initialSnapshot initial immutable Project state
-     * @throws NullPointerException when an argument is null
+     * @throws NullPointerException     when an argument is null
      * @throws IllegalArgumentException when the application name is blank
      */
     public ProjectPresentation(String applicationName, ProjectSnapshot initialSnapshot) {
@@ -48,6 +48,55 @@ public final class ProjectPresentation {
         this.mutableNpcMorphAssignments = FXCollections.observableArrayList();
         this.npcMorphAssignments = FXCollections.unmodifiableObservableList(mutableNpcMorphAssignments);
         renderSnapshot(Objects.requireNonNull(initialSnapshot, "initialSnapshot"));
+    }
+
+    /**
+     * Reports whether two snapshots carry the same Project content. Snapshot lists
+     * are always defensive copies, so the comparison is by element identity: the
+     * session reuses immutable element values whenever a collection is untouched.
+     *
+     * @param left  previously rendered snapshot
+     * @param right newly rendered snapshot
+     * @return true when every content collection holds identical elements in order
+     */
+    private static boolean sameContent(ProjectSnapshot left, ProjectSnapshot right) {
+        return sameElements(left.getSliderPresets(), right.getSliderPresets())
+                && sameElements(left.getCustomMorphTargets(), right.getCustomMorphTargets())
+                && sameElements(left.getNpcMorphAssignments(), right.getNpcMorphAssignments());
+    }
+
+    /**
+     * Compares two lists by size and per-index element identity.
+     */
+    private static boolean sameElements(List<?> left, List<?> right) {
+        if (left.size() != right.size())
+            return false;
+        for (int index = 0; index < left.size(); index++) {
+            if (left.get(index) != right.get(index))
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * Reports whether an outcome carries any presentation-level error diagnostic.
+     */
+    private static boolean hasErrorDiagnostic(ProjectOutcome outcome) {
+        for (ProjectDiagnostic diagnostic : outcome.getDiagnostics()) {
+            if (diagnostic.getSeverity() == DiagnosticSeverity.ERROR)
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Requires a non-blank application name for stable title formatting.
+     */
+    private static String requireApplicationName(String name) {
+        Objects.requireNonNull(name, "applicationName");
+        if (name.trim().isEmpty())
+            throw new IllegalArgumentException("applicationName must not be blank");
+        return name;
     }
 
     /**
@@ -69,7 +118,9 @@ public final class ProjectPresentation {
                 ProjectDiagnosticFormatter.format(requiredOutcome.getDiagnostics()), hasErrorDiagnostic(requiredOutcome));
     }
 
-    /** @return the latest immutable snapshot rendered by the presentation */
+    /**
+     * @return the latest immutable snapshot rendered by the presentation
+     */
     public ProjectSnapshot getSnapshot() {
         return snapshot;
     }
@@ -120,7 +171,9 @@ public final class ProjectPresentation {
         return applicationName + " - " + dirtyMarker + displayName;
     }
 
-    /** @return true when closing, opening, or creating would discard unsaved Project changes */
+    /**
+     * @return true when closing, opening, or creating would discard unsaved Project changes
+     */
     public boolean requiresDiscardConfirmation() {
         return snapshot.isDirty();
     }
@@ -142,48 +195,5 @@ public final class ProjectPresentation {
         mutableSliderPresets.setAll(nextSnapshot.getSliderPresets());
         mutableCustomMorphTargets.setAll(nextSnapshot.getCustomMorphTargets());
         mutableNpcMorphAssignments.setAll(nextSnapshot.getNpcMorphAssignments());
-    }
-
-    /**
-     * Reports whether two snapshots carry the same Project content. Snapshot lists
-     * are always defensive copies, so the comparison is by element identity: the
-     * session reuses immutable element values whenever a collection is untouched.
-     *
-     * @param left previously rendered snapshot
-     * @param right newly rendered snapshot
-     * @return true when every content collection holds identical elements in order
-     */
-    private static boolean sameContent(ProjectSnapshot left, ProjectSnapshot right) {
-        return sameElements(left.getSliderPresets(), right.getSliderPresets())
-                && sameElements(left.getCustomMorphTargets(), right.getCustomMorphTargets())
-                && sameElements(left.getNpcMorphAssignments(), right.getNpcMorphAssignments());
-    }
-
-    /** Compares two lists by size and per-index element identity. */
-    private static boolean sameElements(List<?> left, List<?> right) {
-        if (left.size() != right.size())
-            return false;
-        for (int index = 0; index < left.size(); index++) {
-            if (left.get(index) != right.get(index))
-                return false;
-        }
-        return true;
-    }
-
-    /** Reports whether an outcome carries any presentation-level error diagnostic. */
-    private static boolean hasErrorDiagnostic(ProjectOutcome outcome) {
-        for (ProjectDiagnostic diagnostic : outcome.getDiagnostics()) {
-            if (diagnostic.getSeverity() == DiagnosticSeverity.ERROR)
-                return true;
-        }
-        return false;
-    }
-
-    /** Requires a non-blank application name for stable title formatting. */
-    private static String requireApplicationName(String name) {
-        Objects.requireNonNull(name, "applicationName");
-        if (name.trim().isEmpty())
-            throw new IllegalArgumentException("applicationName must not be blank");
-        return name;
     }
 }

@@ -47,9 +47,9 @@ public final class FilteredView<T, K> {
     /**
      * Creates an empty view.
      *
-     * @param columns the filterable columns, in table order; IDs must be unique
+     * @param columns  the filterable columns, in table order; IDs must be unique
      * @param identity derives the logical identity of a row
-     * @throws NullPointerException when an argument or column is null
+     * @throws NullPointerException     when an argument or column is null
      * @throws IllegalArgumentException when two columns share an ID
      */
     public FilteredView(List<FilterColumn<T>> columns, Function<? super T, ? extends K> identity) {
@@ -72,7 +72,7 @@ public final class FilteredView<T, K> {
      * call {@link #clearSelection()} themselves.
      *
      * @param rows source rows in canonical order
-     * @throws NullPointerException when rows or a row is null
+     * @throws NullPointerException     when rows or a row is null
      * @throws IllegalArgumentException when two rows share an identity
      */
     public void setRows(List<? extends T> rows) {
@@ -94,7 +94,7 @@ public final class FilteredView<T, K> {
      * that hides nothing) clears the column instead.
      *
      * @param criterion the criterion to apply
-     * @throws NullPointerException when criterion is null
+     * @throws NullPointerException     when criterion is null
      * @throws IllegalArgumentException when the column is unknown
      */
     public void setCriterion(ColumnCriterion criterion) {
@@ -110,7 +110,7 @@ public final class FilteredView<T, K> {
      * Removes the criterion of one column, if any.
      *
      * @param columnId column to clear
-     * @throws NullPointerException when columnId is null
+     * @throws NullPointerException     when columnId is null
      * @throws IllegalArgumentException when the column is unknown
      */
     public void clearCriterion(String columnId) {
@@ -118,13 +118,17 @@ public final class FilteredView<T, K> {
         reconcileSelection();
     }
 
-    /** Removes every criterion. The selection, if any, stays visible and is kept. */
+    /**
+     * Removes every criterion. The selection, if any, stays visible and is kept.
+     */
     public void clearAllCriteria() {
         criteria.clear();
         reconcileSelection();
     }
 
-    /** @return the active criteria, immutable, in column order */
+    /**
+     * @return the active criteria, immutable, in column order
+     */
     public List<ColumnCriterion> getCriteria() {
         List<ColumnCriterion> ordered = new ArrayList<>();
         for (String columnId : columns.keySet()) {
@@ -135,9 +139,18 @@ public final class FilteredView<T, K> {
         return Collections.unmodifiableList(ordered);
     }
 
-    /** @return true when at least one criterion is active */
+    /**
+     * @return true when at least one criterion is active
+     */
     public boolean isFiltered() {
         return !criteria.isEmpty();
+    }
+
+    /**
+     * @return the immutable sort order in priority order
+     */
+    public List<SortKey> getSortOrder() {
+        return sortOrder;
     }
 
     /**
@@ -146,7 +159,7 @@ public final class FilteredView<T, K> {
      * unaffected.
      *
      * @param sortOrder sort keys in priority order; empty restores source order
-     * @throws NullPointerException when sortOrder or a key is null
+     * @throws NullPointerException     when sortOrder or a key is null
      * @throws IllegalArgumentException when a key names an unknown column
      */
     public void setSortOrder(List<SortKey> sortOrder) {
@@ -158,17 +171,12 @@ public final class FilteredView<T, K> {
         this.sortOrder = Collections.unmodifiableList(copy);
     }
 
-    /** @return the immutable sort order in priority order */
-    public List<SortKey> getSortOrder() {
-        return sortOrder;
-    }
-
     /**
      * Selects the row with the given identity if it is currently visible.
      *
      * @param identity logical identity to select
      * @return true when the row is visible and is now selected; false leaves the
-     *         previous selection untouched
+     * previous selection untouched
      * @throws NullPointerException when identity is null
      */
     public boolean select(K identity) {
@@ -183,12 +191,16 @@ public final class FilteredView<T, K> {
         return false;
     }
 
-    /** Clears the logical selection. */
+    /**
+     * Clears the logical selection.
+     */
     public void clearSelection() {
         selection = null;
     }
 
-    /** @return the selected identity, always a member of the visible set */
+    /**
+     * @return the selected identity, always a member of the visible set
+     */
     public Optional<K> getSelection() {
         return Optional.ofNullable(selection);
     }
@@ -235,7 +247,9 @@ public final class FilteredView<T, K> {
         });
     }
 
-    /** Drops the selection when its row is no longer present or no longer visible. */
+    /**
+     * Drops the selection when its row is no longer present or no longer visible.
+     */
     private void reconcileSelection() {
         if (selection == null)
             return;
