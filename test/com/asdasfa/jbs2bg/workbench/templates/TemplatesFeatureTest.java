@@ -6,16 +6,35 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.nio.file.Path;
+import java.util.Optional;
+import java.util.OptionalInt;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
+import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
+import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
+import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectDiagnosticCodes;
+import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
+import com.asdasfa.jbs2bg.project.ProjectEdit;
+import com.asdasfa.jbs2bg.project.ProjectOperationContext;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
+import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
+import com.asdasfa.jbs2bg.project.SourceLocation;
+import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
@@ -26,6 +45,179 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TemplatesFeatureTest {
+
+    /**
+     * Publishes distinct profile defaults so profile switches and preview text are independently observable.
+     */
+    @BeforeEach
+    void initializeSliderSettings() {
+        Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
+        standard.put("Waist", new DefaultSliderValue(0.2f, 0.8f));
+        Map<String, DefaultSliderValue> uunp = new LinkedHashMap<>();
+        uunp.put("Arms", new DefaultSliderValue(0.1f, 0.5f));
+        SettingsTestSupport.installDefaults(standard, uunp);
+    }
+
+    /**
+     * Restores repository Settings so this feature fixture cannot leak into other test classes.
+     */
+    @AfterEach
+    void restoreSliderSettings() {
+        SettingsTestSupport.restoreRepositorySettings();
+    }
+
+    /**
+     * Selecting a Slider Preset exposes every synthesized profile choice with exact BodyGen preview text; changing
+     * profile writes through the authoritative Project flow while preserving the selected logical identity.
+     */
+    @Test
+    void profileSwitchRebuildsSynthesizedChoicesAndPublishesExactPreview() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+
+        TemplatesFeature.EditorFrame standard = feature.frame().editor().orElseThrow();
+
+        assertEquals(TemplatesFeature.Profile.STANDARD, standard.profile());
+        assertEquals(List.of("Waist"), standard.choices().stream()
+                .map(TemplatesFeature.ChoiceFrame::name).toList());
+        assertEquals("Waist@0.8", standard.choices().get(0).previewText());
+        assertTrue(standard.choices().get(0).synthesizedDefault());
+        assertTrue(standard.choices().get(0).omittedFromProjectFile());
+
+        TemplatesFeature.Update switched = feature.dispatch(
+                new TemplatesFeature.ChangeProfile(TemplatesFeature.Profile.UUNP));
+        TemplatesFeature.EditorFrame uunp = switched.frame().editor().orElseThrow();
+
+        assertTrue(switched.accepted());
+        assertEquals(NameIdentity.of("Alpha"), switched.frame().selection().orElseThrow());
+        assertEquals(TemplatesFeature.Profile.UUNP, uunp.profile());
+        assertEquals(List.of("Arms"), uunp.choices().stream()
+                .map(TemplatesFeature.ChoiceFrame::name).toList());
+        assertEquals("Arms@0.5", uunp.choices().get(0).previewText());
+        assertTrue(uunp.choices().get(0).synthesizedDefault());
+    }
+
+    /**
+     * One row intent publishes the session's exact Changed/Unchanged distinction, keeps the stable preset selected,
+     * and renders from the immutable value returned by ProjectSession rather than a control-local draft.
+     */
+    @Test
+    void rowEnableEditDistinguishesChangedFromUnchangedAndPreservesSelection() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+
+        TemplatesFeature.Update changed = feature.dispatch(
+                new TemplatesFeature.SetChoiceEnabled("Waist", false));
+        TemplatesFeature.Update unchanged = feature.dispatch(
+                new TemplatesFeature.SetChoiceEnabled("Waist", false));
+
+        assertEquals(TemplatesFeature.OutcomeKind.CHANGED, changed.outcomeKind());
+        assertFalse(changed.frame().editor().orElseThrow().choices().get(0).enabled());
+        assertEquals(NameIdentity.of("Alpha"), changed.frame().selection().orElseThrow());
+        assertEquals(TemplatesFeature.OutcomeKind.UNCHANGED, unchanged.outcomeKind());
+        assertEquals(NameIdentity.of("Alpha"), unchanged.frame().selection().orElseThrow());
+    }
+
+    /**
+     * Row range edits publish exact live-preview text, while a reversed range is rejected by ProjectSession and the
+     * editor retains the last accepted values, selection, and inline diagnostic.
+     */
+    @Test
+    void rowRangeEditPublishesPreviewAndRetainsAcceptedStateAfterValidationRejection() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+
+        TemplatesFeature.Update changed = feature.dispatch(
+                new TemplatesFeature.SetChoiceRange("Waist", 25, 75));
+        TemplatesFeature.Update rejected = feature.dispatch(
+                new TemplatesFeature.SetChoiceRange("Waist", 90, 10));
+        TemplatesFeature.ChoiceFrame retained = rejected.frame().editor().orElseThrow().choices().get(0);
+
+        assertEquals(TemplatesFeature.OutcomeKind.CHANGED, changed.outcomeKind());
+        assertEquals("Waist@0.35:0.65", changed.frame().editor().orElseThrow().choices().get(0).previewText());
+        assertFalse(changed.frame().editor().orElseThrow().choices().get(0).omittedFromProjectFile());
+        assertEquals(TemplatesFeature.OutcomeKind.REJECTED, rejected.outcomeKind());
+        assertEquals(25, retained.minimum());
+        assertEquals(75, retained.maximum());
+        assertFalse(rejected.frame().diagnostics().isEmpty());
+        assertEquals(NameIdentity.of("Alpha"), rejected.frame().selection().orElseThrow());
+    }
+
+    /**
+     * All-Min edits every enabled row in one Project publication, leaves omitted rows untouched, and mutually
+     * exclusive gang modes lock the rows without allowing the legacy All-Min/All-Max overlap.
+     */
+    @Test
+    void gangOperationsAreAtomicEnabledOnlyAndMutuallyExclusive() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.setSliderChoice("Alpha",
+                new SliderChoiceSnapshot("Arms", true, Integer.valueOf(10), Integer.valueOf(90), 10, 90,
+                        10, 90, false)));
+        projectFlow.apply(SliderPresetEdits.setSliderChoice("Alpha",
+                projectFlow.frame().snapshot().getSliderPresets().get(0).getSliderChoices().stream()
+                        .filter(choice -> choice.getName().equals("Waist")).findFirst().orElseThrow()
+                        .withEnabled(false)));
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+        long beforeSequence = feature.frame().projectSequence();
+
+        TemplatesFeature.Update allMinimum = feature.dispatch(
+                new TemplatesFeature.ApplyBulkValue(TemplatesFeature.GangMode.MINIMUM, 50));
+
+        assertEquals(TemplatesFeature.OutcomeKind.CHANGED, allMinimum.outcomeKind());
+        assertEquals(beforeSequence + 1, allMinimum.frame().projectSequence());
+        assertEquals(50, choiceNamed(allMinimum.frame(), "Arms").minimum());
+        assertEquals(90, choiceNamed(allMinimum.frame(), "Arms").maximum());
+        assertEquals(100, choiceNamed(allMinimum.frame(), "Waist").minimum());
+        assertFalse(choiceNamed(allMinimum.frame(), "Waist").enabled());
+
+        TemplatesFeature.Update minimumGang = feature.dispatch(
+                new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.MINIMUM, true));
+        TemplatesFeature.Update maximumGang = feature.dispatch(
+                new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.MAXIMUM, true));
+
+        assertEquals(TemplatesFeature.GangMode.MINIMUM,
+                minimumGang.frame().editor().orElseThrow().gang().activeMode().orElseThrow());
+        assertEquals(TemplatesFeature.GangMode.MAXIMUM,
+                maximumGang.frame().editor().orElseThrow().gang().activeMode().orElseThrow());
+        assertTrue(maximumGang.frame().editor().orElseThrow().gang().rowsLocked());
+        assertEquals(NameIdentity.of("Alpha"), maximumGang.frame().selection().orElseThrow());
+    }
+
+    /**
+     * An environmental ProjectSession failure remains distinct from validation rejection and preserves the selected
+     * identity and last committed row values for controller feedback and focus restoration.
+     */
+    @Test
+    void failedRowEditPreservesSelectionAndLastCommittedEditorFrame() {
+        FailingApplySession session = new FailingApplySession(ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        session.failEdits();
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+
+        TemplatesFeature.Update failed = feature.dispatch(
+                new TemplatesFeature.SetChoiceRange("Waist", 25, 75));
+
+        assertEquals(TemplatesFeature.OutcomeKind.FAILED, failed.outcomeKind());
+        assertEquals(NameIdentity.of("Alpha"), failed.frame().selection().orElseThrow());
+        assertEquals(100, choiceNamed(failed.frame(), "Waist").minimum());
+        assertEquals(100, choiceNamed(failed.frame(), "Waist").maximum());
+        assertEquals("TEST_SLIDER_EDIT_FAILURE", failed.frame().diagnostics().get(0).getCode());
+    }
 
     /**
      * A typed Create intent writes through the authoritative Project flow, then selects the returned logical identity
@@ -257,6 +449,14 @@ class TemplatesFeatureTest {
     }
 
     /**
+     * Finds one rendered Slider choice by stable case-insensitive name.
+     */
+    private static TemplatesFeature.ChoiceFrame choiceNamed(TemplatesFeature.Frame frame, String name) {
+        return frame.editor().orElseThrow().choices().stream()
+                .filter(choice -> choice.name().equalsIgnoreCase(name)).findFirst().orElseThrow();
+    }
+
+    /**
      * Minimal deterministic clock used to cross the type-ahead timeout without sleeping.
      */
     private static final class MutableClock extends Clock {
@@ -288,6 +488,73 @@ class TemplatesFeatureTest {
         @Override
         public Instant instant() {
             return now;
+        }
+    }
+
+    /**
+     * ProjectSession boundary adapter that preserves every read/lifecycle operation but returns a deterministic
+     * environmental failure for Project edits.
+     */
+    private static final class FailingApplySession implements ProjectSession {
+        private final ProjectSession delegate;
+        private boolean failEdits;
+
+        /** Creates the adapter around one already-seeded session. */
+        private FailingApplySession(ProjectSession delegate) {
+            this.delegate = delegate;
+        }
+
+        /** Arms deterministic failures after fixture setup has completed through the same public seam. */
+        private void failEdits() {
+            failEdits = true;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public com.asdasfa.jbs2bg.project.ProjectSnapshot getSnapshot() {
+            return delegate.getSnapshot();
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome newProject() {
+            return delegate.newProject();
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome open(Path source, ProjectOperationContext context) {
+            return delegate.open(source, context);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome save(ProjectOperationContext context) {
+            return delegate.save(context);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome saveAs(Path target, ProjectOperationContext context) {
+            return delegate.saveAs(target, context);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public SliderPresetImportOutcome importSliderPresets(List<Path> sources, ProjectOperationContext context) {
+            return delegate.importSliderPresets(sources, context);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome apply(ProjectEdit edit) {
+            if (!failEdits)
+                return delegate.apply(edit);
+            ProjectDiagnostic diagnostic = new ProjectDiagnostic("TEST_SLIDER_EDIT_FAILURE",
+                    DiagnosticSeverity.ERROR, new SourceLocation(Optional.empty(),
+                    Optional.of("slider-preset.slider-choice"), OptionalInt.empty(), OptionalInt.empty()),
+                    "The test Slider choice could not be edited.");
+            return new FailedOutcome(delegate.getSnapshot(), List.of(diagnostic));
         }
     }
 }

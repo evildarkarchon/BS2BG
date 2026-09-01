@@ -47,6 +47,22 @@
     -fx-padding: 12px;
 }
 
+#workbenchRoot .slider-choice-row {
+    -fx-background-color: -bs-surface;
+    -fx-border-color: -bs-border;
+    -fx-border-width: 1px;
+    -fx-padding: 10px;
+}
+
+#workbenchRoot .slider-choice-preview {
+    -fx-font-family: "Consolas";
+    -fx-font-weight: bold;
+}
+
+#workbenchRoot .slider-choice-default-state {
+    -fx-font-size: 11px;
+}
+
 #workbenchRoot .title {
     -fx-font-size: 18px;
     -fx-font-weight: bold;
@@ -104,6 +120,7 @@
 }
 
 #workbenchRoot .button:focused,
+#workbenchRoot .check-box:focused,
 #workbenchRoot .toggle-button:focused,
 #workbenchRoot .combo-box:focused,
 #workbenchRoot .list-view:focused,
@@ -124,12 +141,17 @@
     -fx-border-width: 2px;
 }
 
+#workbenchRoot:workbench-high-contrast .slider-choice-row {
+    -fx-border-width: 2px;
+}
+
 #workbenchRoot:workbench-high-contrast .semantic-icon {
     -fx-stroke: -bs-text;
     -fx-stroke-width: 2.5px;
 }
 
 #workbenchRoot:workbench-high-contrast .button:disabled,
+#workbenchRoot:workbench-high-contrast .check-box:disabled,
 #workbenchRoot:workbench-high-contrast .toggle-button:disabled,
 #workbenchRoot:workbench-high-contrast .combo-box:disabled {
     -fx-opacity: 1;

@@ -1,6 +1,7 @@
 package com.asdasfa.jbs2bg.project;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
+import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -382,5 +384,41 @@ class ProjectSessionSliderChoiceTest {
         assertInstanceOf(ChangedOutcome.class, outcome);
         assertFalse(preset.isUunp());
         assertExplicitStored(find(preset, "Waist"), 20, 80, 10, 90);
+    }
+
+    /**
+     * UI-representative enable and range edits persist changed synthesized defaults with null endpoints, continue to
+     * omit untouched defaults, and reopen with the same observable profile, percentages, and exact preview text.
+     *
+     * @throws Exception when the temporary Project cannot be saved or inspected
+     */
+    @Test
+    void sliderChoiceEditsPreservePreviewAndCanonicalOmissionAcrossSaveReopen() throws Exception {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        SliderPresetSnapshot created = session.getSnapshot().getSliderPresets().get(0);
+        session.apply(SliderPresetEdits.setSliderChoice("Alpha",
+                find(created, "Legs").withPercentageRange(25, 75)));
+        session.apply(SliderPresetEdits.setSliderChoice("Alpha",
+                find(session.getSnapshot().getSliderPresets().get(0), "Waist").withEnabled(false)));
+        SliderPresetSnapshot edited = session.getSnapshot().getSliderPresets().get(0);
+        String legsPreview = ProjectOutputFormatter.formatSliderChoicePreview(find(edited, "Legs"), false);
+
+        Path savedFile = tempDirectory.resolve("edited-choices.jbs2bg");
+        session.saveAs(savedFile);
+        String canonical = Files.readString(savedFile);
+        SliderPresetSnapshot reopened = ProjectSessions.create().open(savedFile).getSnapshot()
+                .getSliderPresets().get(0);
+
+        assertFalse(canonical.contains("\"Breasts\""));
+        assertTrue(canonical.contains("\"Legs\""));
+        assertTrue(canonical.contains("\"Waist\""));
+        assertFalse(reopened.isUunp());
+        assertEquals(25, find(reopened, "Legs").getPercentageMinimum());
+        assertEquals(75, find(reopened, "Legs").getPercentageMaximum());
+        assertFalse(find(reopened, "Waist").isEnabled());
+        assertEquals(legsPreview,
+                ProjectOutputFormatter.formatSliderChoicePreview(find(reopened, "Legs"), false));
     }
 }

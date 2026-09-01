@@ -3,7 +3,10 @@ package com.asdasfa.jbs2bg.workbench;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -163,11 +166,55 @@ public final class WorkbenchController {
     @FXML
     private Label templateChoiceCountText;
     @FXML
+    private ComboBox<TemplatesFeature.Profile> sliderPresetProfile;
+    @FXML
+    private VBox sliderChoiceRows;
+    @FXML
     private VBox templatesInspectorContent;
+    @FXML
+    private ScrollPane templatesInspectorScroll;
     @FXML
     private Label templateSelectionText;
     @FXML
+    private Button goToSetSlidersButton;
+    @FXML
     private Button renameSliderPresetButton;
+    @FXML
+    private Button zeroAllSliderChoicesButton;
+    @FXML
+    private Button fiftyAllSliderChoicesButton;
+    @FXML
+    private Button hundredAllSliderChoicesButton;
+    @FXML
+    private Button zeroAllMinimumButton;
+    @FXML
+    private Button fiftyAllMinimumButton;
+    @FXML
+    private Button hundredAllMinimumButton;
+    @FXML
+    private Button zeroAllMaximumButton;
+    @FXML
+    private Button fiftyAllMaximumButton;
+    @FXML
+    private Button hundredAllMaximumButton;
+    @FXML
+    private javafx.scene.control.CheckBox gangAllCheck;
+    @FXML
+    private javafx.scene.control.CheckBox gangMinimumCheck;
+    @FXML
+    private javafx.scene.control.CheckBox gangMaximumCheck;
+    @FXML
+    private Slider gangAllSlider;
+    @FXML
+    private Slider gangMinimumSlider;
+    @FXML
+    private Slider gangMaximumSlider;
+    @FXML
+    private Label gangAllValue;
+    @FXML
+    private Label gangMinimumValue;
+    @FXML
+    private Label gangMaximumValue;
     @FXML
     private Button editorButton;
     @FXML
@@ -202,6 +249,7 @@ public final class WorkbenchController {
     private boolean templatesMutationsBlocked;
     private boolean resetTemplatesOnNextProjectFrame;
     private boolean sliderPresetListInitialized;
+    private final Map<String, SliderChoiceRow> sliderChoiceRowsByName = new LinkedHashMap<>();
 
     /**
      * Pairs one decorative vector with the text label and exposes its keyboard cue as help text.
@@ -419,6 +467,7 @@ public final class WorkbenchController {
     private void configureTemplates() {
         sliderPresetSort.getItems().setAll(TemplatesFeature.SortOrder.values());
         sliderPresetSort.setValue(templatesFeature.frame().sortOrder());
+        sliderPresetProfile.getItems().setAll(TemplatesFeature.Profile.values());
         configureSliderPresetList();
         sliderPresetFilter.textProperty().addListener((observable, previous, current) -> {
             if (!renderingTemplates)
@@ -427,6 +476,12 @@ public final class WorkbenchController {
         sliderPresetSort.setOnAction(event -> {
             if (!renderingTemplates && sliderPresetSort.getValue() != null)
                 dispatchTemplates(new TemplatesFeature.ChangeSort(sliderPresetSort.getValue()));
+        });
+        sliderPresetProfile.setOnAction(event -> {
+            if (!renderingTemplates && sliderPresetProfile.getValue() != null
+                    && templatesFeature.frame().editor().stream()
+                    .anyMatch(editor -> editor.profile() != sliderPresetProfile.getValue()))
+                dispatchTemplates(new TemplatesFeature.ChangeProfile(sliderPresetProfile.getValue()));
         });
         createSliderPresetButton.setOnAction(event ->
                 dispatchTemplates(new TemplatesFeature.Create(sliderPresetNameInput.getText())));
@@ -440,6 +495,58 @@ public final class WorkbenchController {
                 dispatchTemplates(new TemplatesFeature.RequestClearVisible()));
         dismissTemplatesInfoBarButton.setOnAction(event ->
                 dispatchTemplates(new TemplatesFeature.DismissDiagnostics()));
+        configureGangControls();
+    }
+
+    /**
+     * Connects every inspector bulk button, mutually exclusive gang check, and coalesced gang Slider gesture to the
+     * same typed Templates intent seam.
+     */
+    private void configureGangControls() {
+        configureBulkButton(zeroAllSliderChoicesButton, TemplatesFeature.GangMode.ALL, 0);
+        configureBulkButton(fiftyAllSliderChoicesButton, TemplatesFeature.GangMode.ALL, 50);
+        configureBulkButton(hundredAllSliderChoicesButton, TemplatesFeature.GangMode.ALL, 100);
+        configureBulkButton(zeroAllMinimumButton, TemplatesFeature.GangMode.MINIMUM, 0);
+        configureBulkButton(fiftyAllMinimumButton, TemplatesFeature.GangMode.MINIMUM, 50);
+        configureBulkButton(hundredAllMinimumButton, TemplatesFeature.GangMode.MINIMUM, 100);
+        configureBulkButton(zeroAllMaximumButton, TemplatesFeature.GangMode.MAXIMUM, 0);
+        configureBulkButton(fiftyAllMaximumButton, TemplatesFeature.GangMode.MAXIMUM, 50);
+        configureBulkButton(hundredAllMaximumButton, TemplatesFeature.GangMode.MAXIMUM, 100);
+        gangAllCheck.setOnAction(event -> dispatchTemplates(new TemplatesFeature.ToggleGang(
+                TemplatesFeature.GangMode.ALL, gangAllCheck.isSelected())));
+        gangMinimumCheck.setOnAction(event -> dispatchTemplates(new TemplatesFeature.ToggleGang(
+                TemplatesFeature.GangMode.MINIMUM, gangMinimumCheck.isSelected())));
+        gangMaximumCheck.setOnAction(event -> dispatchTemplates(new TemplatesFeature.ToggleGang(
+                TemplatesFeature.GangMode.MAXIMUM, gangMaximumCheck.isSelected())));
+        configureGangSlider(gangAllSlider, gangAllValue, TemplatesFeature.GangMode.ALL);
+        configureGangSlider(gangMinimumSlider, gangMinimumValue, TemplatesFeature.GangMode.MINIMUM);
+        configureGangSlider(gangMaximumSlider, gangMaximumValue, TemplatesFeature.GangMode.MAXIMUM);
+        goToSetSlidersButton.setOnAction(event -> firstSliderChoiceControl().ifPresent(node -> {
+            node.requestFocus();
+            Platform.runLater(node::requestFocus);
+        }));
+    }
+
+    /**
+     * Binds one fixed-value bulk button to an atomic enabled-row edit.
+     */
+    private void configureBulkButton(Button button, TemplatesFeature.GangMode mode, int value) {
+        button.setOnAction(event -> dispatchTemplates(new TemplatesFeature.ApplyBulkValue(mode, value)));
+    }
+
+    /**
+     * Keeps pointer drags local until release while conventional keyboard Slider changes publish immediately.
+     */
+    private void configureGangSlider(Slider slider, Label valueLabel, TemplatesFeature.GangMode mode) {
+        slider.valueProperty().addListener((observable, previous, current) -> {
+            valueLabel.setText(current.intValue() + "%");
+            if (!renderingTemplates && !slider.isValueChanging())
+                dispatchTemplates(new TemplatesFeature.ApplyBulkValue(mode, current.intValue()));
+        });
+        slider.valueChangingProperty().addListener((observable, previous, changing) -> {
+            if (!renderingTemplates && !changing.booleanValue())
+                dispatchTemplates(new TemplatesFeature.ApplyBulkValue(mode, (int) slider.getValue()));
+        });
     }
 
     /**
@@ -492,7 +599,12 @@ public final class WorkbenchController {
                 || intent instanceof TemplatesFeature.ChangeRename
                 || intent instanceof TemplatesFeature.CommitRename
                 || intent instanceof TemplatesFeature.RequestRemove
-                || intent instanceof TemplatesFeature.RequestClearVisible;
+                || intent instanceof TemplatesFeature.RequestClearVisible
+                || intent instanceof TemplatesFeature.ChangeProfile
+                || intent instanceof TemplatesFeature.SetChoiceEnabled
+                || intent instanceof TemplatesFeature.SetChoiceRange
+                || intent instanceof TemplatesFeature.ApplyBulkValue
+                || intent instanceof TemplatesFeature.ToggleGang;
     }
 
     /**
@@ -536,6 +648,10 @@ public final class WorkbenchController {
      * Routes feature validation and mutation outcomes into inline InfoBar, Activity, and status projections.
      */
     private void publishTemplatesOutcome(TemplatesFeature.Intent intent, TemplatesFeature.Update update) {
+        if (isSliderChoiceIntent(intent)) {
+            publishSliderChoiceOutcome(intent, update);
+            return;
+        }
         if (!update.frame().diagnostics().isEmpty()) {
             String message = ProjectDiagnosticFormatter.format(update.frame().diagnostics());
             renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
@@ -557,6 +673,64 @@ public final class WorkbenchController {
         };
         if (operation != null)
             publishTemplatesMutation(operation, update);
+    }
+
+    /**
+     * Identifies in-place profile, row, and gang tasks whose feedback follows the accepted per-gesture/bulk tiers.
+     */
+    private static boolean isSliderChoiceIntent(TemplatesFeature.Intent intent) {
+        return intent instanceof TemplatesFeature.ChangeProfile
+                || intent instanceof TemplatesFeature.SetChoiceEnabled
+                || intent instanceof TemplatesFeature.SetChoiceRange
+                || intent instanceof TemplatesFeature.ApplyBulkValue
+                || intent instanceof TemplatesFeature.ToggleGang;
+    }
+
+    /**
+     * Projects the exact feature outcome without flooding Activity for individual row gestures or stealing focus.
+     */
+    private void publishSliderChoiceOutcome(TemplatesFeature.Intent intent, TemplatesFeature.Update update) {
+        boolean bulk = intent instanceof TemplatesFeature.ApplyBulkValue
+                || intent instanceof TemplatesFeature.ToggleGang;
+        String operation = bulk ? "Edit Slider choices" : "Edit Slider choice";
+        WorkbenchFeedback.Notification notification = switch (update.outcomeKind()) {
+            case CHANGED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.SUCCESS,
+                    operation + " changed.", WorkbenchFeedback.Disposition.COMPLETED);
+            case UNCHANGED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.INFORMATION,
+                    "No Slider choice values changed.", WorkbenchFeedback.Disposition.COMPLETED);
+            case REJECTED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.VALIDATION,
+                    "Slider choice validation rejected the edit.", WorkbenchFeedback.Disposition.FAILED);
+            case FAILED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.FAILURE,
+                    "Slider choice editing failed.", WorkbenchFeedback.Disposition.FAILED);
+            case CANCELLED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.INFORMATION,
+                    "Slider choice editing was cancelled.", WorkbenchFeedback.Disposition.CANCELLED);
+            case NONE -> null;
+        };
+        if (notification == null)
+            return;
+        renderFeedback(bulk && update.outcomeKind() == TemplatesFeature.OutcomeKind.CHANGED
+                ? feedback.publishActivity(notification)
+                : feedback.publishStatus(notification));
+        if (update.outcomeKind() == TemplatesFeature.OutcomeKind.FAILED)
+            showTemplatesFailure(update);
+    }
+
+    /**
+     * Realizes an unexpected synchronous Templates failure as the accepted focus-restoring failure dialog.
+     */
+    private void showTemplatesFailure(TemplatesFeature.Update update) {
+        WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
+        String details = ProjectDiagnosticFormatter.format(update.frame().diagnostics());
+        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
+                "Slider choice editing failed", "The Slider Preset could not be edited.",
+                details.isBlank() ? "No diagnostic details were provided." : details, false);
+        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
+        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
+        renderFeedback(pendingFrame);
+        WorkbenchFeedback.DialogAction action = platform.completeFailure(spec, stage);
+        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
+                pending.token(), action)).frame());
+        requestFocus(returnTarget);
     }
 
     /**
@@ -615,10 +789,78 @@ public final class WorkbenchController {
                 templateSelectionText.setText("No Slider Preset selected");
                 renameSliderPresetButton.setAccessibleText("Rename selected Slider Preset");
             });
+            reconcileSliderChoiceRows(frame.editor());
             synchronizeRenameEditor(frame.rename());
         } finally {
             renderingTemplates = false;
         }
+    }
+
+    /**
+     * Reuses JavaFX row adapters by case-insensitive choice identity so edits preserve focus and the UIA subtree.
+     */
+    private void reconcileSliderChoiceRows(Optional<TemplatesFeature.EditorFrame> editor) {
+        renderGangControls(editor);
+        if (editor.isEmpty()) {
+            sliderPresetProfile.setDisable(true);
+            sliderPresetProfile.setValue(null);
+            sliderChoiceRowsByName.clear();
+            sliderChoiceRows.getChildren().clear();
+            return;
+        }
+        TemplatesFeature.EditorFrame editorFrame = editor.orElseThrow();
+        sliderPresetProfile.setDisable(templatesMutationsBlocked);
+        sliderPresetProfile.setValue(editorFrame.profile());
+        Map<String, SliderChoiceRow> next = new LinkedHashMap<>();
+        List<SliderChoiceRow> ordered = editorFrame.choices().stream().map(choice -> {
+            String key = choice.name().toLowerCase(Locale.ROOT);
+            SliderChoiceRow row = sliderChoiceRowsByName.get(key);
+            if (row == null)
+                row = new SliderChoiceRow(this::dispatchTemplates);
+            row.render(editorFrame, choice, templatesMutationsBlocked);
+            next.put(key, row);
+            return row;
+        }).toList();
+        sliderChoiceRowsByName.clear();
+        sliderChoiceRowsByName.putAll(next);
+        if (!List.copyOf(sliderChoiceRows.getChildren()).equals(ordered))
+            sliderChoiceRows.getChildren().setAll(ordered);
+    }
+
+    /**
+     * Renders mutually exclusive gang state and disables every Project mutation when no preset is selected or a job
+     * owns admission.
+     */
+    private void renderGangControls(Optional<TemplatesFeature.EditorFrame> editor) {
+        boolean available = editor.isPresent() && !templatesMutationsBlocked;
+        TemplatesFeature.GangFrame gang = editor.map(TemplatesFeature.EditorFrame::gang).orElse(null);
+        Optional<TemplatesFeature.GangMode> active = gang == null ? Optional.empty() : gang.activeMode();
+        gangAllCheck.setSelected(active.equals(Optional.of(TemplatesFeature.GangMode.ALL)));
+        gangMinimumCheck.setSelected(active.equals(Optional.of(TemplatesFeature.GangMode.MINIMUM)));
+        gangMaximumCheck.setSelected(active.equals(Optional.of(TemplatesFeature.GangMode.MAXIMUM)));
+        int all = gang == null ? 100 : gang.allValue();
+        int minimum = gang == null ? 100 : gang.minimumValue();
+        int maximum = gang == null ? 100 : gang.maximumValue();
+        gangAllSlider.setValue(all);
+        gangMinimumSlider.setValue(minimum);
+        gangMaximumSlider.setValue(maximum);
+        gangAllValue.setText(all + "%");
+        gangMinimumValue.setText(minimum + "%");
+        gangMaximumValue.setText(maximum + "%");
+        goToSetSlidersButton.setDisable(!available
+                || editor.stream().allMatch(frame -> frame.choices().isEmpty()));
+        renameSliderPresetButton.setDisable(!available);
+        for (Button button : List.of(zeroAllSliderChoicesButton, fiftyAllSliderChoicesButton,
+                hundredAllSliderChoicesButton, zeroAllMinimumButton, fiftyAllMinimumButton,
+                hundredAllMinimumButton, zeroAllMaximumButton, fiftyAllMaximumButton,
+                hundredAllMaximumButton))
+            button.setDisable(!available);
+        gangAllCheck.setDisable(!available);
+        gangMinimumCheck.setDisable(!available);
+        gangMaximumCheck.setDisable(!available);
+        gangAllSlider.setDisable(!available || !gangAllCheck.isSelected());
+        gangMinimumSlider.setDisable(!available || !gangMinimumCheck.isSelected());
+        gangMaximumSlider.setDisable(!available || !gangMaximumCheck.isSelected());
     }
 
     /**
@@ -999,8 +1241,8 @@ public final class WorkbenchController {
         templatesPrimaryScroll.setVisible(templatesActive);
         templatesEditorContent.setManaged(templatesActive);
         templatesEditorContent.setVisible(templatesActive);
-        templatesInspectorContent.setManaged(templatesActive);
-        templatesInspectorContent.setVisible(templatesActive);
+        templatesInspectorScroll.setManaged(templatesActive);
+        templatesInspectorScroll.setVisible(templatesActive);
         primaryContentButton.setManaged(!templatesActive);
         primaryContentButton.setVisible(!templatesActive);
         editorButton.setManaged(!templatesActive);
@@ -1069,7 +1311,8 @@ public final class WorkbenchController {
         if (focusOwner == sliderPresetFilter || focusOwner == sliderPresetList
                 || focusOwner == sliderPresetNameInput) {
             landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
-        } else if (focusOwner == templateEditorFocusTarget) {
+        } else if (focusOwner == templateEditorFocusTarget || focusOwner == sliderPresetProfile
+                || sliderChoiceRowsByName.values().stream().anyMatch(row -> row.contains(focusOwner))) {
             landmark = WorkbenchNavigation.Landmark.EDITOR;
         } else if (focusOwner == renameSliderPresetButton || focusOwner == templateSelectionText) {
             landmark = WorkbenchNavigation.Landmark.INSPECTOR;
@@ -1120,7 +1363,7 @@ public final class WorkbenchController {
             case PRIMARY_CONTENT -> target.area() == WorkbenchNavigation.Area.TEMPLATES
                     ? sliderPresetList : primaryContentButton;
             case EDITOR -> target.area() == WorkbenchNavigation.Area.TEMPLATES
-                    ? templateEditorFocusTarget : editorButton;
+                    ? firstSliderChoiceControl().orElse(templateEditorFocusTarget) : editorButton;
             case INSPECTOR_LAUNCHER -> showInspectorOverlayButton;
             case INSPECTOR -> target.area() == WorkbenchNavigation.Area.TEMPLATES
                     ? (renameSliderPresetButton.isDisabled() ? templateSelectionText : renameSliderPresetButton)
@@ -1130,6 +1373,14 @@ public final class WorkbenchController {
             case ACTIVITY -> activityList;
             case STATUS -> statusText;
         };
+    }
+
+    /**
+     * Resolves the first canonical Slider choice row without retaining a control reference in navigation state.
+     */
+    private Optional<Node> firstSliderChoiceControl() {
+        return sliderChoiceRowsByName.values().stream().findFirst().map(SliderChoiceRow::enabledControl)
+                .map(Node.class::cast);
     }
 
     /**
@@ -1425,7 +1676,8 @@ public final class WorkbenchController {
         });
         activityList.getItems().setAll(frame.activities());
         WorkbenchFeedback.StatusProjection status = frame.status();
-        statusText.setText(frame.activities().isEmpty()
+        boolean initialReady = frame.activities().isEmpty() && status.message().equals("Ready");
+        statusText.setText(initialReady
                 ? "Ready"
                 : status.severity().cue() + " — " + status.dispositionText() + " — " + status.message());
         statusText.setAccessibleText("Workbench status");

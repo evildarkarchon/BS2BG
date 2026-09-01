@@ -2,6 +2,7 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
@@ -206,8 +207,25 @@
                                                                 <Label fx:id="templateChoiceCountText"
                                                                         accessibleText="Slider choice count"
                                                                         text="No slider choices" />
-                                                                <Label text="Slider choice editing is delivered in the next Templates slice."
-                                                                        wrapText="true" />
+                                                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                                                    <children>
+                                                                        <Label labelFor="$sliderPresetProfile"
+                                                                                mnemonicParsing="true"
+                                                                                text="_Profile:" />
+                                                                        <ComboBox fx:id="sliderPresetProfile"
+                                                                                accessibleText="Slider Preset profile"
+                                                                                disable="true" maxWidth="Infinity"
+                                                                                HBox.hgrow="ALWAYS" />
+                                                                    </children>
+                                                                </HBox>
+                                                                <ScrollPane fx:id="sliderChoicesScroll"
+                                                                        accessibleText="Set Sliders editor"
+                                                                        fitToWidth="true" focusTraversable="false"
+                                                                        hbarPolicy="NEVER" VBox.vgrow="ALWAYS">
+                                                                    <content>
+                                                                        <VBox fx:id="sliderChoiceRows" spacing="8.0" />
+                                                                    </content>
+                                                                </ScrollPane>
                                                             </children>
                                                         </VBox>
                                                         <Button fx:id="editorButton" accessibleText="Templates editor"
@@ -217,22 +235,107 @@
                                                 </StackPane>
                                                 <VBox fx:id="inspectorPane" accessibleText="Templates inspector"
                                                         minWidth="180.0" prefWidth="240.0" spacing="8.0"
-                                                        styleClass="placeholder-pane">
+                                                    styleClass="placeholder-pane">
                                                     <children>
-                                                        <VBox fx:id="templatesInspectorContent" spacing="8.0"
-                                                                VBox.vgrow="ALWAYS">
-                                                            <children>
-                                                                <Label text="Slider Preset inspector" />
-                                                                <Label fx:id="templateSelectionText"
-                                                                        accessibleText="Selected Slider Preset"
-                                                                        focusTraversable="true"
-                                                                        text="No Slider Preset selected" wrapText="true" />
-                                                                <Button fx:id="renameSliderPresetButton"
-                                                                        accessibleText="Rename selected Slider Preset"
-                                                                        maxWidth="Infinity" mnemonicParsing="true"
-                                                                        text="_Rename Slider Preset (F2)" />
-                                                            </children>
-                                                        </VBox>
+                                                        <ScrollPane fx:id="templatesInspectorScroll"
+                                                                accessibleText="Templates inspector controls"
+                                                                fitToWidth="true" focusTraversable="false"
+                                                                hbarPolicy="NEVER" VBox.vgrow="ALWAYS">
+                                                            <content>
+                                                                <VBox fx:id="templatesInspectorContent" spacing="8.0">
+                                                                    <children>
+                                                                        <Label text="Slider Preset inspector" />
+                                                                        <Label fx:id="templateSelectionText"
+                                                                                accessibleText="Selected Slider Preset"
+                                                                                focusTraversable="true"
+                                                                                text="No Slider Preset selected" wrapText="true" />
+                                                                        <Button fx:id="goToSetSlidersButton"
+                                                                                accessibleText="Go to Set Sliders"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Go to Set Sliders" />
+                                                                        <Button fx:id="renameSliderPresetButton"
+                                                                                accessibleText="Rename selected Slider Preset"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Rename Slider Preset (F2)" />
+                                                                        <Label styleClass="title" text="Gang controls" />
+                                                                        <Label text="Set every enabled Slider choice atomically."
+                                                                                wrapText="true" />
+                                                                        <HBox spacing="4.0">
+                                                                            <children>
+                                                                                <Button fx:id="zeroAllSliderChoicesButton"
+                                                                                        accessibleText="Set all Slider choice values to 0 percent"
+                                                                                        maxWidth="Infinity" text="0 All"
+                                                                                        HBox.hgrow="ALWAYS" />
+                                                                                <Button fx:id="fiftyAllSliderChoicesButton"
+                                                                                        accessibleText="Set all Slider choice values to 50 percent"
+                                                                                        maxWidth="Infinity" text="50 All"
+                                                                                        HBox.hgrow="ALWAYS" />
+                                                                                <Button fx:id="hundredAllSliderChoicesButton"
+                                                                                        accessibleText="Set all Slider choice values to 100 percent"
+                                                                                        maxWidth="Infinity" text="100 All"
+                                                                                        HBox.hgrow="ALWAYS" />
+                                                                            </children>
+                                                                        </HBox>
+                                                                        <HBox spacing="4.0">
+                                                                            <children>
+                                                                                <Button fx:id="zeroAllMinimumButton"
+                                                                                        accessibleText="Set all Slider choice minimum values to 0 percent"
+                                                                                        maxWidth="Infinity" text="0 All-Min"
+                                                                                        HBox.hgrow="ALWAYS" />
+                                                                                <Button fx:id="fiftyAllMinimumButton"
+                                                                                        accessibleText="Set all Slider choice minimum values to 50 percent"
+                                                                                        maxWidth="Infinity" text="50 All-Min"
+                                                                                        HBox.hgrow="ALWAYS" />
+                                                                                <Button fx:id="hundredAllMinimumButton"
+                                                                                        accessibleText="Set all Slider choice minimum values to 100 percent"
+                                                                                        maxWidth="Infinity" text="100 All-Min"
+                                                                                        HBox.hgrow="ALWAYS" />
+                                                                            </children>
+                                                                        </HBox>
+                                                                        <HBox spacing="4.0">
+                                                                            <children>
+                                                                                <Button fx:id="zeroAllMaximumButton"
+                                                                                        accessibleText="Set all Slider choice maximum values to 0 percent"
+                                                                                        maxWidth="Infinity" text="0 All-Max"
+                                                                                        HBox.hgrow="ALWAYS" />
+                                                                                <Button fx:id="fiftyAllMaximumButton"
+                                                                                        accessibleText="Set all Slider choice maximum values to 50 percent"
+                                                                                        maxWidth="Infinity" text="50 All-Max"
+                                                                                        HBox.hgrow="ALWAYS" />
+                                                                                <Button fx:id="hundredAllMaximumButton"
+                                                                                        accessibleText="Set all Slider choice maximum values to 100 percent"
+                                                                                        maxWidth="Infinity" text="100 All-Max"
+                                                                                        HBox.hgrow="ALWAYS" />
+                                                                            </children>
+                                                                        </HBox>
+                                                                        <CheckBox fx:id="gangAllCheck"
+                                                                                accessibleText="Gang all Slider choice values"
+                                                                                mnemonicParsing="true" text="Gang _All" />
+                                                                        <Slider fx:id="gangAllSlider"
+                                                                                accessibleText="Gang all Slider choice value"
+                                                                                blockIncrement="1.0" majorTickUnit="20.0"
+                                                                                max="100.0" min="0.0" value="100.0" />
+                                                                        <Label fx:id="gangAllValue" text="100%" />
+                                                                        <CheckBox fx:id="gangMinimumCheck"
+                                                                                accessibleText="Gang all minimum Slider choice values"
+                                                                                mnemonicParsing="true" text="Gang All _Minimum" />
+                                                                        <Slider fx:id="gangMinimumSlider"
+                                                                                accessibleText="Gang all minimum Slider choice value"
+                                                                                blockIncrement="1.0" majorTickUnit="20.0"
+                                                                                max="100.0" min="0.0" value="100.0" />
+                                                                        <Label fx:id="gangMinimumValue" text="100%" />
+                                                                        <CheckBox fx:id="gangMaximumCheck"
+                                                                                accessibleText="Gang all maximum Slider choice values"
+                                                                                mnemonicParsing="true" text="Gang All Ma_ximum" />
+                                                                        <Slider fx:id="gangMaximumSlider"
+                                                                                accessibleText="Gang all maximum Slider choice value"
+                                                                                blockIncrement="1.0" majorTickUnit="20.0"
+                                                                                max="100.0" min="0.0" value="100.0" />
+                                                                        <Label fx:id="gangMaximumValue" text="100%" />
+                                                                    </children>
+                                                                </VBox>
+                                                            </content>
+                                                        </ScrollPane>
                                                         <Button fx:id="inspectorButton" accessibleText="Templates inspector"
                                                                 managed="false" maxWidth="Infinity"
                                                                 text="Focus Templates inspector" visible="false" />

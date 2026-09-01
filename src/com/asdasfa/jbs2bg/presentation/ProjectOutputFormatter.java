@@ -149,7 +149,7 @@ public final class ProjectOutputFormatter {
         List<String> values = new ArrayList<>();
         for (SliderChoiceSnapshot choice : enabledChoices(preset)) {
             if (!omitRedundantSliders || !isRedundant(choice, preset.isUunp()))
-                values.add(formatSliderValue(choice, preset.isUunp()));
+                values.add(formatSliderChoicePreview(choice, preset.isUunp()));
         }
         return preset.getName() + "=" + String.join(", ", values);
     }
@@ -198,9 +198,16 @@ public final class ProjectOutputFormatter {
     }
 
     /**
-     * Formats one BodyGen slider range using the legacy float and rounding behavior.
+     * Formats one Slider choice exactly as it appears inside a BodyGen Templates line, including configured profile
+     * inversion, multiplier, interpolation, float spelling, and legacy half-up rounding.
+     *
+     * @param choice immutable Slider choice to preview
+     * @param uunp   whether the containing Slider Preset uses the UUNP Settings profile
+     * @return exact BodyGen choice text without the containing preset name
+     * @throws NullPointerException when choice is null
      */
-    private static String formatSliderValue(SliderChoiceSnapshot choice, boolean uunp) {
+    public static String formatSliderChoicePreview(SliderChoiceSnapshot choice, boolean uunp) {
+        Objects.requireNonNull(choice, "choice");
         float small = choice.getEffectiveSmallValue() * 0.01f;
         float big = choice.getEffectiveBigValue() * 0.01f;
         if (isInverted(choice.getName(), uunp)) {

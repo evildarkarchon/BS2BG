@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.AfterEach;
@@ -181,6 +182,26 @@ class ProjectOutputFormatterTest {
 
         assertEquals("Preset=", output.getTemplatesText());
         assertTrue(bos.contains("\"slidersnumber\": 0"));
+    }
+
+    /**
+     * The in-place editor preview uses the same inversion, multiplier, interpolation, rounding, and float spelling as
+     * the complete Templates artifact rather than maintaining a second formatter.
+     */
+    @Test
+    void singleChoicePreviewMatchesGeneratedInvertedTemplateValue() {
+        SettingsTestSupport.installStandardOutput(Map.of("Inverted", Float.valueOf(2f)), List.of("Inverted"));
+        SliderChoiceSnapshot inverted = choice("Inverted", true, 20, 80, 25, 75);
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Preset"));
+        session.apply(SliderPresetEdits.setSliderChoice("Preset", inverted));
+
+        String preview = ProjectOutputFormatter.formatSliderChoicePreview(inverted, false);
+
+        assertEquals("Inverted@1.3:0.7", preview);
+        assertEquals("Preset=" + preview,
+                ProjectOutputFormatter.generate(session.getSnapshot(), false).getTemplatesText());
     }
 
     /**

@@ -1,10 +1,10 @@
 # Windows app-image packaging checkpoint
 
-Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#102 and inherited gates). A green run proves
+Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#103 and inherited gates). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
 starts from a clean extracted location without any system Java, exercises typed navigation, semantic focus, Output,
 responsive/minimum geometry, live themes, High Contrast, reduced motion, feedback, typed dialogs, Project lifecycle,
-failure preservation, pointer-free Slider Preset browsing/management, and dirty shutdown, and exits cleanly.
+failure preservation, pointer-free Slider Preset choice editing and catalog management, and dirty shutdown, and exits cleanly.
 ADR-0003 records the Java 25 baseline this checkpoint ships.
 
 ## One command
@@ -99,7 +99,7 @@ empty working directory with every host-Java discovery path removed. The origina
 image process, host `jvm.dll` and JavaFX native libraries from the extracted runtime, and exit with code 0 inside
 the configured bound.
 
-Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #102
+Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #103
 workflow records these steps:
 
 1. Extract the clean image, verify launcher configuration/version, and install representative, recovery, malformed,
@@ -112,10 +112,12 @@ workflow records these steps:
 6. Measure live native DPI/client insets, cross the 1200-logical-pixel breakpoint, drive narrow List/Inspector
    overlays through Ctrl+K/F7/Escape, enforce the 800x600 logical-client minimum, and keep editor/drawer controls
    inside the measured client rectangle.
-7. Open the representative Project and, without pointer activation, browse exact Slider Preset identities; filter,
-   sort, and type ahead in visible order; reject duplicate create/rename; duplicate and inline-rename with F2;
-   Cancel then confirm Remove and Clear Visible; verify stable selection, complete relationship cascades, and
-   save/reopen continuity.
+7. Open the representative Project and, without pointer activation, edit an exact Slider choice, verify truthful
+   BodyGen preview and disabled omission, apply atomic 50-All, exercise mutually exclusive All-Min/All-Max gang
+   locking, switch Standard/UUNP profiles, and preserve selection and focus. Then browse exact Slider Preset
+   identities; filter, sort, and type ahead in visible order; reject duplicate create/rename; duplicate and
+   inline-rename with F2; Cancel then confirm Remove and Clear Visible; verify stable selection, complete
+   relationship cascades, canonical Slider choice persistence, and save/reopen continuity.
 8. Save As a clean New Project and verify the canonical file and adopted identity.
 9. Open a recovered Project and require captured source/basis, both ordered
    `SLIDER_PRESET_ASSIGNMENT_MISSING` diagnostics, committed effect, retry capability, and dirty title.
@@ -135,7 +137,7 @@ workflow records these steps:
 Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
 launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/11`; its durable artifacts include the Workbench,
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/12`; its durable artifacts include the Workbench,
 responsive, and Templates-management UIA trees plus `workbench-high-contrast.png` and
 `workbench-reduced-motion.png`, the populated Templates High Contrast screenshot
 `workbench-templates-high-contrast.png`, and the narrow Templates clipping screenshot
@@ -282,7 +284,7 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
-- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/11`; steps with durations;
+- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/12`; steps with durations;
   typed navigation, semantic focus, Output interaction, live themes, High Contrast, reduced motion, feedback,
   dialogs, native DPI and responsive/minimum geometry; Project recovery, New/Open/Save/Save As, failure
   preservation/retry and dirty shutdown; the expected/observed process model; bounded exit; environment scrubbing;

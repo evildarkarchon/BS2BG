@@ -98,6 +98,23 @@ class WorkbenchFeedbackTest {
     }
 
     /**
+     * High-frequency feature gestures may update truthful terminal status without creating an InfoBar or durable
+     * Activity entry for every individual row edit.
+     */
+    @Test
+    void statusOnlyPublicationDoesNotCreateInfoBarOrActivity() {
+        WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.fixed(FIXED_TIME, ZoneOffset.UTC));
+
+        WorkbenchFeedback.Frame frame = feedback.publishStatus(new WorkbenchFeedback.Notification(
+                "Edit Slider choice", WorkbenchFeedback.Severity.SUCCESS,
+                "Waist range changed.", WorkbenchFeedback.Disposition.COMPLETED));
+
+        assertEquals(true, frame.infoBar().isEmpty());
+        assertEquals(0, frame.activities().size());
+        assertEquals("Waist range changed.", frame.status().message());
+    }
+
+    /**
      * Destructive dialogs publish a safe Cancel default and accept only the matching tokenized answer.
      */
     @Test

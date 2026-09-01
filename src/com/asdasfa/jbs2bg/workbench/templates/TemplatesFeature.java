@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 import com.asdasfa.jbs2bg.filtering.ColumnCriterion;
 import com.asdasfa.jbs2bg.filtering.FilterColumn;
@@ -18,12 +19,16 @@ import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
 import com.asdasfa.jbs2bg.filtering.SortKey;
 import com.asdasfa.jbs2bg.project.CancelledOutcome;
+import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.RejectedOutcome;
+import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
+import com.asdasfa.jbs2bg.project.UnchangedOutcome;
+import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 /**
@@ -47,6 +52,7 @@ public final class TemplatesFeature {
     private String typeAheadPrefix = "";
     private Instant lastTypeAhead;
     private RenameState rename;
+    private GangFrame gang = GangFrame.inactive();
     private long revision;
     private long nextObserverId = 1;
     private long nextEffectToken = 1;
@@ -119,6 +125,13 @@ public final class TemplatesFeature {
             case ChangeSort changeSort -> changeSort(changeSort.order());
             case TypeAhead typeAhead -> typeAhead(typeAhead.character());
             case Duplicate duplicate -> duplicate(duplicate.name());
+            case ChangeProfile changeProfile -> changeProfile(changeProfile.profile());
+            case SetChoiceEnabled setChoiceEnabled -> setChoiceEnabled(
+                    setChoiceEnabled.choiceName(), setChoiceEnabled.enabled());
+            case SetChoiceRange setChoiceRange -> setChoiceRange(
+                    setChoiceRange.choiceName(), setChoiceRange.minimum(), setChoiceRange.maximum());
+            case ApplyBulkValue applyBulkValue -> applyBulkValue(applyBulkValue.mode(), applyBulkValue.value());
+            case ToggleGang toggleGang -> toggleGang(toggleGang.mode(), toggleGang.selected());
             case BeginRename ignored -> beginRename();
             case ChangeRename changeRename -> changeRename(changeRename.draft());
             case CommitRename ignored -> commitRename();
@@ -143,6 +156,7 @@ public final class TemplatesFeature {
             return new Update(true, frame);
         if (resetSelection) {
             rename = null;
+            gang = GangFrame.inactive();
             view.clearSelection();
         }
         reconcile(projectFrame, projectFrame.diagnostics());
@@ -236,8 +250,11 @@ public final class TemplatesFeature {
      * Selects only an identity that is present in the accepted visible frame.
      */
     private Update select(NameIdentity identity) {
+        Optional<NameIdentity> previous = view.getSelection();
         if (!view.select(Objects.requireNonNull(identity, "identity")))
             return new Update(false, frame);
+        if (!previous.equals(view.getSelection()))
+            gang = GangFrame.inactive();
         publish(frame.projectSequence(), frame.diagnostics());
         return new Update(true, frame);
     }
@@ -254,7 +271,7 @@ public final class TemplatesFeature {
             view.select(NameIdentity.of(requestedIdentity));
             publish(projectFlow.frame().sequence(), outcome.getDiagnostics());
         }
-        return new Update(accepted, frame);
+        return outcomeUpdate(outcome);
     }
 
     /**
@@ -272,7 +289,124 @@ public final class TemplatesFeature {
             view.select(NameIdentity.of(Objects.requireNonNull(name, "name").trim()));
             publish(projectFlow.frame().sequence(), outcome.getDiagnostics());
         }
-        return new Update(accepted, frame);
+        return outcomeUpdate(outcome);
+    }
+
+    /**
+     * Switches the selected Slider Preset profile through ProjectSession so synthesized defaults are rebuilt by the
+     * domain authority while the stable preset selection survives the coherent Project publication.
+     */
+    private Update changeProfile(Profile profile) {
+        Optional<NameIdentity> selected = view.getSelection();
+        if (selected.isEmpty())
+            return new Update(false, frame);
+        gang = GangFrame.inactive();
+        ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.setUunp(
+                selected.orElseThrow().getName(), Objects.requireNonNull(profile, "profile") == Profile.UUNP));
+        boolean accepted = accepted(outcome);
+        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        return outcomeUpdate(outcome);
+    }
+
+    /**
+     * Changes one selected preset row by stable case-insensitive choice name and then renders only the value returned
+     * by ProjectSession, preserving synthesized-default and stored-endpoint semantics.
+     */
+    private Update setChoiceEnabled(String choiceName, boolean enabled) {
+        SliderPresetSnapshot preset = selectedPreset();
+        if (preset == null)
+            return new Update(false, frame);
+        SliderChoiceSnapshot choice = findChoice(preset, choiceName);
+        if (choice == null)
+            return new Update(false, frame);
+        ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.setSliderChoice(
+                preset.getName(), choice.withEnabled(enabled)));
+        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        return outcomeUpdate(outcome);
+    }
+
+    /**
+     * Changes one selected preset row percentage range and lets ProjectSession validate the inclusive bounds and
+     * ordering before any requested value becomes visible.
+     */
+    private Update setChoiceRange(String choiceName, int minimum, int maximum) {
+        SliderPresetSnapshot preset = selectedPreset();
+        if (preset == null)
+            return new Update(false, frame);
+        SliderChoiceSnapshot choice = findChoice(preset, choiceName);
+        if (choice == null)
+            return new Update(false, frame);
+        ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.setSliderChoice(
+                preset.getName(), choice.withPercentageRange(minimum, maximum)));
+        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        return outcomeUpdate(outcome);
+    }
+
+    /**
+     * Applies one deterministic enabled-row transform as a single complete-preset Project edit. Disabled choices stay
+     * untouched because they are omitted from generated output and are not operands of Set Sliders gang gestures.
+     */
+    private Update applyBulkValue(GangMode mode, int value) {
+        SliderPresetSnapshot preset = selectedPreset();
+        if (preset == null)
+            return new Update(false, frame);
+        GangMode requestedMode = Objects.requireNonNull(mode, "mode");
+        GangFrame requestedGang = gang.withValue(requestedMode, value);
+        UnaryOperator<SliderChoiceSnapshot> transform = switch (requestedMode) {
+            case ALL -> choice -> choice.withPercentageRange(value, value);
+            case MINIMUM -> choice -> choice.withPercentageRange(
+                    Math.min(value, choice.getPercentageMaximum()), choice.getPercentageMaximum());
+            case MAXIMUM -> choice -> choice.withPercentageRange(choice.getPercentageMinimum(),
+                    Math.max(value, choice.getPercentageMinimum()));
+        };
+        List<SliderChoiceSnapshot> choices = preset.getSliderChoices().stream()
+                .map(choice -> choice.isEnabled() ? transform.apply(choice) : choice)
+                .toList();
+        ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.update(preset.getName(),
+                new SliderPresetSnapshot(preset.getName(), preset.isUunp(), choices)));
+        if (accepted(outcome))
+            gang = requestedGang;
+        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        return outcomeUpdate(outcome);
+    }
+
+    /**
+     * Activates at most one gang mode and applies its current value atomically; clearing the active mode is local
+     * presentation state and never writes the Project.
+     */
+    private Update toggleGang(GangMode mode, boolean selected) {
+        GangMode requestedMode = Objects.requireNonNull(mode, "mode");
+        if (selected) {
+            gang = gang.activate(requestedMode);
+            return applyBulkValue(requestedMode, gang.value(requestedMode));
+        }
+        if (!gang.activeMode().equals(Optional.of(requestedMode)))
+            return new Update(false, frame);
+        gang = gang.deactivate();
+        publish(frame.projectSequence(), frame.diagnostics());
+        return new Update(true, frame);
+    }
+
+    /**
+     * Resolves the selected Slider Preset from the latest coherent Project publication without retaining a row index.
+     */
+    private SliderPresetSnapshot selectedPreset() {
+        Optional<NameIdentity> selected = view.getSelection();
+        if (selected.isEmpty())
+            return null;
+        return sourcePresets.stream()
+                .filter(preset -> ProjectIdentities.sliderPreset(preset).equals(selected.orElseThrow()))
+                .findFirst().orElse(null);
+    }
+
+    /**
+     * Resolves one immutable Slider choice without changing the Settings-defined display casing.
+     */
+    private static SliderChoiceSnapshot findChoice(SliderPresetSnapshot preset, String choiceName) {
+        String requested = Objects.requireNonNull(choiceName, "choiceName");
+        return preset.getSliderChoices().stream()
+                .filter(choice -> choice.getName().equalsIgnoreCase(requested))
+                .findFirst().orElse(null);
     }
 
     /**
@@ -343,6 +477,7 @@ public final class TemplatesFeature {
         if (view.getSelection().isEmpty() && rename == null)
             return new Update(false, frame);
         rename = null;
+        gang = GangFrame.inactive();
         view.clearSelection();
         publish(frame.projectSequence(), List.of());
         return new Update(true, frame);
@@ -433,6 +568,8 @@ public final class TemplatesFeature {
         view.setRows(sourcePresets);
         applyFilter();
         if (view.getSelection().isEmpty())
+            gang = GangFrame.inactive();
+        if (view.getSelection().isEmpty())
             rename = null;
         applySort();
         publish(projectFrame.sequence(), diagnostics);
@@ -470,7 +607,7 @@ public final class TemplatesFeature {
      */
     private void publish(long projectSequence, List<ProjectDiagnostic> diagnostics) {
         frame = new Frame(++revision, projectSequence, view.visibleSet().getRows(), view.getSelection(), filterText,
-                sortOrder, Optional.ofNullable(rename), diagnostics);
+                sortOrder, Optional.ofNullable(rename), editorFrame(), diagnostics);
         publishing = true;
         try {
             for (Consumer<Frame> observer : List.copyOf(observers.values())) {
@@ -483,6 +620,33 @@ public final class TemplatesFeature {
         } finally {
             publishing = false;
         }
+    }
+
+    /**
+     * Projects the selected immutable Slider Preset into the in-place editor without retaining row indexes or mutable
+     * control state inside the feature.
+     */
+    private Optional<EditorFrame> editorFrame() {
+        Optional<NameIdentity> selected = view.getSelection();
+        if (selected.isEmpty())
+            return Optional.empty();
+        return sourcePresets.stream()
+                .filter(preset -> ProjectIdentities.sliderPreset(preset).equals(selected.orElseThrow()))
+                .findFirst()
+                .map(preset -> new EditorFrame(ProjectIdentities.sliderPreset(preset),
+                        preset.isUunp() ? Profile.UUNP : Profile.STANDARD,
+                        preset.getSliderChoices().stream().map(choice -> choiceFrame(choice, preset.isUunp()))
+                                .toList(), gang));
+    }
+
+    /**
+     * Projects one immutable Slider choice through the shared exact-output formatter.
+     */
+    private static ChoiceFrame choiceFrame(SliderChoiceSnapshot choice, boolean uunp) {
+        return new ChoiceFrame(choice.getName(), choice.isEnabled(), choice.getPercentageMinimum(),
+                choice.getPercentageMaximum(), ProjectOutputFormatter.formatSliderChoicePreview(choice, uunp),
+                choice.isMissingDefault(), choice.isMissingDefault() && choice.isEnabled()
+                && choice.getPercentageMinimum() == 100 && choice.getPercentageMaximum() == 100, choice);
     }
 
     /**
@@ -505,9 +669,36 @@ public final class TemplatesFeature {
     }
 
     /**
+     * Preserves ProjectSession's terminal distinction for feedback without exposing mutable session state.
+     */
+    private Update outcomeUpdate(ProjectOutcome outcome) {
+        OutcomeKind kind = outcomeKind(outcome);
+        return new Update(kind == OutcomeKind.CHANGED || kind == OutcomeKind.UNCHANGED,
+                frame, Optional.empty(), kind);
+    }
+
+    /**
+     * Classifies the closed Project outcome family for immutable Templates feedback.
+     */
+    private static OutcomeKind outcomeKind(ProjectOutcome outcome) {
+        if (outcome instanceof ChangedOutcome)
+            return OutcomeKind.CHANGED;
+        if (outcome instanceof UnchangedOutcome)
+            return OutcomeKind.UNCHANGED;
+        if (outcome instanceof RejectedOutcome)
+            return OutcomeKind.REJECTED;
+        if (outcome instanceof FailedOutcome)
+            return OutcomeKind.FAILED;
+        if (outcome instanceof CancelledOutcome)
+            return OutcomeKind.CANCELLED;
+        throw new IllegalStateException("Unsupported Project outcome type: " + outcome.getClass().getName());
+    }
+
+    /**
      * Closed family of task-oriented Templates intents.
      */
     public sealed interface Intent permits Select, Create, ChangeFilter, ChangeSort, TypeAhead, Duplicate,
+            ChangeProfile, SetChoiceEnabled, SetChoiceRange, ApplyBulkValue, ToggleGang,
             BeginRename, ChangeRename, CommitRename, RequestRemove, RequestClearVisible, CancelRename,
             ClearSelection, DismissDiagnostics {
     }
@@ -538,6 +729,71 @@ public final class TemplatesFeature {
      * @param name raw user-entered duplicate name
      */
     public record Duplicate(String name) implements Intent {
+    }
+
+    /**
+     * Switches the selected Slider Preset between the Standard and UUNP Settings profiles.
+     *
+     * @param profile requested profile
+     */
+    public record ChangeProfile(Profile profile) implements Intent {
+        /** Requires a complete profile choice. */
+        public ChangeProfile {
+            Objects.requireNonNull(profile, "profile");
+        }
+    }
+
+    /**
+     * Enables or omits one Slider choice in the selected Slider Preset.
+     *
+     * @param choiceName stable case-insensitive Slider choice name
+     * @param enabled    whether the choice participates in generated output
+     */
+    public record SetChoiceEnabled(String choiceName, boolean enabled) implements Intent {
+        /** Requires a complete Slider choice identity. */
+        public SetChoiceEnabled {
+            Objects.requireNonNull(choiceName, "choiceName");
+        }
+    }
+
+    /**
+     * Changes one Slider choice randomization range in the selected Slider Preset.
+     *
+     * @param choiceName stable case-insensitive Slider choice name
+     * @param minimum   requested inclusive lower percentage
+     * @param maximum   requested inclusive upper percentage
+     */
+    public record SetChoiceRange(String choiceName, int minimum, int maximum) implements Intent {
+        /** Requires a complete Slider choice identity; ProjectSession owns numeric validation. */
+        public SetChoiceRange {
+            Objects.requireNonNull(choiceName, "choiceName");
+        }
+    }
+
+    /**
+     * Applies a 0–100 value to every enabled Slider choice through one atomic preset edit.
+     *
+     * @param mode  complete range, minimum-only, or maximum-only operation
+     * @param value requested percentage; ProjectSession owns final numeric validation
+     */
+    public record ApplyBulkValue(GangMode mode, int value) implements Intent {
+        /** Requires a complete gang operation family. */
+        public ApplyBulkValue {
+            Objects.requireNonNull(mode, "mode");
+        }
+    }
+
+    /**
+     * Activates or clears one mutually exclusive gang mode in the selected Slider Preset inspector.
+     *
+     * @param mode     gang operation family
+     * @param selected whether that one mode is active
+     */
+    public record ToggleGang(GangMode mode, boolean selected) implements Intent {
+        /** Requires a complete gang operation family. */
+        public ToggleGang {
+            Objects.requireNonNull(mode, "mode");
+        }
     }
 
     /**
@@ -641,6 +897,141 @@ public final class TemplatesFeature {
     }
 
     /**
+     * User-facing Slider Preset profile choices.
+     */
+    public enum Profile {
+        STANDARD("Standard"),
+        UUNP("UUNP");
+
+        private final String displayName;
+
+        Profile(String displayName) {
+            this.displayName = displayName;
+        }
+
+        /** @return stable user-facing profile name */
+        @Override
+        public String toString() {
+            return displayName;
+        }
+    }
+
+    /**
+     * Exact terminal classification of a Project-backed Templates intent.
+     */
+    public enum OutcomeKind {
+        NONE,
+        CHANGED,
+        UNCHANGED,
+        REJECTED,
+        FAILED,
+        CANCELLED
+    }
+
+    /**
+     * Mutually exclusive Set Sliders gang operation families.
+     */
+    public enum GangMode {
+        ALL,
+        MINIMUM,
+        MAXIMUM
+    }
+
+    /**
+     * Immutable inspector-owned gang state for one selected Slider Preset.
+     *
+     * @param activeMode   sole active gang mode, when rows are locked
+     * @param allValue     complete-range gang percentage
+     * @param minimumValue minimum-only gang percentage
+     * @param maximumValue maximum-only gang percentage
+     */
+    public record GangFrame(Optional<GangMode> activeMode, int allValue, int minimumValue, int maximumValue) {
+        /** Requires a complete optional active mode. */
+        public GangFrame {
+            Objects.requireNonNull(activeMode, "activeMode");
+        }
+
+        /** @return neutral unlocked gang state used when selection changes */
+        private static GangFrame inactive() {
+            return new GangFrame(Optional.empty(), 100, 100, 100);
+        }
+
+        /** @return whether one active gang mode locks every row editor */
+        public boolean rowsLocked() {
+            return activeMode.isPresent();
+        }
+
+        /** Returns a copy with exactly one active mode. */
+        private GangFrame activate(GangMode mode) {
+            return new GangFrame(Optional.of(mode), allValue, minimumValue, maximumValue);
+        }
+
+        /** Returns an unlocked copy while retaining each inspector Slider value. */
+        private GangFrame deactivate() {
+            return new GangFrame(Optional.empty(), allValue, minimumValue, maximumValue);
+        }
+
+        /** Resolves the current percentage for one gang family. */
+        private int value(GangMode mode) {
+            return switch (mode) {
+                case ALL -> allValue;
+                case MINIMUM -> minimumValue;
+                case MAXIMUM -> maximumValue;
+            };
+        }
+
+        /** Returns a copy with one gang family percentage replaced. */
+        private GangFrame withValue(GangMode mode, int value) {
+            return switch (mode) {
+                case ALL -> new GangFrame(activeMode, value, minimumValue, maximumValue);
+                case MINIMUM -> new GangFrame(activeMode, allValue, value, maximumValue);
+                case MAXIMUM -> new GangFrame(activeMode, allValue, minimumValue, value);
+            };
+        }
+    }
+
+    /**
+     * Immutable render state for one selected Slider Preset's in-place editor.
+     *
+     * @param preset  stable selected Slider Preset identity
+     * @param profile selected Settings profile
+     * @param choices Slider choices in canonical display order
+     * @param gang    inspector gang controls and row-lock state
+     */
+    public record EditorFrame(NameIdentity preset, Profile profile, List<ChoiceFrame> choices, GangFrame gang) {
+        /** Defensively owns the editor rows. */
+        public EditorFrame {
+            Objects.requireNonNull(preset, "preset");
+            Objects.requireNonNull(profile, "profile");
+            choices = List.copyOf(Objects.requireNonNull(choices, "choices"));
+            Objects.requireNonNull(gang, "gang");
+        }
+    }
+
+    /**
+     * Immutable render state for one Slider choice row.
+     *
+     * @param name               stable Slider choice name
+     * @param enabled            whether the choice participates in generated output
+     * @param minimum            lower randomization percentage
+     * @param maximum            upper randomization percentage
+     * @param previewText        exact BodyGen choice text for the current profile
+     * @param synthesizedDefault whether the choice is an omitted, profile-synthesized default until changed
+     * @param omittedFromProjectFile whether canonical persistence currently omits this unchanged synthesized default
+     * @param snapshot           exact immutable Project value used for truthful drag preview
+     */
+    public record ChoiceFrame(String name, boolean enabled, int minimum, int maximum, String previewText,
+                              boolean synthesizedDefault, boolean omittedFromProjectFile,
+                              SliderChoiceSnapshot snapshot) {
+        /** Requires complete immutable row text. */
+        public ChoiceFrame {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(previewText, "previewText");
+            Objects.requireNonNull(snapshot, "snapshot");
+        }
+    }
+
+    /**
      * Durable inline rename state rendered beneath exactly one logical Slider Preset row.
      *
      * @param identity    stable identity being renamed
@@ -697,11 +1088,13 @@ public final class TemplatesFeature {
      * @param filterText     retained filter field contents
      * @param sortOrder      retained name presentation order
      * @param rename         inline rename draft and validation, when active
+     * @param editor         selected Slider Preset editor projection, when present and visible
      * @param diagnostics    structured diagnostics from the most recent feature edit
      */
     public record Frame(long revision, long projectSequence, List<SliderPresetSnapshot> visiblePresets,
                         Optional<NameIdentity> selection, String filterText, SortOrder sortOrder,
-                        Optional<RenameState> rename, List<ProjectDiagnostic> diagnostics) {
+                        Optional<RenameState> rename, Optional<EditorFrame> editor,
+                        List<ProjectDiagnostic> diagnostics) {
         /** Defensively owns all immutable frame collections and optionals. */
         public Frame {
             if (revision <= 0)
@@ -713,6 +1106,7 @@ public final class TemplatesFeature {
             Objects.requireNonNull(filterText, "filterText");
             Objects.requireNonNull(sortOrder, "sortOrder");
             Objects.requireNonNull(rename, "rename");
+            Objects.requireNonNull(editor, "editor");
             diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
         }
     }
@@ -722,17 +1116,25 @@ public final class TemplatesFeature {
      *
      * @param accepted whether the intent was accepted
      * @param frame    current immutable frame, changed or unchanged
+     * @param effect   tokenized platform effect, when requested
+     * @param outcomeKind exact Project outcome classification, or NONE for local-only intents
      */
-    public record Update(boolean accepted, Frame frame, Optional<Effect> effect) {
+    public record Update(boolean accepted, Frame frame, Optional<Effect> effect, OutcomeKind outcomeKind) {
         /** Creates an update without a platform effect. */
         private Update(boolean accepted, Frame frame) {
-            this(accepted, frame, Optional.empty());
+            this(accepted, frame, Optional.empty(), OutcomeKind.NONE);
+        }
+
+        /** Creates a local update with one tokenized platform effect. */
+        private Update(boolean accepted, Frame frame, Optional<Effect> effect) {
+            this(accepted, frame, effect, OutcomeKind.NONE);
         }
 
         /** Requires a coherent current frame for both accepted and rejected tasks. */
         public Update {
             Objects.requireNonNull(frame, "frame");
             Objects.requireNonNull(effect, "effect");
+            Objects.requireNonNull(outcomeKind, "outcomeKind");
         }
     }
 

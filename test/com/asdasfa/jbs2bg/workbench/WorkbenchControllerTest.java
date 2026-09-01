@@ -8,6 +8,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import javafx.scene.shape.SVGPath;
@@ -16,6 +17,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.asdasfa.jbs2bg.Main;
 import com.asdasfa.jbs2bg.data.Settings;
+import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
+import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
@@ -23,6 +26,7 @@ import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
+import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
 import javafx.css.PseudoClass;
 import javafx.event.ActionEvent;
@@ -31,6 +35,7 @@ import javafx.scene.AccessibleRole;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
@@ -98,6 +103,123 @@ class WorkbenchControllerTest {
             assertSame(root, loader.getRoot());
             stage.close();
         });
+    }
+
+    /**
+     * The in-place Templates editor renders one accessible group per immutable Slider choice, keeps focus on a row
+     * through its authoritative edit, and switches profile without losing the selected Slider Preset identity.
+     */
+    @Test
+    void templatesEditorRendersAccessibleRowsAndPreservesFocusAcrossEdits() throws Exception {
+        SettingsTestSupport.installDefaults(
+                Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)),
+                Map.of("Arms", new DefaultSliderValue(0.1f, 0.5f)));
+        try {
+            WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+            flow.apply(SliderPresetEdits.create("Alpha"));
+
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+                Parent root = loader.load();
+                WorkbenchController controller = loader.getController();
+                Stage stage = new Stage();
+                Scene scene = new Scene(root, 1300.0, 800.0);
+                stage.setScene(scene);
+                controller.attach(flow, stage, new RecordingPlatform());
+                stage.show();
+                @SuppressWarnings("unchecked")
+                ListView<SliderPresetSnapshot> presets =
+                        (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+                presets.getSelectionModel().select(0);
+                VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
+                SliderChoiceRow waist = (SliderChoiceRow) rows.getChildren().get(0);
+
+                assertEquals("Slider choice Waist in Slider Preset Alpha", waist.getAccessibleText());
+                assertEquals("Waist@0.8", waist.previewControl().getText());
+                assertEquals("Waist Minimum in Slider Preset Alpha", waist.minimumControl().getAccessibleText());
+                CheckBox enabled = waist.enabledControl();
+                enabled.requestFocus();
+                enabled.fire();
+
+                assertSame(enabled, scene.getFocusOwner());
+                assertFalse(flow.frame().snapshot().getSliderPresets().get(0).getSliderChoices().get(0).isEnabled());
+                assertEquals(0, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
+                assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("changed"));
+
+                @SuppressWarnings("unchecked")
+                ComboBox<TemplatesFeature.Profile> profile =
+                        (ComboBox<TemplatesFeature.Profile>) loader.getNamespace().get("sliderPresetProfile");
+                profile.setValue(TemplatesFeature.Profile.UUNP);
+                profile.fireEvent(new ActionEvent());
+
+                assertEquals("Alpha", presets.getSelectionModel().getSelectedItem().getName());
+                assertEquals("Arms", ((SliderChoiceRow) rows.getChildren().get(0)).choiceName());
+                stage.close();
+            });
+        } finally {
+            SettingsTestSupport.restoreRepositorySettings();
+        }
+    }
+
+    /**
+     * Inspector gang controls apply one atomic enabled-row edit, remain mutually exclusive, lock row editors while
+     * active, and retain focus on the initiating bulk action.
+     */
+    @Test
+    void templatesGangControlsAreAtomicExclusiveAndKeyboardReachable() throws Exception {
+        SettingsTestSupport.installDefaults(
+                Map.of("Arms", new DefaultSliderValue(0.1f, 0.9f),
+                        "Waist", new DefaultSliderValue(0.2f, 0.8f)),
+                Map.of());
+        try {
+            WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+            flow.apply(SliderPresetEdits.create("Alpha"));
+
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+                Parent root = loader.load();
+                WorkbenchController controller = loader.getController();
+                Stage stage = new Stage();
+                Scene scene = new Scene(root, 1300.0, 800.0);
+                stage.setScene(scene);
+                controller.attach(flow, stage, new RecordingPlatform());
+                stage.show();
+                @SuppressWarnings("unchecked")
+                ListView<SliderPresetSnapshot> presets =
+                        (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+                presets.getSelectionModel().select(0);
+                VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
+                Button fiftyAll = (Button) loader.getNamespace().get("fiftyAllSliderChoicesButton");
+                CheckBox minimumGang = (CheckBox) loader.getNamespace().get("gangMinimumCheck");
+                CheckBox maximumGang = (CheckBox) loader.getNamespace().get("gangMaximumCheck");
+
+                fiftyAll.requestFocus();
+                fiftyAll.fire();
+
+                assertSame(fiftyAll, scene.getFocusOwner());
+                assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().get(0)
+                        .getSliderChoices().stream().map(choice -> choice.getPercentageMinimum()).toList());
+                assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().get(0)
+                        .getSliderChoices().stream().map(choice -> choice.getPercentageMaximum()).toList());
+                assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
+
+                minimumGang.fire();
+                assertTrue(minimumGang.isSelected());
+                assertTrue(((SliderChoiceRow) rows.getChildren().get(0)).enabledControl().isDisabled());
+                maximumGang.fire();
+
+                assertFalse(minimumGang.isSelected());
+                assertTrue(maximumGang.isSelected());
+                assertTrue(((SliderChoiceRow) rows.getChildren().get(0)).minimumControl().isDisabled());
+                maximumGang.fire();
+                assertFalse(maximumGang.isSelected());
+                assertFalse(((SliderChoiceRow) rows.getChildren().get(0)).enabledControl().isDisabled());
+                assertEquals("Gang all minimum Slider choice values", minimumGang.getAccessibleText());
+                stage.close();
+            });
+        } finally {
+            SettingsTestSupport.restoreRepositorySettings();
+        }
     }
 
     /**

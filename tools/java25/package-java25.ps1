@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds, verifies, and smoke-tests the self-contained Windows x64 Workbench image (issues #98-#102 and gates).
+    Builds, verifies, and smoke-tests the self-contained Windows x64 Workbench image (issues #98-#103 and gates).
 
 .DESCRIPTION
     On top of the complete application gate (tools/java25/verify-java25.ps1, which this script runs first), the

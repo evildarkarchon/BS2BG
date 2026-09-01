@@ -281,6 +281,21 @@ public final class WorkbenchFeedback {
     }
 
     /**
+     * Updates only the concise status projection for a per-gesture feature edit. Existing InfoBar, Activity, and
+     * pending-dialog state remain untouched, preventing high-frequency row changes from flooding durable history.
+     *
+     * @param notification completely described gesture outcome
+     * @return newly committed immutable frame
+     */
+    public Frame publishStatus(Notification notification) {
+        Notification value = Objects.requireNonNull(notification, "notification");
+        StatusProjection status = new StatusProjection(value.severity(), value.message(),
+                value.disposition().displayText());
+        frame = new Frame(++revision, frame.infoBar(), activities, status, frame.pendingDialog());
+        return frame;
+    }
+
+    /**
      * Projects one notification consistently while allowing a deep feature to retain ownership of its pane InfoBar.
      */
     private Frame publish(Notification notification, Optional<JobDetails> jobDetails, boolean showInfoBar) {

@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
     Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, and Templates contracts
-    (issues #98-#102).
+    (issues #98-#103).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
@@ -11,7 +11,7 @@
     Output drawer interaction, responsive/minimum geometry, live themes, High Contrast, reduced motion,
     accessibility semantics, notifications, typed dialogs, startup, New, Open, Save, Save As, Project recovery,
     centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
-    malformed/failed operation preservation, complete pointer-free Slider Preset browsing and management,
+    malformed/failed operation preservation, complete pointer-free Slider Preset choice editing and management,
     coordinated dirty shutdown, and bounded process exit.
 #>
 [CmdletBinding()]
@@ -843,7 +843,7 @@ try {
         'narrow overlays, semantic restoration, 800x600 minimum, breakpoint, and live-DPI geometry passed'
     }
 
-    Invoke-SmokeStep -Name 'browse-and-manage-slider-presets-without-pointer' -Action {
+    Invoke-SmokeStep -Name 'edit-and-manage-slider-presets-without-pointer' -Action {
         Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
         Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $openedProjectName) -ConfirmButton 'Open'
         Wait-MainWindow -Title "$applicationTitle - $openedProjectName" | Out-Null
@@ -901,6 +901,81 @@ try {
         Wait-UiaCondition -Description 'CBBE identity selected by keyboard' -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (Get-UiaSelectionState -Element $cbbe) { $cbbe }
         } | Out-Null
+
+        $waistEnabled = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'CheckBox' -Name 'Enable Waist in Slider Preset CBBE Curvy') `
+            -Description 'CBBE Waist enable control' -TimeoutSeconds $StepTimeoutSeconds
+        $waistMinimum = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Slider' -Name 'Waist Minimum in Slider Preset CBBE Curvy') `
+            -Description 'CBBE Waist minimum control' -TimeoutSeconds $StepTimeoutSeconds
+        $waistMaximum = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Slider' -Name 'Waist Maximum in Slider Preset CBBE Curvy') `
+            -Description 'CBBE Waist maximum control' -TimeoutSeconds $StepTimeoutSeconds
+        $waistPreview = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Waist BodyGen preview') `
+            -Description 'CBBE Waist BodyGen preview' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $waistMinimum -Keys '{HOME}{RIGHT 25}' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'Waist minimum and live preview edit' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaRangeValue -Element $waistMinimum) -eq 25 `
+                    -and $waistPreview.Current.HelpText.Contains('Waist@0.35:0.74')) { $waistMinimum }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $waistEnabled -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'disabled Waist omission state' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaToggleState -Element $waistEnabled) -eq 'Off' `
+                    -and -not $waistMinimum.Current.IsEnabled `
+                    -and $waistPreview.Current.HelpText.Contains('Omitted from generated output')) { $waistEnabled }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $waistEnabled -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 're-enabled Waist focus and range state' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaToggleState -Element $waistEnabled) -eq 'On' `
+                    -and $waistMinimum.Current.IsEnabled `
+                    -and $waistEnabled.Current.HasKeyboardFocus) { $waistEnabled }
+        } | Out-Null
+
+        $fiftyAll = Find-OuterControl -ControlType 'Button' -Name 'Set all Slider choice values to 50 percent'
+        Send-UiaKeysToElement -Element $fiftyAll -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'atomic 50 All gang operation' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaRangeValue -Element $waistMinimum) -eq 50 `
+                    -and (Get-UiaRangeValue -Element $waistMaximum) -eq 50 `
+                    -and $fiftyAll.Current.HasKeyboardFocus) { $fiftyAll }
+        } | Out-Null
+        $gangMinimum = Find-OuterControl -ControlType 'CheckBox' -Name 'Gang all minimum Slider choice values'
+        $gangMaximum = Find-OuterControl -ControlType 'CheckBox' -Name 'Gang all maximum Slider choice values'
+        Send-UiaKeysToElement -Element $gangMinimum -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'All-Min gang locks editor rows' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaToggleState -Element $gangMinimum) -eq 'On' -and -not $waistEnabled.Current.IsEnabled) {
+                $gangMinimum
+            }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $gangMaximum -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'All-Max replaces All-Min gang mode' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaToggleState -Element $gangMinimum) -eq 'Off' `
+                    -and (Get-UiaToggleState -Element $gangMaximum) -eq 'On' `
+                    -and -not $waistEnabled.Current.IsEnabled) { $gangMaximum }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $gangMaximum -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'gang unlock restores row editing' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaToggleState -Element $gangMaximum) -eq 'Off' -and $waistEnabled.Current.IsEnabled) {
+                $waistEnabled
+            }
+        } | Out-Null
+
+        $profile = Find-OuterControl -ControlType 'ComboBox' -Name 'Slider Preset profile'
+        Send-UiaKeysToElement -Element $profile -Keys '{END}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'UUNP profile removes Standard-only synthesized choice' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $standardOnly = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'CheckBox' -Name 'Enable Ankles in Slider Preset CBBE Curvy')
+            if ($null -eq $standardOnly -and (Get-UiaSelectionState -Element $cbbe)) { $profile }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $profile -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'CheckBox' -Name 'Enable Ankles in Slider Preset CBBE Curvy') `
+            -Description 'restored Standard profile synthesized choice' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        if (-not (Get-UiaSelectionState -Element $cbbe)) {
+            throw 'Profile switching did not preserve the selected Slider Preset identity.'
+        }
         $templatesRail = Get-AreaButton -Name 'Templates'
         $templatesRail.SetFocus()
         foreach ($target in @(
@@ -1039,6 +1114,12 @@ try {
         if (@($managed.MorphedNPCs.Lydia.SliderPresets).Count -ne 0) {
             throw 'Slider Preset removal did not clear the NPC Morph Assignment relationship.'
         }
+        $managedWaist = @($managed.SliderPresets.'CBBE Curvy'.SetSliders | Where-Object { $_.name -ceq 'Waist' })
+        if ($managed.SliderPresets.'CBBE Curvy'.isUUNP -or $managedWaist.Count -ne 1 `
+                -or -not $managedWaist[0].enabled -or $managedWaist[0].pctMin -ne 50 `
+                -or $managedWaist[0].pctMax -ne 50) {
+            throw 'Slider choice profile, enable, or gang edits did not survive canonical Save As.'
+        }
 
         Send-FileCommand -Item 'New'
         Wait-MainWindow -Title $applicationTitle | Out-Null
@@ -1114,8 +1195,11 @@ try {
             removed = 'UUNP Athletic'
             clearVisiblePreserved = 'CBBE Curvy'
             savedAndReopened = $templatesManagedName
+            profile = 'Standard'
+            editedChoice = 'Waist@50:50'
+            gangModes = @('All-Min', 'All-Max')
         }
-        'pointer-free browse, validation, duplicate, inline rename, remove, filtered clear, cascade, and reopen passed'
+        'pointer-free Slider choice/profile/gang editing, browse, validation, management, and reopen passed'
     }
 
     Invoke-SmokeStep -Name 'save-as-new-project' -Action {
@@ -1435,7 +1519,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/11'
+        schema = 'bs2bg.windows-app-image-smoke/12'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion
