@@ -10,6 +10,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -63,6 +64,51 @@ class WorkbenchProjectFlowTest {
         assertEquals(ProjectLifecycleStatus.FILE_BACKED, saved.frame().snapshot().getLifecycleStatus());
         assertFalse(saved.frame().snapshot().isDirty());
         assertEquals("BS2BG Preview - saved-project.jbs2bg", saved.frame().title());
+    }
+
+    /**
+     * Save As returns after central admission while persistence, measured progress, and publication remain on the
+     * application worker.
+     */
+    @Test
+    void saveAsPersistsOnlyWhenTheApplicationWorkerRuns() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        List<JobCoordinator.Frame> observedJobs = new ArrayList<>();
+        jobs.observe(observedJobs::add);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        flow.apply(SliderPresetEdits.create("Queued Save As"));
+        WorkbenchProjectFlow.Frame before = flow.frame();
+        Path target = temporaryDirectory.resolve("async-save-as.jbs2bg").toAbsolutePath().normalize();
+
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
+                .effect().orElseThrow();
+        WorkbenchProjectFlow.Update admitted = flow.respond(chooser.token(),
+                WorkbenchProjectFlow.Response.selected(target));
+
+        assertEquals(before, admitted.frame());
+        assertFalse(Files.exists(target));
+        assertTrue(jobs.frame().active());
+        JobCoordinator.Attempt running = jobs.frame().attempt().orElseThrow();
+        assertEquals("Save Project", running.operation().name());
+        assertEquals(List.of(target.toString()), running.operation().destinationLabels());
+        assertEquals(Optional.of(before.snapshot().getContentVersion().toString()),
+                running.operation().capturedBasis());
+        assertTrue(running.progress().cancellable());
+
+        worker.runNext();
+
+        assertTrue(Files.isRegularFile(target));
+        assertFalse(flow.frame().snapshot().isDirty());
+        assertEquals(target, flow.frame().snapshot().getFileIdentity().orElseThrow());
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED,
+                jobs.frame().attempt().orElseThrow().lifecycle());
+        assertTrue(observedJobs.stream().flatMap(job -> job.attempt().stream())
+                .anyMatch(attempt -> attempt.progress().phase().equals("Serializing Project")));
+        assertTrue(observedJobs.stream().flatMap(job -> job.attempt().stream())
+                .anyMatch(attempt -> attempt.progress().phase().equals("Staging Project file")));
     }
 
     /**
@@ -253,6 +299,82 @@ class WorkbenchProjectFlowTest {
     }
 
     /**
+     * File-backed Save leaves the dirty frame and destination untouched until its admitted worker action executes.
+     */
+    @Test
+    void saveToAnAdoptedIdentityPersistsOnlyWhenTheApplicationWorkerRuns() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        Path target = temporaryDirectory.resolve("async-save.jbs2bg").toAbsolutePath().normalize();
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
+                .effect().orElseThrow();
+        flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selected(target));
+        worker.runNext();
+        flow.apply(SliderPresetEdits.create("Queued Ctrl S"));
+        WorkbenchProjectFlow.Frame dirty = flow.frame();
+
+        WorkbenchProjectFlow.Update admitted = flow.request(WorkbenchProjectFlow.Intent.SAVE);
+
+        assertEquals(dirty, admitted.frame());
+        assertTrue(admitted.frame().snapshot().isDirty());
+        assertTrue(jobs.frame().active());
+        assertFalse(Files.readString(target).contains("Queued Ctrl S"));
+
+        Thread saveWorker = worker.runNextAsync();
+        saveWorker.join();
+
+        assertFalse(flow.frame().snapshot().isDirty());
+        assertTrue(Files.readString(target).contains("Queued Ctrl S"));
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED,
+                jobs.frame().attempt().orElseThrow().lifecycle());
+    }
+
+    /**
+     * Retrying adopted-identity Save recaptures the identity currently published by the ProjectSession.
+     */
+    @Test
+    void saveRetryUsesTheCurrentAdoptedIdentity() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        Path failedParent = Files.createDirectory(temporaryDirectory.resolve("failed-identity"));
+        Path failedIdentity = failedParent.resolve("project.jbs2bg").toAbsolutePath().normalize();
+        WorkbenchProjectFlow.Effect firstChooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
+                .effect().orElseThrow();
+        flow.respond(firstChooser.token(), WorkbenchProjectFlow.Response.selected(failedIdentity));
+        worker.runNext();
+        flow.apply(SliderPresetEdits.create("Initial dirty content"));
+        Files.delete(failedIdentity);
+        Files.delete(failedParent);
+
+        flow.request(WorkbenchProjectFlow.Intent.SAVE);
+        worker.runNext();
+
+        JobCoordinator.AttemptId failedAttempt = jobs.frame().attempt().orElseThrow().id();
+        assertEquals(JobCoordinator.Lifecycle.FAILED, jobs.frame().attempt().orElseThrow().lifecycle());
+        Path currentIdentity = temporaryDirectory.resolve("current-identity.jbs2bg").toAbsolutePath().normalize();
+        WorkbenchProjectFlow.Effect replacementChooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
+                .effect().orElseThrow();
+        flow.respond(replacementChooser.token(), WorkbenchProjectFlow.Response.selected(currentIdentity));
+        worker.runNext();
+        flow.apply(SliderPresetEdits.create("Retry follows current identity"));
+
+        assertTrue(jobs.retry(failedAttempt).admitted());
+        worker.runNext();
+
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED,
+                jobs.frame().attempt().orElseThrow().lifecycle());
+        assertEquals(currentIdentity, flow.frame().snapshot().getFileIdentity().orElseThrow());
+        assertFalse(flow.frame().snapshot().isDirty());
+        assertTrue(Files.readString(currentIdentity).contains("Retry follows current identity"));
+    }
+
+    /**
      * Dirty shutdown preserves the Project on Cancel and closes at most once after explicit Discard.
      */
     @Test
@@ -438,6 +560,43 @@ class WorkbenchProjectFlowTest {
         assertTrue(saved.frame().closed());
         assertEquals(WorkbenchProjectFlow.EffectKind.CLOSE_WINDOW, saved.effect().orElseThrow().kind());
         assertTrue(Files.isRegularFile(temporaryDirectory.resolve("saved-on-close.jbs2bg")));
+    }
+
+    /**
+     * Untitled close-after-save admits the selected Save As destination and keeps the window open until the worker
+     * publishes a successful clean outcome.
+     */
+    @Test
+    void dirtyUntitledCloseWaitsForTheApplicationWorkerSaveAsBeforeClosing() {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        flow.apply(SliderPresetEdits.create("Unsaved worker close"));
+        WorkbenchProjectFlow.Frame dirty = flow.frame();
+        Path target = temporaryDirectory.resolve("worker-close-save-as.jbs2bg").toAbsolutePath().normalize();
+
+        WorkbenchProjectFlow.Effect confirmation = flow.request(WorkbenchProjectFlow.Intent.CLOSE)
+                .effect().orElseThrow();
+        WorkbenchProjectFlow.Effect chooser = flow.respond(confirmation.token(),
+                WorkbenchProjectFlow.Response.save()).effect().orElseThrow();
+        WorkbenchProjectFlow.Update admitted = flow.respond(chooser.token(),
+                WorkbenchProjectFlow.Response.selected(target));
+
+        assertEquals(dirty, admitted.frame());
+        assertFalse(admitted.frame().closed());
+        assertTrue(admitted.effect().isEmpty());
+        assertTrue(jobs.frame().active());
+        assertFalse(Files.exists(target));
+
+        worker.runNext();
+
+        assertTrue(Files.isRegularFile(target));
+        assertFalse(flow.frame().snapshot().isDirty());
+        assertTrue(flow.frame().closed());
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED,
+                jobs.frame().attempt().orElseThrow().lifecycle());
     }
 
 }

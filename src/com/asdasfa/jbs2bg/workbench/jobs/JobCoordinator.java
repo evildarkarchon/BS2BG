@@ -33,92 +33,86 @@ public final class JobCoordinator implements AutoCloseable {
     private final Map<Long, Consumer<Frame>> observers = new LinkedHashMap<>();
     private final Map<AttemptId, RetryFactory<?>> completedRetryFactories = new LinkedHashMap<>();
     private final List<Diagnostic> technicalDiagnostics = new ArrayList<>();
-/**
-     * Type-safe terminal worker result delivered only for its accepted current attempt.
-     */
-    public record Result<T>(
-    /**
-     * Fully captured request for a new attempt; only the coordinator stamps retry linkage.
-     */
-    public record Submission<T>value,
-    Lifecycle lifecycle, Optional<String>effectsCommitted,
-    String summary, List)
-List<Diagnostic> diagnostics
-Operation operation, Work
-Completion<T> completion
-Optional<RetryFactory<T>> retryFactory
     private long nextAttemptId = 1;
-    private long nextObserverId = 1;<T>(
-        private long nextSequence = 2;<T>work,
-        private Frame frame = new Frame(1, Optional.empty(), false, false, List.of());,
-        private Active<?> active;)
+    private long nextObserverId = 1;
+    private long nextSequence = 2;
+    private Frame frame = new Frame(1, Optional.empty(), false, false, List.of());
+    private Active<?> active;
     private boolean shutdownRequested;
     private boolean closed;
 
-    {
+    /**
+     * Type-safe terminal worker result delivered only for its accepted current attempt.
+     */
+    public record Result<T>(Lifecycle lifecycle, Optional<T> value, String summary, List<String> effectsCommitted,
+                            List<Diagnostic> diagnostics) {
         /** Creates a successful result carrying its usable typed value. */
-        public static <T > Result < T > completed(T value, String summary, List < String > effectsCommitted,
-            List < Diagnostic > diagnostics) {
-        return new Result<>(Lifecycle.COMPLETED, Optional.of(Objects.requireNonNull(value, "value")), summary,
-                effectsCommitted, diagnostics);
-    }
+        public static <T> Result<T> completed(T value, String summary, List<String> effectsCommitted,
+                                             List<Diagnostic> diagnostics) {
+            return new Result<>(Lifecycle.COMPLETED, Optional.of(Objects.requireNonNull(value, "value")), summary,
+                    effectsCommitted, diagnostics);
+        }
 
         /** Creates a usable result whose structured diagnostics require attention. */
-        public static <T > Result < T > completedWithIssues(T value, String summary, List < String > effectsCommitted,
-            List < Diagnostic > diagnostics) {
-        return new Result<>(Lifecycle.COMPLETED_WITH_ISSUES,
-                Optional.of(Objects.requireNonNull(value, "value")), summary, effectsCommitted, diagnostics);
-    }
+        public static <T> Result<T> completedWithIssues(T value, String summary, List<String> effectsCommitted,
+                                                       List<Diagnostic> diagnostics) {
+            return new Result<>(Lifecycle.COMPLETED_WITH_ISSUES,
+                    Optional.of(Objects.requireNonNull(value, "value")), summary, effectsCommitted, diagnostics);
+        }
 
         /** Creates a cancellation result without a usable value or unsafe committed effect. */
-        public static <T > Result < T > cancelled(String summary, List < String > effectsCommitted,
-            List < Diagnostic > diagnostics) {
-        return new Result<>(Lifecycle.CANCELLED, Optional.empty(), summary, effectsCommitted, diagnostics);
-    }
+        public static <T> Result<T> cancelled(String summary, List<String> effectsCommitted,
+                                             List<Diagnostic> diagnostics) {
+            return new Result<>(Lifecycle.CANCELLED, Optional.empty(), summary, effectsCommitted, diagnostics);
+        }
 
         /** Creates a cancellation result carrying an authoritative unchanged or partially committed typed outcome. */
-        public static <T > Result < T > cancelled(T value, String summary, List < String > effectsCommitted,
-            List < Diagnostic > diagnostics) {
-        return new Result<>(Lifecycle.CANCELLED, Optional.of(Objects.requireNonNull(value, "value")), summary,
-                effectsCommitted, diagnostics);
-    }
+        public static <T> Result<T> cancelled(T value, String summary, List<String> effectsCommitted,
+                                             List<Diagnostic> diagnostics) {
+            return new Result<>(Lifecycle.CANCELLED, Optional.of(Objects.requireNonNull(value, "value")), summary,
+                    effectsCommitted, diagnostics);
+        }
 
         /** Creates a failed result without a usable value. */
-        public static <T > Result < T > failed(String summary, List < Diagnostic > diagnostics) {
-        return new Result<>(Lifecycle.FAILED, Optional.empty(), summary, List.of(), diagnostics);
-    }
+        public static <T> Result<T> failed(String summary, List<Diagnostic> diagnostics) {
+            return new Result<>(Lifecycle.FAILED, Optional.empty(), summary, List.of(), diagnostics);
+        }
 
         /** Creates a failed result carrying an authoritative domain outcome for serialized presentation. */
-        public static <T > Result < T > failed(T value, String summary, List < Diagnostic > diagnostics) {
-        return new Result<>(Lifecycle.FAILED, Optional.of(Objects.requireNonNull(value, "value")), summary,
-                List.of(), diagnostics);
-    }
+        public static <T> Result<T> failed(T value, String summary, List<Diagnostic> diagnostics) {
+            return new Result<>(Lifecycle.FAILED, Optional.of(Objects.requireNonNull(value, "value")), summary,
+                    List.of(), diagnostics);
+        }
 
         /** Rejects active lifecycles and successful results that omit their usable typed value. */
         public Result {
-        Objects.requireNonNull(lifecycle, "lifecycle");
-        if (!lifecycle.terminal())
-            throw new IllegalArgumentException("worker results must be terminal");
-        value = Objects.requireNonNull(value, "value");
-        summary = requireText(summary, "summary");
-        effectsCommitted = copyText(effectsCommitted, "effectsCommitted");
-        diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
-        if (diagnostics.stream().anyMatch(Objects::isNull))
-            throw new NullPointerException("diagnostics contains null");
-        boolean usable = lifecycle == Lifecycle.COMPLETED || lifecycle == Lifecycle.COMPLETED_WITH_ISSUES;
-        if (usable && value.isEmpty())
-            throw new IllegalArgumentException("successful completion dispositions require a value");
-    }
+            Objects.requireNonNull(lifecycle, "lifecycle");
+            if (!lifecycle.terminal())
+                throw new IllegalArgumentException("worker results must be terminal");
+            value = Objects.requireNonNull(value, "value");
+            summary = requireText(summary, "summary");
+            effectsCommitted = copyText(effectsCommitted, "effectsCommitted");
+            diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
+            if (diagnostics.stream().anyMatch(Objects::isNull))
+                throw new NullPointerException("diagnostics contains null");
+            boolean usable = lifecycle == Lifecycle.COMPLETED || lifecycle == Lifecycle.COMPLETED_WITH_ISSUES;
+            if (usable && value.isEmpty())
+                throw new IllegalArgumentException("successful completion dispositions require a value");
+        }
     }
 
-    {
+    /**
+     * Fully captured request for a new attempt; only the coordinator stamps retry linkage.
+     */
+    public record Submission<T>(Operation operation, Work<T> work, Completion<T> completion,
+                                Optional<RetryFactory<T>> retryFactory) {
         /** Requires immutable operation context, executable callbacks, and an explicit retry capability. */
         public Submission {
-        Objects.requireNonNull(operation, "operation");
-        Objects.requireNonNull(work, "work");
-        Objects.requireNonNull(completion, "completion");
-        Objects.requireNonNull(retryFactory, "retryFactory");
-    }
+            Objects.requireNonNull(operation, "operation");
+            Objects.requireNonNull(work, "work");
+            Objects.requireNonNull(completion, "completion");
+            Objects.requireNonNull(retryFactory, "retryFactory");
+        }
     }
 
     /**

@@ -1264,10 +1264,20 @@ public final class WorkbenchController {
                 renderedTerminalAttemptId = terminal.id().value();
                 renderTerminalJob(terminal);
             }
+            if (projectFrame.closed() && activeOperation == null && !finalClose) {
+                // Asynchronous close-after-save has no dispatch stack left to consume a CLOSE_WINDOW effect.
+                finalClose = true;
+                closeAfterActiveJob = false;
+                platform.closeWindow(stage);
+                return;
+            }
         }
 
         if (closeAfterActiveJob && frame.shutdownReady()) {
             closeAfterActiveJob = false;
+            // The settled job no longer needs the shutdown gate; a confirmed Save must be able to claim admission.
+            if (!projectFlow.jobs().resumeAfterShutdown())
+                throw new IllegalStateException("Shutdown-ready coordinator could not resume before Close");
             dispatch(WorkbenchProjectFlow.Intent.CLOSE);
         }
     }

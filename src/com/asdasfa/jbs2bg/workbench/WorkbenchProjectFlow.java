@@ -67,10 +67,11 @@ public final class WorkbenchProjectFlow {
     }
 
     /**
-     * Reports whether persistence produced a usable clean Project rather than a typed rejection or failure.
+     * Reports whether persistence produced a usable clean Project rather than cancellation, rejection, or failure.
      */
     private static boolean completedSuccessfully(ProjectOutcome outcome) {
-        return !(outcome instanceof FailedOutcome) && !(outcome instanceof RejectedOutcome)
+        return !(outcome instanceof CancelledOutcome) && !(outcome instanceof FailedOutcome)
+                && !(outcome instanceof RejectedOutcome)
                 && !outcome.getSnapshot().isDirty();
     }
 
@@ -125,6 +126,39 @@ public final class WorkbenchProjectFlow {
         return JobCoordinator.Result.completedWithIssues(outcome,
                 "Project opened with " + diagnosticSummary(diagnostics.size()) + ".",
                 List.of("Project published"), diagnostics);
+    }
+
+    /**
+     * Classifies one typed Save outcome into coordinator lifecycle, committed filesystem effects, and diagnostics.
+     *
+     * @param outcome     authoritative synchronous ProjectSession result
+     * @param staleReason freshness refusal detected at the replacement boundary, when present
+     * @return terminal coordinator result retaining the outcome needed on the publication lane
+     */
+    private static JobCoordinator.Result<ProjectOutcome> saveResult(ProjectOutcome outcome,
+                                                                    Optional<String> staleReason) {
+        List<JobCoordinator.Diagnostic> diagnostics = outcome.getDiagnostics().stream()
+                .map(WorkbenchProjectFlow::jobDiagnostic)
+                .toList();
+        if (staleReason.isPresent()) {
+            List<JobCoordinator.Diagnostic> staleDiagnostics = new java.util.ArrayList<>(diagnostics);
+            staleDiagnostics.add(new JobCoordinator.Diagnostic("STALE_RESULT",
+                    "Save result was not published because " + staleReason.orElseThrow() + ".",
+                    Optional.empty()));
+            return JobCoordinator.Result.completedWithIssues(outcome, "Save result was stale.", List.of(),
+                    staleDiagnostics);
+        }
+        if (outcome instanceof CancelledOutcome)
+            return JobCoordinator.Result.cancelled(outcome, "Save Project cancelled.", List.of(), diagnostics);
+        if (outcome instanceof FailedOutcome || outcome instanceof RejectedOutcome)
+            return JobCoordinator.Result.failed(outcome,
+                    "Save Project failed with " + diagnosticSummary(diagnostics.size()) + ".", diagnostics);
+        if (diagnostics.isEmpty())
+            return JobCoordinator.Result.completed(outcome, "Project saved.", List.of("Project file replaced"),
+                    diagnostics);
+        return JobCoordinator.Result.completedWithIssues(outcome,
+                "Project saved with " + diagnosticSummary(diagnostics.size()) + ".",
+                List.of("Project file replaced"), diagnostics);
     }
 
     /**
@@ -255,8 +289,8 @@ public final class WorkbenchProjectFlow {
             return accepted(null);
         }
         if (intent == Intent.SAVE && frame.snapshot().getFileIdentity().isPresent()) {
-            publish(projectSession.save());
-            return accepted(null);
+            Path adoptedIdentity = frame.snapshot().getFileIdentity().orElseThrow();
+            return admitSave(adoptedIdentity, true, false);
         }
         pendingIntent = intent;
         EffectKind kind = switch (intent) {
@@ -337,9 +371,8 @@ public final class WorkbenchProjectFlow {
                     pendingEffect = new Effect(nextEffectToken++, EffectKind.CHOOSE_SAVE_PATH);
                     return accepted(pendingEffect);
                 }
-                ProjectOutcome saved = projectSession.save();
-                publish(saved);
-                return completedSuccessfully(saved) ? closeWindow() : accepted(null);
+                Path adoptedIdentity = frame.snapshot().getFileIdentity().orElseThrow();
+                return admitSave(adoptedIdentity, true, true);
             }
             if (response.kind() != ResponseKind.DISCARD)
                 return rejected();
@@ -355,16 +388,13 @@ public final class WorkbenchProjectFlow {
             JobCoordinator.Admission admission = jobs.submit(openSubmission(source));
             return admission.admitted() ? accepted(null) : rejected();
         }
-        ProjectOutcome outcome = switch (completedIntent) {
-            case CLOSE -> projectSession.saveAs(projectPath(response.selectedPath()));
+        Path target = projectPath(response.selectedPath());
+        return switch (completedIntent) {
+            case CLOSE -> admitSave(target, false, true);
             case NEW -> throw new IllegalStateException("New Project cannot complete from a path chooser");
             case OPEN -> throw new AssertionError("Open is admitted through the application job coordinator");
-            case SAVE, SAVE_AS -> projectSession.saveAs(projectPath(response.selectedPath()));
+            case SAVE, SAVE_AS -> admitSave(target, false, false);
         };
-        publish(outcome);
-        if (completedIntent == Intent.CLOSE && completedSuccessfully(outcome))
-            return closeWindow();
-        return accepted(null);
     }
 
     /**
@@ -394,10 +424,45 @@ public final class WorkbenchProjectFlow {
     }
 
     /**
+     * Admits one captured Save attempt and preserves synchronous compatibility when the injected coordinator runs
+     * inline. Real application workers return the unchanged frame immediately.
+     *
+     * @param target          captured normalized destination
+     * @param adoptedIdentity whether the operation is Save rather than Save As
+     * @param closeOnSuccess  whether a successful clean publication completes a pending window close
+     * @return admitted unchanged frame, synchronous compatibility result, or rejection
+     */
+    private Update admitSave(Path target, boolean adoptedIdentity, boolean closeOnSuccess) {
+        JobCoordinator.Admission admission = jobs.submit(saveSubmission(target, adoptedIdentity, closeOnSuccess));
+        if (!admission.admitted())
+            return rejected();
+        if (closeOnSuccess && frame.closed())
+            return closeEffect();
+        return accepted(null);
+    }
+
+    /**
      * Marks the flow closed before emitting its single final-window effect.
      */
     private Update closeWindow() {
+        markClosed();
+        return closeEffect();
+    }
+
+    /**
+     * Marks the immutable Project frame closed on the serialized publication lane without inventing a new Project
+     * publication sequence.
+     */
+    private void markClosed() {
         frame = new Frame(frame.sequence(), frame.snapshot(), frame.diagnostics(), frame.title(), true);
+    }
+
+    /**
+     * Emits the platform close effect after the flow has already committed its closed state.
+     *
+     * @return accepted update carrying the final close-window effect
+     */
+    private Update closeEffect() {
         return accepted(new Effect(nextEffectToken++, EffectKind.CLOSE_WINDOW));
     }
 
@@ -447,6 +512,60 @@ public final class WorkbenchProjectFlow {
             if (!stale && result.lifecycle() != JobCoordinator.Lifecycle.CANCELLED)
                 result.value().ifPresent(this::publish);
         }, Optional.of(() -> openSubmission(capturedSource)));
+    }
+
+    /**
+     * Captures one Save or Save As attempt, including destination, Project basis, retry, and optional close
+     * continuation, before any worker code runs.
+     *
+     * @param target          normalized destination owned by this attempt
+     * @param adoptedIdentity whether to invoke the adopted-identity Save overload
+     * @param closeOnSuccess  whether successful completion closes the Workbench
+     * @return fully captured coordinator submission
+     */
+    private JobCoordinator.Submission<ProjectOutcome> saveSubmission(Path target, boolean adoptedIdentity,
+                                                                     boolean closeOnSuccess) {
+        Path capturedTarget = Objects.requireNonNull(target, "target").toAbsolutePath().normalize();
+        ProjectContentVersion capturedBasis = projectSession.getSnapshot().getContentVersion();
+        JobCoordinator.Operation operation = new JobCoordinator.Operation("Save Project", List.of(),
+                List.of(capturedTarget.toString()), Optional.of(capturedBasis.toString()));
+        return new JobCoordinator.Submission<>(operation, context -> {
+            SaveOperationContext projectContext = new SaveOperationContext(context, capturedBasis,
+                    adoptedIdentity ? Optional.of(capturedTarget) : Optional.empty());
+            ProjectOutcome outcome = adoptedIdentity
+                    ? projectSession.save(projectContext)
+                    : projectSession.saveAs(capturedTarget, projectContext);
+            return saveResult(outcome, projectContext.staleReason());
+        }, (attempt, result) -> {
+            boolean stale = result.diagnostics().stream()
+                    .anyMatch(diagnostic -> diagnostic.code().equals("STALE_RESULT"));
+            if (!stale && result.lifecycle() != JobCoordinator.Lifecycle.CANCELLED) {
+                result.value().ifPresent(outcome -> {
+                    publish(outcome);
+                    if (closeOnSuccess && completedSuccessfully(outcome))
+                        markClosed();
+                });
+            }
+        }, Optional.of(() -> retrySaveSubmission(capturedTarget, adoptedIdentity, closeOnSuccess)));
+    }
+
+    /**
+     * Recaptures the current adopted identity for Save retry while preserving an explicitly selected Save As target.
+     *
+     * @param capturedTarget  original target retained only for Save As
+     * @param adoptedIdentity whether the retried operation uses the session's current identity
+     * @param closeOnSuccess  whether successful retry completes a pending close
+     * @return freshly captured retry submission
+     * @throws IllegalStateException when adopted-identity Save no longer has an identity to retry
+     */
+    private JobCoordinator.Submission<ProjectOutcome> retrySaveSubmission(Path capturedTarget,
+                                                                          boolean adoptedIdentity,
+                                                                          boolean closeOnSuccess) {
+        Path retryTarget = adoptedIdentity
+                ? projectSession.getSnapshot().getFileIdentity().orElseThrow(() ->
+                new IllegalStateException("Cannot retry Save without an adopted Project identity"))
+                : capturedTarget;
+        return saveSubmission(retryTarget, adoptedIdentity, closeOnSuccess);
     }
 
     /**
@@ -558,24 +677,17 @@ public final class WorkbenchProjectFlow {
     }
 
     /**
-     * Project-operation adapter bound to one captured content version and one coordinator attempt.
+     * Project-operation adapter that forwards cancellation, progress, and commit linearization for one coordinator
+     * attempt.
      */
-    private final class OpenOperationContext implements ProjectOperationContext {
+    private class JobOperationContext implements ProjectOperationContext {
         private final JobCoordinator.Context jobContext;
-        private final ProjectContentVersion capturedBasis;
-        private final Path capturedSource;
-        private final OpenSourceStamp capturedSourceStamp;
-        private String staleReason;
 
         /**
-         * Captures immutable freshness state for exactly one Open worker invocation.
+         * Binds one synchronous Project operation to exactly one coordinator attempt.
          */
-        private OpenOperationContext(JobCoordinator.Context jobContext, ProjectContentVersion capturedBasis,
-                                     Path capturedSource, OpenSourceStamp capturedSourceStamp) {
+        private JobOperationContext(JobCoordinator.Context jobContext) {
             this.jobContext = Objects.requireNonNull(jobContext, "jobContext");
-            this.capturedBasis = Objects.requireNonNull(capturedBasis, "capturedBasis");
-            this.capturedSource = Objects.requireNonNull(capturedSource, "capturedSource");
-            this.capturedSourceStamp = Objects.requireNonNull(capturedSourceStamp, "capturedSourceStamp");
         }
 
         /**
@@ -607,6 +719,35 @@ public final class WorkbenchProjectFlow {
          */
         @Override
         public boolean beginCommit(String phase) {
+            return jobContext.beginCommit(phase);
+        }
+    }
+
+    /**
+     * Open-specific Project context that rejects a detached candidate when its captured basis or source changed.
+     */
+    private final class OpenOperationContext extends JobOperationContext {
+        private final ProjectContentVersion capturedBasis;
+        private final Path capturedSource;
+        private final OpenSourceStamp capturedSourceStamp;
+        private String staleReason;
+
+        /**
+         * Captures immutable freshness state for exactly one Open worker invocation.
+         */
+        private OpenOperationContext(JobCoordinator.Context jobContext, ProjectContentVersion capturedBasis,
+                                     Path capturedSource, OpenSourceStamp capturedSourceStamp) {
+            super(jobContext);
+            this.capturedBasis = Objects.requireNonNull(capturedBasis, "capturedBasis");
+            this.capturedSource = Objects.requireNonNull(capturedSource, "capturedSource");
+            this.capturedSourceStamp = Objects.requireNonNull(capturedSourceStamp, "capturedSourceStamp");
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public boolean beginCommit(String phase) {
             if (!capturedBasis.equals(projectSession.getSnapshot().getContentVersion())) {
                 staleReason = "the active Project changed after admission";
                 return false;
@@ -615,11 +756,57 @@ public final class WorkbenchProjectFlow {
                 staleReason = "the selected source changed after admission";
                 return false;
             }
-            return jobContext.beginCommit(phase);
+            return super.beginCommit(phase);
         }
 
         /**
          * @return freshness reason when input change, rather than cancellation, refused publication
+         */
+        private Optional<String> staleReason() {
+            return Optional.ofNullable(staleReason);
+        }
+    }
+
+    /**
+     * Save-specific Project context that prevents a queued attempt from replacing a file after its Project basis or
+     * adopted identity changed.
+     */
+    private final class SaveOperationContext extends JobOperationContext {
+        private final ProjectContentVersion capturedBasis;
+        private final Optional<Path> capturedAdoptedIdentity;
+        private String staleReason;
+
+        /**
+         * Captures freshness constraints for exactly one Save worker invocation.
+         */
+        private SaveOperationContext(JobCoordinator.Context jobContext, ProjectContentVersion capturedBasis,
+                                     Optional<Path> capturedAdoptedIdentity) {
+            super(jobContext);
+            this.capturedBasis = Objects.requireNonNull(capturedBasis, "capturedBasis");
+            this.capturedAdoptedIdentity = Objects.requireNonNull(capturedAdoptedIdentity,
+                    "capturedAdoptedIdentity");
+        }
+
+        /**
+         * Rejects replacement if queued Save inputs no longer describe the active Project.
+         */
+        @Override
+        public boolean beginCommit(String phase) {
+            ProjectSnapshot current = projectSession.getSnapshot();
+            if (!capturedBasis.equals(current.getContentVersion())) {
+                staleReason = "the active Project changed after admission";
+                return false;
+            }
+            if (capturedAdoptedIdentity.isPresent()
+                    && !capturedAdoptedIdentity.equals(current.getFileIdentity())) {
+                staleReason = "the adopted Project identity changed after admission";
+                return false;
+            }
+            return super.beginCommit(phase);
+        }
+
+        /**
+         * @return freshness reason when input change, rather than cancellation, refused replacement
          */
         private Optional<String> staleReason() {
             return Optional.ofNullable(staleReason);

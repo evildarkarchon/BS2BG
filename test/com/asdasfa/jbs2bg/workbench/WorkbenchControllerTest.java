@@ -8,6 +8,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
+import java.util.Optional;
 
 import javafx.scene.shape.SVGPath;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.stage.WindowEvent;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -321,6 +323,115 @@ class WorkbenchControllerTest {
             assertEquals(0, platform.closeCount);
 
             exit.fire();
+            assertTrue(flow.frame().closed());
+            assertEquals(1, platform.closeCount);
+            stage.close();
+        });
+    }
+
+    /**
+     * Exit with Save keeps the JavaFX window responsive and open until the application worker publishes a clean
+     * Project, then consumes the final close effect exactly once.
+     */
+    @Test
+    void dirtyExitWaitsForTheApplicationWorkerSaveBeforeClosingTheWindow() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // This save settles before prolonged-cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        Path target = temporaryDirectory.resolve("close-after-save.jbs2bg").toAbsolutePath().normalize();
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
+                .effect().orElseThrow();
+        flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selected(target));
+        worker.runNext();
+        flow.apply(SliderPresetEdits.create("Unsaved at close"));
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondWith(WorkbenchProjectFlow.Response.save());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, platform);
+
+            ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
+
+            assertTrue(jobs.frame().active());
+            assertTrue(flow.frame().snapshot().isDirty());
+            assertFalse(flow.frame().closed());
+            assertEquals(0, platform.closeCount);
+
+            worker.runNext();
+
+            assertFalse(flow.frame().snapshot().isDirty());
+            assertTrue(flow.frame().closed());
+            assertEquals(1, platform.closeCount);
+            stage.close();
+        });
+    }
+
+    /**
+     * Close requested during another queued job reopens admission before the follow-up confirmation submits Save.
+     */
+    @Test
+    void closeDuringAnActiveJobCanSaveAfterThatJobSettles() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Both deterministic jobs settle before prolonged-cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        Path target = temporaryDirectory.resolve("active-job-close-save.jbs2bg").toAbsolutePath().normalize();
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
+                .effect().orElseThrow();
+        flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selected(target));
+        worker.runNext();
+        flow.apply(SliderPresetEdits.create("Dirty during active job"));
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondWith(WorkbenchProjectFlow.Response.save());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, platform);
+            JobCoordinator.Submission<String> existingJob = new JobCoordinator.Submission<>(
+                    new JobCoordinator.Operation("Existing Job", List.of(), List.of(), Optional.empty()),
+                    context -> JobCoordinator.Result.completed("done", "Existing job completed.", List.of(),
+                            List.of()),
+                    (attempt, result) -> {
+                        // This synthetic job has no domain publication; only its shutdown boundary is under test.
+                    }, Optional.empty());
+            assertTrue(jobs.submit(existingJob).admitted());
+
+            WindowEvent closeRequest = new WindowEvent(stage, WindowEvent.WINDOW_CLOSE_REQUEST);
+            stage.getOnCloseRequest().handle(closeRequest);
+            assertTrue(closeRequest.isConsumed());
+            assertTrue(jobs.frame().active());
+            assertEquals("Save Project", jobs.frame().attempt().orElseThrow().operation().name());
+            assertTrue(flow.frame().snapshot().isDirty());
+            assertEquals(0, platform.closeCount);
+
+            // The cancelled queued Future remains ahead of the admitted Save in the deterministic executor.
+            worker.runNext();
+            assertTrue(jobs.frame().active());
+            worker.runNext();
+
+            assertFalse(flow.frame().snapshot().isDirty());
             assertTrue(flow.frame().closed());
             assertEquals(1, platform.closeCount);
             stage.close();
