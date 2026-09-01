@@ -144,6 +144,29 @@ class OutputFeatureTest {
         assertTrue(feature.frame().generatedOutput().isEmpty());
     }
 
+    /** New/Open lifecycle reset clears Output even when the replacement Project has an equal content version. */
+    @Test
+    void lifecycleResetClearsOutputIndependentlyOfContentVersion() {
+        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        OutputFeature feature = new OutputFeature(projectFlow,
+                () -> new OutputFeature.GenerationSettings(Settings.snapshot(), false));
+        feature.dispatch(new OutputFeature.Generate());
+        worker.runNext();
+        feature.dispatch(new OutputFeature.SelectTab(OutputFeature.Tab.MORPHS));
+        assertEquals(OutputFeature.Freshness.FRESH, feature.frame().freshness());
+
+        WorkbenchProjectFlow.Update reset = projectFlow.request(WorkbenchProjectFlow.Intent.NEW);
+        feature.acceptProjectFrame(reset.frame(), true);
+
+        assertEquals(OutputFeature.Freshness.EMPTY, feature.frame().freshness());
+        assertTrue(feature.frame().generatedOutput().isEmpty());
+        assertEquals(OutputFeature.Tab.TEMPLATES, feature.frame().selectedTab());
+    }
+
     /** A Project edit may continue during snapshot-derived Generate and prevents that stale completion publishing. */
     @Test
     void projectEditDuringGenerateProducesStaleActivityWithoutPublishing() {

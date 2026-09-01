@@ -316,6 +316,15 @@ public final class JobCoordinator implements AutoCloseable {
         public boolean active () {
             return attempt.stream().anyMatch(Attempt::active);
         }
+
+        /**
+         * @return whether shutdown or the active operation requires ordinary Project/Settings mutations to pause
+         */
+        public boolean projectMutationsBlocked() {
+            return shutdownRequested || attempt.stream().filter(Attempt::active)
+                    .anyMatch(value -> value.operation().consistencyClass()
+                            != ConsistencyClass.SNAPSHOT_DERIVED);
+        }
     }
 
     /**

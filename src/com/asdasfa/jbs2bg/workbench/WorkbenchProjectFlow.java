@@ -469,11 +469,7 @@ public final class WorkbenchProjectFlow {
      * Rejects immediate legacy feature work while the lifecycle state machine owns a platform effect.
      */
     private void requireImmediateOperation() {
-        boolean projectExclusiveJob = jobs.frame().attempt().stream()
-                .filter(JobCoordinator.Attempt::active)
-                .anyMatch(attempt -> attempt.operation().consistencyClass()
-                        != JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED);
-        if (frame.closed() || pendingEffect != null || projectExclusiveJob)
+        if (frame.closed() || pendingEffect != null || jobs.frame().projectMutationsBlocked())
             throw new IllegalStateException("Workbench Project flow is not accepting immediate operations");
     }
 

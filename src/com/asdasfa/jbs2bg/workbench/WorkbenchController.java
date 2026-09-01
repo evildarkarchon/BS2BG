@@ -685,11 +685,7 @@ public final class WorkbenchController {
                 morphsOutputText.setText(output.getMorphsText());
                 bosArtifactChoice.getItems().setAll(frame.bosArtifactNames());
                 bosArtifactChoice.setValue(frame.selectedBosArtifact().orElse(null));
-                bosOutputText.setText(output.getBosJsonArtifacts().stream()
-                        .filter(artifact -> frame.selectedBosArtifact().stream().anyMatch(name ->
-                                name.equalsIgnoreCase(artifact.getSliderPresetName())))
-                        .findFirst().map(artifact -> artifact.getText())
-                        .orElse("No BoS JSON artifacts were generated."));
+                bosOutputText.setText(frame.selectedBosText());
             }, () -> {
                 templatesOutputText.setText(emptyText);
                 morphsOutputText.setText(emptyText);
@@ -1969,15 +1965,16 @@ public final class WorkbenchController {
         stage.setTitle(frame.title());
         projectStatusText.setText(projectStatus(frame));
         diagnosticsText.setText(ProjectDiagnosticFormatter.format(frame.diagnostics()));
+        boolean lifecyclePublication = frame.sequence() != renderedProjectSequence;
+        boolean resetFeatures = resetTemplatesOnNextProjectFrame || lifecyclePublication
+                && (activeOperation == WorkbenchProjectFlow.Intent.NEW
+                || activeOperation == WorkbenchProjectFlow.Intent.OPEN);
         if (templatesFeature != null && templatesFeature.frame().projectSequence() != frame.sequence()) {
-            boolean resetSelection = activeOperation == WorkbenchProjectFlow.Intent.NEW
-                    || activeOperation == WorkbenchProjectFlow.Intent.OPEN
-                    || resetTemplatesOnNextProjectFrame;
-            renderTemplates(templatesFeature.acceptProjectFrame(frame, resetSelection).frame());
-            resetTemplatesOnNextProjectFrame = false;
+            renderTemplates(templatesFeature.acceptProjectFrame(frame, resetFeatures).frame());
         }
         if (outputFeature != null)
-            renderOutput(outputFeature.acceptProjectFrame(frame).frame());
+            renderOutput(outputFeature.acceptProjectFrame(frame, resetFeatures).frame());
+        resetTemplatesOnNextProjectFrame = false;
         if (!frame.closed() && frame.sequence() != renderedProjectSequence) {
             renderedProjectSequence = frame.sequence();
             publishProjectFeedback(frame);
@@ -1990,12 +1987,8 @@ public final class WorkbenchController {
     private void renderJobFrame(JobCoordinator.Frame frame) {
         Objects.requireNonNull(frame, "frame");
         boolean blocked = frame.active() || frame.shutdownRequested();
-        boolean projectExclusive = frame.shutdownRequested() || frame.attempt().stream()
-                .filter(JobCoordinator.Attempt::active)
-                .anyMatch(attempt -> attempt.operation().consistencyClass()
-                        != JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED);
-        templatesMutationsBlocked = projectExclusive;
-        settingsMutationsBlocked = projectExclusive;
+        templatesMutationsBlocked = frame.projectMutationsBlocked();
+        settingsMutationsBlocked = frame.projectMutationsBlocked();
         newProjectMenuItem.setDisable(blocked);
         openProjectMenuItem.setDisable(blocked);
         saveProjectMenuItem.setDisable(blocked);

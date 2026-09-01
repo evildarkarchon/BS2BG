@@ -402,7 +402,7 @@ public final class ProjectOutputFormatter {
             if (totalUnits < 0)
                 throw new IllegalArgumentException("totalUnits must not be negative");
             this.totalUnits = totalUnits;
-            reportInterval = Math.max(1L, totalUnits / 100L);
+            reportInterval = Math.max(1L, (totalUnits + 99L) / 100L);
         }
 
         /** Checks cancellation before starting the next indivisible formatter unit. */

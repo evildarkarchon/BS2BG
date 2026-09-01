@@ -89,7 +89,25 @@ public final class OutputFeature {
      * @return accepted Output update with no navigation effect
      */
     public Update acceptProjectFrame(WorkbenchProjectFlow.Frame projectFrame) {
+        return acceptProjectFrame(projectFrame, false);
+    }
+
+    /**
+     * Reconciles Project content and optionally clears all session Output state for successful New/Open lifecycle
+     * replacement, including an equal-content pristine replacement.
+     *
+     * @param projectFrame latest authoritative Project frame
+     * @param resetOutput  whether New/Open semantics require an unconditional empty Output state
+     * @return accepted Output update with no navigation effect
+     */
+    public Update acceptProjectFrame(WorkbenchProjectFlow.Frame projectFrame, boolean resetOutput) {
         Objects.requireNonNull(projectFrame, "projectFrame");
+        if (resetOutput) {
+            selectedTab = Tab.TEMPLATES;
+            selectedBosArtifact = null;
+            commit(Optional.empty(), Optional.empty(), Freshness.EMPTY, Optional.empty());
+            return publish(true, Optional.empty());
+        }
         if (frame.basis().stream().noneMatch(basis -> !basis.projectSnapshot().getContentVersion()
                 .equals(projectFrame.snapshot().getContentVersion())))
             return update(true, Optional.empty());
@@ -206,11 +224,10 @@ public final class OutputFeature {
     /** Accepts only the latest fresh usable completion, leaving prior accepted artifacts untouched otherwise. */
     private void acceptCompletion(long generationToken, JobCoordinator.Result<GeneratedCandidate> result) {
         if (generationToken != currentGenerationToken
-                || (result.lifecycle() != JobCoordinator.Lifecycle.COMPLETED
-                && result.lifecycle() != JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES))
+                || result.lifecycle() != JobCoordinator.Lifecycle.COMPLETED)
             return;
         Optional<GeneratedCandidate> value = result.value();
-        if (value.isEmpty() || !result.effectsCommitted().contains("Generated Output published"))
+        if (value.isEmpty())
             return;
         GeneratedCandidate candidate = value.orElseThrow();
         Optional<String> selected = retainedBosSelection(candidate.output());
@@ -364,6 +381,15 @@ public final class OutputFeature {
                     .map(BosJsonArtifact::getSliderPresetName).toList();
         }
 
+        /** @return canonical text of the selected BoS artifact, or explicit empty-artifact guidance */
+        public String selectedBosText() {
+            return generatedOutput.stream().flatMap(output -> output.getBosJsonArtifacts().stream())
+                    .filter(artifact -> selectedBosArtifact.stream().anyMatch(name ->
+                            name.equalsIgnoreCase(artifact.getSliderPresetName())))
+                    .findFirst().map(BosJsonArtifact::getText)
+                    .orElse("No BoS JSON artifacts were generated.");
+        }
+
         /**
          * @return read-only text belonging to the selected tab/artifact, or the current empty/freshness guidance
          */
@@ -375,11 +401,7 @@ public final class OutputFeature {
             return switch (selectedTab) {
                 case TEMPLATES -> output.getTemplatesText();
                 case MORPHS -> output.getMorphsText();
-                case BOS_JSON -> output.getBosJsonArtifacts().stream()
-                        .filter(artifact -> selectedBosArtifact.stream().anyMatch(name ->
-                                name.equalsIgnoreCase(artifact.getSliderPresetName())))
-                        .findFirst().map(BosJsonArtifact::getText)
-                        .orElse("No BoS JSON artifacts were generated.");
+                case BOS_JSON -> selectedBosText();
             };
         }
     }

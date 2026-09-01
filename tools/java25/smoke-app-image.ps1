@@ -1566,30 +1566,25 @@ try {
         Wait-AreaSelected -Name 'Output' | Out-Null
         Wait-UiaKeyboardFocus -Element $presetList -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
-        $templatesText = Find-OuterControl -ControlType 'Edit' -Name 'Generated Templates output'
-        $morphsText = Find-OuterControl -ControlType 'Edit' -Name 'Generated Morphs output'
-        $bosText = Find-OuterControl -ControlType 'Edit' -Name 'Generated BoS JSON output'
-        foreach ($textControl in @($templatesText, $morphsText, $bosText)) {
-            if (-not $textControl.Current.IsKeyboardFocusable) {
-                throw "Generated text '$($textControl.Current.Name)' is not keyboard reachable."
-            }
-            if (-not (Get-UiaReadOnlyState -Element $textControl)) {
-                throw "Generated text '$($textControl.Current.Name)' is not read-only."
-            }
+        $outputRegion = Find-OuterControl -ControlType 'Tab' -Name 'Generated Output tabs'
+        $selectedOutput = Wait-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'Edit') -Description 'selected Templates output text' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        if (-not $selectedOutput.Current.IsKeyboardFocusable `
+                -or -not (Get-UiaReadOnlyState -Element $selectedOutput)) {
+            throw 'Selected Templates output text is not keyboard-reachable and read-only.'
         }
-        $generatedTemplates = Get-UiaText -Element $templatesText
-        $generatedMorphs = Get-UiaText -Element $morphsText
-        $generatedBos = Get-UiaText -Element $bosText
+        $generatedTemplates = Get-UiaText -Element $selectedOutput
         if (-not $generatedTemplates.Contains('Settings Output=')) {
             throw 'Generated Templates output omitted the imported Settings Output preset.'
         }
-        if ([string]::IsNullOrWhiteSpace($generatedBos)) {
-            throw 'Generated BoS JSON output was empty for a Project with Slider Presets.'
-        }
 
-        $templatesTab = Find-OuterControl -ControlType 'TabItem' -Name 'Templates'
-        $morphsTab = Find-OuterControl -ControlType 'TabItem' -Name 'Morphs'
-        $bosTab = Find-OuterControl -ControlType 'TabItem' -Name 'BoS JSON'
+        $templatesTab = Find-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'TabItem' -Name 'Templates')
+        $morphsTab = Find-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'TabItem' -Name 'Morphs')
+        $bosTab = Find-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'TabItem' -Name 'BoS JSON')
         $templatesTab.SetFocus()
         Wait-UiaKeyboardFocus -Element $templatesTab -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{RIGHT}' -TimeoutSeconds $StepTimeoutSeconds
@@ -1597,20 +1592,48 @@ try {
             -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (Get-UiaSelectionState -Element $morphsTab) { $morphsTab }
         } | Out-Null
+        $selectedOutput = Wait-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'Edit') -Description 'selected Morphs output text' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        if (-not $selectedOutput.Current.IsKeyboardFocusable `
+                -or -not (Get-UiaReadOnlyState -Element $selectedOutput)) {
+            throw 'Selected Morphs output text is not keyboard-reachable and read-only.'
+        }
+        $generatedMorphs = Get-UiaText -Element $selectedOutput
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{RIGHT}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaCondition -Description 'keyboard-selected BoS JSON Output tab' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (Get-UiaSelectionState -Element $bosTab) { $bosTab }
         } | Out-Null
+        $selectedOutput = Wait-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'Edit') -Description 'selected BoS JSON output text' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        if (-not $selectedOutput.Current.IsKeyboardFocusable `
+                -or -not (Get-UiaReadOnlyState -Element $selectedOutput)) {
+            throw 'Selected BoS JSON output text is not keyboard-reachable and read-only.'
+        }
+        $generatedBos = Get-UiaText -Element $selectedOutput
+        if ([string]::IsNullOrWhiteSpace($generatedBos)) {
+            throw 'Generated BoS JSON output was empty for a Project with Slider Presets.'
+        }
 
         Send-FileCommand -Item 'Save'
         Wait-UiaElement -Root $activity -Condition (
             New-UiaCondition -ControlType 'ListItem' `
                 -Name 'Success — Save Project — Completed: Project saved.') `
             -Description 'save-only freshness Activity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        if ((Get-UiaText -Element $templatesText) -cne $generatedTemplates `
-                -or (Get-UiaText -Element $morphsText) -cne $generatedMorphs `
-                -or (Get-UiaText -Element $bosText) -cne $generatedBos) {
+        $savedBos = Get-UiaText -Element (Find-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'Edit'))
+        Select-UiaElement -Element $templatesTab
+        $savedTemplates = Get-UiaText -Element (Wait-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'Edit') -Description 'saved Templates output text' `
+            -TimeoutSeconds $StepTimeoutSeconds)
+        Select-UiaElement -Element $morphsTab
+        $savedMorphs = Get-UiaText -Element (Wait-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'Edit') -Description 'saved Morphs output text' `
+            -TimeoutSeconds $StepTimeoutSeconds)
+        if ($savedTemplates -cne $generatedTemplates -or $savedMorphs -cne $generatedMorphs `
+                -or $savedBos -cne $generatedBos) {
             throw 'Save-only Project publication invalidated or changed accepted Output.'
         }
 
@@ -1620,7 +1643,10 @@ try {
         Invoke-UiaElement -Element $createPreset
         Wait-UiaCondition -Description 'Project edit invalidates generated Output' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {
-            if ((Get-UiaText -Element $templatesText) -ceq 'Project changed—Generate again.') { $templatesText }
+            $current = Find-UiaElement -Root $outputRegion -Condition (New-UiaCondition -ControlType 'Edit')
+            if ($null -ne $current -and (Get-UiaText -Element $current) -ceq 'Project changed—Generate again.') {
+                $current
+            }
         } | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaCondition -Description 'invalidated Output drawer closes' -TimeoutSeconds $StepTimeoutSeconds -Test {
