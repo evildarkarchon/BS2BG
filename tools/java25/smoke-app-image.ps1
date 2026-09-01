@@ -1603,7 +1603,9 @@ try {
         $generatedTemplates = (Get-SelectedOutputText -Region $outputRegion -TabName 'Templates' `
             -Description 'selected Templates output text').Text
         if (-not $generatedTemplates.Contains('Settings Output=')) {
-            throw 'Generated Templates output omitted the imported Settings Output preset.'
+            $templatesPreview = $generatedTemplates.Replace("`r", '\r').Replace("`n", '\n')
+            throw "Generated Templates output omitted the imported Settings Output preset; observed " +
+                    "$($generatedTemplates.Length) characters: '$templatesPreview'."
         }
 
         $templatesTab = Find-UiaElement -Root $outputRegion -Condition (
@@ -1612,8 +1614,8 @@ try {
             New-UiaCondition -ControlType 'TabItem' -Name 'Morphs')
         $bosTab = Find-UiaElement -Root $outputRegion -Condition (
             New-UiaCondition -ControlType 'TabItem' -Name 'BoS JSON')
-        $templatesTab.SetFocus()
-        Wait-UiaKeyboardFocus -Element $templatesTab -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $outputRegion.SetFocus()
+        Wait-UiaKeyboardFocus -Element $outputRegion -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{RIGHT}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaCondition -Description 'keyboard-selected Morphs Output tab' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {
@@ -1650,7 +1652,8 @@ try {
             throw 'Save-only Project publication invalidated or changed accepted Output.'
         }
 
-        $presetName = Find-OuterControl -ControlType 'Edit' -Name 'Slider Preset name'
+        $presetNameLabel = Find-OuterControl -ControlType 'Text' -Name 'Slider Preset name:'
+        $presetName = Get-FollowingControl -Element $presetNameLabel -ControlType 'Edit'
         $createPreset = Find-OuterControl -ControlType 'Button' -Name 'Create Slider Preset'
         Set-UiaValue -Element $presetName -Value 'Invalidate Output'
         Invoke-UiaElement -Element $createPreset
@@ -1705,7 +1708,8 @@ try {
                 New-UiaCondition -ControlType 'ProgressBar' -Name 'Current operation progress')
             if ($null -ne $candidate -and $candidate.Current.HelpText.Contains('Generate Output')) { $candidate }
         } | Out-Null
-        $presetName = Find-OuterControl -ControlType 'Edit' -Name 'Slider Preset name'
+        $presetNameLabel = Find-OuterControl -ControlType 'Text' -Name 'Slider Preset name:'
+        $presetName = Get-FollowingControl -Element $presetNameLabel -ControlType 'Edit'
         $createPreset = Find-OuterControl -ControlType 'Button' -Name 'Create Slider Preset'
         if (-not $createPreset.Current.IsEnabled) {
             throw 'Snapshot-derived Generate blocked an ordinary Project edit.'
@@ -1713,6 +1717,14 @@ try {
         Set-UiaValue -Element $presetName -Value 'Stale Mutation'
         $presetName.SetFocus()
         Invoke-UiaElement -Element $createPreset
+        Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Stale Mutation') `
+            -Description 'Project mutation during Generate' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $focusAfterMutation = Wait-UiaCondition -Description 'semantic focus after Project mutation' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+            if ($null -ne $focused -and $focused.Current.ProcessId -eq $script:app.Id) { $focused }
+        }
         $stale = Wait-UiaElement -Root $activity -Condition (
             New-UiaCondition -ControlType 'ListItem' `
                 -Name 'Warning — Generate Output — Completed with issues: Project changed—Generate again.') `
@@ -1726,7 +1738,7 @@ try {
         if ((Get-UiaToggleState -Element (Get-AreaButton -Name 'Output')) -ne 'Off') {
             throw 'Stale Generate revealed Output.'
         }
-        Wait-UiaKeyboardFocus -Element $presetName -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-UiaKeyboardFocus -Element $focusAfterMutation -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
         $observations['generatedOutput'] = [ordered]@{
             completed = $completed.Current.HelpText

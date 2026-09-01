@@ -613,19 +613,42 @@ function Set-UiaValue {
 
 <#
 .SYNOPSIS
-    Reads the text of a control: its Value pattern, else its Text pattern's document range, else its accessible name.
+    Reads editable Value text; for read-only controls prefers descendant document text, then TextPattern/Value/name.
+.NOTES
+    JavaFX 25 read-only TextArea can expose its accessibility label through both ValuePattern and TextPattern while
+    its actual document is exposed by a descendant Text element. Editable controls still prefer ValuePattern;
+    read-only controls therefore inspect the owned descendant first so packaged checks read the displayed bytes.
 #>
 function Get-UiaText {
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Element)
     $value = $null
     $valueText = $null
+    $valueReadOnly = $false
     if ($Element.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$value)) {
         $valueText = [string]$value.Current.Value
-        if (-not [string]::IsNullOrEmpty($valueText)) { return $valueText }
+        $valueReadOnly = [bool]$value.Current.IsReadOnly
+        if (-not $valueReadOnly -and -not [string]::IsNullOrEmpty($valueText)) { return $valueText }
+    }
+    if ($valueReadOnly) {
+        $readOnlyText = @(Find-UiaElements -Root $Element -Condition (
+            New-UiaCondition -ControlType 'Text') | ForEach-Object { [string]$_.Current.Name } |
+                Where-Object { $_ })
+        if ($readOnlyText.Count -gt 0) {
+            return $readOnlyText -join [Environment]::NewLine
+        }
     }
     if ($Element.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$value)) {
-        return [string]$value.DocumentRange.GetText(-1)
+        $documentText = [string]$value.DocumentRange.GetText(-1)
+        if (-not [string]::IsNullOrEmpty($documentText)) { return $documentText }
+    }
+    if (-not $valueReadOnly) {
+        $fallbackText = @(Find-UiaElements -Root $Element -Condition (
+            New-UiaCondition -ControlType 'Text') | ForEach-Object { [string]$_.Current.Name } |
+                Where-Object { $_ })
+        if ($fallbackText.Count -gt 0) {
+            return $fallbackText -join [Environment]::NewLine
+        }
     }
     if ($null -ne $valueText) { return $valueText }
     return [string]$Element.Current.Name
