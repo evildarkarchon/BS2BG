@@ -630,6 +630,22 @@ function Get-UiaText {
 
 <#
 .SYNOPSIS
+    Returns whether a Value-pattern text control is read-only.
+.NOTES
+    Generated Output remains enabled and selectable, so IsEnabled cannot establish its edit contract.
+#>
+function Get-UiaReadOnlyState {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Element)
+    $value = $null
+    if (-not $Element.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$value)) {
+        throw "Element '$($Element.Current.Name)' does not expose ValuePattern read-only state."
+    }
+    return [bool]$value.Current.IsReadOnly
+}
+
+<#
+.SYNOPSIS
     Waits until the exact UIA element owns keyboard focus.
 .PARAMETER Element
     Semantic role/name-located element expected to receive focus.
@@ -861,6 +877,7 @@ Export-ModuleMember -Function @(
     'Expand-UiaElement',
     'Set-UiaValue',
     'Get-UiaText',
+    'Get-UiaReadOnlyState',
     'Wait-UiaKeyboardFocus',
     'Send-UiaKeys',
     'Get-UiaToggleState',

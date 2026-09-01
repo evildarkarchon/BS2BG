@@ -2,13 +2,14 @@
 <#
 .SYNOPSIS
     Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, and Templates contracts
-    (issues #98-#103).
+    (issues #98-#105).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
     discovery path, proves that the launcher process hosts the bundled JVM, and drives the Workbench through
     Windows UI Automation by accessible role and name. The run covers typed navigation, focus cycling and return,
-    Output drawer interaction, responsive/minimum geometry, live themes, High Contrast, reduced motion,
+    captured Output generation and tab inspection, Output drawer interaction, responsive/minimum geometry,
+    live themes, High Contrast, reduced motion,
     accessibility semantics, notifications, typed dialogs, startup, New, Open, Save, Save As, Project recovery,
     centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
     malformed/failed operation preservation, complete pointer-free Slider Preset choice editing and management,
@@ -1551,6 +1552,162 @@ try {
         'paired Settings editing/recovery and successful, malformed, partial, failed, and cancelled imports passed'
     }
 
+    Invoke-SmokeStep -Name 'generate-inspect-invalidate-cancel-and-stale-output' -Action {
+        $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        $presetList.SetFocus()
+        Wait-UiaKeyboardFocus -Element $presetList -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^g' -TimeoutSeconds $StepTimeoutSeconds
+
+        $completed = Wait-UiaElement -Root $activity -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Success — Generate Output — Completed: Output generated.') `
+            -Description 'fresh Generate Activity' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Output' | Out-Null
+        Wait-UiaKeyboardFocus -Element $presetList -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $templatesText = Find-OuterControl -ControlType 'Edit' -Name 'Generated Templates output'
+        $morphsText = Find-OuterControl -ControlType 'Edit' -Name 'Generated Morphs output'
+        $bosText = Find-OuterControl -ControlType 'Edit' -Name 'Generated BoS JSON output'
+        foreach ($textControl in @($templatesText, $morphsText, $bosText)) {
+            if (-not $textControl.Current.IsKeyboardFocusable) {
+                throw "Generated text '$($textControl.Current.Name)' is not keyboard reachable."
+            }
+            if (-not (Get-UiaReadOnlyState -Element $textControl)) {
+                throw "Generated text '$($textControl.Current.Name)' is not read-only."
+            }
+        }
+        $generatedTemplates = Get-UiaText -Element $templatesText
+        $generatedMorphs = Get-UiaText -Element $morphsText
+        $generatedBos = Get-UiaText -Element $bosText
+        if (-not $generatedTemplates.Contains('Settings Output=')) {
+            throw 'Generated Templates output omitted the imported Settings Output preset.'
+        }
+        if ([string]::IsNullOrWhiteSpace($generatedBos)) {
+            throw 'Generated BoS JSON output was empty for a Project with Slider Presets.'
+        }
+
+        $templatesTab = Find-OuterControl -ControlType 'TabItem' -Name 'Templates'
+        $morphsTab = Find-OuterControl -ControlType 'TabItem' -Name 'Morphs'
+        $bosTab = Find-OuterControl -ControlType 'TabItem' -Name 'BoS JSON'
+        $templatesTab.SetFocus()
+        Wait-UiaKeyboardFocus -Element $templatesTab -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{RIGHT}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'keyboard-selected Morphs Output tab' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Get-UiaSelectionState -Element $morphsTab) { $morphsTab }
+        } | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{RIGHT}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'keyboard-selected BoS JSON Output tab' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Get-UiaSelectionState -Element $bosTab) { $bosTab }
+        } | Out-Null
+
+        Send-FileCommand -Item 'Save'
+        Wait-UiaElement -Root $activity -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Success — Save Project — Completed: Project saved.') `
+            -Description 'save-only freshness Activity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        if ((Get-UiaText -Element $templatesText) -cne $generatedTemplates `
+                -or (Get-UiaText -Element $morphsText) -cne $generatedMorphs `
+                -or (Get-UiaText -Element $bosText) -cne $generatedBos) {
+            throw 'Save-only Project publication invalidated or changed accepted Output.'
+        }
+
+        $presetName = Find-OuterControl -ControlType 'Edit' -Name 'Slider Preset name'
+        $createPreset = Find-OuterControl -ControlType 'Button' -Name 'Create Slider Preset'
+        Set-UiaValue -Element $presetName -Value 'Invalidate Output'
+        Invoke-UiaElement -Element $createPreset
+        Wait-UiaCondition -Description 'Project edit invalidates generated Output' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaText -Element $templatesText) -ceq 'Project changed—Generate again.') { $templatesText }
+        } | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'invalidated Output drawer closes' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaToggleState -Element (Get-AreaButton -Name 'Output')) -eq 'Off') { $true }
+        } | Out-Null
+
+        Send-FileCommand -Item 'Open…' -DialogTitle $applicationTitle
+        Choose-Confirmation -ButtonName 'Discard'
+        Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $cancellableProjectName) `
+            -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $cancellableProjectName" | Out-Null
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        $presetList.SetFocus()
+        Wait-UiaKeyboardFocus -Element $presetList -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^g' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'truthful Generate progress before cancellation' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'ProgressBar' -Name 'Current operation progress')
+            if ($null -ne $candidate -and $candidate.Current.HelpText.Contains('Generate Output')) { $candidate }
+        } | Out-Null
+        $cancel = Wait-UiaCondition -Description 'enabled Generate cancellation control' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Button' -Name 'Cancel current operation')
+            if ($null -ne $candidate -and $candidate.Current.IsEnabled) { $candidate }
+        }
+        Invoke-UiaElement -Element $cancel
+        $cancelled = Wait-UiaElement -Root $activity -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Information — Generate Output — Cancelled: Cancellation completed.') `
+            -Description 'cancelled Generate Activity' -TimeoutSeconds $StepTimeoutSeconds
+        if ((Get-UiaToggleState -Element (Get-AreaButton -Name 'Output')) -ne 'Off') {
+            throw 'Cancelled Generate revealed Output.'
+        }
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^g' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'active Generate before Project mutation' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'ProgressBar' -Name 'Current operation progress')
+            if ($null -ne $candidate -and $candidate.Current.HelpText.Contains('Generate Output')) { $candidate }
+        } | Out-Null
+        $presetName = Find-OuterControl -ControlType 'Edit' -Name 'Slider Preset name'
+        $createPreset = Find-OuterControl -ControlType 'Button' -Name 'Create Slider Preset'
+        if (-not $createPreset.Current.IsEnabled) {
+            throw 'Snapshot-derived Generate blocked an ordinary Project edit.'
+        }
+        Set-UiaValue -Element $presetName -Value 'Stale Mutation'
+        $presetName.SetFocus()
+        Invoke-UiaElement -Element $createPreset
+        $stale = Wait-UiaElement -Root $activity -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Warning — Generate Output — Completed with issues: Project changed—Generate again.') `
+            -Description 'stale Generate Activity' -TimeoutSeconds $StepTimeoutSeconds
+        foreach ($evidence in @('Effects committed: none', 'Diagnostics: STALE_RESULT',
+                'Captured basis: Project content version')) {
+            if (-not $stale.Current.HelpText.Contains($evidence)) {
+                throw "Stale Generate Activity omitted '$evidence': '$($stale.Current.HelpText)'"
+            }
+        }
+        if ((Get-UiaToggleState -Element (Get-AreaButton -Name 'Output')) -ne 'Off') {
+            throw 'Stale Generate revealed Output.'
+        }
+        Wait-UiaKeyboardFocus -Element $presetName -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $observations['generatedOutput'] = [ordered]@{
+            completed = $completed.Current.HelpText
+            templatesCharacters = $generatedTemplates.Length
+            morphsCharacters = $generatedMorphs.Length
+            bosCharacters = $generatedBos.Length
+            tabs = @('Templates', 'Morphs', 'BoS JSON')
+            readOnly = $true
+            savePreserved = $true
+            contentInvalidated = $true
+            cancellation = $cancelled.Current.HelpText
+            stale = $stale.Current.HelpText
+            focusPreserved = 'Slider Preset list / name field'
+        }
+
+        Send-FileCommand -Item 'New' -DialogTitle $applicationTitle
+        Choose-Confirmation -ButtonName 'Discard'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        'fresh, save-only, invalidated, cancelled, and stale Output contracts passed through packaged UIA'
+    }
+
     Invoke-SmokeStep -Name 'save-as-new-project' -Action {
         $target = Join-Path $workDir $firstSaveName
         Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
@@ -1868,7 +2025,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/13'
+        schema = 'bs2bg.windows-app-image-smoke/14'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion

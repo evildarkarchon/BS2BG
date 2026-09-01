@@ -45,12 +45,48 @@ public final class ProjectOutputFormatter {
      * @throws BosOutputException   when any BoS filename or calculated value cannot publish safely
      */
     public static ProjectGeneratedOutput generate(ProjectSnapshot snapshot, boolean omitRedundantSliders) {
+        return generate(snapshot, Settings.snapshot(), omitRedundantSliders);
+    }
+
+    /**
+     * Generates every artifact from one explicit immutable Project and Settings basis. This overload prevents an
+     * asynchronous command from mixing Settings publications while its captured Project snapshot is formatted.
+     *
+     * @param snapshot             immutable Project state to format
+     * @param settings             immutable paired generation Settings captured with the Project
+     * @param omitRedundantSliders whether redundant template sliders should be omitted
+     * @return one immutable generated-output value
+     * @throws NullPointerException when snapshot or settings is null
+     * @throws BosOutputException   when any BoS filename or calculated value cannot publish safely
+     */
+    public static ProjectGeneratedOutput generate(ProjectSnapshot snapshot, Settings.Snapshot settings,
+                                                   boolean omitRedundantSliders) {
+        return generate(snapshot, settings, omitRedundantSliders, GenerationContext.nonCancellable());
+    }
+
+    /**
+     * Generates from one captured basis with cooperative safe points between real output units.
+     *
+     * @param snapshot             immutable Project state to format
+     * @param settings             immutable paired generation Settings
+     * @param omitRedundantSliders whether redundant template sliders should be omitted
+     * @param context              cancellation and measured-progress receiver retained for this call only
+     * @return one immutable generated-output value
+     */
+    public static ProjectGeneratedOutput generate(ProjectSnapshot snapshot, Settings.Snapshot settings,
+                                                   boolean omitRedundantSliders, GenerationContext context) {
         Objects.requireNonNull(snapshot, "snapshot");
+        Objects.requireNonNull(settings, "settings");
+        Objects.requireNonNull(context, "context");
+        long totalUnits = Math.addExact(Math.multiplyExact(3L, snapshot.getSliderPresets().size()),
+                Math.addExact(snapshot.getCustomMorphTargets().size(), snapshot.getNpcMorphAssignments().size()));
+        GenerationProgress progress = new GenerationProgress(context, totalUnits);
         List<BosOutputDiagnostic> bosDiagnostics = new ArrayList<>();
-        List<BosFileNameMapping> bosFileNameMappings = mapBosFileNames(snapshot.getSliderPresets(), bosDiagnostics);
+        List<BosFileNameMapping> bosFileNameMappings = mapBosFileNames(snapshot.getSliderPresets(), bosDiagnostics,
+                progress);
         // Payload validation continues after filename failures so one preflight report covers the whole command.
         List<BosJsonArtifact> bosJsonArtifacts = generateBosArtifacts(snapshot.getSliderPresets(),
-                bosFileNameMappings, bosDiagnostics);
+                bosFileNameMappings, bosDiagnostics, settings, progress);
         if (!bosDiagnostics.isEmpty())
             throw new BosOutputException(bosFileNameMappings, bosDiagnostics);
         Map<String, String> templateLines = new LinkedHashMap<>();
@@ -58,26 +94,32 @@ public final class ProjectOutputFormatter {
         String newLine = System.lineSeparator();
 
         for (SliderPresetSnapshot preset : snapshot.getSliderPresets()) {
-            String line = formatTemplateLine(preset, omitRedundantSliders);
+            progress.checkCancellation();
+            String line = formatTemplateLine(preset, omitRedundantSliders, settings, progress);
             if (templatesText.length() > 0)
                 templatesText.append(newLine);
             templatesText.append(line);
             templateLines.put(preset.getName(), line);
+            progress.completedUnit();
         }
 
         List<CustomMorphTargetSnapshot> customWithoutPresets = new ArrayList<>();
         List<NpcMorphAssignmentSnapshot> npcsWithoutPresets = new ArrayList<>();
         StringBuilder morphsText = new StringBuilder();
         for (CustomMorphTargetSnapshot target : snapshot.getCustomMorphTargets()) {
+            progress.checkCancellation();
             appendMorphLine(morphsText, target.getName(), target.getSliderPresetNames(), newLine);
             if (target.getSliderPresetNames().isEmpty())
                 customWithoutPresets.add(target);
+            progress.completedUnit();
         }
         for (NpcMorphAssignmentSnapshot npc : snapshot.getNpcMorphAssignments()) {
+            progress.checkCancellation();
             appendMorphLine(morphsText, npc.getPluginName() + "|" + npc.getFormId(),
                     npc.getSliderPresetNames(), newLine);
             if (npc.getSliderPresetNames().isEmpty())
                 npcsWithoutPresets.add(npc);
+            progress.completedUnit();
         }
 
         return new ProjectGeneratedOutput(templatesText.toString(), morphsText.toString(), templateLines,
@@ -88,10 +130,12 @@ public final class ProjectOutputFormatter {
      * Maps every artifact name and accumulates all case-insensitive collision diagnostics.
      */
     private static List<BosFileNameMapping> mapBosFileNames(List<SliderPresetSnapshot> presets,
-                                                            List<BosOutputDiagnostic> diagnostics) {
+                                                            List<BosOutputDiagnostic> diagnostics,
+                                                            GenerationProgress progress) {
         List<BosFileNameMapping> mappings = new ArrayList<>();
         Map<String, List<BosFileNameMapping>> mappingsByFileName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (SliderPresetSnapshot preset : presets) {
+            progress.checkCancellation();
             String fileName = null;
             try {
                 fileName = BosFileNamePolicy.map(preset.getName());
@@ -103,8 +147,10 @@ public final class ProjectOutputFormatter {
             mappings.add(mapping);
             if (fileName != null)
                 mappingsByFileName.computeIfAbsent(fileName, ignored -> new ArrayList<>()).add(mapping);
+            progress.completedUnit();
         }
 
+        progress.checkCancellation();
         for (Map.Entry<String, List<BosFileNameMapping>> entry : mappingsByFileName.entrySet()) {
             if (entry.getValue().size() < 2)
                 continue;
@@ -122,12 +168,16 @@ public final class ProjectOutputFormatter {
      * rejected Slider Presets into the command-wide diagnostic list.
      */
     private static List<BosJsonArtifact> generateBosArtifacts(List<SliderPresetSnapshot> presets,
-                                                              List<BosFileNameMapping> mappings, List<BosOutputDiagnostic> diagnostics) {
+                                                              List<BosFileNameMapping> mappings,
+                                                              List<BosOutputDiagnostic> diagnostics,
+                                                              Settings.Snapshot settings,
+                                                              GenerationProgress progress) {
         List<BosJsonArtifact> artifacts = new ArrayList<>();
         for (int index = 0; index < presets.size(); index++) {
+            progress.checkCancellation();
             SliderPresetSnapshot preset = presets.get(index);
             try {
-                Utf8Json json = formatBosJson(preset);
+                Utf8Json json = formatBosJson(preset, settings, progress);
                 String fileName = mappings.get(index).getFileName().orElse(null);
                 if (fileName != null)
                     artifacts.add(new BosJsonArtifact(preset.getName(), fileName, json));
@@ -138,6 +188,7 @@ public final class ProjectOutputFormatter {
                 diagnostics.add(new BosOutputDiagnostic("BOS_VALUE_UNREPRESENTABLE", preset.getName(),
                         exception.getMessage()));
             }
+            progress.completedUnit();
         }
         return artifacts;
     }
@@ -145,11 +196,13 @@ public final class ProjectOutputFormatter {
     /**
      * Formats one legacy templates.ini line from immutable Slider Preset values.
      */
-    private static String formatTemplateLine(SliderPresetSnapshot preset, boolean omitRedundantSliders) {
+    private static String formatTemplateLine(SliderPresetSnapshot preset, boolean omitRedundantSliders,
+                                             Settings.Snapshot settings, GenerationProgress progress) {
         List<String> values = new ArrayList<>();
-        for (SliderChoiceSnapshot choice : enabledChoices(preset)) {
-            if (!omitRedundantSliders || !isSliderChoiceRedundant(choice, preset.isUunp()))
-                values.add(formatSliderChoicePreview(choice, preset.isUunp()));
+        for (SliderChoiceSnapshot choice : enabledChoices(preset, progress)) {
+            progress.checkCancellation();
+            if (!omitRedundantSliders || !isSliderChoiceRedundant(choice, preset.isUunp(), settings))
+                values.add(formatSliderChoicePreview(choice, preset.isUunp(), settings));
         }
         return preset.getName() + "=" + String.join(", ", values);
     }
@@ -157,10 +210,12 @@ public final class ProjectOutputFormatter {
     /**
      * Formats one BoS JSON payload through the repository-owned canonical writer.
      */
-    private static Utf8Json formatBosJson(SliderPresetSnapshot preset) {
+    private static Utf8Json formatBosJson(SliderPresetSnapshot preset, Settings.Snapshot settings,
+                                          GenerationProgress progress) {
         List<SliderChoiceSnapshot> included = new ArrayList<>();
-        for (SliderChoiceSnapshot choice : enabledChoices(preset)) {
-            if (!isSliderChoiceRedundant(choice, preset.isUunp()))
+        for (SliderChoiceSnapshot choice : enabledChoices(preset, progress)) {
+            progress.checkCancellation();
+            if (!isSliderChoiceRedundant(choice, preset.isUunp(), settings))
                 included.add(choice);
         }
 
@@ -168,9 +223,12 @@ public final class ProjectOutputFormatter {
         List<String> highValues = new ArrayList<>();
         List<String> lowValues = new ArrayList<>();
         for (SliderChoiceSnapshot choice : included) {
+            progress.checkCancellation();
             sliderNames.add(choice.getName());
-            highValues.add(formatBosLexeme(choice.getEffectiveBigValue(), choice.getName(), preset.isUunp()));
-            lowValues.add(formatBosLexeme(choice.getEffectiveSmallValue(), choice.getName(), preset.isUunp()));
+            highValues.add(formatBosLexeme(choice.getEffectiveBigValue(), choice.getName(), preset.isUunp(),
+                    settings));
+            lowValues.add(formatBosLexeme(choice.getEffectiveSmallValue(), choice.getName(), preset.isUunp(),
+                    settings));
         }
         return BosJacksonWriter.write(new BosJacksonWriter.BosDocument(
                 preset.getName(), sliderNames, highValues, lowValues));
@@ -179,17 +237,19 @@ public final class ProjectOutputFormatter {
     /**
      * Preserves minimal-json's whole-float spelling while retaining exponent notation.
      */
-    private static String formatBosLexeme(int value, String sliderName, boolean uunp) {
-        String lexeme = Float.toString(formatBosValue(value, sliderName, uunp));
+    private static String formatBosLexeme(int value, String sliderName, boolean uunp, Settings.Snapshot settings) {
+        String lexeme = Float.toString(formatBosValue(value, sliderName, uunp, settings));
         return lexeme.endsWith(".0") ? lexeme.substring(0, lexeme.length() - 2) : lexeme;
     }
 
     /**
      * Returns enabled explicit and synthesized choices in the legacy name order.
      */
-    private static List<SliderChoiceSnapshot> enabledChoices(SliderPresetSnapshot preset) {
+    private static List<SliderChoiceSnapshot> enabledChoices(SliderPresetSnapshot preset,
+                                                             GenerationProgress progress) {
         List<SliderChoiceSnapshot> enabled = new ArrayList<>();
         for (SliderChoiceSnapshot choice : preset.getSliderChoices()) {
+            progress.checkCancellation();
             if (choice.isEnabled())
                 enabled.add(choice);
         }
@@ -207,17 +267,23 @@ public final class ProjectOutputFormatter {
      * @throws NullPointerException when choice is null
      */
     public static String formatSliderChoicePreview(SliderChoiceSnapshot choice, boolean uunp) {
+        return formatSliderChoicePreview(choice, uunp, Settings.snapshot());
+    }
+
+    /** Formats one choice from an explicit captured Settings basis. */
+    private static String formatSliderChoicePreview(SliderChoiceSnapshot choice, boolean uunp,
+                                                    Settings.Snapshot settings) {
         Objects.requireNonNull(choice, "choice");
         float small = choice.getEffectiveSmallValue() * 0.01f;
         float big = choice.getEffectiveBigValue() * 0.01f;
-        if (isInverted(choice.getName(), uunp)) {
+        if (isInverted(choice.getName(), uunp, settings)) {
             small = 1f - small;
             big = 1f - big;
         }
         float difference = big - small;
         float minimum = small + difference * (choice.getPercentageMinimum() * 0.01f);
         float maximum = small + difference * (choice.getPercentageMaximum() * 0.01f);
-        float multiplier = multiplier(choice.getName(), uunp);
+        float multiplier = multiplier(choice.getName(), uunp, settings);
         minimum = roundLegacy(minimum * multiplier);
         maximum = roundLegacy(maximum * multiplier);
         return choice.getName() + "@" + (minimum != maximum ? minimum + ":" + maximum : Float.toString(maximum));
@@ -226,11 +292,11 @@ public final class ProjectOutputFormatter {
     /**
      * Converts one effective Slider Preset endpoint into its BoS float value.
      */
-    private static float formatBosValue(int value, String sliderName, boolean uunp) {
+    private static float formatBosValue(int value, String sliderName, boolean uunp, Settings.Snapshot settings) {
         float formatted = value * 0.01f;
-        if (isInverted(sliderName, uunp))
+        if (isInverted(sliderName, uunp, settings))
             formatted = 1f - formatted;
-        float multiplied = formatted * multiplier(sliderName, uunp);
+        float multiplied = formatted * multiplier(sliderName, uunp, settings);
         if (!Float.isFinite(multiplied))
             throw new BosValueException("Slider " + BosOutputException.escape(sliderName)
                     + " calculated a non-finite BoS endpoint.");
@@ -247,25 +313,36 @@ public final class ProjectOutputFormatter {
      * @throws NullPointerException when choice is null
      */
     public static boolean isSliderChoiceRedundant(SliderChoiceSnapshot choice, boolean uunp) {
+        return isSliderChoiceRedundant(choice, uunp, Settings.snapshot());
+    }
+
+    /** Reports redundancy against an explicit captured Settings basis. */
+    private static boolean isSliderChoiceRedundant(SliderChoiceSnapshot choice, boolean uunp,
+                                                   Settings.Snapshot settings) {
         Objects.requireNonNull(choice, "choice");
         int small = choice.getEffectiveSmallValue();
         int big = choice.getEffectiveBigValue();
-        int neutral = isInverted(choice.getName(), uunp) ? 100 : 0;
+        int neutral = isInverted(choice.getName(), uunp, settings) ? 100 : 0;
         return small == neutral && small == big;
     }
 
     /**
      * Resolves the configured inversion family without exposing mutable Settings collections.
      */
-    private static boolean isInverted(String sliderName, boolean uunp) {
-        return uunp ? Settings.isInvertedUUNP(sliderName) : Settings.isInverted(sliderName);
+    private static boolean isInverted(String sliderName, boolean uunp, Settings.Snapshot settings) {
+        List<String> inverted = (uunp ? settings.uunp() : settings.standard()).inverted();
+        for (String candidate : inverted)
+            if (candidate.equalsIgnoreCase(sliderName))
+                return true;
+        return false;
     }
 
     /**
      * Resolves the configured output multiplier for the Slider Preset family.
      */
-    private static float multiplier(String sliderName, boolean uunp) {
-        return uunp ? Settings.getMultiplierUUNP(sliderName) : Settings.getMultiplier(sliderName);
+    private static float multiplier(String sliderName, boolean uunp, Settings.Snapshot settings) {
+        return (uunp ? settings.uunp() : settings.standard()).multipliers()
+                .getOrDefault(sliderName, Float.valueOf(1f)).floatValue();
     }
 
     /**
@@ -281,6 +358,64 @@ public final class ProjectOutputFormatter {
     private static void appendMorphLine(StringBuilder output, String identity, List<String> presetNames,
                                         String newLine) {
         output.append((identity + "=" + String.join("|", presetNames)).trim()).append(newLine);
+    }
+
+    /** JavaFX-independent cancellation and truthful measured-progress seam for one generation call. */
+    public interface GenerationContext {
+        /** Returns a context for compatibility callers that need neither cancellation nor progress. */
+        static GenerationContext nonCancellable() {
+            return new GenerationContext() {
+                @Override
+                public void checkCancellation() {
+                    // Synchronous compatibility generation is intentionally non-cancellable.
+                }
+
+                @Override
+                public void report(long completedUnits, long totalUnits) {
+                    // Synchronous compatibility generation intentionally discards progress.
+                }
+            };
+        }
+
+        /** Throws when cancellation has been accepted at the current ordinary safe point. */
+        void checkCancellation();
+
+        /**
+         * Reports completed real formatting units.
+         *
+         * @param completedUnits completed preset/target/NPC formatting units
+         * @param totalUnits     total real units in the captured Project
+         */
+        void report(long completedUnits, long totalUnits);
+    }
+
+    /** Counts real generation work while keeping cancellation checks adjacent to each immutable input unit. */
+    private static final class GenerationProgress {
+        private final GenerationContext context;
+        private final long totalUnits;
+        private final long reportInterval;
+        private long completedUnits;
+
+        /** Captures one context and its precomputed immutable Project work count. */
+        private GenerationProgress(GenerationContext context, long totalUnits) {
+            this.context = Objects.requireNonNull(context, "context");
+            if (totalUnits < 0)
+                throw new IllegalArgumentException("totalUnits must not be negative");
+            this.totalUnits = totalUnits;
+            reportInterval = Math.max(1L, totalUnits / 100L);
+        }
+
+        /** Checks cancellation before starting the next indivisible formatter unit. */
+        private void checkCancellation() {
+            context.checkCancellation();
+        }
+
+        /** Reports one completed real unit without inventing work for an empty Project. */
+        private void completedUnit() {
+            completedUnits++;
+            if (totalUnits > 0 && (completedUnits == totalUnits || completedUnits % reportInterval == 0))
+                context.report(completedUnits, totalUnits);
+        }
     }
 
     /**

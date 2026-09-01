@@ -105,6 +105,55 @@ class JobCoordinatorTest {
                 .anyMatch(attempt -> attempt.progress().percentage().orElse(-1) == 40)));
     }
 
+    /** Serialized result resolution classifies freshness before terminal Activity and completion observe the result. */
+    @Test
+    void resultResolverFinalizesDispositionBeforeCompletion() {
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator coordinator = coordinator(worker);
+        List<JobCoordinator.Result<String>> completed = new ArrayList<>();
+        coordinator.submit(new JobCoordinator.Submission<>(new JobCoordinator.Operation(
+                "Generate Output", List.of(), List.of(), Optional.of("captured basis"),
+                JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED),
+                context -> JobCoordinator.Result.completed("candidate", "Worker completed", List.of(), List.of()),
+                (attempt, result) -> completed.add(result), Optional.empty(),
+                (attempt, result) -> JobCoordinator.Result.completedWithIssues(
+                        result.value().orElseThrow(), "Project changed—Generate again.", List.of(),
+                        List.of(new JobCoordinator.Diagnostic("STALE_RESULT", "Captured basis is stale.",
+                                Optional.empty())))));
+
+        worker.runNext();
+
+        JobCoordinator.Attempt terminal = coordinator.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, terminal.lifecycle());
+        assertEquals("Project changed—Generate again.", terminal.summary());
+        assertEquals(List.of("STALE_RESULT"), terminal.diagnostics().stream()
+                .map(JobCoordinator.Diagnostic::code).toList());
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, completed.getFirst().lifecycle());
+    }
+
+    /** A broken serialized result resolver becomes a failed job without stranding global admission. */
+    @Test
+    void resultResolverFailureIsIsolatedAsTerminalDiagnostic() {
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator coordinator = coordinator(worker);
+        coordinator.submit(new JobCoordinator.Submission<>(new JobCoordinator.Operation(
+                "Generate Output", List.of(), List.of(), Optional.empty()),
+                context -> JobCoordinator.Result.completed("candidate", "Worker completed", List.of(), List.of()),
+                (attempt, result) -> {
+                    // Terminal state and diagnostics are asserted through the public coordinator frame.
+                }, Optional.empty(), (attempt, result) -> {
+            throw new IllegalStateException("resolver failed");
+        }));
+
+        worker.runNext();
+
+        JobCoordinator.Attempt terminal = coordinator.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.FAILED, terminal.lifecycle());
+        assertEquals(List.of("JOB_RESULT_RESOLUTION_FAILED"), terminal.diagnostics().stream()
+                .map(JobCoordinator.Diagnostic::code).toList());
+        assertFalse(coordinator.frame().active());
+    }
+
     /**
      * Accepted cancellation wins before commit, remains idempotent, and cannot leak a completed effect.
      */

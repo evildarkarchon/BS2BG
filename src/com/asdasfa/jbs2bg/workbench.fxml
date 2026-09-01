@@ -13,6 +13,8 @@
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.SeparatorMenuItem?>
 <?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
@@ -81,6 +83,8 @@
                                         <Button fx:id="showInspectorOverlayButton" accessibleText="Open Templates inspector"
                                                 managed="false" mnemonicParsing="true" text="_Inspector" visible="false" />
                                         <Region HBox.hgrow="ALWAYS" />
+                                        <Button fx:id="generateOutputButton" accessibleText="Generate Project output"
+                                                mnemonicParsing="true" text="_Generate" />
                                         <Label fx:id="projectStatusText" accessibleText="Project status" text="Untitled Project" />
                                     </children>
                                 </HBox>
@@ -496,9 +500,46 @@
                                                 prefWidth="180.0" value="220.0" />
                                     </children>
                                 </HBox>
-                                <TextArea fx:id="outputText" accessibleText="Output generated text" editable="false"
-                                        focusTraversable="true" text="Generated output will appear here."
-                                        wrapText="false" VBox.vgrow="ALWAYS" />
+                                <TabPane fx:id="outputTabs" accessibleText="Generated Output tabs"
+                                        focusTraversable="true" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+                                    <tabs>
+                                        <Tab fx:id="templatesOutputTab" text="Templates">
+                                            <content>
+                                                <TextArea fx:id="templatesOutputText"
+                                                        accessibleText="Generated Templates output" editable="false"
+                                                        focusTraversable="true" text="Generate Project output to inspect it here."
+                                                        styleClass="output-text" wrapText="false" />
+                                            </content>
+                                        </Tab>
+                                        <Tab fx:id="morphsOutputTab" text="Morphs">
+                                            <content>
+                                                <TextArea fx:id="morphsOutputText"
+                                                        accessibleText="Generated Morphs output" editable="false"
+                                                        focusTraversable="true" text="Generate Project output to inspect it here."
+                                                        styleClass="output-text" wrapText="false" />
+                                            </content>
+                                        </Tab>
+                                        <Tab fx:id="bosOutputTab" text="BoS JSON">
+                                            <content>
+                                                <VBox spacing="6.0">
+                                                    <children>
+                                                        <Label labelFor="$bosArtifactChoice" mnemonicParsing="true"
+                                                                text="BoS Slider _Preset:" />
+                                                        <ComboBox fx:id="bosArtifactChoice"
+                                                                accessibleText="Generated BoS Slider Preset"
+                                                                maxWidth="Infinity" />
+                                                        <TextArea fx:id="bosOutputText"
+                                                                accessibleText="Generated BoS JSON output" editable="false"
+                                                                focusTraversable="true"
+                                                                text="Generate Project output to inspect it here."
+                                                                styleClass="output-text" wrapText="false"
+                                                                VBox.vgrow="ALWAYS" />
+                                                    </children>
+                                                </VBox>
+                                            </content>
+                                        </Tab>
+                                    </tabs>
+                                </TabPane>
                             </children>
                         </VBox>
                     </children>

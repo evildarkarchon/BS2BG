@@ -68,11 +68,11 @@ public final class WorkbenchNavigation {
         if (destination == Destination.OUTPUT) {
             if (outputDrawerVisible) {
                 outputDrawerVisible = false;
-                FocusTarget returnTarget = outputReturnTarget != null
-                        ? outputReturnTarget
-                        : new FocusTarget(activeArea, Landmark.PRIMARY_CONTENT);
+                FocusTarget returnTarget = outputReturnTarget;
                 outputReturnTarget = null;
-                return transition(returnTarget);
+                return returnTarget == null
+                        ? new Transition(currentFrame(), Optional.empty())
+                        : transition(returnTarget);
             }
             outputDrawerVisible = true;
             outputReturnTarget = currentFocus;
@@ -206,11 +206,11 @@ public final class WorkbenchNavigation {
         }
         if (outputDrawerVisible) {
             outputDrawerVisible = false;
-            FocusTarget returnTarget = outputReturnTarget != null
-                    ? outputReturnTarget
-                    : new FocusTarget(activeArea, Landmark.PRIMARY_CONTENT);
+            FocusTarget returnTarget = outputReturnTarget;
             outputReturnTarget = null;
-            return transition(returnTarget);
+            return returnTarget == null
+                    ? new Transition(currentFrame(), Optional.empty())
+                    : transition(returnTarget);
         }
         return new Transition(currentFrame(), Optional.empty());
     }

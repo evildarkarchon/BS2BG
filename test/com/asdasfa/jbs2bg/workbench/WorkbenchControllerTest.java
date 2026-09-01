@@ -43,6 +43,7 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Slider;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
@@ -924,12 +925,22 @@ class WorkbenchControllerTest {
         });
     }
 
-    /**
-     * Generated Output may reveal the drawer without moving focus away from the active editor.
-     */
+    /** Ctrl+G publishes all captured Output tabs through the central job without moving editor focus. */
     @Test
-    void automaticOutputRevealUsesTheProductionAdapterWithoutStealingFocus() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+    void generateRendersReadOnlyOutputTabsWithoutStealingFocus() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // This small generated Project settles before prolonged cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        flow.apply(SliderPresetEdits.create("Generated UI"));
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -938,16 +949,126 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             Scene scene = new Scene(root, 1300, 720);
             stage.setScene(scene);
-            controller.attach(flow, stage, new RecordingPlatform());
+            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
             stage.show();
 
             Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
             editor.requestFocus();
-            controller.revealGeneratedOutput("generated output");
+            sendControlKey(root, KeyCode.G);
+
+            Button generate = (Button) loader.getNamespace().get("generateOutputButton");
+            assertTrue(jobs.frame().active());
+            assertTrue(generate.isDisabled());
+            worker.runNext();
 
             assertTrue(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
-            assertEquals("generated output", ((TextArea) loader.getNamespace().get("outputText")).getText());
+            TabPane tabs = (TabPane) loader.getNamespace().get("outputTabs");
+            TextArea templates = (TextArea) loader.getNamespace().get("templatesOutputText");
+            TextArea morphs = (TextArea) loader.getNamespace().get("morphsOutputText");
+            TextArea bos = (TextArea) loader.getNamespace().get("bosOutputText");
+            assertEquals(3, tabs.getTabs().size());
+            assertTrue(templates.getText().startsWith("Generated UI="));
+            assertEquals("", morphs.getText());
+            assertFalse(bos.getText().isEmpty());
+            for (TextArea output : List.of(templates, morphs, bos)) {
+                assertFalse(output.isEditable());
+                assertTrue(output.isFocusTraversable());
+            }
             assertSame(editor, scene.getFocusOwner());
+            stage.close();
+        });
+    }
+
+    /** A Templates edit remains available during Generate and makes its captured completion stale and invisible. */
+    @Test
+    void projectEditDuringGenerateProducesStaleActivityWithoutRevealingOutput() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // This controlled stale completion never reaches prolonged cancellation.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        flow.apply(SliderPresetEdits.create("Captured UI"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300, 720);
+            stage.setScene(scene);
+            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            stage.show();
+            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
+            editor.requestFocus();
+
+            sendControlKey(root, KeyCode.G);
+            TextField name = (TextField) loader.getNamespace().get("sliderPresetNameInput");
+            Button create = (Button) loader.getNamespace().get("createSliderPresetButton");
+            assertFalse(create.isDisabled());
+            assertTrue(((Button) loader.getNamespace().get("importBodySlideButton")).isDisabled());
+            name.setText("Newer UI");
+            create.fire();
+            worker.runNext();
+
+            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
+            assertEquals("Generate Project output to inspect it here.",
+                    ((TextArea) loader.getNamespace().get("templatesOutputText")).getText());
+            JobCoordinator.Attempt stale = jobs.frame().attempt().orElseThrow();
+            assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, stale.lifecycle());
+            assertEquals(List.of("STALE_RESULT"), stale.diagnostics().stream()
+                    .map(JobCoordinator.Diagnostic::code).toList());
+            assertSame(editor, scene.getFocusOwner());
+            stage.close();
+        });
+    }
+
+    /** Cancel honours a queued Generate before work starts and never reveals or populates Output. */
+    @Test
+    void cancelledGeneratePublishesActivityWithoutOutput() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Pre-start cancellation settles without delayed status.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            stage.show();
+
+            sendControlKey(root, KeyCode.G);
+            Button cancel = (Button) loader.getNamespace().get("cancelOperationButton");
+            assertFalse(cancel.isDisabled());
+            cancel.fire();
+            worker.runNext();
+
+            assertEquals(JobCoordinator.Lifecycle.CANCELLED,
+                    jobs.frame().attempt().orElseThrow().lifecycle());
+            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
+            assertEquals("Generate Project output to inspect it here.",
+                    ((TextArea) loader.getNamespace().get("templatesOutputText")).getText());
+            @SuppressWarnings("unchecked")
+            ListView<WorkbenchFeedback.ActivityRecord> activity =
+                    (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+            assertEquals(WorkbenchFeedback.Disposition.CANCELLED, activity.getItems().getLast().disposition());
             stage.close();
         });
     }

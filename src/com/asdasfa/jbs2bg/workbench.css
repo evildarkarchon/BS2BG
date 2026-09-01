@@ -59,6 +59,31 @@
     -fx-font-weight: bold;
 }
 
+#workbenchRoot .output-text {
+    -fx-font-family: "Consolas";
+}
+
+#workbenchRoot .tab-pane > .tab-header-area > .headers-region > .tab {
+    -fx-background-color: -bs-surface;
+    -fx-border-color: -bs-border;
+    -fx-border-width: 1px;
+}
+
+#workbenchRoot .tab-pane > .tab-header-area > .headers-region > .tab:selected {
+    -fx-background-color: -bs-selection;
+    -fx-border-color: -bs-accent;
+    -fx-border-width: 1px 1px 3px 1px;
+}
+
+#workbenchRoot .tab-pane > .tab-header-area > .headers-region > .tab .tab-label {
+    -fx-text-fill: -bs-text;
+}
+
+#workbenchRoot .tab-pane:focused > .tab-header-area > .headers-region > .tab:selected {
+    -fx-border-color: -bs-focus;
+    -fx-border-width: 2px 2px 3px 2px;
+}
+
 #workbenchRoot .slider-choice-default-state {
     -fx-font-size: 11px;
 }
@@ -143,6 +168,14 @@
 
 #workbenchRoot:workbench-high-contrast .slider-choice-row {
     -fx-border-width: 2px;
+}
+
+#workbenchRoot:workbench-high-contrast .tab-pane > .tab-header-area > .headers-region > .tab {
+    -fx-border-width: 2px;
+}
+
+#workbenchRoot:workbench-high-contrast .tab-pane > .tab-header-area > .headers-region > .tab:selected {
+    -fx-border-width: 2px 2px 4px 2px;
 }
 
 #workbenchRoot:workbench-high-contrast .semantic-icon {

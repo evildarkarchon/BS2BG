@@ -90,6 +90,18 @@ class WorkbenchNavigationTest {
         assertTrue(revealed.focusTarget().isEmpty());
     }
 
+    /** Closing automatically revealed Output leaves the still-focused control untouched. */
+    @Test
+    void dismissingAutomaticOutputRevealHasNoFocusEffect() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        navigation.revealOutput();
+
+        WorkbenchNavigation.Transition dismissed = navigation.dismiss();
+
+        assertFalse(dismissed.frame().outputDrawerVisible());
+        assertTrue(dismissed.focusTarget().isEmpty());
+    }
+
     /**
      * F6 follows semantic landmark order through durable Activity and loops across the wide Workbench.
      */

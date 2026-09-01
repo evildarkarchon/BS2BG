@@ -17,6 +17,7 @@ import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
+import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 
 import javafx.application.Platform;
@@ -32,6 +33,8 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
@@ -83,6 +86,8 @@ public final class WorkbenchController {
     private MenuItem exitMenuItem;
     @FXML
     private Label areaTitle;
+    @FXML
+    private Button generateOutputButton;
     @FXML
     private Label projectStatusText;
     @FXML
@@ -274,11 +279,26 @@ public final class WorkbenchController {
     @FXML
     private Label outputFocusTarget;
     @FXML
-    private TextArea outputText;
+    private TabPane outputTabs;
+    @FXML
+    private Tab templatesOutputTab;
+    @FXML
+    private Tab morphsOutputTab;
+    @FXML
+    private Tab bosOutputTab;
+    @FXML
+    private TextArea templatesOutputText;
+    @FXML
+    private TextArea morphsOutputText;
+    @FXML
+    private ComboBox<String> bosArtifactChoice;
+    @FXML
+    private TextArea bosOutputText;
     private WorkbenchNavigation.Frame navigationFrame = navigation.currentFrame();
     private WorkbenchProjectFlow projectFlow;
     private TemplatesFeature templatesFeature;
     private SettingsFeature settingsFeature;
+    private OutputFeature outputFeature;
     private Stage stage;
     private WorkbenchPlatform platform;
     private JavaFxWorkbenchAppearance appearanceAdapter;
@@ -286,10 +306,12 @@ public final class WorkbenchController {
     private long renderedProjectSequence;
     private WorkbenchProjectFlow.Intent activeOperation;
     private JobCoordinator.Subscription jobSubscription;
+    private OutputFeature.Subscription outputSubscription;
     private long renderedTerminalAttemptId;
     private boolean closeAfterActiveJob;
     private boolean renderingTemplates;
     private boolean renderingSettings;
+    private boolean renderingOutput;
     private TextField activeRenameField;
     private SliderPresetCell activeRenameCell;
     private boolean templatesMutationsBlocked;
@@ -492,11 +514,14 @@ public final class WorkbenchController {
         projectFlow = Objects.requireNonNull(flow, "flow");
         templatesFeature = new TemplatesFeature(projectFlow, Clock.systemUTC());
         settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup, migrationPolicy);
+        outputFeature = new OutputFeature(projectFlow, () -> new OutputFeature.GenerationSettings(
+                Settings.snapshot(), settingsFeature.frame().omitRedundantSliders()));
         stage = Objects.requireNonNull(ownerStage, "ownerStage");
         platform = Objects.requireNonNull(platformAdapter, "platformAdapter");
         configureProjectCommands();
         configureTemplates();
         configureSettings();
+        configureOutput();
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
@@ -509,35 +534,24 @@ public final class WorkbenchController {
             }
         });
         jobSubscription = projectFlow.jobs().observe(this::renderJobFrame);
+        outputSubscription = outputFeature.observe(this::renderOutputUpdate);
         publishInitialSettingsEvidence();
         stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> {
             appearanceAdapter.close();
             jobSubscription.close();
+            outputSubscription.close();
         });
         renderedProjectSequence = projectFlow.frame().sequence();
         renderNavigation(navigationFrame);
         render(projectFlow.frame());
         renderTemplates(templatesFeature.frame());
+        renderOutput(outputFeature.frame());
         renderFeedback(feedback.frame());
         if (workbenchRoot.getWidth() > 0.0)
             applyNavigation(navigation.resize(workbenchRoot.getWidth(), currentSemanticFocus()));
         // attach happens before Stage.show in production, so initial focus is realized on the next JavaFX pulse.
         Platform.runLater(() -> requestFocus(new WorkbenchNavigation.FocusTarget(
                 navigationFrame.activeArea(), WorkbenchNavigation.Landmark.PRIMARY_CONTENT)));
-    }
-
-    /**
-     * Publishes freshly generated text and reveals Output without taking focus from the user's current Area.
-     *
-     * @param generatedOutput complete generated text to present in the drawer
-     * @throws NullPointerException  when generatedOutput is null
-     * @throws IllegalStateException when called off the JavaFX Application Thread
-     */
-    public void revealGeneratedOutput(String generatedOutput) {
-        if (!Platform.isFxApplicationThread())
-            throw new IllegalStateException("Generated Output must be revealed on the JavaFX Application Thread");
-        outputText.setText(Objects.requireNonNull(generatedOutput, "generatedOutput"));
-        applyNavigation(navigation.revealOutput());
     }
 
     /**
@@ -624,6 +638,82 @@ public final class WorkbenchController {
         renderSettings(settingsFeature.frame());
     }
 
+    /** Connects Generate, Output tabs, and BoS identity selection to the JavaFX-independent Output feature. */
+    private void configureOutput() {
+        generateOutputButton.setOnAction(event -> dispatchOutput(new OutputFeature.Generate()));
+        outputTabs.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
+            if (renderingOutput || selected == null)
+                return;
+            OutputFeature.Tab tab;
+            if (selected == templatesOutputTab)
+                tab = OutputFeature.Tab.TEMPLATES;
+            else if (selected == morphsOutputTab)
+                tab = OutputFeature.Tab.MORPHS;
+            else if (selected == bosOutputTab)
+                tab = OutputFeature.Tab.BOS_JSON;
+            else
+                return;
+            dispatchOutput(new OutputFeature.SelectTab(tab));
+        });
+        bosArtifactChoice.setOnAction(event -> {
+            if (!renderingOutput && bosArtifactChoice.getValue() != null)
+                dispatchOutput(new OutputFeature.SelectBosArtifact(bosArtifactChoice.getValue()));
+        });
+        renderOutput(outputFeature.frame());
+    }
+
+    /** Dispatches one Output task and renders synchronous selection updates; Generate completes via observation. */
+    private void dispatchOutput(OutputFeature.Intent intent) {
+        OutputFeature.Update update = outputFeature.dispatch(Objects.requireNonNull(intent, "intent"));
+        renderOutput(update.frame());
+    }
+
+    /** Applies one committed Output publication and consumes its optional drawer reveal exactly once. */
+    private void renderOutputUpdate(OutputFeature.Update update) {
+        renderOutput(Objects.requireNonNull(update, "update").frame());
+        update.effect().filter(effect -> effect.kind() == OutputFeature.EffectKind.REVEAL_DRAWER)
+                .ifPresent(effect -> applyNavigation(navigation.revealOutput()));
+    }
+
+    /** Renders accepted generated bytes and feature-owned tab/BoS identity without listener command loops. */
+    private void renderOutput(OutputFeature.Frame frame) {
+        renderingOutput = true;
+        try {
+            String emptyText = frame.displayedText();
+            frame.generatedOutput().ifPresentOrElse(output -> {
+                templatesOutputText.setText(output.getTemplatesText());
+                morphsOutputText.setText(output.getMorphsText());
+                bosArtifactChoice.getItems().setAll(frame.bosArtifactNames());
+                bosArtifactChoice.setValue(frame.selectedBosArtifact().orElse(null));
+                bosOutputText.setText(output.getBosJsonArtifacts().stream()
+                        .filter(artifact -> frame.selectedBosArtifact().stream().anyMatch(name ->
+                                name.equalsIgnoreCase(artifact.getSliderPresetName())))
+                        .findFirst().map(artifact -> artifact.getText())
+                        .orElse("No BoS JSON artifacts were generated."));
+            }, () -> {
+                templatesOutputText.setText(emptyText);
+                morphsOutputText.setText(emptyText);
+                bosArtifactChoice.getItems().clear();
+                bosArtifactChoice.setValue(null);
+                bosOutputText.setText(emptyText);
+            });
+            outputTabs.getSelectionModel().select(switch (frame.selectedTab()) {
+                case TEMPLATES -> templatesOutputTab;
+                case MORPHS -> morphsOutputTab;
+                case BOS_JSON -> bosOutputTab;
+            });
+            bosArtifactChoice.setDisable(frame.bosArtifactNames().isEmpty());
+            String freshness = switch (frame.freshness()) {
+                case EMPTY -> "No generated Output is available.";
+                case FRESH -> "Generated Output matches the current Project and Settings.";
+                case INVALIDATED -> "Project changed—Generate again.";
+            };
+            outputTabs.setAccessibleHelp(freshness);
+        } finally {
+            renderingOutput = false;
+        }
+    }
+
     /** Commits one Settings intent, publishes its reporting tier, and refreshes output-affecting Templates previews. */
     private void dispatchSettings(SettingsFeature.Intent intent) {
         if (settingsMutationsBlocked && isSettingsMutation(intent))
@@ -633,6 +723,8 @@ public final class WorkbenchController {
         publishSettingsOutcome(update);
         if (update.accepted() && update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED)
             renderTemplates(templatesFeature.refreshSettings().frame());
+        if (update.accepted())
+            renderOutput(outputFeature.refreshGenerationSettings().frame());
     }
 
     /** Distinguishes local profile browsing from operations that can change live or on-disk Settings. */
@@ -765,7 +857,8 @@ public final class WorkbenchController {
             saveSettingsButton.setDisable(settingsMutationsBlocked || !frame.dirty()
                     || !frame.validation().isEmpty());
             reloadSettingsButton.setDisable(settingsMutationsBlocked);
-            importBodySlideButton.setDisable(settingsMutationsBlocked || !frame.liveAvailable());
+            importBodySlideButton.setDisable(settingsMutationsBlocked || projectFlow.jobs().frame().active()
+                    || projectFlow.jobs().frame().shutdownRequested() || !frame.liveAvailable());
         } finally {
             renderingSettings = false;
         }
@@ -1524,6 +1617,11 @@ public final class WorkbenchController {
      * Translates one accepted key gesture into a typed navigation transition.
      */
     private void handleNavigationKey(KeyEvent event) {
+        if (event.isControlDown() && event.getCode() == KeyCode.G) {
+            dispatchOutput(new OutputFeature.Generate());
+            event.consume();
+            return;
+        }
         if (navigationFrame.activeArea() == WorkbenchNavigation.Area.TEMPLATES) {
             if (event.isControlDown() && event.getCode() == KeyCode.K) {
                 if (navigationFrame.narrowMode())
@@ -1720,7 +1818,10 @@ public final class WorkbenchController {
             landmark = WorkbenchNavigation.Landmark.INSPECTOR_LAUNCHER;
         } else if (focusOwner == outputAreaButton) {
             landmark = WorkbenchNavigation.Landmark.OUTPUT_LAUNCHER;
-        } else if (focusOwner == outputFocusTarget || focusOwner == outputText || focusOwner == outputDrawerHeight) {
+        } else if (focusOwner == outputFocusTarget || focusOwner == outputTabs
+                || focusOwner == templatesOutputText || focusOwner == morphsOutputText
+                || focusOwner == bosArtifactChoice || focusOwner == bosOutputText
+                || focusOwner == outputDrawerHeight) {
             landmark = WorkbenchNavigation.Landmark.OUTPUT;
         } else if (focusOwner == activityList) {
             landmark = WorkbenchNavigation.Landmark.ACTIVITY;
@@ -1875,6 +1976,8 @@ public final class WorkbenchController {
             renderTemplates(templatesFeature.acceptProjectFrame(frame, resetSelection).frame());
             resetTemplatesOnNextProjectFrame = false;
         }
+        if (outputFeature != null)
+            renderOutput(outputFeature.acceptProjectFrame(frame).frame());
         if (!frame.closed() && frame.sequence() != renderedProjectSequence) {
             renderedProjectSequence = frame.sequence();
             publishProjectFeedback(frame);
@@ -1887,13 +1990,18 @@ public final class WorkbenchController {
     private void renderJobFrame(JobCoordinator.Frame frame) {
         Objects.requireNonNull(frame, "frame");
         boolean blocked = frame.active() || frame.shutdownRequested();
-        templatesMutationsBlocked = blocked;
-        settingsMutationsBlocked = blocked;
+        boolean projectExclusive = frame.shutdownRequested() || frame.attempt().stream()
+                .filter(JobCoordinator.Attempt::active)
+                .anyMatch(attempt -> attempt.operation().consistencyClass()
+                        != JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED);
+        templatesMutationsBlocked = projectExclusive;
+        settingsMutationsBlocked = projectExclusive;
         newProjectMenuItem.setDisable(blocked);
         openProjectMenuItem.setDisable(blocked);
         saveProjectMenuItem.setDisable(blocked);
         saveAsProjectMenuItem.setDisable(blocked);
         importBodySlideButton.setDisable(blocked);
+        generateOutputButton.setDisable(blocked);
         renderTemplates(templatesFeature.frame());
         renderSettings(settingsFeature.frame());
         updateActivityRetry(activityList.getSelectionModel().getSelectedItem());

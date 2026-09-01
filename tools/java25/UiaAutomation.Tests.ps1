@@ -25,3 +25,9 @@ Describe 'UI Automation selection helpers' {
         Get-Command Get-UiaSelectionState -ErrorAction Stop | Should -Not -BeNullOrEmpty
     }
 }
+
+Describe 'UI Automation generated-text helpers' {
+    It 'exports read-only state inspection for packaged Output tests' {
+        Get-Command Get-UiaReadOnlyState -ErrorAction Stop | Should -Not -BeNullOrEmpty
+    }
+}

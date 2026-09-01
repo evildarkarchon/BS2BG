@@ -105,13 +105,20 @@ public final class JobCoordinator implements AutoCloseable {
      * Fully captured request for a new attempt; only the coordinator stamps retry linkage.
      */
     public record Submission<T>(Operation operation, Work<T> work, Completion<T> completion,
-                                Optional<RetryFactory<T>> retryFactory) {
+                                Optional<RetryFactory<T>> retryFactory, ResultResolver<T> resultResolver) {
+        /** Creates a request whose worker result needs no serialized freshness classification. */
+        public Submission(Operation operation, Work<T> work, Completion<T> completion,
+                          Optional<RetryFactory<T>> retryFactory) {
+            this(operation, work, completion, retryFactory, (attempt, result) -> result);
+        }
+
         /** Requires immutable operation context, executable callbacks, and an explicit retry capability. */
         public Submission {
             Objects.requireNonNull(operation, "operation");
             Objects.requireNonNull(work, "work");
             Objects.requireNonNull(completion, "completion");
             Objects.requireNonNull(retryFactory, "retryFactory");
+            Objects.requireNonNull(resultResolver, "resultResolver");
         }
     }
 
@@ -185,7 +192,13 @@ public final class JobCoordinator implements AutoCloseable {
      * Immutable captured operation identity and user-facing source/destination context.
      */
     public record Operation(String name, List<String> sourceLabels, List<String> destinationLabels,
-                            Optional<String> capturedBasis) {
+                            Optional<String> capturedBasis, ConsistencyClass consistencyClass) {
+        /** Creates a Project-exclusive operation, preserving the established default for lifecycle and import jobs. */
+        public Operation(String name, List<String> sourceLabels, List<String> destinationLabels,
+                         Optional<String> capturedBasis) {
+            this(name, sourceLabels, destinationLabels, capturedBasis, ConsistencyClass.PROJECT_EXCLUSIVE);
+        }
+
         /** Defensively owns labels and rejects incomplete operation descriptions. */
         public Operation {
             name = requireText(name, "name");
@@ -193,6 +206,7 @@ public final class JobCoordinator implements AutoCloseable {
             destinationLabels = copyText(destinationLabels, "destinationLabels");
             capturedBasis = Objects.requireNonNull(capturedBasis, "capturedBasis")
                     .map(value -> requireText(value, "capturedBasis value"));
+            Objects.requireNonNull(consistencyClass, "consistencyClass");
         }
     }
 
@@ -568,6 +582,24 @@ public final class JobCoordinator implements AutoCloseable {
      */
     private <T> void finishOnPublicationLane(Active<T> current, Result<T> supplied) {
         Result<T> result = supplied;
+        boolean cancellationWon;
+        synchronized (lock) {
+            if (closed || active != current) {
+                recordTechnical("JOB_STALE_COMPLETION_REJECTED",
+                        "A late worker completion was rejected for attempt " + current.id().value() + ".");
+                return;
+            }
+            cancellationWon = current.cancelRequested() && !current.commitStarted();
+        }
+        if (!cancellationWon) {
+            try {
+                result = Objects.requireNonNull(current.submission().resultResolver().resolve(current.id(), result),
+                        "Job result resolver returned null");
+            } catch (RuntimeException | LinkageError failure) {
+                result = Result.failed("The job result could not be finalized.", List.of(diagnostic(
+                        "JOB_RESULT_RESOLUTION_FAILED", "The serialized result resolver failed.", failure)));
+            }
+        }
         Frame published;
         synchronized (lock) {
             if (closed || active != current) {
@@ -742,6 +774,14 @@ public final class JobCoordinator implements AutoCloseable {
     }
 
     /**
+     * Operation consistency determines which immediate state may remain editable while one captured job runs.
+     */
+    public enum ConsistencyClass {
+        PROJECT_EXCLUSIVE,
+        SNAPSHOT_DERIVED
+    }
+
+    /**
      * Result of the cancellation linearization point.
      */
     public enum CancelResponse {
@@ -799,6 +839,20 @@ public final class JobCoordinator implements AutoCloseable {
          * Runs captured work and returns one truthful terminal result.
          */
         Result<T> run(Context context) throws Exception;
+    }
+
+    /**
+     * Classifies a worker result against current presentation state on the serialized publication lane.
+     * This is the freshness linearization point for snapshot-derived work.
+     */
+    @FunctionalInterface
+    public interface ResultResolver<T> {
+        /**
+         * @param attempt accepted coordinator attempt
+         * @param result  terminal worker result before current-state classification
+         * @return final terminal result committed to Activity
+         */
+        Result<T> resolve(AttemptId attempt, Result<T> result);
     }
 
     /**
