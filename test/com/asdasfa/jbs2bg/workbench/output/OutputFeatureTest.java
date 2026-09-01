@@ -381,6 +381,9 @@ class OutputFeatureTest {
         assertTrue(jobFrames.stream().flatMap(frame -> frame.attempt().stream())
                 .anyMatch(frame -> frame.progress().phase().equals("Staging Output artifacts")));
         assertTrue(jobFrames.stream().flatMap(frame -> frame.attempt().stream())
+                .anyMatch(frame -> frame.progress().phase().equals("Staging Output artifacts")
+                        && frame.progress().completedUnits().orElse(-1L).longValue() == 0L));
+        assertTrue(jobFrames.stream().flatMap(frame -> frame.attempt().stream())
                 .anyMatch(frame -> frame.lifecycle() == JobCoordinator.Lifecycle.FINISHING
                         && frame.progress().phase().equals("Publishing Output artifacts")));
     }

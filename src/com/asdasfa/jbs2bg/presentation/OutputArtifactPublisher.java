@@ -11,11 +11,10 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.concurrent.CancellationException;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -60,7 +59,15 @@ public final class OutputArtifactPublisher {
     }
 
     /**
-     * Package-private fault seam used to prove rollback without relying on operating-system timing or locks.
+     * Publishes through an injected same-filesystem atomic-move seam so rollback faults remain deterministic in
+     * tests without relying on operating-system timing or locks. Cancellation and commit ownership stay with the
+     * supplied context exactly as in the public overload.
+     *
+     * @param targetDirectory existing destination directory
+     * @param artifacts       complete accepted artifact set
+     * @param context         cancellation, progress, and commit-linearization receiver
+     * @param atomicMove      same-filesystem atomic replacement used for install and rollback
+     * @throws IOException when preflight, staging, replacement, or rollback fails
      */
     static void publishAll(Path targetDirectory, List<? extends OutputArtifact> artifacts,
                            PublicationContext context, AtomicMove atomicMove) throws IOException {
@@ -84,21 +91,20 @@ public final class OutputArtifactPublisher {
                                                PublicationContext context) throws IOException {
         List<? extends OutputArtifact> accepted = List.copyOf(Objects.requireNonNull(artifacts, "artifacts"));
         Map<String, List<Path>> existingByName = existingEntries(directory);
-        Map<String, OutputArtifact> artifactsByName = new HashMap<>();
+        Map<String, OutputArtifact> artifactsByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         List<Publication> publications = new ArrayList<>();
         for (int index = 0; index < accepted.size(); index++) {
             context.checkCancellation();
             OutputArtifact artifact = Objects.requireNonNull(accepted.get(index), "artifact");
             String fileName = artifact.getFileName();
             requireSafeWindowsLeaf(fileName);
-            String foldedName = fileName.toLowerCase(Locale.ROOT);
-            if (artifactsByName.put(foldedName, artifact) != null)
+            if (artifactsByName.put(fileName, artifact) != null)
                 throw new IOException("Output artifact filenames collide without regard to case: " + fileName);
 
             Path target = directory.resolve(fileName).normalize();
             if (!directory.equals(target.getParent()))
                 throw new IOException("Output artifact escapes the target directory: " + fileName);
-            List<Path> matches = existingByName.getOrDefault(foldedName, List.of());
+            List<Path> matches = existingByName.getOrDefault(fileName, List.of());
             if (matches.size() > 1)
                 throw new IOException("Output destination is ambiguous without regard to case: " + fileName);
             Path existing = matches.isEmpty() ? null : matches.getFirst();
@@ -113,10 +119,10 @@ public final class OutputArtifactPublisher {
 
     /** Indexes existing entries by Windows case-insensitive destination identity. */
     private static Map<String, List<Path>> existingEntries(Path directory) throws IOException {
-        Map<String, List<Path>> existingByName = new HashMap<>();
+        Map<String, List<Path>> existingByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         try (Stream<Path> entries = Files.list(directory)) {
             entries.forEach(path -> existingByName.computeIfAbsent(
-                    path.getFileName().toString().toLowerCase(Locale.ROOT), ignored -> new ArrayList<>()).add(path));
+                    path.getFileName().toString(), ignored -> new ArrayList<>()).add(path));
         }
         return existingByName;
     }
@@ -173,6 +179,7 @@ public final class OutputArtifactPublisher {
         boolean preserveRecoveryDirectory = false;
         Throwable publicationFailure = null;
         try {
+            context.beginStaging(publications.size());
             stageArtifacts(stagingDirectory, publications, context);
             context.checkCancellation();
             if (!context.beginCommit())
@@ -296,6 +303,11 @@ public final class OutputArtifactPublisher {
                 }
 
                 @Override
+                public void beginStaging(long totalArtifacts) {
+                    // Synchronous compatibility publication intentionally discards phase changes.
+                }
+
+                @Override
                 public void reportStaged(long completedArtifacts, long totalArtifacts) {
                     // Synchronous compatibility publication intentionally discards progress.
                 }
@@ -309,6 +321,9 @@ public final class OutputArtifactPublisher {
 
         /** Throws when cancellation has been accepted at the current pre-commit safe point. */
         void checkCancellation();
+
+        /** Announces the cancellable staging phase before the first accepted artifact byte is written. */
+        void beginStaging(long totalArtifacts);
 
         /** Reports one real staged artifact out of the immutable batch total. */
         void reportStaged(long completedArtifacts, long totalArtifacts);

@@ -70,6 +70,17 @@ final class OutputArtifactPublisherTest {
                 () -> OutputArtifactPublisher.publishAll(targetDirectory, List.of(alpha, colliding)));
     }
 
+    /** Unicode names that Java compares case-insensitively share one Windows destination identity. */
+    @Test
+    void rejectsUnicodeCaseInsensitiveArtifactCollisions(@TempDir Path targetDirectory) {
+        OutputArtifact ascii = new TestArtifact("s.json", "one");
+        OutputArtifact longS = new TestArtifact("\u017f.json", "two");
+
+        assertEquals(0, String.CASE_INSENSITIVE_ORDER.compare(ascii.getFileName(), longS.getFileName()));
+        assertThrows(IOException.class,
+                () -> OutputArtifactPublisher.publishAll(targetDirectory, List.of(ascii, longS)));
+    }
+
     /** Accepted cancellation after complete staging preserves prior destinations and removes staged bytes. */
     @Test
     void cancellationBeforeCommitPreservesEveryDestination(@TempDir Path targetDirectory) throws Exception {
@@ -83,6 +94,11 @@ final class OutputArtifactPublisherTest {
                     @Override
                     public void checkCancellation() {
                         // This test lets all cancellable preflight and staging work finish.
+                    }
+
+                    @Override
+                    public void beginStaging(long totalArtifacts) {
+                        assertEquals(output.getArtifacts().size(), totalArtifacts);
                     }
 
                     @Override
