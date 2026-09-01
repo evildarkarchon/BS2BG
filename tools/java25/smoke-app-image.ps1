@@ -971,14 +971,14 @@ try {
 
         $profileLabel = Find-OuterControl -ControlType 'Text' -Name 'Profile:'
         $profile = Get-FollowingControl -Element $profileLabel -ControlType 'ComboBox'
-        Send-UiaKeysToElement -Element $profile -Keys '{END}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $profile -Keys '{F4}{END}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaCondition -Description 'UUNP profile removes Standard-only synthesized choice' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {
             $standardOnly = Find-UiaElement -Root $script:mainWindow -Condition (
                 New-UiaCondition -ControlType 'CheckBox' -Name 'Enable Ankles in Slider Preset CBBE Curvy')
             if ($null -eq $standardOnly -and (Get-UiaSelectionState -Element $cbbe)) { $profile }
         } | Out-Null
-        Send-UiaKeysToElement -Element $profile -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $profile -Keys '{F4}{HOME}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'CheckBox' -Name 'Enable Ankles in Slider Preset CBBE Curvy') `
             -Description 'restored Standard profile synthesized choice' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
