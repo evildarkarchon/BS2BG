@@ -708,7 +708,7 @@ public final class WorkbenchController {
         };
         if (notification == null)
             return;
-        renderFeedback(bulk && update.outcomeKind() == TemplatesFeature.OutcomeKind.CHANGED
+        renderFeedback(bulk
                 ? feedback.publishActivity(notification)
                 : feedback.publishStatus(notification));
         if (update.outcomeKind() == TemplatesFeature.OutcomeKind.FAILED)
@@ -719,6 +719,7 @@ public final class WorkbenchController {
      * Realizes an unexpected synchronous Templates failure as the accepted focus-restoring failure dialog.
      */
     private void showTemplatesFailure(TemplatesFeature.Update update) {
+        Optional<SliderChoiceFocus> exactFocus = currentSliderChoiceFocus();
         WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
         String details = ProjectDiagnosticFormatter.format(update.frame().diagnostics());
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
@@ -730,7 +731,42 @@ public final class WorkbenchController {
         WorkbenchFeedback.DialogAction action = platform.completeFailure(spec, stage);
         renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
                 pending.token(), action)).frame());
-        requestFocus(returnTarget);
+        if (!restoreSliderChoiceFocus(exactFocus))
+            requestFocus(returnTarget);
+    }
+
+    /**
+     * Captures the focused Slider choice through semantic identities rather than retaining a JavaFX Node reference.
+     */
+    private Optional<SliderChoiceFocus> currentSliderChoiceFocus() {
+        Node focusOwner = stage != null && stage.getScene() != null ? stage.getScene().getFocusOwner() : null;
+        if (focusOwner == null)
+            return Optional.empty();
+        for (SliderChoiceRow row : sliderChoiceRowsByName.values()) {
+            Optional<SliderChoiceRow.FocusControl> control = row.focusedControl(focusOwner);
+            if (control.isPresent())
+                return Optional.of(new SliderChoiceFocus(row.choiceName(), control.orElseThrow()));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Restores one still-valid logical Slider row control after a failure dialog without silently retargeting.
+     */
+    private boolean restoreSliderChoiceFocus(Optional<SliderChoiceFocus> requested) {
+        if (requested.isEmpty())
+            return false;
+        SliderChoiceFocus focus = requested.orElseThrow();
+        SliderChoiceRow row = sliderChoiceRowsByName.get(focus.choiceName().toLowerCase(Locale.ROOT));
+        if (row == null)
+            return false;
+        Node control = row.control(focus.control());
+        if (!control.isVisible() || control.getParent() == null)
+            return false;
+        control.requestFocus();
+        if (!control.isFocused())
+            Platform.runLater(control::requestFocus);
+        return true;
     }
 
     /**
@@ -760,10 +796,13 @@ public final class WorkbenchController {
             templatesInfoBar.setVisible(validationVisible);
             if (validationVisible) {
                 String message = ProjectDiagnosticFormatter.format(frame.diagnostics());
-                templatesInfoBarCue.setText("Validation");
+                WorkbenchFeedback.Severity severity = frame.outcomeKind() == TemplatesFeature.OutcomeKind.FAILED
+                        ? WorkbenchFeedback.Severity.FAILURE
+                        : WorkbenchFeedback.Severity.VALIDATION;
+                templatesInfoBarCue.setText(severity.cue());
                 templatesInfoBarMessage.setText(message);
-                templatesInfoBar.setAccessibleHelp("Validation: " + message);
-                setSeverityStyle(templatesInfoBar, WorkbenchFeedback.Severity.VALIDATION);
+                templatesInfoBar.setAccessibleHelp(severity.cue() + ": " + message);
+                setSeverityStyle(templatesInfoBar, severity);
             }
             boolean selected = frame.selection().isPresent();
             createSliderPresetButton.setDisable(templatesMutationsBlocked);
@@ -1695,6 +1734,17 @@ public final class WorkbenchController {
         private OperationDescription {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(completedText, "completedText");
+        }
+    }
+
+    /**
+     * Semantic Slider row focus token retained only across one synchronous failure dialog.
+     */
+    private record SliderChoiceFocus(String choiceName, SliderChoiceRow.FocusControl control) {
+        /** Requires a complete logical row and editable-control identity. */
+        private SliderChoiceFocus {
+            Objects.requireNonNull(choiceName, "choiceName");
+            Objects.requireNonNull(control, "control");
         }
     }
 

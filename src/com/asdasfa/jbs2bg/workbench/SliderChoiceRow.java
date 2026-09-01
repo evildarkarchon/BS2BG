@@ -1,6 +1,7 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
@@ -8,6 +9,7 @@ import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
 import javafx.geometry.Pos;
 import javafx.scene.AccessibleRole;
+import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
@@ -160,9 +162,13 @@ final class SliderChoiceRow extends VBox {
             enabled.setSelected(choice.enabled());
             preview.setText(choice.previewText());
             preview.setAccessibleText(choice.name() + " BodyGen preview");
-            String omission = choice.enabled()
-                    ? "Included in generated output."
-                    : "Omitted from generated output because this choice is disabled.";
+            String omission;
+            if (!choice.enabled())
+                omission = "Omitted from generated output because this choice is disabled.";
+            else if (choice.redundantForGeneratedOutput())
+                omission = "Neutral for this profile; omitted when Omit Redundant Sliders is enabled and from BoS.";
+            else
+                omission = "Included in generated output.";
             String persistence;
             if (choice.omittedFromProjectFile())
                 persistence = " Synthesized profile default; omitted from the Project file until changed.";
@@ -219,5 +225,34 @@ final class SliderChoiceRow extends VBox {
     /** @return whether the supplied focus owner belongs to this row */
     boolean contains(javafx.scene.Node node) {
         return node == this || node == enabled || node == minimum || node == maximum || node == preview;
+    }
+
+    /** @return semantic row control currently focused, when the focus owner is editable */
+    Optional<FocusControl> focusedControl(Node focusOwner) {
+        if (focusOwner == enabled)
+            return Optional.of(FocusControl.ENABLED);
+        if (focusOwner == minimum)
+            return Optional.of(FocusControl.MINIMUM);
+        if (focusOwner == maximum)
+            return Optional.of(FocusControl.MAXIMUM);
+        return Optional.empty();
+    }
+
+    /** @return current JavaFX control for one semantic row-control identity */
+    Node control(FocusControl control) {
+        return switch (Objects.requireNonNull(control, "control")) {
+            case ENABLED -> enabled;
+            case MINIMUM -> minimum;
+            case MAXIMUM -> maximum;
+        };
+    }
+
+    /**
+     * Stable editable control families used to restore exact row focus after a modal failure.
+     */
+    enum FocusControl {
+        ENABLED,
+        MINIMUM,
+        MAXIMUM
     }
 }

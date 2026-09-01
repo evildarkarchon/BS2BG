@@ -53,6 +53,7 @@ public final class TemplatesFeature {
     private Instant lastTypeAhead;
     private RenameState rename;
     private GangFrame gang = GangFrame.inactive();
+    private OutcomeKind lastOutcomeKind = OutcomeKind.NONE;
     private long revision;
     private long nextObserverId = 1;
     private long nextEffectToken = 1;
@@ -159,6 +160,7 @@ public final class TemplatesFeature {
             gang = GangFrame.inactive();
             view.clearSelection();
         }
+        lastOutcomeKind = OutcomeKind.NONE;
         reconcile(projectFrame, projectFrame.diagnostics());
         return new Update(true, frame);
     }
@@ -265,7 +267,7 @@ public final class TemplatesFeature {
     private Update create(String name) {
         ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.create(name));
         boolean accepted = accepted(outcome);
-        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        reconcileOutcome(outcome);
         if (accepted) {
             String requestedIdentity = Objects.requireNonNull(name, "name").trim();
             view.select(NameIdentity.of(requestedIdentity));
@@ -284,7 +286,7 @@ public final class TemplatesFeature {
         ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.duplicate(
                 source.orElseThrow().getName(), name));
         boolean accepted = accepted(outcome);
-        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        reconcileOutcome(outcome);
         if (accepted) {
             view.select(NameIdentity.of(Objects.requireNonNull(name, "name").trim()));
             publish(projectFlow.frame().sequence(), outcome.getDiagnostics());
@@ -304,7 +306,7 @@ public final class TemplatesFeature {
         ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.setUunp(
                 selected.orElseThrow().getName(), Objects.requireNonNull(profile, "profile") == Profile.UUNP));
         boolean accepted = accepted(outcome);
-        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        reconcileOutcome(outcome);
         return outcomeUpdate(outcome);
     }
 
@@ -321,7 +323,7 @@ public final class TemplatesFeature {
             return new Update(false, frame);
         ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.setSliderChoice(
                 preset.getName(), choice.withEnabled(enabled)));
-        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        reconcileOutcome(outcome);
         return outcomeUpdate(outcome);
     }
 
@@ -338,7 +340,7 @@ public final class TemplatesFeature {
             return new Update(false, frame);
         ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.setSliderChoice(
                 preset.getName(), choice.withPercentageRange(minimum, maximum)));
-        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        reconcileOutcome(outcome);
         return outcomeUpdate(outcome);
     }
 
@@ -347,12 +349,18 @@ public final class TemplatesFeature {
      * untouched because they are omitted from generated output and are not operands of Set Sliders gang gestures.
      */
     private Update applyBulkValue(GangMode mode, int value) {
+        GangMode requestedMode = Objects.requireNonNull(mode, "mode");
+        return applyBulkValue(requestedMode, value, gang.withValue(requestedMode, value));
+    }
+
+    /**
+     * Applies one bulk transform while publishing the requested gang state only after a usable Project outcome.
+     */
+    private Update applyBulkValue(GangMode mode, int value, GangFrame requestedGang) {
         SliderPresetSnapshot preset = selectedPreset();
         if (preset == null)
             return new Update(false, frame);
-        GangMode requestedMode = Objects.requireNonNull(mode, "mode");
-        GangFrame requestedGang = gang.withValue(requestedMode, value);
-        UnaryOperator<SliderChoiceSnapshot> transform = switch (requestedMode) {
+        UnaryOperator<SliderChoiceSnapshot> transform = switch (mode) {
             case ALL -> choice -> choice.withPercentageRange(value, value);
             case MINIMUM -> choice -> choice.withPercentageRange(
                     Math.min(value, choice.getPercentageMaximum()), choice.getPercentageMaximum());
@@ -366,7 +374,7 @@ public final class TemplatesFeature {
                 new SliderPresetSnapshot(preset.getName(), preset.isUunp(), choices)));
         if (accepted(outcome))
             gang = requestedGang;
-        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        reconcileOutcome(outcome);
         return outcomeUpdate(outcome);
     }
 
@@ -377,8 +385,8 @@ public final class TemplatesFeature {
     private Update toggleGang(GangMode mode, boolean selected) {
         GangMode requestedMode = Objects.requireNonNull(mode, "mode");
         if (selected) {
-            gang = gang.activate(requestedMode);
-            return applyBulkValue(requestedMode, gang.value(requestedMode));
+            GangFrame activated = gang.activate(requestedMode);
+            return applyBulkValue(requestedMode, activated.value(requestedMode), activated);
         }
         if (!gang.activeMode().equals(Optional.of(requestedMode)))
             return new Update(false, frame);
@@ -451,7 +459,7 @@ public final class TemplatesFeature {
             rename = null;
         else
             rename = new RenameState(pending.identity(), pending.draft(), outcome.getDiagnostics());
-        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        reconcileOutcome(outcome);
         if (accepted) {
             view.select(NameIdentity.of(pending.draft().trim()));
             publish(projectFlow.frame().sequence(), outcome.getDiagnostics());
@@ -489,6 +497,7 @@ public final class TemplatesFeature {
     private Update dismissDiagnostics() {
         if (frame.diagnostics().isEmpty())
             return new Update(false, frame);
+        lastOutcomeKind = OutcomeKind.NONE;
         publish(frame.projectSequence(), List.of());
         return new Update(true, frame);
     }
@@ -532,7 +541,7 @@ public final class TemplatesFeature {
     private Update remove(NameIdentity identity) {
         ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.delete(identity.getName()));
         boolean accepted = accepted(outcome);
-        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        reconcileOutcome(outcome);
         return new Update(accepted, frame);
     }
 
@@ -543,7 +552,7 @@ public final class TemplatesFeature {
         ProjectOutcome outcome = projectFlow.apply(SliderPresetEdits.deleteAll(
                 identities.stream().map(NameIdentity::getName).toList()));
         boolean accepted = accepted(outcome);
-        reconcile(projectFlow.frame(), outcome.getDiagnostics());
+        reconcileOutcome(outcome);
         return new Update(accepted, frame);
     }
 
@@ -558,6 +567,14 @@ public final class TemplatesFeature {
                         .flatMap(npc -> npc.getSliderPresetNames().stream()))
                 .filter(name -> NameIdentity.of(name).equals(identity))
                 .count();
+    }
+
+    /**
+     * Classifies one exact Project outcome before publishing the immutable feature frame that owns its feedback.
+     */
+    private void reconcileOutcome(ProjectOutcome outcome) {
+        lastOutcomeKind = outcomeKind(Objects.requireNonNull(outcome, "outcome"));
+        reconcile(projectFlow.frame(), outcome.getDiagnostics());
     }
 
     /**
@@ -607,7 +624,7 @@ public final class TemplatesFeature {
      */
     private void publish(long projectSequence, List<ProjectDiagnostic> diagnostics) {
         frame = new Frame(++revision, projectSequence, view.visibleSet().getRows(), view.getSelection(), filterText,
-                sortOrder, Optional.ofNullable(rename), editorFrame(), diagnostics);
+                sortOrder, Optional.ofNullable(rename), editorFrame(), lastOutcomeKind, diagnostics);
         publishing = true;
         try {
             for (Consumer<Frame> observer : List.copyOf(observers.values())) {
@@ -646,7 +663,8 @@ public final class TemplatesFeature {
         return new ChoiceFrame(choice.getName(), choice.isEnabled(), choice.getPercentageMinimum(),
                 choice.getPercentageMaximum(), ProjectOutputFormatter.formatSliderChoicePreview(choice, uunp),
                 choice.isMissingDefault(), choice.isMissingDefault() && choice.isEnabled()
-                && choice.getPercentageMinimum() == 100 && choice.getPercentageMaximum() == 100, choice);
+                && choice.getPercentageMinimum() == 100 && choice.getPercentageMaximum() == 100,
+                choice.isEnabled() && ProjectOutputFormatter.isSliderChoiceRedundant(choice, uunp), choice);
     }
 
     /**
@@ -1018,10 +1036,12 @@ public final class TemplatesFeature {
      * @param previewText        exact BodyGen choice text for the current profile
      * @param synthesizedDefault whether the choice is an omitted, profile-synthesized default until changed
      * @param omittedFromProjectFile whether canonical persistence currently omits this unchanged synthesized default
+     * @param redundantForGeneratedOutput whether profile-neutral output may omit this enabled choice
      * @param snapshot           exact immutable Project value used for truthful drag preview
      */
     public record ChoiceFrame(String name, boolean enabled, int minimum, int maximum, String previewText,
                               boolean synthesizedDefault, boolean omittedFromProjectFile,
+                              boolean redundantForGeneratedOutput,
                               SliderChoiceSnapshot snapshot) {
         /** Requires complete immutable row text. */
         public ChoiceFrame {
@@ -1089,12 +1109,13 @@ public final class TemplatesFeature {
      * @param sortOrder      retained name presentation order
      * @param rename         inline rename draft and validation, when active
      * @param editor         selected Slider Preset editor projection, when present and visible
+     * @param outcomeKind    exact terminal classification of the latest Project-backed Templates intent
      * @param diagnostics    structured diagnostics from the most recent feature edit
      */
     public record Frame(long revision, long projectSequence, List<SliderPresetSnapshot> visiblePresets,
                         Optional<NameIdentity> selection, String filterText, SortOrder sortOrder,
                         Optional<RenameState> rename, Optional<EditorFrame> editor,
-                        List<ProjectDiagnostic> diagnostics) {
+                        OutcomeKind outcomeKind, List<ProjectDiagnostic> diagnostics) {
         /** Defensively owns all immutable frame collections and optionals. */
         public Frame {
             if (revision <= 0)
@@ -1107,6 +1128,7 @@ public final class TemplatesFeature {
             Objects.requireNonNull(sortOrder, "sortOrder");
             Objects.requireNonNull(rename, "rename");
             Objects.requireNonNull(editor, "editor");
+            Objects.requireNonNull(outcomeKind, "outcomeKind");
             diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "diagnostics"));
         }
     }

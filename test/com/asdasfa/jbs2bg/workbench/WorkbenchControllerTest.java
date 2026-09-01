@@ -137,6 +137,10 @@ class WorkbenchControllerTest {
                 assertEquals("Slider choice Waist in Slider Preset Alpha", waist.getAccessibleText());
                 assertEquals("Waist@0.8", waist.previewControl().getText());
                 assertEquals("Waist Minimum in Slider Preset Alpha", waist.minimumControl().getAccessibleText());
+                waist.minimumControl().requestFocus();
+                assertEquals(SliderChoiceRow.FocusControl.MINIMUM,
+                        waist.focusedControl(scene.getFocusOwner()).orElseThrow());
+                assertSame(waist.minimumControl(), waist.control(SliderChoiceRow.FocusControl.MINIMUM));
                 CheckBox enabled = waist.enabledControl();
                 enabled.requestFocus();
                 enabled.fire();

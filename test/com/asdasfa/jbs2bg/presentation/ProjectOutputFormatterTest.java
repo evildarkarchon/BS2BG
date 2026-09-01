@@ -174,14 +174,15 @@ class ProjectOutputFormatterTest {
         ProjectSession session = ProjectSessions.create();
         session.newProject();
         session.apply(SliderPresetEdits.create("Preset"));
-        session.apply(SliderPresetEdits.setSliderChoice("Preset",
-                choice("Inverted", true, 100, 100, 100, 100)));
+        SliderChoiceSnapshot inverted = choice("Inverted", true, 100, 100, 100, 100);
+        session.apply(SliderPresetEdits.setSliderChoice("Preset", inverted));
 
         ProjectGeneratedOutput output = ProjectOutputFormatter.generate(session.getSnapshot(), true);
         String bos = artifactNamed(output, "Preset.json").getText();
 
         assertEquals("Preset=", output.getTemplatesText());
         assertTrue(bos.contains("\"slidersnumber\": 0"));
+        assertTrue(ProjectOutputFormatter.isSliderChoiceRedundant(inverted, false));
     }
 
     /**

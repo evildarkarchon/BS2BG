@@ -920,6 +920,14 @@ try {
             if ((Get-UiaRangeValue -Element $waistMinimum) -eq 25 `
                     -and $waistPreview.Current.HelpText.Contains('Waist@0.35:0.74')) { $waistMinimum }
         } | Out-Null
+        Send-UiaKeysToElement -Element $waistMaximum -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'reversed range gesture clamps without losing focus or selection' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaRangeValue -Element $waistMaximum) -eq 25 `
+                    -and $waistMaximum.Current.HasKeyboardFocus `
+                    -and (Get-UiaSelectionState -Element $cbbe)) { $waistMaximum }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $waistMaximum -Keys '{END}' -TimeoutSeconds $StepTimeoutSeconds
         Send-UiaKeysToElement -Element $waistEnabled -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaCondition -Description 'disabled Waist omission state' -TimeoutSeconds $StepTimeoutSeconds -Test {
             if ((Get-UiaToggleState -Element $waistEnabled) -eq 'Off' `
@@ -1146,6 +1154,33 @@ try {
             -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (Get-UiaSelectionState -Element $reopenedCbbe) { $reopenedCbbe }
         } | Out-Null
+        $reopenedWaistMinimum = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Slider' -Name 'Waist Minimum in Slider Preset CBBE Curvy') `
+            -Description 'reopened Waist minimum' -TimeoutSeconds $StepTimeoutSeconds
+        $reopenedWaistMaximum = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Slider' -Name 'Waist Maximum in Slider Preset CBBE Curvy') `
+            -Description 'reopened Waist maximum' -TimeoutSeconds $StepTimeoutSeconds
+        $reopenedWaistPreview = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Waist BodyGen preview') `
+            -Description 'reopened Waist preview' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'CheckBox' -Name 'Enable Ankles in Slider Preset CBBE Curvy') `
+            -Description 'reopened Standard profile choice' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        if ((Get-UiaRangeValue -Element $reopenedWaistMinimum) -ne 50 `
+                -or (Get-UiaRangeValue -Element $reopenedWaistMaximum) -ne 50 `
+                -or -not $reopenedWaistPreview.Current.HelpText.Contains('Waist@0.5')) {
+            throw 'Reopened Slider choice range or exact BodyGen preview did not match the saved edit.'
+        }
+        Set-SystemHighContrast -Enabled:$true
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
+            -Description 'Slider editor High Contrast state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $templatesEditorHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-templates-editor-high-contrast.png'
+        Save-Screenshot -Path $templatesEditorHighContrastScreenshot
+        Set-SystemHighContrast -Enabled:$false
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
+            -Description 'Slider editor theme restored after High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $templatesNarrow = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
             -TimeoutSeconds $StepTimeoutSeconds
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
@@ -1157,11 +1192,17 @@ try {
         # JavaFX reports stale descendant bounds after overlay reparenting; the named scroll boundary plus focus is
         # the reliable clipping/reachability evidence for this surface.
         Assert-ControlInsideClient -Element $templatesSurface -Metrics $templatesNarrow
+        Assert-ControlInsideClient -Element $reopenedWaistMinimum -Metrics $templatesNarrow
         $templatesNarrowScreenshot = Join-Path $diagnosticsDir 'workbench-templates-narrow.png'
         Save-Screenshot -Path $templatesNarrowScreenshot
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-FocusedControl -ControlType 'Button' -Name 'Rename Slider Preset CBBE Curvy' | Out-Null
+        $narrowGangMinimum = Find-OuterControl -ControlType 'CheckBox' `
+            -Name 'Gang all minimum Slider choice values'
+        $narrowGangMinimum.SetFocus()
+        Wait-UiaKeyboardFocus -Element $narrowGangMinimum -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Assert-ControlInsideClient -Element $narrowGangMinimum -Metrics (Get-UiaWindowMetrics -Window $script:mainWindow)
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
 
         $templatesMinimum = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 700 -LogicalHeight 500 `
@@ -1175,6 +1216,7 @@ try {
         $templatesMinimum = Get-UiaWindowMetrics -Window $script:mainWindow
         $templatesSurface = Find-OuterControl -ControlType 'Pane' -Name 'Slider Preset management'
         Assert-ControlInsideClient -Element $templatesSurface -Metrics $templatesMinimum
+        Assert-ControlInsideClient -Element $reopenedWaistMinimum -Metrics $templatesMinimum
         $clear.SetFocus()
         Wait-UiaKeyboardFocus -Element $clear -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         if ($clear.Current.IsOffscreen) { throw 'Clear visible Slider Presets is offscreen at the minimum geometry.' }
@@ -1198,6 +1240,7 @@ try {
             profile = 'Standard'
             editedChoice = 'Waist@50:50'
             gangModes = @('All-Min', 'All-Max')
+            rangeValidation = 'reversed maximum clamped to minimum'
         }
         'pointer-free Slider choice/profile/gang editing, browse, validation, management, and reopen passed'
     }

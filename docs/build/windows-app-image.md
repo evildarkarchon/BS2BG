@@ -113,7 +113,7 @@ workflow records these steps:
    overlays through Ctrl+K/F7/Escape, enforce the 800x600 logical-client minimum, and keep editor/drawer controls
    inside the measured client rectangle.
 7. Open the representative Project and, without pointer activation, edit an exact Slider choice, verify truthful
-   BodyGen preview and disabled omission, apply atomic 50-All, exercise mutually exclusive All-Min/All-Max gang
+   BodyGen preview, reversed-range validation, and disabled omission, apply atomic 50-All, exercise mutually exclusive All-Min/All-Max gang
    locking, switch Standard/UUNP profiles, and preserve selection and focus. Then browse exact Slider Preset
    identities; filter, sort, and type ahead in visible order; reject duplicate create/rename; duplicate and
    inline-rename with F2; Cancel then confirm Remove and Clear Visible; verify stable selection, complete
@@ -140,7 +140,8 @@ launcher stdout/stderr. Because real accelerators and focus are used, the deskto
 The smoke evidence schema is `bs2bg.windows-app-image-smoke/12`; its durable artifacts include the Workbench,
 responsive, and Templates-management UIA trees plus `workbench-high-contrast.png` and
 `workbench-reduced-motion.png`, the populated Templates High Contrast screenshot
-`workbench-templates-high-contrast.png`, and the narrow Templates clipping screenshot
+`workbench-templates-high-contrast.png`, the selected Slider editor High Contrast screenshot
+`workbench-templates-editor-high-contrast.png`, and the narrow Templates clipping screenshot
 `workbench-templates-narrow.png`. The accessibility
 preference changes use documented Windows SPI calls and restore the exact original state in `finally`; see
 [workbench-platform.md](workbench-platform.md).

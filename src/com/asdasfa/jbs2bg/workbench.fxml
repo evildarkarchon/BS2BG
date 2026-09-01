@@ -235,7 +235,7 @@
                                                 </StackPane>
                                                 <VBox fx:id="inspectorPane" accessibleText="Templates inspector"
                                                         minWidth="180.0" prefWidth="240.0" spacing="8.0"
-                                                    styleClass="placeholder-pane">
+                                                        styleClass="placeholder-pane">
                                                     <children>
                                                         <ScrollPane fx:id="templatesInspectorScroll"
                                                                 accessibleText="Templates inspector controls"
@@ -279,15 +279,15 @@
                                                                         <HBox spacing="4.0">
                                                                             <children>
                                                                                 <Button fx:id="zeroAllMinimumButton"
-                                                                                        accessibleText="Set all Slider choice minimum values to 0 percent"
+                                                                                        accessibleText="Set all Slider choice minimum values toward 0 percent without crossing each maximum"
                                                                                         maxWidth="Infinity" text="0 All-Min"
                                                                                         HBox.hgrow="ALWAYS" />
                                                                                 <Button fx:id="fiftyAllMinimumButton"
-                                                                                        accessibleText="Set all Slider choice minimum values to 50 percent"
+                                                                                        accessibleText="Set all Slider choice minimum values toward 50 percent without crossing each maximum"
                                                                                         maxWidth="Infinity" text="50 All-Min"
                                                                                         HBox.hgrow="ALWAYS" />
                                                                                 <Button fx:id="hundredAllMinimumButton"
-                                                                                        accessibleText="Set all Slider choice minimum values to 100 percent"
+                                                                                        accessibleText="Set all Slider choice minimum values toward 100 percent without crossing each maximum"
                                                                                         maxWidth="Infinity" text="100 All-Min"
                                                                                         HBox.hgrow="ALWAYS" />
                                                                             </children>
@@ -295,15 +295,15 @@
                                                                         <HBox spacing="4.0">
                                                                             <children>
                                                                                 <Button fx:id="zeroAllMaximumButton"
-                                                                                        accessibleText="Set all Slider choice maximum values to 0 percent"
+                                                                                        accessibleText="Set all Slider choice maximum values toward 0 percent without crossing each minimum"
                                                                                         maxWidth="Infinity" text="0 All-Max"
                                                                                         HBox.hgrow="ALWAYS" />
                                                                                 <Button fx:id="fiftyAllMaximumButton"
-                                                                                        accessibleText="Set all Slider choice maximum values to 50 percent"
+                                                                                        accessibleText="Set all Slider choice maximum values toward 50 percent without crossing each minimum"
                                                                                         maxWidth="Infinity" text="50 All-Max"
                                                                                         HBox.hgrow="ALWAYS" />
                                                                                 <Button fx:id="hundredAllMaximumButton"
-                                                                                        accessibleText="Set all Slider choice maximum values to 100 percent"
+                                                                                        accessibleText="Set all Slider choice maximum values toward 100 percent without crossing each minimum"
                                                                                         maxWidth="Infinity" text="100 All-Max"
                                                                                         HBox.hgrow="ALWAYS" />
                                                                             </children>
@@ -317,6 +317,7 @@
                                                                                 max="100.0" min="0.0" value="100.0" />
                                                                         <Label fx:id="gangAllValue" text="100%" />
                                                                         <CheckBox fx:id="gangMinimumCheck"
+                                                                                accessibleHelp="Minimum values stop at each Slider choice maximum."
                                                                                 accessibleText="Gang all minimum Slider choice values"
                                                                                 mnemonicParsing="true" text="Gang All _Minimum" />
                                                                         <Slider fx:id="gangMinimumSlider"
@@ -325,6 +326,7 @@
                                                                                 max="100.0" min="0.0" value="100.0" />
                                                                         <Label fx:id="gangMinimumValue" text="100%" />
                                                                         <CheckBox fx:id="gangMaximumCheck"
+                                                                                accessibleHelp="Maximum values stop at each Slider choice minimum."
                                                                                 accessibleText="Gang all maximum Slider choice values"
                                                                                 mnemonicParsing="true" text="Gang All Ma_ximum" />
                                                                         <Slider fx:id="gangMaximumSlider"

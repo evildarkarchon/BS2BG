@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg.workbench.templates;
 
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -9,7 +10,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.nio.file.Path;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -25,18 +25,18 @@ import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
-import com.asdasfa.jbs2bg.project.ProjectDiagnosticCodes;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
+import com.asdasfa.jbs2bg.project.ProjectDiagnosticCodes;
 import com.asdasfa.jbs2bg.project.ProjectEdit;
 import com.asdasfa.jbs2bg.project.ProjectOperationContext;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
-import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
-import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
+import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -211,12 +211,17 @@ class TemplatesFeatureTest {
 
         TemplatesFeature.Update failed = feature.dispatch(
                 new TemplatesFeature.SetChoiceRange("Waist", 25, 75));
+        TemplatesFeature.Update failedGang = feature.dispatch(
+                new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.MINIMUM, true));
 
         assertEquals(TemplatesFeature.OutcomeKind.FAILED, failed.outcomeKind());
         assertEquals(NameIdentity.of("Alpha"), failed.frame().selection().orElseThrow());
         assertEquals(100, choiceNamed(failed.frame(), "Waist").minimum());
         assertEquals(100, choiceNamed(failed.frame(), "Waist").maximum());
         assertEquals("TEST_SLIDER_EDIT_FAILURE", failed.frame().diagnostics().get(0).getCode());
+        assertEquals(TemplatesFeature.OutcomeKind.FAILED, failedGang.outcomeKind());
+        assertTrue(failedGang.frame().editor().orElseThrow().gang().activeMode().isEmpty());
+        assertFalse(failedGang.frame().editor().orElseThrow().gang().rowsLocked());
     }
 
     /**

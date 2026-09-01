@@ -148,7 +148,7 @@ public final class ProjectOutputFormatter {
     private static String formatTemplateLine(SliderPresetSnapshot preset, boolean omitRedundantSliders) {
         List<String> values = new ArrayList<>();
         for (SliderChoiceSnapshot choice : enabledChoices(preset)) {
-            if (!omitRedundantSliders || !isRedundant(choice, preset.isUunp()))
+            if (!omitRedundantSliders || !isSliderChoiceRedundant(choice, preset.isUunp()))
                 values.add(formatSliderChoicePreview(choice, preset.isUunp()));
         }
         return preset.getName() + "=" + String.join(", ", values);
@@ -160,7 +160,7 @@ public final class ProjectOutputFormatter {
     private static Utf8Json formatBosJson(SliderPresetSnapshot preset) {
         List<SliderChoiceSnapshot> included = new ArrayList<>();
         for (SliderChoiceSnapshot choice : enabledChoices(preset)) {
-            if (!isRedundant(choice, preset.isUunp()))
+            if (!isSliderChoiceRedundant(choice, preset.isUunp()))
                 included.add(choice);
         }
 
@@ -238,9 +238,16 @@ public final class ProjectOutputFormatter {
     }
 
     /**
-     * Reports whether a choice matches the legacy neutral endpoint for its inversion.
+     * Reports whether one Slider choice matches the legacy neutral endpoint for its selected profile inversion.
+     * Such enabled choices are omitted when Omit Redundant Sliders is selected and are always omitted from BoS.
+     *
+     * @param choice immutable Slider choice to inspect
+     * @param uunp   whether the containing Slider Preset uses the UUNP Settings profile
+     * @return whether both effective endpoints equal the profile's neutral endpoint
+     * @throws NullPointerException when choice is null
      */
-    private static boolean isRedundant(SliderChoiceSnapshot choice, boolean uunp) {
+    public static boolean isSliderChoiceRedundant(SliderChoiceSnapshot choice, boolean uunp) {
+        Objects.requireNonNull(choice, "choice");
         int small = choice.getEffectiveSmallValue();
         int big = choice.getEffectiveBigValue();
         int neutral = isInverted(choice.getName(), uunp) ? 100 : 0;
