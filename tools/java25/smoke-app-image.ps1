@@ -989,7 +989,7 @@ try {
         $templatesRail.SetFocus()
         foreach ($target in @(
                 @{ Role = 'List'; Name = 'Slider Presets' },
-                @{ Role = 'CheckBox'; Name = 'Enable Waist in Slider Preset CBBE Curvy' },
+                @{ Role = 'CheckBox'; Name = 'Enable Ankles in Slider Preset CBBE Curvy' },
                 @{ Role = 'Button'; Name = 'Rename Slider Preset CBBE Curvy' })) {
             Send-UiaKeys -ProcessId $script:app.Id -Keys '{F6}' -TimeoutSeconds $StepTimeoutSeconds
             Wait-FocusedControl -ControlType $target.Role -Name $target.Name | Out-Null
