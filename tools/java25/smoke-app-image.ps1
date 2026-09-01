@@ -968,6 +968,12 @@ try {
                 $waistEnabled
             }
         } | Out-Null
+        Send-UiaKeysToElement -Element $fiftyAll -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'final atomic 50 All state for persistence' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaRangeValue -Element $waistMinimum) -eq 50 `
+                    -and (Get-UiaRangeValue -Element $waistMaximum) -eq 50) { $fiftyAll }
+        } | Out-Null
 
         $profileLabel = Find-OuterControl -ControlType 'Text' -Name 'Profile:'
         $profile = Get-FollowingControl -Element $profileLabel -ControlType 'ComboBox'
@@ -1193,7 +1199,11 @@ try {
         # JavaFX reports stale descendant bounds after overlay reparenting; the named scroll boundary plus focus is
         # the reliable clipping/reachability evidence for this surface.
         Assert-ControlInsideClient -Element $templatesSurface -Metrics $templatesNarrow
-        Assert-ControlInsideClient -Element $reopenedWaistMinimum -Metrics $templatesNarrow
+        $reopenedWaistMinimum.SetFocus()
+        Wait-UiaKeyboardFocus -Element $reopenedWaistMinimum -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-UiaCondition -Description 'narrow Waist row scrolled into view' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (-not $reopenedWaistMinimum.Current.IsOffscreen) { $reopenedWaistMinimum }
+        } | Out-Null
         $templatesNarrowScreenshot = Join-Path $diagnosticsDir 'workbench-templates-narrow.png'
         Save-Screenshot -Path $templatesNarrowScreenshot
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
@@ -1217,7 +1227,12 @@ try {
         $templatesMinimum = Get-UiaWindowMetrics -Window $script:mainWindow
         $templatesSurface = Find-OuterControl -ControlType 'Pane' -Name 'Slider Preset management'
         Assert-ControlInsideClient -Element $templatesSurface -Metrics $templatesMinimum
-        Assert-ControlInsideClient -Element $reopenedWaistMinimum -Metrics $templatesMinimum
+        $reopenedWaistMinimum.SetFocus()
+        Wait-UiaKeyboardFocus -Element $reopenedWaistMinimum -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-UiaCondition -Description 'minimum-geometry Waist row scrolled into view' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (-not $reopenedWaistMinimum.Current.IsOffscreen) { $reopenedWaistMinimum }
+        } | Out-Null
         $clear.SetFocus()
         Wait-UiaKeyboardFocus -Element $clear -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         if ($clear.Current.IsOffscreen) { throw 'Clear visible Slider Presets is offscreen at the minimum geometry.' }
