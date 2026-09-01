@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -422,7 +421,7 @@ class OutputFeatureTest {
         assertEquals(JobCoordinator.Lifecycle.COMPLETED, retried.lifecycle());
         assertEquals(failed.id(), retried.retryOf().orElseThrow());
         assertEquals(feature.frame().generatedOutput().orElseThrow().getTemplatesText(),
-                Files.readString(temporaryDirectory.resolve("templates.ini"), StandardCharsets.UTF_8));
+                Files.readString(temporaryDirectory.resolve("templates.ini")));
     }
 
     /** Selected BoS export preserves a case-insensitive JSON extension and adds one only when absent. */

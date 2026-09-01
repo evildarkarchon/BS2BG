@@ -1,9 +1,12 @@
 package com.asdasfa.jbs2bg.json;
 
+import java.io.Serial;
+
 /**
  * Stable repository diagnostic translated from JSON syntax, schema, and resource failures.
  */
 final class JsonFormatException extends RuntimeException {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private final String code;

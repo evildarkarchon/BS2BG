@@ -201,7 +201,7 @@ final class SettingsPairPublisherTest {
         assertTrue(failure.getSuppressed().length > 0);
         Settings.InitializationResult recovered = Settings.initialize(directory);
         assertTrue(recovered.isSuccessful());
-        assertEquals("SETTINGS_PUBLICATION_RECOVERED", recovered.getDiagnostics().get(0).getCode());
+        assertEquals("SETTINGS_PUBLICATION_RECOVERED", recovered.getDiagnostics().getFirst().getCode());
         assertArrayEquals(priorStandard, Files.readAllBytes(standard));
         assertArrayEquals(priorUunp, Files.readAllBytes(uunp));
         assertNoTransactions(directory);
@@ -244,7 +244,7 @@ final class SettingsPairPublisherTest {
         Settings.InitializationResult recovered = Settings.initialize(directory);
 
         assertTrue(recovered.isSuccessful());
-        assertEquals("SETTINGS_PUBLICATION_RECOVERED", recovered.getDiagnostics().get(0).getCode());
+        assertEquals("SETTINGS_PUBLICATION_RECOVERED", recovered.getDiagnostics().getFirst().getCode());
         assertArrayEquals(priorStandard, Files.readAllBytes(standard));
         assertArrayEquals(priorUunp, Files.readAllBytes(uunp));
         assertNoTransactions(directory);

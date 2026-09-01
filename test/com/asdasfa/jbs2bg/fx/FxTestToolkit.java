@@ -68,10 +68,10 @@ public final class FxTestToolkit {
         });
         await(done, "JavaFX test body");
         Throwable thrown = failure.get();
-        if (thrown instanceof Exception)
-            throw (Exception) thrown;
-        if (thrown instanceof Error)
-            throw (Error) thrown;
+        if (thrown instanceof Exception exception)
+            throw exception;
+        if (thrown instanceof Error error)
+            throw error;
         if (thrown != null)
             throw new AssertionError(thrown);
     }

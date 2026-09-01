@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg.presentation;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -7,6 +8,7 @@ import java.util.Objects;
  * Structured reason one complete BoS generation or publication command was rejected.
  */
 public final class BosOutputDiagnostic implements Serializable {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private final String code;

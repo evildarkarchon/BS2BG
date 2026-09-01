@@ -10,7 +10,6 @@ import java.lang.reflect.Modifier;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -37,7 +36,7 @@ class LauncherTest {
      * The directory javac emitted production classes into (target/classes), located from a production class.
      */
     private static Path productionClassesRoot() throws URISyntaxException {
-        Path root = Paths.get(ProjectSession.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Path root = Path.of(ProjectSession.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         assertTrue(Files.isDirectory(root), "production classes must be on the test classpath as a directory: " + root);
         return root;
     }

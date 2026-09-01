@@ -121,7 +121,7 @@ final class ProjectJacksonCompatibilityTest {
      */
     private static void assertSemanticFixture(ProjectSnapshot snapshot) {
         assertEquals(2, snapshot.getSliderPresets().size());
-        SliderPresetSnapshot cbbe = snapshot.getSliderPresets().get(0);
+        SliderPresetSnapshot cbbe = snapshot.getSliderPresets().getFirst();
         assertEquals("CBBE Curvy", cbbe.getName());
         assertFalse(cbbe.isUunp());
         assertEquals(2, cbbe.getSliderChoices().size());
@@ -135,16 +135,16 @@ final class ProjectJacksonCompatibilityTest {
         SliderPresetSnapshot uunp = snapshot.getSliderPresets().get(1);
         assertEquals("UUNP Athletic", uunp.getName());
         assertTrue(uunp.isUunp());
-        assertEquals("Arms", uunp.getSliderChoices().get(0).getName());
-        assertTrue(uunp.getSliderChoices().get(0).isMissingDefault());
+        assertEquals("Arms", uunp.getSliderChoices().getFirst().getName());
+        assertTrue(uunp.getSliderChoices().getFirst().isMissingDefault());
 
         assertEquals(1, snapshot.getCustomMorphTargets().size());
-        assertEquals("All|Female", snapshot.getCustomMorphTargets().get(0).getName());
+        assertEquals("All|Female", snapshot.getCustomMorphTargets().getFirst().getName());
         assertEquals(List.of("CBBE Curvy", "UUNP Athletic"),
-                snapshot.getCustomMorphTargets().get(0).getSliderPresetNames());
+                snapshot.getCustomMorphTargets().getFirst().getSliderPresetNames());
 
         assertEquals(1, snapshot.getNpcMorphAssignments().size());
-        NpcMorphAssignmentSnapshot npc = snapshot.getNpcMorphAssignments().get(0);
+        NpcMorphAssignmentSnapshot npc = snapshot.getNpcMorphAssignments().getFirst();
         assertEquals("Lydia", npc.getDisplayName());
         assertEquals("Skyrim.esm", npc.getPluginName());
         assertEquals("HousecarlWhiterun", npc.getEditorId());
@@ -246,8 +246,8 @@ final class ProjectJacksonCompatibilityTest {
         Path fixture = FIXTURE_ROOT.resolve("member-order-uunp.jbs2bg");
 
         ProjectSnapshot snapshot = ProjectJacksonAdapter.read(fixture).snapshot();
-        SliderPresetSnapshot preset = snapshot.getSliderPresets().get(0);
-        SliderChoiceSnapshot choice = preset.getSliderChoices().get(0);
+        SliderPresetSnapshot preset = snapshot.getSliderPresets().getFirst();
+        SliderChoiceSnapshot choice = preset.getSliderChoices().getFirst();
 
         assertEquals("UUNP Ordered", preset.getName());
         assertTrue(preset.isUunp());
@@ -271,12 +271,12 @@ final class ProjectJacksonCompatibilityTest {
         assertEquals(List.of("Alpha", "Beta"), candidate.snapshot().getSliderPresets().stream()
                 .map(SliderPresetSnapshot::getName).toList());
         assertEquals(List.of("Alpha", "Beta"),
-                candidate.snapshot().getCustomMorphTargets().get(0).getSliderPresetNames());
-        assertEquals(List.of("Beta"), candidate.snapshot().getNpcMorphAssignments().get(0).getSliderPresetNames());
+                candidate.snapshot().getCustomMorphTargets().getFirst().getSliderPresetNames());
+        assertEquals(List.of("Beta"), candidate.snapshot().getNpcMorphAssignments().getFirst().getSliderPresetNames());
         assertEquals(ProjectLifecycleStatus.RECOVERED, candidate.snapshot().getLifecycleStatus());
         assertTrue(candidate.snapshot().isDirty());
         assertEquals(2, candidate.diagnostics().size());
-        assertDiagnostic(candidate.diagnostics().get(0), "/CustomMorphTargets/Target/SliderPresets/1",
+        assertDiagnostic(candidate.diagnostics().getFirst(), "/CustomMorphTargets/Target/SliderPresets/1",
                 "Missing Target");
         assertDiagnostic(candidate.diagnostics().get(1), "/MorphedNPCs/NPC/SliderPresets/1", "Missing NPC");
     }
@@ -344,7 +344,7 @@ final class ProjectJacksonCompatibilityTest {
         ProjectJacksonAdapter.Candidate reopened = ProjectJacksonAdapter.read(written);
 
         assertProjectContentEquals(candidate.snapshot(), reopened.snapshot());
-        assertEquals("İstanbul/˜😀", reopened.snapshot().getSliderPresets().get(0).getName());
+        assertEquals("İstanbul/˜😀", reopened.snapshot().getSliderPresets().getFirst().getName());
     }
 
     /**
@@ -375,7 +375,7 @@ final class ProjectJacksonCompatibilityTest {
 
         ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture);
 
-        SliderChoiceSnapshot choice = candidate.snapshot().getSliderPresets().get(0).getSliderChoices().get(0);
+        SliderChoiceSnapshot choice = candidate.snapshot().getSliderPresets().getFirst().getSliderChoices().getFirst();
         assertEquals(Integer.MIN_VALUE, choice.getStoredSmallValue().getAsInt());
         assertEquals(Integer.MAX_VALUE, choice.getStoredBigValue().getAsInt());
         assertEquals(0, choice.getPercentageMinimum());
@@ -418,8 +418,7 @@ final class ProjectJacksonCompatibilityTest {
     @Test
     void supplementaryStringBeyondOwnedUtf8LimitReportsResourceFailure() throws Exception {
         Properties limits = new Properties();
-        try (java.io.Reader descriptor = Files.newBufferedReader(FIXTURE_ROOT.resolve("resource-limits.properties"),
-                StandardCharsets.UTF_8)) {
+        try (java.io.Reader descriptor = Files.newBufferedReader(FIXTURE_ROOT.resolve("resource-limits.properties"))) {
             limits.load(descriptor);
         }
         int maximumBytes = Integer.parseInt(limits.getProperty("maximumTextUtf8Bytes"));
@@ -429,8 +428,7 @@ final class ProjectJacksonCompatibilityTest {
                 "{\"SliderPresets\":{\"Wide\":{\"isUUNP\":false,\"SetSliders\":[{"
                         + "\"name\":\"" + oversizedName + "\",\"enabled\":true,\"valueSmall\":0,"
                         + "\"valueBig\":1,\"pctMin\":0,\"pctMax\":100}]}},"
-                        + "\"CustomMorphTargets\":{},\"MorphedNPCs\":{}}",
-                StandardCharsets.UTF_8);
+                        + "\"CustomMorphTargets\":{},\"MorphedNPCs\":{}}");
 
         ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
                 ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source));

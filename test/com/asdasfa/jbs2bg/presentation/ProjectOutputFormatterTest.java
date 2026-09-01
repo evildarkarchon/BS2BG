@@ -135,11 +135,11 @@ class ProjectOutputFormatterTest {
         ProjectGeneratedOutput output = ProjectOutputFormatter.generate(pinned, false);
 
         assertEquals(1, output.getCustomMorphTargetsWithoutPresets().size());
-        assertEquals("ZuluTarget", output.getCustomMorphTargetsWithoutPresets().get(0).getName());
-        assertSame(pinned.getCustomMorphTargets().get(1), output.getCustomMorphTargetsWithoutPresets().get(0));
+        assertEquals("ZuluTarget", output.getCustomMorphTargetsWithoutPresets().getFirst().getName());
+        assertSame(pinned.getCustomMorphTargets().get(1), output.getCustomMorphTargetsWithoutPresets().getFirst());
         assertEquals(1, output.getNpcMorphAssignmentsWithoutPresets().size());
-        assertEquals("Early", output.getNpcMorphAssignmentsWithoutPresets().get(0).getDisplayName());
-        assertSame(pinned.getNpcMorphAssignments().get(0), output.getNpcMorphAssignmentsWithoutPresets().get(0));
+        assertEquals("Early", output.getNpcMorphAssignmentsWithoutPresets().getFirst().getDisplayName());
+        assertSame(pinned.getNpcMorphAssignments().getFirst(), output.getNpcMorphAssignmentsWithoutPresets().getFirst());
     }
 
     /**
@@ -269,7 +269,7 @@ class ProjectOutputFormatterTest {
         List<String> fileNames = ProjectOutputFormatter.generate(snapshot, false).getBosJsonArtifacts().stream()
                 .map(BosJsonArtifact::getFileName).toList();
 
-        assertEquals("%43ON.txt.json", fileNames.get(0));
+        assertEquals("%43ON.txt.json", fileNames.getFirst());
         assertEquals("%43OM¹.json", fileNames.get(1));
         assertEquals("%4CPT³.log.json", fileNames.get(2));
         assertEquals("trail%2E%20.json", fileNames.get(3));
@@ -295,9 +295,9 @@ class ProjectOutputFormatterTest {
                 () -> ProjectOutputFormatter.generate(snapshot, false));
 
         assertEquals(2, exception.getFileNameMappings().size());
-        assertEquals("Safe.json", exception.getFileNameMappings().get(0).getFileName().orElseThrow());
+        assertEquals("Safe.json", exception.getFileNameMappings().getFirst().getFileName().orElseThrow());
         assertTrue(exception.getFileNameMappings().get(1).getFileName().isEmpty());
-        assertEquals("BOS_FILENAME_UNREPRESENTABLE", exception.getDiagnostics().get(0).getCode());
+        assertEquals("BOS_FILENAME_UNREPRESENTABLE", exception.getDiagnostics().getFirst().getCode());
     }
 
     /**
@@ -316,7 +316,7 @@ class ProjectOutputFormatterTest {
                 () -> ProjectOutputFormatter.generate(snapshot, false));
 
         assertEquals(3, exception.getFileNameMappings().size());
-        assertEquals("Alpha.json", exception.getFileNameMappings().get(0).getFileName().orElseThrow());
+        assertEquals("Alpha.json", exception.getFileNameMappings().getFirst().getFileName().orElseThrow());
         assertEquals("alpha.json", exception.getFileNameMappings().get(1).getFileName().orElseThrow());
         assertEquals("Safe.json", exception.getFileNameMappings().get(2).getFileName().orElseThrow());
         assertEquals(2, exception.getDiagnostics().size());

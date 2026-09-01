@@ -10,7 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -78,14 +77,14 @@ final class SettingsDirectoryLockTest {
                 assertFalse(Files.exists(directory.resolve("settings_UUNP.json")));
             }
 
-            assertTrue(child.waitFor(10, TimeUnit.SECONDS), "child did not initialize after lock release");
+            assertTrue(child.waitFor(Duration.ofSeconds(10)), "child did not initialize after lock release");
             assertEquals(0, child.exitValue(), readOutput(child));
             assertTrue(Files.isRegularFile(directory.resolve("settings.json")));
             assertTrue(Files.isRegularFile(directory.resolve("settings_UUNP.json")));
         } finally {
             if (child != null && child.isAlive()) {
                 child.destroyForcibly();
-                child.waitFor(10, TimeUnit.SECONDS);
+                child.waitFor(Duration.ofSeconds(10));
             }
         }
     }

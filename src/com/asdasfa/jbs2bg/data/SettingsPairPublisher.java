@@ -47,7 +47,7 @@ final class SettingsPairPublisher {
         if (transactions.size() != 1)
             throw new IOException("Settings recovery found more than one interrupted transaction.");
 
-        Path transaction = transactions.get(0);
+        Path transaction = transactions.getFirst();
         if (!Files.isDirectory(transaction, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(transaction))
             throw new IOException("Settings recovery state is not a transaction directory: " + transaction);
         Path standard = normalizeTarget(standardTarget);

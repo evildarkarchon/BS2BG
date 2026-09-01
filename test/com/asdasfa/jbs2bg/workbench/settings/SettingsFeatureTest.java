@@ -2,7 +2,6 @@ package com.asdasfa.jbs2bg.workbench.settings;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.AfterEach;
@@ -93,7 +92,7 @@ final class SettingsFeatureTest {
 
         assertTrue(recovered.accepted());
         assertEquals(SettingsFeature.OutcomeKind.RECOVERED, recovered.frame().outcome());
-        assertEquals("SETTINGS_PUBLICATION_RECOVERED", recovered.frame().notices().get(0).code());
+        assertEquals("SETTINGS_PUBLICATION_RECOVERED", recovered.frame().notices().getFirst().code());
         assertTrue(recovered.frame().notices().stream()
                 .anyMatch(notice -> notice.code().equals("SETTINGS_MEMBER_UNKNOWN")));
         assertArrayEquals(priorStandard, Files.readAllBytes(standard));

@@ -1,6 +1,5 @@
 package com.asdasfa.jbs2bg.data;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -19,7 +18,7 @@ public final class SettingsLockProbe {
      */
     public static void main(String[] arguments) throws Exception {
         Path directory = Path.of(arguments[0]);
-        Files.writeString(Path.of(arguments[1]), "ready", StandardCharsets.UTF_8);
+        Files.writeString(Path.of(arguments[1]), "ready");
         Settings.InitializationResult result = Settings.initialize(directory);
         if (!result.isSuccessful())
             throw new IllegalStateException(result.getFailure().orElseThrow().formatForDisplay());

@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg.presentation;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 import java.util.Optional;
@@ -8,6 +9,7 @@ import java.util.Optional;
  * Immutable mapping from one Slider Preset display name to its BoS artifact filename.
  */
 public final class BosFileNameMapping implements Serializable {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private final String sliderPresetName;

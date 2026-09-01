@@ -214,12 +214,14 @@ public class MainController extends CustomController {
     private void setupTooltips() {
         Tooltip tooltip = new Tooltip();
         tooltip.setText(
-                "Examples: \n" +
-                        "\n" +
-                        "All|Female \n" +
-                        "All|Female|NordRace \n" +
-                        "All|Female|BretonRace \n" +
-                        "All|Female|NordRaceVampire \n"
+                """
+                Examples:\s
+                
+                All|Female\s
+                All|Female|NordRace\s
+                All|Female|BretonRace\s
+                All|Female|NordRaceVampire\s
+                """
         );
         tfCustomTarget.setTooltip(tooltip);
     }
@@ -564,8 +566,9 @@ public class MainController extends CustomController {
         confirmClearNpcs.setTitle("Confirm Action");
         confirmClearNpcs.setHeaderText("Clear NPCs");
         confirmClearNpcs.setContentText(
-                "All NPCs in the table will be removed.\n" +
-                        "If filter is active, only the ones displayed will be removed."
+                """
+                All NPCs in the table will be removed.
+                If filter is active, only the ones displayed will be removed."""
         );
         confirmClearNpcs.setOkButtonText("Clear");
         confirmClearNpcs.setCancelButtonText("Cancel");
@@ -583,8 +586,9 @@ public class MainController extends CustomController {
         confirmClearAssignments.setTitle("Confirm Action");
         confirmClearAssignments.setHeaderText("Clear NPCs' Assigned Presets");
         confirmClearAssignments.setContentText(
-                "All NPCs in the table will have all their assigned presets cleared.\n" +
-                        "If filter is active, only the ones displayed will be cleared."
+                """
+                All NPCs in the table will have all their assigned presets cleared.
+                If filter is active, only the ones displayed will be cleared."""
         );
         confirmClearAssignments.setOkButtonText("Clear");
         confirmClearAssignments.setCancelButtonText("Cancel");
@@ -1095,7 +1099,7 @@ public class MainController extends CustomController {
             public void test() {
                 // Use the first (leftmost, possibly reordered) column's data for searching; the
                 // adapter derives the same cell text the column renders and the filter sees.
-                TableColumn<NpcMorphAssignmentSnapshot, ?> leadingColumn = tvNpc.getColumns().get(0);
+                TableColumn<NpcMorphAssignmentSnapshot, ?> leadingColumn = tvNpc.getColumns().getFirst();
 
                 for (NpcMorphAssignmentSnapshot npc : tvNpc.getItems()) {
                     String text = npcTable.cellTextOf(leadingColumn, npc);

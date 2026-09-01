@@ -31,7 +31,7 @@ final class OutputArtifactPublisherTest {
             throws Exception {
         ProjectGeneratedOutput output = generatedOutput("Alpha", "Zulu");
         Path unrelated = targetDirectory.resolve("stale.json");
-        Files.writeString(unrelated, "preserved", StandardCharsets.UTF_8);
+        Files.writeString(unrelated, "preserved");
 
         byte[] exposed = output.getArtifacts().getFirst().getBytes();
         exposed[0] = 'x';
@@ -39,7 +39,7 @@ final class OutputArtifactPublisherTest {
 
         for (OutputArtifact artifact : output.getArtifacts())
             assertArrayEquals(artifact.getBytes(), Files.readAllBytes(targetDirectory.resolve(artifact.getFileName())));
-        assertEquals("preserved", Files.readString(unrelated, StandardCharsets.UTF_8));
+        assertEquals("preserved", Files.readString(unrelated));
     }
 
     /** One conflicting destination rejects the complete batch before any prior destination is changed. */
@@ -47,13 +47,13 @@ final class OutputArtifactPublisherTest {
     void preflightsEveryTargetConflictBeforePublishing(@TempDir Path targetDirectory) throws Exception {
         ProjectGeneratedOutput output = generatedOutput("Alpha", "Zulu");
         Path prior = targetDirectory.resolve("templates.ini");
-        Files.writeString(prior, "prior", StandardCharsets.UTF_8);
+        Files.writeString(prior, "prior");
         Files.createDirectory(targetDirectory.resolve("Zulu.json"));
 
         assertThrows(IOException.class,
                 () -> OutputArtifactPublisher.publishAll(targetDirectory, output.getArtifacts()));
 
-        assertEquals("prior", Files.readString(prior, StandardCharsets.UTF_8));
+        assertEquals("prior", Files.readString(prior));
         assertNoTransactionDirectory(targetDirectory);
     }
 
@@ -86,7 +86,7 @@ final class OutputArtifactPublisherTest {
     void cancellationBeforeCommitPreservesEveryDestination(@TempDir Path targetDirectory) throws Exception {
         ProjectGeneratedOutput output = generatedOutput("Alpha");
         Path prior = targetDirectory.resolve("templates.ini");
-        Files.writeString(prior, "prior", StandardCharsets.UTF_8);
+        Files.writeString(prior, "prior");
         AtomicInteger staged = new AtomicInteger();
 
         assertThrows(CancellationException.class, () -> OutputArtifactPublisher.publishAll(targetDirectory,
@@ -113,7 +113,7 @@ final class OutputArtifactPublisherTest {
                 }));
 
         assertEquals(output.getArtifacts().size(), staged.get());
-        assertEquals("prior", Files.readString(prior, StandardCharsets.UTF_8));
+        assertEquals("prior", Files.readString(prior));
         assertNoTransactionDirectory(targetDirectory);
     }
 
@@ -123,7 +123,7 @@ final class OutputArtifactPublisherTest {
         ProjectGeneratedOutput output = generatedOutput("Alpha");
         for (OutputArtifact artifact : output.getArtifacts())
             Files.writeString(targetDirectory.resolve(artifact.getFileName()),
-                    "prior " + artifact.getFileName(), StandardCharsets.UTF_8);
+                    "prior " + artifact.getFileName());
 
         AtomicInteger moves = new AtomicInteger();
         assertThrows(IOException.class, () -> OutputArtifactPublisher.publishAll(targetDirectory,
@@ -137,7 +137,7 @@ final class OutputArtifactPublisherTest {
         assertEquals(3, moves.get());
         for (OutputArtifact artifact : output.getArtifacts())
             assertEquals("prior " + artifact.getFileName(),
-                    Files.readString(targetDirectory.resolve(artifact.getFileName()), StandardCharsets.UTF_8));
+                    Files.readString(targetDirectory.resolve(artifact.getFileName())));
         assertNoTransactionDirectory(targetDirectory);
     }
 
@@ -148,7 +148,7 @@ final class OutputArtifactPublisherTest {
         ProjectGeneratedOutput output = generatedOutput("Alpha");
         for (OutputArtifact artifact : output.getArtifacts())
             Files.writeString(targetDirectory.resolve(artifact.getFileName()),
-                    "prior " + artifact.getFileName(), StandardCharsets.UTF_8);
+                    "prior " + artifact.getFileName());
         int backupMoves = output.getArtifacts().size();
         AtomicInteger moves = new AtomicInteger();
 
@@ -163,7 +163,7 @@ final class OutputArtifactPublisherTest {
 
         for (OutputArtifact artifact : output.getArtifacts())
             assertEquals("prior " + artifact.getFileName(),
-                    Files.readString(targetDirectory.resolve(artifact.getFileName()), StandardCharsets.UTF_8));
+                    Files.readString(targetDirectory.resolve(artifact.getFileName())));
         assertNoTransactionDirectory(targetDirectory);
     }
 

@@ -1,7 +1,6 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,7 +37,7 @@ public final class WorkbenchAppearanceStore {
     public WorkbenchAppearance.ThemeChoice load() throws IOException {
         if (!Files.exists(file))
             return WorkbenchAppearance.ThemeChoice.SYSTEM;
-        String content = Files.readString(file, StandardCharsets.UTF_8).trim();
+        String content = Files.readString(file).trim();
         if (!content.startsWith(THEME_PREFIX))
             return WorkbenchAppearance.ThemeChoice.SYSTEM;
         String value = content.substring(THEME_PREFIX.length()).trim().toUpperCase(Locale.ROOT);
@@ -61,8 +60,7 @@ public final class WorkbenchAppearanceStore {
         Files.createDirectories(directory);
         Path temporary = Files.createTempFile(directory, "workbench-appearance-", ".next");
         try {
-            Files.writeString(temporary, THEME_PREFIX + choice.name() + System.lineSeparator(),
-                    StandardCharsets.UTF_8);
+            Files.writeString(temporary, THEME_PREFIX + choice.name() + System.lineSeparator());
             try {
                 Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException exception) {

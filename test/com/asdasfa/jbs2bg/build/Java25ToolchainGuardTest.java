@@ -16,7 +16,6 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -72,7 +71,7 @@ class Java25ToolchainGuardTest {
     /**
      * Repository layout the build compiles from; Surefire runs with the repository root as working directory.
      */
-    private static final Path REPO_ROOT = Paths.get("").toAbsolutePath();
+    private static final Path REPO_ROOT = Path.of("").toAbsolutePath();
     private static final Path SOURCE_ROOT = REPO_ROOT.resolve("src");
     private static final Path ASSETS_ROOT = REPO_ROOT.resolve("assets");
 
@@ -157,7 +156,7 @@ class Java25ToolchainGuardTest {
      * The directory javac emitted production classes into (target/classes), located from a production class.
      */
     private static Path productionClassesRoot() throws URISyntaxException {
-        Path root = Paths.get(ProjectSession.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Path root = Path.of(ProjectSession.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         assertTrue(Files.isDirectory(root), "production classes must be on the test classpath as a directory: " + root);
         return root;
     }

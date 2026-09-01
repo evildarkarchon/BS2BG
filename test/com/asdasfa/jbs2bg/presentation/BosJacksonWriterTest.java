@@ -86,7 +86,7 @@ final class BosJacksonWriterTest {
                     25, 100, 100, 100, false)));
 
             BosJsonArtifact artifact = ProjectOutputFormatter.generate(session.getSnapshot(), false)
-                    .getBosJsonArtifacts().get(0);
+                    .getBosJsonArtifacts().getFirst();
             byte[] exposed = artifact.getBytes();
             exposed[0] = 'x';
 
@@ -131,11 +131,11 @@ final class BosJacksonWriterTest {
                     () -> ProjectOutputFormatter.generate(session.getSnapshot(), false));
 
             assertEquals(2, exception.getFileNameMappings().size());
-            assertEquals("Broken.json", exception.getFileNameMappings().get(0).getFileName().orElseThrow());
+            assertEquals("Broken.json", exception.getFileNameMappings().getFirst().getFileName().orElseThrow());
             assertEquals("Safe.json", exception.getFileNameMappings().get(1).getFileName().orElseThrow());
             assertEquals(1, exception.getDiagnostics().size());
-            assertEquals("BOS_VALUE_NON_FINITE", exception.getDiagnostics().get(0).getCode());
-            assertEquals("Broken", exception.getDiagnostics().get(0).getSliderPresetName());
+            assertEquals("BOS_VALUE_NON_FINITE", exception.getDiagnostics().getFirst().getCode());
+            assertEquals("Broken", exception.getDiagnostics().getFirst().getSliderPresetName());
         } finally {
             SettingsTestSupport.restoreRepositorySettings();
         }
@@ -160,7 +160,7 @@ final class BosJacksonWriterTest {
                     () -> ProjectOutputFormatter.generate(session.getSnapshot(), false));
 
             assertEquals(2, exception.getFileNameMappings().size());
-            assertTrue(exception.getFileNameMappings().get(0).getFileName().isEmpty());
+            assertTrue(exception.getFileNameMappings().getFirst().getFileName().isEmpty());
             assertEquals("Infinite Value.json",
                     exception.getFileNameMappings().get(1).getFileName().orElseThrow());
             assertEquals(List.of("BOS_FILENAME_UNREPRESENTABLE", "BOS_VALUE_NON_FINITE"),

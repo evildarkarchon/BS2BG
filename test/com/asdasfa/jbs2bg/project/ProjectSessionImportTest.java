@@ -123,7 +123,7 @@ class ProjectSessionImportTest {
             assertInstanceOf(RejectedOutcome.class, sourceOutcome);
             assertSame(before, sourceOutcome.getSnapshot());
             assertEquals(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED,
-                    sourceOutcome.getDiagnostics().get(0).getCode());
+                    sourceOutcome.getDiagnostics().getFirst().getCode());
         }
     }
 
@@ -155,9 +155,9 @@ class ProjectSessionImportTest {
         assertTrue(snapshot.isDirty());
         assertEquals(Arrays.asList("Alpha Shape", "Zulu Body"), sliderPresetNames(snapshot));
         assertEquals(2, outcome.getSourceOutcomes().size());
-        assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().getFirst());
         assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().get(1));
-        assertSame(snapshot, outcome.getSourceOutcomes().get(0).getSnapshot());
+        assertSame(snapshot, outcome.getSourceOutcomes().getFirst().getSnapshot());
         assertSame(snapshot, outcome.getSourceOutcomes().get(1).getSnapshot());
         assertTrue(outcome.getDiagnostics().isEmpty());
 
@@ -221,7 +221,7 @@ class ProjectSessionImportTest {
         assertEquals(List.of("Committed First"), sliderPresetNames(outcome.getSnapshot()));
         assertFalse(clean.getContentVersion().equals(outcome.getSnapshot().getContentVersion()));
         assertEquals(3, outcome.getSourceOutcomes().size());
-        assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().getFirst());
         assertInstanceOf(CancelledOutcome.class, outcome.getSourceOutcomes().get(1));
         assertInstanceOf(CancelledOutcome.class, outcome.getSourceOutcomes().get(2));
     }
@@ -285,20 +285,20 @@ class ProjectSessionImportTest {
         assertTrue(outcome.getSnapshot().isDirty());
         assertEquals(Arrays.asList("Committed"), sliderPresetNames(outcome.getSnapshot()));
         assertEquals(3, outcome.getSourceOutcomes().size());
-        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().getFirst());
         assertInstanceOf(ChangedOutcome.class, outcome.getSourceOutcomes().get(1));
         assertInstanceOf(FailedOutcome.class, outcome.getSourceOutcomes().get(2));
         assertEquals(2, outcome.getDiagnostics().size());
 
-        ProjectDiagnostic malformedDiagnostic = outcome.getSourceOutcomes().get(0).getDiagnostics().get(0);
+        ProjectDiagnostic malformedDiagnostic = outcome.getSourceOutcomes().getFirst().getDiagnostics().getFirst();
         assertImportDiagnostic(malformedDiagnostic, malformed,
                 ProjectDiagnosticCodes.SLIDER_PRESET_XML_MALFORMED, "/");
         assertTrue(malformedDiagnostic.getSourceLocation().getLine().isPresent());
         assertTrue(malformedDiagnostic.getSourceLocation().getColumn().isPresent());
-        assertImportDiagnostic(outcome.getSourceOutcomes().get(2).getDiagnostics().get(0), missing,
+        assertImportDiagnostic(outcome.getSourceOutcomes().get(2).getDiagnostics().getFirst(), missing,
                 ProjectDiagnosticCodes.SLIDER_PRESET_XML_READ_FAILED, "/");
-        assertSame(malformedDiagnostic, outcome.getDiagnostics().get(0));
-        assertSame(outcome.getSourceOutcomes().get(2).getDiagnostics().get(0), outcome.getDiagnostics().get(1));
+        assertSame(malformedDiagnostic, outcome.getDiagnostics().getFirst());
+        assertSame(outcome.getSourceOutcomes().get(2).getDiagnostics().getFirst(), outcome.getDiagnostics().get(1));
     }
 
     /**
@@ -322,11 +322,11 @@ class ProjectSessionImportTest {
         assertSame(clean, session.getSnapshot());
         assertFalse(outcome.getSnapshot().isDirty());
         assertEquals(2, outcome.getSourceOutcomes().size());
-        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().getFirst());
         assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(1));
-        assertImportDiagnostic(outcome.getSourceOutcomes().get(0).getDiagnostics().get(0), wrongRoot,
+        assertImportDiagnostic(outcome.getSourceOutcomes().getFirst().getDiagnostics().getFirst(), wrongRoot,
                 ProjectDiagnosticCodes.SLIDER_PRESET_XML_STRUCTURE_INVALID, "/");
-        assertImportDiagnostic(outcome.getSourceOutcomes().get(1).getDiagnostics().get(0), blankName,
+        assertImportDiagnostic(outcome.getSourceOutcomes().get(1).getDiagnostics().getFirst(), blankName,
                 ProjectDiagnosticCodes.SLIDER_PRESET_NAME_REQUIRED, "/SliderPresets/Preset[1]/@name");
         assertEquals(2, outcome.getDiagnostics().size());
     }
@@ -353,12 +353,12 @@ class ProjectSessionImportTest {
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(source));
 
         assertInstanceOf(RejectedOutcome.class, outcome.getProjectOutcome());
-        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().getFirst());
         assertSame(clean, outcome.getSnapshot());
         assertSame(clean, session.getSnapshot());
         assertTrue(outcome.getSnapshot().getSliderPresets().isEmpty());
         assertFalse(outcome.getSnapshot().isDirty());
-        assertImportDiagnostic(outcome.getDiagnostics().get(0), source,
+        assertImportDiagnostic(outcome.getDiagnostics().getFirst(), source,
                 ProjectDiagnosticCodes.SLIDER_PRESET_XML_VALUE_INVALID,
                 "/SliderPresets/Preset[2]/SetSlider[1]/@value");
     }
@@ -391,7 +391,7 @@ class ProjectSessionImportTest {
                 .getEffectiveBigValue());
         assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(1));
         assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_XML_SIZE_INVALID,
-                outcome.getSourceOutcomes().get(1).getDiagnostics().get(0).getCode());
+                outcome.getSourceOutcomes().get(1).getDiagnostics().getFirst().getCode());
     }
 
     /**
@@ -421,9 +421,9 @@ class ProjectSessionImportTest {
         assertSame(clean, session.getSnapshot());
         assertFalse(outcome.getSnapshot().isDirty());
         assertEquals(2, outcome.getSourceOutcomes().size());
-        assertInstanceOf(UnchangedOutcome.class, outcome.getSourceOutcomes().get(0));
+        assertInstanceOf(UnchangedOutcome.class, outcome.getSourceOutcomes().getFirst());
         assertInstanceOf(UnchangedOutcome.class, outcome.getSourceOutcomes().get(1));
-        assertSame(clean, outcome.getSourceOutcomes().get(0).getSnapshot());
+        assertSame(clean, outcome.getSourceOutcomes().getFirst().getSnapshot());
         assertSame(clean, outcome.getSourceOutcomes().get(1).getSnapshot());
         assertTrue(outcome.getDiagnostics().isEmpty());
     }
@@ -465,8 +465,8 @@ class ProjectSessionImportTest {
         assertEquals(Arrays.asList("Breasts", "New"), sliderChoiceNames(preset));
         assertEquals(30, findChoice(preset, "New").getStoredSmallValue().getAsInt());
         assertEquals(70, findChoice(preset, "New").getStoredBigValue().getAsInt());
-        assertEquals(Arrays.asList("Alpha"), snapshot.getCustomMorphTargets().get(0).getSliderPresetNames());
-        assertEquals(Arrays.asList("Alpha"), snapshot.getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("Alpha"), snapshot.getCustomMorphTargets().getFirst().getSliderPresetNames());
+        assertEquals(Arrays.asList("Alpha"), snapshot.getNpcMorphAssignments().getFirst().getSliderPresetNames());
         assertSame(snapshot, session.getSnapshot());
         assertTrue(snapshot.isDirty());
     }
@@ -534,7 +534,7 @@ class ProjectSessionImportTest {
         SliderPresetImportOutcome outcome = session.importSliderPresets(Collections.singletonList(source));
 
         assertInstanceOf(FailedOutcome.class, outcome.getProjectOutcome());
-        ProjectDiagnostic diagnostic = outcome.getDiagnostics().get(0);
+        ProjectDiagnostic diagnostic = outcome.getDiagnostics().getFirst();
         assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_XML_IMPORT_FAILED, diagnostic.getCode());
         assertSame(source, diagnostic.getSourceLocation().getPath().get());
         assertFalse(outcome.getSnapshot().isDirty());

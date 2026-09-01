@@ -83,9 +83,9 @@ class TemplatesFeatureTest {
         assertEquals(TemplatesFeature.Profile.STANDARD, standard.profile());
         assertEquals(List.of("Waist"), standard.choices().stream()
                 .map(TemplatesFeature.ChoiceFrame::name).toList());
-        assertEquals("Waist@0.8", standard.choices().get(0).previewText());
-        assertTrue(standard.choices().get(0).synthesizedDefault());
-        assertTrue(standard.choices().get(0).omittedFromProjectFile());
+        assertEquals("Waist@0.8", standard.choices().getFirst().previewText());
+        assertTrue(standard.choices().getFirst().synthesizedDefault());
+        assertTrue(standard.choices().getFirst().omittedFromProjectFile());
 
         TemplatesFeature.Update switched = feature.dispatch(
                 new TemplatesFeature.ChangeProfile(TemplatesFeature.Profile.UUNP));
@@ -96,8 +96,8 @@ class TemplatesFeatureTest {
         assertEquals(TemplatesFeature.Profile.UUNP, uunp.profile());
         assertEquals(List.of("Arms"), uunp.choices().stream()
                 .map(TemplatesFeature.ChoiceFrame::name).toList());
-        assertEquals("Arms@0.5", uunp.choices().get(0).previewText());
-        assertTrue(uunp.choices().get(0).synthesizedDefault());
+        assertEquals("Arms@0.5", uunp.choices().getFirst().previewText());
+        assertTrue(uunp.choices().getFirst().synthesizedDefault());
     }
 
     /**
@@ -118,7 +118,7 @@ class TemplatesFeatureTest {
                 new TemplatesFeature.SetChoiceEnabled("Waist", false));
 
         assertEquals(TemplatesFeature.OutcomeKind.CHANGED, changed.outcomeKind());
-        assertFalse(changed.frame().editor().orElseThrow().choices().get(0).enabled());
+        assertFalse(changed.frame().editor().orElseThrow().choices().getFirst().enabled());
         assertEquals(NameIdentity.of("Alpha"), changed.frame().selection().orElseThrow());
         assertEquals(TemplatesFeature.OutcomeKind.UNCHANGED, unchanged.outcomeKind());
         assertEquals(NameIdentity.of("Alpha"), unchanged.frame().selection().orElseThrow());
@@ -140,11 +140,11 @@ class TemplatesFeatureTest {
                 new TemplatesFeature.SetChoiceRange("Waist", 25, 75));
         TemplatesFeature.Update rejected = feature.dispatch(
                 new TemplatesFeature.SetChoiceRange("Waist", 90, 10));
-        TemplatesFeature.ChoiceFrame retained = rejected.frame().editor().orElseThrow().choices().get(0);
+        TemplatesFeature.ChoiceFrame retained = rejected.frame().editor().orElseThrow().choices().getFirst();
 
         assertEquals(TemplatesFeature.OutcomeKind.CHANGED, changed.outcomeKind());
-        assertEquals("Waist@0.35:0.65", changed.frame().editor().orElseThrow().choices().get(0).previewText());
-        assertFalse(changed.frame().editor().orElseThrow().choices().get(0).omittedFromProjectFile());
+        assertEquals("Waist@0.35:0.65", changed.frame().editor().orElseThrow().choices().getFirst().previewText());
+        assertFalse(changed.frame().editor().orElseThrow().choices().getFirst().omittedFromProjectFile());
         assertEquals(TemplatesFeature.OutcomeKind.REJECTED, rejected.outcomeKind());
         assertEquals(25, retained.minimum());
         assertEquals(75, retained.maximum());
@@ -164,7 +164,7 @@ class TemplatesFeatureTest {
                 new SliderChoiceSnapshot("Arms", true, Integer.valueOf(10), Integer.valueOf(90), 10, 90,
                         10, 90, false)));
         projectFlow.apply(SliderPresetEdits.setSliderChoice("Alpha",
-                projectFlow.frame().snapshot().getSliderPresets().get(0).getSliderChoices().stream()
+                projectFlow.frame().snapshot().getSliderPresets().getFirst().getSliderChoices().stream()
                         .filter(choice -> choice.getName().equals("Waist")).findFirst().orElseThrow()
                         .withEnabled(false)));
         TemplatesFeature feature = new TemplatesFeature(projectFlow,
@@ -218,7 +218,7 @@ class TemplatesFeatureTest {
         assertEquals(NameIdentity.of("Alpha"), failed.frame().selection().orElseThrow());
         assertEquals(100, choiceNamed(failed.frame(), "Waist").minimum());
         assertEquals(100, choiceNamed(failed.frame(), "Waist").maximum());
-        assertEquals("TEST_SLIDER_EDIT_FAILURE", failed.frame().diagnostics().get(0).getCode());
+        assertEquals("TEST_SLIDER_EDIT_FAILURE", failed.frame().diagnostics().getFirst().getCode());
         assertEquals(TemplatesFeature.OutcomeKind.FAILED, failedGang.outcomeKind());
         assertTrue(failedGang.frame().editor().orElseThrow().gang().activeMode().isEmpty());
         assertFalse(failedGang.frame().editor().orElseThrow().gang().rowsLocked());
@@ -344,7 +344,7 @@ class TemplatesFeatureTest {
         assertFalse(rejected.accepted());
         assertEquals("Beta", rejected.frame().rename().orElseThrow().draft());
         assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_DUPLICATE,
-                rejected.frame().rename().orElseThrow().diagnostics().get(0).getCode());
+                rejected.frame().rename().orElseThrow().diagnostics().getFirst().getCode());
         assertEquals(NameIdentity.of("Alpha"), rejected.frame().selection().orElseThrow());
 
         feature.dispatch(new TemplatesFeature.ChangeRename("Gamma"));
@@ -353,9 +353,9 @@ class TemplatesFeatureTest {
         assertTrue(renamed.accepted());
         assertTrue(renamed.frame().rename().isEmpty());
         assertEquals(NameIdentity.of("Gamma"), renamed.frame().selection().orElseThrow());
-        assertEquals(List.of("Gamma"), projectFlow.frame().snapshot().getCustomMorphTargets().get(0)
+        assertEquals(List.of("Gamma"), projectFlow.frame().snapshot().getCustomMorphTargets().getFirst()
                 .getSliderPresetNames());
-        assertEquals(List.of("Gamma"), projectFlow.frame().snapshot().getNpcMorphAssignments().get(0)
+        assertEquals(List.of("Gamma"), projectFlow.frame().snapshot().getNpcMorphAssignments().getFirst()
                 .getSliderPresetNames());
     }
 
@@ -385,7 +385,7 @@ class TemplatesFeatureTest {
         assertTrue(removed.accepted());
         assertEquals(List.of("Beta"), names(removed.frame().visiblePresets()));
         assertTrue(removed.frame().selection().isEmpty());
-        assertEquals(List.of("Beta"), projectFlow.frame().snapshot().getCustomMorphTargets().get(0)
+        assertEquals(List.of("Beta"), projectFlow.frame().snapshot().getCustomMorphTargets().getFirst()
                 .getSliderPresetNames());
     }
 
@@ -416,7 +416,7 @@ class TemplatesFeatureTest {
         assertTrue(cleared.frame().visiblePresets().isEmpty());
         assertEquals(List.of("Alpha", "Gamma"), projectFlow.frame().snapshot().getSliderPresets().stream()
                 .map(SliderPresetSnapshot::getName).toList());
-        assertEquals(List.of("Alpha", "Gamma"), projectFlow.frame().snapshot().getCustomMorphTargets().get(0)
+        assertEquals(List.of("Alpha", "Gamma"), projectFlow.frame().snapshot().getCustomMorphTargets().getFirst()
                 .getSliderPresetNames());
     }
 
@@ -438,7 +438,7 @@ class TemplatesFeatureTest {
 
         TemplatesFeature.Update filtered = feature.dispatch(new TemplatesFeature.ChangeFilter("alp"));
 
-        assertSame(filtered.frame(), observed.get(observed.size() - 1));
+        assertSame(filtered.frame(), observed.getLast());
         assertEquals(List.of("broken Templates renderer"), failures.stream().map(Throwable::getMessage).toList());
         int beforeClose = observed.size();
         subscription.close();

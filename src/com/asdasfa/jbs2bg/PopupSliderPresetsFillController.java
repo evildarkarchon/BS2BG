@@ -107,8 +107,9 @@ public class PopupSliderPresetsFillController extends CustomController {
         confirmFillEmpty.setTitle("Confirm Action");
         confirmFillEmpty.setHeaderText("Fill NPCs Without Preset");
         confirmFillEmpty.setContentText(
-                "Each NPC in the table without a preset will be given a random one from the selection.\n" +
-                        "If filter is active, only the ones displayed will be filled."
+                """
+                Each NPC in the table without a preset will be given a random one from the selection.
+                If filter is active, only the ones displayed will be filled."""
         );
         confirmFillEmpty.setOkButtonText("Fill");
         confirmFillEmpty.setCancelButtonText("Cancel");

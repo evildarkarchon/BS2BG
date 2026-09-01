@@ -10,7 +10,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -117,7 +116,7 @@ class ProjectPresentationTest {
         ObservableList<SliderPresetSnapshot> sliderPresets = presentation.getSliderPresets();
         ObservableList<CustomMorphTargetSnapshot> customMorphTargets = presentation.getCustomMorphTargets();
         ObservableList<NpcMorphAssignmentSnapshot> npcMorphAssignments = presentation.getNpcMorphAssignments();
-        ProjectSnapshot snapshot = populatedSnapshot(Paths.get("projects", "example.jbs2bg"), true);
+        ProjectSnapshot snapshot = populatedSnapshot(Path.of("projects", "example.jbs2bg"), true);
 
         ProjectPresentationUpdate update = presentation.render(new ChangedOutcome(snapshot));
 
@@ -129,19 +128,19 @@ class ProjectPresentationTest {
         assertEquals("jBS2BG - *example.jbs2bg", presentation.getWindowTitle());
         assertTrue(presentation.requiresDiscardConfirmation());
 
-        SliderPresetSnapshot preset = presentation.getSliderPresets().get(0);
-        assertSame(snapshot.getSliderPresets().get(0), preset);
+        SliderPresetSnapshot preset = presentation.getSliderPresets().getFirst();
+        assertSame(snapshot.getSliderPresets().getFirst(), preset);
         assertEquals("Athletic", preset.getName());
-        assertEquals(25, preset.getSliderChoices().get(0).getEffectiveSmallValue());
-        assertEquals(75, preset.getSliderChoices().get(0).getEffectiveBigValue());
+        assertEquals(25, preset.getSliderChoices().getFirst().getEffectiveSmallValue());
+        assertEquals(75, preset.getSliderChoices().getFirst().getEffectiveBigValue());
 
-        CustomMorphTargetSnapshot target = presentation.getCustomMorphTargets().get(0);
-        assertSame(snapshot.getCustomMorphTargets().get(0), target);
+        CustomMorphTargetSnapshot target = presentation.getCustomMorphTargets().getFirst();
+        assertSame(snapshot.getCustomMorphTargets().getFirst(), target);
         assertEquals("All|Female", target.getName());
         assertEquals(Collections.singletonList("Athletic"), target.getSliderPresetNames());
 
-        NpcMorphAssignmentSnapshot npc = presentation.getNpcMorphAssignments().get(0);
-        assertSame(snapshot.getNpcMorphAssignments().get(0), npc);
+        NpcMorphAssignmentSnapshot npc = presentation.getNpcMorphAssignments().getFirst();
+        assertSame(snapshot.getNpcMorphAssignments().getFirst(), npc);
         assertEquals("Skyrim.esm", npc.getPluginName());
         assertEquals("FemaleNord", npc.getEditorId());
         assertEquals(Collections.singletonList("Athletic"), npc.getSliderPresetNames());
@@ -154,14 +153,14 @@ class ProjectPresentationTest {
     @Test
     void nonChangedOutcomesPreserveGeneratedOutputAndFormatDiagnostics() {
         ProjectPresentation presentation = newPresentation();
-        ProjectSnapshot snapshot = populatedSnapshot(Paths.get("projects", "example.jbs2bg"), false);
-        Path source = Paths.get("imports", "broken.xml");
+        ProjectSnapshot snapshot = populatedSnapshot(Path.of("projects", "example.jbs2bg"), false);
+        Path source = Path.of("imports", "broken.xml");
         ProjectDiagnostic diagnostic = new ProjectDiagnostic("XML_PARSE_FAILED", DiagnosticSeverity.ERROR,
                 new SourceLocation(Optional.of(source), Optional.of("Preset"), OptionalInt.of(3),
                         OptionalInt.of(7)),
                 "Could not parse source.");
         ProjectDiagnostic missingDiagnostic = new ProjectDiagnostic("PROJECT_FILE_READ_FAILED",
-                DiagnosticSeverity.ERROR, new SourceLocation(Optional.of(Paths.get("imports", "missing.xml")),
+                DiagnosticSeverity.ERROR, new SourceLocation(Optional.of(Path.of("imports", "missing.xml")),
                 Optional.of("/"), OptionalInt.empty(), OptionalInt.empty()),
                 "The source could not be read.");
         List<ProjectDiagnostic> diagnostics = Arrays.asList(diagnostic, missingDiagnostic);
@@ -171,7 +170,7 @@ class ProjectPresentationTest {
 
         ProjectPresentationUpdate unchanged = presentation
                 .render(new UnchangedOutcome(snapshot, diagnostics));
-        SliderPresetSnapshot renderedBeforeFailure = presentation.getSliderPresets().get(0);
+        SliderPresetSnapshot renderedBeforeFailure = presentation.getSliderPresets().getFirst();
         ProjectPresentationUpdate failed = presentation
                 .render(new FailedOutcome(snapshot, diagnostics));
 
@@ -179,7 +178,7 @@ class ProjectPresentationTest {
         assertFalse(failed.invalidatesGeneratedOutput());
         assertTrue(failed.hasDiagnostics());
         assertTrue(failed.hasErrorDiagnostics());
-        assertSame(renderedBeforeFailure, presentation.getSliderPresets().get(0));
+        assertSame(renderedBeforeFailure, presentation.getSliderPresets().getFirst());
         assertEquals("ERROR [XML_PARSE_FAILED] broken.xml / Preset (line 3, column 7): Could not parse source."
                         + System.lineSeparator()
                         + "ERROR [PROJECT_FILE_READ_FAILED] missing.xml: The source could not be read.",
@@ -195,17 +194,17 @@ class ProjectPresentationTest {
     @Test
     void metadataOnlyChangesPreserveGeneratedOutput() {
         ProjectPresentation presentation = newPresentation();
-        ProjectSnapshot dirty = populatedSnapshot(Paths.get("projects", "example.jbs2bg"), true);
+        ProjectSnapshot dirty = populatedSnapshot(Path.of("projects", "example.jbs2bg"), true);
         presentation.render(new ChangedOutcome(dirty));
         ProjectSnapshot saved = new ProjectSnapshot(dirty.getSliderPresets(), dirty.getCustomMorphTargets(),
-                dirty.getNpcMorphAssignments(), Optional.of(Paths.get("projects", "renamed.jbs2bg")), false,
+                dirty.getNpcMorphAssignments(), Optional.of(Path.of("projects", "renamed.jbs2bg")), false,
                 ProjectLifecycleStatus.FILE_BACKED);
 
         ProjectPresentationUpdate savedUpdate = presentation.render(new ChangedOutcome(saved));
 
         assertFalse(savedUpdate.invalidatesGeneratedOutput());
         assertSame(saved, presentation.getSnapshot());
-        assertSame(saved.getSliderPresets().get(0), presentation.getSliderPresets().get(0));
+        assertSame(saved.getSliderPresets().getFirst(), presentation.getSliderPresets().getFirst());
         assertEquals("jBS2BG - renamed.jbs2bg", presentation.getWindowTitle());
         assertFalse(presentation.requiresDiscardConfirmation());
 
@@ -224,7 +223,7 @@ class ProjectPresentationTest {
     @Test
     void projectionListenersObserveThePublishedSnapshot() {
         ProjectPresentation presentation = newPresentation();
-        ProjectSnapshot next = populatedSnapshot(Paths.get("projects", "example.jbs2bg"), true);
+        ProjectSnapshot next = populatedSnapshot(Path.of("projects", "example.jbs2bg"), true);
         List<ProjectSnapshot> observedSnapshots = new ArrayList<>();
         presentation.getSliderPresets().addListener(
                 (ListChangeListener<SliderPresetSnapshot>) change -> observedSnapshots.add(presentation.getSnapshot()));
@@ -232,7 +231,7 @@ class ProjectPresentationTest {
         presentation.render(new ChangedOutcome(next));
 
         assertEquals(1, observedSnapshots.size());
-        assertSame(next, observedSnapshots.get(0));
+        assertSame(next, observedSnapshots.getFirst());
     }
 
     /**
@@ -255,11 +254,11 @@ class ProjectPresentationTest {
 
         presentation.render(new ChangedOutcome(snapshot));
 
-        SliderPresetSnapshot rendered = presentation.getSliderPresets().get(0);
-        assertSame(explicitChoice, rendered.getSliderChoices().get(0));
-        assertFalse(rendered.getSliderChoices().get(0).isMissingDefault());
-        assertEquals(20, rendered.getSliderChoices().get(0).getEffectiveSmallValue());
-        assertEquals(80, rendered.getSliderChoices().get(0).getEffectiveBigValue());
+        SliderPresetSnapshot rendered = presentation.getSliderPresets().getFirst();
+        assertSame(explicitChoice, rendered.getSliderChoices().getFirst());
+        assertFalse(rendered.getSliderChoices().getFirst().isMissingDefault());
+        assertEquals(20, rendered.getSliderChoices().getFirst().getEffectiveSmallValue());
+        assertEquals(80, rendered.getSliderChoices().getFirst().getEffectiveBigValue());
         assertSame(missingDefaultChoice, rendered.getSliderChoices().get(1));
         assertTrue(rendered.getSliderChoices().get(1).isMissingDefault());
         assertEquals("jBS2BG *", presentation.getWindowTitle());
@@ -272,7 +271,7 @@ class ProjectPresentationTest {
     @Test
     void renderedProjectCollectionsAreStructurallyReadOnly() {
         ProjectPresentation presentation = newPresentation();
-        presentation.render(new ChangedOutcome(populatedSnapshot(Paths.get("projects", "example.jbs2bg"), true)));
+        presentation.render(new ChangedOutcome(populatedSnapshot(Path.of("projects", "example.jbs2bg"), true)));
 
         assertThrows(UnsupportedOperationException.class, () -> presentation.getSliderPresets().clear());
         assertThrows(UnsupportedOperationException.class, () -> presentation.getCustomMorphTargets().clear());

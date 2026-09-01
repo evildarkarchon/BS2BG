@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -224,7 +223,7 @@ class ProjectPersistenceCompatibilityTest {
 
         session.saveAs(savedProject);
 
-        String savedText = Files.readString(savedProject, StandardCharsets.UTF_8);
+        String savedText = Files.readString(savedProject);
         assertTrue(savedText.contains("\"SetSliders\":[]"));
         ProjectSnapshot reopened = ProjectSessions.create().open(savedProject).getSnapshot();
         SliderChoiceSnapshot breasts = findChoice(findPreset(reopened, "All Defaults"), "Breasts");
@@ -260,7 +259,7 @@ class ProjectPersistenceCompatibilityTest {
         session.saveAs(savedProject);
 
         assertFalse(opened.isMissingDefault());
-        String savedText = Files.readString(savedProject, StandardCharsets.UTF_8);
+        String savedText = Files.readString(savedProject);
         assertTrue(savedText.contains("\"valueSmall\":null"));
         assertTrue(savedText.contains("\"valueBig\":null"));
         ProjectSnapshot reopened = ProjectSessions.create().open(savedProject).getSnapshot();

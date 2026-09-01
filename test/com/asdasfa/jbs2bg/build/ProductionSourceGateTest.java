@@ -5,10 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +33,7 @@ import org.w3c.dom.NodeList;
  */
 class ProductionSourceGateTest {
 
-    private static final Path REPO_ROOT = Paths.get("").toAbsolutePath();
+    private static final Path REPO_ROOT = Path.of("").toAbsolutePath();
     private static final Path SOURCE_ROOT = REPO_ROOT.resolve("src");
     private static final Path POM = REPO_ROOT.resolve("pom.xml");
 
@@ -68,7 +66,7 @@ class ProductionSourceGateTest {
      * Appends one "path:line reason (match)" entry per forbidden pattern found in the file.
      */
     private static void scan(Path file, Map<Pattern, String> forbidden, List<String> violations) throws IOException {
-        String text = Files.readString(file, StandardCharsets.UTF_8);
+        String text = Files.readString(file);
         for (Map.Entry<Pattern, String> rule : forbidden.entrySet()) {
             var matcher = rule.getKey().matcher(text);
             if (matcher.find()) {
@@ -106,7 +104,7 @@ class ProductionSourceGateTest {
         for (int index = 0; index < plugins.getLength(); index++) {
             Element plugin = (Element) plugins.item(index);
             List<Element> artifactIds = children(plugin, "artifactId");
-            if (artifactIds.size() != 1 || !"maven-compiler-plugin".equals(artifactIds.get(0).getTextContent().trim()))
+            if (artifactIds.size() != 1 || !"maven-compiler-plugin".equals(artifactIds.getFirst().getTextContent().trim()))
                 continue;
             NodeList nested = plugin.getElementsByTagName("configuration");
             for (int nestedIndex = 0; nestedIndex < nested.getLength(); nestedIndex++)
@@ -139,7 +137,7 @@ class ProductionSourceGateTest {
     private static Element child(Element parent, String name) {
         List<Element> matches = children(parent, name);
         assertEquals(1, matches.size(), parent.getTagName() + " must have exactly one <" + name + ">");
-        return matches.get(0);
+        return matches.getFirst();
     }
 
     private static List<Element> children(Element parent, String name) {
@@ -147,8 +145,8 @@ class ProductionSourceGateTest {
         NodeList nodes = parent.getChildNodes();
         for (int index = 0; index < nodes.getLength(); index++) {
             Node node = nodes.item(index);
-            if (node instanceof Element && name.equals(node.getNodeName()))
-                matches.add((Element) node);
+            if (node instanceof Element element && name.equals(node.getNodeName()))
+                matches.add(element);
         }
         return matches;
     }
@@ -176,7 +174,7 @@ class ProductionSourceGateTest {
      */
     @Test
     void theVendoredFilterIsGone() {
-        assertFalse(Files.exists(SOURCE_ROOT.resolve(Paths.get("com", "asdasfa", "jbs2bg", "controlsfx"))),
+        assertFalse(Files.exists(SOURCE_ROOT.resolve(Path.of("com", "asdasfa", "jbs2bg", "controlsfx"))),
                 "the vendored ControlsFX filter must stay deleted");
     }
 
@@ -228,7 +226,7 @@ class ProductionSourceGateTest {
                 REPO_ROOT.resolve(".mvn").resolve("jvm.config"))) {
             if (!Files.exists(input))
                 continue;
-            String text = Files.readString(input, StandardCharsets.UTF_8);
+            String text = Files.readString(input);
             assertFalse(text.contains("enable-preview"), input + " must not enable preview features");
         }
     }
@@ -246,7 +244,7 @@ class ProductionSourceGateTest {
                 .filter(profile -> "openrewrite".equals(child(profile, "id").getTextContent().trim())).toList();
         assertEquals(1, matches.size(), "pom.xml must define one openrewrite profile");
 
-        Element profile = matches.get(0);
+        Element profile = matches.getFirst();
         assertTrue(children(profile, "activation").isEmpty(), "the openrewrite profile must require explicit activation");
         Element rewrite = plugin(child(child(profile, "build"), "plugins"), "rewrite-maven-plugin",
                 "profiles/profile[id=openrewrite]/build/plugins");
@@ -284,7 +282,7 @@ class ProductionSourceGateTest {
     @Test
     void enforcerBansJavaFxIncubatorModules() throws Exception {
         Document pom = parse(POM);
-        String pomText = Files.readString(POM, StandardCharsets.UTF_8);
+        String pomText = Files.readString(POM);
         assertTrue(pomText.contains("<exclude>org.openjfx:javafx-incubator-*</exclude>"),
                 "pom.xml must ban org.openjfx:javafx-incubator-* through bannedDependencies");
         for (Element dependency : children(child(pom.getDocumentElement(), "dependencies"), "dependency")) {
@@ -299,7 +297,7 @@ class ProductionSourceGateTest {
     @Test
     void enforcerKeepsTheUnselectedIkonliStackOutOfTheImage() throws Exception {
         Document pom = parse(POM);
-        String pomText = Files.readString(POM, StandardCharsets.UTF_8);
+        String pomText = Files.readString(POM);
         assertTrue(pomText.contains("<exclude>org.kordamp.ikonli:*</exclude>"),
                 "pom.xml must ban the unselected Ikonli stack through bannedDependencies");
         for (Element dependency : children(child(pom.getDocumentElement(), "dependencies"), "dependency")) {

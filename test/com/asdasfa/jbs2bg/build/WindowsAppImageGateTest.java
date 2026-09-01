@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,7 +30,7 @@ import com.asdasfa.jbs2bg.Main;
  */
 class WindowsAppImageGateTest {
 
-    private static final Path POM = Paths.get("").toAbsolutePath().resolve("pom.xml");
+    private static final Path POM = Path.of("").toAbsolutePath().resolve("pom.xml");
 
     /**
      * Staging directory (relative to target/) that jpackage receives through {@code --input}.
@@ -83,7 +82,7 @@ class WindowsAppImageGateTest {
     private static Element child(Element parent, String name) {
         List<Element> matches = children(parent, name);
         assertEquals(1, matches.size(), parent.getTagName() + " must have exactly one <" + name + ">");
-        return matches.get(0);
+        return matches.getFirst();
     }
 
     private static List<Element> children(Element parent, String name) {
@@ -91,8 +90,8 @@ class WindowsAppImageGateTest {
         NodeList nodes = parent.getChildNodes();
         for (int index = 0; index < nodes.getLength(); index++) {
             Node node = nodes.item(index);
-            if (node instanceof Element && name.equals(node.getNodeName()))
-                matches.add((Element) node);
+            if (node instanceof Element element && name.equals(node.getNodeName()))
+                matches.add(element);
         }
         return matches;
     }
@@ -155,7 +154,7 @@ class WindowsAppImageGateTest {
                 continue;
             List<Element> scope = children(dependency, "scope");
             assertFalse(scope.isEmpty(), "JavaFX dependencies must declare the provided scope");
-            assertEquals("provided", scope.get(0).getTextContent().trim(),
+            assertEquals("provided", scope.getFirst().getTextContent().trim(),
                     child(dependency, "artifactId").getTextContent().trim() + " must be provided by the bundled runtime");
         }
     }

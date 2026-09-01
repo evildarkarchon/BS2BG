@@ -28,8 +28,8 @@ class ProjectSessionSaveTest {
         assertSame(before, outcome.getSnapshot());
         assertSame(before, session.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.ACTIVE_PROJECT_REQUIRED,
-                outcome.getDiagnostics().get(0).getCode());
-        assertEquals("project", outcome.getDiagnostics().get(0).getSourceLocation().getElement().get());
+                outcome.getDiagnostics().getFirst().getCode());
+        assertEquals("project", outcome.getDiagnostics().getFirst().getSourceLocation().getElement().get());
     }
 
     /**
@@ -48,7 +48,7 @@ class ProjectSessionSaveTest {
         assertSame(dirty, outcome.getSnapshot());
         assertSame(dirty, session.getSnapshot());
         assertEquals(ProjectDiagnosticCodes.FILE_IDENTITY_REQUIRED,
-                outcome.getDiagnostics().get(0).getCode());
+                outcome.getDiagnostics().getFirst().getCode());
     }
 
     /**
@@ -99,7 +99,7 @@ class ProjectSessionSaveTest {
 
         ProjectOutcome reopened = ProjectSessions.create().open(target);
         assertInstanceOf(ChangedOutcome.class, reopened);
-        assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().get(0).getName());
+        assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().getFirst().getName());
     }
 
     /**
@@ -128,7 +128,7 @@ class ProjectSessionSaveTest {
         assertEquals(target.toAbsolutePath().normalize(), outcome.getSnapshot().getFileIdentity().get());
         ProjectOutcome reopened = ProjectSessions.create().open(target);
         assertInstanceOf(ChangedOutcome.class, reopened);
-        assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().get(0).getName());
+        assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().getFirst().getName());
         try (java.util.stream.Stream<Path> siblings = Files.list(tempDirectory)) {
             assertEquals(1, siblings.count(), "no staging file may be left beside the saved Project");
         }
@@ -184,7 +184,7 @@ class ProjectSessionSaveTest {
         assertSame(clean, outcome.getSnapshot());
         assertSame(clean, session.getSnapshot());
         ProjectOutcome reopened = ProjectSessions.create().open(target);
-        assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().get(0).getName());
+        assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().getFirst().getName());
     }
 
     /**
@@ -217,9 +217,9 @@ class ProjectSessionSaveTest {
         assertTrue(Files.isDirectory(blockedTarget));
         assertEquals("previous target", new String(Files.readAllBytes(marker), StandardCharsets.UTF_8));
         assertEquals(ProjectDiagnosticCodes.PROJECT_FILE_WRITE_FAILED,
-                outcome.getDiagnostics().get(0).getCode());
+                outcome.getDiagnostics().getFirst().getCode());
         assertEquals(blockedTarget.toAbsolutePath().normalize(),
-                outcome.getDiagnostics().get(0).getSourceLocation().getPath().get());
+                outcome.getDiagnostics().getFirst().getSourceLocation().getPath().get());
         try (var siblings = Files.list(tempDirectory)) {
             assertFalse(siblings.anyMatch(path -> path.getFileName().toString()
                             .startsWith(".blocked-target.jbs2bg-")),
@@ -254,7 +254,7 @@ class ProjectSessionSaveTest {
         assertEquals(target.toAbsolutePath().normalize(), outcome.getSnapshot().getFileIdentity().get());
         assertEquals(2, outcome.getSnapshot().getSliderPresets().size());
         assertEquals(ProjectDiagnosticCodes.PROJECT_FILE_WRITE_FAILED,
-                outcome.getDiagnostics().get(0).getCode());
+                outcome.getDiagnostics().getFirst().getCode());
     }
 
     /**
@@ -277,7 +277,7 @@ class ProjectSessionSaveTest {
         assertFalse(outcome.getSnapshot().isDirty());
         ProjectOutcome reopened = ProjectSessions.create().open(target);
         assertInstanceOf(ChangedOutcome.class, reopened);
-        assertEquals("Replacement", reopened.getSnapshot().getSliderPresets().get(0).getName());
+        assertEquals("Replacement", reopened.getSnapshot().getSliderPresets().getFirst().getName());
     }
 
     /**
@@ -306,7 +306,7 @@ class ProjectSessionSaveTest {
         assertEquals(target.toAbsolutePath().normalize(), saved.getSnapshot().getFileIdentity().get());
         ProjectOutcome reopened = ProjectSessions.create().open(target);
         assertTrue(reopened.getDiagnostics().isEmpty());
-        assertTrue(reopened.getSnapshot().getCustomMorphTargets().get(0).getSliderPresetNames().isEmpty());
+        assertTrue(reopened.getSnapshot().getCustomMorphTargets().getFirst().getSliderPresetNames().isEmpty());
     }
 
     /**

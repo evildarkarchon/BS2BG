@@ -605,7 +605,7 @@ class WorkbenchProjectFlowTest {
         assertEquals(dirty.snapshot(), failed.frame().snapshot());
         assertEquals(dirty.title(), failed.frame().title());
         assertEquals(ProjectDiagnosticCodes.PROJECT_FILE_WRITE_FAILED,
-                failed.frame().diagnostics().get(0).getCode());
+                failed.frame().diagnostics().getFirst().getCode());
         assertTrue(failed.effect().isEmpty());
     }
 

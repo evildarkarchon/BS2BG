@@ -78,7 +78,7 @@ class ProjectSessionSliderChoiceTest {
                                                    ProjectSnapshot snapshot) {
         assertInstanceOf(RejectedOutcome.class, outcome);
         assertSame(snapshot, outcome.getSnapshot());
-        ProjectDiagnostic diagnostic = outcome.getDiagnostics().get(0);
+        ProjectDiagnostic diagnostic = outcome.getDiagnostics().getFirst();
         assertEquals(code, diagnostic.getCode());
         assertEquals(DiagnosticSeverity.ERROR, diagnostic.getSeverity());
         assertEquals(element, diagnostic.getSourceLocation().getElement().get());
@@ -185,7 +185,7 @@ class ProjectSessionSliderChoiceTest {
         // Breasts and Legs are the standard defaults synthesized at creation; Waist's
         // synthesized default was replaced by the explicit choice above.
         assertEquals(Arrays.asList("Arms", "Breasts", "Legs", "Waist"),
-                names(collapsedRange.getSnapshot().getSliderPresets().get(0)));
+                names(collapsedRange.getSnapshot().getSliderPresets().getFirst()));
     }
 
     /**
@@ -224,7 +224,7 @@ class ProjectSessionSliderChoiceTest {
         session.newProject();
 
         ProjectOutcome created = session.apply(SliderPresetEdits.create("Alpha"));
-        SliderPresetSnapshot preset = created.getSnapshot().getSliderPresets().get(0);
+        SliderPresetSnapshot preset = created.getSnapshot().getSliderPresets().getFirst();
 
         assertInstanceOf(ChangedOutcome.class, created);
         assertFalse(preset.isUunp());
@@ -236,7 +236,7 @@ class ProjectSessionSliderChoiceTest {
         Path savedFile = tempDirectory.resolve("created.jbs2bg");
         assertInstanceOf(ChangedOutcome.class, session.saveAs(savedFile));
         SliderPresetSnapshot reopened = ProjectSessions.create().open(savedFile).getSnapshot()
-                .getSliderPresets().get(0);
+                .getSliderPresets().getFirst();
 
         assertEquals(names(preset), names(reopened));
         assertSynthesized(find(reopened, "Breasts"), 20, 100);
@@ -259,7 +259,7 @@ class ProjectSessionSliderChoiceTest {
                 new SliderChoiceSnapshot("Waist", true, null, null, 0, 100, 100, 100, false)));
 
         ProjectOutcome toUunp = session.apply(SliderPresetEdits.setUunp("Alpha", true));
-        SliderPresetSnapshot uunpPreset = toUunp.getSnapshot().getSliderPresets().get(0);
+        SliderPresetSnapshot uunpPreset = toUunp.getSnapshot().getSliderPresets().getFirst();
 
         assertInstanceOf(ChangedOutcome.class, toUunp);
         assertTrue(uunpPreset.isUunp());
@@ -278,10 +278,10 @@ class ProjectSessionSliderChoiceTest {
         ProjectOutcome editedSynthesized = session.apply(SliderPresetEdits.setSliderChoice("Alpha",
                 find(uunpPreset, "Legs").withPercentageRange(20, 80)));
         assertInstanceOf(ChangedOutcome.class, editedSynthesized);
-        assertTrue(find(editedSynthesized.getSnapshot().getSliderPresets().get(0), "Legs").isMissingDefault());
+        assertTrue(find(editedSynthesized.getSnapshot().getSliderPresets().getFirst(), "Legs").isMissingDefault());
 
         ProjectOutcome toRegular = session.apply(SliderPresetEdits.setUunp("Alpha", false));
-        SliderPresetSnapshot regularPreset = toRegular.getSnapshot().getSliderPresets().get(0);
+        SliderPresetSnapshot regularPreset = toRegular.getSnapshot().getSliderPresets().getFirst();
 
         assertInstanceOf(ChangedOutcome.class, toRegular);
         assertFalse(regularPreset.isUunp());
@@ -310,7 +310,7 @@ class ProjectSessionSliderChoiceTest {
 
         ProjectOutcome outcome = session.apply(SliderPresetEdits.update("Alpha",
                 new SliderPresetSnapshot("Alpha", true, Arrays.asList(breasts, staleWaist))));
-        SliderPresetSnapshot preset = outcome.getSnapshot().getSliderPresets().get(0);
+        SliderPresetSnapshot preset = outcome.getSnapshot().getSliderPresets().getFirst();
 
         assertInstanceOf(ChangedOutcome.class, outcome);
         assertTrue(preset.isUunp());
@@ -343,7 +343,7 @@ class ProjectSessionSliderChoiceTest {
 
         ProjectOutcome waistOutcome = session.apply(SliderPresetEdits.setSliderChoice("Alpha", divergentWaist));
         ProjectOutcome breastsOutcome = session.apply(SliderPresetEdits.setSliderChoice("Alpha", deferringBreasts));
-        SliderPresetSnapshot preset = breastsOutcome.getSnapshot().getSliderPresets().get(0);
+        SliderPresetSnapshot preset = breastsOutcome.getSnapshot().getSliderPresets().getFirst();
 
         assertInstanceOf(ChangedOutcome.class, waistOutcome);
         assertInstanceOf(ChangedOutcome.class, breastsOutcome);
@@ -379,7 +379,7 @@ class ProjectSessionSliderChoiceTest {
 
         ProjectOutcome outcome = session.apply(SliderPresetEdits.update("Alpha",
                 new SliderPresetSnapshot("Alpha", false, Arrays.asList(divergentWaist))));
-        SliderPresetSnapshot preset = outcome.getSnapshot().getSliderPresets().get(0);
+        SliderPresetSnapshot preset = outcome.getSnapshot().getSliderPresets().getFirst();
 
         assertInstanceOf(ChangedOutcome.class, outcome);
         assertFalse(preset.isUunp());
@@ -397,19 +397,19 @@ class ProjectSessionSliderChoiceTest {
         ProjectSession session = ProjectSessions.create();
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
-        SliderPresetSnapshot created = session.getSnapshot().getSliderPresets().get(0);
+        SliderPresetSnapshot created = session.getSnapshot().getSliderPresets().getFirst();
         session.apply(SliderPresetEdits.setSliderChoice("Alpha",
                 find(created, "Legs").withPercentageRange(25, 75)));
         session.apply(SliderPresetEdits.setSliderChoice("Alpha",
-                find(session.getSnapshot().getSliderPresets().get(0), "Waist").withEnabled(false)));
-        SliderPresetSnapshot edited = session.getSnapshot().getSliderPresets().get(0);
+                find(session.getSnapshot().getSliderPresets().getFirst(), "Waist").withEnabled(false)));
+        SliderPresetSnapshot edited = session.getSnapshot().getSliderPresets().getFirst();
         String legsPreview = ProjectOutputFormatter.formatSliderChoicePreview(find(edited, "Legs"), false);
 
         Path savedFile = tempDirectory.resolve("edited-choices.jbs2bg");
         session.saveAs(savedFile);
         String canonical = Files.readString(savedFile);
         SliderPresetSnapshot reopened = ProjectSessions.create().open(savedFile).getSnapshot()
-                .getSliderPresets().get(0);
+                .getSliderPresets().getFirst();
 
         assertFalse(canonical.contains("\"Breasts\""));
         assertTrue(canonical.contains("\"Legs\""));

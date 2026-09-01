@@ -1,7 +1,6 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -66,7 +65,7 @@ public final class GenerationPreferencesStore {
 
     /** Parses the small profile-local preference document. */
     private boolean loadProfileValue() throws IOException {
-        String content = Files.readString(file, StandardCharsets.UTF_8).trim();
+        String content = Files.readString(file).trim();
         if (!content.startsWith(OMIT_PREFIX))
             return false;
         return Boolean.parseBoolean(content.substring(OMIT_PREFIX.length()).trim());
@@ -88,8 +87,7 @@ public final class GenerationPreferencesStore {
         Files.createDirectories(directory);
         Path temporary = Files.createTempFile(directory, "workbench-generation-", ".next");
         try {
-            Files.writeString(temporary, OMIT_PREFIX + omitRedundantSliders + System.lineSeparator(),
-                    StandardCharsets.UTF_8);
+            Files.writeString(temporary, OMIT_PREFIX + omitRedundantSliders + System.lineSeparator());
             try {
                 Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException exception) {

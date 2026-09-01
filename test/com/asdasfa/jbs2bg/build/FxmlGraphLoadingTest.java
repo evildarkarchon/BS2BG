@@ -5,7 +5,6 @@ import java.lang.reflect.Field;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -49,7 +48,7 @@ class FxmlGraphLoadingTest {
     /**
      * Repository-relative directory holding every FXML graph next to its controller.
      */
-    private static final Path FXML_DIRECTORY = Paths.get("src", "com", "asdasfa", "jbs2bg");
+    private static final Path FXML_DIRECTORY = Path.of("src", "com", "asdasfa", "jbs2bg");
 
     private static final String STYLESHEET = Main.class.getResource("dark.css").toExternalForm();
 
@@ -117,7 +116,7 @@ class FxmlGraphLoadingTest {
     void attachedWorkbenchSaveCommandPublishesTheReturnedProjectFrame() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
         Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
-        Files.copy(Paths.get("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
+        Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN).effect().orElseThrow();

@@ -44,7 +44,7 @@ final class SettingsJacksonAdapterTest {
      * @throws IOException when the permanent fixture cannot be read
      */
     private static byte[] canonicalFixtureBytes(String name) throws IOException {
-        return Files.readString(fixture(name), StandardCharsets.UTF_8)
+        return Files.readString(fixture(name))
                 .replace("\r\n", "\n").getBytes(StandardCharsets.UTF_8);
     }
 
@@ -199,7 +199,7 @@ final class SettingsJacksonAdapterTest {
         Settings.InitializationResult result = Settings.initialize(directory);
 
         assertTrue(result.isSuccessful());
-        assertEquals("SETTINGS_PUBLICATION_RECOVERED", result.getDiagnostics().get(0).getCode());
+        assertEquals("SETTINGS_PUBLICATION_RECOVERED", result.getDiagnostics().getFirst().getCode());
         assertArrayEquals(priorStandard, Files.readAllBytes(standard));
         assertArrayEquals(priorUunp, Files.readAllBytes(uunp));
         assertFalse(Files.exists(transaction));

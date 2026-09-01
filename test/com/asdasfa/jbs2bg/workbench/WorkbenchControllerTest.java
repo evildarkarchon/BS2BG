@@ -196,7 +196,7 @@ class WorkbenchControllerTest {
             ListView<WorkbenchFeedback.ActivityRecord> activity =
                     (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
             assertEquals(1, activity.getItems().size());
-            assertTrue(activity.getItems().get(0).message().contains("SETTINGS_JSON_MALFORMED"));
+            assertTrue(activity.getItems().getFirst().message().contains("SETTINGS_JSON_MALFORMED"));
             stage.close();
         });
     }
@@ -272,7 +272,7 @@ class WorkbenchControllerTest {
                         (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
                 presets.getSelectionModel().select(0);
                 VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
-                SliderChoiceRow waist = (SliderChoiceRow) rows.getChildren().get(0);
+                SliderChoiceRow waist = (SliderChoiceRow) rows.getChildren().getFirst();
 
                 assertEquals("Slider choice Waist in Slider Preset Alpha", waist.getAccessibleText());
                 assertEquals("Waist@0.8", waist.previewControl().getText());
@@ -286,7 +286,7 @@ class WorkbenchControllerTest {
                 enabled.fire();
 
                 assertSame(enabled, scene.getFocusOwner());
-                assertFalse(flow.frame().snapshot().getSliderPresets().get(0).getSliderChoices().get(0).isEnabled());
+                assertFalse(flow.frame().snapshot().getSliderPresets().getFirst().getSliderChoices().getFirst().isEnabled());
                 assertEquals(0, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
                 assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("changed"));
 
@@ -297,7 +297,7 @@ class WorkbenchControllerTest {
                 profile.fireEvent(new ActionEvent());
 
                 assertEquals("Alpha", presets.getSelectionModel().getSelectedItem().getName());
-                assertEquals("Arms", ((SliderChoiceRow) rows.getChildren().get(0)).choiceName());
+                assertEquals("Arms", ((SliderChoiceRow) rows.getChildren().getFirst()).choiceName());
                 stage.close();
             });
         } finally {
@@ -341,23 +341,23 @@ class WorkbenchControllerTest {
                 fiftyAll.fire();
 
                 assertSame(fiftyAll, scene.getFocusOwner());
-                assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().get(0)
+                assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().getFirst()
                         .getSliderChoices().stream().map(choice -> choice.getPercentageMinimum()).toList());
-                assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().get(0)
+                assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().getFirst()
                         .getSliderChoices().stream().map(choice -> choice.getPercentageMaximum()).toList());
                 assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
 
                 minimumGang.fire();
                 assertTrue(minimumGang.isSelected());
-                assertTrue(((SliderChoiceRow) rows.getChildren().get(0)).enabledControl().isDisabled());
+                assertTrue(((SliderChoiceRow) rows.getChildren().getFirst()).enabledControl().isDisabled());
                 maximumGang.fire();
 
                 assertFalse(minimumGang.isSelected());
                 assertTrue(maximumGang.isSelected());
-                assertTrue(((SliderChoiceRow) rows.getChildren().get(0)).minimumControl().isDisabled());
+                assertTrue(((SliderChoiceRow) rows.getChildren().getFirst()).minimumControl().isDisabled());
                 maximumGang.fire();
                 assertFalse(maximumGang.isSelected());
-                assertFalse(((SliderChoiceRow) rows.getChildren().get(0)).enabledControl().isDisabled());
+                assertFalse(((SliderChoiceRow) rows.getChildren().getFirst()).enabledControl().isDisabled());
                 assertEquals("Gang all minimum Slider choice values", minimumGang.getAccessibleText());
                 minimumGang.requestFocus();
                 sendKey(root, KeyCode.F6);

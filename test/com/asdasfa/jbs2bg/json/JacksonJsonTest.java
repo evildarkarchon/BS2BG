@@ -150,7 +150,7 @@ final class JacksonJsonTest {
     void projectProfileEnforcesItsPermanentDocumentAndTokenLimits() throws IOException {
         Properties limits = new Properties();
         try (var reader = Files.newBufferedReader(Path.of("test-resources", "json-oracles", "project",
-                "resource-limits.properties"), StandardCharsets.UTF_8)) {
+                "resource-limits.properties"))) {
             limits.load(reader);
         }
         int maximumDocumentBytes = Integer.parseInt(limits.getProperty("maximumDocumentBytes"));

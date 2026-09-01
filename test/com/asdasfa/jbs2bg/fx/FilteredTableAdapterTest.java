@@ -285,7 +285,7 @@ class FilteredTableAdapterTest {
             assertEquals(identities(ALPHA, BETA), frozen.getIdentities());
             assertEquals(Arrays.asList(DELTA), fixture.table.getItems());
 
-            assertEquals("Delta", fixture.adapter.cellTextOf(fixture.table.getColumns().get(0), DELTA));
+            assertEquals("Delta", fixture.adapter.cellTextOf(fixture.table.getColumns().getFirst(), DELTA));
             assertEquals("Dawnguard.esm", fixture.adapter.cellTextOf(fixture.master, DELTA));
 
             fixture.adapter.setSource(null);

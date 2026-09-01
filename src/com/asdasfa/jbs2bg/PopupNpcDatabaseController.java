@@ -2,7 +2,6 @@ package com.asdasfa.jbs2bg;
 
 import java.io.File;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.ResourceBundle;
@@ -105,7 +104,7 @@ public class PopupNpcDatabaseController extends CustomController {
             @Override
             public void test() {
                 // Use the first (leftmost, possibly reordered) column's data for searching.
-                TableColumn<NPC, ?> leadingColumn = tvNpcDatabase.getColumns().get(0);
+                TableColumn<NPC, ?> leadingColumn = tvNpcDatabase.getColumns().getFirst();
 
                 for (NPC npc : tvNpcDatabase.getItems()) {
                     String text = npcDatabaseTable.cellTextOf(leadingColumn, npc);
@@ -154,8 +153,9 @@ public class PopupNpcDatabaseController extends CustomController {
         confirmAddAllNpcs.setTitle("Confirm Action");
         confirmAddAllNpcs.setHeaderText("Add All NPCs");
         confirmAddAllNpcs.setContentText(
-                "Add all NPCs from this database?\n" +
-                        "If filter is active, only the ones displayed will be added."
+                """
+                Add all NPCs from this database?
+                If filter is active, only the ones displayed will be added."""
         );
         confirmAddAllNpcs.setOkButtonText("Add All");
         confirmAddAllNpcs.setCancelButtonText("Cancel");
@@ -172,9 +172,10 @@ public class PopupNpcDatabaseController extends CustomController {
         confirmClearNpcDatabase.setTitle("Confirm Action");
         confirmClearNpcDatabase.setHeaderText("Clear NPC Database");
         confirmClearNpcDatabase.setContentText(
-                "Clear NPC database?\n" +
-                        "This will only clear the database, not the morph targets list.\n" +
-                        "If filter is active, only the ones displayed will be removed."
+                """
+                Clear NPC database?
+                This will only clear the database, not the morph targets list.
+                If filter is active, only the ones displayed will be removed."""
         );
         confirmClearNpcDatabase.setOkButtonText("Clear");
         confirmClearNpcDatabase.setCancelButtonText("Cancel");

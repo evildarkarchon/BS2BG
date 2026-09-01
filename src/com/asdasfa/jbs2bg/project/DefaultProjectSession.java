@@ -495,60 +495,60 @@ final class DefaultProjectSession implements ProjectSession {
                     || edit instanceof NpcMorphAssignmentEdits.NpcMorphAssignmentEdit)
                     && snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT)
                 return rejectedActiveProjectRequired();
-            if (edit instanceof NpcMorphAssignmentEdits.AddNpc)
-                return addNpc((NpcMorphAssignmentEdits.AddNpc) edit);
-            if (edit instanceof NpcMorphAssignmentEdits.AddNpcs)
-                return addNpcs((NpcMorphAssignmentEdits.AddNpcs) edit);
-            if (edit instanceof NpcMorphAssignmentEdits.AddSliderPreset)
-                return addNpcSliderPreset((NpcMorphAssignmentEdits.AddSliderPreset) edit);
-            if (edit instanceof NpcMorphAssignmentEdits.AddSliderPresets)
-                return addNpcSliderPresets((NpcMorphAssignmentEdits.AddSliderPresets) edit);
-            if (edit instanceof NpcMorphAssignmentEdits.RemoveSliderPreset)
-                return removeNpcSliderPreset((NpcMorphAssignmentEdits.RemoveSliderPreset) edit);
-            if (edit instanceof NpcMorphAssignmentEdits.ClearSliderPresets)
-                return clearNpcSliderPresets((NpcMorphAssignmentEdits.ClearSliderPresets) edit);
-            if (edit instanceof NpcMorphAssignmentEdits.ClearSliderPresetsForNpcs)
-                return clearNpcSliderPresetsForNpcs((NpcMorphAssignmentEdits.ClearSliderPresetsForNpcs) edit);
-            if (edit instanceof NpcMorphAssignmentEdits.RemoveNpc)
-                return removeNpc((NpcMorphAssignmentEdits.RemoveNpc) edit);
-            if (edit instanceof NpcMorphAssignmentEdits.RemoveNpcs)
-                return removeNpcs((NpcMorphAssignmentEdits.RemoveNpcs) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.AddNpc npc)
+                return addNpc(npc);
+            if (edit instanceof NpcMorphAssignmentEdits.AddNpcs npcs)
+                return addNpcs(npcs);
+            if (edit instanceof NpcMorphAssignmentEdits.AddSliderPreset preset)
+                return addNpcSliderPreset(preset);
+            if (edit instanceof NpcMorphAssignmentEdits.AddSliderPresets presets)
+                return addNpcSliderPresets(presets);
+            if (edit instanceof NpcMorphAssignmentEdits.RemoveSliderPreset preset1)
+                return removeNpcSliderPreset(preset1);
+            if (edit instanceof NpcMorphAssignmentEdits.ClearSliderPresets presets1)
+                return clearNpcSliderPresets(presets1);
+            if (edit instanceof NpcMorphAssignmentEdits.ClearSliderPresetsForNpcs npcs1)
+                return clearNpcSliderPresetsForNpcs(npcs1);
+            if (edit instanceof NpcMorphAssignmentEdits.RemoveNpc npc1)
+                return removeNpc(npc1);
+            if (edit instanceof NpcMorphAssignmentEdits.RemoveNpcs npcs2)
+                return removeNpcs(npcs2);
             if (edit instanceof NpcMorphAssignmentEdits.ClearNpcs)
                 return clearNpcs();
-            if (edit instanceof NpcMorphAssignmentEdits.FillEmpty)
-                return fillEmpty((NpcMorphAssignmentEdits.FillEmpty) edit);
-            if (edit instanceof CustomMorphTargetEdits.Create)
-                return createCustomMorphTarget((CustomMorphTargetEdits.Create) edit);
-            if (edit instanceof CustomMorphTargetEdits.AddSliderPreset)
-                return addCustomMorphTargetSliderPreset((CustomMorphTargetEdits.AddSliderPreset) edit);
-            if (edit instanceof CustomMorphTargetEdits.AddSliderPresets)
-                return addCustomMorphTargetSliderPresets((CustomMorphTargetEdits.AddSliderPresets) edit);
-            if (edit instanceof CustomMorphTargetEdits.RemoveSliderPreset)
-                return removeCustomMorphTargetSliderPreset((CustomMorphTargetEdits.RemoveSliderPreset) edit);
-            if (edit instanceof CustomMorphTargetEdits.ClearSliderPresets)
-                return clearCustomMorphTargetSliderPresets((CustomMorphTargetEdits.ClearSliderPresets) edit);
-            if (edit instanceof CustomMorphTargetEdits.Delete)
-                return deleteCustomMorphTarget((CustomMorphTargetEdits.Delete) edit);
+            if (edit instanceof NpcMorphAssignmentEdits.FillEmpty empty)
+                return fillEmpty(empty);
+            if (edit instanceof CustomMorphTargetEdits.Create create)
+                return createCustomMorphTarget(create);
+            if (edit instanceof CustomMorphTargetEdits.AddSliderPreset preset2)
+                return addCustomMorphTargetSliderPreset(preset2);
+            if (edit instanceof CustomMorphTargetEdits.AddSliderPresets presets2)
+                return addCustomMorphTargetSliderPresets(presets2);
+            if (edit instanceof CustomMorphTargetEdits.RemoveSliderPreset preset3)
+                return removeCustomMorphTargetSliderPreset(preset3);
+            if (edit instanceof CustomMorphTargetEdits.ClearSliderPresets presets3)
+                return clearCustomMorphTargetSliderPresets(presets3);
+            if (edit instanceof CustomMorphTargetEdits.Delete delete)
+                return deleteCustomMorphTarget(delete);
             if (edit instanceof CustomMorphTargetEdits.Clear)
                 return clearCustomMorphTargets();
-            if (edit instanceof SliderPresetEdits.Create)
-                return createSliderPreset((SliderPresetEdits.Create) edit);
-            if (edit instanceof SliderPresetEdits.Duplicate)
-                return duplicateSliderPreset((SliderPresetEdits.Duplicate) edit);
-            if (edit instanceof SliderPresetEdits.Update)
-                return updateSliderPreset((SliderPresetEdits.Update) edit);
-            if (edit instanceof SliderPresetEdits.Rename)
-                return renameSliderPreset((SliderPresetEdits.Rename) edit);
-            if (edit instanceof SliderPresetEdits.Delete)
-                return deleteSliderPreset((SliderPresetEdits.Delete) edit);
-            if (edit instanceof SliderPresetEdits.DeleteAll)
-                return deleteSliderPresets((SliderPresetEdits.DeleteAll) edit);
+            if (edit instanceof SliderPresetEdits.Create create1)
+                return createSliderPreset(create1);
+            if (edit instanceof SliderPresetEdits.Duplicate duplicate)
+                return duplicateSliderPreset(duplicate);
+            if (edit instanceof SliderPresetEdits.Update update)
+                return updateSliderPreset(update);
+            if (edit instanceof SliderPresetEdits.Rename rename)
+                return renameSliderPreset(rename);
+            if (edit instanceof SliderPresetEdits.Delete delete1)
+                return deleteSliderPreset(delete1);
+            if (edit instanceof SliderPresetEdits.DeleteAll all)
+                return deleteSliderPresets(all);
             if (edit instanceof SliderPresetEdits.Clear)
                 return clearSliderPresets();
-            if (edit instanceof SliderPresetEdits.SetUunp)
-                return setSliderPresetUunp((SliderPresetEdits.SetUunp) edit);
-            if (edit instanceof SliderPresetEdits.SetSliderChoice)
-                return setSliderChoice((SliderPresetEdits.SetSliderChoice) edit);
+            if (edit instanceof SliderPresetEdits.SetUunp uunp)
+                return setSliderPresetUunp(uunp);
+            if (edit instanceof SliderPresetEdits.SetSliderChoice choice)
+                return setSliderChoice(choice);
             SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("project-edit"),
                     OptionalInt.empty(), OptionalInt.empty());
             return rejected(ProjectDiagnosticCodes.EDIT_UNSUPPORTED, location,
@@ -610,7 +610,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome addNpcSliderPreset(NpcMorphAssignmentEdits.AddSliderPreset edit) {
-        if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
+        if (project.findNpcMorphAssignment(edit.getIdentity()).isEmpty())
             return rejectedNpcMorphAssignmentNotFound();
         return outcome(project.assignSliderPreset(Project.ReferrerKey.npcMorphAssignment(edit.getIdentity()),
                 edit.getSliderPresetName()));
@@ -624,7 +624,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome addNpcSliderPresets(NpcMorphAssignmentEdits.AddSliderPresets edit) {
-        if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
+        if (project.findNpcMorphAssignment(edit.getIdentity()).isEmpty())
             return rejectedNpcMorphAssignmentNotFound();
         if (edit.getSliderPresetNames() == null)
             return rejectedSliderPresetNotFound();
@@ -640,7 +640,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome removeNpcSliderPreset(NpcMorphAssignmentEdits.RemoveSliderPreset edit) {
-        if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
+        if (project.findNpcMorphAssignment(edit.getIdentity()).isEmpty())
             return rejectedNpcMorphAssignmentNotFound();
         return outcome(project.unassignSliderPreset(
                 Project.ReferrerKey.npcMorphAssignment(edit.getIdentity()), edit.getSliderPresetName()));
@@ -654,7 +654,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @return changed, unchanged, or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome clearNpcSliderPresets(NpcMorphAssignmentEdits.ClearSliderPresets edit) {
-        if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
+        if (project.findNpcMorphAssignment(edit.getIdentity()).isEmpty())
             return rejectedNpcMorphAssignmentNotFound();
         return outcome(project.clearSliderPresetAssignments(
                 Project.ReferrerKey.npcMorphAssignment(edit.getIdentity())));
@@ -675,7 +675,7 @@ final class DefaultProjectSession implements ProjectSession {
                     "Filtered assignment clearing requires an NPC identity selection.");
         List<Project.ReferrerKey> keys = new ArrayList<>(edit.getIdentities().size());
         for (NpcMorphAssignmentIdentity identity : edit.getIdentities()) {
-            if (!project.findNpcMorphAssignment(identity).isPresent())
+            if (project.findNpcMorphAssignment(identity).isEmpty())
                 return rejectedNpcMorphAssignmentNotFound();
             keys.add(Project.ReferrerKey.npcMorphAssignment(identity));
         }
@@ -689,7 +689,7 @@ final class DefaultProjectSession implements ProjectSession {
      * @return a changed or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome removeNpc(NpcMorphAssignmentEdits.RemoveNpc edit) {
-        if (!project.findNpcMorphAssignment(edit.getIdentity()).isPresent())
+        if (project.findNpcMorphAssignment(edit.getIdentity()).isEmpty())
             return rejectedNpcMorphAssignmentNotFound();
         return outcome(project.removeNpcMorphAssignment(edit.getIdentity()));
     }
@@ -788,7 +788,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome addCustomMorphTargetSliderPreset(CustomMorphTargetEdits.AddSliderPreset edit) {
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getTargetName());
-        if (!target.isPresent())
+        if (target.isEmpty())
             return rejectedCustomMorphTargetNotFound();
         return outcome(project.assignSliderPreset(Project.ReferrerKey.customMorphTarget(target.get().getName()),
                 edit.getSliderPresetName()));
@@ -803,7 +803,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome addCustomMorphTargetSliderPresets(CustomMorphTargetEdits.AddSliderPresets edit) {
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getTargetName());
-        if (!target.isPresent())
+        if (target.isEmpty())
             return rejectedCustomMorphTargetNotFound();
         if (edit.getSliderPresetNames() == null)
             return rejectedSliderPresetNotFound();
@@ -820,7 +820,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome removeCustomMorphTargetSliderPreset(CustomMorphTargetEdits.RemoveSliderPreset edit) {
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getTargetName());
-        if (!target.isPresent())
+        if (target.isEmpty())
             return rejectedCustomMorphTargetNotFound();
         return outcome(project.unassignSliderPreset(
                 Project.ReferrerKey.customMorphTarget(target.get().getName()), edit.getSliderPresetName()));
@@ -835,7 +835,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome clearCustomMorphTargetSliderPresets(CustomMorphTargetEdits.ClearSliderPresets edit) {
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getTargetName());
-        if (!target.isPresent())
+        if (target.isEmpty())
             return rejectedCustomMorphTargetNotFound();
         return outcome(project.clearSliderPresetAssignments(
                 Project.ReferrerKey.customMorphTarget(target.get().getName())));
@@ -849,7 +849,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome deleteCustomMorphTarget(CustomMorphTargetEdits.Delete edit) {
         Optional<CustomMorphTargetSnapshot> target = project.findCustomMorphTarget(edit.getName());
-        if (!target.isPresent())
+        if (target.isEmpty())
             return rejectedCustomMorphTargetNotFound();
         return outcome(project.removeCustomMorphTarget(target.get().getName()));
     }
@@ -930,7 +930,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome duplicateSliderPreset(SliderPresetEdits.Duplicate edit) {
         Optional<SliderPresetSnapshot> source = project.findSliderPreset(edit.getSourceName());
-        if (!source.isPresent())
+        if (source.isEmpty())
             return rejectedSliderPresetNotFound();
         RejectedOutcome rejection = validateSliderPresetName(edit.getDuplicateName());
         if (rejection != null)
@@ -951,7 +951,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome updateSliderPreset(SliderPresetEdits.Update edit) {
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getCurrentName());
-        if (!found.isPresent())
+        if (found.isEmpty())
             return rejectedSliderPresetNotFound();
         if (edit.getReplacement() == null) {
             SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("slider-preset"),
@@ -995,7 +995,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome renameSliderPreset(SliderPresetEdits.Rename edit) {
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getCurrentName());
-        if (!found.isPresent())
+        if (found.isEmpty())
             return rejectedSliderPresetNotFound();
         RejectedOutcome rejection = validateSliderPresetName(edit.getNewName());
         if (rejection != null)
@@ -1012,7 +1012,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome deleteSliderPreset(SliderPresetEdits.Delete edit) {
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getName());
-        if (!found.isPresent())
+        if (found.isEmpty())
             return rejectedSliderPresetNotFound();
         return outcome(project.removeSliderPreset(found.get().getName()));
     }
@@ -1060,7 +1060,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome setSliderPresetUunp(SliderPresetEdits.SetUunp edit) {
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getName());
-        if (!found.isPresent())
+        if (found.isEmpty())
             return rejectedSliderPresetNotFound();
         SliderPresetSnapshot current = found.get();
         // Same mode is a no-op by rule, not by value comparison: rebuilding defaults
@@ -1082,7 +1082,7 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome setSliderChoice(SliderPresetEdits.SetSliderChoice edit) {
         Optional<SliderPresetSnapshot> found = project.findSliderPreset(edit.getPresetName());
-        if (!found.isPresent())
+        if (found.isEmpty())
             return rejectedSliderPresetNotFound();
         if (edit.getChoice() == null) {
             SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("slider-preset.slider-choice"),

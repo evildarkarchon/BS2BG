@@ -192,7 +192,7 @@ public final class TemplatesFeature {
         if (!confirmed)
             return new Update(true, frame);
         return switch (effect.kind()) {
-            case CONFIRM_REMOVE -> remove(effect.identities().get(0));
+            case CONFIRM_REMOVE -> remove(effect.identities().getFirst());
             case CONFIRM_CLEAR_VISIBLE -> clearVisible(effect.identities());
         };
     }

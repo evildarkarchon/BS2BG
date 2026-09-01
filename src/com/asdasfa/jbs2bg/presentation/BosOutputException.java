@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg.presentation;
 
+import java.io.Serial;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -8,6 +9,7 @@ import java.util.List;
  * Rejects a BoS command with its complete filename mappings and ordered diagnostics.
  */
 public final class BosOutputException extends IllegalArgumentException {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private final ArrayList<BosFileNameMapping> fileNameMappings;

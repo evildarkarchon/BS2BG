@@ -163,7 +163,7 @@ public final class ProjectPresentation {
      */
     public String getWindowTitle() {
         String dirtyMarker = snapshot.isDirty() ? "*" : "";
-        if (!snapshot.getFileIdentity().isPresent())
+        if (snapshot.getFileIdentity().isEmpty())
             return applicationName + (dirtyMarker.isEmpty() ? "" : " " + dirtyMarker);
         Path identity = snapshot.getFileIdentity().get();
         Path fileName = identity.getFileName();

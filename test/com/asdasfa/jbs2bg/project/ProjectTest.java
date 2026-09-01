@@ -134,7 +134,7 @@ class ProjectTest {
                 .getProject();
         assertSame(project.getSliderPresets(), assigned.getSliderPresets());
         assertSame(project.getNpcMorphAssignments(), assigned.getNpcMorphAssignments());
-        assertSame(project.getCustomMorphTargets().get(0), assigned.getCustomMorphTargets().get(0));
+        assertSame(project.getCustomMorphTargets().getFirst(), assigned.getCustomMorphTargets().getFirst());
         assertSame(project.getCustomMorphTargets(), cleared.getCustomMorphTargets());
 
         // NPC Morph Assignment collection operations: a bulk promotion whose every
@@ -165,7 +165,7 @@ class ProjectTest {
         assertSame(project.getCustomMorphTargets(), promoted.getCustomMorphTargets());
         assertNotSame(source, promoted.findNpcMorphAssignment(new NpcMorphAssignmentIdentity("skyrim.esm", "AELA"))
                 .get());
-        assertSame(project.getNpcMorphAssignments().get(0), promoted.getNpcMorphAssignments().get(0));
+        assertSame(project.getNpcMorphAssignments().getFirst(), promoted.getNpcMorphAssignments().getFirst());
         Project removed = promoted.removeNpcMorphAssignment(new NpcMorphAssignmentIdentity("skyrim.esm", "AELA"));
         assertSame(promoted.getSliderPresets(), removed.getSliderPresets());
         assertSame(promoted.getCustomMorphTargets(), removed.getCustomMorphTargets());
@@ -183,19 +183,19 @@ class ProjectTest {
 
         Project renamed = project.renameSliderPreset("alpha", "Zulu").getProject();
         assertEquals(Arrays.asList("Beta", "Zulu"), names(renamed.getSliderPresets()));
-        assertEquals(Arrays.asList("Beta", "Zulu"), renamed.getCustomMorphTargets().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("Beta", "Zulu"), renamed.getCustomMorphTargets().getFirst().getSliderPresetNames());
         assertEquals(Arrays.asList("Beta"), renamed.getCustomMorphTargets().get(1).getSliderPresetNames());
         // NPCs order by plugin name: Dawnguard.esm (Serana) precedes Skyrim.esm (Lydia).
-        assertEquals(Arrays.asList("Beta", "Zulu"), renamed.getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("Beta", "Zulu"), renamed.getNpcMorphAssignments().getFirst().getSliderPresetNames());
         assertEquals(Arrays.asList("Zulu"), renamed.getNpcMorphAssignments().get(1).getSliderPresetNames());
         assertSame(project.getCustomMorphTargets().get(1), renamed.getCustomMorphTargets().get(1),
                 "an unaffected referrer must be carried over rather than copied");
 
         Project removed = project.removeSliderPreset("ALPHA");
         assertEquals(Arrays.asList("Beta"), names(removed.getSliderPresets()));
-        assertEquals(Arrays.asList("Beta"), removed.getCustomMorphTargets().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("Beta"), removed.getCustomMorphTargets().getFirst().getSliderPresetNames());
         assertEquals(Arrays.asList("Beta"), removed.getCustomMorphTargets().get(1).getSliderPresetNames());
-        assertEquals(Arrays.asList("Beta"), removed.getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("Beta"), removed.getNpcMorphAssignments().getFirst().getSliderPresetNames());
         assertTrue(removed.getNpcMorphAssignments().get(1).getSliderPresetNames().isEmpty());
         assertEquals("Lydia", removed.getNpcMorphAssignments().get(1).getDisplayName());
 
@@ -238,8 +238,8 @@ class ProjectTest {
                 Optional.empty(), true, ProjectLifecycleStatus.UNTITLED));
         Project renamed = seeded.renameSliderPreset("Bravo", "Zulu").getProject();
         assertEquals(Arrays.asList("alpha", "delta", "Echo", "Zulu"), names(renamed.getSliderPresets()));
-        assertEquals(Arrays.asList("delta", "Echo", "Zulu"), renamed.getCustomMorphTargets().get(0).getSliderPresetNames());
-        assertEquals(Arrays.asList("alpha", "delta", "Zulu"), renamed.getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("delta", "Echo", "Zulu"), renamed.getCustomMorphTargets().getFirst().getSliderPresetNames());
+        assertEquals(Arrays.asList("alpha", "delta", "Zulu"), renamed.getNpcMorphAssignments().getFirst().getSliderPresetNames());
 
         Project unsorted = Project.from(new ProjectSnapshot(
                 Arrays.asList(preset("zulu"), preset("Alpha")),
@@ -251,8 +251,8 @@ class ProjectTest {
                                 Collections.<String>emptyList())),
                 Optional.empty(), true, ProjectLifecycleStatus.UNTITLED));
         assertEquals(Arrays.asList("Alpha", "zulu"), names(unsorted.getSliderPresets()));
-        assertEquals("A", unsorted.getCustomMorphTargets().get(0).getName());
-        assertEquals("One", unsorted.getNpcMorphAssignments().get(0).getDisplayName());
+        assertEquals("A", unsorted.getCustomMorphTargets().getFirst().getName());
+        assertEquals("One", unsorted.getNpcMorphAssignments().getFirst().getDisplayName());
 
         // Custom Morph Target and relationship operations: the target list stays
         // canonical, and every assigned name is stored in the catalog's casing and
@@ -274,12 +274,12 @@ class ProjectTest {
                 new NpcMorphAssignmentIdentity("PLUGIN.ESP", "editor"));
         targets = targets.assignSliderPreset(editor, "ECHO").getProject();
         assertEquals(Arrays.asList("alpha", "delta", "Echo", "Zulu"),
-                targets.getNpcMorphAssignments().get(0).getSliderPresetNames());
+                targets.getNpcMorphAssignments().getFirst().getSliderPresetNames());
 
         targets = targets.unassignSliderPreset(beta, " echo ");
         assertEquals(Arrays.asList("alpha", "Zulu"), targets.getCustomMorphTargets().get(1).getSliderPresetNames());
         targets = targets.unassignSliderPreset(editor, "DELTA");
-        assertEquals(Arrays.asList("alpha", "Echo", "Zulu"), targets.getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("alpha", "Echo", "Zulu"), targets.getNpcMorphAssignments().getFirst().getSliderPresetNames());
         targets = targets.clearSliderPresetAssignments(beta);
         assertTrue(targets.getCustomMorphTargets().get(1).getSliderPresetNames().isEmpty());
 
@@ -306,7 +306,7 @@ class ProjectTest {
                         new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("DAWNGUARD.ESM", "zuluEditor"), "ECHO"),
                         new NpcSliderPresetChoice(new NpcMorphAssignmentIdentity("skyrim.esm", "alphaeditor"), "alpha")))
                 .getProject();
-        assertEquals(Arrays.asList("Echo"), npcs.getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("Echo"), npcs.getNpcMorphAssignments().getFirst().getSliderPresetNames());
         assertEquals(Arrays.asList("Zulu"), npcs.getNpcMorphAssignments().get(2).getSliderPresetNames(),
                 "an occupied NPC must keep its assignments");
 
@@ -315,7 +315,7 @@ class ProjectTest {
                 Project.ReferrerKey.npcMorphAssignment(new NpcMorphAssignmentIdentity("Plugin.esp", "Editor"))));
         assertTrue(npcs.getNpcMorphAssignments().get(1).getSliderPresetNames().isEmpty());
         assertTrue(npcs.getNpcMorphAssignments().get(2).getSliderPresetNames().isEmpty());
-        assertEquals(Arrays.asList("Echo"), npcs.getNpcMorphAssignments().get(0).getSliderPresetNames());
+        assertEquals(Arrays.asList("Echo"), npcs.getNpcMorphAssignments().getFirst().getSliderPresetNames());
 
         npcs = npcs.removeNpcMorphAssignment(new NpcMorphAssignmentIdentity("plugin.ESP", "EDITOR"));
         assertEquals(Arrays.asList("Dawnguard.esm/ZuluEditor", "skyrim.ESM/AlphaEditor", "Skyrim.esm/ZuluEditor"),
