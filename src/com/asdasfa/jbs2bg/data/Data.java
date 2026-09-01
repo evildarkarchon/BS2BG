@@ -18,13 +18,16 @@ import javafx.collections.ObservableList;
  */
 public class Data {
 
+    /** Legacy Java Preferences key migrated into the Workbench generation-preference store. */
+    public static final String LEGACY_OMIT_REDUNDANT_SLIDERS = "Omit redundant sliders";
+
     public final ObservableList<NPC> npcDatabase = FXCollections.observableArrayList();
     public final String LAST_USED_FOLDER = "Last used folder";
     public final String LAST_USED_PRESET_FOLDER = "Last used preset folder";
     public final String LAST_USED_NPC_FOLDER = "Last used npc folder";
     public final String LAST_USED_INI_FOLDER = "Last used ini folder";
     public final String LAST_USED_JSON_FOLDER = "Last used json folder";
-    public final String OMIT_REDUNDANT_SLIDERS = "Omit redundant sliders";
+    public final String OMIT_REDUNDANT_SLIDERS = LEGACY_OMIT_REDUNDANT_SLIDERS;
     public final String encoding = "UTF-8";
     public File homeDir;
     public Preferences prefs;

@@ -1,6 +1,7 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import java.io.File;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -24,6 +25,16 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
                 : WorkbenchProjectFlow.Response.selected(selected.toPath());
     }
 
+    /** Shows the ordered multi-source BodySlide XML chooser. */
+    private static WorkbenchProjectFlow.Response chooseBodySlideSources(Stage owner) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Import BodySlide Presets");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("BodySlide Presets (*.xml)", "*.xml"));
+        List<File> selected = chooser.showOpenMultipleDialog(owner);
+        return selected == null || selected.isEmpty() ? WorkbenchProjectFlow.Response.cancelled()
+                : WorkbenchProjectFlow.Response.selectedSources(selected.stream().map(File::toPath).toList());
+    }
+
     /**
      * Returns the typed dialog contract for one Project confirmation effect.
      *
@@ -39,7 +50,7 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
                     "Open another Project?", "The current Project has unsaved changes."));
             case CONFIRM_CLOSE -> Optional.of(WorkbenchFeedback.DialogSpec.unsavedClose(
                     "Save changes before closing?", "Closing now would discard unsaved Project changes."));
-            case CHOOSE_OPEN_PATH, CHOOSE_SAVE_PATH, CLOSE_WINDOW -> Optional.empty();
+            case CHOOSE_BODYSLIDE_SOURCES, CHOOSE_OPEN_PATH, CHOOSE_SAVE_PATH, CLOSE_WINDOW -> Optional.empty();
         };
     }
 
@@ -71,6 +82,7 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
         return switch (effect.kind()) {
             case CHOOSE_OPEN_PATH -> chooseProject(owner, false);
             case CHOOSE_SAVE_PATH -> chooseProject(owner, true);
+            case CHOOSE_BODYSLIDE_SOURCES -> chooseBodySlideSources(owner);
             case CONFIRM_NEW, CONFIRM_OPEN -> response(JavaFxWorkbenchDialogs.show(
                     dialogSpec(effect.kind()).orElseThrow(), owner));
             case CONFIRM_CLOSE -> response(JavaFxWorkbenchDialogs.show(

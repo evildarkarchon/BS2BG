@@ -303,6 +303,34 @@ function Complete-FileDialog {
     }
 }
 
+function Complete-MultipleFileDialog {
+    param(
+        [Parameter(Mandatory)] [string] $Title,
+        [Parameter(Mandatory)] [string[]] $Paths,
+        [Parameter(Mandatory)] [string] $ConfirmButton
+    )
+    if ($Paths.Count -eq 0) { throw 'At least one file path is required.' }
+    $dialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $StepTimeoutSeconds
+    $fileName = Wait-UiaElement -Root $dialog -Condition (
+        New-UiaCondition -ControlType 'Edit' -Name 'File name:') `
+        -Description "$Title file name" -TimeoutSeconds $StepTimeoutSeconds
+    $quotedPaths = ($Paths | ForEach-Object { '"' + $_ + '"' }) -join ' '
+    Set-UiaValue -Element $fileName -Value $quotedPaths
+    $confirmRole = New-Object System.Windows.Automation.OrCondition(@(
+        (New-UiaCondition -ControlType 'Pane' -Name $ConfirmButton),
+        (New-UiaCondition -ControlType 'SplitButton' -Name $ConfirmButton),
+        (New-UiaCondition -ControlType 'Button' -Name $ConfirmButton)))
+    $confirm = Wait-UiaElement -Root $dialog -Condition $confirmRole -Description "$Title $ConfirmButton button" `
+        -TimeoutSeconds $StepTimeoutSeconds
+    $invoke = $null
+    if ($confirm.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$invoke)) {
+        $invoke.Invoke()
+    }
+    else {
+        Invoke-UiaNativeButton -Element $confirm
+    }
+}
+
 <#
 .SYNOPSIS
     Chooses one named Workbench confirmation action.
@@ -587,13 +615,20 @@ try {
         Copy-Item -LiteralPath $FixtureMalformedProject -Destination (Join-Path $workDir $malformedProjectName)
         $cancellableProject = Join-Path $workDir $cancellableProjectName
         New-CancellableProjectFixture -Path $cancellableProject
+        $settingsTransaction = Join-Path $workDir '.bs2bg-settings-stage-packaged-recovery'
+        New-Item -ItemType Directory -Path $settingsTransaction -Force | Out-Null
+        $repositorySettings = (Resolve-Path (Join-Path $PSScriptRoot '..\..\settings.json')).Path
+        $repositoryUunpSettings = (Resolve-Path (Join-Path $PSScriptRoot '..\..\settings_UUNP.json')).Path
+        Copy-Item -LiteralPath $repositorySettings -Destination (Join-Path $settingsTransaction 'standard.backup')
+        Copy-Item -LiteralPath $repositoryUunpSettings -Destination (Join-Path $settingsTransaction 'uunp.backup')
+        Copy-Item -LiteralPath $repositorySettings -Destination (Join-Path $workDir 'settings.json')
         $observations['extractedImage'] = Join-Path $imageRoot $LauncherName
         $observations['launcher'] = $launcherPath
         $observations['launcherSha256'] = (Get-FileHash -LiteralPath $launcherPath -Algorithm SHA256).Hash.ToLowerInvariant()
         $observations['archiveSha256'] = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
         $observations['workingDirectory'] = $workDir
         $observations['cancellableProjectBytes'] = (Get-Item -LiteralPath $cancellableProject).Length
-        "extracted archive and installed four Project fixtures in $workDir"
+        "extracted archive, installed four Project fixtures, and staged interrupted Settings recovery in $workDir"
     }
 
     Invoke-SmokeStep -Name 'launch-workbench-without-system-java' -Action {
@@ -611,6 +646,22 @@ try {
             if (-not (Test-Path -LiteralPath (Join-Path $workDir $settingsName) -PathType Leaf)) {
                 throw "Workbench startup did not create $settingsName."
             }
+        }
+        if (Test-Path -LiteralPath (Join-Path $workDir '.bs2bg-settings-stage-packaged-recovery')) {
+            throw 'Workbench startup did not remove the recovered Settings transaction.'
+        }
+        $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        $settingsRecovery = Wait-UiaCondition -Description 'durable packaged Settings recovery Activity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $items = Find-UiaElements -Root $activity -Condition (New-UiaCondition -ControlType 'ListItem')
+            foreach ($item in $items) {
+                if ($item.Current.Name.Contains('Load Settings') `
+                        -and $item.Current.Name.Contains('SETTINGS_PUBLICATION_RECOVERED')) { return $item }
+            }
+        }
+        if (-not $settingsRecovery.Current.HelpText.Contains('Diagnostics: none')) {
+            # Startup Settings evidence is not a coordinator job, so it intentionally has no JobDetails payload.
+            $observations['settingsRecoveryActivity'] = $settingsRecovery.Current.Name
         }
         Get-UiaTree -Element $script:mainWindow |
             Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-workbench.txt') -Encoding utf8
@@ -717,6 +768,9 @@ try {
             Wait-AreaSelected -Name $entry.Value | Out-Null
             if ($entry.Value -ceq 'Templates') {
                 Wait-FocusedControl -ControlType 'List' -Name 'Slider Presets' | Out-Null
+            }
+            elseif ($entry.Value -ceq 'Settings') {
+                Wait-FocusedControl -ControlType 'List' -Name 'Settings entries' | Out-Null
             }
             else {
                 Wait-FocusedControl -ControlType 'Button' -Name "$($entry.Value) primary content" | Out-Null
@@ -1261,6 +1315,216 @@ try {
         'pointer-free Slider choice/profile/gang editing, browse, validation, management, and reopen passed'
     }
 
+    Invoke-SmokeStep -Name 'manage-settings-and-import-bodyslide-through-workbench' -Action {
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^5' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Settings' | Out-Null
+        $profileLabel = Find-OuterControl -ControlType 'Text' -Name 'Settings profile:'
+        $profileChoice = Get-FollowingControl -Element $profileLabel -ControlType 'ComboBox'
+        $settingsEntries = Find-OuterControl -ControlType 'List' -Name 'Settings entries'
+        $waistEntry = Wait-UiaElement -Root $settingsEntries -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Waist') `
+            -Description 'Standard Waist Settings entry' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $waistEntry
+        $multiplierLabel = Find-OuterControl -ControlType 'Text' -Name 'Multiplier (blank means absent):'
+        $multiplier = Get-FollowingControl -Element $multiplierLabel -ControlType 'Edit'
+        Set-UiaValue -Element $multiplier -Value '2'
+        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' -Name 'Apply Settings entry draft')
+
+        Send-UiaKeysToElement -Element $profileChoice -Keys '{F4}{END}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $armsEntry = Wait-UiaElement -Root $settingsEntries -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Arms') `
+            -Description 'UUNP Arms Settings entry' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $armsEntry
+        Set-UiaValue -Element $multiplier -Value '3'
+        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' -Name 'Apply Settings entry draft')
+        $omitRedundant = Find-OuterControl -ControlType 'CheckBox' -Name 'Omit redundant sliders'
+        Send-UiaKeysToElement -Element $omitRedundant -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' -Name 'Save Standard and UUNP Settings')
+
+        $settingsActivity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        Wait-UiaElement -Root $settingsActivity -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Success — Save Settings — Completed: Settings saved.') `
+            -Description 'durable packaged Settings save Activity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $savedStandard = Get-Content -LiteralPath (Join-Path $workDir 'settings.json') -Raw | ConvertFrom-Json
+        $savedUunp = Get-Content -LiteralPath (Join-Path $workDir 'settings_UUNP.json') -Raw | ConvertFrom-Json
+        if ($savedStandard.Multipliers.Waist -ne 2 -or $savedUunp.Multipliers.Arms -ne 3) {
+            throw 'Workbench Settings edits did not persist both output-affecting profiles.'
+        }
+        if ((Get-Content -LiteralPath (Join-Path $workDir 'workbench-generation.properties') -Raw) `
+                -notmatch 'omitRedundantSliders=true') {
+            throw 'Workbench did not migrate and persist Omit Redundant Sliders in the isolated profile.'
+        }
+        if (@(Get-ChildItem -LiteralPath $workDir -Filter '.bs2bg-settings-stage-*' -Force).Count -ne 0) {
+            throw 'Settings save left a paired-publication transaction behind.'
+        }
+
+        $validImport = Join-Path $workDir 'settings-output.xml'
+        $partialImport = Join-Path $workDir 'partial-valid.xml'
+        $malformedImport = Join-Path $workDir 'malformed.xml'
+        $failedMalformed = Join-Path $workDir 'a-failed-malformed.xml'
+        $failedMissing = Join-Path $workDir 'z-failed-missing.xml'
+        $cancelFirst = Join-Path $workDir 'a-cancel-first.xml'
+        $cancelLarge = Join-Path $workDir 'z-cancel-large.xml'
+        [IO.File]::WriteAllText($validImport,
+            '<SliderPresets><Preset name="Settings Output"><SetSlider name="Waist" size="small" value="25"/><SetSlider name="Waist" size="big" value="75"/></Preset></SliderPresets>')
+        [IO.File]::WriteAllText($partialImport,
+            '<SliderPresets><Preset name="Partial Commit"/></SliderPresets>')
+        [IO.File]::WriteAllText($malformedImport, '<SliderPresets><Preset name="Broken">')
+        [IO.File]::WriteAllText($failedMalformed,
+            '<SliderPresets><Preset name="Broken"/>' + [string]::new(' ', 20000000))
+        [IO.File]::WriteAllText($failedMissing,
+            '<SliderPresets><Preset name="Must Not Commit"/></SliderPresets>')
+        [IO.File]::WriteAllText($cancelFirst,
+            '<SliderPresets><Preset name="Committed Before Cancel"/></SliderPresets>')
+        $cancelWriter = [IO.StreamWriter]::new($cancelLarge, $false, [Text.UTF8Encoding]::new($false))
+        try {
+            $cancelWriter.Write('<SliderPresets>')
+            for ($index = 0; $index -lt 400000; $index++) {
+                $cancelWriter.Write('<Preset name="Cancelled Source ')
+                $cancelWriter.Write($index)
+                $cancelWriter.Write('"/>')
+            }
+            $cancelWriter.Write('</SliderPresets>')
+        }
+        finally {
+            $cancelWriter.Dispose()
+        }
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^1' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Templates' | Out-Null
+        $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import BodySlide Presets'
+        Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-FileDialog -Title 'Import BodySlide Presets' -Path $validImport -ConfirmButton 'Open'
+        # An empty-list import intentionally replaces the ListView for JavaFX UIA refill correctness; locate the
+        # committed logical identity from the stable Workbench root before capturing the replacement list node.
+        $settingsOutput = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Settings Output') `
+            -Description 'successfully imported Settings Output preset' -TimeoutSeconds $StepTimeoutSeconds
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        Select-UiaElement -Element $settingsOutput
+        $waistPreview = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Waist BodyGen preview') `
+            -Description 'Settings-driven imported Waist preview' -TimeoutSeconds $StepTimeoutSeconds
+        if (-not $waistPreview.Current.HelpText.Contains('Waist@1.5')) {
+            throw "Saved Standard multiplier did not affect the imported preview: $($waistPreview.Current.HelpText)"
+        }
+
+        $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import BodySlide Presets'
+        $importButton.SetFocus()
+        Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-MultipleFileDialog -Title 'Import BodySlide Presets' `
+            -Paths @($malformedImport, $partialImport) -ConfirmButton 'Open'
+        $partialActivity = Wait-UiaCondition -Description 'partial BodySlide import Activity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $items = Find-UiaElements -Root $settingsActivity -Condition (New-UiaCondition -ControlType 'ListItem')
+            foreach ($item in $items) {
+                if ($item.Current.Name.Contains('Import BodySlide Presets') `
+                        -and $item.Current.Name.Contains('Completed with issues') `
+                        -and $item.Current.HelpText.Contains('SLIDER_PRESET_XML_MALFORMED') `
+                        -and $item.Current.HelpText.Contains('Imported partial-valid.xml')) { return $item }
+            }
+        }
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Partial Commit') `
+            -Description 'partially committed BodySlide source' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        if (-not (Get-UiaSelectionState -Element $settingsOutput)) {
+            throw 'Partial import did not preserve the selected Slider Preset identity.'
+        }
+
+        $importResultsName = 'settings-import-results.jbs2bg'
+        $importResultsPath = Join-Path $workDir $importResultsName
+        Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
+        Complete-FileDialog -Title $saveDialogTitle -Path $importResultsPath -ConfirmButton 'Save'
+        Wait-MainWindow -Title "$applicationTitle - $importResultsName" | Out-Null
+        $savedImport = Get-Content -LiteralPath $importResultsPath -Raw | ConvertFrom-Json
+        $savedImportNames = @($savedImport.SliderPresets.PSObject.Properties.Name)
+        foreach ($expected in @('Partial Commit', 'Settings Output')) {
+            if ($savedImportNames -cnotcontains $expected) {
+                throw "Saved partial-import Project omitted '$expected'."
+            }
+        }
+        if ($savedImportNames -ccontains 'Broken') {
+            throw 'Saved partial-import Project retained the malformed source.'
+        }
+
+        $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import BodySlide Presets'
+        Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-MultipleFileDialog -Title 'Import BodySlide Presets' `
+            -Paths @($failedMalformed, $failedMissing) -ConfirmButton 'Open'
+        # The worker is occupied reading the large first source, making removal of the already selected second
+        # source deterministic without adding a production test hook or racing the native chooser.
+        Remove-Item -LiteralPath $failedMissing -Force
+        $failureDialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $applicationTitle `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaAccelerator -Window $failureDialog -Keys '{ESC}'
+        $failedActivity = Wait-UiaCondition -Description 'failed BodySlide import Activity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $items = Find-UiaElements -Root $settingsActivity -Condition (New-UiaCondition -ControlType 'ListItem')
+            foreach ($item in $items) {
+                if ($item.Current.Name.Contains('Import BodySlide Presets') `
+                        -and $item.Current.Name.Contains('Failed') `
+                        -and $item.Current.HelpText.Contains('SLIDER_PRESET_XML_MALFORMED') `
+                        -and $item.Current.HelpText.Contains('SLIDER_PRESET_XML_READ_FAILED')) { return $item }
+            }
+        }
+
+        $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import BodySlide Presets'
+        Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-MultipleFileDialog -Title 'Import BodySlide Presets' `
+            -Paths @($cancelFirst, $cancelLarge) -ConfirmButton 'Open'
+        $progress = Wait-UiaCondition -Description 'BodySlide second-source 50 percent progress' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'ProgressBar' -Name 'Current operation progress')
+            if ($null -ne $candidate -and $candidate.Current.HelpText.Contains('50%')) { return $candidate }
+        }
+        $cancel = Wait-UiaCondition -Description 'enabled BodySlide cancellation control' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Button' -Name 'Cancel current operation')
+            if ($null -ne $candidate -and $candidate.Current.IsEnabled) { return $candidate }
+        }
+        Invoke-UiaElement -Element $cancel
+        $cancelledActivity = Wait-UiaCondition -Description 'cancelled BodySlide import Activity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $items = Find-UiaElements -Root $settingsActivity -Condition (New-UiaCondition -ControlType 'ListItem')
+            foreach ($item in $items) {
+                if ($item.Current.Name.Contains('Import BodySlide Presets') `
+                        -and $item.Current.Name.Contains('Cancelled') `
+                        -and $item.Current.HelpText.Contains('Imported a-cancel-first.xml')) { return $item }
+            }
+        }
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Committed Before Cancel') `
+            -Description 'source committed before BodySlide cancellation' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        if ($null -ne (Find-UiaElement -Root $presetList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name 'Cancelled Source 0'))) {
+            throw 'Cancelled BodySlide source committed unexpectedly.'
+        }
+        Send-FileCommand -Item 'Save'
+        Wait-MainWindow -Title "$applicationTitle - $importResultsName" | Out-Null
+        $savedCancelled = Get-Content -LiteralPath $importResultsPath -Raw | ConvertFrom-Json
+        $savedCancelledNames = @($savedCancelled.SliderPresets.PSObject.Properties.Name)
+        if ($savedCancelledNames -cnotcontains 'Committed Before Cancel' `
+                -or $savedCancelledNames -ccontains 'Cancelled Source') {
+            throw 'Save/readback did not preserve the truthful BodySlide cancellation boundary.'
+        }
+
+        $observations['settingsAndBodySlideImport'] = [ordered]@{
+            settings = @('Standard Waist multiplier 2', 'UUNP Arms multiplier 3', 'Omit Redundant Sliders true')
+            success = 'Settings Output'
+            partial = $partialActivity.Current.HelpText
+            failed = $failedActivity.Current.HelpText
+            cancelled = $cancelledActivity.Current.HelpText
+            progress = $progress.Current.HelpText
+            savedProject = $importResultsName
+        }
+        'paired Settings editing/recovery and successful, malformed, partial, failed, and cancelled imports passed'
+    }
+
     Invoke-SmokeStep -Name 'save-as-new-project' -Action {
         $target = Join-Path $workDir $firstSaveName
         Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
@@ -1578,7 +1842,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/12'
+        schema = 'bs2bg.windows-app-image-smoke/13'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion

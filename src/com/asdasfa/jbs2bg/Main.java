@@ -154,7 +154,7 @@ public class Main extends Application {
             primaryStage.setScene(scene);
             primaryStage.setResizable(true);
             WorkbenchController controller = loader.getController();
-            controller.attach(workbenchProjectFlow, primaryStage);
+            controller.attach(workbenchProjectFlow, primaryStage, Path.of("."), settingsInitialization);
             primaryStage.show();
             applyMeasuredClientMinimum(primaryStage, scene);
         } catch (java.io.IOException exception) {

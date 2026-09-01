@@ -166,6 +166,18 @@ public final class TemplatesFeature {
     }
 
     /**
+     * Reprojects Slider choice previews and redundancy from the newly published Settings pair without inventing a
+     * Project publication or disturbing Templates selection, filtering, rename, or gang state.
+     *
+     * @return accepted immutable feature update on the existing Project sequence
+     */
+    public Update refreshSettings() {
+        lastOutcomeKind = OutcomeKind.NONE;
+        publish(frame.projectSequence(), frame.diagnostics());
+        return new Update(true, frame);
+    }
+
+    /**
      * Completes a matching tokenized destructive confirmation before any captured identity can be edited.
      *
      * @param token     pending effect token

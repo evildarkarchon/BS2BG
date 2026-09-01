@@ -112,6 +112,142 @@ class WorkbenchProjectFlowTest {
     }
 
     /**
+     * BodySlide chooser results are captured as one Project-exclusive central job and publish the authoritative
+     * Project frame only after the application worker completes.
+     */
+    @Test
+    void bodySlideImportUsesCapturedSourcesAndTheCentralJobPath() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path source = temporaryDirectory.resolve("captured.xml").toAbsolutePath().normalize();
+        Files.writeString(source, "<SliderPresets><Preset name=\"Imported Preset\">"
+                + "<SetSlider name=\"Waist\" size=\"small\" value=\"25\"/>"
+                + "<SetSlider name=\"Waist\" size=\"big\" value=\"75\"/>"
+                + "</Preset></SliderPresets>");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        List<JobCoordinator.Frame> importFrames = new ArrayList<>();
+        jobs.observe(importFrames::add);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow.Frame before = flow.frame();
+
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE)
+                .effect().orElseThrow();
+        WorkbenchProjectFlow.Update admitted = flow.respond(chooser.token(),
+                WorkbenchProjectFlow.Response.selectedSources(List.of(source)));
+
+        assertEquals(WorkbenchProjectFlow.EffectKind.CHOOSE_BODYSLIDE_SOURCES, chooser.kind());
+        assertEquals(before, admitted.frame());
+        assertTrue(jobs.frame().active());
+        JobCoordinator.Attempt running = jobs.frame().attempt().orElseThrow();
+        assertEquals("Import BodySlide Presets", running.operation().name());
+        assertEquals(List.of(source.toString()), running.operation().sourceLabels());
+        assertEquals(Optional.of(before.snapshot().getContentVersion().toString()),
+                running.operation().capturedBasis());
+
+        worker.runNext();
+
+        assertEquals(List.of("Imported Preset"), flow.frame().snapshot().getSliderPresets().stream()
+                .map(preset -> preset.getName()).toList());
+        JobCoordinator.Attempt completed = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED, completed.lifecycle());
+        assertEquals(List.of("Imported captured.xml"), completed.effectsCommitted());
+        assertTrue(completed.diagnostics().isEmpty());
+        assertTrue(importFrames.stream().flatMap(frame -> frame.attempt().stream())
+                .anyMatch(attempt -> attempt.progress().completedUnits().equals(Optional.of(1L))
+                        && attempt.progress().totalUnits().equals(Optional.of(1L))));
+    }
+
+    /**
+     * A valid source commits beside malformed and unreadable sources, with exact per-source evidence and a warning
+     * terminal disposition rather than a modal-only failure.
+     */
+    @Test
+    void bodySlideImportReportsPartialSourceOutcomes() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path valid = temporaryDirectory.resolve("valid.xml").toAbsolutePath().normalize();
+        Path malformed = temporaryDirectory.resolve("malformed.xml").toAbsolutePath().normalize();
+        Path missing = temporaryDirectory.resolve("missing.xml").toAbsolutePath().normalize();
+        Files.writeString(valid, "<SliderPresets><Preset name=\"Committed\"/></SliderPresets>");
+        Files.writeString(malformed, "<SliderPresets><Preset name=\"Broken\">");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE)
+                .effect().orElseThrow();
+        flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selectedSources(
+                List.of(malformed, valid, missing)));
+        worker.runNext();
+
+        JobCoordinator.Attempt completed = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, completed.lifecycle());
+        assertEquals(List.of("Imported valid.xml"), completed.effectsCommitted());
+        assertEquals(List.of(ProjectDiagnosticCodes.SLIDER_PRESET_XML_MALFORMED,
+                        ProjectDiagnosticCodes.SLIDER_PRESET_XML_READ_FAILED),
+                completed.diagnostics().stream().map(JobCoordinator.Diagnostic::code).toList());
+        assertEquals(List.of("Committed"), flow.frame().snapshot().getSliderPresets().stream()
+                .map(preset -> preset.getName()).toList());
+    }
+
+    /** An unreadable-only import is a failed attempt and retains the prior authoritative Project. */
+    @Test
+    void bodySlideImportFailsWhenNoSelectedSourceProducesAUsableOutcome() {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow.Frame before = flow.frame();
+        Path missing = temporaryDirectory.resolve("missing-only.xml").toAbsolutePath().normalize();
+
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE)
+                .effect().orElseThrow();
+        flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selectedSources(List.of(missing)));
+        worker.runNext();
+
+        JobCoordinator.Attempt failed = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.FAILED, failed.lifecycle());
+        assertEquals(List.of(ProjectDiagnosticCodes.SLIDER_PRESET_XML_READ_FAILED),
+                failed.diagnostics().stream().map(JobCoordinator.Diagnostic::code).toList());
+        assertEquals(before.snapshot(), flow.frame().snapshot());
+    }
+
+    /** Cancellation at the next source safe point retains the earlier committed source and names that effect. */
+    @Test
+    void bodySlideImportCancellationRetainsEarlierCommittedSources() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path first = temporaryDirectory.resolve("first.xml").toAbsolutePath().normalize();
+        Path second = temporaryDirectory.resolve("second.xml").toAbsolutePath().normalize();
+        Files.writeString(first, "<SliderPresets><Preset name=\"Committed First\"/></SliderPresets>");
+        Files.writeString(second, "<SliderPresets><Preset name=\"Must Not Commit\"/></SliderPresets>");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        boolean[] cancellationRequested = {false};
+        jobs.observe(frame -> frame.attempt().ifPresent(attempt -> {
+            if (!cancellationRequested[0] && attempt.progress().completedUnits().equals(Optional.of(1L))) {
+                cancellationRequested[0] = true;
+                jobs.requestCancel();
+            }
+        }));
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE)
+                .effect().orElseThrow();
+        flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selectedSources(List.of(first, second)));
+
+        Thread importWorker = worker.runNextAsync();
+        importWorker.join();
+
+        JobCoordinator.Attempt cancelled = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.CANCELLED, cancelled.lifecycle());
+        assertEquals(List.of("Imported first.xml"), cancelled.effectsCommitted());
+        assertEquals(List.of("Committed First"), flow.frame().snapshot().getSliderPresets().stream()
+                .map(preset -> preset.getName()).toList());
+    }
+
+    /**
      * A recovered Open publishes its adopted identity, dirty state, and ordered structured diagnostics together.
      */
     @Test

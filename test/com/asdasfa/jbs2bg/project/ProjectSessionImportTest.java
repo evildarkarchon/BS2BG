@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -226,6 +227,42 @@ class ProjectSessionImportTest {
     }
 
     /**
+     * XML byte consumption cooperates with cancellation instead of waiting for a complete large DOM parse.
+     */
+    @Test
+    void bodySlideParserChecksCancellationWhileReadingXml() throws Exception {
+        StringBuilder xml = new StringBuilder("<SliderPresets>");
+        for (int index = 0; index < 4_000; index++)
+            xml.append("<Preset name=\"Preset ").append(index).append("\"/>");
+        xml.append("</SliderPresets>");
+        Path source = writeXml("large-cancellable.xml", xml.toString());
+        ProjectOperationContext context = new ProjectOperationContext() {
+            private int checks;
+
+            /** Cancels only after parsing has performed multiple reads. */
+            @Override
+            public boolean cancellationRequested() {
+                return ++checks > 4;
+            }
+
+            /** Direct parser verification has no presentation progress observer. */
+            @Override
+            public void report(ProjectOperationProgress progress) {
+                // This parser seam reports through the owning batch rather than per XML byte.
+            }
+
+            /** Direct parser verification never reaches a commit boundary. */
+            @Override
+            public boolean beginCommit(String phase) {
+                return true;
+            }
+        };
+
+        assertThrows(CancellationException.class,
+                () -> BodySlidePresetFileParser.parse(source, context));
+    }
+
+    /**
      * Continues after rejected and failed sources, commits the valid file between
      * them, and reports stable source diagnostics in selection order.
      *
@@ -324,6 +361,37 @@ class ProjectSessionImportTest {
         assertImportDiagnostic(outcome.getDiagnostics().get(0), source,
                 ProjectDiagnosticCodes.SLIDER_PRESET_XML_VALUE_INVALID,
                 "/SliderPresets/Preset[2]/SetSlider[1]/@value");
+    }
+
+    /**
+     * A missing size retains the legacy big-endpoint meaning, but any unsupported explicit size rejects its entire
+     * source instead of silently changing endpoint semantics.
+     *
+     * @throws Exception when the temporary XML sources cannot be written
+     */
+    @Test
+    void missingSizeMeansBigWhileUnsupportedExplicitSizeRejectsTheSource() throws Exception {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        Path missingSize = writeXml("missing-size.xml", "<SliderPresets>"
+                + "<Preset name=\"Legacy Missing Size\">"
+                + "<SetSlider name=\"Waist\" value=\"65\"/>"
+                + "</Preset></SliderPresets>");
+        Path unsupportedSize = writeXml("unsupported-size.xml", "<SliderPresets>"
+                + "<Preset name=\"Must Not Commit\">"
+                + "<SetSlider name=\"Waist\" size=\"middle\" value=\"40\"/>"
+                + "</Preset></SliderPresets>");
+
+        SliderPresetImportOutcome outcome = session.importSliderPresets(
+                List.of(missingSize, unsupportedSize));
+
+        assertInstanceOf(ChangedOutcome.class, outcome.getProjectOutcome());
+        assertEquals(List.of("Legacy Missing Size"), sliderPresetNames(outcome.getSnapshot()));
+        assertEquals(65, findChoice(findPreset(outcome.getSnapshot(), "Legacy Missing Size"), "Waist")
+                .getEffectiveBigValue());
+        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().get(1));
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_XML_SIZE_INVALID,
+                outcome.getSourceOutcomes().get(1).getDiagnostics().get(0).getCode());
     }
 
     /**

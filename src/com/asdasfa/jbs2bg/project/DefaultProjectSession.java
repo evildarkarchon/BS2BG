@@ -357,7 +357,8 @@ final class DefaultProjectSession implements ProjectSession {
         }
         try {
             context.checkCancellation();
-            List<BodySlidePresetFileParser.ParsedPreset> imported = BodySlidePresetFileParser.parse(normalizedSource);
+            List<BodySlidePresetFileParser.ParsedPreset> imported = BodySlidePresetFileParser.parse(
+                    normalizedSource, context);
             context.checkCancellation();
             return upsertImportedSliderPresets(imported, normalizedSource);
         } catch (CancellationException exception) {

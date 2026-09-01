@@ -99,13 +99,14 @@ empty working directory with every host-Java discovery path removed. The origina
 image process, host `jvm.dll` and JavaFX native libraries from the extracted runtime, and exit with code 0 inside
 the configured bound.
 
-Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #103
+Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #104
 workflow records these steps:
 
-1. Extract the clean image, verify launcher configuration/version, and install representative, recovery, malformed,
-   and high-token-count cancellable Project fixtures.
+1. Extract the clean image, verify launcher configuration/version, install representative, recovery, malformed,
+   and high-token-count cancellable Project fixtures, and stage an interrupted paired Settings publication.
 2. Launch `BS2BG Preview` without system Java and verify the bundled single-process runtime.
-3. Verify Templates, Morphs, NPC Database, Output, and Settings typed destinations plus the first-run Settings pair.
+3. Verify Templates, Morphs, NPC Database, Output, and Settings typed destinations plus paired Settings recovery and
+   its durable Activity evidence.
 4. Drive System/Light/Dark, High Contrast, reduced motion, Activity focus, and the idle Cancel state.
 5. Drive Ctrl+1/2/3/5, Ctrl+4, Ctrl+Backquote, Escape, and F6; require active-Area preservation, semantic focus
    return/cycling, standard Toggle state, and keyboard resizing through the Output drawer's RangeValue control.
@@ -118,26 +119,29 @@ workflow records these steps:
    identities; filter, sort, and type ahead in visible order; reject duplicate create/rename; duplicate and
    inline-rename with F2; Cancel then confirm Remove and Clear Visible; verify stable selection, complete
    relationship cascades, canonical Slider choice persistence, and save/reopen continuity.
-8. Save As a clean New Project and verify the canonical file and adopted identity.
-9. Open a recovered Project and require captured source/basis, both ordered
+8. Edit Standard and UUNP Settings, persist the pair, prove live output-affecting preview behavior, then exercise
+   successful, malformed/partial, failed, and cancelled BodySlide imports with captured-source, diagnostics,
+   committed-effect, selection, focus, and Activity evidence.
+9. Save As a clean New Project and verify the canonical file and adopted identity.
+10. Open a recovered Project and require captured source/basis, both ordered
    `SLIDER_PRESET_ASSIGNMENT_MISSING` diagnostics, committed effect, retry capability, and dirty title.
-10. Cancel and then explicitly discard a dirty New request.
-11. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
-12. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes; repair the
+11. Cancel and then explicitly discard a dirty New request.
+12. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
+13. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes; repair the
     captured source and Retry it as a newly linked successful attempt.
-13. Change the selected high-token-count source after detached parsing begins, require `STALE_RESULT`, zero effects,
+14. Change the selected high-token-count source after detached parsing begins, require `STALE_RESULT`, zero effects,
     a durable Completed-with-issues Activity record, and preservation of the active Project.
-14. Open the regenerated high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
+15. Open the regenerated high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
     New/Open/Save/Save As disabled while Exit remains available, then Cancel and require zero committed effects.
-15. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
+16. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
     recover through Save As.
-16. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
+17. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
     prompt and prove admission resumes, then repeat and Discard to require bounded exit 0 with no image process.
 
 Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
 launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/12`; its durable artifacts include the Workbench,
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/13`; its durable artifacts include the Workbench,
 responsive, and Templates-management UIA trees plus `workbench-high-contrast.png` and
 `workbench-reduced-motion.png`, the populated Templates High Contrast screenshot
 `workbench-templates-high-contrast.png`, the selected Slider editor High Contrast screenshot
@@ -285,7 +289,7 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
-- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/12`; steps with durations;
+- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/13`; steps with durations;
   typed navigation, semantic focus, Output interaction, live themes, High Contrast, reduced motion, feedback,
   dialogs, native DPI and responsive/minimum geometry; Project recovery, New/Open/Save/Save As, failure
   preservation/retry and dirty shutdown; the expected/observed process model; bounded exit; environment scrubbing;

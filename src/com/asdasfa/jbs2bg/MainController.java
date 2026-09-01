@@ -14,7 +14,6 @@ import java.util.logging.Logger;
 
 import org.apache.commons.io.FileUtils;
 
-import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
 import com.asdasfa.jbs2bg.filtering.NpcTableColumns;
@@ -38,15 +37,11 @@ import com.asdasfa.jbs2bg.project.ProjectEdit;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.ProjectSnapshot;
 import com.asdasfa.jbs2bg.project.RejectedOutcome;
-import com.asdasfa.jbs2bg.project.SliderPresetEdits;
-import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
+import com.asdasfa.jbs2bg.workbench.GenerationPreferencesStore;
 
-import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyStringWrapper;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
@@ -56,7 +51,6 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.Cursor;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -75,7 +69,6 @@ import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
-import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -93,8 +86,6 @@ public class MainController extends CustomController {
     protected TableView<NpcMorphAssignmentSnapshot> tvNpc;
     @FXML
     protected ListView<SliderPresetSnapshot> lvTargetPresets;
-    // Popup SetSliders
-    protected Stage popupSetSliders;
     // Popup BoSView
     protected Stage popupBosView;
     // Popup SliderPresets
@@ -104,8 +95,6 @@ public class MainController extends CustomController {
     // Popup NpcDatabase
     protected Stage popupNpcDatabase;
     // ^ Templates ^
-    // Popup Rename
-    protected Stage popupRename;
     protected PopupImageViewController popupImageViewController;
     /**
      * Public-JavaFX adapter over the NPC Morph Assignment table; every bulk
@@ -124,10 +113,6 @@ public class MainController extends CustomController {
     private TextArea taTemplate;
     @FXML
     private TextArea taTemplatesGen;
-    @FXML
-    private CheckBox cbUUNP;
-    @FXML
-    private CheckBox cbOmitRedundantSliders;
     // Morphs
     @FXML
     private ListView<CustomMorphTargetSnapshot> lvCustomTargets;
@@ -155,8 +140,6 @@ public class MainController extends CustomController {
     @FXML
     private TextArea taMorphsGen;
     // Confirm Dialogs
-    private CustomConfirm confirmClearPresets;
-    private CustomConfirm confirmRemovePreset;
     private CustomConfirm confirmClearTargetPresets;
     private CustomConfirm confirmClearCustomTargets;
     private CustomConfirm confirmClearNpcs;
@@ -166,12 +149,10 @@ public class MainController extends CustomController {
     // Help Menu
     private Stage popupAbout;
     private PopupAboutController popupAboutController;
-    private PopupSetSlidersController popupSetSlidersController;
     private PopupBosViewController popupBosViewController;
     private PopupSliderPresetsController popupSliderPresetsController;
     private PopupSliderPresetsFillController popupSliderPresetsFillController;
     private PopupNpcDatabaseController popupNpcDatabaseController;
-    private PopupRenameController popupRenameController;
     // Popup ImageView
     private Stage popupImageView;
     // Popup NoPresetNotif
@@ -179,7 +160,6 @@ public class MainController extends CustomController {
     private PopupNoPresetNotifController popupNoPresetNotifController;
 
     // File Choosers
-    private FileChooser fcXml;
     private DirectoryChooser fcExport;
     private DirectoryChooser fcExportBosJson;
 
@@ -277,59 +257,13 @@ public class MainController extends CustomController {
     @Override
     protected void onPostInit() {
         setupNotifs();
-        for (Settings.Diagnostic diagnostic : main.settingsInitialization.getDiagnostics()) {
-            Logger.getLogger(Settings.class.getName()).log(Level.WARNING,
-                    diagnostic.getCode() + ": " + diagnostic.getSource() + " " + diagnostic.getPath()
-                            + System.lineSeparator() + diagnostic.getMessage());
-        }
-        if (!main.settingsInitialization.isSuccessful()) {
-            Settings.Failure failure = main.settingsInitialization.getFailure().orElseThrow();
-            notif.showError("Invalid Settings files detected!" + System.lineSeparator()
-                    + failure.formatForDisplay());
-            Platform.exit();
-            return;
-        }
-
-        cbUUNP.setDisable(true);
-        cbUUNP.selectedProperty().addListener(new ChangeListener<Boolean>() {
-            /** Publishes a UUNP toggle as one Slider Preset edit. */
-            @Override
-            public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
-                SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
-                if (preset == null)
-                    return;
-
-                if (preset.isUunp() != cbUUNP.isSelected()) { // Only mark changed if toggled
-                    applyProjectEdit(SliderPresetEdits.setUunp(preset.getName(), cbUUNP.isSelected()));
-
-                    lvPresets.requestFocus();
-                }
-            }
-        });
-
-        cbOmitRedundantSliders.setDisable(false);
-        boolean omitRedundantSliders = main.data.prefs.getBoolean(main.data.OMIT_REDUNDANT_SLIDERS, false);
-        cbOmitRedundantSliders.setSelected(omitRedundantSliders);
-        cbOmitRedundantSliders.selectedProperty().addListener(new ChangeListener<Boolean>() {
-            @Override
-            public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
-                updateTemplateText();
-
-                main.data.prefs.putBoolean(main.data.OMIT_REDUNDANT_SLIDERS, cbOmitRedundantSliders.isSelected());
-
-                // Clear Templates TextArea
-                taTemplatesGen.clear();
-            }
-        });
 
         setupViews();
         setupAlerts();
         setupPopupAbout();
-        setupPopupSetSliders();
         setupPopupBosView();
         setupPopupSliderPresets();
         setupPopupNpcDatabase();
-        setupPopupRename();
         setupPopupImageView();
         setupPopupNoPresetNotif();
         setupFileChoosers();
@@ -414,14 +348,8 @@ public class MainController extends CustomController {
         );
         lvPresets.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
             SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
-            if (preset == null) {
-                cbUUNP.setDisable(true);
-                cbUUNP.setSelected(false);
+            if (preset == null)
                 return;
-            }
-
-            cbUUNP.setDisable(false);
-            cbUUNP.setSelected(preset.isUunp());
             updateTemplateText();
         });
 
@@ -692,36 +620,6 @@ public class MainController extends CustomController {
     }
 
     private void setupAlerts() {
-        confirmClearPresets = new CustomConfirm(main) {
-            @Override
-            public void ok() {
-                clearPresets();
-            }
-        };
-        confirmClearPresets.setTitle("Confirm Action");
-        confirmClearPresets.setHeaderText("Clear Slider Presets");
-        confirmClearPresets.setContentText(
-                "All your slider presets will be removed.\n" +
-                        "Obviously, all targets will also lose all their assigned presets."
-        );
-        confirmClearPresets.setOkButtonText("Clear");
-        confirmClearPresets.setCancelButtonText("Cancel");
-
-        confirmRemovePreset = new CustomConfirm(main) {
-            @Override
-            public void ok() {
-                removeSelectedPreset();
-            }
-        };
-        confirmRemovePreset.setTitle("Confirm Action");
-        confirmRemovePreset.setHeaderText("Remove Slider Preset");
-        confirmRemovePreset.setContentText(
-                "This preset is assigned to a morph target.\n" +
-                        "All targets assigned with this preset will lose this preset."
-        );
-        confirmRemovePreset.setOkButtonText("Remove");
-        confirmRemovePreset.setCancelButtonText("Cancel");
-
         confirmClearTargetPresets = new CustomConfirm(main) {
             /** Clears the currently selected target's relationships atomically. */
             @Override
@@ -807,29 +705,6 @@ public class MainController extends CustomController {
 
             popupAboutController = loader.getController();
             popupAboutController.postInitialize(main, popupAbout);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void setupPopupSetSliders() {
-        try {
-            popupSetSliders = new Stage();
-            popupSetSliders.getIcons().add(main.icon);
-
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("popup_setsliders.fxml"));
-            Parent root = loader.load();
-
-            Scene scene = new Scene(root, 590, 600);
-            scene.getStylesheets().add(main.style);
-            popupSetSliders.setScene(scene);
-
-            popupSetSliders.initModality(Modality.WINDOW_MODAL);
-            popupSetSliders.initOwner(stage);
-            popupSetSliders.setResizable(false);
-
-            popupSetSlidersController = loader.getController();
-            popupSetSlidersController.postInitialize(main, popupSetSliders);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -932,29 +807,6 @@ public class MainController extends CustomController {
         }
     }
 
-    private void setupPopupRename() {
-        try {
-            popupRename = new Stage();
-            popupRename.getIcons().add(main.icon);
-
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("popup_rename.fxml"));
-            Parent root = loader.load();
-
-            Scene scene = new Scene(root, 400, 150);
-            scene.getStylesheets().add(main.style);
-            popupRename.setScene(scene);
-
-            popupRename.initModality(Modality.WINDOW_MODAL);
-            popupRename.initOwner(stage);
-            popupRename.setResizable(false);
-
-            popupRenameController = loader.getController();
-            popupRenameController.postInitialize(main, popupRename);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
     private void setupPopupImageView() {
         try {
             popupImageView = new Stage();
@@ -1008,139 +860,11 @@ public class MainController extends CustomController {
     }
 
     private void setupFileChoosers() {
-        fcXml = new FileChooser();
-        fcXml.setTitle("Add BodySlide XMLs");
-        fcXml.getExtensionFilters().add(new FileChooser.ExtensionFilter("BodySlide XML files (*.xml)", "*.xml"));
-
         fcExport = new DirectoryChooser();
         fcExport.setTitle("Export Templates and Morphs INI");
 
         fcExportBosJson = new DirectoryChooser();
         fcExportBosJson.setTitle("Export BoS JSON files");
-    }
-
-    /**
-     * Selects BodySlide XML sources, schedules their session import, and renders the aggregate outcome.
-     */
-    @FXML
-    private void addXmlPresets() {
-        List<File> files;
-        try {
-            fcXml.setInitialDirectory(new File(main.data.prefs.get(main.data.LAST_USED_PRESET_FOLDER, new File(".").getAbsolutePath())));
-            files = fcXml.showOpenMultipleDialog(stage);
-        } catch (Exception e) {
-            fcXml.setInitialDirectory(main.data.homeDir);
-            files = fcXml.showOpenMultipleDialog(stage);
-        }
-        if (files != null) {
-            main.data.prefs.put(main.data.LAST_USED_PRESET_FOLDER, files.get(0).getParent());
-
-            Task<SliderPresetImportOutcome> task = importSliderPresets(files);
-            scheduleBackgroundTask(task, importOutcome -> {
-                renderProjectOutcome(importOutcome.getProjectOutcome());
-                Logger.getLogger(getClass().getName()).log(Level.INFO,
-                        isRejectedOrFailed(importOutcome.getProjectOutcome())
-                                ? "XML parsing completed without a successful Project change."
-                                : "XML parsing done.");
-            }, "XML parsing");
-        } else {
-        }
-    }
-
-    /**
-     * Creates a worker wrapper for one synchronous ProjectSession XML batch without
-     * letting the worker thread touch JavaFX controls or presentation projections.
-     *
-     * @param files selected BodySlide XML sources in chooser order
-     * @return background task carrying the aggregate and per-source outcomes
-     */
-    private Task<SliderPresetImportOutcome> importSliderPresets(List<File> files) {
-        List<Path> sources = new ArrayList<>();
-        for (File file : files)
-            sources.add(file.toPath());
-        return new Task<SliderPresetImportOutcome>() {
-            @Override
-            protected SliderPresetImportOutcome call() {
-                return main.workbenchProjectFlow.importSliderPresets(sources);
-            }
-        };
-    }
-
-    @FXML
-    private void showConfirmClearPresets() {
-        if (main.projectPresentation.getSliderPresets().isEmpty())
-            return;
-
-        confirmClearPresets.show();
-    }
-
-    /**
-     * Clears the Project Slider Preset catalog and its cascaded relationships.
-     */
-    private void clearPresets() {
-        if (main.projectPresentation.getSliderPresets().isEmpty())
-            return;
-
-        applyProjectEdit(SliderPresetEdits.clear());
-    }
-
-    /**
-     * Confirms a delete only when the selected Slider Preset has relationships.
-     */
-    @FXML
-    private void showConfirmRemovePreset() {
-        SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
-        if (preset == null)
-            return;
-
-        boolean used = false;
-        // Search custom morph targets
-        for (CustomMorphTargetSnapshot target : main.projectPresentation.getCustomMorphTargets()) {
-            if (target.getSliderPresetNames().contains(preset.getName())) {
-                used = true;
-                break;
-            }
-        }
-        if (!used) { // Search NPCs
-            for (NpcMorphAssignmentSnapshot npc : main.projectPresentation.getNpcMorphAssignments()) {
-                if (npc.getSliderPresetNames().contains(preset.getName())) {
-                    used = true;
-                    break;
-                }
-            }
-        }
-
-        if (used) { // Show confirmation
-            confirmRemovePreset.show();
-        } else { // Just remove
-            removeSelectedPreset();
-        }
-    }
-
-    /**
-     * Deletes the selected logical Slider Preset through the session cascade.
-     */
-    private void removeSelectedPreset() {
-        SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
-        if (preset == null)
-            return;
-
-        applyProjectEdit(SliderPresetEdits.delete(preset.getName()));
-    }
-
-    /**
-     * Duplicates the selected Slider Preset and selects the returned copy.
-     */
-    @FXML
-    private void duplicateSelectedPreset() {
-        SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
-        if (preset == null)
-            return;
-
-        String duplicateName = preset.getName() + "(Dupe)";
-        ProjectOutcome outcome = applyProjectEdit(SliderPresetEdits.duplicate(preset.getName(), duplicateName));
-        if (outcome instanceof ChangedOutcome)
-            selectSliderPreset(duplicateName);
     }
 
     @FXML
@@ -1209,28 +933,6 @@ public class MainController extends CustomController {
         popupAbout.setX(x);
         popupAbout.setY(y);
         popupAbout.show();
-    }
-
-    @FXML
-    private void showPopupSetSliders() {
-        if (lvPresets.getSelectionModel().getSelectedItem() == null)
-            return;
-
-        Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
-        Scene mainScene = stage.getScene();
-        double x = stage.getX() + mainScene.getWidth() / 2 - popupSetSliders.getScene().getWidth() / 2;
-        double y = stage.getY() + mainScene.getHeight() / 2 - popupSetSliders.getScene().getHeight() / 2;
-        if (x < 0)
-            x = 0;
-        if (x > screenBounds.getWidth() - popupSetSliders.getScene().getWidth())
-            x = screenBounds.getWidth() - popupSetSliders.getScene().getWidth();
-        if (y < 0)
-            y = 0;
-        if (y + popupSetSliders.getScene().getHeight() > screenBounds.getHeight())
-            y = screenBounds.getHeight() - popupSetSliders.getScene().getHeight();
-        popupSetSliders.setX(x);
-        popupSetSliders.setY(y);
-        popupSetSliders.show();
     }
 
     @FXML
@@ -1332,28 +1034,6 @@ public class MainController extends CustomController {
         popupNpcDatabase.show();
     }
 
-    @FXML
-    private void showPopupRename() {
-        if (lvPresets.getSelectionModel().getSelectedItem() == null)
-            return;
-
-        Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
-        Scene mainScene = stage.getScene();
-        double x = stage.getX() + mainScene.getWidth() / 2 - popupRename.getScene().getWidth() / 2;
-        double y = stage.getY() + mainScene.getHeight() / 2 - popupRename.getScene().getHeight() / 2;
-        if (x < 0)
-            x = 0;
-        if (x > screenBounds.getWidth() - popupRename.getScene().getWidth())
-            x = screenBounds.getWidth() - popupRename.getScene().getWidth();
-        if (y < 0)
-            y = 0;
-        if (y + popupRename.getScene().getHeight() > screenBounds.getHeight())
-            y = screenBounds.getHeight() - popupRename.getScene().getHeight();
-        popupRename.setX(x);
-        popupRename.setY(y);
-        popupRename.show();
-    }
-
     /**
      * Renders the selected Slider Preset preview from the latest coherent Project snapshot.
      */
@@ -1365,9 +1045,19 @@ public class MainController extends CustomController {
         }
 
         ProjectGeneratedOutput output = ProjectOutputFormatter.generate(main.projectPresentation.getSnapshot(),
-                cbOmitRedundantSliders.isSelected());
+                omitRedundantSliders());
         taTemplate.setText(output.getTemplateLinesByPresetName().get(preset.getName()));
         taTemplate.positionCaret(0);
+    }
+
+    /** Returns the retained generation preference for unfinished legacy Output adapters. */
+    private boolean omitRedundantSliders() {
+        try {
+            return new GenerationPreferencesStore(Path.of(".")).loadOrMigrate();
+        } catch (IOException exception) {
+            // Unfinished legacy Output routes retain their prior value if the profile-local migration is unreadable.
+            return main.data.prefs.getBoolean(main.data.OMIT_REDUNDANT_SLIDERS, false);
+        }
     }
 
     /**
@@ -1376,7 +1066,7 @@ public class MainController extends CustomController {
     @FXML
     private void generateTemplates() {
         ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
-        boolean omitRedundantSliders = cbOmitRedundantSliders.isSelected();
+        boolean omitRedundantSliders = omitRedundantSliders();
         if (outputSnapshot.getSliderPresets().isEmpty()) {
             notif.show("You don't have any presets in the list, add some BodySlide XML presets first!");
             taTemplatesGen.setText("");
@@ -1531,7 +1221,7 @@ public class MainController extends CustomController {
     @FXML
     private void generateMorphs() {
         ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
-        boolean omitRedundantSliders = cbOmitRedundantSliders.isSelected();
+        boolean omitRedundantSliders = omitRedundantSliders();
         if (outputSnapshot.getCustomMorphTargets().isEmpty()
                 && outputSnapshot.getNpcMorphAssignments().isEmpty()) {
             notif.show("You don't have any morphs in the list, add some morph targets first!");
@@ -1666,7 +1356,7 @@ public class MainController extends CustomController {
 
         main.data.prefs.put(main.data.LAST_USED_INI_FOLDER, targetDir.getAbsolutePath());
         ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
-        boolean omitRedundantSliders = cbOmitRedundantSliders.isSelected();
+        boolean omitRedundantSliders = omitRedundantSliders();
 
         Task<ProjectGeneratedOutput> task = exportTask(targetDir, outputSnapshot, omitRedundantSliders);
         scheduleBackgroundTask(task, output -> {
@@ -1754,7 +1444,7 @@ public class MainController extends CustomController {
 
         main.data.prefs.put(main.data.LAST_USED_JSON_FOLDER, targetDir.getAbsolutePath());
         ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
-        boolean omitRedundantSliders = cbOmitRedundantSliders.isSelected();
+        boolean omitRedundantSliders = omitRedundantSliders();
 
         Task<ProjectGeneratedOutput> task = exportBosJsonTask(targetDir, outputSnapshot,
                 omitRedundantSliders);

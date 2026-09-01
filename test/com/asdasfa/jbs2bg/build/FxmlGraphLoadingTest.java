@@ -8,7 +8,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
@@ -18,7 +17,6 @@ import com.asdasfa.jbs2bg.CustomConfirm;
 import com.asdasfa.jbs2bg.CustomController;
 import com.asdasfa.jbs2bg.CustomNotif;
 import com.asdasfa.jbs2bg.Main;
-import com.asdasfa.jbs2bg.SetSliderControl;
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
@@ -31,7 +29,6 @@ import javafx.scene.Parent;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -162,9 +159,7 @@ class FxmlGraphLoadingTest {
     }
 
     /**
-     * Custom-root graphs load into the control that owns them: the dialogs
-     * through their public constructors, and the slider row through its
-     * declared {@code @FXML} fields.
+     * The remaining custom-root graphs load into the dialog controls that own them.
      */
     @Test
     void customRootGraphsLoadIntoTheirOwningControls() throws Exception {
@@ -177,18 +172,6 @@ class FxmlGraphLoadingTest {
             confirm.setHeaderText("header");
             confirm.setContentText("content");
 
-            FXMLLoader loader = new FXMLLoader(resource("setslider_control.fxml"));
-            loader.setRoot(new VBox());
-            loader.load();
-            Map<String, Object> namespace = loader.getNamespace();
-            for (Field field : SetSliderControl.class.getDeclaredFields()) {
-                if (field.getAnnotation(FXML.class) == null)
-                    continue;
-                Object node = namespace.get(field.getName());
-                assertNotNull(node, "setslider_control.fxml must declare fx:id " + field.getName());
-                assertTrue(field.getType().isInstance(node),
-                        field.getName() + " must be a " + field.getType().getSimpleName());
-            }
         });
     }
 
@@ -198,7 +181,7 @@ class FxmlGraphLoadingTest {
     @Test
     void everyFxmlGraphOnDiskIsServedFromTheClasspath() throws IOException {
         List<String> graphs = fxmlFiles("");
-        assertTrue(graphs.size() >= 13, "expected the full FXML set, found " + graphs);
+        assertEquals(10, graphs.size(), "expected only the Workbench and unfinished workflow FXML set");
         assertTrue(graphs.contains("workbench.fxml"), "the Workbench must be the packaged root graph");
         assertFalse(graphs.contains("main.fxml"), "the replaced legacy root graph must not ship");
         for (String graph : graphs)

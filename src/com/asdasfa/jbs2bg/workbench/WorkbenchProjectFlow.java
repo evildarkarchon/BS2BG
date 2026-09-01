@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
 import com.asdasfa.jbs2bg.project.CancelledOutcome;
+import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.ProjectContentVersion;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
@@ -162,6 +163,57 @@ public final class WorkbenchProjectFlow {
     }
 
     /**
+     * Classifies one ordered BodySlide batch without flattening rejected, failed, partial, or cancelled source
+     * outcomes. Successfully committed earlier sources remain explicit effects when a later source does not commit.
+     *
+     * @param outcome authoritative aggregate and per-source Project result
+     * @param sources captured normalized source paths in processing order
+     * @return terminal coordinator result carrying the aggregate for serialized Project publication
+     */
+    private static JobCoordinator.Result<SliderPresetImportOutcome> importResult(
+            SliderPresetImportOutcome outcome, List<Path> sources) {
+        List<JobCoordinator.Diagnostic> diagnostics = outcome.getDiagnostics().stream()
+                .map(WorkbenchProjectFlow::jobDiagnostic)
+                .toList();
+        List<String> effects = new java.util.ArrayList<>();
+        boolean usableSource = false;
+        boolean failedSource = false;
+        boolean issueSource = false;
+        for (int index = 0; index < outcome.getSourceOutcomes().size(); index++) {
+            ProjectOutcome sourceOutcome = outcome.getSourceOutcomes().get(index);
+            if (sourceOutcome instanceof ChangedOutcome) {
+                Path fileName = sources.get(index).getFileName();
+                effects.add("Imported " + (fileName == null ? sources.get(index) : fileName));
+                usableSource = true;
+            } else if (sourceOutcome instanceof com.asdasfa.jbs2bg.project.UnchangedOutcome) {
+                usableSource = true;
+            } else if (sourceOutcome instanceof FailedOutcome) {
+                failedSource = true;
+                issueSource = true;
+            } else if (sourceOutcome instanceof RejectedOutcome) {
+                issueSource = true;
+            }
+        }
+        if (outcome.getProjectOutcome() instanceof CancelledOutcome) {
+            return JobCoordinator.Result.cancelled(outcome,
+                    "BodySlide import cancelled after committing " + effects.size()
+                            + (effects.size() == 1 ? " source." : " sources."),
+                    effects, diagnostics);
+        }
+        if (failedSource && !usableSource)
+            return JobCoordinator.Result.failed(outcome,
+                    "BodySlide import failed with " + diagnosticSummary(diagnostics.size()) + ".", diagnostics);
+        if (issueSource || !diagnostics.isEmpty())
+            return JobCoordinator.Result.completedWithIssues(outcome,
+                    "BodySlide import completed with " + diagnosticSummary(diagnostics.size()) + ".",
+                    effects, diagnostics);
+        return JobCoordinator.Result.completed(outcome,
+                "BodySlide import completed from " + sources.size()
+                        + (sources.size() == 1 ? " source." : " sources."),
+                effects, diagnostics);
+    }
+
+    /**
      * Pluralizes the stable diagnostic count used in terminal Open summaries.
      */
     private static String diagnosticSummary(int count) {
@@ -203,32 +255,43 @@ public final class WorkbenchProjectFlow {
     /**
      * Immutable response from a completed platform effect.
      */
-    public record Response(ResponseKind kind, Path selectedPath) {
+    public record Response(ResponseKind kind, Path selectedPath, List<Path> selectedPaths) {
         /** Creates a response for a user-selected local path. */
         public static Response selected (Path path){
-            return new Response(ResponseKind.PATH_SELECTED, Objects.requireNonNull(path, "path"));
+            return new Response(ResponseKind.PATH_SELECTED, Objects.requireNonNull(path, "path"), List.of());
+        }
+
+        /** Creates a response for one ordered, nonempty BodySlide source selection. */
+        public static Response selectedSources(List<Path> paths) {
+            List<Path> selected = List.copyOf(Objects.requireNonNull(paths, "paths"));
+            if (selected.isEmpty())
+                throw new IllegalArgumentException("selected BodySlide sources must not be empty");
+            return new Response(ResponseKind.PATHS_SELECTED, null, selected);
         }
 
         /** Creates a response for a cancelled chooser or confirmation. */
         public static Response cancelled () {
-            return new Response(ResponseKind.CANCELLED, null);
+            return new Response(ResponseKind.CANCELLED, null, List.of());
         }
 
         /** Creates a response that explicitly discards the dirty Project before continuing. */
         public static Response discard () {
-            return new Response(ResponseKind.DISCARD, null);
+            return new Response(ResponseKind.DISCARD, null, List.of());
         }
 
         /** Creates a response that saves the dirty Project before continuing. */
         public static Response save () {
-            return new Response(ResponseKind.SAVE, null);
+            return new Response(ResponseKind.SAVE, null, List.of());
         }
 
-        /** Requires a path only for the selected-path response kind. */
+        /** Requires exactly the selected value family belonging to the response kind. */
         public Response {
             Objects.requireNonNull(kind, "kind");
+            selectedPaths = List.copyOf(Objects.requireNonNull(selectedPaths, "selectedPaths"));
             if ((kind == ResponseKind.PATH_SELECTED) == (selectedPath == null))
                 throw new IllegalArgumentException("selectedPath must be present only for PATH_SELECTED");
+            if ((kind == ResponseKind.PATHS_SELECTED) != !selectedPaths.isEmpty())
+                throw new IllegalArgumentException("selectedPaths must be present only for PATHS_SELECTED");
         }
     }
 
@@ -298,6 +361,7 @@ public final class WorkbenchProjectFlow {
             case NEW -> EffectKind.CONFIRM_NEW;
             case OPEN -> frame.snapshot().isDirty() ? EffectKind.CONFIRM_OPEN : EffectKind.CHOOSE_OPEN_PATH;
             case SAVE, SAVE_AS -> EffectKind.CHOOSE_SAVE_PATH;
+            case IMPORT_BODYSLIDE -> EffectKind.CHOOSE_BODYSLIDE_SOURCES;
         };
         pendingEffect = new Effect(nextEffectToken++, kind);
         return accepted(pendingEffect);
@@ -315,21 +379,6 @@ public final class WorkbenchProjectFlow {
         requireImmediateOperation();
         ProjectOutcome outcome = projectSession.apply(Objects.requireNonNull(edit, "edit"));
         publish(outcome);
-        return outcome;
-    }
-
-    /**
-     * Imports an ordered BodySlide source batch through the authoritative session and publishes its aggregate frame.
-     *
-     * @param sources selected source paths in processing order
-     * @return the exact aggregate and per-source ProjectSession outcome
-     * @throws IllegalStateException when the flow is awaiting an effect or already closed
-     */
-    public SliderPresetImportOutcome importSliderPresets(List<Path> sources) {
-        requireImmediateOperation();
-        SliderPresetImportOutcome outcome = projectSession.importSliderPresets(
-                Objects.requireNonNull(sources, "sources"));
-        publish(outcome.getProjectOutcome());
         return outcome;
     }
 
@@ -379,9 +428,19 @@ public final class WorkbenchProjectFlow {
             clearPendingEffect();
             return closeWindow();
         }
+        Intent completedIntent = pendingIntent;
+        if (completedIntent == Intent.IMPORT_BODYSLIDE) {
+            if (response.kind() != ResponseKind.PATHS_SELECTED)
+                return rejected();
+            clearPendingEffect();
+            List<Path> sources = response.selectedPaths().stream()
+                    .map(path -> path.toAbsolutePath().normalize())
+                    .toList();
+            JobCoordinator.Admission admission = jobs.submit(importSubmission(sources));
+            return admission.admitted() ? accepted(null) : rejected();
+        }
         if (response.kind() != ResponseKind.PATH_SELECTED)
             return rejected();
-        Intent completedIntent = pendingIntent;
         clearPendingEffect();
         if (completedIntent == Intent.OPEN) {
             Path source = response.selectedPath().toAbsolutePath().normalize();
@@ -394,6 +453,7 @@ public final class WorkbenchProjectFlow {
             case NEW -> throw new IllegalStateException("New Project cannot complete from a path chooser");
             case OPEN -> throw new AssertionError("Open is admitted through the application job coordinator");
             case SAVE, SAVE_AS -> admitSave(target, false, false);
+            case IMPORT_BODYSLIDE -> throw new AssertionError("BodySlide import uses the multi-source chooser");
         };
     }
 
@@ -569,6 +629,39 @@ public final class WorkbenchProjectFlow {
     }
 
     /**
+     * Captures one ordered BodySlide source batch, current Project basis, and fresh retry factory before dispatch.
+     *
+     * @param sources normalized selected sources in user-selected order
+     * @return fully captured coordinator submission
+     */
+    private JobCoordinator.Submission<SliderPresetImportOutcome> importSubmission(List<Path> sources) {
+        List<Path> capturedSources = List.copyOf(Objects.requireNonNull(sources, "sources"));
+        if (capturedSources.isEmpty())
+            throw new IllegalArgumentException("BodySlide sources must not be empty");
+        ProjectContentVersion capturedBasis = projectSession.getSnapshot().getContentVersion();
+        JobCoordinator.Operation operation = new JobCoordinator.Operation("Import BodySlide Presets",
+                capturedSources.stream().map(Path::toString).toList(), List.of(),
+                Optional.of(capturedBasis.toString()));
+        return new JobCoordinator.Submission<>(operation, context -> {
+            SliderPresetImportOutcome outcome = projectSession.importSliderPresets(capturedSources,
+                    new JobOperationContext(context));
+            if (!(outcome.getProjectOutcome() instanceof CancelledOutcome)) {
+                if (context.beginCommit("Finalizing BodySlide import")) {
+                    context.report(new JobCoordinator.Progress("Imported BodySlide sources",
+                            Optional.of((long) capturedSources.size()), Optional.of((long) capturedSources.size()),
+                            false));
+                } else {
+                    // Cancellation won the final boundary after per-source commits; retain those effects explicitly.
+                    outcome = new SliderPresetImportOutcome(new CancelledOutcome(outcome.getSnapshot(),
+                            outcome.getDiagnostics()), outcome.getSourceOutcomes());
+                }
+            }
+            return importResult(outcome, capturedSources);
+        }, (attempt, result) -> result.value().ifPresent(value -> publish(value.getProjectOutcome())),
+                Optional.of(() -> importSubmission(capturedSources)));
+    }
+
+    /**
      * Lightweight filesystem identity used to reject an Open whose selected source changed in flight.
      */
     private record OpenSourceStamp(boolean readable, long size, FileTime modifiedAt, String fileKey) {
@@ -589,6 +682,7 @@ public final class WorkbenchProjectFlow {
      */
     public enum Intent {
         CLOSE,
+        IMPORT_BODYSLIDE,
         NEW,
         OPEN,
         SAVE,
@@ -603,6 +697,7 @@ public final class WorkbenchProjectFlow {
         CONFIRM_CLOSE,
         CONFIRM_NEW,
         CONFIRM_OPEN,
+        CHOOSE_BODYSLIDE_SOURCES,
         CHOOSE_OPEN_PATH,
         CHOOSE_SAVE_PATH
     }
@@ -612,6 +707,7 @@ public final class WorkbenchProjectFlow {
      */
     public enum ResponseKind {
         PATH_SELECTED,
+        PATHS_SELECTED,
         CANCELLED,
         DISCARD,
         SAVE

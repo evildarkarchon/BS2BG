@@ -26,6 +26,7 @@ import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
+import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
 import javafx.css.PseudoClass;
@@ -60,6 +61,144 @@ class WorkbenchControllerTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    /**
+     * The Settings Area edits both profiles through immutable feature frames, persists them as one pair, and records
+     * one durable save result without routing through a legacy controller.
+     */
+    @Test
+    void settingsAreaEditsAndPersistsBothProfilesThroughTheWorkbench() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
+            @SuppressWarnings("unchecked")
+            ComboBox<SettingsFeature.Profile> profiles =
+                    (ComboBox<SettingsFeature.Profile>) loader.getNamespace().get("settingsProfileChoice");
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            TextField multiplier = (TextField) loader.getNamespace().get("settingsMultiplierInput");
+            Button apply = (Button) loader.getNamespace().get("applySettingsEntryButton");
+
+            profiles.setValue(SettingsFeature.Profile.STANDARD);
+            profiles.fireEvent(new ActionEvent());
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            multiplier.setText("2");
+            apply.fire();
+
+            profiles.setValue(SettingsFeature.Profile.UUNP);
+            profiles.fireEvent(new ActionEvent());
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Arms")).findFirst().orElseThrow());
+            multiplier.setText("3");
+            apply.fire();
+            CheckBox omit = (CheckBox) loader.getNamespace().get("omitRedundantSlidersCheck");
+            omit.fire();
+            ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+
+            assertEquals(2f, Settings.getMultiplier("Waist"));
+            assertEquals(3f, Settings.getMultiplierUUNP("Arms"));
+            assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
+            assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("Settings saved"));
+            stage.close();
+        });
+
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertEquals(2f, Settings.getMultiplier("Waist"));
+        assertEquals(3f, Settings.getMultiplierUUNP("Arms"));
+        assertTrue(new GenerationPreferencesStore(temporaryDirectory).loadOrMigrate());
+    }
+
+    /**
+     * The Templates import launcher captures a multiple-file chooser response, falls back to the logical Slider
+     * Preset list while admission disables the launcher, and completion updates Project and Activity without moving
+     * focus.
+     */
+    @Test
+    void bodySlideImportLauncherUsesTheCentralJobWithoutStealingFocus() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Path source = temporaryDirectory.resolve("workbench-import.xml").toAbsolutePath().normalize();
+        Files.writeString(source, "<SliderPresets><Preset name=\"Workbench Import\"/></SliderPresets>");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // This import settles before prolonged cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondWith(WorkbenchProjectFlow.Response.selectedSources(List.of(source)));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300, 720);
+            stage.setScene(scene);
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            stage.show();
+            Button importButton = (Button) loader.getNamespace().get("importBodySlideButton");
+            @SuppressWarnings("unchecked")
+            ListView<SliderPresetSnapshot> presets =
+                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+            importButton.requestFocus();
+
+            importButton.fire();
+
+            assertTrue(jobs.frame().active());
+            assertTrue(importButton.isDisabled());
+            assertSame(presets, scene.getFocusOwner());
+            worker.runNext();
+
+            ListView<SliderPresetSnapshot> importedPresets = controller.sliderPresetListNode();
+            assertEquals(List.of("Workbench Import"), importedPresets.getItems().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+            assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
+            assertSame(importedPresets, scene.getFocusOwner());
+            stage.close();
+        });
+    }
+
+    /** A blocking startup Settings diagnostic becomes durable Activity and prevents imports from consuming empties. */
+    @Test
+    void invalidStartupSettingsAreVisibleAndBlockBodySlideImport() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Files.writeString(temporaryDirectory.resolve("settings.json"), "{\"Defaults\":");
+        Settings.InitializationResult rejected = Settings.initialize(temporaryDirectory);
+        assertFalse(rejected.isSuccessful());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, rejected);
+
+            assertTrue(((Button) loader.getNamespace().get("importBodySlideButton")).isDisabled());
+            @SuppressWarnings("unchecked")
+            ListView<WorkbenchFeedback.ActivityRecord> activity =
+                    (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+            assertEquals(1, activity.getItems().size());
+            assertTrue(activity.getItems().get(0).message().contains("SETTINGS_JSON_MALFORMED"));
+            stage.close();
+        });
+    }
 
     /**
      * The Templates JavaFX adapter renders immutable feature frames and translates controls into typed feature intents

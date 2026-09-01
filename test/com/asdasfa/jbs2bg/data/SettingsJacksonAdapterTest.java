@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.LinkedHashMap;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -274,6 +275,62 @@ final class SettingsJacksonAdapterTest {
                 output.getTemplateLinesByPresetName().get("CBBE Curvy"));
         assertEquals("UUNP Athletic=Arms@0.25:0.75",
                 output.getTemplateLinesByPresetName().get("UUNP Athletic"));
+    }
+
+    /**
+     * Workbench-authored Settings replace the pair atomically, become the live immutable snapshot, and immediately
+     * affect generated output through the same public Settings seam used after restart.
+     *
+     * @param directory isolated production Settings directory
+     * @throws IOException when permanent fixtures cannot be copied
+     */
+    @Test
+    void workbenchSettingsPersistAsOnePairAndImmediatelyAffectOutput(@TempDir Path directory) throws IOException {
+        Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
+        Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        Settings.Snapshot loaded = Settings.snapshot();
+        LinkedHashMap<String, Float> standardMultipliers =
+                new LinkedHashMap<>(loaded.standard().multipliers());
+        standardMultipliers.put("Waist", 2f);
+        Settings.Profile editedStandard = new Settings.Profile(loaded.standard().defaults(),
+                standardMultipliers, loaded.standard().inverted());
+
+        Settings.PersistenceResult persisted = Settings.persist(directory,
+                new Settings.Snapshot(editedStandard, loaded.uunp()));
+
+        assertTrue(persisted.isSuccessful());
+        assertTrue(persisted.getDiagnostics().isEmpty());
+        assertEquals(2f, Settings.getMultiplier("Waist"));
+        ProjectSession session = ProjectSessions.create();
+        ProjectOutcome opened = session.open(Path.of("test-resources", "projects",
+                "legacy-project-semantics.jbs2bg"));
+        assertEquals("CBBE Curvy=Waist@1.48:0.52, Ångström/形@0.0",
+                ProjectOutputFormatter.generate(opened.getSnapshot(), false)
+                        .getTemplateLinesByPresetName().get("CBBE Curvy"));
+
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        assertEquals(2f, Settings.snapshot().standard().multipliers().get("Waist"));
+        assertEquals("CBBE Curvy=Waist@1.48:0.52, Ångström/形@0.0",
+                ProjectOutputFormatter.generate(opened.getSnapshot(), false)
+                        .getTemplateLinesByPresetName().get("CBBE Curvy"));
+    }
+
+    /** A Workbench save fails immediately when another writer owns the pair lock and retains the live snapshot. */
+    @Test
+    void workbenchSettingsPersistenceDoesNotBlockBehindAnotherWriter(@TempDir Path directory) throws IOException {
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        Settings.Snapshot before = Settings.snapshot();
+
+        Settings.PersistenceResult result;
+        try (SettingsDirectoryLock lock = SettingsDirectoryLock.acquire(directory)) {
+            assertNotNull(lock);
+            result = Settings.persist(directory, before);
+        }
+
+        assertFalse(result.isSuccessful());
+        assertEquals("SETTINGS_LOCK_FAILED", result.getFailure().orElseThrow().getCode());
+        assertEquals(before, Settings.snapshot());
     }
 
     /**

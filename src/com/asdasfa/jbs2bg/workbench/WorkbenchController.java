@@ -10,12 +10,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
 import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
+import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -158,6 +160,8 @@ public final class WorkbenchController {
     @FXML
     private Button clearSliderPresetsButton;
     @FXML
+    private Button importBodySlideButton;
+    @FXML
     private VBox templatesEditorContent;
     @FXML
     private Label templateEditorFocusTarget;
@@ -216,6 +220,46 @@ public final class WorkbenchController {
     @FXML
     private Label gangMaximumValue;
     @FXML
+    private ScrollPane settingsPrimaryScroll;
+    @FXML
+    private VBox settingsPrimaryContent;
+    @FXML
+    private ComboBox<SettingsFeature.Profile> settingsProfileChoice;
+    @FXML
+    private ListView<SettingsFeature.EntryFrame> settingsEntryList;
+    @FXML
+    private TextField newSettingsEntryName;
+    @FXML
+    private Button addSettingsEntryButton;
+    @FXML
+    private VBox settingsEditorContent;
+    @FXML
+    private Label settingsValidationText;
+    @FXML
+    private TextField settingsEntryNameInput;
+    @FXML
+    private TextField settingsSmallInput;
+    @FXML
+    private TextField settingsBigInput;
+    @FXML
+    private TextField settingsMultiplierInput;
+    @FXML
+    private javafx.scene.control.CheckBox settingsInvertedCheck;
+    @FXML
+    private Button applySettingsEntryButton;
+    @FXML
+    private Button removeSettingsEntryButton;
+    @FXML
+    private VBox settingsInspectorContent;
+    @FXML
+    private Label settingsNoticeText;
+    @FXML
+    private javafx.scene.control.CheckBox omitRedundantSlidersCheck;
+    @FXML
+    private Button saveSettingsButton;
+    @FXML
+    private Button reloadSettingsButton;
+    @FXML
     private Button editorButton;
     @FXML
     private Button inspectorButton;
@@ -234,6 +278,7 @@ public final class WorkbenchController {
     private WorkbenchNavigation.Frame navigationFrame = navigation.currentFrame();
     private WorkbenchProjectFlow projectFlow;
     private TemplatesFeature templatesFeature;
+    private SettingsFeature settingsFeature;
     private Stage stage;
     private WorkbenchPlatform platform;
     private JavaFxWorkbenchAppearance appearanceAdapter;
@@ -244,9 +289,11 @@ public final class WorkbenchController {
     private long renderedTerminalAttemptId;
     private boolean closeAfterActiveJob;
     private boolean renderingTemplates;
+    private boolean renderingSettings;
     private TextField activeRenameField;
     private SliderPresetCell activeRenameCell;
     private boolean templatesMutationsBlocked;
+    private boolean settingsMutationsBlocked;
     private boolean resetTemplatesOnNextProjectFrame;
     private boolean sliderPresetListInitialized;
     private final Map<String, SliderChoiceRow> sliderChoiceRowsByName = new LinkedHashMap<>();
@@ -267,7 +314,7 @@ public final class WorkbenchController {
             case SAVE -> WorkbenchFeedback.DialogAction.SAVE;
             case DISCARD -> WorkbenchFeedback.DialogAction.DISCARD;
             case CANCELLED -> WorkbenchFeedback.DialogAction.CANCEL;
-            case PATH_SELECTED -> throw new IllegalArgumentException(
+            case PATH_SELECTED, PATHS_SELECTED -> throw new IllegalArgumentException(
                     "A Project confirmation cannot return a selected path");
         };
     }
@@ -291,6 +338,8 @@ public final class WorkbenchController {
             case NEW -> new OperationDescription("New Project", "New Project created");
             case OPEN -> new OperationDescription("Open Project", "Project opened");
             case SAVE, SAVE_AS -> new OperationDescription("Save Project", "Project saved");
+            case IMPORT_BODYSLIDE -> new OperationDescription("Import BodySlide Presets",
+                    "BodySlide presets imported");
             case CLOSE -> new OperationDescription("Close Project", "Project closed");
         };
     }
@@ -355,6 +404,20 @@ public final class WorkbenchController {
      * @throws IllegalStateException when this controller is attached more than once
      */
     public void attach(WorkbenchProjectFlow flow, Stage ownerStage) {
+        attach(flow, ownerStage, Path.of("."), Settings.publishedState());
+    }
+
+    /**
+     * Attaches the loaded JavaFX graph with the exact Settings startup result so recovery and failures become visible
+     * Workbench evidence rather than being stranded in the composition root.
+     *
+     * @param flow               authoritative Workbench Project flow
+     * @param ownerStage         application window that owns effects and focus
+     * @param settingsDirectory  directory owning the paired Settings files
+     * @param settingsStartup    original paired Settings startup result
+     */
+    public void attach(WorkbenchProjectFlow flow, Stage ownerStage, Path settingsDirectory,
+                       Settings.InitializationResult settingsStartup) {
         WorkbenchAppearanceStore store = new WorkbenchAppearanceStore(Path.of("."));
         WorkbenchAppearance.ThemeChoice initialChoice;
         try {
@@ -363,7 +426,8 @@ public final class WorkbenchController {
             // A damaged or unreadable optional preference must not prevent the Workbench from starting safely.
             initialChoice = WorkbenchAppearance.ThemeChoice.SYSTEM;
         }
-        attach(flow, ownerStage, new JavaFxWorkbenchPlatform(), initialChoice, store::save);
+        attach(flow, ownerStage, new JavaFxWorkbenchPlatform(), initialChoice, store::save,
+                settingsDirectory, settingsStartup);
     }
 
     /**
@@ -379,7 +443,17 @@ public final class WorkbenchController {
     void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter) {
         attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
             // Tests and embedded adapters intentionally keep theme selection in memory only.
-        });
+        }, Path.of("."), Settings.publishedState());
+    }
+
+    /**
+     * Test and embedded adapter seam that supplies isolated Settings persistence and startup evidence.
+     */
+    void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
+                Path settingsDirectory, Settings.InitializationResult settingsStartup) {
+        attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
+            // Tests and embedded adapters intentionally keep theme selection in memory only.
+        }, settingsDirectory, settingsStartup);
     }
 
     /**
@@ -394,15 +468,18 @@ public final class WorkbenchController {
      * @throws IllegalStateException when this controller is already attached
      */
     private void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
-                        WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver) {
+                        WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver,
+                        Path settingsDirectory, Settings.InitializationResult settingsStartup) {
         if (projectFlow != null)
             throw new IllegalStateException("WorkbenchController is already attached");
         projectFlow = Objects.requireNonNull(flow, "flow");
         templatesFeature = new TemplatesFeature(projectFlow, Clock.systemUTC());
+        settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup);
         stage = Objects.requireNonNull(ownerStage, "ownerStage");
         platform = Objects.requireNonNull(platformAdapter, "platformAdapter");
         configureProjectCommands();
         configureTemplates();
+        configureSettings();
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
@@ -415,6 +492,7 @@ public final class WorkbenchController {
             }
         });
         jobSubscription = projectFlow.jobs().observe(this::renderJobFrame);
+        publishInitialSettingsEvidence();
         stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> {
             appearanceAdapter.close();
             jobSubscription.close();
@@ -495,7 +573,185 @@ public final class WorkbenchController {
                 dispatchTemplates(new TemplatesFeature.RequestClearVisible()));
         dismissTemplatesInfoBarButton.setOnAction(event ->
                 dispatchTemplates(new TemplatesFeature.DismissDiagnostics()));
+        importBodySlideButton.setOnAction(event -> dispatch(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE));
         configureGangControls();
+    }
+
+    /**
+     * Translates Settings controls into task-oriented feature intents and renders only committed immutable frames.
+     */
+    private void configureSettings() {
+        settingsProfileChoice.getItems().setAll(SettingsFeature.Profile.values());
+        settingsEntryList.setCellFactory(list -> new SettingsEntryCell());
+        settingsProfileChoice.setOnAction(event -> {
+            if (!renderingSettings && settingsProfileChoice.getValue() != null)
+                dispatchSettings(new SettingsFeature.SelectProfile(settingsProfileChoice.getValue()));
+        });
+        settingsEntryList.getSelectionModel().selectedItemProperty().addListener(
+                (observable, previous, selected) -> {
+                    if (!renderingSettings && selected != null)
+                        dispatchSettings(new SettingsFeature.SelectEntry(selected.name()));
+                });
+        addSettingsEntryButton.setOnAction(event ->
+                dispatchSettings(new SettingsFeature.AddEntry(newSettingsEntryName.getText())));
+        applySettingsEntryButton.setOnAction(event -> settingsFeature.frame().editor().ifPresent(editor ->
+                dispatchSettings(new SettingsFeature.EditEntry(editor.originalName(), settingsEntryNameInput.getText(),
+                        Optional.of(settingsSmallInput.getText()), Optional.of(settingsBigInput.getText()),
+                        Optional.of(settingsMultiplierInput.getText()), settingsInvertedCheck.isSelected()))));
+        removeSettingsEntryButton.setOnAction(event -> settingsFeature.frame().selection().ifPresent(name ->
+                dispatchSettings(new SettingsFeature.RemoveEntry(name))));
+        omitRedundantSlidersCheck.setOnAction(event -> dispatchSettings(
+                new SettingsFeature.ChangeOmitRedundantSliders(omitRedundantSlidersCheck.isSelected())));
+        saveSettingsButton.setOnAction(event -> dispatchSettings(new SettingsFeature.Save()));
+        reloadSettingsButton.setOnAction(event -> dispatchSettings(new SettingsFeature.Reload()));
+        renderSettings(settingsFeature.frame());
+    }
+
+    /** Commits one Settings intent, publishes its reporting tier, and refreshes output-affecting Templates previews. */
+    private void dispatchSettings(SettingsFeature.Intent intent) {
+        if (settingsMutationsBlocked && isSettingsMutation(intent))
+            return;
+        SettingsFeature.Update update = settingsFeature.dispatch(Objects.requireNonNull(intent, "intent"));
+        renderSettings(update.frame());
+        publishSettingsOutcome(update);
+        if (update.accepted() && update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED)
+            renderTemplates(templatesFeature.refreshSettings().frame());
+    }
+
+    /** Distinguishes local profile browsing from operations that can change live or on-disk Settings. */
+    private static boolean isSettingsMutation(SettingsFeature.Intent intent) {
+        return intent instanceof SettingsFeature.AddEntry
+                || intent instanceof SettingsFeature.EditEntry
+                || intent instanceof SettingsFeature.RemoveEntry
+                || intent instanceof SettingsFeature.ChangeOmitRedundantSliders
+                || intent instanceof SettingsFeature.Save
+                || intent instanceof SettingsFeature.Reload;
+    }
+
+    /** Projects Settings outcomes through inline validation, status-only drafts, and durable bulk Activity. */
+    private void publishSettingsOutcome(SettingsFeature.Update update) {
+        SettingsFeature.OutcomeKind kind = update.frame().outcome();
+        if (kind == SettingsFeature.OutcomeKind.NONE || kind == SettingsFeature.OutcomeKind.REJECTED)
+            return;
+        WorkbenchFeedback.Notification notification = null;
+        boolean durable = false;
+        switch (kind) {
+            case CHANGED -> {
+                notification = new WorkbenchFeedback.Notification("Edit Settings",
+                        WorkbenchFeedback.Severity.INFORMATION, "Settings draft changed.",
+                        WorkbenchFeedback.Disposition.COMPLETED);
+                durable = false;
+            }
+            case UNCHANGED -> {
+                notification = new WorkbenchFeedback.Notification("Edit Settings",
+                        WorkbenchFeedback.Severity.INFORMATION, "Settings are unchanged.",
+                        WorkbenchFeedback.Disposition.COMPLETED);
+                durable = false;
+            }
+            case SAVED -> {
+                notification = new WorkbenchFeedback.Notification("Save Settings",
+                        WorkbenchFeedback.Severity.SUCCESS, "Settings saved.",
+                        WorkbenchFeedback.Disposition.COMPLETED);
+                durable = true;
+            }
+            case RELOADED -> {
+                notification = new WorkbenchFeedback.Notification("Reload Settings",
+                        WorkbenchFeedback.Severity.SUCCESS, "Settings reloaded.",
+                        WorkbenchFeedback.Disposition.COMPLETED);
+                durable = true;
+            }
+            case RECOVERED -> {
+                notification = new WorkbenchFeedback.Notification("Reload Settings",
+                        WorkbenchFeedback.Severity.WARNING, "Settings recovered and reloaded.",
+                        WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES);
+                durable = true;
+            }
+            case FAILED -> {
+                notification = new WorkbenchFeedback.Notification("Settings",
+                        WorkbenchFeedback.Severity.FAILURE, settingsNoticeSummary(update.frame()),
+                        WorkbenchFeedback.Disposition.FAILED);
+                durable = true;
+            }
+            case NONE, REJECTED -> throw new AssertionError("Non-reportable Settings outcomes returned early");
+        }
+        if (notification == null)
+            throw new IllegalStateException("Settings outcome did not produce feedback");
+        renderFeedback(durable ? feedback.publishActivity(notification) : feedback.publishStatus(notification));
+    }
+
+    /** Publishes startup recovery and failure evidence once into durable Activity. */
+    private void publishInitialSettingsEvidence() {
+        if (settingsFeature.frame().notices().isEmpty())
+            return;
+        boolean failed = settingsFeature.frame().notices().stream().anyMatch(SettingsFeature.Notice::failure);
+        WorkbenchFeedback.Notification notification = new WorkbenchFeedback.Notification("Load Settings",
+                failed ? WorkbenchFeedback.Severity.FAILURE : WorkbenchFeedback.Severity.WARNING,
+                settingsNoticeSummary(settingsFeature.frame()), failed
+                ? WorkbenchFeedback.Disposition.FAILED : WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES);
+        renderFeedback(feedback.publishActivity(notification));
+    }
+
+    /** Formats complete Settings diagnostic codes and paths without losing structured feature state. */
+    private static String settingsNoticeSummary(SettingsFeature.Frame frame) {
+        if (frame.notices().isEmpty())
+            return "Settings operation failed.";
+        return String.join("; ", frame.notices().stream()
+                .map(notice -> notice.code() + " " + notice.path() + ": " + notice.message())
+                .toList());
+    }
+
+    /** Renders one complete Settings frame while suppressing control-listener command loops. */
+    private void renderSettings(SettingsFeature.Frame frame) {
+        renderingSettings = true;
+        try {
+            settingsProfileChoice.setValue(frame.profile());
+            if (!List.copyOf(settingsEntryList.getItems()).equals(frame.entries()))
+                settingsEntryList.getItems().setAll(frame.entries());
+            SettingsFeature.EntryFrame selected = settingsEntryList.getSelectionModel().getSelectedItem();
+            String selectedName = selected == null ? null : selected.name();
+            if (!Objects.equals(selectedName, frame.selection().orElse(null))) {
+                settingsEntryList.getSelectionModel().clearSelection();
+                frame.selection().ifPresent(name -> settingsEntryList.getItems().stream()
+                        .filter(entry -> entry.name().equals(name)).findFirst()
+                        .ifPresent(entry -> settingsEntryList.getSelectionModel().select(entry)));
+            }
+            frame.editor().ifPresentOrElse(editor -> {
+                settingsEntryNameInput.setText(editor.name());
+                settingsSmallInput.setText(editor.small());
+                settingsBigInput.setText(editor.big());
+                settingsMultiplierInput.setText(editor.multiplier());
+                settingsInvertedCheck.setSelected(editor.inverted());
+            }, () -> {
+                settingsEntryNameInput.clear();
+                settingsSmallInput.clear();
+                settingsBigInput.clear();
+                settingsMultiplierInput.clear();
+                settingsInvertedCheck.setSelected(false);
+            });
+            settingsValidationText.setText(frame.validation().isEmpty()
+                    ? frame.editor().isPresent() ? "Edit finite float values; blank leaves that category absent."
+                    : "Select an entry to edit."
+                    : String.join(System.lineSeparator(), frame.validation().stream()
+                    .map(SettingsFeature.Validation::message).toList()));
+            settingsNoticeText.setText(frame.notices().isEmpty()
+                    ? frame.dirty() ? "Unsaved Settings changes." : "Standard and UUNP Settings are saved together."
+                    : settingsNoticeSummary(frame));
+            omitRedundantSlidersCheck.setSelected(frame.omitRedundantSliders());
+            omitRedundantSlidersCheck.setDisable(settingsMutationsBlocked);
+            boolean editable = frame.editor().isPresent() && !settingsMutationsBlocked;
+            for (javafx.scene.control.Control control : List.of(settingsEntryNameInput, settingsSmallInput,
+                    settingsBigInput, settingsMultiplierInput, settingsInvertedCheck, applySettingsEntryButton,
+                    removeSettingsEntryButton))
+                control.setDisable(!editable);
+            newSettingsEntryName.setDisable(settingsMutationsBlocked);
+            addSettingsEntryButton.setDisable(settingsMutationsBlocked);
+            saveSettingsButton.setDisable(settingsMutationsBlocked || !frame.dirty()
+                    || !frame.validation().isEmpty());
+            reloadSettingsButton.setDisable(settingsMutationsBlocked);
+            importBodySlideButton.setDisable(settingsMutationsBlocked || !frame.liveAvailable());
+        } finally {
+            renderingSettings = false;
+        }
     }
 
     /**
@@ -988,6 +1244,7 @@ public final class WorkbenchController {
      * virtualized accessibility subtree for the lifetime of that control.
      */
     private void replaceEmptySliderPresetList() {
+        boolean restoreFocus = sliderPresetList.isFocused();
         ListView<SliderPresetSnapshot> replacement = new ListView<>();
         replacement.setId("sliderPresetList");
         replacement.setAccessibleText("Slider Presets");
@@ -1001,6 +1258,11 @@ public final class WorkbenchController {
         activeRenameCell = null;
         activeRenameField = null;
         configureSliderPresetList();
+        if (restoreFocus) {
+            // Import can refill an empty list while it owns semantic focus; the UIA node swap must retain that focus.
+            replacement.requestFocus();
+            Platform.runLater(replacement::requestFocus);
+        }
     }
 
     /**
@@ -1331,18 +1593,26 @@ public final class WorkbenchController {
 
         String area = frame.activeArea().displayName();
         boolean templatesActive = frame.activeArea() == WorkbenchNavigation.Area.TEMPLATES;
+        boolean settingsActive = frame.activeArea() == WorkbenchNavigation.Area.SETTINGS;
         templatesPrimaryScroll.setManaged(templatesActive);
         templatesPrimaryScroll.setVisible(templatesActive);
         templatesEditorContent.setManaged(templatesActive);
         templatesEditorContent.setVisible(templatesActive);
         templatesInspectorScroll.setManaged(templatesActive);
         templatesInspectorScroll.setVisible(templatesActive);
-        primaryContentButton.setManaged(!templatesActive);
-        primaryContentButton.setVisible(!templatesActive);
-        editorButton.setManaged(!templatesActive);
-        editorButton.setVisible(!templatesActive);
-        inspectorButton.setManaged(!templatesActive);
-        inspectorButton.setVisible(!templatesActive);
+        settingsPrimaryScroll.setManaged(settingsActive);
+        settingsPrimaryScroll.setVisible(settingsActive);
+        settingsEditorContent.setManaged(settingsActive);
+        settingsEditorContent.setVisible(settingsActive);
+        settingsInspectorContent.setManaged(settingsActive);
+        settingsInspectorContent.setVisible(settingsActive);
+        boolean placeholderActive = !templatesActive && !settingsActive;
+        primaryContentButton.setManaged(placeholderActive);
+        primaryContentButton.setVisible(placeholderActive);
+        editorButton.setManaged(placeholderActive);
+        editorButton.setVisible(placeholderActive);
+        inspectorButton.setManaged(placeholderActive);
+        inspectorButton.setVisible(placeholderActive);
         areaTitle.setText(area);
         areaTitle.setAccessibleText(area + " Area");
         primaryPane.setAccessibleText(area + " primary content");
@@ -1403,15 +1673,23 @@ public final class WorkbenchController {
         Node focusOwner = stage != null && stage.getScene() != null ? stage.getScene().getFocusOwner() : null;
         WorkbenchNavigation.Landmark landmark;
         if (focusOwner == sliderPresetFilter || focusOwner == sliderPresetList
-                || focusOwner == sliderPresetNameInput) {
+                || focusOwner == sliderPresetNameInput || focusOwner == importBodySlideButton
+                || focusOwner == settingsProfileChoice || focusOwner == settingsEntryList
+                || focusOwner == newSettingsEntryName || focusOwner == addSettingsEntryButton) {
             landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
         } else if (focusOwner == templateEditorFocusTarget || focusOwner == sliderPresetProfile
-                || sliderChoiceRowsByName.values().stream().anyMatch(row -> row.contains(focusOwner))) {
+                || sliderChoiceRowsByName.values().stream().anyMatch(row -> row.contains(focusOwner))
+                || focusOwner == settingsEntryNameInput || focusOwner == settingsSmallInput
+                || focusOwner == settingsBigInput || focusOwner == settingsMultiplierInput
+                || focusOwner == settingsInvertedCheck || focusOwner == applySettingsEntryButton
+                || focusOwner == removeSettingsEntryButton) {
             landmark = WorkbenchNavigation.Landmark.EDITOR;
         } else if (focusOwner == templateSelectionText
                 || templatesFocusNodes().entrySet().stream()
                 .anyMatch(entry -> entry.getKey() != TemplatesControlFocus.PROFILE
-                        && entry.getValue() == focusOwner)) {
+                        && entry.getValue() == focusOwner)
+                || focusOwner == settingsNoticeText || focusOwner == saveSettingsButton
+                || focusOwner == reloadSettingsButton || focusOwner == omitRedundantSlidersCheck) {
             landmark = WorkbenchNavigation.Landmark.INSPECTOR;
         } else if (focusOwner == primaryContentButton) {
             landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
@@ -1442,8 +1720,13 @@ public final class WorkbenchController {
      */
     private void requestFocus(WorkbenchNavigation.FocusTarget target) {
         Node node = resolveFocusNode(target);
-        if (node == null || !node.isVisible() || node.getParent() == null)
-            node = editorButton;
+        if (node == null || !node.isVisible() || node.isDisabled() || node.getParent() == null) {
+            node = switch (target.area()) {
+                case TEMPLATES -> sliderPresetList;
+                case SETTINGS -> settingsEntryList;
+                case MORPHS, NPC_DATABASE -> editorButton;
+            };
+        }
         Node resolved = node;
         resolved.requestFocus();
         if (!resolved.isFocused())
@@ -1457,14 +1740,23 @@ public final class WorkbenchController {
         return switch (target.landmark()) {
             case RAIL -> areaButton(target.area());
             case PRIMARY_LAUNCHER -> showPrimaryOverlayButton;
-            case PRIMARY_CONTENT -> target.area() == WorkbenchNavigation.Area.TEMPLATES
-                    ? sliderPresetList : primaryContentButton;
-            case EDITOR -> target.area() == WorkbenchNavigation.Area.TEMPLATES
-                    ? firstSliderChoiceControl().orElse(templateEditorFocusTarget) : editorButton;
+            case PRIMARY_CONTENT -> switch (target.area()) {
+                case TEMPLATES -> sliderPresetList;
+                case SETTINGS -> settingsEntryList;
+                case MORPHS, NPC_DATABASE -> primaryContentButton;
+            };
+            case EDITOR -> switch (target.area()) {
+                case TEMPLATES -> firstSliderChoiceControl().orElse(templateEditorFocusTarget);
+                case SETTINGS -> settingsEntryNameInput;
+                case MORPHS, NPC_DATABASE -> editorButton;
+            };
             case INSPECTOR_LAUNCHER -> showInspectorOverlayButton;
-            case INSPECTOR -> target.area() == WorkbenchNavigation.Area.TEMPLATES
-                    ? (renameSliderPresetButton.isDisabled() ? templateSelectionText : renameSliderPresetButton)
-                    : inspectorButton;
+            case INSPECTOR -> switch (target.area()) {
+                case TEMPLATES -> renameSliderPresetButton.isDisabled()
+                        ? templateSelectionText : renameSliderPresetButton;
+                case SETTINGS -> saveSettingsButton.isDisabled() ? settingsNoticeText : saveSettingsButton;
+                case MORPHS, NPC_DATABASE -> inspectorButton;
+            };
             case OUTPUT_LAUNCHER -> outputAreaButton;
             case OUTPUT -> outputFocusTarget;
             case ACTIVITY -> activityList;
@@ -1579,11 +1871,14 @@ public final class WorkbenchController {
         Objects.requireNonNull(frame, "frame");
         boolean blocked = frame.active() || frame.shutdownRequested();
         templatesMutationsBlocked = blocked;
+        settingsMutationsBlocked = blocked;
         newProjectMenuItem.setDisable(blocked);
         openProjectMenuItem.setDisable(blocked);
         saveProjectMenuItem.setDisable(blocked);
         saveAsProjectMenuItem.setDisable(blocked);
+        importBodySlideButton.setDisable(blocked);
         renderTemplates(templatesFeature.frame());
+        renderSettings(settingsFeature.frame());
         updateActivityRetry(activityList.getSelectionModel().getSelectedItem());
 
         Optional<JobCoordinator.Attempt> current = frame.attempt();
@@ -1968,6 +2263,29 @@ public final class WorkbenchController {
                 activeRenameCell = null;
             if (activeRenameField == renameField)
                 activeRenameField = null;
+        }
+    }
+
+    /** List cell exposing complete Settings category membership through stable accessible text. */
+    private static final class SettingsEntryCell extends ListCell<SettingsFeature.EntryFrame> {
+        /** Renders one exact Settings identity without depending on list position. */
+        @Override
+        protected void updateItem(SettingsFeature.EntryFrame entry, boolean empty) {
+            super.updateItem(entry, empty);
+            if (empty || entry == null) {
+                setText(null);
+                setAccessibleText(null);
+                setAccessibleHelp(null);
+                return;
+            }
+            setText(entry.name());
+            setAccessibleText(entry.name());
+            String defaults = entry.small().isPresent()
+                    ? "defaults " + entry.small().orElseThrow() + " to " + entry.big().orElseThrow()
+                    : "defaults absent";
+            String multiplier = entry.multiplier().map(value -> "multiplier " + value)
+                    .orElse("multiplier absent");
+            setAccessibleHelp(defaults + "; " + multiplier + "; inverted " + entry.inverted() + ".");
         }
     }
 

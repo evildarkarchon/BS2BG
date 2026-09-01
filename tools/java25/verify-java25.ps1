@@ -221,7 +221,9 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.presentation.BosArtifactPublisherTest',
     'com.asdasfa.jbs2bg.workbench.jobs.JobCoordinatorTest',
     'com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlowTest',
-    'com.asdasfa.jbs2bg.workbench.WorkbenchControllerTest'
+    'com.asdasfa.jbs2bg.workbench.WorkbenchControllerTest',
+    'com.asdasfa.jbs2bg.workbench.templates.TemplatesFeatureTest',
+    'com.asdasfa.jbs2bg.workbench.settings.SettingsFeatureTest'
 )
 
 if (-not $SkipMaven) {
@@ -336,7 +338,7 @@ $evidence = [ordered]@{
         } else { $null })
         structuralGate          = 'ProductionSourceGateTest (sources, resources, pom) and Java25ToolchainGuardTest (every emitted class file)'
         fxmlHarness             = 'FxmlGraphLoadingTest (Workbench root, retained migration popups, and custom-root graphs on the pinned toolkit)'
-        workbenchLifecycle      = 'JobCoordinatorTest + WorkbenchProjectFlowTest + WorkbenchControllerTest (central admission, progress, cancellation, retry, stale refusal, shutdown, and JavaFX adapter)'
+        workbenchLifecycle      = 'JobCoordinatorTest + WorkbenchProjectFlowTest + WorkbenchControllerTest + TemplatesFeatureTest + SettingsFeatureTest (central admission, import outcomes, Settings persistence/recovery, progress, cancellation, retry, stale refusal, shutdown, and JavaFX adapter)'
     }
     targetRelease           = [ordered]@{
         pinned      = $lock.targetRelease

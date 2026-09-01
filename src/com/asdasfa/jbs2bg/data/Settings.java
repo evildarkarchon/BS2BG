@@ -131,6 +131,78 @@ public final class Settings {
     }
 
     /**
+     * Returns the complete immutable Standard/UUNP Settings value currently used by Project editing and output.
+     *
+     * @return detached immutable Settings snapshot in canonical encounter order
+     */
+    public static Snapshot snapshot() {
+        return liveSettings.snapshot();
+    }
+
+    /**
+     * Returns a successful no-diagnostic initialization view for adapters that attach after another composition root
+     * has already published the live pair. Startup callers should pass the original result when recovery evidence
+     * must be rendered.
+     *
+     * @return successful view of the currently published pair
+     */
+    public static InitializationResult publishedState() {
+        return InitializationResult.success(List.of());
+    }
+
+    /**
+     * Atomically persists and publishes one complete Workbench-authored Settings pair. Readers observe either the
+     * prior live pair or the fully installed replacement, and a failed write never partially changes live state.
+     *
+     * @param workingDirectory directory containing {@code settings.json} and {@code settings_UUNP.json}
+     * @param replacement      complete immutable replacement pair
+     * @return success with recovery diagnostics, or one stable failure with the prior live pair retained
+     */
+    public static synchronized PersistenceResult persist(Path workingDirectory, Snapshot replacement) {
+        Objects.requireNonNull(workingDirectory, "workingDirectory");
+        Objects.requireNonNull(replacement, "replacement");
+        Path directory = workingDirectory.toAbsolutePath().normalize();
+        Path standardSource = directory.resolve("settings.json");
+        Path uunpSource = directory.resolve("settings_UUNP.json");
+        SettingsJacksonAdapter.SettingsCandidate candidate = replacement.toCandidate();
+        SettingsJacksonAdapter.SettingsPairBytes encoded;
+        try {
+            encoded = SettingsJacksonAdapter.writePair(candidate);
+        } catch (SettingsJacksonAdapter.SettingsFormatException exception) {
+            return PersistenceResult.failure(Failure.fromAdapter(exception));
+        }
+
+        SettingsDirectoryLock directoryLock;
+        try {
+            directoryLock = SettingsDirectoryLock.tryAcquire(directory);
+        } catch (IOException exception) {
+            return PersistenceResult.failure(Failure.fromIo("SETTINGS_LOCK_FAILED", directory, exception));
+        }
+        boolean recovered;
+        try (directoryLock) {
+            try {
+                recovered = SettingsPairPublisher.recover(directory, standardSource, uunpSource);
+            } catch (IOException exception) {
+                return PersistenceResult.failure(
+                        Failure.fromIo("SETTINGS_RECOVERY_FAILED", directory, exception));
+            }
+            try {
+                SettingsPairPublisher.publish(standardSource, uunpSource, encoded);
+            } catch (IOException exception) {
+                return PersistenceResult.failure(
+                        Failure.fromIo("SETTINGS_PUBLISH_FAILED", directory, exception));
+            }
+        } catch (IOException exception) {
+            return PersistenceResult.failure(Failure.fromIo("SETTINGS_LOCK_FAILED", directory, exception));
+        }
+
+        publish(candidate);
+        List<Diagnostic> diagnostics = recovered
+                ? List.of(Diagnostic.recovered(directory)) : List.of();
+        return PersistenceResult.success(diagnostics);
+    }
+
+    /**
      * Resolves a Standard multiplier.
      *
      * @param sliderName exact dynamic Slider key
@@ -267,6 +339,12 @@ public final class Settings {
                     candidate.standard().multipliers(), candidate.standard().inverted(),
                     convertDefaults(candidate.uunp().defaults()), candidate.uunp().multipliers(),
                     candidate.uunp().inverted());
+        }
+
+        /** Returns a detached public snapshot without exposing the live value's collection identities. */
+        private Snapshot snapshot() {
+            return new Snapshot(new Profile(standardDefaults, standardMultipliers, standardInverted),
+                    new Profile(uunpDefaults, uunpMultipliers, uunpInverted));
         }
 
         /** Creates the pre-initialization empty value used before application startup. */
@@ -493,6 +571,121 @@ public final class Settings {
     }
 
     /**
+     * Result of one Workbench-authored paired Settings persistence attempt.
+     */
+    public static final class PersistenceResult {
+        private final List<Diagnostic> diagnostics;
+        private final Failure failure;
+
+        /** Creates one immutable persistence success or failure. */
+        private PersistenceResult(List<Diagnostic> diagnostics, Failure failure) {
+            this.diagnostics = List.copyOf(diagnostics);
+            this.failure = failure;
+        }
+
+        /** Returns one successful result carrying ordered recovery warnings. */
+        private static PersistenceResult success(List<Diagnostic> diagnostics) {
+            return new PersistenceResult(diagnostics, null);
+        }
+
+        /** Returns one rejected result carrying the stable blocking diagnostic. */
+        private static PersistenceResult failure(Failure failure) {
+            return new PersistenceResult(Collections.emptyList(), Objects.requireNonNull(failure, "failure"));
+        }
+
+        /** @return true only when both replacement profiles became durable and live */
+        public boolean isSuccessful() {
+            return failure == null;
+        }
+
+        /** @return ordered recovery warnings emitted before the replacement was installed */
+        public List<Diagnostic> getDiagnostics() {
+            return diagnostics;
+        }
+
+        /** @return the blocking persistence diagnostic when the prior live pair was retained */
+        public Optional<Failure> getFailure() {
+            return Optional.ofNullable(failure);
+        }
+    }
+
+    /**
+     * Immutable application-facing Standard or UUNP Settings profile.
+     *
+     * @param defaults    Slider endpoint defaults in canonical encounter order
+     * @param multipliers output multipliers in canonical encounter order
+     * @param inverted    case-insensitive inversion identities in canonical encounter order
+     */
+    public record Profile(Map<String, DefaultSliderValue> defaults, Map<String, Float> multipliers,
+                          List<String> inverted) {
+        /** Defensively owns every profile collection and rejects null or non-finite values. */
+        public Profile {
+            defaults = immutableDefaults(defaults);
+            multipliers = immutableMultipliers(multipliers);
+            inverted = List.copyOf(Objects.requireNonNull(inverted, "inverted"));
+            for (String name : inverted)
+                Objects.requireNonNull(name, "inverted name");
+        }
+
+        /** Converts the public value into the repository-owned codec boundary. */
+        private SettingsJacksonAdapter.SettingsProfile toAdapter() {
+            Map<String, SettingsJacksonAdapter.DefaultValue> convertedDefaults = new LinkedHashMap<>();
+            for (Map.Entry<String, DefaultSliderValue> entry : defaults.entrySet()) {
+                convertedDefaults.put(entry.getKey(), new SettingsJacksonAdapter.DefaultValue(
+                        entry.getValue().getValueSmall(), entry.getValue().getValueBig()));
+            }
+            return new SettingsJacksonAdapter.SettingsProfile(convertedDefaults, multipliers, inverted);
+        }
+
+        /** Copies endpoint values while preserving encounter order and validating writer invariants. */
+        private static Map<String, DefaultSliderValue> immutableDefaults(Map<String, DefaultSliderValue> source) {
+            Objects.requireNonNull(source, "defaults");
+            Map<String, DefaultSliderValue> copy = new LinkedHashMap<>();
+            for (Map.Entry<String, DefaultSliderValue> entry : source.entrySet()) {
+                String name = Objects.requireNonNull(entry.getKey(), "default name");
+                DefaultSliderValue value = Objects.requireNonNull(entry.getValue(), "default value");
+                if (!Float.isFinite(value.getValueSmall()) || !Float.isFinite(value.getValueBig()))
+                    throw new IllegalArgumentException("Settings default values must be finite");
+                copy.put(name, value);
+            }
+            return Collections.unmodifiableMap(copy);
+        }
+
+        /** Copies multiplier values while preserving encounter order and validating writer invariants. */
+        private static Map<String, Float> immutableMultipliers(Map<String, Float> source) {
+            Objects.requireNonNull(source, "multipliers");
+            Map<String, Float> copy = new LinkedHashMap<>();
+            for (Map.Entry<String, Float> entry : source.entrySet()) {
+                String name = Objects.requireNonNull(entry.getKey(), "multiplier name");
+                Float value = Objects.requireNonNull(entry.getValue(), "multiplier value");
+                if (!Float.isFinite(value.floatValue()))
+                    throw new IllegalArgumentException("Settings multipliers must be finite");
+                copy.put(name, value);
+            }
+            return Collections.unmodifiableMap(copy);
+        }
+    }
+
+    /**
+     * Complete immutable Settings persistence and output-consumption unit.
+     *
+     * @param standard Standard BodySlide profile
+     * @param uunp     UUNP BodySlide profile
+     */
+    public record Snapshot(Profile standard, Profile uunp) {
+        /** Requires both profile values. */
+        public Snapshot {
+            Objects.requireNonNull(standard, "standard");
+            Objects.requireNonNull(uunp, "uunp");
+        }
+
+        /** Converts the public pair into one atomic repository-owned candidate. */
+        private SettingsJacksonAdapter.SettingsCandidate toCandidate() {
+            return new SettingsJacksonAdapter.SettingsCandidate(standard.toAdapter(), uunp.toAdapter(), List.of());
+        }
+    }
+
+    /**
      * Immutable Slider endpoint defaults exposed to Project value construction.
      */
     public static final class DefaultSliderValue {
@@ -522,6 +715,20 @@ public final class Settings {
          */
         public float getValueBig() {
             return valueBig;
+        }
+
+        /** Compares endpoint values by their exact finite float representation. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof DefaultSliderValue value
+                    && Float.floatToIntBits(valueSmall) == Float.floatToIntBits(value.valueSmall)
+                    && Float.floatToIntBits(valueBig) == Float.floatToIntBits(value.valueBig);
+        }
+
+        /** @return hash of the exact endpoint float representations */
+        @Override
+        public int hashCode() {
+            return Objects.hash(Float.floatToIntBits(valueSmall), Float.floatToIntBits(valueBig));
         }
     }
 }

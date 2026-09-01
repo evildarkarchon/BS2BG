@@ -121,6 +121,9 @@ public final class ProjectDiagnosticCodes {
      * A BodySlide slider value cannot be represented as a legacy integer.
      */
     public static final String SLIDER_PRESET_XML_VALUE_INVALID = "SLIDER_PRESET_XML_VALUE_INVALID";
+
+    /** A BodySlide slider declares an unsupported explicit endpoint size. */
+    public static final String SLIDER_PRESET_XML_SIZE_INVALID = "SLIDER_PRESET_XML_SIZE_INVALID";
     /**
      * An unexpected parser or runtime failure prevented one XML source import.
      */

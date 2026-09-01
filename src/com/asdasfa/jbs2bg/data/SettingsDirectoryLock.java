@@ -36,6 +36,22 @@ final class SettingsDirectoryLock implements AutoCloseable {
      * @throws IOException when the directory or lock file cannot safely be opened or locked
      */
     static SettingsDirectoryLock acquire(Path directory) throws IOException {
+        return acquire(directory, false);
+    }
+
+    /**
+     * Attempts the Workbench edit lock without blocking the JavaFX publication lane behind another process.
+     *
+     * @param directory working directory that owns the Settings pair
+     * @return an immediately acquired lock
+     * @throws IOException when the directory is invalid or another writer already owns the lock
+     */
+    static SettingsDirectoryLock tryAcquire(Path directory) throws IOException {
+        return acquire(directory, true);
+    }
+
+    /** Opens and acquires the validated lock path in blocking startup or immediate Workbench mode. */
+    private static SettingsDirectoryLock acquire(Path directory, boolean immediate) throws IOException {
         Path owner = Objects.requireNonNull(directory, "directory").toAbsolutePath().normalize();
         if (!Files.isDirectory(owner, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(owner))
             throw new IOException("Settings working directory is not an existing directory: " + owner);
@@ -48,7 +64,10 @@ final class SettingsDirectoryLock implements AutoCloseable {
         FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
                 LinkOption.NOFOLLOW_LINKS);
         try {
-            return new SettingsDirectoryLock(channel, channel.lock());
+            FileLock acquired = immediate ? channel.tryLock() : channel.lock();
+            if (acquired == null)
+                throw new IOException("Settings lock is already held by another process.");
+            return new SettingsDirectoryLock(channel, acquired);
         } catch (IOException | OverlappingFileLockException exception) {
             try {
                 channel.close();

@@ -68,10 +68,6 @@
 	-fx-background-color: #000;
 }
 
-/* SetSliders ScrollPane */
-#spSetSlidersList > .viewport {
-	-fx-background-color: #000;
-}
 /* ImageView ScrollPane */
 #spImageContainer > .viewport {
 	-fx-background-color: #000;
@@ -80,25 +76,6 @@
 /* Morph Target Name Label */
 #lblTargetName {
 	-fx-text-fill: #ff7800;
-}
-
-/* Rename Warning Label*/
-#lblRenameWarning {
-	-fx-text-fill: #ff7800;
-}
-
-/* SetSliderControl */
-.setSliderControl {
-	-fx-background-color: derive(-fx-base, 5%);
-}
-.setSliderControl .text-field {
-	-fx-text-fill: -fx-light-text-color;
-	-fx-background-color: #000;
-	-fx-focus-color: transparent;
-	-fx-faint-focus-color: transparent;
-}
-.setSliderControl .lblContainer {
-	-fx-background-color: derive(-fx-base, 25%);
 }
 
 /* CustomConfirm */

@@ -1,11 +1,15 @@
 package com.asdasfa.jbs2bg.project;
 
+import java.io.FilterInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 
 import javax.xml.XMLConstants;
@@ -42,6 +46,24 @@ final class BodySlidePresetFileParser {
      */
     static List<ParsedPreset> parse(Path source)
             throws IOException, SAXException, ParserConfigurationException {
+        return parse(source, ProjectOperationContext.nonCancellable());
+    }
+
+    /**
+     * Parses a complete BodySlide source while checking cancellation during byte consumption and DOM traversal.
+     *
+     * @param source  XML file to parse
+     * @param context owning Project operation context
+     * @return detached Slider Presets and name locations in canonical name order
+     * @throws IOException                     when the source cannot be read
+     * @throws SAXException                    when XML syntax is malformed
+     * @throws ParserConfigurationException    when secure XML parsing is unavailable
+     * @throws InvalidBodySlidePresetException when valid XML violates import rules
+     */
+    static List<ParsedPreset> parse(Path source, ProjectOperationContext context)
+            throws IOException, SAXException, ParserConfigurationException {
+        Objects.requireNonNull(source, "source");
+        ProjectOperationContext operation = Objects.requireNonNull(context, "context");
         DocumentBuilderFactory factory = secureDocumentBuilderFactory();
         DocumentBuilder builder = factory.newDocumentBuilder();
         builder.setErrorHandler(new DefaultHandler() {
@@ -57,7 +79,11 @@ final class BodySlidePresetFileParser {
                 throw exception;
             }
         });
-        Document document = builder.parse(source.toFile());
+        Document document;
+        try (InputStream input = new CancellationInputStream(Files.newInputStream(source), operation)) {
+            document = builder.parse(input);
+        }
+        operation.checkCancellation();
         document.getDocumentElement().normalize();
         Element root = document.getDocumentElement();
         if (root == null || !"SliderPresets".equalsIgnoreCase(root.getNodeName()))
@@ -67,11 +93,12 @@ final class BodySlidePresetFileParser {
         Map<String, ParsedPreset> presets = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         NodeList presetNodes = root.getElementsByTagName("Preset");
         for (int index = 0; index < presetNodes.getLength(); index++) {
+            operation.checkCancellation();
             Node node = presetNodes.item(index);
             if (node.getNodeType() != Node.ELEMENT_NODE)
                 continue;
             String presetElement = "/SliderPresets/Preset[" + (index + 1) + "]";
-            ParsedPreset candidate = parsePreset((Element) node, presetElement);
+            ParsedPreset candidate = parsePreset((Element) node, presetElement, operation);
             ParsedPreset previous = presets.get(candidate.getPreset().getName());
             if (previous != null) {
                 // Legacy import treats repeated logical names as later payloads for the
@@ -112,12 +139,14 @@ final class BodySlidePresetFileParser {
      * @return detached, canonically ordered Slider Preset with its name location
      * @throws InvalidBodySlidePresetException when a slider choice is invalid
      */
-    private static ParsedPreset parsePreset(Element element, String presetElement) {
+    private static ParsedPreset parsePreset(Element element, String presetElement,
+                                            ProjectOperationContext context) {
         String name = element.getAttribute("name").replace('.', ' ').trim();
 
         Map<String, MutableChoice> choices = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         NodeList sliderNodes = element.getElementsByTagName("SetSlider");
         for (int index = 0; index < sliderNodes.getLength(); index++) {
+            context.checkCancellation();
             Node node = sliderNodes.item(index);
             if (node.getNodeType() != Node.ELEMENT_NODE)
                 continue;
@@ -126,6 +155,35 @@ final class BodySlidePresetFileParser {
         }
         return new ParsedPreset(new SliderPresetSnapshot(name, false, completeChoices(choices)),
                 presetElement + "/@name");
+    }
+
+    /** Input adapter that turns an accepted cancellation into a parser-safe runtime unwind. */
+    private static final class CancellationInputStream extends FilterInputStream {
+        private final ProjectOperationContext context;
+
+        /** Binds one source stream to its owning operation context. */
+        private CancellationInputStream(InputStream input, ProjectOperationContext context) {
+            super(Objects.requireNonNull(input, "input"));
+            this.context = Objects.requireNonNull(context, "context");
+        }
+
+        /** Checks cancellation around one scalar parser read. */
+        @Override
+        public int read() throws IOException {
+            context.checkCancellation();
+            int value = super.read();
+            context.checkCancellation();
+            return value;
+        }
+
+        /** Checks cancellation around one buffered parser read. */
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            context.checkCancellation();
+            int count = super.read(buffer, offset, length);
+            context.checkCancellation();
+            return count;
+        }
     }
 
     /**
@@ -156,10 +214,15 @@ final class BodySlidePresetFileParser {
             choice = new MutableChoice(name);
             choices.put(name, choice);
         }
-        if ("small".equalsIgnoreCase(element.getAttribute("size")))
+        String size = element.getAttribute("size");
+        if ("small".equalsIgnoreCase(size))
             choice.small = Integer.valueOf(value);
-        else
+        else if (size.isEmpty() || "big".equalsIgnoreCase(size))
             choice.big = Integer.valueOf(value);
+        else
+            throw new InvalidBodySlidePresetException(ProjectDiagnosticCodes.SLIDER_PRESET_XML_SIZE_INVALID,
+                    choiceElement + "/@size",
+                    "A BodySlide slider size must be small or big when it is explicitly present.");
     }
 
     /**
