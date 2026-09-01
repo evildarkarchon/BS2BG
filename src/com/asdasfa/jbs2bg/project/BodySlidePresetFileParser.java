@@ -136,8 +136,10 @@ final class BodySlidePresetFileParser {
      *
      * @param element       Preset element
      * @param presetElement stable diagnostic element path
+     * @param context       owning operation context checked between Slider elements
      * @return detached, canonically ordered Slider Preset with its name location
      * @throws InvalidBodySlidePresetException when a slider choice is invalid
+     * @throws java.util.concurrent.CancellationException when cancellation is accepted during traversal
      */
     private static ParsedPreset parsePreset(Element element, String presetElement,
                                             ProjectOperationContext context) {

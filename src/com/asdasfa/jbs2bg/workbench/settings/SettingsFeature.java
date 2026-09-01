@@ -42,6 +42,18 @@ public final class SettingsFeature {
      * @param initialization   startup recovery, warning, or failure evidence
      */
     public SettingsFeature(Path workingDirectory, Settings.InitializationResult initialization) {
+        this(workingDirectory, initialization, false);
+    }
+
+    /**
+     * Creates a Settings feature and optionally completes the one-time packaged generation-preference migration.
+     *
+     * @param workingDirectory application profile directory
+     * @param initialization   paired Settings startup result
+     * @param migrateLegacyPreference whether an absent profile-local preference should be created from legacy state
+     */
+    public SettingsFeature(Path workingDirectory, Settings.InitializationResult initialization,
+                           boolean migrateLegacyPreference) {
         directory = Objects.requireNonNull(workingDirectory, "workingDirectory").toAbsolutePath().normalize();
         generationPreferences = new GenerationPreferencesStore(directory);
         Objects.requireNonNull(initialization, "initialization");
@@ -53,7 +65,8 @@ public final class SettingsFeature {
         selectedUunp = uunp.firstName().orElse(null);
         List<Notice> startupNotices = new ArrayList<>(initializationNotices(initialization));
         try {
-            omitRedundantSliders = generationPreferences.loadOrMigrate();
+            omitRedundantSliders = migrateLegacyPreference
+                    ? generationPreferences.loadOrMigrate() : generationPreferences.loadLegacyFallback();
         } catch (IOException exception) {
             startupNotices.add(Notice.preferenceFailure(directory, exception));
         }

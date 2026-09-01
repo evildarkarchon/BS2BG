@@ -40,13 +40,36 @@ public final class GenerationPreferencesStore {
      */
     public boolean loadOrMigrate() throws IOException {
         if (!Files.exists(file)) {
-            return Preferences.userRoot().node(Data.class.getName())
-                    .getBoolean(Data.LEGACY_OMIT_REDUNDANT_SLIDERS, false);
+            boolean legacy = legacyValue();
+            save(legacy);
+            return legacy;
         }
+        return loadProfileValue();
+    }
+
+    /**
+     * Loads the profile-local choice when present, otherwise reads the legacy value without writing. Embedded and
+     * test adapters use this path so attaching a controller cannot mutate an unrelated working directory.
+     *
+     * @return stored or legacy omission choice
+     * @throws IOException when an existing profile-local file cannot be read
+     */
+    public boolean loadLegacyFallback() throws IOException {
+        return Files.exists(file) ? loadProfileValue() : legacyValue();
+    }
+
+    /** Parses the small profile-local preference document. */
+    private boolean loadProfileValue() throws IOException {
         String content = Files.readString(file, StandardCharsets.UTF_8).trim();
         if (!content.startsWith(OMIT_PREFIX))
             return false;
         return Boolean.parseBoolean(content.substring(OMIT_PREFIX.length()).trim());
+    }
+
+    /** Reads the retained packaged Java Preferences key used before the Workbench cutover. */
+    private static boolean legacyValue() {
+        return Preferences.userRoot().node(Data.class.getName())
+                .getBoolean(Data.LEGACY_OMIT_REDUNDANT_SLIDERS, false);
     }
 
     /**

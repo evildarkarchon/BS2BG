@@ -127,7 +127,7 @@ class FxmlGraphLoadingTest {
             FXMLLoader loader = load("workbench.fxml");
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage);
+            controller.attach(flow, stage, temporaryDirectory, Settings.publishedState());
 
             assertEquals("BS2BG Preview - *recovery-source.jbs2bg", stage.getTitle());
             MenuItem save = (MenuItem) loader.getNamespace().get("saveProjectMenuItem");

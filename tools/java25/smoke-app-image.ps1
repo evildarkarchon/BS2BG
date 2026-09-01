@@ -1470,6 +1470,32 @@ try {
             }
         }
 
+        if (-not (Get-UiaSelectionState -Element $settingsOutput)) {
+            throw 'Failed import did not preserve the selected Slider Preset identity.'
+        }
+        Wait-UiaKeyboardFocus -Element $presetList -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $activityCountBeforeFailureSave = @(Find-UiaElements -Root $settingsActivity -Condition (
+            New-UiaCondition -ControlType 'ListItem')).Count
+        Send-FileCommand -Item 'Save'
+        Wait-UiaCondition -Description 'Save after failed BodySlide import' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $items = @(Find-UiaElements -Root $settingsActivity -Condition (
+                New-UiaCondition -ControlType 'ListItem'))
+            if ($items.Count -gt $activityCountBeforeFailureSave) { return $items[-1] }
+        } | Out-Null
+        $savedAfterFailure = Get-Content -LiteralPath $importResultsPath -Raw | ConvertFrom-Json
+        $savedAfterFailureNames = @($savedAfterFailure.SliderPresets.PSObject.Properties.Name)
+        foreach ($preserved in @('Partial Commit', 'Settings Output')) {
+            if ($savedAfterFailureNames -cnotcontains $preserved) {
+                throw "Failed import Save/readback lost prior committed preset '$preserved'."
+            }
+        }
+        foreach ($rejected in @('Broken', 'Must Not Commit')) {
+            if ($savedAfterFailureNames -ccontains $rejected) {
+                throw "Failed import Save/readback unexpectedly retained '$rejected'."
+            }
+        }
+
         $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import BodySlide Presets'
         Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Complete-MultipleFileDialog -Title 'Import BodySlide Presets' `

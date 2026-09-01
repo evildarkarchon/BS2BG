@@ -427,7 +427,7 @@ public final class WorkbenchController {
             initialChoice = WorkbenchAppearance.ThemeChoice.SYSTEM;
         }
         attach(flow, ownerStage, new JavaFxWorkbenchPlatform(), initialChoice, store::save,
-                settingsDirectory, settingsStartup);
+                settingsDirectory, settingsStartup, true);
     }
 
     /**
@@ -443,17 +443,24 @@ public final class WorkbenchController {
     void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter) {
         attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
             // Tests and embedded adapters intentionally keep theme selection in memory only.
-        }, Path.of("."), Settings.publishedState());
+        }, Path.of("."), Settings.publishedState(), false);
     }
 
     /**
-     * Test and embedded adapter seam that supplies isolated Settings persistence and startup evidence.
+     * Test and embedded adapter seam that supplies isolated Settings persistence and startup evidence on the JavaFX
+     * Application Thread. The adapter and feature state remain owned until the Stage is hidden.
+     *
+     * @param flow authoritative window-scoped Project flow
+     * @param ownerStage Stage owning controls, focus, and platform effects
+     * @param platformAdapter native-effect adapter retained for the window lifetime
+     * @param settingsDirectory isolated directory owning Settings persistence
+     * @param settingsStartup startup Settings result rendered into the Settings feature and Activity
      */
     void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
                 Path settingsDirectory, Settings.InitializationResult settingsStartup) {
         attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
             // Tests and embedded adapters intentionally keep theme selection in memory only.
-        }, settingsDirectory, settingsStartup);
+        }, settingsDirectory, settingsStartup, false);
     }
 
     /**
@@ -464,17 +471,21 @@ public final class WorkbenchController {
      * @param platformAdapter native-effect adapter retained until the Stage is hidden
      * @param initialChoice   persisted System, Light, or Dark choice
      * @param themeSaver      profile persistence callback used after user selection
+     * @param settingsDirectory directory owning the paired Settings files
+     * @param settingsStartup original Settings startup result rendered as durable evidence
+     * @param migrateGenerationPreference whether production should create the profile-local migrated preference
      * @throws NullPointerException  when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
     private void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
                         WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver,
-                        Path settingsDirectory, Settings.InitializationResult settingsStartup) {
+                        Path settingsDirectory, Settings.InitializationResult settingsStartup,
+                        boolean migrateGenerationPreference) {
         if (projectFlow != null)
             throw new IllegalStateException("WorkbenchController is already attached");
         projectFlow = Objects.requireNonNull(flow, "flow");
         templatesFeature = new TemplatesFeature(projectFlow, Clock.systemUTC());
-        settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup);
+        settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup, migrateGenerationPreference);
         stage = Objects.requireNonNull(ownerStage, "ownerStage");
         platform = Objects.requireNonNull(platformAdapter, "platformAdapter");
         configureProjectCommands();

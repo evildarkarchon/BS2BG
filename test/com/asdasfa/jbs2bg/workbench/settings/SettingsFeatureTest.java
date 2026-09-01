@@ -118,4 +118,15 @@ final class SettingsFeatureTest {
         SettingsFeature reopened = new SettingsFeature(directory, Settings.publishedState());
         assertTrue(reopened.frame().omitRedundantSliders());
     }
+
+    /** First packaged use writes the legacy omission choice exactly once into the profile-local store. */
+    @Test
+    void packagedGenerationPreferenceCompletesTheLegacyMigration(@TempDir Path directory) throws Exception {
+        GenerationPreferencesStore store = new GenerationPreferencesStore(directory);
+
+        boolean migrated = store.loadOrMigrate();
+
+        assertTrue(Files.isRegularFile(directory.resolve("workbench-generation.properties")));
+        assertEquals(migrated, store.loadOrMigrate());
+    }
 }
