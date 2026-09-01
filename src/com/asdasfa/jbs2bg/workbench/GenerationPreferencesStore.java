@@ -22,6 +22,12 @@ public final class GenerationPreferencesStore {
     private final Path directory;
     private final Path file;
 
+    /** Explicit attach-time policy for adopting the legacy preference into the profile-local store. */
+    public enum MigrationPolicy {
+        MIGRATE,
+        READ_ONLY_FALLBACK
+    }
+
     /**
      * Creates a profile-local generation preference store without reading or writing it.
      *

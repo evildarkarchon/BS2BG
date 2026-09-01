@@ -42,7 +42,8 @@ public final class SettingsFeature {
      * @param initialization   startup recovery, warning, or failure evidence
      */
     public SettingsFeature(Path workingDirectory, Settings.InitializationResult initialization) {
-        this(workingDirectory, initialization, false);
+        this(workingDirectory, initialization,
+                GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
     }
 
     /**
@@ -50,10 +51,10 @@ public final class SettingsFeature {
      *
      * @param workingDirectory application profile directory
      * @param initialization   paired Settings startup result
-     * @param migrateLegacyPreference whether an absent profile-local preference should be created from legacy state
+     * @param migrationPolicy explicit production migration or embedded read-only fallback policy
      */
     public SettingsFeature(Path workingDirectory, Settings.InitializationResult initialization,
-                           boolean migrateLegacyPreference) {
+                           GenerationPreferencesStore.MigrationPolicy migrationPolicy) {
         directory = Objects.requireNonNull(workingDirectory, "workingDirectory").toAbsolutePath().normalize();
         generationPreferences = new GenerationPreferencesStore(directory);
         Objects.requireNonNull(initialization, "initialization");
@@ -65,7 +66,8 @@ public final class SettingsFeature {
         selectedUunp = uunp.firstName().orElse(null);
         List<Notice> startupNotices = new ArrayList<>(initializationNotices(initialization));
         try {
-            omitRedundantSliders = migrateLegacyPreference
+            omitRedundantSliders = Objects.requireNonNull(migrationPolicy, "migrationPolicy")
+                    == GenerationPreferencesStore.MigrationPolicy.MIGRATE
                     ? generationPreferences.loadOrMigrate() : generationPreferences.loadLegacyFallback();
         } catch (IOException exception) {
             startupNotices.add(Notice.preferenceFailure(directory, exception));

@@ -415,6 +415,8 @@ public final class WorkbenchController {
      * @param ownerStage         application window that owns effects and focus
      * @param settingsDirectory  directory owning the paired Settings files
      * @param settingsStartup    original paired Settings startup result
+     * @throws NullPointerException when an argument is null
+     * @throws IllegalStateException when this controller is already attached
      */
     public void attach(WorkbenchProjectFlow flow, Stage ownerStage, Path settingsDirectory,
                        Settings.InitializationResult settingsStartup) {
@@ -427,7 +429,7 @@ public final class WorkbenchController {
             initialChoice = WorkbenchAppearance.ThemeChoice.SYSTEM;
         }
         attach(flow, ownerStage, new JavaFxWorkbenchPlatform(), initialChoice, store::save,
-                settingsDirectory, settingsStartup, true);
+                settingsDirectory, settingsStartup, GenerationPreferencesStore.MigrationPolicy.MIGRATE);
     }
 
     /**
@@ -443,7 +445,8 @@ public final class WorkbenchController {
     void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter) {
         attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
             // Tests and embedded adapters intentionally keep theme selection in memory only.
-        }, Path.of("."), Settings.publishedState(), false);
+        }, Path.of("."), Settings.publishedState(),
+                GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
     }
 
     /**
@@ -455,12 +458,15 @@ public final class WorkbenchController {
      * @param platformAdapter native-effect adapter retained for the window lifetime
      * @param settingsDirectory isolated directory owning Settings persistence
      * @param settingsStartup startup Settings result rendered into the Settings feature and Activity
+     * @throws NullPointerException when an argument is null
+     * @throws IllegalStateException when this controller is already attached
      */
     void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
                 Path settingsDirectory, Settings.InitializationResult settingsStartup) {
         attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
             // Tests and embedded adapters intentionally keep theme selection in memory only.
-        }, settingsDirectory, settingsStartup, false);
+        }, settingsDirectory, settingsStartup,
+                GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
     }
 
     /**
@@ -473,19 +479,19 @@ public final class WorkbenchController {
      * @param themeSaver      profile persistence callback used after user selection
      * @param settingsDirectory directory owning the paired Settings files
      * @param settingsStartup original Settings startup result rendered as durable evidence
-     * @param migrateGenerationPreference whether production should create the profile-local migrated preference
+     * @param migrationPolicy explicit production migration or embedded read-only fallback policy
      * @throws NullPointerException  when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
     private void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
                         WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver,
                         Path settingsDirectory, Settings.InitializationResult settingsStartup,
-                        boolean migrateGenerationPreference) {
+                        GenerationPreferencesStore.MigrationPolicy migrationPolicy) {
         if (projectFlow != null)
             throw new IllegalStateException("WorkbenchController is already attached");
         projectFlow = Objects.requireNonNull(flow, "flow");
         templatesFeature = new TemplatesFeature(projectFlow, Clock.systemUTC());
-        settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup, migrateGenerationPreference);
+        settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup, migrationPolicy);
         stage = Objects.requireNonNull(ownerStage, "ownerStage");
         platform = Objects.requireNonNull(platformAdapter, "platformAdapter");
         configureProjectCommands();
