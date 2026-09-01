@@ -619,12 +619,15 @@ function Get-UiaText {
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Element)
     $value = $null
+    $valueText = $null
     if ($Element.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$value)) {
-        return [string]$value.Current.Value
+        $valueText = [string]$value.Current.Value
+        if (-not [string]::IsNullOrEmpty($valueText)) { return $valueText }
     }
     if ($Element.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$value)) {
         return [string]$value.DocumentRange.GetText(-1)
     }
+    if ($null -ne $valueText) { return $valueText }
     return [string]$Element.Current.Name
 }
 
