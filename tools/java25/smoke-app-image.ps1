@@ -969,7 +969,8 @@ try {
             }
         } | Out-Null
 
-        $profile = Find-OuterControl -ControlType 'ComboBox' -Name 'Slider Preset profile'
+        $profileLabel = Find-OuterControl -ControlType 'Text' -Name 'Profile:'
+        $profile = Get-FollowingControl -Element $profileLabel -ControlType 'ComboBox'
         Send-UiaKeysToElement -Element $profile -Keys '{END}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaCondition -Description 'UUNP profile removes Standard-only synthesized choice' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {

@@ -720,6 +720,7 @@ public final class WorkbenchController {
      */
     private void showTemplatesFailure(TemplatesFeature.Update update) {
         Optional<SliderChoiceFocus> exactFocus = currentSliderChoiceFocus();
+        Optional<TemplatesControlFocus> exactControlFocus = currentTemplatesControlFocus();
         WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
         String details = ProjectDiagnosticFormatter.format(update.frame().diagnostics());
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
@@ -731,7 +732,7 @@ public final class WorkbenchController {
         WorkbenchFeedback.DialogAction action = platform.completeFailure(spec, stage);
         renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
                 pending.token(), action)).frame());
-        if (!restoreSliderChoiceFocus(exactFocus))
+        if (!restoreSliderChoiceFocus(exactFocus) && !restoreTemplatesControlFocus(exactControlFocus))
             requestFocus(returnTarget);
     }
 
@@ -767,6 +768,60 @@ public final class WorkbenchController {
         if (!control.isFocused())
             Platform.runLater(control::requestFocus);
         return true;
+    }
+
+    /**
+     * Captures profile, gang, and bulk-action focus through a stable semantic control family.
+     */
+    private Optional<TemplatesControlFocus> currentTemplatesControlFocus() {
+        Node focusOwner = stage != null && stage.getScene() != null ? stage.getScene().getFocusOwner() : null;
+        if (focusOwner == null)
+            return Optional.empty();
+        return templatesFocusNodes().entrySet().stream()
+                .filter(entry -> entry.getValue() == focusOwner)
+                .map(Map.Entry::getKey)
+                .findFirst();
+    }
+
+    /**
+     * Restores a still-valid profile, gang, or bulk-action focus target after a synchronous failure dialog.
+     */
+    private boolean restoreTemplatesControlFocus(Optional<TemplatesControlFocus> requested) {
+        if (requested.isEmpty())
+            return false;
+        Node control = templatesFocusNodes().get(requested.orElseThrow());
+        if (control == null || !control.isVisible() || control.getParent() == null)
+            return false;
+        control.requestFocus();
+        if (!control.isFocused())
+            Platform.runLater(control::requestFocus);
+        return true;
+    }
+
+    /**
+     * Maps every non-row Templates editor/inspector focus identity to its current JavaFX adapter node.
+     */
+    private Map<TemplatesControlFocus, Node> templatesFocusNodes() {
+        Map<TemplatesControlFocus, Node> controls = new java.util.EnumMap<>(TemplatesControlFocus.class);
+        controls.put(TemplatesControlFocus.PROFILE, sliderPresetProfile);
+        controls.put(TemplatesControlFocus.GO_TO_SET_SLIDERS, goToSetSlidersButton);
+        controls.put(TemplatesControlFocus.RENAME, renameSliderPresetButton);
+        controls.put(TemplatesControlFocus.ZERO_ALL, zeroAllSliderChoicesButton);
+        controls.put(TemplatesControlFocus.FIFTY_ALL, fiftyAllSliderChoicesButton);
+        controls.put(TemplatesControlFocus.HUNDRED_ALL, hundredAllSliderChoicesButton);
+        controls.put(TemplatesControlFocus.ZERO_MINIMUM, zeroAllMinimumButton);
+        controls.put(TemplatesControlFocus.FIFTY_MINIMUM, fiftyAllMinimumButton);
+        controls.put(TemplatesControlFocus.HUNDRED_MINIMUM, hundredAllMinimumButton);
+        controls.put(TemplatesControlFocus.ZERO_MAXIMUM, zeroAllMaximumButton);
+        controls.put(TemplatesControlFocus.FIFTY_MAXIMUM, fiftyAllMaximumButton);
+        controls.put(TemplatesControlFocus.HUNDRED_MAXIMUM, hundredAllMaximumButton);
+        controls.put(TemplatesControlFocus.GANG_ALL_CHECK, gangAllCheck);
+        controls.put(TemplatesControlFocus.GANG_MINIMUM_CHECK, gangMinimumCheck);
+        controls.put(TemplatesControlFocus.GANG_MAXIMUM_CHECK, gangMaximumCheck);
+        controls.put(TemplatesControlFocus.GANG_ALL_SLIDER, gangAllSlider);
+        controls.put(TemplatesControlFocus.GANG_MINIMUM_SLIDER, gangMinimumSlider);
+        controls.put(TemplatesControlFocus.GANG_MAXIMUM_SLIDER, gangMaximumSlider);
+        return controls;
     }
 
     /**
@@ -1353,7 +1408,10 @@ public final class WorkbenchController {
         } else if (focusOwner == templateEditorFocusTarget || focusOwner == sliderPresetProfile
                 || sliderChoiceRowsByName.values().stream().anyMatch(row -> row.contains(focusOwner))) {
             landmark = WorkbenchNavigation.Landmark.EDITOR;
-        } else if (focusOwner == renameSliderPresetButton || focusOwner == templateSelectionText) {
+        } else if (focusOwner == templateSelectionText
+                || templatesFocusNodes().entrySet().stream()
+                .anyMatch(entry -> entry.getKey() != TemplatesControlFocus.PROFILE
+                        && entry.getValue() == focusOwner)) {
             landmark = WorkbenchNavigation.Landmark.INSPECTOR;
         } else if (focusOwner == primaryContentButton) {
             landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
@@ -1746,6 +1804,30 @@ public final class WorkbenchController {
             Objects.requireNonNull(choiceName, "choiceName");
             Objects.requireNonNull(control, "control");
         }
+    }
+
+    /**
+     * Stable Templates editor/inspector controls used for exact failure-dialog focus restoration.
+     */
+    private enum TemplatesControlFocus {
+        PROFILE,
+        GO_TO_SET_SLIDERS,
+        RENAME,
+        ZERO_ALL,
+        FIFTY_ALL,
+        HUNDRED_ALL,
+        ZERO_MINIMUM,
+        FIFTY_MINIMUM,
+        HUNDRED_MINIMUM,
+        ZERO_MAXIMUM,
+        FIFTY_MAXIMUM,
+        HUNDRED_MAXIMUM,
+        GANG_ALL_CHECK,
+        GANG_MINIMUM_CHECK,
+        GANG_MAXIMUM_CHECK,
+        GANG_ALL_SLIDER,
+        GANG_MINIMUM_SLIDER,
+        GANG_MAXIMUM_SLIDER
     }
 
     /**

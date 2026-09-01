@@ -219,6 +219,9 @@ class WorkbenchControllerTest {
                 assertFalse(maximumGang.isSelected());
                 assertFalse(((SliderChoiceRow) rows.getChildren().get(0)).enabledControl().isDisabled());
                 assertEquals("Gang all minimum Slider choice values", minimumGang.getAccessibleText());
+                minimumGang.requestFocus();
+                sendKey(root, KeyCode.F6);
+                assertSame(loader.getNamespace().get("activityList"), scene.getFocusOwner());
                 stage.close();
             });
         } finally {
