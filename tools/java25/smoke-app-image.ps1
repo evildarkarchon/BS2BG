@@ -315,11 +315,23 @@ function Complete-FileDialog {
 function Complete-DirectoryDialog {
     param([string]$Title, [string]$Path)
     $dialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $StepTimeoutSeconds
-    $dialog.SetFocus()
-    Send-UiaKeysToElement -Element $dialog -Keys '^l' -TimeoutSeconds $StepTimeoutSeconds
+    $focusableCondition = New-Object System.Windows.Automation.OrCondition(@(
+        (New-UiaCondition -ControlType 'Edit'),
+        (New-UiaCondition -ControlType 'List'),
+        (New-UiaCondition -ControlType 'Tree'),
+        (New-UiaCondition -ControlType 'Button')))
+    $focusTarget = Wait-UiaCondition -Description "focusable child in '$Title'" `
+        -TimeoutSeconds $StepTimeoutSeconds -Test {
+        foreach ($candidate in (Find-UiaElements -Root $dialog -Condition $focusableCondition)) {
+            if ($candidate.Current.IsKeyboardFocusable) { return $candidate }
+        }
+    }
+    # The top-level native dialog is not focusable; Ctrl+L is routed from one of its real child controls.
+    Send-UiaKeysToElement -Element $focusTarget -Keys '^l' -TimeoutSeconds $StepTimeoutSeconds
+    $dialogProcessId = $dialog.Current.ProcessId
     $address = Wait-UiaCondition -Description "address bar in '$Title'" -TimeoutSeconds $StepTimeoutSeconds -Test {
         $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-        if ($null -ne $focused -and $focused.Current.ProcessId -eq $script:app.Id `
+        if ($null -ne $focused -and $focused.Current.ProcessId -eq $dialogProcessId `
                 -and $focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit) {
             $focused
         }
@@ -1674,7 +1686,8 @@ try {
             $candidate = Get-Clipboard -Raw
             if (-not [string]::IsNullOrEmpty($candidate)) { $candidate }
         }
-        if ($copiedTemplates.Replace("`r`n", "`n") -cne $generatedTemplates.Replace("`r`n", "`n")) {
+        if ($copiedTemplates.Replace("`r`n", "`n").Replace("`r", "`n") `
+                -cne $generatedTemplates.Replace("`r`n", "`n").Replace("`r", "`n")) {
             throw 'Clipboard text differs from the selected accepted Templates artifact after newline normalization.'
         }
         Wait-UiaElement -Root (Find-OuterControl -ControlType 'List' -Name 'Activity') -Condition (
@@ -1697,11 +1710,16 @@ try {
             }
         }
         $utf8 = [Text.UTF8Encoding]::new($false)
+        $normalizedTemplates = $generatedTemplates.Replace("`r`n", "`n").Replace("`r", "`n")
         $expectedTemplatesBytes = $utf8.GetBytes(
-            $generatedTemplates.Replace("`r`n", "`n").Replace("`n", "`r`n"))
-        $expectedMorphsBytes = $utf8.GetBytes(
-            $generatedMorphs.Replace("`r`n", "`n").Replace("`n", "`r`n"))
-        $expectedBosBytes = $utf8.GetBytes($generatedBos.Replace("`r`n", "`n"))
+            $normalizedTemplates.Replace("`n", "`r`n"))
+        $normalizedMorphs = $generatedMorphs.Replace("`r`n", "`n").Replace("`r", "`n")
+        if ($normalizedMorphs.Length -gt 0 -and -not $normalizedMorphs.EndsWith("`n")) {
+            # UIA omits TextArea's final paragraph delimiter; canonical morphs.ini retains its required final CRLF.
+            $normalizedMorphs += "`n"
+        }
+        $expectedMorphsBytes = $utf8.GetBytes($normalizedMorphs.Replace("`n", "`r`n"))
+        $expectedBosBytes = $utf8.GetBytes($generatedBos.Replace("`r`n", "`n").Replace("`r", "`n"))
         $exportedTemplates = [IO.File]::ReadAllBytes((Join-Path $completeExportDirectory 'templates.ini'))
         $exportedMorphs = [IO.File]::ReadAllBytes((Join-Path $completeExportDirectory 'morphs.ini'))
         $exportedBos = [IO.File]::ReadAllBytes((Join-Path $completeExportDirectory 'Settings Output.json'))
@@ -1716,6 +1734,10 @@ try {
         if ($exportedTemplates.Length -gt 0 -and ($exportedTemplates[-1] -eq 0x0A `
                 -or $exportedTemplates[-1] -eq 0x0D)) {
             throw 'Exported templates.ini unexpectedly has a final newline.'
+        }
+        if ($exportedMorphs.Length -gt 0 -and ($exportedMorphs.Length -lt 2 `
+                -or $exportedMorphs[-2] -ne 0x0D -or $exportedMorphs[-1] -ne 0x0A)) {
+            throw 'Exported morphs.ini does not retain its required final CRLF.'
         }
         if (@(Get-ChildItem -LiteralPath $completeExportDirectory -Filter '.bs2bg-output-stage-*' -Force).Count -ne 0) {
             throw 'Successful complete Output export left a transaction directory behind.'
