@@ -1,6 +1,6 @@
 # Windows app-image packaging checkpoint
 
-Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#105 and inherited gates). A green run proves
+Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#106 and inherited gates). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
 starts from a clean extracted location without any system Java, exercises typed navigation, semantic focus, Output,
 responsive/minimum geometry, live themes, High Contrast, reduced motion, feedback, typed dialogs, Project lifecycle,
@@ -99,7 +99,7 @@ empty working directory with every host-Java discovery path removed. The origina
 image process, host `jvm.dll` and JavaFX native libraries from the extracted runtime, and exit with code 0 inside
 the configured bound.
 
-Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #105
+Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #106
 workflow records these steps:
 
 1. Extract the clean image, verify launcher configuration/version, install representative, recovery, malformed,
@@ -122,9 +122,11 @@ workflow records these steps:
 8. Edit Standard and UUNP Settings, persist the pair, prove live output-affecting preview behavior, then exercise
    successful, malformed/partial, failed, and cancelled BodySlide imports with captured-source, diagnostics,
    committed-effect, selection, focus, and Activity evidence.
-9. Generate one captured Project/Settings basis, inspect keyboard-selectable Templates/Morphs/BoS tabs as read-only
-   text, preserve accepted Output across Save, invalidate it after a Project edit, and prove cancelled/stale Generate
-   attempts publish no artifacts, do not reveal Output, retain focus, and record complete Activity evidence.
+9. Generate one captured Project/Settings basis; inspect keyboard-selectable Templates/Morphs/BoS tabs as read-only
+   text; copy the selected accepted bytes; publish the complete INI/BoS set and one selected BoS file with exact
+   UTF-8 bytes; force a locked-destination batch failure and prove rollback before a linked retry. Then preserve
+   accepted Output across Save, invalidate it after a Project edit, and prove cancelled/stale Generate attempts
+   publish no artifacts, do not reveal Output, retain focus, and record complete Activity evidence.
 10. Save As a clean New Project and verify the canonical file and adopted identity.
 11. Open a recovered Project and require captured source/basis, both ordered
    `SLIDER_PRESET_ASSIGNMENT_MISSING` diagnostics, committed effect, retry capability, and dirty title.
@@ -144,7 +146,7 @@ workflow records these steps:
 Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
 launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/14`; its durable artifacts include the Workbench,
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/15`; its durable artifacts include the Workbench,
 responsive, and Templates-management UIA trees plus `workbench-high-contrast.png` and
 `workbench-reduced-motion.png`, the populated Templates High Contrast screenshot
 `workbench-templates-high-contrast.png`, the selected Slider editor High Contrast screenshot
@@ -292,7 +294,7 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
-- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/14`; steps with durations;
+- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/15`; steps with durations;
   typed navigation, semantic focus, Output interaction, live themes, High Contrast, reduced motion, feedback,
   dialogs, native DPI and responsive/minimum geometry; Project recovery, New/Open/Save/Save As, failure
   preservation/retry and dirty shutdown; the expected/observed process model; bounded exit; environment scrubbing;

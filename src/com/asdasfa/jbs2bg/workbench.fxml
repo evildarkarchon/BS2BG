@@ -494,6 +494,10 @@
                                                 focusTraversable="true" styleClass="title output-focus-target"
                                                 text="Output" />
                                         <Region HBox.hgrow="ALWAYS" />
+                                        <Button fx:id="copyOutputButton" accessibleText="Copy selected Output artifact"
+                                                mnemonicParsing="true" text="_Copy" />
+                                        <Button fx:id="exportOutputButton" accessibleText="Export all Output artifacts"
+                                                mnemonicParsing="true" text="_Export All…" />
                                         <Label text="Drawer height" />
                                         <Slider fx:id="outputDrawerHeight" accessibleText="Output drawer height"
                                                 blockIncrement="20.0" majorTickUnit="40.0" max="360.0" min="140.0"
@@ -534,6 +538,9 @@
                                                                 text="Generate Project output to inspect it here."
                                                                 styleClass="output-text" wrapText="false"
                                                                 VBox.vgrow="ALWAYS" />
+                                                        <Button fx:id="exportSelectedBosButton"
+                                                                accessibleText="Export selected BoS JSON artifact"
+                                                                mnemonicParsing="true" text="Export _Selected…" />
                                                     </children>
                                                 </VBox>
                                             </content>

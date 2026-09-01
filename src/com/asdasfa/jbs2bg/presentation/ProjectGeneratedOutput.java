@@ -15,8 +15,8 @@ import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
  */
 public final class ProjectGeneratedOutput {
 
-    private final String templatesText;
-    private final String morphsText;
+    private final OutputArtifact templatesArtifact;
+    private final OutputArtifact morphsArtifact;
     private final Map<String, String> templateLinesByPresetName;
     private final List<BosJsonArtifact> bosJsonArtifacts;
     private final List<CustomMorphTargetSnapshot> customMorphTargetsWithoutPresets;
@@ -38,8 +38,10 @@ public final class ProjectGeneratedOutput {
                            Map<String, String> templateLinesByPresetName, List<BosJsonArtifact> bosJsonArtifacts,
                            List<CustomMorphTargetSnapshot> customMorphTargetsWithoutPresets,
                            List<NpcMorphAssignmentSnapshot> npcMorphAssignmentsWithoutPresets) {
-        this.templatesText = Objects.requireNonNull(templatesText, "templatesText");
-        this.morphsText = Objects.requireNonNull(morphsText, "morphsText");
+        templatesArtifact = new Utf8OutputArtifact("templates.ini",
+                Objects.requireNonNull(templatesText, "templatesText"));
+        morphsArtifact = new Utf8OutputArtifact("morphs.ini",
+                Objects.requireNonNull(morphsText, "morphsText"));
         this.templateLinesByPresetName = Collections.unmodifiableMap(
                 new LinkedHashMap<>(Objects.requireNonNull(templateLinesByPresetName,
                         "templateLinesByPresetName")));
@@ -57,14 +59,37 @@ public final class ProjectGeneratedOutput {
      * @return complete templates.ini text without a trailing newline
      */
     public String getTemplatesText() {
-        return templatesText;
+        return templatesArtifact.getText();
     }
 
     /**
      * @return complete morphs.ini text, including the legacy trailing newline when non-empty
      */
     public String getMorphsText() {
-        return morphsText;
+        return morphsArtifact.getText();
+    }
+
+    /** @return immutable Templates artifact whose text and publication bytes are inseparable */
+    public OutputArtifact getTemplatesArtifact() {
+        return templatesArtifact;
+    }
+
+    /** @return immutable Morphs artifact whose text and publication bytes are inseparable */
+    public OutputArtifact getMorphsArtifact() {
+        return morphsArtifact;
+    }
+
+    /**
+     * Returns the complete transactional export set: both INIs followed by every canonical BoS JSON artifact.
+     *
+     * @return immutable artifacts in deterministic publication order
+     */
+    public List<OutputArtifact> getArtifacts() {
+        List<OutputArtifact> artifacts = new ArrayList<>(2 + bosJsonArtifacts.size());
+        artifacts.add(templatesArtifact);
+        artifacts.add(morphsArtifact);
+        artifacts.addAll(bosJsonArtifacts);
+        return List.copyOf(artifacts);
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.asdasfa.jbs2bg.workbench.output;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +13,8 @@ import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.presentation.BosJsonArtifact;
 import com.asdasfa.jbs2bg.presentation.BosOutputDiagnostic;
 import com.asdasfa.jbs2bg.presentation.BosOutputException;
+import com.asdasfa.jbs2bg.presentation.OutputArtifact;
+import com.asdasfa.jbs2bg.presentation.OutputArtifactPublisher;
 import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.project.ProjectSnapshot;
@@ -33,6 +37,8 @@ public final class OutputFeature {
     private long nextObserverId = 1;
     private long nextEffectToken = 1;
     private long currentGenerationToken;
+    private PendingExport pendingExport;
+    private PendingSelectedExport pendingSelectedExport;
     private Tab selectedTab = Tab.TEMPLATES;
     private String selectedBosArtifact;
     private Frame frame;
@@ -138,7 +144,100 @@ public final class OutputFeature {
             case Generate ignored -> generate();
             case SelectTab selectTab -> selectTab(selectTab.tab());
             case SelectBosArtifact selectBosArtifact -> selectBosArtifact(selectBosArtifact.sliderPresetName());
+            case Copy ignored -> copy();
+            case Export ignored -> requestExport();
+            case ExportSelected ignored -> requestSelectedExport();
         };
+    }
+
+    /** Captures the selected accepted artifact as a tokenized clipboard effect. */
+    private Update copy() {
+        Optional<OutputArtifact> artifact = frame.displayedArtifact();
+        if (frame.freshness() != Freshness.FRESH || artifact.isEmpty())
+            return update(false, Optional.empty());
+        OutputArtifact accepted = artifact.orElseThrow();
+        return update(true, Optional.of(new CopyToClipboard(nextEffectToken++, accepted.getFileName(),
+                accepted.getText())));
+    }
+
+    /** Captures the complete accepted batch before asking the platform for one destination directory. */
+    private Update requestExport() {
+        if (frame.freshness() != Freshness.FRESH || frame.generatedOutput().isEmpty()
+                || projectFlow.jobs().frame().active())
+            return update(false, Optional.empty());
+        long token = nextEffectToken++;
+        pendingExport = new PendingExport(token, frame.generatedOutput().orElseThrow(), frame.basis().orElseThrow());
+        return update(true, Optional.of(new ChooseExportDirectory(token)));
+    }
+
+    /**
+     * Completes the latest tokenized directory chooser and admits one captured export job when a path was selected.
+     *
+     * @param effectToken     chooser effect identity
+     * @param targetDirectory selected existing directory, or empty when the chooser was cancelled
+     * @return whether this response matched the pending effect and any resulting job was admitted
+     */
+    public Update completeExport(long effectToken, Optional<Path> targetDirectory) {
+        Objects.requireNonNull(targetDirectory, "targetDirectory");
+        PendingExport pending = pendingExport;
+        if (pending == null || pending.token() != effectToken)
+            return update(false, Optional.empty());
+        pendingExport = null;
+        if (targetDirectory.isEmpty())
+            return update(true, Optional.empty());
+        ProjectGeneratedOutput output = pending.output();
+        ExportCapture capture = new ExportCapture(output.getArtifacts(), relationshipDiagnostics(output),
+                pending.basis(), targetDirectory.orElseThrow().toAbsolutePath().normalize(), Optional.empty(),
+                ExportScope.COMPLETE);
+        JobCoordinator.Admission admission = projectFlow.jobs().submit(exportSubmission(capture));
+        return update(admission.admitted(), Optional.empty());
+    }
+
+    /** Captures the selected accepted BoS artifact before asking the platform for one file destination. */
+    private Update requestSelectedExport() {
+        Optional<OutputArtifact> artifact = frame.displayedArtifact();
+        if (frame.freshness() != Freshness.FRESH || selectedTab != Tab.BOS_JSON || artifact.isEmpty()
+                || projectFlow.jobs().frame().active())
+            return update(false, Optional.empty());
+        long token = nextEffectToken++;
+        OutputArtifact accepted = artifact.orElseThrow();
+        pendingSelectedExport = new PendingSelectedExport(token, accepted, frame.basis().orElseThrow());
+        return update(true, Optional.of(new ChooseExportFile(token, accepted.getFileName())));
+    }
+
+    /**
+     * Completes the latest selected-BoS chooser and admits a one-artifact transactional export.
+     *
+     * @param effectToken chooser effect identity
+     * @param destination selected file, or empty when the chooser was cancelled
+     * @return whether this response matched the pending effect and any resulting job was admitted
+     */
+    public Update completeSelectedExport(long effectToken, Optional<Path> destination) {
+        Objects.requireNonNull(destination, "destination");
+        PendingSelectedExport pending = pendingSelectedExport;
+        if (pending == null || pending.token() != effectToken)
+            return update(false, Optional.empty());
+        pendingSelectedExport = null;
+        if (destination.isEmpty())
+            return update(true, Optional.empty());
+        Path selected = jsonDestination(destination.orElseThrow());
+        Path directory = selected.getParent();
+        if (directory == null)
+            return update(false, Optional.empty());
+        OutputArtifact targeted = new SelectedOutputArtifact(pending.artifact(),
+                selected.getFileName().toString());
+        ExportCapture capture = new ExportCapture(List.of(targeted), List.of(), pending.basis(), directory,
+                Optional.of(selected), ExportScope.SELECTED_BOS);
+        JobCoordinator.Admission admission = projectFlow.jobs().submit(exportSubmission(capture));
+        return update(admission.admitted(), Optional.empty());
+    }
+
+    /** Preserves any case-insensitive JSON extension and appends the canonical extension only when absent. */
+    private static Path jsonDestination(Path selected) {
+        Path normalized = Objects.requireNonNull(selected, "selected").toAbsolutePath().normalize();
+        String name = normalized.getFileName().toString();
+        return name.toLowerCase(java.util.Locale.ROOT).endsWith(".json")
+                ? normalized : normalized.resolveSibling(name + ".json");
     }
 
     /** Selects one stable artifact-family tab without changing accepted generated bytes. */
@@ -208,7 +307,11 @@ public final class OutputFeature {
             }
             context.checkCancellation();
             GeneratedCandidate candidate = new GeneratedCandidate(generationToken, basis, generated);
-            return JobCoordinator.Result.completed(candidate, "Output generated.", List.of(), List.of());
+            List<JobCoordinator.Diagnostic> warnings = relationshipDiagnostics(generated);
+            return warnings.isEmpty()
+                    ? JobCoordinator.Result.completed(candidate, "Output generated.", List.of(), List.of())
+                    : JobCoordinator.Result.completedWithIssues(candidate,
+                    unassignedSummary("Output generated", warnings.size()), List.of(), warnings);
         }, (attempt, result) -> acceptCompletion(generationToken, result),
                 Optional.of(this::recaptureGenerationSubmission), this::resolveCompletion);
     }
@@ -224,7 +327,9 @@ public final class OutputFeature {
     /** Accepts only the latest fresh usable completion, leaving prior accepted artifacts untouched otherwise. */
     private void acceptCompletion(long generationToken, JobCoordinator.Result<GeneratedCandidate> result) {
         if (generationToken != currentGenerationToken
-                || result.lifecycle() != JobCoordinator.Lifecycle.COMPLETED)
+                || result.lifecycle() != JobCoordinator.Lifecycle.COMPLETED
+                && result.lifecycle() != JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES
+                || !result.effectsCommitted().contains("Generated Output published"))
             return;
         Optional<GeneratedCandidate> value = result.value();
         if (value.isEmpty())
@@ -233,7 +338,96 @@ public final class OutputFeature {
         Optional<String> selected = retainedBosSelection(candidate.output());
         selectedBosArtifact = selected.orElse(null);
         commit(Optional.of(candidate.output()), Optional.of(candidate.basis()), Freshness.FRESH, selected);
-        publish(true, Optional.of(new Effect(nextEffectToken++, EffectKind.REVEAL_DRAWER)));
+        publish(true, Optional.of(new RevealDrawer(nextEffectToken++)));
+    }
+
+    /** Creates one retryable central-job request over already accepted, defensively owned Output bytes. */
+    private JobCoordinator.Submission<ExportCapture> exportSubmission(ExportCapture capture) {
+        List<String> artifactLabels = capture.artifacts().stream()
+                .map(OutputFeature::artifactLabel).toList();
+        JobCoordinator.Operation operation = new JobCoordinator.Operation("Export Output", artifactLabels,
+                List.of(capture.destinationLabel()), Optional.of(capture.basis().describe()),
+                JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED);
+        return new JobCoordinator.Submission<>(operation, context -> {
+            context.report(JobCoordinator.Progress.indeterminate("Preflighting Output destinations", true));
+            try {
+                OutputArtifactPublisher.publishAll(capture.targetDirectory(), capture.artifacts(),
+                        new OutputArtifactPublisher.PublicationContext() {
+                            @Override
+                            public void checkCancellation() {
+                                context.checkCancellation();
+                            }
+
+                            @Override
+                            public void reportStaged(long completedArtifacts, long totalArtifacts) {
+                                context.report(JobCoordinator.Progress.determinate("Staging Output artifacts",
+                                        completedArtifacts, totalArtifacts));
+                            }
+
+                            @Override
+                            public boolean beginCommit() {
+                                return context.beginCommit("Publishing Output artifacts");
+                            }
+                        });
+            } catch (IOException exception) {
+                return JobCoordinator.Result.failed("Export Output failed.", List.of(
+                        new JobCoordinator.Diagnostic("OUTPUT_EXPORT_FAILED",
+                                readableMessage(exception), Optional.of(exception.getClass().getName()))));
+            }
+            int count = capture.artifacts().size();
+            List<String> effects = List.of("Published " + count + " Output artifacts");
+            return capture.warnings().isEmpty()
+                    ? JobCoordinator.Result.completed(capture, "Output exported.", effects, List.of())
+                    : JobCoordinator.Result.completedWithIssues(capture,
+                    unassignedSummary("Output exported", capture.warnings().size()), effects, capture.warnings());
+        }, (attempt, result) -> {
+            // Filesystem effects and Activity are already committed by the worker/coordinator paths.
+        }, Optional.of(() -> recaptureExportSubmission(capture)));
+    }
+
+    /** Recaptures current accepted Output bytes while retaining the user-selected retry destination and scope. */
+    private JobCoordinator.Submission<ExportCapture> recaptureExportSubmission(ExportCapture previous) {
+        if (frame.freshness() == Freshness.FRESH && frame.generatedOutput().isPresent()) {
+            ProjectGeneratedOutput output = frame.generatedOutput().orElseThrow();
+            if (previous.scope() == ExportScope.COMPLETE)
+                return exportSubmission(new ExportCapture(output.getArtifacts(), relationshipDiagnostics(output),
+                        frame.basis().orElseThrow(), previous.targetDirectory(), Optional.empty(),
+                        ExportScope.COMPLETE));
+            Optional<OutputArtifact> selected = selectedTab == Tab.BOS_JSON ? frame.displayedArtifact()
+                    : Optional.empty();
+            if (selected.isPresent()) {
+                Path destination = previous.selectedDestination().orElseThrow();
+                OutputArtifact targeted = new SelectedOutputArtifact(selected.orElseThrow(),
+                        destination.getFileName().toString());
+                return exportSubmission(new ExportCapture(List.of(targeted), List.of(), frame.basis().orElseThrow(),
+                        previous.targetDirectory(), Optional.of(destination), ExportScope.SELECTED_BOS));
+            }
+        }
+        JobCoordinator.Operation operation = new JobCoordinator.Operation("Export Output", List.of("Output"),
+                List.of(previous.destinationLabel()), Optional.of("No accepted Output is available"),
+                JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED);
+        return new JobCoordinator.Submission<>(operation, context -> JobCoordinator.Result.failed(
+                "Generate Output before retrying export.", List.of(new JobCoordinator.Diagnostic(
+                        "OUTPUT_NOT_AVAILABLE", "No accepted Output is available for export.", Optional.empty()))),
+                (attempt, result) -> {
+                    // The coordinator publishes the structured retry failure through the ordinary Activity path.
+                }, Optional.of(() -> recaptureExportSubmission(previous)));
+    }
+
+    /** Returns stable nonblank I/O diagnostic text without assuming providers supply a message. */
+    private static String readableMessage(IOException failure) {
+        String message = failure.getMessage();
+        return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
+    }
+
+    /** Reports every BoS source-to-filename mapping while keeping fixed INI labels concise. */
+    private static String artifactLabel(OutputArtifact artifact) {
+        if (artifact instanceof BosJsonArtifact bosArtifact)
+            return bosArtifact.getFileNameMapping().formatForDisplay();
+        if (artifact instanceof SelectedOutputArtifact selected
+                && selected.source() instanceof BosJsonArtifact bosArtifact)
+            return bosArtifact.getFileNameMapping().formatForDisplay();
+        return artifact.getFileName();
     }
 
     /** Preserves the selected BoS Slider Preset when present, otherwise selects the first generated artifact. */
@@ -268,7 +462,11 @@ public final class OutputFeature {
         if (!isCurrent(candidate.basis()))
             return JobCoordinator.Result.completedWithIssues(candidate, STALE_MESSAGE, List.of(),
                     List.of(new JobCoordinator.Diagnostic("STALE_RESULT", STALE_MESSAGE, Optional.empty())));
-        return JobCoordinator.Result.completed(candidate, "Output generated.",
+        if (result.diagnostics().isEmpty())
+            return JobCoordinator.Result.completed(candidate, "Output generated.",
+                    List.of("Generated Output published"), List.of());
+        return JobCoordinator.Result.completedWithIssues(candidate,
+                unassignedSummary("Output generated", result.diagnostics().size()),
                 List.of("Generated Output published"), result.diagnostics());
     }
 
@@ -286,6 +484,25 @@ public final class OutputFeature {
                 ? diagnostic.getMessage()
                 : diagnostic.getSliderPresetName() + ": " + diagnostic.getMessage();
         return new JobCoordinator.Diagnostic(diagnostic.getCode(), message, Optional.empty());
+    }
+
+    /** Converts accepted unassigned-target metadata into non-fatal Output Activity diagnostics. */
+    private static List<JobCoordinator.Diagnostic> relationshipDiagnostics(ProjectGeneratedOutput output) {
+        List<JobCoordinator.Diagnostic> diagnostics = new java.util.ArrayList<>();
+        output.getCustomMorphTargetsWithoutPresets().forEach(target -> diagnostics.add(
+                new JobCoordinator.Diagnostic("CUSTOM_MORPH_TARGET_WITHOUT_PRESET",
+                        "Custom Morph Target " + target.getName() + " has no assigned Slider Preset.",
+                        Optional.empty())));
+        output.getNpcMorphAssignmentsWithoutPresets().forEach(npc -> diagnostics.add(
+                new JobCoordinator.Diagnostic("NPC_MORPH_ASSIGNMENT_WITHOUT_PRESET",
+                        "NPC Morph Assignment " + npc.getPluginName() + "|" + npc.getFormId()
+                                + " has no assigned Slider Preset.", Optional.empty())));
+        return List.copyOf(diagnostics);
+    }
+
+    /** Formats one usable Output warning summary without misclassifying it as a failure. */
+    private static String unassignedSummary(String completedText, int count) {
+        return completedText + " with " + count + (count == 1 ? " unassigned target." : " unassigned targets.");
     }
 
     /** Pluralizes the stable failure count used in terminal job summaries. */
@@ -390,6 +607,18 @@ public final class OutputFeature {
                     .orElse("No BoS JSON artifacts were generated.");
         }
 
+        /** @return accepted artifact selected by the current Output tab and BoS identity */
+        public Optional<OutputArtifact> displayedArtifact() {
+            return generatedOutput.flatMap(output -> switch (selectedTab) {
+                case TEMPLATES -> Optional.of(output.getTemplatesArtifact());
+                case MORPHS -> Optional.of(output.getMorphsArtifact());
+                case BOS_JSON -> output.getBosJsonArtifacts().stream()
+                        .filter(artifact -> selectedBosArtifact.stream().anyMatch(name ->
+                                name.equalsIgnoreCase(artifact.getSliderPresetName())))
+                        .findFirst().map(artifact -> (OutputArtifact) artifact);
+            });
+        }
+
         /**
          * @return read-only text belonging to the selected tab/artifact, or the current empty/freshness guidance
          */
@@ -397,12 +626,8 @@ public final class OutputFeature {
             if (generatedOutput.isEmpty())
                 return freshness == Freshness.INVALIDATED
                         ? STALE_MESSAGE : "Generate Project output to inspect it here.";
-            ProjectGeneratedOutput output = generatedOutput.orElseThrow();
-            return switch (selectedTab) {
-                case TEMPLATES -> output.getTemplatesText();
-                case MORPHS -> output.getMorphsText();
-                case BOS_JSON -> selectedBosText();
-            };
+            return displayedArtifact().map(OutputArtifact::getText)
+                    .orElse("No BoS JSON artifacts were generated.");
         }
     }
 
@@ -416,12 +641,74 @@ public final class OutputFeature {
     }
 
     /** Tokenized at-most-once effect emitted only by a freshly accepted Generate result. */
-    public record Effect(long token, EffectKind kind) {
-        /** Requires a positive effect token and semantic effect kind. */
-        public Effect {
+    public sealed interface Effect permits RevealDrawer, CopyToClipboard, ChooseExportDirectory, ChooseExportFile {
+        /** @return monotonically increasing at-most-once platform-effect identity */
+        long token();
+
+        /** @return semantic effect family used by adapters that do not need the typed payload */
+        EffectKind kind();
+    }
+
+    /** Fresh Generate completion requests the sole accepted Output navigation side effect. */
+    public record RevealDrawer(long token) implements Effect {
+        /** Requires a positive effect identity. */
+        public RevealDrawer {
             if (token <= 0)
                 throw new IllegalArgumentException("token must be positive");
-            Objects.requireNonNull(kind, "kind");
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public EffectKind kind() {
+            return EffectKind.REVEAL_DRAWER;
+        }
+    }
+
+    /** Clipboard effect carrying text decoded from one accepted artifact's owned bytes. */
+    public record CopyToClipboard(long token, String artifactName, String text) implements Effect {
+        /** Requires complete immutable clipboard context. */
+        public CopyToClipboard {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(artifactName, "artifactName");
+            Objects.requireNonNull(text, "text");
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public EffectKind kind() {
+            return EffectKind.COPY_TO_CLIPBOARD;
+        }
+    }
+
+    /** Native directory-chooser effect whose response returns through {@link #completeExport(long, Optional)}. */
+    public record ChooseExportDirectory(long token) implements Effect {
+        /** Requires a positive effect identity. */
+        public ChooseExportDirectory {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public EffectKind kind() {
+            return EffectKind.CHOOSE_EXPORT_DIRECTORY;
+        }
+    }
+
+    /** Native save-file chooser for one selected accepted BoS artifact. */
+    public record ChooseExportFile(long token, String suggestedFileName) implements Effect {
+        /** Requires a positive effect identity and the accepted artifact's canonical filename. */
+        public ChooseExportFile {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(suggestedFileName, "suggestedFileName");
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public EffectKind kind() {
+            return EffectKind.CHOOSE_EXPORT_FILE;
         }
     }
 
@@ -433,7 +720,7 @@ public final class OutputFeature {
     }
 
     /** Task family owned by Output. */
-    public sealed interface Intent permits Generate, SelectTab, SelectBosArtifact {
+    public sealed interface Intent permits Generate, SelectTab, SelectBosArtifact, Copy, Export, ExportSelected {
     }
 
     /** Requests generation of all Output artifact families from one captured basis. */
@@ -456,6 +743,18 @@ public final class OutputFeature {
         }
     }
 
+    /** Copies the artifact currently selected in the accepted Output drawer. */
+    public record Copy() implements Intent {
+    }
+
+    /** Requests complete-batch export of the currently accepted Output value. */
+    public record Export() implements Intent {
+    }
+
+    /** Requests one-file export of the selected accepted BoS artifact. */
+    public record ExportSelected() implements Intent {
+    }
+
     /** Whether the feature currently retains accepted output for the active Project/settings basis. */
     public enum Freshness {
         EMPTY,
@@ -472,7 +771,10 @@ public final class OutputFeature {
 
     /** Kernel-owned effect request family produced by Output. */
     public enum EffectKind {
-        REVEAL_DRAWER
+        REVEAL_DRAWER,
+        COPY_TO_CLIPBOARD,
+        CHOOSE_EXPORT_DIRECTORY,
+        CHOOSE_EXPORT_FILE
     }
 
     /** Idempotent Output observer handle. */
@@ -491,6 +793,85 @@ public final class OutputFeature {
                 throw new IllegalArgumentException("generationToken must be positive");
             Objects.requireNonNull(basis, "basis");
             Objects.requireNonNull(output, "output");
+        }
+    }
+
+    /** Accepted bytes and basis retained while the native export-directory chooser is open. */
+    private record PendingExport(long token, ProjectGeneratedOutput output, OutputBasis basis) {
+        /** Requires one positive effect identity and complete accepted Output state. */
+        private PendingExport {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(output, "output");
+            Objects.requireNonNull(basis, "basis");
+        }
+    }
+
+    /** Selected accepted artifact and basis retained while its native save chooser is open. */
+    private record PendingSelectedExport(long token, OutputArtifact artifact, OutputBasis basis) {
+        /** Requires one positive effect identity and complete accepted selected Output state. */
+        private PendingSelectedExport {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(artifact, "artifact");
+            Objects.requireNonNull(basis, "basis");
+        }
+    }
+
+    /** Accepted artifacts, warnings, basis, scope, and normalized destination captured by one export attempt. */
+    private record ExportCapture(List<OutputArtifact> artifacts, List<JobCoordinator.Diagnostic> warnings,
+                                 OutputBasis basis, Path targetDirectory, Optional<Path> selectedDestination,
+                                 ExportScope scope) {
+        /** Requires all immutable export inputs before central-job admission. */
+        private ExportCapture {
+            artifacts = List.copyOf(Objects.requireNonNull(artifacts, "artifacts"));
+            warnings = List.copyOf(Objects.requireNonNull(warnings, "warnings"));
+            Objects.requireNonNull(basis, "basis");
+            Objects.requireNonNull(targetDirectory, "targetDirectory");
+            Objects.requireNonNull(selectedDestination, "selectedDestination");
+            Objects.requireNonNull(scope, "scope");
+            if (artifacts.isEmpty())
+                throw new IllegalArgumentException("artifacts must not be empty");
+            if ((scope == ExportScope.SELECTED_BOS) != selectedDestination.isPresent())
+                throw new IllegalArgumentException("selected destination must match selected BoS scope");
+        }
+
+        /** @return exact destination shown in Activity for this export scope */
+        private String destinationLabel() {
+            return selectedDestination.map(Path::toString).orElseGet(targetDirectory::toString);
+        }
+    }
+
+    /** Complete-directory and selected-BoS retry recapture policies. */
+    private enum ExportScope {
+        COMPLETE,
+        SELECTED_BOS
+    }
+
+    /** One selected accepted artifact retargeted to the user's safe chosen filename without changing its bytes. */
+    private record SelectedOutputArtifact(OutputArtifact source, String fileName) implements OutputArtifact {
+        /** Requires the immutable accepted source and selected leaf name. */
+        private SelectedOutputArtifact {
+            Objects.requireNonNull(source, "source");
+            Objects.requireNonNull(fileName, "fileName");
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public String getFileName() {
+            return fileName;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public byte[] getBytes() {
+            return source.getBytes();
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public String getText() {
+            return source.getText();
         }
     }
 }

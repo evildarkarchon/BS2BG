@@ -181,9 +181,11 @@ class FxmlGraphLoadingTest {
     @Test
     void everyFxmlGraphOnDiskIsServedFromTheClasspath() throws IOException {
         List<String> graphs = fxmlFiles("");
-        assertEquals(10, graphs.size(), "expected only the Workbench and unfinished workflow FXML set");
+        assertEquals(8, graphs.size(), "expected only the Workbench and unfinished workflow FXML set");
         assertTrue(graphs.contains("workbench.fxml"), "the Workbench must be the packaged root graph");
         assertFalse(graphs.contains("main.fxml"), "the replaced legacy root graph must not ship");
+        assertFalse(graphs.contains("popup_bosview.fxml"), "the replaced BoS popup must not ship");
+        assertFalse(graphs.contains("popup_nopresetnotif.fxml"), "the replaced Output warning popup must not ship");
         for (String graph : graphs)
             assertNotNull(Main.class.getResource(graph), graph + " must be on the classpath");
     }

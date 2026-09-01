@@ -1,17 +1,49 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 import javafx.stage.FileChooser;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 
 /**
  * JavaFX implementation of Workbench file choosers, confirmations, and final window closure.
  */
 final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
+
+    /** Copies exact accepted Output text without consulting any preview control. */
+    @Override
+    public boolean copyOutputText(String text) {
+        ClipboardContent content = new ClipboardContent();
+        content.putString(Objects.requireNonNull(text, "text"));
+        return Clipboard.getSystemClipboard().setContent(content);
+    }
+
+    /** Shows the complete-batch Output directory chooser. */
+    @Override
+    public Optional<Path> chooseOutputDirectory(Stage owner) {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Export Accepted Output");
+        File selected = chooser.showDialog(Objects.requireNonNull(owner, "owner"));
+        return selected == null ? Optional.empty() : Optional.of(selected.toPath());
+    }
+
+    /** Shows the selected-BoS save chooser with the accepted mapping as its initial filename. */
+    @Override
+    public Optional<Path> chooseOutputFile(String suggestedFileName, Stage owner) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Export Selected BoS JSON");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON files (*.json)", "*.json"));
+        chooser.setInitialFileName(Objects.requireNonNull(suggestedFileName, "suggestedFileName"));
+        File selected = chooser.showSaveDialog(Objects.requireNonNull(owner, "owner"));
+        return selected == null ? Optional.empty() : Optional.of(selected.toPath());
+    }
 
     /**
      * Shows the native Open or Save chooser and translates cancellation without inventing a path.

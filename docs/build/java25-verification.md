@@ -51,7 +51,7 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | Representative FXML/controller graphs load | `FxmlGraphLoadingTest`: `workbench.fxml` (sole root), every retained migration `popup_*.fxml`, and the custom-root graphs on the pinned toolkit; it also rejects the removed `main.fxml` resource |
 | Workbench Project lifecycle and centralized jobs | `JobCoordinatorTest` covers single admission, truthful progress, cancel/commit races, serialized result freshness, retry linkage, observer isolation, stale callbacks, and shutdown; `ProjectSessionOpenTest` proves detached Open parsing does not hold the publication lock; `WorkbenchProjectFlowTest` covers captured asynchronous Open, content-version and selected-source freshness, coherent lifecycle frames, and stale-effect rejection; `TemplatesFeatureTest`, `SettingsFeatureTest`, and `OutputFeatureTest` cover their immutable frame/intent seams; `WorkbenchControllerTest` covers real JavaFX admission/progress/cancel/Activity/Retry and captured Output rendering with platform effects substituted at the native chooser/dialog seam |
 | Logical visible-set behavior preserved | `FilteredViewTest`, `VisibleScopeCommandsTest` (seam), `FilteredTableAdapterTest` (public-JavaFX adapter: AND filtering, sort through `TableView.sortOrder`, identity-stable selection, frozen bulk scope, detach) |
-| Project, Settings, and BoS JSON contracts | `ProjectSession*Test`, `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`, `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, and `BosArtifactPublisherTest` required by the script; `JacksonJsonTest` and `JacksonDependencyPolicyTest` witness the shared policy |
+| Project, Settings, and generated Output contracts | `ProjectSession*Test`, `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`, `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, and `OutputRoutePolicyTest` required by the script; `JacksonJsonTest` and `JacksonDependencyPolicyTest` witness the shared JSON policy |
 
 The required suites the script asserts (report present, at least one test, zero failures/errors):
 `Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxmlGraphLoadingTest`, `LauncherTest`,
@@ -60,7 +60,7 @@ The required suites the script asserts (report present, at least one test, zero 
 `ProjectSessionOpenTest`, `ProjectSessionSaveTest`, `ProjectSessionImportTest`, `ProjectSessionSliderChoiceTest`,
 `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `JacksonJsonTest`,
 `JacksonDependencyPolicyTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`,
-`ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `BosArtifactPublisherTest`, `JobCoordinatorTest`,
+`ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, `OutputRoutePolicyTest`, `JobCoordinatorTest`,
 `WorkbenchProjectFlowTest`, `WorkbenchControllerTest`, `TemplatesFeatureTest`, `SettingsFeatureTest`, and
 `OutputFeatureTest`.
 

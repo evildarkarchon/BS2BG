@@ -1,11 +1,13 @@
 package com.asdasfa.jbs2bg.presentation;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -103,7 +105,7 @@ class ProjectOutputFormatterTest {
         session.apply(SliderPresetEdits.rename("Alpha", "Changed"));
         ProjectGeneratedOutput output = ProjectOutputFormatter.generate(pinned, false);
 
-        String newLine = System.lineSeparator();
+        String newLine = "\r\n";
         assertEquals("Alpha=Scale@0.35:0.65" + newLine + "Zulu=Active@0.2, Zero@0.0",
                 output.getTemplatesText());
         assertEquals("AlphaTarget=Alpha" + newLine + "ZuluTarget=" + newLine
@@ -329,6 +331,7 @@ class ProjectOutputFormatterTest {
     void exposesOnlyUnmodifiableGeneratedCollections() {
         ProjectGeneratedOutput output = ProjectOutputFormatter.generate(populatedSession().getSnapshot(), false);
 
+        assertThrows(UnsupportedOperationException.class, () -> output.getArtifacts().clear());
         assertThrows(UnsupportedOperationException.class,
                 () -> output.getTemplateLinesByPresetName().put("Injected", "Injected="));
         assertThrows(UnsupportedOperationException.class,
@@ -337,5 +340,23 @@ class ProjectOutputFormatterTest {
                 () -> output.getCustomMorphTargetsWithoutPresets().clear());
         assertThrows(UnsupportedOperationException.class,
                 () -> output.getNpcMorphAssignmentsWithoutPresets().clear());
+    }
+
+    /** Templates, Morphs, and BoS previews decode from the same defensively owned bytes used for export. */
+    @Test
+    void generatedArtifactsDefensivelyOwnTheExactDisplayedUtf8Bytes() {
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(populatedSession().getSnapshot(), false);
+
+        assertEquals("templates.ini", output.getTemplatesArtifact().getFileName());
+        assertEquals("morphs.ini", output.getMorphsArtifact().getFileName());
+        assertEquals(2 + output.getBosJsonArtifacts().size(), output.getArtifacts().size());
+        for (OutputArtifact artifact : output.getArtifacts()) {
+            byte[] expected = artifact.getText().getBytes(StandardCharsets.UTF_8);
+            assertArrayEquals(expected, artifact.getBytes());
+            byte[] exposed = artifact.getBytes();
+            if (exposed.length > 0)
+                exposed[0] ^= 0x7f;
+            assertArrayEquals(expected, artifact.getBytes());
+        }
     }
 }

@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * Immutable BoS JSON artifact that owns its canonical UTF-8 bytes and output mapping.
  */
-public final class BosJsonArtifact {
+public final class BosJsonArtifact implements OutputArtifact {
     private final String sliderPresetName;
     private final String fileName;
     private final Utf8Json json;
@@ -33,6 +33,7 @@ public final class BosJsonArtifact {
     /**
      * @return mapped output filename including the {@code .json} extension
      */
+    @Override
     public String getFileName() {
         return fileName;
     }
@@ -47,6 +48,7 @@ public final class BosJsonArtifact {
     /**
      * @return a defensive copy of the canonical UTF-8 bytes
      */
+    @Override
     public byte[] getBytes() {
         return json.bytes();
     }
@@ -54,6 +56,7 @@ public final class BosJsonArtifact {
     /**
      * @return preview text decoded from the same canonical bytes used for publication
      */
+    @Override
     public String getText() {
         return json.text();
     }

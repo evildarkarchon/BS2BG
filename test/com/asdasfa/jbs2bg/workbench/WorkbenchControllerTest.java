@@ -979,6 +979,75 @@ class WorkbenchControllerTest {
         });
     }
 
+    /** Output controls realize accepted copy and complete/selected export effects without reading editable UI state. */
+    @Test
+    void copyAndExportOutputUseThePlatformAdapterAndCentralJobPath() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // These small export batches settle before prolonged cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        flow.apply(SliderPresetEdits.create("Platform Output"));
+        RecordingPlatform platform = new RecordingPlatform();
+        Path completeDirectory = Files.createDirectory(temporaryDirectory.resolve("complete-output"));
+        Path selectedFile = temporaryDirectory.resolve("selected.JSON");
+        platform.respondOutputDirectoryWith(Optional.of(completeDirectory));
+        platform.respondOutputFileWith(Optional.of(selectedFile));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300, 720);
+            stage.setScene(scene);
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            stage.show();
+            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
+            editor.requestFocus();
+            ((Button) loader.getNamespace().get("generateOutputButton")).fire();
+            worker.runNext();
+
+            TextArea templates = (TextArea) loader.getNamespace().get("templatesOutputText");
+            Button copy = (Button) loader.getNamespace().get("copyOutputButton");
+            Button exportAll = (Button) loader.getNamespace().get("exportOutputButton");
+            assertFalse(copy.isDisabled());
+            assertFalse(exportAll.isDisabled());
+            copy.fire();
+            assertEquals(List.of(templates.getText()), platform.clipboardTexts);
+            assertEquals("templates.ini copied to the clipboard.",
+                    ((Label) loader.getNamespace().get("infoBarMessage")).getText());
+            assertSame(editor, scene.getFocusOwner());
+
+            sendControlKey(root, KeyCode.E);
+            assertTrue(jobs.frame().active());
+            assertTrue(exportAll.isDisabled());
+            worker.runNext();
+            assertArrayEquals(templates.getText().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    Files.readAllBytes(completeDirectory.resolve("templates.ini")));
+            assertSame(editor, scene.getFocusOwner());
+
+            TabPane tabs = (TabPane) loader.getNamespace().get("outputTabs");
+            tabs.getSelectionModel().select((javafx.scene.control.Tab) loader.getNamespace().get("bosOutputTab"));
+            Button selectedExport = (Button) loader.getNamespace().get("exportSelectedBosButton");
+            assertFalse(selectedExport.isDisabled());
+            String bos = ((TextArea) loader.getNamespace().get("bosOutputText")).getText();
+            selectedExport.fire();
+            worker.runNext();
+            assertArrayEquals(bos.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    Files.readAllBytes(selectedFile));
+            assertSame(editor, scene.getFocusOwner());
+            stage.close();
+        });
+    }
+
     /** A Templates edit remains available during Generate and makes its captured completion stale and invisible. */
     @Test
     void projectEditDuringGenerateProducesStaleActivityWithoutRevealingOutput() throws Exception {
@@ -1166,6 +1235,9 @@ class WorkbenchControllerTest {
     private static final class RecordingPlatform implements WorkbenchPlatform {
         private final Deque<WorkbenchProjectFlow.Response> responses = new ArrayDeque<>();
         private final Deque<WorkbenchFeedback.DialogAction> confirmationResponses = new ArrayDeque<>();
+        private final Deque<Optional<Path>> outputDirectoryResponses = new ArrayDeque<>();
+        private final Deque<Optional<Path>> outputFileResponses = new ArrayDeque<>();
+        private final List<String> clipboardTexts = new java.util.ArrayList<>();
         private int closeCount;
 
         /**
@@ -1182,6 +1254,16 @@ class WorkbenchControllerTest {
             confirmationResponses.addLast(action);
         }
 
+        /** Adds the next Output directory-chooser result. */
+        void respondOutputDirectoryWith(Optional<Path> response) {
+            outputDirectoryResponses.addLast(response);
+        }
+
+        /** Adds the next selected-BoS save-chooser result. */
+        void respondOutputFileWith(Optional<Path> response) {
+            outputFileResponses.addLast(response);
+        }
+
         /**
          * Returns the next scripted real-platform result.
          */
@@ -1196,6 +1278,25 @@ class WorkbenchControllerTest {
         @Override
         public WorkbenchFeedback.DialogAction completeConfirmation(WorkbenchFeedback.DialogSpec spec, Stage owner) {
             return confirmationResponses.removeFirst();
+        }
+
+        /** Records accepted clipboard text without consulting a JavaFX TextArea. */
+        @Override
+        public boolean copyOutputText(String text) {
+            clipboardTexts.add(text);
+            return true;
+        }
+
+        /** Returns the next scripted complete-batch directory. */
+        @Override
+        public Optional<Path> chooseOutputDirectory(Stage owner) {
+            return outputDirectoryResponses.removeFirst();
+        }
+
+        /** Returns the next scripted selected-BoS destination. */
+        @Override
+        public Optional<Path> chooseOutputFile(String suggestedFileName, Stage owner) {
+            return outputFileResponses.removeFirst();
         }
 
         /**

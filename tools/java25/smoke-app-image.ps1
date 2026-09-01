@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
     Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, and Templates contracts
-    (issues #98-#105).
+    (issues #98-#106).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
@@ -302,6 +302,37 @@ function Complete-FileDialog {
     else {
         Invoke-UiaNativeButton -Element $confirm
     }
+}
+
+<#
+.SYNOPSIS
+    Completes the native Windows directory chooser used by complete Output export.
+.PARAMETER Title
+    Exact native dialog title.
+.PARAMETER Path
+    Existing directory selected through the address bar.
+#>
+function Complete-DirectoryDialog {
+    param([string]$Title, [string]$Path)
+    $dialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $StepTimeoutSeconds
+    $dialog.SetFocus()
+    Send-UiaKeysToElement -Element $dialog -Keys '^l' -TimeoutSeconds $StepTimeoutSeconds
+    $address = Wait-UiaCondition -Description "address bar in '$Title'" -TimeoutSeconds $StepTimeoutSeconds -Test {
+        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+        if ($null -ne $focused -and $focused.Current.ProcessId -eq $script:app.Id `
+                -and $focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit) {
+            $focused
+        }
+    }
+    Set-UiaValue -Element $address -Value $Path
+    Send-UiaKeysToElement -Element $address -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+    $confirmCondition = New-Object System.Windows.Automation.OrCondition(@(
+        (New-UiaCondition -ControlType 'Button' -Name 'Select Folder'),
+        (New-UiaCondition -ControlType 'Button' -Name 'Open'),
+        (New-UiaCondition -ControlType 'Button' -Name 'Select')))
+    $confirm = Wait-UiaElement -Root $dialog -Condition $confirmCondition `
+        -Description "directory confirmation in '$Title'" -TimeoutSeconds $StepTimeoutSeconds
+    Invoke-UiaElement -Element $confirm
 }
 
 function Complete-MultipleFileDialog {
@@ -1634,6 +1665,130 @@ try {
             throw 'Generated BoS JSON output was empty for a Project with Slider Presets.'
         }
 
+        Select-UiaElement -Element $templatesTab
+        Set-Clipboard -Value ''
+        $copyOutput = Find-OuterControl -ControlType 'Button' -Name 'Copy selected Output artifact'
+        Invoke-UiaElement -Element $copyOutput
+        $copiedTemplates = Wait-UiaCondition -Description 'accepted Templates clipboard text' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Get-Clipboard -Raw
+            if (-not [string]::IsNullOrEmpty($candidate)) { $candidate }
+        }
+        if ($copiedTemplates.Replace("`r`n", "`n") -cne $generatedTemplates.Replace("`r`n", "`n")) {
+            throw 'Clipboard text differs from the selected accepted Templates artifact after newline normalization.'
+        }
+        Wait-UiaElement -Root (Find-OuterControl -ControlType 'List' -Name 'Activity') -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Success — Copy Output — Completed: templates.ini copied to the clipboard.') `
+            -Description 'durable accepted Output copy Activity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $completeExportDirectory = Join-Path $workDir 'accepted-output'
+        New-Item -ItemType Directory -Path $completeExportDirectory | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^e' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-DirectoryDialog -Title 'Export Accepted Output' -Path $completeExportDirectory
+        $completeExportActivity = Wait-UiaCondition -Description 'complete accepted Output export Activity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $items = Find-UiaElements -Root (Find-OuterControl -ControlType 'List' -Name 'Activity') `
+                -Condition (New-UiaCondition -ControlType 'ListItem')
+            foreach ($item in $items) {
+                if ($item.Current.Name -ceq 'Success — Export Output — Completed: Output exported.' `
+                        -and $item.Current.HelpText.Contains($completeExportDirectory) `
+                        -and $item.Current.HelpText.Contains('Effects committed: Published ')) { return $item }
+            }
+        }
+        $utf8 = [Text.UTF8Encoding]::new($false)
+        $expectedTemplatesBytes = $utf8.GetBytes(
+            $generatedTemplates.Replace("`r`n", "`n").Replace("`n", "`r`n"))
+        $expectedMorphsBytes = $utf8.GetBytes(
+            $generatedMorphs.Replace("`r`n", "`n").Replace("`n", "`r`n"))
+        $expectedBosBytes = $utf8.GetBytes($generatedBos.Replace("`r`n", "`n"))
+        $exportedTemplates = [IO.File]::ReadAllBytes((Join-Path $completeExportDirectory 'templates.ini'))
+        $exportedMorphs = [IO.File]::ReadAllBytes((Join-Path $completeExportDirectory 'morphs.ini'))
+        $exportedBos = [IO.File]::ReadAllBytes((Join-Path $completeExportDirectory 'Settings Output.json'))
+        foreach ($comparison in @(
+                @($expectedTemplatesBytes, $exportedTemplates, 'templates.ini'),
+                @($expectedMorphsBytes, $exportedMorphs, 'morphs.ini'),
+                @($expectedBosBytes, $exportedBos, 'Settings Output.json'))) {
+            if ([Convert]::ToBase64String($comparison[0]) -cne [Convert]::ToBase64String($comparison[1])) {
+                throw "Complete export bytes differ from accepted $($comparison[2]) Output."
+            }
+        }
+        if ($exportedTemplates.Length -gt 0 -and ($exportedTemplates[-1] -eq 0x0A `
+                -or $exportedTemplates[-1] -eq 0x0D)) {
+            throw 'Exported templates.ini unexpectedly has a final newline.'
+        }
+        if (@(Get-ChildItem -LiteralPath $completeExportDirectory -Filter '.bs2bg-output-stage-*' -Force).Count -ne 0) {
+            throw 'Successful complete Output export left a transaction directory behind.'
+        }
+
+        Select-UiaElement -Element $bosTab
+        $selectedExportPath = Join-Path $workDir 'selected-output.JSON'
+        $selectedExport = Find-OuterControl -ControlType 'Button' -Name 'Export selected BoS JSON artifact'
+        Send-UiaKeysToElement -Element $selectedExport -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-FileDialog -Title 'Export Selected BoS JSON' -Path $selectedExportPath -ConfirmButton 'Save'
+        Wait-UiaCondition -Description 'selected accepted BoS export Activity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $items = Find-UiaElements -Root (Find-OuterControl -ControlType 'List' -Name 'Activity') `
+                -Condition (New-UiaCondition -ControlType 'ListItem')
+            foreach ($item in $items) {
+                if ($item.Current.Name -ceq 'Success — Export Output — Completed: Output exported.' `
+                        -and $item.Current.HelpText.Contains($selectedExportPath) `
+                        -and $item.Current.HelpText.Contains('Effects committed: Published 1 Output artifacts')) {
+                    return $item
+                }
+            }
+        } | Out-Null
+        $selectedBytes = [IO.File]::ReadAllBytes($selectedExportPath)
+        if ([Convert]::ToBase64String($selectedBytes) -cne [Convert]::ToBase64String($expectedBosBytes)) {
+            throw 'Selected BoS export bytes differ from the displayed accepted artifact.'
+        }
+
+        $failureDirectory = Join-Path $workDir 'atomic-output-failure'
+        New-Item -ItemType Directory -Path $failureDirectory | Out-Null
+        [IO.File]::WriteAllText((Join-Path $failureDirectory 'templates.ini'), 'prior templates', $utf8)
+        [IO.File]::WriteAllText((Join-Path $failureDirectory 'morphs.ini'), 'prior morphs', $utf8)
+        $lockedMorphs = [IO.File]::Open((Join-Path $failureDirectory 'morphs.ini'),
+            [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        try {
+            Send-UiaKeys -ProcessId $script:app.Id -Keys '^e' -TimeoutSeconds $StepTimeoutSeconds
+            Complete-DirectoryDialog -Title 'Export Accepted Output' -Path $failureDirectory
+            $failureDialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $applicationTitle `
+                -TimeoutSeconds $StepTimeoutSeconds
+            if ([IO.File]::ReadAllText((Join-Path $failureDirectory 'templates.ini'), $utf8) -cne 'prior templates' `
+                    -or [IO.File]::ReadAllText((Join-Path $failureDirectory 'morphs.ini'), $utf8) -cne 'prior morphs') {
+                throw 'Failed complete Output export changed a prior destination.'
+            }
+            if (Test-Path -LiteralPath (Join-Path $failureDirectory 'Settings Output.json')) {
+                throw 'Failed complete Output export published a later artifact.'
+            }
+            if (@(Get-ChildItem -LiteralPath $failureDirectory -Filter '.bs2bg-output-stage-*' -Force).Count -ne 0) {
+                throw 'Failed complete Output export left a transaction directory after complete rollback.'
+            }
+            $lockedMorphs.Dispose()
+            $lockedMorphs = $null
+            $retry = Wait-UiaElement -Root $failureDialog -Condition (
+                New-UiaCondition -ControlType 'Button' -Name 'Retry') -Description 'Output export Retry action' `
+                -TimeoutSeconds $StepTimeoutSeconds
+            Send-UiaKeysToElement -Element $retry -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+            $retryActivity = Wait-UiaCondition -Description 'linked successful Output export retry' `
+                -TimeoutSeconds $StepTimeoutSeconds -Test {
+                $items = Find-UiaElements -Root (Find-OuterControl -ControlType 'List' -Name 'Activity') `
+                    -Condition (New-UiaCondition -ControlType 'ListItem')
+                foreach ($item in $items) {
+                    if ($item.Current.Name -ceq 'Success — Export Output — Completed: Output exported.' `
+                            -and $item.Current.HelpText.Contains($failureDirectory) `
+                            -and $item.Current.HelpText.Contains('Retry of attempt:')) { return $item }
+                }
+            }
+            $retriedTemplates = [IO.File]::ReadAllBytes((Join-Path $failureDirectory 'templates.ini'))
+            if ([Convert]::ToBase64String($retriedTemplates) -cne [Convert]::ToBase64String($expectedTemplatesBytes)) {
+                throw 'Retried complete Output export did not publish the accepted Templates bytes.'
+            }
+        }
+        finally {
+            if ($null -ne $lockedMorphs) { $lockedMorphs.Dispose() }
+        }
+
         Send-FileCommand -Item 'Save'
         Wait-UiaElement -Root $activity -Condition (
             New-UiaCondition -ControlType 'ListItem' `
@@ -1747,6 +1902,10 @@ try {
             bosCharacters = $generatedBos.Length
             tabs = @('Templates', 'Morphs', 'BoS JSON')
             readOnly = $true
+            clipboardExact = $true
+            completeExport = $completeExportActivity.Current.HelpText
+            selectedExport = $selectedExportPath
+            atomicFailureAndRetry = $retryActivity.Current.HelpText
             savePreserved = $true
             contentInvalidated = $true
             cancellation = $cancelled.Current.HelpText
@@ -2077,7 +2236,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/14'
+        schema = 'bs2bg.windows-app-image-smoke/15'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion

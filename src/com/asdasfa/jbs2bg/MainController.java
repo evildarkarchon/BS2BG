@@ -1,9 +1,7 @@
 package com.asdasfa.jbs2bg;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.URL;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
@@ -12,19 +10,12 @@ import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.apache.commons.io.FileUtils;
-
 import com.asdasfa.jbs2bg.etc.KeyNavigationListener;
 import com.asdasfa.jbs2bg.etc.MyUtils;
 import com.asdasfa.jbs2bg.filtering.NpcTableColumns;
 import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
 import com.asdasfa.jbs2bg.filtering.VisibleScopeCommands;
-import com.asdasfa.jbs2bg.fx.DialogGraphics;
 import com.asdasfa.jbs2bg.fx.FilteredTableAdapter;
-import com.asdasfa.jbs2bg.presentation.BosArtifactPublisher;
-import com.asdasfa.jbs2bg.presentation.BosJsonArtifact;
-import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
-import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.presentation.ProjectPresentationUpdate;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
@@ -35,10 +26,8 @@ import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectEdit;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
-import com.asdasfa.jbs2bg.project.ProjectSnapshot;
 import com.asdasfa.jbs2bg.project.RejectedOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
-import com.asdasfa.jbs2bg.workbench.GenerationPreferencesStore;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyStringWrapper;
@@ -54,21 +43,14 @@ import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
-import javafx.scene.control.MenuItem;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
-import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.VBox;
-import javafx.stage.DirectoryChooser;
 import javafx.stage.Modality;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -86,8 +68,6 @@ public class MainController extends CustomController {
     protected TableView<NpcMorphAssignmentSnapshot> tvNpc;
     @FXML
     protected ListView<SliderPresetSnapshot> lvTargetPresets;
-    // Popup BoSView
-    protected Stage popupBosView;
     // Popup SliderPresets
     protected Stage popupSliderPresets;
     // Popup SliderPresetsFill
@@ -105,14 +85,6 @@ public class MainController extends CustomController {
     @FXML
     private VBox mainPane;
     // Menu Items
-    @FXML
-    private MenuItem miExportBosJson;
-    @FXML
-    private MenuItem miExport;
-    @FXML
-    private TextArea taTemplate;
-    @FXML
-    private TextArea taTemplatesGen;
     // Morphs
     @FXML
     private ListView<CustomMorphTargetSnapshot> lvCustomTargets;
@@ -137,8 +109,6 @@ public class MainController extends CustomController {
     private Label lblTargetName;
     @FXML
     private Label lblPresetCounter;
-    @FXML
-    private TextArea taMorphsGen;
     // Confirm Dialogs
     private CustomConfirm confirmClearTargetPresets;
     private CustomConfirm confirmClearCustomTargets;
@@ -149,19 +119,11 @@ public class MainController extends CustomController {
     // Help Menu
     private Stage popupAbout;
     private PopupAboutController popupAboutController;
-    private PopupBosViewController popupBosViewController;
     private PopupSliderPresetsController popupSliderPresetsController;
     private PopupSliderPresetsFillController popupSliderPresetsFillController;
     private PopupNpcDatabaseController popupNpcDatabaseController;
     // Popup ImageView
     private Stage popupImageView;
-    // Popup NoPresetNotif
-    private Stage popupNoPresetNotif;
-    private PopupNoPresetNotifController popupNoPresetNotifController;
-
-    // File Choosers
-    private DirectoryChooser fcExport;
-    private DirectoryChooser fcExportBosJson;
 
     /**
      * Called BEFORE all FXML fields are injected.
@@ -211,31 +173,10 @@ public class MainController extends CustomController {
     }
 
     /**
-     * Includes structured formatter or publisher diagnostics in the visible task failure.
-     */
-    private static String failureMessageFor(String failureMessage, Throwable exception) {
-        if (exception == null || exception.getMessage() == null || exception.getMessage().isBlank())
-            return failureMessage;
-        return failureMessage + System.lineSeparator() + exception.getMessage();
-    }
-
-    /**
      * @return true when a completed task carries a rejected or failed Project operation
      */
     private static boolean isRejectedOrFailed(ProjectOutcome outcome) {
         return outcome instanceof RejectedOutcome || outcome instanceof FailedOutcome;
-    }
-
-    /**
-     * Formats every successful source-to-filename mapping for logs and notification.
-     */
-    private static String formatBosFileNameMappings(ProjectGeneratedOutput output) {
-        StringBuilder mappings = new StringBuilder("BoS filename mappings:");
-        for (BosJsonArtifact artifact : output.getBosJsonArtifacts()) {
-            mappings.append(System.lineSeparator())
-                    .append(artifact.getFileNameMapping().formatForDisplay());
-        }
-        return mappings.toString();
     }
 
     /**
@@ -247,7 +188,6 @@ public class MainController extends CustomController {
         npcTable = FilteredTableAdapter.attach(tvNpc, NpcTableColumns.npcMorphAssignments(),
                 ProjectIdentities::npcMorphAssignment);
         setupKeyNavigation();
-        setupKeyCombinations();
         setupTooltips();
     }
 
@@ -261,35 +201,14 @@ public class MainController extends CustomController {
         setupViews();
         setupAlerts();
         setupPopupAbout();
-        setupPopupBosView();
         setupPopupSliderPresets();
         setupPopupNpcDatabase();
         setupPopupImageView();
-        setupPopupNoPresetNotif();
-        setupFileChoosers();
 
         connectViews();
         stage.setTitle(main.projectPresentation.getWindowTitle());
 
         stage.getScene().cursorProperty().bind(Bindings.when(mainPane.disabledProperty()).then(Cursor.WAIT).otherwise(Cursor.DEFAULT));
-    }
-
-    /**
-     * Clears every generated Project-derived output cache owned by presentation.
-     */
-    private void invalidateGeneratedOutput() {
-        taTemplate.clear();
-        taTemplatesGen.clear();
-        taMorphsGen.clear();
-        if (popupBosViewController != null)
-            popupBosViewController.invalidateGeneratedOutput();
-        if (popupNoPresetNotifController != null)
-            popupNoPresetNotifController.invalidateGeneratedOutput();
-    }
-
-    private void setupKeyCombinations() {
-        miExportBosJson.setAccelerator(new KeyCodeCombination(KeyCode.B, KeyCombination.CONTROL_DOWN));
-        miExport.setAccelerator(new KeyCodeCombination(KeyCode.X, KeyCombination.CONTROL_DOWN));
     }
 
     private void setupTooltips() {
@@ -346,13 +265,6 @@ public class MainController extends CustomController {
                     }
                 }
         );
-        lvPresets.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
-            SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
-            if (preset == null)
-                return;
-            updateTemplateText();
-        });
-
         lvCustomTargets.setCellFactory(p ->
                 new ListCell<CustomMorphTargetSnapshot>() {
                     @Override
@@ -470,20 +382,12 @@ public class MainController extends CustomController {
         SliderPresetSnapshot selectedTargetPreset = lvTargetPresets.getSelectionModel().getSelectedItem();
         String selectedTargetPresetName = selectedTargetPreset == null ? null : selectedTargetPreset.getName();
         ProjectPresentationUpdate update = main.projectPresentation.render(outcome);
-        // Generated text must be cleared before selection listeners recreate the
-        // selected preview from the newly returned snapshot.
-        if (update.invalidatesGeneratedOutput())
-            invalidateGeneratedOutput();
         selectSliderPreset(selectedPresetName);
         if (selectedCustomTargetName != null)
             selectCustomTarget(selectedCustomTargetName);
         else if (selectedNpcIdentity != null)
             selectNpc(selectedNpcIdentity);
         selectTargetPreset(selectedTargetPresetName);
-        // Re-selecting an unchanged preset instance fires no selection event, so the
-        // preview cleared above must be rebuilt explicitly from the published snapshot.
-        if (update.invalidatesGeneratedOutput())
-            updateTemplateText();
         stage.setTitle(main.projectPresentation.getWindowTitle());
         if (update.hasDiagnostics()) {
             if (update.hasErrorDiagnostics())
@@ -710,31 +614,6 @@ public class MainController extends CustomController {
         }
     }
 
-    private void setupPopupBosView() {
-        try {
-            popupBosView = new Stage();
-            popupBosView.getIcons().add(main.icon);
-
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("popup_bosview.fxml"));
-            Parent root = loader.load();
-
-            Scene scene = new Scene(root, 600, 400);
-            scene.getStylesheets().add(main.style);
-            popupBosView.setScene(scene);
-
-            popupBosView.initModality(Modality.WINDOW_MODAL);
-            popupBosView.initOwner(stage);
-            popupBosView.setMinWidth(600 + main.decorWidth);
-            popupBosView.setMinHeight(400 + main.decorHeight);
-            popupBosView.setResizable(true);
-
-            popupBosViewController = loader.getController();
-            popupBosViewController.postInitialize(main, popupBosView);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
     private void setupPopupSliderPresets() {
         try {
             popupSliderPresets = new Stage();
@@ -833,40 +712,6 @@ public class MainController extends CustomController {
         }
     }
 
-    private void setupPopupNoPresetNotif() {
-        try {
-            popupNoPresetNotif = new Stage();
-            popupNoPresetNotif.getIcons().add(DialogGraphics.image(DialogGraphics.Semantic.WARNING, DialogGraphics.ICON_SIZE));
-
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("popup_nopresetnotif.fxml"));
-            Parent root = loader.load();
-
-            Scene scene = new Scene(root, 500, 450);
-            scene.getStylesheets().add(main.style);
-            popupNoPresetNotif.setScene(scene);
-
-            popupNoPresetNotif.initModality(Modality.NONE);
-            popupNoPresetNotif.initOwner(stage);
-            popupNoPresetNotif.setResizable(true);
-            popupNoPresetNotif.setAlwaysOnTop(true);
-            popupNoPresetNotif.setMinWidth(500 + main.decorWidth);
-            popupNoPresetNotif.setMinHeight(450 + main.decorHeight);
-
-            popupNoPresetNotifController = loader.getController();
-            popupNoPresetNotifController.postInitialize(main, popupNoPresetNotif);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void setupFileChoosers() {
-        fcExport = new DirectoryChooser();
-        fcExport.setTitle("Export Templates and Morphs INI");
-
-        fcExportBosJson = new DirectoryChooser();
-        fcExportBosJson.setTitle("Export BoS JSON files");
-    }
-
     @FXML
     private void showConfirmClearTargetPresets() {
         if (lvCustomTargets.getSelectionModel().getSelectedItem() == null
@@ -933,28 +778,6 @@ public class MainController extends CustomController {
         popupAbout.setX(x);
         popupAbout.setY(y);
         popupAbout.show();
-    }
-
-    @FXML
-    protected void showPopupBosView() {
-        if (lvPresets.getSelectionModel().getSelectedItem() == null)
-            return;
-
-        Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
-        Scene mainScene = stage.getScene();
-        double x = stage.getX() + mainScene.getWidth() / 2 - popupBosView.getScene().getWidth() / 2;
-        double y = stage.getY() + mainScene.getHeight() / 2 - popupBosView.getScene().getHeight() / 2;
-        if (x < 0)
-            x = 0;
-        if (x > screenBounds.getWidth() - popupBosView.getScene().getWidth())
-            x = screenBounds.getWidth() - popupBosView.getScene().getWidth();
-        if (y < 0)
-            y = 0;
-        if (y + popupBosView.getScene().getHeight() > screenBounds.getHeight())
-            y = screenBounds.getHeight() - popupBosView.getScene().getHeight();
-        popupBosView.setX(x);
-        popupBosView.setY(y);
-        popupBosView.show();
     }
 
     @FXML
@@ -1032,89 +855,6 @@ public class MainController extends CustomController {
         popupNpcDatabase.setX(x);
         popupNpcDatabase.setY(y);
         popupNpcDatabase.show();
-    }
-
-    /**
-     * Renders the selected Slider Preset preview from the latest coherent Project snapshot.
-     */
-    public void updateTemplateText() {
-        SliderPresetSnapshot preset = lvPresets.getSelectionModel().getSelectedItem();
-        if (preset == null) {
-            taTemplate.setText("");
-            return;
-        }
-
-        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(main.projectPresentation.getSnapshot(),
-                omitRedundantSliders());
-        taTemplate.setText(output.getTemplateLinesByPresetName().get(preset.getName()));
-        taTemplate.positionCaret(0);
-    }
-
-    /** Returns the retained generation preference for unfinished legacy Output adapters. */
-    private boolean omitRedundantSliders() {
-        try {
-            return new GenerationPreferencesStore(Path.of(".")).loadOrMigrate();
-        } catch (IOException exception) {
-            // Unfinished legacy Output routes retain their prior value if the profile-local migration is unreadable.
-            return main.data.prefs.getBoolean(main.data.OMIT_REDUNDANT_SLIDERS, false);
-        }
-    }
-
-    /**
-     * Captures one Project snapshot and schedules Templates generation from it.
-     */
-    @FXML
-    private void generateTemplates() {
-        ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
-        boolean omitRedundantSliders = omitRedundantSliders();
-        if (outputSnapshot.getSliderPresets().isEmpty()) {
-            notif.show("You don't have any presets in the list, add some BodySlide XML presets first!");
-            taTemplatesGen.setText("");
-            taTemplatesGen.positionCaret(0);
-            return;
-        }
-
-        // Capture occurs before dispatch so the worker cannot mix a later Project
-        // render or read JavaFX controls off the application thread.
-        Task<ProjectGeneratedOutput> task = generateProjectOutputTask(outputSnapshot, omitRedundantSliders);
-        scheduleBackgroundTask(task, output -> {
-            taTemplatesGen.setText(output.getTemplatesText());
-            taTemplatesGen.positionCaret(0);
-            Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Templates done.");
-        }, "Generating Templates", "Generating Templates failed.");
-    }
-
-    /**
-     * Creates a worker that formats every Project-derived artifact from one pinned
-     * immutable snapshot.
-     *
-     * @param outputSnapshot       coherent Project state captured before scheduling
-     * @param omitRedundantSliders Templates option captured before scheduling
-     * @return background task yielding immutable generated output
-     */
-    private Task<ProjectGeneratedOutput> generateProjectOutputTask(ProjectSnapshot outputSnapshot,
-                                                                   boolean omitRedundantSliders) {
-        return new Task<ProjectGeneratedOutput>() {
-            /** @return immutable output derived only from the captured Project snapshot */
-            @Override
-            public ProjectGeneratedOutput call() {
-                return ProjectOutputFormatter.generate(outputSnapshot, omitRedundantSliders);
-            }
-        };
-    }
-
-    @FXML
-    private void copyTemplates() {
-        String text = taTemplatesGen.getText();
-        if (!text.isEmpty()) {
-            final ClipboardContent content = new ClipboardContent();
-            content.putString(text);
-            Clipboard.getSystemClipboard().setContent(content);
-
-            notif.show("Templates copied to clipboard!");
-        } else {
-            notif.show("There is nothing in the output, add and generate a preset first!");
-        }
     }
 
     /**
@@ -1216,46 +956,6 @@ public class MainController extends CustomController {
     }
 
     /**
-     * Captures one Project snapshot and schedules Morphs generation from it.
-     */
-    @FXML
-    private void generateMorphs() {
-        ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
-        boolean omitRedundantSliders = omitRedundantSliders();
-        if (outputSnapshot.getCustomMorphTargets().isEmpty()
-                && outputSnapshot.getNpcMorphAssignments().isEmpty()) {
-            notif.show("You don't have any morphs in the list, add some morph targets first!");
-            taMorphsGen.setText("");
-            taMorphsGen.positionCaret(0);
-            return;
-        }
-
-        Task<ProjectGeneratedOutput> task = generateProjectOutputTask(outputSnapshot, omitRedundantSliders);
-        scheduleBackgroundTask(task, output -> {
-            taMorphsGen.setText(output.getMorphsText());
-            taMorphsGen.positionCaret(0);
-            Logger.getLogger(getClass().getName()).log(Level.INFO, "Generating Morphs done.");
-
-            // If there are targets without any presets, notify
-            popupNoPresetNotifController.notify(output);
-        }, "Generating Morphs", "Generating Morphs failed.");
-    }
-
-    @FXML
-    private void copyMorphs() {
-        String text = taMorphsGen.getText();
-        if (!text.isEmpty()) {
-            final ClipboardContent content = new ClipboardContent();
-            content.putString(text);
-            Clipboard.getSystemClipboard().setContent(content);
-
-            notif.show("Morphs copied to clipboard!");
-        } else {
-            notif.show("There is nothing in the output, add and generate a morph first!");
-        }
-    }
-
-    /**
      * Applies the shared JavaFX scheduling, busy, and unexpected-failure lifecycle
      * around a synchronous domain operation.
      *
@@ -1281,21 +981,6 @@ public class MainController extends CustomController {
     private <T> void scheduleBackgroundTask(Task<T> task, Consumer<T> success, String operation,
                                             String failureMessage) {
         scheduleBackgroundTask(task, success, operation, ignored -> failureMessage);
-    }
-
-    /**
-     * Schedules a task whose domain exception carries user-facing structured diagnostics.
-     *
-     * @param task           worker task whose exception may carry complete diagnostics
-     * @param success        presentation callback for the task's typed value
-     * @param operation      user-facing operation phrase for start and cancellation logs
-     * @param failureMessage prefix shown before the task's diagnostic message
-     * @param <T>            typed result returned by the operation
-     */
-    private <T> void scheduleDiagnosticBackgroundTask(Task<T> task, Consumer<T> success,
-                                                      String operation, String failureMessage) {
-        scheduleBackgroundTask(task, success, operation,
-                exception -> failureMessageFor(failureMessage, exception));
     }
 
     /**
@@ -1333,167 +1018,11 @@ public class MainController extends CustomController {
     }
 
     /**
-     * Captures one Project snapshot before scheduling combined INI generation and writing.
-     */
-    @FXML
-    private void export() {
-        File targetDir;
-        try {
-            fcExport.setInitialDirectory(new File(main.data.prefs.get(main.data.LAST_USED_INI_FOLDER, new File(".").getAbsolutePath())));
-            targetDir = fcExport.showDialog(stage);
-        } catch (Exception e) {
-            fcExport.setInitialDirectory(main.data.homeDir);
-            targetDir = fcExport.showDialog(stage);
-        }
-        if (targetDir == null)
-            return;
-
-        if (!targetDir.exists())
-            return;
-
-        if (!targetDir.isDirectory())
-            return;
-
-        main.data.prefs.put(main.data.LAST_USED_INI_FOLDER, targetDir.getAbsolutePath());
-        ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
-        boolean omitRedundantSliders = omitRedundantSliders();
-
-        Task<ProjectGeneratedOutput> task = exportTask(targetDir, outputSnapshot, omitRedundantSliders);
-        scheduleBackgroundTask(task, output -> {
-            taTemplatesGen.setText(output.getTemplatesText());
-            taMorphsGen.setText(output.getMorphsText());
-            Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting Templates and Morphs INI done.");
-
-            //if (popupImageView.isShowing())
-            //	popupImageView.hide();
-
-            notif.show("Templates and Morphs INI exported!");
-
-            // If there are targets without any presets, notify
-            popupNoPresetNotifController.notify(output);
-        }, "Exporting Templates and Morphs INI", "Exporting Templates and Morphs INI failed.");
-    }
-
-    /**
-     * Formats and writes both INI files from exactly one captured Project snapshot.
-     *
-     * @param targetDir            selected output directory
-     * @param outputSnapshot       coherent Project state captured before scheduling
-     * @param omitRedundantSliders Templates option captured before scheduling
-     * @return worker task yielding the immutable artifacts written to disk
-     */
-    private Task<ProjectGeneratedOutput> exportTask(File targetDir, ProjectSnapshot outputSnapshot,
-                                                    boolean omitRedundantSliders) {
-        return new Task<ProjectGeneratedOutput>() {
-            /**
-             * @return the same immutable output written to both INI destinations
-             * @throws Exception when either INI destination cannot be written
-             */
-            @Override
-            public ProjectGeneratedOutput call() throws Exception {
-                ProjectGeneratedOutput output = ProjectOutputFormatter.generate(outputSnapshot,
-                        omitRedundantSliders);
-                writeIniOutputs(targetDir, output);
-                return output;
-            }
-        };
-    }
-
-    /**
-     * Writes already-generated Templates and Morphs artifacts without consulting
-     * Project or JavaFX state.
-     *
-     * @param targetDir selected output directory
-     * @param output    immutable artifacts derived from one Project snapshot
-     * @throws IOException when either output cannot be written
-     */
-    private void writeIniOutputs(File targetDir, ProjectGeneratedOutput output) throws IOException {
-        File templatesFile = new File(targetDir.getAbsolutePath() + "/templates.ini");
-        File morphsFile = new File(targetDir.getAbsolutePath() + "/morphs.ini");
-
-        if (templatesFile.exists())
-            FileUtils.deleteQuietly(templatesFile);
-        if (morphsFile.exists())
-            FileUtils.deleteQuietly(morphsFile);
-
-        FileUtils.writeStringToFile(templatesFile, output.getTemplatesText(), main.data.encoding);
-        FileUtils.writeStringToFile(morphsFile, output.getMorphsText(), main.data.encoding);
-    }
-
-    /**
-     * Captures one Project snapshot before scheduling BoS artifact generation and writing.
-     */
-    @FXML
-    private void exportBosJson() {
-        File targetDir;
-        try {
-            fcExportBosJson.setInitialDirectory(new File(main.data.prefs.get(main.data.LAST_USED_JSON_FOLDER, new File(".").getAbsolutePath())));
-            targetDir = fcExportBosJson.showDialog(stage);
-        } catch (Exception e) {
-            fcExportBosJson.setInitialDirectory(main.data.homeDir);
-            targetDir = fcExportBosJson.showDialog(stage);
-        }
-        if (targetDir == null)
-            return;
-
-        if (!targetDir.exists())
-            return;
-
-        if (!targetDir.isDirectory())
-            return;
-
-        main.data.prefs.put(main.data.LAST_USED_JSON_FOLDER, targetDir.getAbsolutePath());
-        ProjectSnapshot outputSnapshot = main.projectPresentation.getSnapshot();
-        boolean omitRedundantSliders = omitRedundantSliders();
-
-        Task<ProjectGeneratedOutput> task = exportBosJsonTask(targetDir, outputSnapshot,
-                omitRedundantSliders);
-        scheduleDiagnosticBackgroundTask(task, output -> {
-            Logger.getLogger(getClass().getName()).log(Level.INFO, "Exporting BoS JSON files done.");
-            String mappings = formatBosFileNameMappings(output);
-            Logger.getLogger(getClass().getName()).log(Level.INFO, mappings);
-            notif.show("BodyTypes of Skyrim JSON files exported!" + System.lineSeparator() + mappings);
-        }, "Exporting BoS JSON files", "Exporting BoS JSON files failed.");
-    }
-
-    /**
-     * Writes BoS files produced from one pinned Project snapshot without reading UI
-     * state from the worker thread.
-     *
-     * @param targetDir            selected output directory
-     * @param outputSnapshot       coherent Project state captured before scheduling
-     * @param omitRedundantSliders captured formatter option
-     * @return worker task that writes every generated BoS artifact
-     */
-    private Task<ProjectGeneratedOutput> exportBosJsonTask(File targetDir, ProjectSnapshot outputSnapshot,
-                                                           boolean omitRedundantSliders) {
-        return new Task<ProjectGeneratedOutput>() {
-            /**
-             * @return the immutable output after every captured BoS artifact is published
-             * @throws Exception when any BoS destination cannot be written
-             */
-            @Override
-            public ProjectGeneratedOutput call() throws Exception {
-                ProjectGeneratedOutput output = ProjectOutputFormatter.generate(outputSnapshot,
-                        omitRedundantSliders);
-                BosArtifactPublisher.publishAll(targetDir.toPath(), output);
-                return output;
-            }
-        };
-    }
-
-    /**
      * Resets transient controls after a successful New Project or Open render.
      */
     private void reset() {
         stage.setTitle(main.projectPresentation.getWindowTitle());
 
-        taTemplate.setText("");
-        taTemplate.positionCaret(0);
-        taTemplatesGen.setText("");
-        taTemplatesGen.positionCaret(0);
-        taMorphsGen.setText("");
-        taMorphsGen.positionCaret(0);
         tfCustomTarget.setText("");
         tfCustomTarget.positionCaret(0);
 

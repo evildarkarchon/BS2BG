@@ -23,6 +23,8 @@ import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
  */
 public final class ProjectOutputFormatter {
 
+    private static final String WINDOWS_NEW_LINE = "\r\n";
+
     private static final Comparator<SliderChoiceSnapshot> SLIDER_NAME_ORDER =
             new Comparator<SliderChoiceSnapshot>() {
                 @Override
@@ -91,7 +93,7 @@ public final class ProjectOutputFormatter {
             throw new BosOutputException(bosFileNameMappings, bosDiagnostics);
         Map<String, String> templateLines = new LinkedHashMap<>();
         StringBuilder templatesText = new StringBuilder();
-        String newLine = System.lineSeparator();
+        String newLine = WINDOWS_NEW_LINE;
 
         for (SliderPresetSnapshot preset : snapshot.getSliderPresets()) {
             progress.checkCancellation();

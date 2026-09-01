@@ -1,14 +1,20 @@
 package com.asdasfa.jbs2bg.workbench.output;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.AfterEach;
@@ -17,6 +23,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
+import com.asdasfa.jbs2bg.presentation.OutputArtifact;
+import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
@@ -303,5 +311,174 @@ class OutputFeatureTest {
         assertEquals(failed.id(), retried.retryOf().orElseThrow());
         assertEquals("Repaired", feature.frame().generatedOutput().orElseThrow()
                 .getBosJsonArtifacts().getFirst().getSliderPresetName());
+    }
+
+    /** Copy captures the selected accepted artifact text instead of reading mutable JavaFX control state. */
+    @Test
+    void copyUsesTheSameAcceptedArtifactDisplayedByTheSelectedOutputTab() {
+        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        projectFlow.apply(SliderPresetEdits.create("Copied"));
+        OutputFeature feature = new OutputFeature(projectFlow,
+                () -> new OutputFeature.GenerationSettings(Settings.snapshot(), false));
+        feature.dispatch(new OutputFeature.Generate());
+        worker.runNext();
+        feature.dispatch(new OutputFeature.SelectTab(OutputFeature.Tab.BOS_JSON));
+
+        OutputFeature.Update update = feature.dispatch(new OutputFeature.Copy());
+
+        assertTrue(update.accepted());
+        OutputFeature.CopyToClipboard effect = assertInstanceOf(OutputFeature.CopyToClipboard.class,
+                update.effect().orElseThrow());
+        OutputArtifact displayed = update.frame().displayedArtifact().orElseThrow();
+        assertEquals(displayed.getFileName(), effect.artifactName());
+        assertEquals(displayed.getText(), effect.text());
+        assertEquals(update.frame().displayedText(), effect.text());
+    }
+
+    /** Export captures accepted displayed bytes and remains truthful when the Project changes before publication. */
+    @Test
+    void exportPublishesTheCapturedAcceptedBatchThroughTheCentralJobPath() throws Exception {
+        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        List<JobCoordinator.Frame> jobFrames = new java.util.ArrayList<>();
+        jobs.observe(jobFrames::add);
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        projectFlow.apply(SliderPresetEdits.create("Captured export"));
+        OutputFeature feature = new OutputFeature(projectFlow,
+                () -> new OutputFeature.GenerationSettings(Settings.snapshot(), false));
+        feature.dispatch(new OutputFeature.Generate());
+        worker.runNext();
+        List<OutputArtifact> accepted = feature.frame().generatedOutput().orElseThrow().getArtifacts();
+
+        OutputFeature.ChooseExportDirectory chooser = assertInstanceOf(OutputFeature.ChooseExportDirectory.class,
+                feature.dispatch(new OutputFeature.Export()).effect().orElseThrow());
+        assertTrue(feature.completeExport(chooser.token(), Optional.of(temporaryDirectory)).accepted());
+        projectFlow.apply(SliderPresetEdits.create("Later edit"));
+        feature.acceptProjectFrame(projectFlow.frame());
+        assertEquals(OutputFeature.Freshness.INVALIDATED, feature.frame().freshness());
+
+        worker.runNext();
+
+        for (OutputArtifact artifact : accepted)
+            assertArrayEquals(artifact.getBytes(), Files.readAllBytes(temporaryDirectory.resolve(
+                    artifact.getFileName())));
+        JobCoordinator.Attempt attempt = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED, attempt.lifecycle());
+        assertEquals(List.of(temporaryDirectory.toAbsolutePath().normalize().toString()),
+                attempt.operation().destinationLabels());
+        assertEquals(List.of("templates.ini", "morphs.ini",
+                "Captured export -> Captured export.json"), attempt.operation().sourceLabels());
+        assertTrue(attempt.operation().capturedBasis().orElseThrow().contains("Project content version"));
+        assertEquals(List.of("Published " + accepted.size() + " Output artifacts"), attempt.effectsCommitted());
+        assertTrue(jobFrames.stream().flatMap(frame -> frame.attempt().stream())
+                .anyMatch(frame -> frame.progress().phase().equals("Preflighting Output destinations")));
+        assertTrue(jobFrames.stream().flatMap(frame -> frame.attempt().stream())
+                .anyMatch(frame -> frame.progress().phase().equals("Staging Output artifacts")));
+        assertTrue(jobFrames.stream().flatMap(frame -> frame.attempt().stream())
+                .anyMatch(frame -> frame.lifecycle() == JobCoordinator.Lifecycle.FINISHING
+                        && frame.progress().phase().equals("Publishing Output artifacts")));
+    }
+
+    /** Export failure retains structured diagnostics and a linked retry that revalidates the destination set. */
+    @Test
+    void failedExportRetriesTheCurrentAcceptedOutputAfterRepreflight() throws Exception {
+        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        projectFlow.apply(SliderPresetEdits.create("Retry export"));
+        OutputFeature feature = new OutputFeature(projectFlow,
+                () -> new OutputFeature.GenerationSettings(Settings.snapshot(), false));
+        feature.dispatch(new OutputFeature.Generate());
+        worker.runNext();
+        Files.createDirectory(temporaryDirectory.resolve("templates.ini"));
+        OutputFeature.ChooseExportDirectory chooser = assertInstanceOf(OutputFeature.ChooseExportDirectory.class,
+                feature.dispatch(new OutputFeature.Export()).effect().orElseThrow());
+        feature.completeExport(chooser.token(), Optional.of(temporaryDirectory));
+
+        worker.runNext();
+
+        JobCoordinator.Attempt failed = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.FAILED, failed.lifecycle());
+        assertEquals(List.of("OUTPUT_EXPORT_FAILED"), failed.diagnostics().stream()
+                .map(JobCoordinator.Diagnostic::code).toList());
+        assertTrue(failed.retryAvailable());
+        Files.delete(temporaryDirectory.resolve("templates.ini"));
+
+        assertTrue(jobs.retry(failed.id()).admitted());
+        worker.runNext();
+
+        JobCoordinator.Attempt retried = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED, retried.lifecycle());
+        assertEquals(failed.id(), retried.retryOf().orElseThrow());
+        assertEquals(feature.frame().generatedOutput().orElseThrow().getTemplatesText(),
+                Files.readString(temporaryDirectory.resolve("templates.ini"), StandardCharsets.UTF_8));
+    }
+
+    /** Selected BoS export preserves a case-insensitive JSON extension and adds one only when absent. */
+    @Test
+    void selectedBosExportPublishesOnlyTheDisplayedAcceptedArtifact() throws Exception {
+        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        projectFlow.apply(SliderPresetEdits.create("Selected"));
+        OutputFeature feature = new OutputFeature(projectFlow,
+                () -> new OutputFeature.GenerationSettings(Settings.snapshot(), false));
+        feature.dispatch(new OutputFeature.Generate());
+        worker.runNext();
+        feature.dispatch(new OutputFeature.SelectTab(OutputFeature.Tab.BOS_JSON));
+        OutputArtifact selected = feature.frame().displayedArtifact().orElseThrow();
+
+        OutputFeature.ChooseExportFile first = assertInstanceOf(OutputFeature.ChooseExportFile.class,
+                feature.dispatch(new OutputFeature.ExportSelected()).effect().orElseThrow());
+        assertEquals(selected.getFileName(), first.suggestedFileName());
+        Path uppercaseExtension = temporaryDirectory.resolve("chosen.JSON");
+        assertTrue(feature.completeSelectedExport(first.token(), Optional.of(uppercaseExtension)).accepted());
+        worker.runNext();
+
+        assertArrayEquals(selected.getBytes(), Files.readAllBytes(uppercaseExtension));
+        assertFalse(Files.exists(temporaryDirectory.resolve("chosen.JSON.json")));
+        assertFalse(Files.exists(temporaryDirectory.resolve("templates.ini")));
+
+        OutputFeature.ChooseExportFile second = assertInstanceOf(OutputFeature.ChooseExportFile.class,
+                feature.dispatch(new OutputFeature.ExportSelected()).effect().orElseThrow());
+        Path extensionless = temporaryDirectory.resolve("extensionless");
+        assertTrue(feature.completeSelectedExport(second.token(), Optional.of(extensionless)).accepted());
+        worker.runNext();
+
+        assertArrayEquals(selected.getBytes(), Files.readAllBytes(temporaryDirectory.resolve("extensionless.json")));
+    }
+
+    /** Usable output with unassigned targets publishes with structured warnings instead of a legacy popup. */
+    @Test
+    void unassignedTargetsPublishAcceptedOutputWithActivityDiagnostics() {
+        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        projectFlow.apply(SliderPresetEdits.create("Available"));
+        projectFlow.apply(CustomMorphTargetEdits.create("Unassigned", List.of()));
+        OutputFeature feature = new OutputFeature(projectFlow,
+                () -> new OutputFeature.GenerationSettings(Settings.snapshot(), false));
+
+        feature.dispatch(new OutputFeature.Generate());
+        worker.runNext();
+
+        assertEquals(OutputFeature.Freshness.FRESH, feature.frame().freshness());
+        JobCoordinator.Attempt attempt = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, attempt.lifecycle());
+        assertEquals(List.of("CUSTOM_MORPH_TARGET_WITHOUT_PRESET"), attempt.diagnostics().stream()
+                .map(JobCoordinator.Diagnostic::code).toList());
+        assertEquals(List.of("Generated Output published"), attempt.effectsCommitted());
     }
 }

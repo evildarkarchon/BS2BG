@@ -1,12 +1,14 @@
 package com.asdasfa.jbs2bg.data;
 
 import java.io.File;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.prefs.Preferences;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.LineIterator;
 import org.mozilla.universalchardet.UniversalDetector;
 
 import javafx.collections.FXCollections;
@@ -54,24 +56,26 @@ public class Data {
 
     }
 
+    /**
+     * Reads one legacy NPC Database file with the detected charset and deterministic UTF-8 fallback.
+     *
+     * @param file source file whose unique NPC rows are appended to the session database
+     */
     public void parseNpcFile(File file) {
         try {
             String inputEncoding = UniversalDetector.detectCharset(file);
-
-            LineIterator iterator = FileUtils.lineIterator(file, inputEncoding);
-            try {
-                while (iterator.hasNext()) {
-                    String line = iterator.nextLine();
-                    line = line.trim();
-                    if (!line.isEmpty()) {
-                        NPC npc = new NPC(line);
-                        if (!npcExistsInDatabase(npc)) {
-                            npcDatabase.add(npc);
-                        }
+            Charset charset = inputEncoding == null ? StandardCharsets.UTF_8 : Charset.forName(inputEncoding);
+            try (BufferedReader reader = Files.newBufferedReader(file.toPath(), charset)) {
+                String sourceLine;
+                while ((sourceLine = reader.readLine()) != null) {
+                    String line = sourceLine.trim();
+                    if (line.isEmpty())
+                        continue;
+                    NPC npc = new NPC(line);
+                    if (!npcExistsInDatabase(npc)) {
+                        npcDatabase.add(npc);
                     }
                 }
-            } finally {
-                iterator.close();
             }
         } catch (IOException e) {
             e.printStackTrace();
