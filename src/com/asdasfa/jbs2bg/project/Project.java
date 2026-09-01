@@ -550,6 +550,22 @@ final class Project {
     }
 
     /**
+     * Removes several already-resolved Slider Presets as one immutable fold. Because no intermediate aggregate is
+     * published, an invalid identity cannot expose a partial relationship cascade.
+     *
+     * @param names existing logical Slider Preset names
+     * @return the next aggregate, or this aggregate when the selection is empty
+     * @throws IllegalArgumentException when a name does not identify a Slider Preset
+     */
+    Project removeSliderPresets(List<String> names) {
+        Objects.requireNonNull(names, "names");
+        Project next = this;
+        for (String name : names)
+            next = next.removeSliderPreset(Objects.requireNonNull(name, "name"));
+        return next;
+    }
+
+    /**
      * Removes every Slider Preset and clears every Custom Morph Target and NPC
      * Morph Assignment reference.
      *

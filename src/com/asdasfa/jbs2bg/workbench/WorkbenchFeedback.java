@@ -53,6 +53,23 @@ public final class WorkbenchFeedback {
                     DialogAction.CANCEL, DialogAction.CANCEL);
         }
 
+        /**
+         * Creates a destructive feature confirmation whose named action is available but Cancel remains the safe
+         * Enter/Escape default.
+         *
+         * @param title   concise destructive question
+         * @param message complete non-color consequence description
+         * @param action  REMOVE or CLEAR action exposed by the dialog
+         * @return immutable destructive confirmation specification
+         */
+        public static DialogSpec destructiveAction(String title, String message, DialogAction action) {
+            if (action != DialogAction.REMOVE && action != DialogAction.CLEAR)
+                throw new IllegalArgumentException("Destructive feature action must be REMOVE or CLEAR");
+            return new DialogSpec(DialogKind.DESTRUCTIVE_CONFIRMATION, Severity.WARNING, title, message,
+                    Optional.empty(), List.of(action, DialogAction.CANCEL),
+                    DialogAction.CANCEL, DialogAction.CANCEL);
+        }
+
         /** Creates the accepted dirty-shutdown dialog with Cancel as both Enter and Escape safety. */
         public static DialogSpec unsavedClose (String title, String message){
             return new DialogSpec(DialogKind.DESTRUCTIVE_CONFIRMATION, Severity.WARNING, title, message,
@@ -250,16 +267,35 @@ public final class WorkbenchFeedback {
      * @return the newly committed immutable frame
      */
     public Frame publish(Notification notification, Optional<JobDetails> jobDetails) {
+        return publish(notification, jobDetails, true);
+    }
+
+    /**
+     * Records Activity and status for a feature-owned pane outcome without creating a workbench-wide InfoBar.
+     *
+     * @param notification completely described operation outcome
+     * @return the newly committed immutable frame
+     */
+    public Frame publishActivity(Notification notification) {
+        return publish(notification, Optional.empty(), false);
+    }
+
+    /**
+     * Projects one notification consistently while allowing a deep feature to retain ownership of its pane InfoBar.
+     */
+    private Frame publish(Notification notification, Optional<JobDetails> jobDetails, boolean showInfoBar) {
         Notification value = Objects.requireNonNull(notification, "notification");
         Optional<JobDetails> details = Objects.requireNonNull(jobDetails, "jobDetails");
         String cue = value.severity().cue();
         SemanticIcons.IconKey icon = value.severity().icon();
-        InfoBar infoBar = new InfoBar(value.severity(), cue, icon, value.message());
         activities.add(new ActivityRecord(nextActivityId++, value.operation(), value.severity(), cue, icon,
                 value.message(), value.disposition(), clock.instant(), details));
         StatusProjection status = new StatusProjection(value.severity(), value.message(),
                 value.disposition().displayText());
-        frame = new Frame(++revision, Optional.of(infoBar), activities, status, frame.pendingDialog());
+        Optional<InfoBar> infoBar = showInfoBar
+                ? Optional.of(new InfoBar(value.severity(), cue, icon, value.message()))
+                : Optional.empty();
+        frame = new Frame(++revision, infoBar, activities, status, frame.pendingDialog());
         return frame;
     }
 
@@ -380,6 +416,8 @@ public final class WorkbenchFeedback {
         CANCEL,
         COPY_DETAILS,
         RETRY,
+        REMOVE,
+        CLEAR,
         CLOSE
     }
 }

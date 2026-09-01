@@ -677,6 +677,16 @@ function Get-UiaToggleState {
 
 <#
 .SYNOPSIS
+    Reads whether a standard UIA SelectionItem is currently selected.
+#>
+function Get-UiaSelectionState {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Element)
+    return [bool](Get-UiaPattern -Element $Element -PatternType 'SelectionItemPattern').Current.IsSelected
+}
+
+<#
+.SYNOPSIS
     Reads the standard UIA RangeValue value exposed by a keyboard-resizable control.
 #>
 function Get-UiaRangeValue {
@@ -854,6 +864,7 @@ Export-ModuleMember -Function @(
     'Wait-UiaKeyboardFocus',
     'Send-UiaKeys',
     'Get-UiaToggleState',
+    'Get-UiaSelectionState',
     'Get-UiaRangeValue',
     'Get-UiaWindowMetrics',
     'Resize-UiaClient',

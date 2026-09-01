@@ -18,6 +18,8 @@ import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
+import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
@@ -35,6 +37,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -50,6 +53,180 @@ class WorkbenchControllerTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    /**
+     * The Templates JavaFX adapter renders immutable feature frames and translates controls into typed feature intents
+     * without retaining a row-index selection.
+     */
+    @Test
+    void templatesControlsCreateAndFilterThroughTheAuthoritativeProjectFlow() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, new RecordingPlatform());
+            @SuppressWarnings("unchecked")
+            ListView<SliderPresetSnapshot> presets =
+                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+            TextField name = (TextField) loader.getNamespace().get("sliderPresetNameInput");
+            TextField filter = (TextField) loader.getNamespace().get("sliderPresetFilter");
+            Button create = (Button) loader.getNamespace().get("createSliderPresetButton");
+
+            assertEquals(List.of("Alpha"), presets.getItems().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+            name.setText(" Beta ");
+            create.fire();
+            assertEquals(List.of("Alpha", "Beta"), presets.getItems().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+            assertEquals("Beta", presets.getSelectionModel().getSelectedItem().getName());
+
+            filter.setText("alp");
+            assertEquals(List.of("Alpha"), presets.getItems().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+            assertNull(presets.getSelectionModel().getSelectedItem());
+            filter.clear();
+            assertEquals(List.of("Alpha", "Beta"), presets.getItems().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+            assertNull(presets.getSelectionModel().getSelectedItem());
+            assertEquals(flow.frame().sequence(), controller.templatesFrame().projectSequence());
+            assertSame(root, loader.getRoot());
+            stage.close();
+        });
+    }
+
+    /**
+     * F2 exposes one inline row editor whose rejected diagnostics retain the draft; a valid retry restores focusable
+     * selection to the renamed identity and the final Esc tier clears it without retargeting.
+     */
+    @Test
+    void templatesInlineRenameIsKeyboardCompleteAcrossRejectionAndSelectionClear() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(SliderPresetEdits.create("Beta"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            controller.attach(flow, stage, new RecordingPlatform());
+            stage.show();
+            @SuppressWarnings("unchecked")
+            ListView<SliderPresetSnapshot> presets =
+                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+            presets.getSelectionModel().select(0);
+
+            sendKey(root, KeyCode.F2);
+            root.applyCss();
+            root.layout();
+            TextField rename = controller.activeRenameField().orElseThrow();
+            rename.setText("Beta");
+            rename.fireEvent(new ActionEvent());
+
+            assertEquals("Beta", controller.templatesFrame().rename().orElseThrow().draft());
+            assertFalse(controller.templatesFrame().rename().orElseThrow().diagnostics().isEmpty());
+            assertEquals("Alpha", presets.getSelectionModel().getSelectedItem().getName());
+            assertTrue(((HBox) loader.getNamespace().get("templatesInfoBar")).isVisible());
+            assertFalse(((HBox) loader.getNamespace().get("infoBar")).isVisible());
+            assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
+            assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("Validation"));
+
+            rename.setText("Gamma");
+            rename.fireEvent(new ActionEvent());
+
+            assertTrue(controller.templatesFrame().rename().isEmpty());
+            assertEquals("Gamma", presets.getSelectionModel().getSelectedItem().getName());
+            sendKey(root, KeyCode.ESCAPE);
+            assertNull(presets.getSelectionModel().getSelectedItem());
+            assertTrue(controller.templatesFrame().selection().isEmpty());
+            stage.close();
+        });
+    }
+
+    /**
+     * Templates destructive commands publish typed confirmations first, honor Cancel, and apply the captured selected
+     * or visible identity set only after the matching named action.
+     */
+    @Test
+    void templatesRemoveAndClearVisibleRequireSafeTypedConfirmation() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(SliderPresetEdits.create("Beta"));
+        flow.apply(SliderPresetEdits.create("Gamma"));
+        RecordingPlatform platform = new RecordingPlatform();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, platform);
+            @SuppressWarnings("unchecked")
+            ListView<SliderPresetSnapshot> presets =
+                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+            Button remove = (Button) loader.getNamespace().get("removeSliderPresetButton");
+            Button clear = (Button) loader.getNamespace().get("clearSliderPresetsButton");
+            TextField filter = (TextField) loader.getNamespace().get("sliderPresetFilter");
+            presets.getSelectionModel().select(0);
+
+            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
+            remove.fire();
+            assertEquals(List.of("Alpha", "Beta", "Gamma"), flow.frame().snapshot().getSliderPresets().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+
+            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
+            remove.fire();
+            assertEquals(List.of("Beta", "Gamma"), flow.frame().snapshot().getSliderPresets().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+            assertNull(presets.getSelectionModel().getSelectedItem());
+
+            filter.setText("bet");
+            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
+            clear.fire();
+            assertEquals(List.of("Gamma"), flow.frame().snapshot().getSliderPresets().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+            assertTrue(controller.templatesFrame().visiblePresets().isEmpty());
+            stage.close();
+        });
+    }
+
+    /**
+     * Refilling a genuinely empty Templates list replaces its JavaFX node so Windows UI Automation receives a fresh
+     * virtualized child subtree instead of retaining the provider's stale empty tree.
+     */
+    @Test
+    void templatesEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, new RecordingPlatform());
+            @SuppressWarnings("unchecked")
+            ListView<SliderPresetSnapshot> initial =
+                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+            TextField name = (TextField) loader.getNamespace().get("sliderPresetNameInput");
+            Button create = (Button) loader.getNamespace().get("createSliderPresetButton");
+
+            name.setText("Alpha");
+            create.fire();
+
+            assertNotSame(initial, controller.sliderPresetListNode());
+            assertEquals(List.of("Alpha"), controller.sliderPresetListNode().getItems().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+            assertEquals(30.0, controller.sliderPresetListNode().getPrefHeight());
+            assertEquals(28.0, controller.sliderPresetListNode().getFixedCellSize());
+            assertSame(name.getParent(), controller.sliderPresetListNode().getParent());
+            stage.close();
+        });
+    }
 
     /**
      * Delivers one Control accelerator to the Workbench root through the same key-event seam as JavaFX.
@@ -385,7 +562,7 @@ class WorkbenchControllerTest {
             controller.attach(flow, stage, new RecordingPlatform());
             stage.show();
 
-            Button editor = (Button) loader.getNamespace().get("editorButton");
+            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
             editor.requestFocus();
             controller.revealGeneratedOutput("generated output");
 
@@ -453,12 +630,15 @@ class WorkbenchControllerTest {
             VBox inspectorPane = (VBox) loader.getNamespace().get("inspectorPane");
             Button listLauncher = (Button) loader.getNamespace().get("showPrimaryOverlayButton");
             Button inspectorLauncher = (Button) loader.getNamespace().get("showInspectorOverlayButton");
-            Button primary = (Button) loader.getNamespace().get("primaryContentButton");
-            Button inspector = (Button) loader.getNamespace().get("inspectorButton");
+            @SuppressWarnings("unchecked")
+            ListView<SliderPresetSnapshot> primary =
+                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+            Label inspector = (Label) loader.getNamespace().get("templateSelectionText");
 
             assertEquals(java.util.List.of(editorPane), areaPanes.getChildren());
             assertTrue(listLauncher.isVisible());
             assertTrue(inspectorLauncher.isVisible());
+            assertInstanceOf(javafx.scene.shape.Rectangle.class, overlay.getClip());
 
             listLauncher.fire();
             assertEquals(java.util.List.of(primaryPane), overlay.getChildren());
@@ -485,6 +665,7 @@ class WorkbenchControllerTest {
      */
     private static final class RecordingPlatform implements WorkbenchPlatform {
         private final Deque<WorkbenchProjectFlow.Response> responses = new ArrayDeque<>();
+        private final Deque<WorkbenchFeedback.DialogAction> confirmationResponses = new ArrayDeque<>();
         private int closeCount;
 
         /**
@@ -495,11 +676,26 @@ class WorkbenchControllerTest {
         }
 
         /**
+         * Adds the next destructive feature confirmation action.
+         */
+        void respondConfirmationWith(WorkbenchFeedback.DialogAction action) {
+            confirmationResponses.addLast(action);
+        }
+
+        /**
          * Returns the next scripted real-platform result.
          */
         @Override
         public WorkbenchProjectFlow.Response complete(WorkbenchProjectFlow.Effect effect, Stage owner) {
             return responses.removeFirst();
+        }
+
+        /**
+         * Returns the next scripted destructive feature confirmation.
+         */
+        @Override
+        public WorkbenchFeedback.DialogAction completeConfirmation(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+            return confirmationResponses.removeFirst();
         }
 
         /**

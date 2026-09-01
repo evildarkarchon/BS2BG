@@ -1,5 +1,7 @@
 package com.asdasfa.jbs2bg.project;
 
+import java.util.List;
+
 /**
  * Creates explicit immutable edit requests for the Project's Slider Preset
  * catalog. Validation is performed atomically by {@link ProjectSession#apply(ProjectEdit)}.
@@ -66,6 +68,16 @@ public final class SliderPresetEdits {
      */
     public static ProjectEdit delete(String name) {
         return new Delete(name);
+    }
+
+    /**
+     * Requests one atomic removal of a caller-frozen Slider Preset identity set.
+     *
+     * @param names existing Slider Preset names in the captured visible order
+     * @return an immutable bulk-deletion request
+     */
+    public static ProjectEdit deleteAll(List<String> names) {
+        return new DeleteAll(names);
     }
 
     /**
@@ -252,6 +264,29 @@ public final class SliderPresetEdits {
          */
         String getName() {
             return name;
+        }
+    }
+
+    /**
+     * Immutable filtered bulk deletion interpreted only by the ProjectSession module.
+     */
+    static final class DeleteAll implements SliderPresetEdit {
+        private final List<String> names;
+
+        /**
+         * Defensively copies the caller-owned visible identity selection before apply time.
+         *
+         * @param names selected names, or null for session validation
+         */
+        DeleteAll(List<String> names) {
+            this.names = names == null ? null : ImmutableValues.copyOf(names, "names");
+        }
+
+        /**
+         * @return immutable selected names, or null when omitted
+         */
+        List<String> getNames() {
+            return names;
         }
     }
 

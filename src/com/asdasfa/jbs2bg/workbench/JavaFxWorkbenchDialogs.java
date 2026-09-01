@@ -101,6 +101,10 @@ final class JavaFxWorkbenchDialogs {
                 new ButtonType("_Copy Details", ButtonBar.ButtonData.OTHER));
         values.put(WorkbenchFeedback.DialogAction.RETRY,
                 new ButtonType("_Retry", ButtonBar.ButtonData.OTHER));
+        values.put(WorkbenchFeedback.DialogAction.REMOVE,
+                new ButtonType("_Remove", ButtonBar.ButtonData.NO));
+        values.put(WorkbenchFeedback.DialogAction.CLEAR,
+                new ButtonType("C_lear", ButtonBar.ButtonData.NO));
         values.put(WorkbenchFeedback.DialogAction.CLOSE,
                 new ButtonType("_Close", ButtonBar.ButtonData.CANCEL_CLOSE));
         return Map.copyOf(values);

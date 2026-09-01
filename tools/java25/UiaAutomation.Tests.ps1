@@ -19,3 +19,9 @@ Describe 'System accessibility preference helpers' {
         $state.HighContrastFlags | Should -BeOfType [uint32]
     }
 }
+
+Describe 'UI Automation selection helpers' {
+    It 'exports stable logical-selection inspection for packaged list tests' {
+        Get-Command Get-UiaSelectionState -ErrorAction Stop | Should -Not -BeNullOrEmpty
+    }
+}

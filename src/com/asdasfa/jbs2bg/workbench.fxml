@@ -9,9 +9,11 @@
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
 <?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.SeparatorMenuItem?>
 <?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
@@ -107,25 +109,133 @@
                                                         minWidth="160.0" prefWidth="220.0" spacing="8.0"
                                                         styleClass="placeholder-pane">
                                                     <children>
-                                                        <Label text="List" />
+                                                        <ScrollPane fx:id="templatesPrimaryScroll"
+                                                                accessibleText="Slider Preset management"
+                                                                fitToWidth="true" focusTraversable="false"
+                                                                hbarPolicy="NEVER"
+                                                                VBox.vgrow="ALWAYS">
+                                                            <content>
+                                                                <VBox fx:id="templatesPrimaryContent" spacing="6.0">
+                                                                    <children>
+                                                                <HBox fx:id="templatesInfoBar"
+                                                                        accessibleText="Templates notification"
+                                                                        alignment="CENTER_LEFT"
+                                                                        focusTraversable="false" managed="false"
+                                                                        spacing="6.0" styleClass="info-bar templates-info-bar"
+                                                                        visible="false">
+                                                                    <padding>
+                                                                        <Insets bottom="6.0" left="8.0" right="8.0" top="6.0" />
+                                                                    </padding>
+                                                                    <children>
+                                                                        <VBox spacing="2.0" HBox.hgrow="ALWAYS">
+                                                                            <children>
+                                                                                <Label fx:id="templatesInfoBarCue"
+                                                                                        styleClass="feedback-cue"
+                                                                                        text="Validation" />
+                                                                                <Label fx:id="templatesInfoBarMessage"
+                                                                                        text="Validation message"
+                                                                                        wrapText="true" />
+                                                                            </children>
+                                                                        </VBox>
+                                                                        <Button fx:id="dismissTemplatesInfoBarButton"
+                                                                                accessibleText="Dismiss Templates validation"
+                                                                                mnemonicParsing="true" text="_Dismiss" />
+                                                                    </children>
+                                                                </HBox>
+                                                                <Label labelFor="$sliderPresetFilter"
+                                                                        mnemonicParsing="true"
+                                                                        text="_Filter Slider Presets:" />
+                                                                <TextField fx:id="sliderPresetFilter"
+                                                                        accessibleText="Filter Slider Presets"
+                                                                        promptText="Filter by name" />
+                                                                <Label labelFor="$sliderPresetSort"
+                                                                        mnemonicParsing="true"
+                                                                        text="_Sort Slider Presets:" />
+                                                                <ComboBox fx:id="sliderPresetSort"
+                                                                        accessibleText="Slider Preset sort"
+                                                                        maxWidth="Infinity" />
+                                                                <ListView fx:id="sliderPresetList"
+                                                                        accessibleText="Slider Presets"
+                                                                        fixedCellSize="28.0"
+                                                                        focusTraversable="true"
+                                                                        VBox.vgrow="ALWAYS" />
+                                                                <Label labelFor="$sliderPresetNameInput"
+                                                                        mnemonicParsing="true"
+                                                                        text="_Slider Preset name:" />
+                                                                <TextField fx:id="sliderPresetNameInput"
+                                                                        accessibleText="Slider Preset name"
+                                                                        promptText="New or duplicate name" />
+                                                                <Button fx:id="createSliderPresetButton"
+                                                                        accessibleText="Create Slider Preset"
+                                                                        maxWidth="Infinity" mnemonicParsing="true"
+                                                                        text="_Create Slider Preset" />
+                                                                <Button fx:id="duplicateSliderPresetButton"
+                                                                        accessibleText="Duplicate Slider Preset"
+                                                                        maxWidth="Infinity" mnemonicParsing="true"
+                                                                        text="_Duplicate Slider Preset" />
+                                                                <Button fx:id="removeSliderPresetButton"
+                                                                        accessibleText="Remove Slider Preset"
+                                                                        maxWidth="Infinity" mnemonicParsing="true"
+                                                                        text="_Remove Slider Preset" />
+                                                                <Button fx:id="clearSliderPresetsButton"
+                                                                        accessibleText="Clear visible Slider Presets"
+                                                                        maxWidth="Infinity" mnemonicParsing="true"
+                                                                        text="C_lear visible Slider Presets" />
+                                                                    </children>
+                                                                </VBox>
+                                                            </content>
+                                                        </ScrollPane>
                                                         <Button fx:id="primaryContentButton" accessibleText="Templates primary content"
-                                                                maxWidth="Infinity" text="Focus Templates list" />
+                                                                managed="false" maxWidth="Infinity"
+                                                                text="Focus Templates list" visible="false" />
                                                     </children>
                                                 </VBox>
                                                 <StackPane fx:id="editorPane" accessibleText="Templates editor"
                                                         styleClass="placeholder-pane" HBox.hgrow="ALWAYS">
                                                     <children>
+                                                        <VBox fx:id="templatesEditorContent" alignment="TOP_LEFT"
+                                                                spacing="8.0">
+                                                            <children>
+                                                                <Label fx:id="templateEditorFocusTarget"
+                                                                        accessibleText="Templates editor"
+                                                                        focusTraversable="true" styleClass="title"
+                                                                        text="No Slider Preset selected" />
+                                                                <Label fx:id="templateProfileText"
+                                                                        accessibleText="Slider Preset profile"
+                                                                        text="Select a Slider Preset to browse its profile." />
+                                                                <Label fx:id="templateChoiceCountText"
+                                                                        accessibleText="Slider choice count"
+                                                                        text="No slider choices" />
+                                                                <Label text="Slider choice editing is delivered in the next Templates slice."
+                                                                        wrapText="true" />
+                                                            </children>
+                                                        </VBox>
                                                         <Button fx:id="editorButton" accessibleText="Templates editor"
-                                                                text="Templates Area — Workbench placeholder" />
+                                                                managed="false" text="Templates Area — Workbench placeholder"
+                                                                visible="false" />
                                                     </children>
                                                 </StackPane>
                                                 <VBox fx:id="inspectorPane" accessibleText="Templates inspector"
                                                         minWidth="180.0" prefWidth="240.0" spacing="8.0"
                                                         styleClass="placeholder-pane">
                                                     <children>
-                                                        <Label text="Inspector" />
+                                                        <VBox fx:id="templatesInspectorContent" spacing="8.0"
+                                                                VBox.vgrow="ALWAYS">
+                                                            <children>
+                                                                <Label text="Slider Preset inspector" />
+                                                                <Label fx:id="templateSelectionText"
+                                                                        accessibleText="Selected Slider Preset"
+                                                                        focusTraversable="true"
+                                                                        text="No Slider Preset selected" wrapText="true" />
+                                                                <Button fx:id="renameSliderPresetButton"
+                                                                        accessibleText="Rename selected Slider Preset"
+                                                                        maxWidth="Infinity" mnemonicParsing="true"
+                                                                        text="_Rename Slider Preset (F2)" />
+                                                            </children>
+                                                        </VBox>
                                                         <Button fx:id="inspectorButton" accessibleText="Templates inspector"
-                                                                maxWidth="Infinity" text="Focus Templates inspector" />
+                                                                managed="false" maxWidth="Infinity"
+                                                                text="Focus Templates inspector" visible="false" />
                                                     </children>
                                                 </VBox>
                                             </children>

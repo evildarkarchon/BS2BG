@@ -56,7 +56,7 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
             case SAVE -> WorkbenchProjectFlow.Response.save();
             case DISCARD -> WorkbenchProjectFlow.Response.discard();
             case CANCEL, CLOSE -> WorkbenchProjectFlow.Response.cancelled();
-            case COPY_DETAILS, RETRY -> throw new IllegalArgumentException(
+            case COPY_DETAILS, RETRY, REMOVE, CLEAR -> throw new IllegalArgumentException(
                     action + " is not a Project confirmation response");
         };
     }
@@ -86,6 +86,17 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
     public WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
         if (Objects.requireNonNull(spec, "spec").kind() != WorkbenchFeedback.DialogKind.FAILURE)
             throw new IllegalArgumentException("Only failure dialogs use the failure platform seam");
+        return JavaFxWorkbenchDialogs.show(spec, Objects.requireNonNull(owner, "owner"));
+    }
+
+    /**
+     * Shows a destructive feature confirmation through the same owned application-modal renderer.
+     */
+    @Override
+    public WorkbenchFeedback.DialogAction completeConfirmation(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+        if (Objects.requireNonNull(spec, "spec").kind()
+                != WorkbenchFeedback.DialogKind.DESTRUCTIVE_CONFIRMATION)
+            throw new IllegalArgumentException("Only destructive confirmations use this platform seam");
         return JavaFxWorkbenchDialogs.show(spec, Objects.requireNonNull(owner, "owner"));
     }
 

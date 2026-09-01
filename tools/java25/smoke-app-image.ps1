@@ -1,7 +1,8 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG Preview Workbench through its lifecycle and platform contract (issues #98-#101).
+    Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, and Templates contracts
+    (issues #98-#102).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
@@ -10,7 +11,8 @@
     Output drawer interaction, responsive/minimum geometry, live themes, High Contrast, reduced motion,
     accessibility semantics, notifications, typed dialogs, startup, New, Open, Save, Save As, Project recovery,
     centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
-    malformed/failed operation preservation, coordinated dirty shutdown, and bounded process exit.
+    malformed/failed operation preservation, complete pointer-free Slider Preset browsing and management,
+    coordinated dirty shutdown, and bounded process exit.
 #>
 [CmdletBinding()]
 param(
@@ -45,6 +47,7 @@ $cancellableProjectName = 'cancellable-project.jbs2bg'
 $firstSaveName = 'new-project.jbs2bg'
 $retrySaveName = 'save-retry.jbs2bg'
 $shutdownProjectName = 'shutdown-recovery.jbs2bg'
+$templatesManagedName = 'templates-managed.jbs2bg'
 $accessibilityState = Get-SystemAccessibilityPreferences
 
 $evidenceDir = Split-Path -Parent $EvidencePath
@@ -712,7 +715,12 @@ try {
         foreach ($entry in $areaShortcuts.GetEnumerator()) {
             Send-UiaKeys -ProcessId $script:app.Id -Keys $entry.Key -TimeoutSeconds $StepTimeoutSeconds
             Wait-AreaSelected -Name $entry.Value | Out-Null
-            Wait-FocusedControl -ControlType 'Button' -Name "$($entry.Value) primary content" | Out-Null
+            if ($entry.Value -ceq 'Templates') {
+                Wait-FocusedControl -ControlType 'List' -Name 'Slider Presets' | Out-Null
+            }
+            else {
+                Wait-FocusedControl -ControlType 'Button' -Name "$($entry.Value) primary content" | Out-Null
+            }
             $areaEvidence += $entry.Value
         }
 
@@ -835,6 +843,281 @@ try {
         'narrow overlays, semantic restoration, 800x600 minimum, breakpoint, and live-DPI geometry passed'
     }
 
+    Invoke-SmokeStep -Name 'browse-and-manage-slider-presets-without-pointer' -Action {
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $openedProjectName) -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $openedProjectName" | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^1' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Templates' | Out-Null
+
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        foreach ($presetName in @('CBBE Curvy', 'UUNP Athletic')) {
+            Wait-UiaElement -Root $presetList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name $presetName) `
+                -Description "Slider Preset '$presetName'" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        }
+        Set-SystemHighContrast -Enabled:$true
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
+            -Description 'populated Templates High Contrast state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $templatesHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-templates-high-contrast.png'
+        Save-Screenshot -Path $templatesHighContrastScreenshot
+        Set-SystemHighContrast -Enabled:$false
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
+            -Description 'Templates theme restored after High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $filterLabel = Find-OuterControl -ControlType 'Text' -Name 'Filter Slider Presets:'
+        $filter = Get-FollowingControl -Element $filterLabel -ControlType 'Edit'
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $filter -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $filter -Keys 'uunp' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic') `
+            -Description 'filtered UUNP Slider Preset' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        if ($null -ne (Find-UiaElement -Root $presetList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy'))) {
+            throw 'Slider Preset filtering left the hidden CBBE identity visible.'
+        }
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+
+        $nameLabel = Find-OuterControl -ControlType 'Text' -Name 'Slider Preset name:'
+        $nameInput = Get-FollowingControl -Element $nameLabel -ControlType 'Edit'
+        Send-UiaKeysToElement -Element $nameInput -Keys 'CBBE Curvy{TAB}{ENTER}' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $nameInput -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-ProjectDiagnostics -Description 'duplicate Slider Preset create validation' -Predicate {
+            param($value) $value.Contains('SLIDER_PRESET_NAME_DUPLICATE')
+        } | Out-Null
+        Send-UiaKeysToElement -Element $nameInput -Keys '^a{BACKSPACE}Delta Created{TAB}{ENTER}' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Delta Created') `
+            -Description 'created Slider Preset' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Send-UiaKeysToElement -Element $presetList -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        $cbbe = Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
+            -Description 'selected CBBE Slider Preset' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'CBBE identity selected by keyboard' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Get-UiaSelectionState -Element $cbbe) { $cbbe }
+        } | Out-Null
+        $templatesRail = Get-AreaButton -Name 'Templates'
+        $templatesRail.SetFocus()
+        foreach ($target in @(
+                @{ Role = 'List'; Name = 'Slider Presets' },
+                @{ Role = 'Text'; Name = 'Templates editor' },
+                @{ Role = 'Button'; Name = 'Rename Slider Preset CBBE Curvy' })) {
+            Send-UiaKeys -ProcessId $script:app.Id -Keys '{F6}' -TimeoutSeconds $StepTimeoutSeconds
+            Wait-FocusedControl -ControlType $target.Role -Name $target.Name | Out-Null
+        }
+        Send-UiaKeysToElement -Element $nameInput -Keys '^a{BACKSPACE}Curvy Copy{TAB}{TAB}{ENTER}' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        $copy = Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Curvy Copy') `
+            -Description 'duplicated Slider Preset' -TimeoutSeconds $StepTimeoutSeconds
+
+        Send-UiaKeysToElement -Element $presetList -Keys '{HOME}{DOWN}{F2}' -TimeoutSeconds $StepTimeoutSeconds
+        $renameRow = Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Rename Slider Preset Curvy Copy') `
+            -Description 'inline rename row' -TimeoutSeconds $StepTimeoutSeconds
+        $rename = Wait-UiaElement -Root $renameRow -Condition (
+            New-UiaCondition -ControlType 'Edit') -Description 'inline rename field' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $rename -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $rename -Keys '^a{BACKSPACE}Temporary Name{ESC}' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        $copy = Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Curvy Copy') `
+            -Description 'Esc-cancelled inline rename identity' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'Esc restores selection to cancelled rename identity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Get-UiaSelectionState -Element $copy) { $copy }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $presetList -Keys '{F2}' -TimeoutSeconds $StepTimeoutSeconds
+        $renameRow = Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Rename Slider Preset Curvy Copy') `
+            -Description 'reopened inline rename row' -TimeoutSeconds $StepTimeoutSeconds
+        $rename = Wait-UiaElement -Root $renameRow -Condition (
+            New-UiaCondition -ControlType 'Edit') -Description 'reopened inline rename field' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $rename -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $rename -Keys '^a{BACKSPACE}UUNP Athletic{ENTER}' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $rename -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-ProjectDiagnostics -Description 'duplicate inline rename validation' -Predicate {
+            param($value) $value.Contains('SLIDER_PRESET_NAME_DUPLICATE')
+        } | Out-Null
+        Send-UiaKeysToElement -Element $rename -Keys '^a{BACKSPACE}Curvy Copy Renamed{ENTER}' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        $renamed = Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Curvy Copy Renamed') `
+            -Description 'renamed Slider Preset identity' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'renamed identity retains logical selection' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Get-UiaSelectionState -Element $renamed) { $renamed }
+        } | Out-Null
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $filter -Keys 'uunp' -TimeoutSeconds $StepTimeoutSeconds
+        $remove = Find-OuterControl -ControlType 'Button' -Name 'Remove Slider Preset'
+        Wait-UiaCondition -Description 'filter-hidden selection clears management target' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (-not $remove.Current.IsEnabled) { $true }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+        foreach ($identityName in @('CBBE Curvy', 'Curvy Copy Renamed')) {
+            $identity = Wait-UiaElement -Root $presetList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name $identityName) `
+                -Description "restored visible identity '$identityName'" -TimeoutSeconds $StepTimeoutSeconds
+            if (Get-UiaSelectionState -Element $identity) {
+                throw "Clearing the filter silently restored Slider Preset '$($identity.Current.Name)'."
+            }
+        }
+
+        $sortLabel = Find-OuterControl -ControlType 'Text' -Name 'Sort Slider Presets:'
+        $sort = Get-FollowingControl -Element $sortLabel -ControlType 'ComboBox'
+        Send-UiaKeysToElement -Element $sort -Keys '{HOME}{DOWN}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $presetList -Keys 'c' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'type-ahead first visible C match' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $presetList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name 'Curvy Copy Renamed')
+            if ($null -ne $candidate -and (Get-UiaSelectionState -Element $candidate)) { $candidate }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $presetList -Keys 'c' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'repeated-character type-ahead cycle' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $presetList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy')
+            if ($null -ne $candidate -and (Get-UiaSelectionState -Element $candidate)) { $candidate }
+        } | Out-Null
+        Start-Sleep -Milliseconds 800
+        Send-UiaKeysToElement -Element $presetList -Keys 'u' -TimeoutSeconds $StepTimeoutSeconds
+        $uunp = Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic') `
+            -Description 'timeout-reset UUNP type-ahead target' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'type-ahead timeout resets prefix' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Get-UiaSelectionState -Element $uunp) { $uunp }
+        } | Out-Null
+
+        Send-UiaKeysToElement -Element $remove -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Cancel'
+        Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic') `
+            -Description 'Cancel preserves removed identity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $remove -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Remove'
+        Wait-UiaCondition -Description 'confirmed Slider Preset removal' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($null -eq (Find-UiaElement -Root $presetList -Condition (
+                    New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic'))) { $true }
+        } | Out-Null
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}curvy copy renamed' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        $clear = Find-OuterControl -ControlType 'Button' -Name 'Clear visible Slider Presets'
+        Send-UiaKeysToElement -Element $clear -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Cancel'
+        Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Curvy Copy Renamed') `
+            -Description 'Cancel preserves visible clear scope' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $clear -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Clear'
+        Wait-UiaCondition -Description 'confirmed filtered Slider Preset clearing' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $remaining = Find-UiaElements -Root $presetList -Condition (New-UiaCondition -ControlType 'ListItem')
+            if (@($remaining).Count -eq 0) { $true }
+        } | Out-Null
+
+        $managedPath = Join-Path $workDir $templatesManagedName
+        Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
+        Complete-FileDialog -Title $saveDialogTitle -Path $managedPath -ConfirmButton 'Save'
+        Wait-MainWindow -Title "$applicationTitle - $templatesManagedName" | Out-Null
+        $managed = Get-Content -LiteralPath $managedPath -Raw | ConvertFrom-Json
+        if ((@($managed.SliderPresets.PSObject.Properties.Name) -join '|') -cne 'CBBE Curvy|Delta Created') {
+            throw 'Filtered clear removed a hidden Slider Preset or retained a visible Slider Preset.'
+        }
+        if ((@($managed.CustomMorphTargets.'All|Female'.SliderPresets) -join '|') -cne 'CBBE Curvy') {
+            throw 'Slider Preset management did not publish the complete Custom Morph Target cascade.'
+        }
+        if (@($managed.MorphedNPCs.Lydia.SliderPresets).Count -ne 0) {
+            throw 'Slider Preset removal did not clear the NPC Morph Assignment relationship.'
+        }
+
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path $managedPath -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $templatesManagedName" | Out-Null
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
+            -Description 'saved and reopened Slider Preset identity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $unneededListScroll = Find-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ScrollBar')
+        if ($null -ne $unneededListScroll -and -not $unneededListScroll.Current.IsOffscreen) {
+            throw 'A one-row Slider Preset list exposed an unnecessary inner scrollbar.'
+        }
+        Send-UiaKeysToElement -Element $presetList -Keys 'c' -TimeoutSeconds $StepTimeoutSeconds
+        $reopenedCbbe = Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
+            -Description 'reopened CBBE type-ahead target' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'reopened CBBE identity selected before responsive checks' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Get-UiaSelectionState -Element $reopenedCbbe) { $reopenedCbbe }
+        } | Out-Null
+        $templatesNarrow = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        $filterLabel = Find-OuterControl -ControlType 'Text' -Name 'Filter Slider Presets:'
+        $filter = Get-FollowingControl -Element $filterLabel -ControlType 'Edit'
+        Wait-UiaKeyboardFocus -Element $filter -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $templatesNarrow = Get-UiaWindowMetrics -Window $script:mainWindow
+        $templatesSurface = Find-OuterControl -ControlType 'Pane' -Name 'Slider Preset management'
+        # JavaFX reports stale descendant bounds after overlay reparenting; the named scroll boundary plus focus is
+        # the reliable clipping/reachability evidence for this surface.
+        Assert-ControlInsideClient -Element $templatesSurface -Metrics $templatesNarrow
+        $templatesNarrowScreenshot = Join-Path $diagnosticsDir 'workbench-templates-narrow.png'
+        Save-Screenshot -Path $templatesNarrowScreenshot
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FocusedControl -ControlType 'Button' -Name 'Rename Slider Preset CBBE Curvy' | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+
+        $templatesMinimum = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 700 -LogicalHeight 500 `
+            -AllowMinimumClamp -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        $filterLabel = Find-OuterControl -ControlType 'Text' -Name 'Filter Slider Presets:'
+        $filter = Get-FollowingControl -Element $filterLabel -ControlType 'Edit'
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        $clear = Find-OuterControl -ControlType 'Button' -Name 'Clear visible Slider Presets'
+        Wait-UiaKeyboardFocus -Element $filter -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $templatesMinimum = Get-UiaWindowMetrics -Window $script:mainWindow
+        $templatesSurface = Find-OuterControl -ControlType 'Pane' -Name 'Slider Preset management'
+        Assert-ControlInsideClient -Element $templatesSurface -Metrics $templatesMinimum
+        $clear.SetFocus()
+        Wait-UiaKeyboardFocus -Element $clear -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        if ($clear.Current.IsOffscreen) { throw 'Clear visible Slider Presets is offscreen at the minimum geometry.' }
+        Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1300 -LogicalHeight 800 `
+            -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+
+        Get-UiaTree -Element $script:mainWindow |
+            Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-workbench-templates.txt') -Encoding utf8
+        $observations['templatesManagement'] = [ordered]@{
+            browsed = @('CBBE Curvy', 'UUNP Athletic')
+            createdRejected = 'SLIDER_PRESET_NAME_DUPLICATE'
+            created = 'Delta Created'
+            duplicated = 'Curvy Copy'
+            renameCancelled = 'Temporary Name'
+            renamed = 'Curvy Copy Renamed'
+            removed = 'UUNP Athletic'
+            clearVisiblePreserved = 'CBBE Curvy'
+            savedAndReopened = $templatesManagedName
+        }
+        'pointer-free browse, validation, duplicate, inline rename, remove, filtered clear, cascade, and reopen passed'
+    }
+
     Invoke-SmokeStep -Name 'save-as-new-project' -Action {
         $target = Join-Path $workDir $firstSaveName
         Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
@@ -951,7 +1234,12 @@ try {
         Choose-Confirmation -ButtonName 'Retry'
         Wait-MainWindow -Title "$applicationTitle - $malformedProjectName" | Out-Null
         $retryCondition = New-UiaCondition -ControlType 'ListItem' -Name 'Success — Open Project — Completed: Project opened.'
-        $retryActivity = Wait-UiaElement -Root $script:mainWindow -Condition $retryCondition -Description 'durable linked Retry Activity record' -TimeoutSeconds $StepTimeoutSeconds
+        $retryActivity = Wait-UiaCondition -Description 'durable linked Retry Activity record' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            foreach ($candidate in @(Find-UiaElements -Root $script:mainWindow -Condition $retryCondition)) {
+                if ($candidate.Current.HelpText.Contains('Retry of attempt:')) { return $candidate }
+            }
+        }
         foreach ($evidence in @('Retry of attempt:', $malformedProjectName,
                 'Effects committed: Project published', 'Diagnostics: none')) {
             if (-not $retryActivity.Current.HelpText.Contains($evidence)) {
@@ -1147,7 +1435,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/10'
+        schema = 'bs2bg.windows-app-image-smoke/11'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion
@@ -1179,6 +1467,9 @@ finally {
             nativeAccessWarnings = $restricted
             workbenchTree = 'smoke-diagnostics/uia-tree-workbench.txt'
             responsiveWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-responsive.txt'
+            templatesWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-templates.txt'
+            templatesNarrowScreenshot = 'smoke-diagnostics/workbench-templates-narrow.png'
+            templatesHighContrastScreenshot = 'smoke-diagnostics/workbench-templates-high-contrast.png'
             highContrastScreenshot = 'smoke-diagnostics/workbench-high-contrast.png'
             reducedMotionScreenshot = 'smoke-diagnostics/workbench-reduced-motion.png'
         }

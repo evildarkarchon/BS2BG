@@ -8,7 +8,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
+import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
+import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 import javafx.application.Platform;
@@ -22,8 +25,11 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
@@ -43,6 +49,8 @@ import javafx.stage.WindowEvent;
  * JavaFX adapter for the Workbench root graph; Project and navigation state remain JavaFX-independent.
  */
 public final class WorkbenchController {
+    private static final double SLIDER_PRESET_CELL_HEIGHT = 28.0;
+    private static final int MAX_VISIBLE_SLIDER_PRESET_ROWS = 8;
 
     private final WorkbenchNavigation navigation = new WorkbenchNavigation();
     private final WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.systemUTC());
@@ -111,11 +119,55 @@ public final class WorkbenchController {
     @FXML
     private StackPane editorPane;
     @FXML
+    private StackPane paneHost;
+    @FXML
     private VBox inspectorPane;
     @FXML
     private StackPane overlayLayer;
     @FXML
     private Button primaryContentButton;
+    @FXML
+    private ScrollPane templatesPrimaryScroll;
+    @FXML
+    private VBox templatesPrimaryContent;
+    @FXML
+    private HBox templatesInfoBar;
+    @FXML
+    private Label templatesInfoBarCue;
+    @FXML
+    private Label templatesInfoBarMessage;
+    @FXML
+    private Button dismissTemplatesInfoBarButton;
+    @FXML
+    private TextField sliderPresetFilter;
+    @FXML
+    private ListView<SliderPresetSnapshot> sliderPresetList;
+    @FXML
+    private TextField sliderPresetNameInput;
+    @FXML
+    private Button createSliderPresetButton;
+    @FXML
+    private ComboBox<TemplatesFeature.SortOrder> sliderPresetSort;
+    @FXML
+    private Button duplicateSliderPresetButton;
+    @FXML
+    private Button removeSliderPresetButton;
+    @FXML
+    private Button clearSliderPresetsButton;
+    @FXML
+    private VBox templatesEditorContent;
+    @FXML
+    private Label templateEditorFocusTarget;
+    @FXML
+    private Label templateProfileText;
+    @FXML
+    private Label templateChoiceCountText;
+    @FXML
+    private VBox templatesInspectorContent;
+    @FXML
+    private Label templateSelectionText;
+    @FXML
+    private Button renameSliderPresetButton;
     @FXML
     private Button editorButton;
     @FXML
@@ -134,6 +186,7 @@ public final class WorkbenchController {
     private TextArea outputText;
     private WorkbenchNavigation.Frame navigationFrame = navigation.currentFrame();
     private WorkbenchProjectFlow projectFlow;
+    private TemplatesFeature templatesFeature;
     private Stage stage;
     private WorkbenchPlatform platform;
     private JavaFxWorkbenchAppearance appearanceAdapter;
@@ -143,6 +196,12 @@ public final class WorkbenchController {
     private JobCoordinator.Subscription jobSubscription;
     private long renderedTerminalAttemptId;
     private boolean closeAfterActiveJob;
+    private boolean renderingTemplates;
+    private TextField activeRenameField;
+    private SliderPresetCell activeRenameCell;
+    private boolean templatesMutationsBlocked;
+    private boolean resetTemplatesOnNextProjectFrame;
+    private boolean sliderPresetListInitialized;
 
     /**
      * Pairs one decorative vector with the text label and exposes its keyboard cue as help text.
@@ -291,9 +350,11 @@ public final class WorkbenchController {
         if (projectFlow != null)
             throw new IllegalStateException("WorkbenchController is already attached");
         projectFlow = Objects.requireNonNull(flow, "flow");
+        templatesFeature = new TemplatesFeature(projectFlow, Clock.systemUTC());
         stage = Objects.requireNonNull(ownerStage, "ownerStage");
         platform = Objects.requireNonNull(platformAdapter, "platformAdapter");
         configureProjectCommands();
+        configureTemplates();
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
@@ -313,6 +374,7 @@ public final class WorkbenchController {
         renderedProjectSequence = projectFlow.frame().sequence();
         renderNavigation(navigationFrame);
         render(projectFlow.frame());
+        renderTemplates(templatesFeature.frame());
         renderFeedback(feedback.frame());
         if (workbenchRoot.getWidth() > 0.0)
             applyNavigation(navigation.resize(workbenchRoot.getWidth(), currentSemanticFocus()));
@@ -352,6 +414,330 @@ public final class WorkbenchController {
     }
 
     /**
+     * Translates Templates controls into feature-specific typed intents and renders only committed immutable frames.
+     */
+    private void configureTemplates() {
+        sliderPresetSort.getItems().setAll(TemplatesFeature.SortOrder.values());
+        sliderPresetSort.setValue(templatesFeature.frame().sortOrder());
+        configureSliderPresetList();
+        sliderPresetFilter.textProperty().addListener((observable, previous, current) -> {
+            if (!renderingTemplates)
+                dispatchTemplates(new TemplatesFeature.ChangeFilter(current));
+        });
+        sliderPresetSort.setOnAction(event -> {
+            if (!renderingTemplates && sliderPresetSort.getValue() != null)
+                dispatchTemplates(new TemplatesFeature.ChangeSort(sliderPresetSort.getValue()));
+        });
+        createSliderPresetButton.setOnAction(event ->
+                dispatchTemplates(new TemplatesFeature.Create(sliderPresetNameInput.getText())));
+        duplicateSliderPresetButton.setOnAction(event ->
+                dispatchTemplates(new TemplatesFeature.Duplicate(sliderPresetNameInput.getText())));
+        renameSliderPresetButton.setOnAction(event ->
+                dispatchTemplates(new TemplatesFeature.BeginRename()));
+        removeSliderPresetButton.setOnAction(event ->
+                dispatchTemplates(new TemplatesFeature.RequestRemove()));
+        clearSliderPresetsButton.setOnAction(event ->
+                dispatchTemplates(new TemplatesFeature.RequestClearVisible()));
+        dismissTemplatesInfoBarButton.setOnAction(event ->
+                dispatchTemplates(new TemplatesFeature.DismissDiagnostics()));
+    }
+
+    /**
+     * Configures the current Slider Preset ListView instance; the UIA empty/refill workaround may replace that node.
+     */
+    private void configureSliderPresetList() {
+        sliderPresetList.setEditable(true);
+        sliderPresetList.setFixedCellSize(SLIDER_PRESET_CELL_HEIGHT);
+        sliderPresetList.setCellFactory(list -> new SliderPresetCell());
+        sliderPresetList.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
+            if (renderingTemplates)
+                return;
+            dispatchTemplates(selected == null
+                    ? new TemplatesFeature.ClearSelection()
+                    : new TemplatesFeature.Select(NameIdentity.of(selected.getName())));
+        });
+        sliderPresetList.addEventFilter(KeyEvent.KEY_TYPED, event -> {
+            if (!(event.getTarget() instanceof TextInputControl) && event.getCharacter().length() == 1
+                    && !event.isControlDown() && !event.isAltDown()) {
+                dispatchTemplates(new TemplatesFeature.TypeAhead(event.getCharacter().charAt(0)));
+                event.consume();
+            }
+        });
+    }
+
+    /**
+     * Commits a typed Templates update before rendering Project chrome, feature controls, or later platform effects.
+     */
+    private void dispatchTemplates(TemplatesFeature.Intent intent) {
+        if (templatesMutationsBlocked && isTemplatesMutation(intent))
+            return;
+        TemplatesFeature.Update update = templatesFeature.dispatch(Objects.requireNonNull(intent, "intent"));
+        renderTemplatesUpdate(update);
+        update.effect().ifPresent(this::completeTemplatesEffect);
+        publishTemplatesOutcome(intent, update);
+        if ((intent instanceof TemplatesFeature.CommitRename && update.accepted())
+                || intent instanceof TemplatesFeature.CancelRename) {
+            sliderPresetList.requestFocus();
+            Platform.runLater(sliderPresetList::requestFocus);
+        }
+    }
+
+    /**
+     * Distinguishes Project mutations from local browsing so active jobs block writes without freezing the surface.
+     */
+    private static boolean isTemplatesMutation(TemplatesFeature.Intent intent) {
+        return intent instanceof TemplatesFeature.Create
+                || intent instanceof TemplatesFeature.Duplicate
+                || intent instanceof TemplatesFeature.BeginRename
+                || intent instanceof TemplatesFeature.ChangeRename
+                || intent instanceof TemplatesFeature.CommitRename
+                || intent instanceof TemplatesFeature.RequestRemove
+                || intent instanceof TemplatesFeature.RequestClearVisible;
+    }
+
+    /**
+     * Renders one feature update and refreshes Project chrome without replaying generic lifecycle feedback.
+     */
+    private void renderTemplatesUpdate(TemplatesFeature.Update update) {
+        if (update.frame().projectSequence() != renderedProjectSequence) {
+            // Templates owns task wording and inline validation, so suppress the lifecycle-only generic projection.
+            renderedProjectSequence = update.frame().projectSequence();
+            render(projectFlow.frame());
+        }
+        renderTemplates(update.frame());
+    }
+
+    /**
+     * Publishes a destructive Templates dialog before realizing it, then returns the matching action as an ordinary
+     * tokenized feature response.
+     */
+    private void completeTemplatesEffect(TemplatesFeature.Effect effect) {
+        WorkbenchFeedback.DialogAction destructiveAction = effect.kind()
+                == TemplatesFeature.EffectKind.CONFIRM_REMOVE
+                ? WorkbenchFeedback.DialogAction.REMOVE
+                : WorkbenchFeedback.DialogAction.CLEAR;
+        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.destructiveAction(
+                effect.title(), effect.message(), destructiveAction);
+        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
+        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
+        renderFeedback(pendingFrame);
+        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
+        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
+                pending.token(), action)).frame());
+        boolean confirmed = action == destructiveAction;
+        TemplatesFeature.Update response = templatesFeature.respond(effect.token(), confirmed);
+        renderTemplatesUpdate(response);
+        if (confirmed)
+            publishTemplatesMutation(effect.kind() == TemplatesFeature.EffectKind.CONFIRM_REMOVE
+                    ? "Remove Slider Preset" : "Clear visible Slider Presets", response);
+    }
+
+    /**
+     * Routes feature validation and mutation outcomes into inline InfoBar, Activity, and status projections.
+     */
+    private void publishTemplatesOutcome(TemplatesFeature.Intent intent, TemplatesFeature.Update update) {
+        if (!update.frame().diagnostics().isEmpty()) {
+            String message = ProjectDiagnosticFormatter.format(update.frame().diagnostics());
+            renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+                    "Templates validation", WorkbenchFeedback.Severity.VALIDATION, message,
+                    WorkbenchFeedback.Disposition.FAILED)));
+            if (intent instanceof TemplatesFeature.Create || intent instanceof TemplatesFeature.Duplicate) {
+                sliderPresetNameInput.requestFocus();
+                Platform.runLater(sliderPresetNameInput::requestFocus);
+            }
+            return;
+        }
+        if (!update.accepted() || update.effect().isPresent())
+            return;
+        String operation = switch (intent) {
+            case TemplatesFeature.Create ignored -> "Create Slider Preset";
+            case TemplatesFeature.Duplicate ignored -> "Duplicate Slider Preset";
+            case TemplatesFeature.CommitRename ignored -> "Rename Slider Preset";
+            default -> null;
+        };
+        if (operation != null)
+            publishTemplatesMutation(operation, update);
+    }
+
+    /**
+     * Publishes one successful Templates mutation through the shared durable feedback path.
+     */
+    private void publishTemplatesMutation(String operation, TemplatesFeature.Update update) {
+        if (!update.accepted())
+            return;
+        renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(operation,
+                WorkbenchFeedback.Severity.SUCCESS, operation + " completed.",
+                WorkbenchFeedback.Disposition.COMPLETED)));
+    }
+
+    /**
+     * Renders one immutable Templates frame while suppressing control listeners from becoming a second command path.
+     */
+    private void renderTemplates(TemplatesFeature.Frame frame) {
+        renderingTemplates = true;
+        try {
+            sliderPresetFilter.setText(frame.filterText());
+            sliderPresetSort.setValue(frame.sortOrder());
+            reconcileSliderPresetItems(frame.visiblePresets());
+            sizeSliderPresetList(frame.visiblePresets().size());
+            reconcileSliderPresetSelection(frame.selection());
+            boolean validationVisible = !frame.diagnostics().isEmpty();
+            templatesInfoBar.setManaged(validationVisible);
+            templatesInfoBar.setVisible(validationVisible);
+            if (validationVisible) {
+                String message = ProjectDiagnosticFormatter.format(frame.diagnostics());
+                templatesInfoBarCue.setText("Validation");
+                templatesInfoBarMessage.setText(message);
+                templatesInfoBar.setAccessibleHelp("Validation: " + message);
+                setSeverityStyle(templatesInfoBar, WorkbenchFeedback.Severity.VALIDATION);
+            }
+            boolean selected = frame.selection().isPresent();
+            createSliderPresetButton.setDisable(templatesMutationsBlocked);
+            duplicateSliderPresetButton.setDisable(templatesMutationsBlocked || !selected);
+            renameSliderPresetButton.setDisable(templatesMutationsBlocked || !selected);
+            removeSliderPresetButton.setDisable(templatesMutationsBlocked || !selected);
+            clearSliderPresetsButton.setDisable(templatesMutationsBlocked || frame.visiblePresets().isEmpty());
+            Optional<SliderPresetSnapshot> selectedPreset = frame.selection().flatMap(identity ->
+                    frame.visiblePresets().stream()
+                            .filter(candidate -> NameIdentity.of(candidate.getName()).equals(identity))
+                            .findFirst());
+            selectedPreset.ifPresentOrElse(preset -> {
+                templateEditorFocusTarget.setText(preset.getName());
+                templateProfileText.setText(preset.isUunp() ? "UUNP profile" : "Standard profile");
+                templateChoiceCountText.setText(preset.getSliderChoices().size()
+                        + (preset.getSliderChoices().size() == 1 ? " slider choice" : " slider choices"));
+                templateSelectionText.setText("Selected: " + preset.getName());
+                renameSliderPresetButton.setAccessibleText("Rename Slider Preset " + preset.getName());
+            }, () -> {
+                templateEditorFocusTarget.setText("No Slider Preset selected");
+                templateProfileText.setText("Select a Slider Preset to browse its profile.");
+                templateChoiceCountText.setText("No slider choices");
+                templateSelectionText.setText("No Slider Preset selected");
+                renameSliderPresetButton.setAccessibleText("Rename selected Slider Preset");
+            });
+            synchronizeRenameEditor(frame.rename());
+        } finally {
+            renderingTemplates = false;
+        }
+    }
+
+    /**
+     * Avoids replacing an unchanged ListView collection because JavaFX 25 UI Automation can drop every virtualized
+     * cell after a no-op empty/refill notification sequence. Changed membership or values still replace atomically.
+     */
+    private void reconcileSliderPresetItems(List<SliderPresetSnapshot> visiblePresets) {
+        boolean refill = sliderPresetListInitialized && sliderPresetList.getItems().isEmpty()
+                && !visiblePresets.isEmpty();
+        if (refill)
+            replaceEmptySliderPresetList();
+        if (!List.copyOf(sliderPresetList.getItems()).equals(visiblePresets))
+            sliderPresetList.getItems().setAll(visiblePresets);
+        sliderPresetListInitialized = true;
+    }
+
+    /**
+     * Shows only the rows that exist (up to the accepted cap) so a short catalog does not expose a pointless inner
+     * scrollbar; larger catalogs scroll within the list while the management pane handles minimum-height overflow.
+     */
+    private void sizeSliderPresetList(int visibleCount) {
+        int rows = Math.max(1, Math.min(MAX_VISIBLE_SLIDER_PRESET_ROWS, visibleCount));
+        double height = rows * SLIDER_PRESET_CELL_HEIGHT + 2.0;
+        sliderPresetList.setMinHeight(height);
+        sliderPresetList.setPrefHeight(height);
+        sliderPresetList.setMaxHeight(height);
+    }
+
+    /**
+     * Replaces only an empty ListView before refill because JavaFX 25's Windows UIA provider otherwise keeps an empty
+     * virtualized accessibility subtree for the lifetime of that control.
+     */
+    private void replaceEmptySliderPresetList() {
+        ListView<SliderPresetSnapshot> replacement = new ListView<>();
+        replacement.setId("sliderPresetList");
+        replacement.setAccessibleText("Slider Presets");
+        replacement.setFocusTraversable(true);
+        VBox.setVgrow(replacement, javafx.scene.layout.Priority.ALWAYS);
+        int index = templatesPrimaryContent.getChildren().indexOf(sliderPresetList);
+        if (index < 0)
+            throw new IllegalStateException("Templates primary content no longer owns the Slider Preset list");
+        templatesPrimaryContent.getChildren().set(index, replacement);
+        sliderPresetList = replacement;
+        activeRenameCell = null;
+        activeRenameField = null;
+        configureSliderPresetList();
+    }
+
+    /**
+     * Preserves the current focus/caret when the logical selection already matches the immutable feature frame.
+     */
+    private void reconcileSliderPresetSelection(Optional<NameIdentity> selection) {
+        SliderPresetSnapshot selected = sliderPresetList.getSelectionModel().getSelectedItem();
+        Optional<NameIdentity> current = selected == null
+                ? Optional.empty()
+                : Optional.of(NameIdentity.of(selected.getName()));
+        if (current.equals(selection))
+            return;
+        sliderPresetList.getSelectionModel().clearSelection();
+        selection.ifPresent(identity -> {
+            for (int index = 0; index < sliderPresetList.getItems().size(); index++) {
+                SliderPresetSnapshot candidate = sliderPresetList.getItems().get(index);
+                if (NameIdentity.of(candidate.getName()).equals(identity)) {
+                    sliderPresetList.getSelectionModel().select(index);
+                    break;
+                }
+            }
+        });
+    }
+
+    /**
+     * Uses ListView's editing lifecycle rather than refresh(), which drops JavaFX 25 UIA children after rejected edits.
+     */
+    private void synchronizeRenameEditor(Optional<TemplatesFeature.RenameState> rename) {
+        if (rename.isEmpty()) {
+            if (sliderPresetList.getEditingIndex() >= 0)
+                sliderPresetList.edit(-1);
+            return;
+        }
+        NameIdentity identity = rename.orElseThrow().identity();
+        int renameIndex = -1;
+        for (int index = 0; index < sliderPresetList.getItems().size(); index++) {
+            if (NameIdentity.of(sliderPresetList.getItems().get(index).getName()).equals(identity)) {
+                renameIndex = index;
+                break;
+            }
+        }
+        if (renameIndex < 0) {
+            sliderPresetList.edit(-1);
+            return;
+        }
+        if (sliderPresetList.getEditingIndex() != renameIndex)
+            sliderPresetList.edit(renameIndex);
+        if (activeRenameCell != null)
+            activeRenameCell.renderRename(rename.orElseThrow());
+    }
+
+    /**
+     * @return current immutable Templates frame for package-local adapter verification
+     */
+    TemplatesFeature.Frame templatesFrame() {
+        return templatesFeature.frame();
+    }
+
+    /**
+     * @return the currently materialized inline rename field, when its virtualized row is visible
+     */
+    Optional<TextField> activeRenameField() {
+        return Optional.ofNullable(activeRenameField);
+    }
+
+    /**
+     * @return current Slider Preset ListView node, including an accessibility-driven empty/refill replacement
+     */
+    ListView<SliderPresetSnapshot> sliderPresetListNode() {
+        return sliderPresetList;
+    }
+
+    /**
      * Connects rail gestures, accepted keyboard commands, and responsive width changes to typed navigation.
      */
     private void configureNavigation() {
@@ -376,6 +762,11 @@ public final class WorkbenchController {
             if (newWidth.doubleValue() > 0.0)
                 applyNavigation(navigation.resize(newWidth.doubleValue(), currentSemanticFocus()));
         });
+        Rectangle overlayClip = new Rectangle();
+        overlayClip.widthProperty().bind(paneHost.widthProperty());
+        overlayClip.heightProperty().bind(paneHost.heightProperty());
+        // Oversized narrow panes must never paint across the Area header or InfoBar above paneHost.
+        overlayLayer.setClip(overlayClip);
     }
 
     /**
@@ -518,6 +909,26 @@ public final class WorkbenchController {
      * Translates one accepted key gesture into a typed navigation transition.
      */
     private void handleNavigationKey(KeyEvent event) {
+        if (navigationFrame.activeArea() == WorkbenchNavigation.Area.TEMPLATES) {
+            if (event.isControlDown() && event.getCode() == KeyCode.K) {
+                if (navigationFrame.narrowMode())
+                    applyNavigation(navigation.openPrimaryContent(currentSemanticFocus()));
+                sliderPresetFilter.requestFocus();
+                Platform.runLater(sliderPresetFilter::requestFocus);
+                event.consume();
+                return;
+            }
+            if (event.getCode() == KeyCode.F2) {
+                dispatchTemplates(new TemplatesFeature.BeginRename());
+                event.consume();
+                return;
+            }
+            if (event.getCode() == KeyCode.ESCAPE && templatesFeature.frame().rename().isPresent()) {
+                dispatchTemplates(new TemplatesFeature.CancelRename());
+                event.consume();
+                return;
+            }
+        }
         WorkbenchNavigation.Transition transition = null;
         if (event.isControlDown()) {
             transition = switch (event.getCode()) {
@@ -547,6 +958,11 @@ public final class WorkbenchController {
         }
         if (transition != null) {
             applyNavigation(transition);
+            event.consume();
+        } else if (event.getCode() == KeyCode.ESCAPE
+                && navigationFrame.activeArea() == WorkbenchNavigation.Area.TEMPLATES
+                && templatesFeature.frame().selection().isPresent()) {
+            dispatchTemplates(new TemplatesFeature.ClearSelection());
             event.consume();
         }
     }
@@ -578,6 +994,19 @@ public final class WorkbenchController {
         outputAreaButton.setSelected(frame.outputDrawerVisible());
 
         String area = frame.activeArea().displayName();
+        boolean templatesActive = frame.activeArea() == WorkbenchNavigation.Area.TEMPLATES;
+        templatesPrimaryScroll.setManaged(templatesActive);
+        templatesPrimaryScroll.setVisible(templatesActive);
+        templatesEditorContent.setManaged(templatesActive);
+        templatesEditorContent.setVisible(templatesActive);
+        templatesInspectorContent.setManaged(templatesActive);
+        templatesInspectorContent.setVisible(templatesActive);
+        primaryContentButton.setManaged(!templatesActive);
+        primaryContentButton.setVisible(!templatesActive);
+        editorButton.setManaged(!templatesActive);
+        editorButton.setVisible(!templatesActive);
+        inspectorButton.setManaged(!templatesActive);
+        inspectorButton.setVisible(!templatesActive);
         areaTitle.setText(area);
         areaTitle.setAccessibleText(area + " Area");
         primaryPane.setAccessibleText(area + " primary content");
@@ -637,7 +1066,14 @@ public final class WorkbenchController {
     private WorkbenchNavigation.FocusTarget currentSemanticFocus() {
         Node focusOwner = stage != null && stage.getScene() != null ? stage.getScene().getFocusOwner() : null;
         WorkbenchNavigation.Landmark landmark;
-        if (focusOwner == primaryContentButton) {
+        if (focusOwner == sliderPresetFilter || focusOwner == sliderPresetList
+                || focusOwner == sliderPresetNameInput) {
+            landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
+        } else if (focusOwner == templateEditorFocusTarget) {
+            landmark = WorkbenchNavigation.Landmark.EDITOR;
+        } else if (focusOwner == renameSliderPresetButton || focusOwner == templateSelectionText) {
+            landmark = WorkbenchNavigation.Landmark.INSPECTOR;
+        } else if (focusOwner == primaryContentButton) {
             landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
         } else if (focusOwner == editorButton) {
             landmark = WorkbenchNavigation.Landmark.EDITOR;
@@ -681,10 +1117,14 @@ public final class WorkbenchController {
         return switch (target.landmark()) {
             case RAIL -> areaButton(target.area());
             case PRIMARY_LAUNCHER -> showPrimaryOverlayButton;
-            case PRIMARY_CONTENT -> primaryContentButton;
-            case EDITOR -> editorButton;
+            case PRIMARY_CONTENT -> target.area() == WorkbenchNavigation.Area.TEMPLATES
+                    ? sliderPresetList : primaryContentButton;
+            case EDITOR -> target.area() == WorkbenchNavigation.Area.TEMPLATES
+                    ? templateEditorFocusTarget : editorButton;
             case INSPECTOR_LAUNCHER -> showInspectorOverlayButton;
-            case INSPECTOR -> inspectorButton;
+            case INSPECTOR -> target.area() == WorkbenchNavigation.Area.TEMPLATES
+                    ? (renameSliderPresetButton.isDisabled() ? templateSelectionText : renameSliderPresetButton)
+                    : inspectorButton;
             case OUTPUT_LAUNCHER -> outputAreaButton;
             case OUTPUT -> outputFocusTarget;
             case ACTIVITY -> activityList;
@@ -771,6 +1211,13 @@ public final class WorkbenchController {
         stage.setTitle(frame.title());
         projectStatusText.setText(projectStatus(frame));
         diagnosticsText.setText(ProjectDiagnosticFormatter.format(frame.diagnostics()));
+        if (templatesFeature != null && templatesFeature.frame().projectSequence() != frame.sequence()) {
+            boolean resetSelection = activeOperation == WorkbenchProjectFlow.Intent.NEW
+                    || activeOperation == WorkbenchProjectFlow.Intent.OPEN
+                    || resetTemplatesOnNextProjectFrame;
+            renderTemplates(templatesFeature.acceptProjectFrame(frame, resetSelection).frame());
+            resetTemplatesOnNextProjectFrame = false;
+        }
         if (!frame.closed() && frame.sequence() != renderedProjectSequence) {
             renderedProjectSequence = frame.sequence();
             publishProjectFeedback(frame);
@@ -783,10 +1230,12 @@ public final class WorkbenchController {
     private void renderJobFrame(JobCoordinator.Frame frame) {
         Objects.requireNonNull(frame, "frame");
         boolean blocked = frame.active() || frame.shutdownRequested();
+        templatesMutationsBlocked = blocked;
         newProjectMenuItem.setDisable(blocked);
         openProjectMenuItem.setDisable(blocked);
         saveProjectMenuItem.setDisable(blocked);
         saveAsProjectMenuItem.setDisable(blocked);
+        renderTemplates(templatesFeature.frame());
         updateActivityRetry(activityList.getSelectionModel().getSelectedItem());
 
         Optional<JobCoordinator.Attempt> current = frame.attempt();
@@ -803,6 +1252,11 @@ public final class WorkbenchController {
         if (current.isPresent() && current.orElseThrow().lifecycle().terminal()) {
             JobCoordinator.Attempt terminal = current.orElseThrow();
             WorkbenchProjectFlow.Frame projectFrame = projectFlow.frame();
+            if (terminal.operation().name().equals("Open Project")
+                    && projectFrame.sequence() != templatesFeature.frame().projectSequence()
+                    && (terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED
+                    || terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES))
+                resetTemplatesOnNextProjectFrame = true;
             // The job terminal record is the authoritative feedback source for async work.
             renderedProjectSequence = projectFrame.sequence();
             render(projectFrame);
@@ -991,6 +1445,136 @@ public final class WorkbenchController {
          * Persists one selected theme inside the active application profile.
          */
         void save(WorkbenchAppearance.ThemeChoice choice) throws IOException;
+    }
+
+    /**
+     * Reusable Slider Preset cell that replaces exactly the renamed logical row with an accessible editor and attached
+     * validation while JavaFX virtualizes list cells.
+     */
+    private final class SliderPresetCell extends ListCell<SliderPresetSnapshot> {
+        private final TextField renameField = new TextField();
+        private final Label renameValidation = new Label();
+        private final VBox renameEditor = new VBox(4.0, renameField, renameValidation);
+        private boolean rendering;
+
+        private SliderPresetCell() {
+            renameValidation.getStyleClass().add("validation-text");
+            renameValidation.setWrapText(true);
+            renameValidation.setLabelFor(renameField);
+            renameField.textProperty().addListener((observable, previous, current) -> {
+                if (!rendering && templatesFeature.frame().rename().isPresent())
+                    dispatchTemplates(new TemplatesFeature.ChangeRename(current));
+            });
+            renameField.setOnAction(event -> dispatchTemplates(new TemplatesFeature.CommitRename()));
+            renameField.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.ESCAPE) {
+                    dispatchTemplates(new TemplatesFeature.CancelRename());
+                    event.consume();
+                }
+            });
+        }
+
+        /**
+         * Enters the one durable inline editor without refreshing or replacing the surrounding virtualized cells.
+         */
+        @Override
+        public void startEdit() {
+            super.startEdit();
+            SliderPresetSnapshot preset = getItem();
+            if (preset == null)
+                return;
+            templatesFeature.frame().rename()
+                    .filter(value -> value.identity().equals(NameIdentity.of(preset.getName())))
+                    .ifPresent(this::renderRename);
+        }
+
+        /**
+         * Restores the ordinary accessible row after commit, cancellation, filtering, or Project publication.
+         */
+        @Override
+        public void cancelEdit() {
+            super.cancelEdit();
+            clearActiveRenameCell();
+            renderPreset(getItem());
+        }
+
+        /**
+         * Publishes or clears all accessible state whenever JavaFX reuses this cell for another logical identity.
+         */
+        @Override
+        protected void updateItem(SliderPresetSnapshot preset, boolean empty) {
+            super.updateItem(preset, empty);
+            if (empty || preset == null) {
+                clearActiveRenameCell();
+                setText(null);
+                setGraphic(null);
+                setAccessibleText(null);
+                setAccessibleHelp(null);
+                return;
+            }
+            Optional<TemplatesFeature.RenameState> active = templatesFeature.frame().rename()
+                    .filter(rename -> rename.identity().equals(NameIdentity.of(preset.getName())));
+            if (isEditing() && active.isPresent())
+                renderRename(active.orElseThrow());
+            else
+                renderPreset(preset);
+        }
+
+        /**
+         * Updates the stable editor cell in place so validation does not invalidate the UIA SelectionItem subtree.
+         */
+        private void renderRename(TemplatesFeature.RenameState rename) {
+            SliderPresetSnapshot preset = getItem();
+            if (preset == null)
+                return;
+            rendering = true;
+            renameField.setText(rename.draft());
+            rendering = false;
+            String accessibleName = "Rename Slider Preset " + preset.getName();
+            String validation = ProjectDiagnosticFormatter.format(rename.diagnostics());
+            renameField.setAccessibleText(accessibleName);
+            renameField.setAccessibleHelp(validation.isEmpty()
+                    ? "Enter commits the name. Escape cancels and restores the Slider Preset row."
+                    : validation);
+            renameValidation.setText(validation);
+            renameValidation.setManaged(!validation.isEmpty());
+            renameValidation.setVisible(!validation.isEmpty());
+            activeRenameCell = this;
+            activeRenameField = renameField;
+            setText(null);
+            setGraphic(renameEditor);
+            setAccessibleText(accessibleName);
+            setAccessibleHelp(renameField.getAccessibleHelp());
+            if (!renameField.isFocused()) {
+                Platform.runLater(() -> {
+                    renameField.requestFocus();
+                    renameField.selectAll();
+                });
+            }
+        }
+
+        /**
+         * Restores normal row text and complete accessible metadata.
+         */
+        private void renderPreset(SliderPresetSnapshot preset) {
+            if (preset == null)
+                return;
+            setGraphic(null);
+            setText(preset.getName());
+            setAccessibleText(preset.getName());
+            setAccessibleHelp((preset.isUunp() ? "UUNP" : "Standard") + " Slider Preset with "
+                    + preset.getSliderChoices().size() + " slider choices.");
+        }
+
+        /**
+         * Clears outer references only when this virtualized cell owns the active editor.
+         */
+        private void clearActiveRenameCell() {
+            if (activeRenameCell == this)
+                activeRenameCell = null;
+            if (activeRenameField == renameField)
+                activeRenameField = null;
+        }
     }
 
     /**

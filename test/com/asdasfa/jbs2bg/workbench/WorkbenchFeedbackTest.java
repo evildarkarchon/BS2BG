@@ -82,6 +82,22 @@ class WorkbenchFeedbackTest {
     }
 
     /**
+     * Deep features can retain pane-local InfoBar ownership while the kernel still records Activity and status.
+     */
+    @Test
+    void activityOnlyPublicationDoesNotCreateAWorkbenchInfoBar() {
+        WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.fixed(FIXED_TIME, ZoneOffset.UTC));
+
+        WorkbenchFeedback.Frame frame = feedback.publishActivity(new WorkbenchFeedback.Notification(
+                "Rename Slider Preset", WorkbenchFeedback.Severity.SUCCESS,
+                "Rename Slider Preset completed.", WorkbenchFeedback.Disposition.COMPLETED));
+
+        assertEquals(true, frame.infoBar().isEmpty());
+        assertEquals("Rename Slider Preset", frame.activities().getLast().operation());
+        assertEquals("Rename Slider Preset completed.", frame.status().message());
+    }
+
+    /**
      * Destructive dialogs publish a safe Cancel default and accept only the matching tokenized answer.
      */
     @Test

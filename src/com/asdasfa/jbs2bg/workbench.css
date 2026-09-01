@@ -10,8 +10,15 @@
 #workbenchRoot .toggle-button,
 #workbenchRoot .combo-box,
 #workbenchRoot .list-view,
+#workbenchRoot .text-field,
+#workbenchRoot .scroll-pane,
 #workbenchRoot .text-area {
     -fx-text-fill: -bs-text;
+}
+
+#workbenchRoot .scroll-pane,
+#workbenchRoot .scroll-pane > .viewport {
+    -fx-background-color: transparent;
 }
 
 #workbenchRoot .navigation-rail,
@@ -47,6 +54,20 @@
 
 #workbenchRoot .feedback-cue {
     -fx-font-weight: bold;
+}
+
+#workbenchRoot .validation-text {
+    -fx-text-fill: -bs-warning;
+    -fx-border-color: -bs-warning;
+    -fx-border-width: 0 0 0 3px;
+    -fx-padding: 2px 0 2px 6px;
+}
+
+#workbenchRoot .list-cell:filled:selected {
+    -fx-background-color: -bs-selection;
+    -fx-text-fill: -bs-selection-text;
+    -fx-border-color: -bs-accent;
+    -fx-border-width: 1px 1px 1px 4px;
 }
 
 #workbenchRoot .info-bar {
@@ -86,6 +107,7 @@
 #workbenchRoot .toggle-button:focused,
 #workbenchRoot .combo-box:focused,
 #workbenchRoot .list-view:focused,
+#workbenchRoot .text-field:focused,
 #workbenchRoot .text-area:focused,
 #workbenchRoot .slider:focused,
 #workbenchRoot .label:focused {
@@ -113,4 +135,9 @@
     -fx-opacity: 1;
     -fx-text-fill: -bs-disabled;
     -fx-border-color: -bs-disabled;
+}
+
+#workbenchRoot:workbench-high-contrast .list-cell:filled:selected,
+#workbenchRoot:workbench-high-contrast .validation-text {
+    -fx-border-width: 2px 2px 2px 4px;
 }

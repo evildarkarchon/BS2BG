@@ -28,6 +28,17 @@ interface WorkbenchPlatform {
     }
 
     /**
+     * Completes one typed destructive feature confirmation after durable pending-dialog state is published.
+     *
+     * @param spec  destructive confirmation specification
+     * @param owner owning application window
+     * @return selected REMOVE, CLEAR, or CANCEL action
+     */
+    default WorkbenchFeedback.DialogAction completeConfirmation(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+        return WorkbenchFeedback.DialogAction.CANCEL;
+    }
+
+    /**
      * Realizes the final at-most-once close-window effect.
      *
      * @param owner application window to close

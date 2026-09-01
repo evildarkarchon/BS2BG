@@ -1,10 +1,10 @@
 # Windows app-image packaging checkpoint
 
-Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#101 and inherited gates). A green run proves
+Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#102 and inherited gates). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
 starts from a clean extracted location without any system Java, exercises typed navigation, semantic focus, Output,
 responsive/minimum geometry, live themes, High Contrast, reduced motion, feedback, typed dialogs, Project lifecycle,
-failure preservation, and dirty shutdown, and exits cleanly.
+failure preservation, pointer-free Slider Preset browsing/management, and dirty shutdown, and exits cleanly.
 ADR-0003 records the Java 25 baseline this checkpoint ships.
 
 ## One command
@@ -99,7 +99,7 @@ empty working directory with every host-Java discovery path removed. The origina
 image process, host `jvm.dll` and JavaFX native libraries from the extracted runtime, and exit with code 0 inside
 the configured bound.
 
-Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #101
+Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #102
 workflow records these steps:
 
 1. Extract the clean image, verify launcher configuration/version, and install representative, recovery, malformed,
@@ -112,27 +112,34 @@ workflow records these steps:
 6. Measure live native DPI/client insets, cross the 1200-logical-pixel breakpoint, drive narrow List/Inspector
    overlays through Ctrl+K/F7/Escape, enforce the 800x600 logical-client minimum, and keep editor/drawer controls
    inside the measured client rectangle.
-7. Save As a clean New Project and verify the canonical file and adopted identity.
-8. Open a recovered Project and require captured source/basis, both ordered
+7. Open the representative Project and, without pointer activation, browse exact Slider Preset identities; filter,
+   sort, and type ahead in visible order; reject duplicate create/rename; duplicate and inline-rename with F2;
+   Cancel then confirm Remove and Clear Visible; verify stable selection, complete relationship cascades, and
+   save/reopen continuity.
+8. Save As a clean New Project and verify the canonical file and adopted identity.
+9. Open a recovered Project and require captured source/basis, both ordered
    `SLIDER_PRESET_ASSIGNMENT_MISSING` diagnostics, committed effect, retry capability, and dirty title.
-9. Cancel and then explicitly discard a dirty New request.
-10. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
-11. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes; repair the
+10. Cancel and then explicitly discard a dirty New request.
+11. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
+12. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes; repair the
     captured source and Retry it as a newly linked successful attempt.
-12. Change the selected high-token-count source after detached parsing begins, require `STALE_RESULT`, zero effects,
+13. Change the selected high-token-count source after detached parsing begins, require `STALE_RESULT`, zero effects,
     a durable Completed-with-issues Activity record, and preservation of the active Project.
-13. Open the regenerated high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
+14. Open the regenerated high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
     New/Open/Save/Save As disabled while Exit remains available, then Cancel and require zero committed effects.
-14. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
+15. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
     recover through Save As.
-15. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
+16. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
     prompt and prove admission resumes, then repeat and Discard to require bounded exit 0 with no image process.
 
 Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
 launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/10`; its durable artifacts include the Workbench and
-responsive UIA trees plus `workbench-high-contrast.png` and `workbench-reduced-motion.png`. The accessibility
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/11`; its durable artifacts include the Workbench,
+responsive, and Templates-management UIA trees plus `workbench-high-contrast.png` and
+`workbench-reduced-motion.png`, the populated Templates High Contrast screenshot
+`workbench-templates-high-contrast.png`, and the narrow Templates clipping screenshot
+`workbench-templates-narrow.png`. The accessibility
 preference changes use documented Windows SPI calls and restore the exact original state in `finally`; see
 [workbench-platform.md](workbench-platform.md).
 
@@ -275,7 +282,7 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
-- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/10`; steps with durations;
+- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/11`; steps with durations;
   typed navigation, semantic focus, Output interaction, live themes, High Contrast, reduced motion, feedback,
   dialogs, native DPI and responsive/minimum geometry; Project recovery, New/Open/Save/Save As, failure
   preservation/retry and dirty shutdown; the expected/observed process model; bounded exit; environment scrubbing;

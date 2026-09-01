@@ -13,6 +13,8 @@ import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.NpcSliderPresetChoice;
 import com.asdasfa.jbs2bg.project.ProjectEdit;
 import com.asdasfa.jbs2bg.project.ProjectSession;
+import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
 /**
  * Builds the single edit each bulk command submits from the visible scope it
@@ -29,6 +31,21 @@ import com.asdasfa.jbs2bg.project.ProjectSession;
 public final class VisibleScopeCommands {
 
     private VisibleScopeCommands() {
+    }
+
+    /**
+     * Clear Slider Presets: removes exactly the frozen visible Slider Preset identities and every relationship to
+     * them, leaving hidden presets untouched.
+     *
+     * @param scope frozen visible Slider Presets
+     * @return one atomic filtered deletion edit
+     * @throws NullPointerException when scope is null
+     */
+    public static ProjectEdit clearSliderPresets(VisibleSet<SliderPresetSnapshot, NameIdentity> scope) {
+        List<String> names = Objects.requireNonNull(scope, "scope").getIdentities().stream()
+                .map(NameIdentity::getName)
+                .toList();
+        return SliderPresetEdits.deleteAll(names);
     }
 
     /**

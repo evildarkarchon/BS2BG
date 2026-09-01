@@ -540,6 +540,8 @@ final class DefaultProjectSession implements ProjectSession {
                 return renameSliderPreset((SliderPresetEdits.Rename) edit);
             if (edit instanceof SliderPresetEdits.Delete)
                 return deleteSliderPreset((SliderPresetEdits.Delete) edit);
+            if (edit instanceof SliderPresetEdits.DeleteAll)
+                return deleteSliderPresets((SliderPresetEdits.DeleteAll) edit);
             if (edit instanceof SliderPresetEdits.Clear)
                 return clearSliderPresets();
             if (edit instanceof SliderPresetEdits.SetUunp)
@@ -1012,6 +1014,27 @@ final class DefaultProjectSession implements ProjectSession {
         if (!found.isPresent())
             return rejectedSliderPresetNotFound();
         return outcome(project.removeSliderPreset(found.get().getName()));
+    }
+
+    /**
+     * Resolves an entire caller-frozen Slider Preset identity set before atomically removing it and every affected
+     * relationship.
+     *
+     * @param edit immutable filtered bulk deletion
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome deleteSliderPresets(SliderPresetEdits.DeleteAll edit) {
+        if (edit.getNames() == null)
+            return rejectedSliderPresetName(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_REQUIRED,
+                    "Filtered Slider Preset clearing requires an identity selection.");
+        List<String> canonicalNames = new ArrayList<>(edit.getNames().size());
+        for (String name : edit.getNames()) {
+            Optional<SliderPresetSnapshot> found = project.findSliderPreset(name);
+            if (found.isEmpty())
+                return rejectedSliderPresetNotFound();
+            canonicalNames.add(found.orElseThrow().getName());
+        }
+        return outcome(project.removeSliderPresets(canonicalNames));
     }
 
     /**
