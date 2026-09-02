@@ -1824,7 +1824,7 @@ public final class WorkbenchController {
                 morphTargetOutputStatusText.setAccessibleText(
                         "No selected Custom Morph Target is eligible for Morphs output.");
                 morphTargetSelectionText.setText("No Custom Morph Target selected");
-                morphTargetSelectionText.setAccessibleText("No Custom Morph Target selected");
+                morphTargetSelectionText.setAccessibleText("Custom Morph Target inspector: no selection");
                 assignedMorphSliderPresetList.getItems().clear();
                 assignedMorphSliderPresetList.getSelectionModel().clearSelection();
                 availableMorphSliderPreset.getItems().clear();

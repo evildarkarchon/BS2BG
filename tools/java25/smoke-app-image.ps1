@@ -897,7 +897,7 @@ try {
         $focusCycle = @(
             @{ Role = 'List'; Name = 'Custom Morph Targets' },
             @{ Role = 'Text'; Name = 'Custom Morph Target editor' },
-            @{ Role = 'Text'; Name = 'No Custom Morph Target selected' },
+            @{ Role = 'Text'; Name = 'Custom Morph Target inspector: no selection' },
             @{ Role = 'Text'; Name = 'Output generated text' },
             @{ Role = 'List'; Name = 'Activity' },
             @{ Role = 'Text'; Name = 'Workbench status' },
@@ -936,7 +936,7 @@ try {
         Assert-ControlInsideClient -Element $inspectorLauncher -Metrics $narrowMetrics
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Text' -Name 'No Custom Morph Target selected' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Custom Morph Target inspector: no selection' | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
@@ -961,7 +961,8 @@ try {
         Wait-UiaKeyboardFocus -Element $listLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $inspectorLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open Morphs inspector'
         Send-UiaKeysToElement -Element $inspectorLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
-        $minimumInspector = Wait-FocusedControl -ControlType 'Text' -Name 'No Custom Morph Target selected'
+        $minimumInspector = Wait-FocusedControl -ControlType 'Text' `
+            -Name 'Custom Morph Target inspector: no selection'
         Assert-ControlInsideClient -Element $minimumInspector -Metrics $minimumMetrics
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
@@ -1491,7 +1492,7 @@ try {
             if (-not $removeTarget.Current.IsEnabled) { $true }
         } | Out-Null
         Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'No Custom Morph Target selected') `
+            New-UiaCondition -ControlType 'Text' -Name 'Custom Morph Target inspector: no selection') `
             -Description 'cleared accessible target selection state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'Text' `

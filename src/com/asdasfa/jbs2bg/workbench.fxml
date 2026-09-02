@@ -524,7 +524,7 @@
                                                                     <children>
                                                                         <Label styleClass="title" text="Slider Preset relationships" />
                                                                         <Label fx:id="morphTargetSelectionText"
-                                                                                accessibleText="Selected Custom Morph Target"
+                                                                                accessibleText="Custom Morph Target inspector: no selection"
                                                                                 focusTraversable="true"
                                                                                 text="No Custom Morph Target selected"
                                                                                 wrapText="true" />
