@@ -26,13 +26,13 @@ final class SettingsPairPublisher {
     }
 
     /**
-     * Restores an interrupted, uncommitted Settings transaction before either source is parsed.
-     * A committed transaction is only cleaned because both replacements were already installed.
+     * Restores an interrupted Settings transaction before either source is parsed. A committed transaction or an
+     * empty residue with no durable prior-state markers is cleaned without reporting a rollback.
      *
      * @param directory      working directory that owns the production Settings filenames
      * @param standardTarget Standard Settings destination
      * @param uunpTarget     UUNP Settings destination
-     * @return true when an uncommitted transaction was rolled back
+     * @return true only when durable backup or absence markers required prior-state recovery
      * @throws IOException when recovery state is ambiguous or cannot restore a coherent pair
      */
     static boolean recover(Path directory, Path standardTarget, Path uunpTarget) throws IOException {
@@ -60,6 +60,10 @@ final class SettingsPairPublisher {
             deleteTree(transaction);
             return false;
         }
+        if (!hasPriorStateMarkers(transaction)) {
+            deleteTree(transaction);
+            return false;
+        }
 
         try {
             recoverMember(transaction, "standard", standard);
@@ -69,6 +73,16 @@ final class SettingsPairPublisher {
         } catch (IOException exception) {
             throw new IOException("Settings recovery could not restore the complete prior pair.", exception);
         }
+    }
+
+    /** Returns whether an uncommitted journal contains durable evidence of prior member state to restore. */
+    private static boolean hasPriorStateMarkers(Path transaction) {
+        for (String member : List.of("standard", "uunp")) {
+            if (Files.exists(transaction.resolve(member + ".backup"), LinkOption.NOFOLLOW_LINKS)
+                    || Files.exists(transaction.resolve(member + ".absent"), LinkOption.NOFOLLOW_LINKS))
+                return true;
+        }
+        return false;
     }
 
     /**
@@ -100,11 +114,12 @@ final class SettingsPairPublisher {
      * @param standardTarget Standard Settings destination
      * @param uunpTarget     UUNP Settings destination
      * @param pair           defensively owned canonical Settings bytes
-     * @throws IOException when preflight, staging, installation, or cleanup fails
+     * @throws IOException when preflight, staging, installation, or rollback fails
      */
     static void publish(Path standardTarget, Path uunpTarget,
                         SettingsJacksonAdapter.SettingsPairBytes pair) throws IOException {
-        publish(standardTarget, uunpTarget, pair, SettingsPairPublisher::moveAtomically);
+        publish(standardTarget, uunpTarget, pair, SettingsPairPublisher::moveAtomically,
+                SettingsPairPublisher::deleteTree);
     }
 
     /**
@@ -118,8 +133,24 @@ final class SettingsPairPublisher {
      */
     static void publish(Path standardTarget, Path uunpTarget,
                         SettingsJacksonAdapter.SettingsPairBytes pair, AtomicMove atomicMove) throws IOException {
+        publish(standardTarget, uunpTarget, pair, atomicMove, SettingsPairPublisher::deleteTree);
+    }
+
+    /**
+     * Internal cleanup fault seam that distinguishes an already committed pair from a failed publication.
+     *
+     * @param standardTarget Standard Settings destination
+     * @param uunpTarget     UUNP Settings destination
+     * @param pair           defensively owned canonical Settings bytes
+     * @param atomicMove     same-filesystem move used for backup, install, and rollback
+     * @param cleanup        command-owned transaction cleanup attempted after commit or rollback
+     * @throws IOException when the pair cannot be published or fully restored
+     */
+    static void publish(Path standardTarget, Path uunpTarget, SettingsJacksonAdapter.SettingsPairBytes pair,
+                        AtomicMove atomicMove, TransactionCleanup cleanup) throws IOException {
         Objects.requireNonNull(pair, "pair");
         Objects.requireNonNull(atomicMove, "atomicMove");
+        Objects.requireNonNull(cleanup, "cleanup");
         Path standard = normalizeTarget(standardTarget);
         Path uunp = normalizeTarget(uunpTarget);
         Path directory = standard.getParent();
@@ -167,12 +198,13 @@ final class SettingsPairPublisher {
         } finally {
             if (!preserveRecoveryDirectory) {
                 try {
-                    deleteTree(stagingDirectory);
+                    cleanup.delete(stagingDirectory);
                 } catch (IOException cleanupFailure) {
                     if (publicationFailure != null)
                         publicationFailure.addSuppressed(cleanupFailure);
-                    else
-                        throw cleanupFailure;
+                    else {
+                        // The committed marker makes deferred cleanup distinguishable from an interrupted rollback.
+                    }
                 }
             }
         }
@@ -338,6 +370,18 @@ final class SettingsPairPublisher {
          * @throws IOException when the move cannot complete atomically
          */
         void move(Path source, Path target) throws IOException;
+    }
+
+    /** Command-owned transaction cleanup injected only within the package for deterministic post-commit coverage. */
+    @FunctionalInterface
+    interface TransactionCleanup {
+        /**
+         * Removes one transaction tree after commit or complete rollback.
+         *
+         * @param transaction command-owned staging directory
+         * @throws IOException when cleanup must be deferred to a later recovery pass
+         */
+        void delete(Path transaction) throws IOException;
     }
 
     /**

@@ -266,7 +266,8 @@ final class ProjectJacksonAdapter {
     private static SliderPresetSnapshot readSliderPreset(Reader reader, JsonToken token, String path, String name) {
         require(token, JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, reader, path,
                 "A Slider Preset must be an object.");
-        Boolean uunp = null;
+        // Legacy Project documents may omit the marker; absence means Standard mode.
+        Boolean uunp = Boolean.FALSE;
         ExplicitChoices explicitChoices = null;
         Set<String> seen = new LinkedHashSet<>();
         while ((token = reader.next(path)) != JsonToken.END_OBJECT) {
@@ -280,7 +281,6 @@ final class ProjectJacksonAdapter {
             else
                 explicitChoices = readSliderChoices(reader, value, fieldPath);
         }
-        requirePresent(uunp, reader, child(path, "isUUNP"), "isUUNP");
         requirePresent(explicitChoices, reader, child(path, "SetSliders"), "SetSliders");
         return new SliderPresetSnapshot(name, uunp.booleanValue(), explicitChoices.withDefaults(uunp.booleanValue()));
     }
@@ -317,11 +317,13 @@ final class ProjectJacksonAdapter {
         require(token, JsonToken.START_OBJECT, ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, reader, path,
                 "A slider choice must be an object.");
         String name = null;
-        Boolean enabled = null;
+        // These omission defaults are part of the accepted legacy .jbs2bg meaning;
+        // present members still pass through strict type and duplicate validation.
+        Boolean enabled = Boolean.TRUE;
         Integer small = null;
         Integer big = null;
-        Integer minimum = null;
-        Integer maximum = null;
+        Integer minimum = Integer.valueOf(0);
+        Integer maximum = Integer.valueOf(100);
         boolean smallSeen = false;
         boolean bigSeen = false;
         Set<String> seen = new LinkedHashSet<>();
@@ -352,11 +354,8 @@ final class ProjectJacksonAdapter {
             throw reader.failure(ProjectDiagnosticCodes.PROJECT_STRUCTURE_INVALID, child(path, "name"),
                     "A slider-choice name must not be empty.");
         }
-        requirePresent(enabled, reader, child(path, "enabled"), "enabled");
         requireSeen(smallSeen, reader, child(path, "valueSmall"), "valueSmall");
         requireSeen(bigSeen, reader, child(path, "valueBig"), "valueBig");
-        requirePresent(minimum, reader, child(path, "pctMin"), "pctMin");
-        requirePresent(maximum, reader, child(path, "pctMax"), "pctMax");
         return new RawChoice(name, enabled.booleanValue(), small, big, minimum.intValue(), maximum.intValue());
     }
 

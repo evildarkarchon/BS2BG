@@ -314,6 +314,25 @@ final class ProjectJacksonCompatibilityTest {
     }
 
     /**
+     * Preserves the historical Standard-mode, enabled, and percentage defaults
+     * when an older Project omits those optional members.
+     */
+    @Test
+    void omittedLegacySliderFieldsUseHistoricalDefaults() {
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(
+                FIXTURE_ROOT.resolve("legacy-omitted-slider-defaults.jbs2bg"));
+
+        SliderPresetSnapshot preset = candidate.snapshot().getSliderPresets().getFirst();
+        SliderChoiceSnapshot choice = preset.getSliderChoices().getFirst();
+
+        assertFalse(preset.isUunp());
+        assertTrue(choice.isEnabled());
+        assertEquals(0, choice.getPercentageMinimum());
+        assertEquals(100, choice.getPercentageMaximum());
+        assertTrue(candidate.diagnostics().isEmpty());
+    }
+
+    /**
      * Canonical writing re-enters the package-private Project integrity authority before bytes exist.
      */
     @Test

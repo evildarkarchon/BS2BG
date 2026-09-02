@@ -113,6 +113,8 @@ public final class ProjectDiagnosticCodes {
      * A selected BodySlide source contains malformed XML syntax.
      */
     public static final String SLIDER_PRESET_XML_MALFORMED = "SLIDER_PRESET_XML_MALFORMED";
+    /** A selected BodySlide XML source exceeds the bounded DOM input size. */
+    public static final String SLIDER_PRESET_XML_RESOURCE_LIMIT = "SLIDER_PRESET_XML_RESOURCE_LIMIT";
     /**
      * A BodySlide XML document has an unsupported or incomplete structure.
      */

@@ -74,8 +74,11 @@ public final class OutputArtifactPublisher {
         Objects.requireNonNull(context, "context");
         Objects.requireNonNull(atomicMove, "atomicMove");
         Path directory = normalizeDirectory(targetDirectory);
-        List<Publication> publications = preflight(directory, artifacts, context);
-        publishSet(directory, publications, context, atomicMove);
+        OutputDirectoryLock directoryLock = OutputDirectoryLock.acquire(directory);
+        try (directoryLock) {
+            List<Publication> publications = preflight(directory, artifacts, context);
+            publishSet(directory, publications, context, atomicMove);
+        }
     }
 
     /** Resolves the existing non-symbolic-link target directory before inspecting its entries. */
@@ -98,6 +101,8 @@ public final class OutputArtifactPublisher {
             OutputArtifact artifact = Objects.requireNonNull(accepted.get(index), "artifact");
             String fileName = artifact.getFileName();
             requireSafeWindowsLeaf(fileName);
+            if (OutputDirectoryLock.ownsFileName(fileName))
+                throw new IOException("Output artifact filename is reserved for destination locking: " + fileName);
             if (artifactsByName.put(fileName, artifact) != null)
                 throw new IOException("Output artifact filenames collide without regard to case: " + fileName);
 
@@ -227,14 +232,18 @@ public final class OutputArtifactPublisher {
         }
     }
 
-    /** Moves every prior target aside before installing staged artifacts without further cancellation points. */
+    /**
+     * Copies and forces every prior target before atomically replacing live destinations without further
+     * cancellation points. Originals remain continuously addressable if the process stops between replacements.
+     */
     private static void installArtifacts(Path stagingDirectory, List<Publication> publications,
-                                         AtomicMove atomicMove) throws IOException {
+                                          AtomicMove atomicMove) throws IOException {
         for (Publication publication : publications) {
             if (publication.existing == null)
                 continue;
             publication.backup = stagingDirectory.resolve(publication.index + ".backup");
-            atomicMove.move(publication.existing, publication.backup);
+            Files.copy(publication.existing, publication.backup);
+            forceExisting(publication.backup);
         }
         for (Publication publication : publications) {
             try {
@@ -255,9 +264,11 @@ public final class OutputArtifactPublisher {
         for (int index = publications.size() - 1; index >= 0; index--) {
             Publication publication = publications.get(index);
             try {
-                if (publication.installed)
+                if (!publication.installed)
+                    continue;
+                if (publication.backup == null) {
                     Files.deleteIfExists(publication.target);
-                if (publication.backup != null && Files.exists(publication.backup, LinkOption.NOFOLLOW_LINKS)) {
+                } else if (Files.exists(publication.backup, LinkOption.NOFOLLOW_LINKS)) {
                     try {
                         atomicMove.move(publication.backup, publication.existing);
                     } catch (IOException failure) {
@@ -275,10 +286,17 @@ public final class OutputArtifactPublisher {
         return rollbackFailure;
     }
 
+    /** Forces a complete backup before a replacement can consume its corresponding staged artifact. */
+    private static void forceExisting(Path target) throws IOException {
+        try (FileChannel channel = FileChannel.open(target, StandardOpenOption.WRITE)) {
+            channel.force(true);
+        }
+    }
+
     /** Requires same-filesystem atomic moves for installation and rollback. */
     private static void moveAtomically(Path source, Path target) throws IOException {
         try {
-            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException exception) {
             throw new IOException("The target filesystem does not support atomic Output replacement.", exception);
         }

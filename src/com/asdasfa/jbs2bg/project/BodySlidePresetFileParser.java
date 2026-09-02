@@ -30,6 +30,7 @@ import org.xml.sax.helpers.DefaultHandler;
  * No Project state is changed until the caller accepts the complete result.
  */
 final class BodySlidePresetFileParser {
+    private static final long MAXIMUM_DOCUMENT_BYTES = 8L * 1024L * 1024L;
 
     private BodySlidePresetFileParser() {
     }
@@ -42,7 +43,7 @@ final class BodySlidePresetFileParser {
      * @throws IOException                     when the source cannot be read
      * @throws SAXException                    when XML syntax is malformed
      * @throws ParserConfigurationException    when secure XML parsing is unavailable
-     * @throws InvalidBodySlidePresetException when valid XML violates import rules
+     * @throws InvalidBodySlidePresetException when input exceeds resource limits or parsed XML violates import rules
      */
     static List<ParsedPreset> parse(Path source)
             throws IOException, SAXException, ParserConfigurationException {
@@ -58,12 +59,17 @@ final class BodySlidePresetFileParser {
      * @throws IOException                     when the source cannot be read
      * @throws SAXException                    when XML syntax is malformed
      * @throws ParserConfigurationException    when secure XML parsing is unavailable
-     * @throws InvalidBodySlidePresetException when valid XML violates import rules
+     * @throws InvalidBodySlidePresetException when input exceeds resource limits or parsed XML violates import rules
      */
     static List<ParsedPreset> parse(Path source, ProjectOperationContext context)
             throws IOException, SAXException, ParserConfigurationException {
         Objects.requireNonNull(source, "source");
         ProjectOperationContext operation = Objects.requireNonNull(context, "context");
+        long sourceSize = Files.size(source);
+        // DOM expansion costs substantially more memory than the source bytes, so
+        // reject oversized metadata before the parser can begin building nodes.
+        if (sourceSize > MAXIMUM_DOCUMENT_BYTES)
+            throw documentLimitFailure();
         DocumentBuilderFactory factory = secureDocumentBuilderFactory();
         DocumentBuilder builder = factory.newDocumentBuilder();
         builder.setErrorHandler(new DefaultHandler() {
@@ -159,9 +165,20 @@ final class BodySlidePresetFileParser {
                 presetElement + "/@name");
     }
 
-    /** Input adapter that turns an accepted cancellation into a parser-safe runtime unwind. */
+    /**
+     * Creates the stable typed rejection used by metadata and streaming byte-limit checks.
+     *
+     * @return resource-limit failure at the XML document root
+     */
+    private static InvalidBodySlidePresetException documentLimitFailure() {
+        return new InvalidBodySlidePresetException(ProjectDiagnosticCodes.SLIDER_PRESET_XML_RESOURCE_LIMIT,
+                "/", "BodySlide XML input exceeds the 8 MiB document limit.");
+    }
+
+    /** Input adapter that bounds bytes and turns accepted cancellation into a parser-safe runtime unwind. */
     private static final class CancellationInputStream extends FilterInputStream {
         private final ProjectOperationContext context;
+        private long consumed;
 
         /** Binds one source stream to its owning operation context. */
         private CancellationInputStream(InputStream input, ProjectOperationContext context) {
@@ -174,6 +191,8 @@ final class BodySlidePresetFileParser {
         public int read() throws IOException {
             context.checkCancellation();
             int value = super.read();
+            if (value >= 0)
+                recordBytes(1);
             context.checkCancellation();
             return value;
         }
@@ -183,8 +202,17 @@ final class BodySlidePresetFileParser {
         public int read(byte[] buffer, int offset, int length) throws IOException {
             context.checkCancellation();
             int count = super.read(buffer, offset, length);
+            if (count > 0)
+                recordBytes(count);
             context.checkCancellation();
             return count;
+        }
+
+        /** Rejects file growth that crosses the limit after the metadata precheck. */
+        private void recordBytes(int count) {
+            consumed += count;
+            if (consumed > MAXIMUM_DOCUMENT_BYTES)
+                throw documentLimitFailure();
         }
     }
 
@@ -292,9 +320,7 @@ final class BodySlidePresetFileParser {
         }
     }
 
-    /**
-     * Stable schema or value rejection raised only after XML syntax succeeds.
-     */
+    /** Stable resource, schema, or value rejection for one BodySlide source. */
     static final class InvalidBodySlidePresetException extends RuntimeException {
         private static final long serialVersionUID = 1L;
 

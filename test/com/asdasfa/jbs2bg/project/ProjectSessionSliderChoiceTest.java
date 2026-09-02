@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
@@ -245,6 +246,26 @@ class ProjectSessionSliderChoiceTest {
     }
 
     /**
+     * Synthesizes only the first Settings default for one case-insensitive slider
+     * identity so accepted case-distinct Settings keys cannot duplicate Project output.
+     */
+    @Test
+    void creatingSliderPresetSynthesizesCaseInsensitiveSettingsDefaultOnce() {
+        Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
+        standard.put("Waist", new DefaultSliderValue(0f, 1f));
+        standard.put("waist", new DefaultSliderValue(0.25f, 0.75f));
+        SettingsTestSupport.installDefaults(standard, Map.of());
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+
+        SliderPresetSnapshot preset = session.apply(SliderPresetEdits.create("Alpha"))
+                .getSnapshot().getSliderPresets().getFirst();
+
+        assertEquals(List.of("Waist"), names(preset));
+        assertSynthesized(preset.getSliderChoices().getFirst(), 0, 100);
+    }
+
+    /**
      * Matches the legacy UUNP toggle: synthesized defaults are rebuilt for the
      * requested mode (discarding edits made to them), explicit choices survive, and
      * explicit choices that defer to defaults re-resolve their effective values.
@@ -293,6 +314,105 @@ class ProjectSessionSliderChoiceTest {
         assertFalse(regularWaist.isMissingDefault());
         assertEquals(0, regularWaist.getEffectiveSmallValue());
         assertEquals(100, regularWaist.getEffectiveBigValue());
+    }
+
+    /**
+     * Settings refresh rebuilds synthesized and explicit-null choices while preserving a clean file-backed lifecycle,
+     * and a repeated refresh with the same published Settings is an exact no-op.
+     */
+    @Test
+    void refreshSettingsRebuildsChoicesWithoutDirtyingACleanProject() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.setSliderChoice("Alpha",
+                new SliderChoiceSnapshot("Breasts", false, null, null, 20, 100, 25, 75, false)));
+        Path identity = tempDirectory.resolve("settings-refresh-clean.jbs2bg").toAbsolutePath().normalize();
+        ProjectSnapshot clean = session.saveAs(identity).getSnapshot();
+        Map<String, DefaultSliderValue> changedDefaults = new LinkedHashMap<>();
+        changedDefaults.put("Breasts", new DefaultSliderValue(0.4f, 0.8f));
+        changedDefaults.put("Hips", new DefaultSliderValue(0.3f, 0.7f));
+        SettingsTestSupport.installDefaults(changedDefaults, Map.of());
+
+        ProjectOutcome refreshed = session.refreshSettings();
+        SliderPresetSnapshot preset = refreshed.getSnapshot().getSliderPresets().getFirst();
+
+        assertInstanceOf(ChangedOutcome.class, refreshed);
+        assertFalse(refreshed.getSnapshot().isDirty());
+        assertEquals(identity, refreshed.getSnapshot().getFileIdentity().orElseThrow());
+        assertEquals(ProjectLifecycleStatus.FILE_BACKED, refreshed.getSnapshot().getLifecycleStatus());
+        assertNotEquals(clean.getContentVersion(), refreshed.getSnapshot().getContentVersion());
+        assertEquals(Arrays.asList("Breasts", "Hips"), names(preset));
+        SliderChoiceSnapshot breasts = find(preset, "Breasts");
+        assertFalse(breasts.isMissingDefault());
+        assertFalse(breasts.isEnabled());
+        assertFalse(breasts.getStoredSmallValue().isPresent());
+        assertFalse(breasts.getStoredBigValue().isPresent());
+        assertEquals(40, breasts.getEffectiveSmallValue());
+        assertEquals(80, breasts.getEffectiveBigValue());
+        assertEquals(25, breasts.getPercentageMinimum());
+        assertEquals(75, breasts.getPercentageMaximum());
+        assertSynthesized(find(preset, "Hips"), 30, 70);
+
+        ProjectOutcome unchanged = session.refreshSettings();
+        assertInstanceOf(UnchangedOutcome.class, unchanged);
+        assertSame(refreshed.getSnapshot(), unchanged.getSnapshot());
+        assertEquals(refreshed.getSnapshot().getContentVersion(), unchanged.getSnapshot().getContentVersion());
+    }
+
+    /**
+     * Settings refresh preserves an already-dirty file-backed lifecycle and identity while publishing rebuilt content.
+     */
+    @Test
+    void refreshSettingsPreservesDirtyFileBackedState() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        Path identity = tempDirectory.resolve("settings-refresh-dirty.jbs2bg").toAbsolutePath().normalize();
+        session.saveAs(identity);
+        ProjectSnapshot dirty = session.apply(SliderPresetEdits.create("Beta")).getSnapshot();
+        Map<String, DefaultSliderValue> changedDefaults = new LinkedHashMap<>();
+        changedDefaults.put("Breasts", new DefaultSliderValue(0.6f, 0.9f));
+        SettingsTestSupport.installDefaults(changedDefaults, Map.of());
+
+        ProjectOutcome refreshed = session.refreshSettings();
+
+        assertInstanceOf(ChangedOutcome.class, refreshed);
+        assertTrue(refreshed.getSnapshot().isDirty());
+        assertEquals(identity, refreshed.getSnapshot().getFileIdentity().orElseThrow());
+        assertEquals(ProjectLifecycleStatus.FILE_BACKED, refreshed.getSnapshot().getLifecycleStatus());
+        assertNotEquals(dirty.getContentVersion(), refreshed.getSnapshot().getContentVersion());
+    }
+
+    /**
+     * A pinned Settings generation supplies every synthesized identity and explicit-null endpoint even after the
+     * process-global Settings value is replaced.
+     */
+    @Test
+    void rebuildForModeUsesOnePinnedSettingsGeneration() {
+        Map<String, DefaultSliderValue> generationADefaults = new LinkedHashMap<>();
+        generationADefaults.put("Alpha", new DefaultSliderValue(0.1f, 0.2f));
+        generationADefaults.put("Shared", new DefaultSliderValue(0.3f, 0.4f));
+        SettingsTestSupport.installDefaults(generationADefaults, Map.of());
+        Settings.Snapshot generationA = Settings.snapshot();
+        Map<String, DefaultSliderValue> generationBDefaults = new LinkedHashMap<>();
+        generationBDefaults.put("Beta", new DefaultSliderValue(0.5f, 0.6f));
+        generationBDefaults.put("Shared", new DefaultSliderValue(0.7f, 0.8f));
+        SettingsTestSupport.installDefaults(generationBDefaults, Map.of());
+        SliderChoiceSnapshot explicitNull = new SliderChoiceSnapshot(
+                "Shared", true, null, null, 99, 99, 10, 90, false);
+
+        List<SliderChoiceSnapshot> rebuilt = SliderChoiceDefaults.rebuildForMode(
+                List.of(explicitNull), false, generationA);
+
+        assertEquals(List.of("Alpha", "Shared"), rebuilt.stream().map(SliderChoiceSnapshot::getName).toList());
+        assertSynthesized(rebuilt.getFirst(), 10, 20);
+        SliderChoiceSnapshot shared = rebuilt.getLast();
+        assertFalse(shared.isMissingDefault());
+        assertEquals(30, shared.getEffectiveSmallValue());
+        assertEquals(40, shared.getEffectiveBigValue());
+        assertEquals(10, shared.getPercentageMinimum());
+        assertEquals(90, shared.getPercentageMaximum());
     }
 
     /**

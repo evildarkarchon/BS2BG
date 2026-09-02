@@ -552,6 +552,12 @@ class TemplatesFeatureTest {
 
         /** {@inheritDoc} */
         @Override
+        public ProjectOutcome refreshSettings() {
+            return delegate.refreshSettings();
+        }
+
+        /** {@inheritDoc} */
+        @Override
         public ProjectOutcome apply(ProjectEdit edit) {
             if (!failEdits)
                 return delegate.apply(edit);

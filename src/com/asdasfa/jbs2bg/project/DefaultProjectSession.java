@@ -4,16 +4,20 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.concurrent.CancellationException;
 
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
+
+import com.asdasfa.jbs2bg.data.Settings;
 
 /**
  * Serializes Project operations and atomically publishes immutable snapshots.
@@ -158,12 +162,39 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
+     * Re-derives every preset from the already-published global Settings value while retaining Project lifecycle
+     * metadata exactly. Settings draft and persistence ownership remains outside this session.
+     *
+     * @return changed or unchanged outcome preserving the current lifecycle metadata
+     */
+    @Override
+    public ProjectOutcome refreshSettings() {
+        synchronized (operationLock) {
+            // One pinned generation prevents a concurrent Settings publication from
+            // mixing Standard/UUNP membership or endpoints across Project presets.
+            Settings.Snapshot settings = Settings.snapshot();
+            Project refreshed = project;
+            for (SliderPresetSnapshot preset : project.getSliderPresets()) {
+                SliderPresetSnapshot rebuilt = new SliderPresetSnapshot(preset.getName(), preset.isUunp(),
+                        SliderChoiceDefaults.rebuildForMode(preset.getSliderChoices(), preset.isUunp(), settings));
+                refreshed = refreshed.replaceSliderPreset(preset.getName(), rebuilt);
+            }
+            boolean changed = refreshed != project;
+            return publish(refreshed, snapshot.getFileIdentity(), snapshot.isDirty(), snapshot.getLifecycleStatus(),
+                    changed, NO_DIAGNOSTICS);
+        }
+    }
+
+    /**
      * {@inheritDoc}
      */
     @Override
     public ProjectOutcome open(Path source, ProjectOperationContext context) {
         Objects.requireNonNull(source, "source");
         ProjectOperationContext operation = Objects.requireNonNull(context, "context");
+        // Capture from the volatile snapshot before detached parsing so context-free
+        // callers cannot publish over content committed while document I/O was running.
+        ProjectContentVersion capturedBasis = snapshot.getContentVersion();
         ProjectFileLoader.LoadedProject loaded;
         Project opened;
         try {
@@ -190,6 +221,10 @@ final class DefaultProjectSession implements ProjectSession {
             try {
                 operation.checkCancellation();
                 if (!operation.beginCommit("Publishing Project"))
+                    return new CancelledOutcome(snapshot);
+                // The caller context runs first so Workbench contexts retain their
+                // more specific stale/source classification before this session-owned fallback.
+                if (!capturedBasis.equals(contentVersion))
                     return new CancelledOutcome(snapshot);
                 ProjectSnapshot loadedSnapshot = loaded.getSnapshot();
                 return publish(opened, loadedSnapshot.getFileIdentity(), loadedSnapshot.isDirty(),
@@ -1028,14 +1063,14 @@ final class DefaultProjectSession implements ProjectSession {
         if (edit.getNames() == null)
             return rejectedSliderPresetName(ProjectDiagnosticCodes.SLIDER_PRESET_NAME_REQUIRED,
                     "Filtered Slider Preset clearing requires an identity selection.");
-        List<String> canonicalNames = new ArrayList<>(edit.getNames().size());
+        Set<String> canonicalNames = new LinkedHashSet<>(edit.getNames().size());
         for (String name : edit.getNames()) {
             Optional<SliderPresetSnapshot> found = project.findSliderPreset(name);
             if (found.isEmpty())
                 return rejectedSliderPresetNotFound();
             canonicalNames.add(found.orElseThrow().getName());
         }
-        return outcome(project.removeSliderPresets(canonicalNames));
+        return outcome(project.removeSliderPresets(new ArrayList<>(canonicalNames)));
     }
 
     /**

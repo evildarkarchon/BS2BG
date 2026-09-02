@@ -12,6 +12,7 @@ import java.util.Optional;
 
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
+import com.asdasfa.jbs2bg.json.JacksonJson;
 import com.asdasfa.jbs2bg.workbench.GenerationPreferencesStore;
 
 /**
@@ -33,6 +34,8 @@ public final class SettingsFeature {
     private boolean liveAvailable;
     private boolean omitRedundantSliders;
     private long revision;
+    private long nextEffectToken = 1;
+    private Effect pendingEffect;
     private Frame frame;
 
     /**
@@ -82,6 +85,20 @@ public final class SettingsFeature {
     }
 
     /**
+     * Reports whether a failed Save can capture a meaningful replacement from the current draft.
+     * Pending-effect state is deliberately ignored because the coordinator rechecks availability after recapture.
+     *
+     * @return a user-facing unavailable reason, or empty when Save retry may proceed
+     */
+    public Optional<String> saveRetryUnavailableReason() {
+        if (!frame.dirty())
+            return Optional.of("Settings have no unsaved changes to save.");
+        if (!frame.validation().isEmpty())
+            return Optional.of("Settings validation must be resolved before saving.");
+        return Optional.empty();
+    }
+
+    /**
      * Applies one task-oriented Settings intent on the serialized presentation lane.
      *
      * @param intent immutable user task
@@ -89,6 +106,8 @@ public final class SettingsFeature {
      */
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
+        if (pendingEffect != null && isMutation(intent))
+            return new Update(false, frame);
         return switch (intent) {
             case SelectProfile selectProfile -> selectProfile(selectProfile.profile());
             case SelectEntry selectEntry -> selectEntry(selectEntry.name());
@@ -100,6 +119,12 @@ public final class SettingsFeature {
             case Reload ignored -> reload();
             case DismissNotice ignored -> dismissNotice();
         };
+    }
+
+    /** Reports whether an intent could invalidate a captured persistence input or perform another disk mutation. */
+    private static boolean isMutation(Intent intent) {
+        return intent instanceof AddEntry || intent instanceof EditEntry || intent instanceof RemoveEntry
+                || intent instanceof ChangeOmitRedundantSliders || intent instanceof Save || intent instanceof Reload;
     }
 
     /** Selects one profile without discarding either profile's draft or logical selection. */
@@ -207,9 +232,11 @@ public final class SettingsFeature {
         return accepted();
     }
 
-    /** Persists both drafts through the owned atomic Settings pair boundary. */
+    /** Captures both drafts for later persistence without performing filesystem work on the presentation lane. */
     private Update save() {
         if (rejectedDraft != null)
+            return new Update(false, frame);
+        if (pendingEffect != null)
             return new Update(false, frame);
         Settings.Snapshot replacement = draftSnapshot();
         if (replacement.equals(baseline)) {
@@ -217,7 +244,54 @@ public final class SettingsFeature {
             publish();
             return accepted();
         }
-        Settings.PersistenceResult result = Settings.persist(directory, replacement);
+        SaveEffect effect = new SaveEffect(nextEffectToken++, directory, replacement);
+        pendingEffect = effect;
+        return accepted(effect);
+    }
+
+    /** Captures the Settings directory for a later worker-owned reload and recovery attempt. */
+    private Update reload() {
+        if (pendingEffect != null)
+            return new Update(false, frame);
+        ReloadEffect effect = new ReloadEffect(nextEffectToken++, directory);
+        pendingEffect = effect;
+        return accepted(effect);
+    }
+
+    /**
+     * Applies one matching worker completion on the serialized presentation lane.
+     *
+     * @param completion tokenized Settings persistence result
+     * @return accepted immutable feature update, or the unchanged frame for a stale completion
+     */
+    public Update complete(Completion completion) {
+        Completion value = Objects.requireNonNull(completion, "completion");
+        if (pendingEffect == null || pendingEffect.token() != value.token()
+                || pendingEffect instanceof SaveEffect != value instanceof SaveCompletion)
+            return new Update(false, frame);
+        pendingEffect = null;
+        return switch (value) {
+            case SaveCompletion saveCompletion -> completeSave(saveCompletion.result());
+            case ReloadCompletion reloadCompletion -> completeReload(reloadCompletion.result());
+        };
+    }
+
+    /**
+     * Clears one matching worker effect after coordinator cancellation without changing the retained draft.
+     *
+     * @param token presentation-owned effect token
+     * @return accepted unchanged frame, or a rejected update for a stale token
+     */
+    public Update cancel(long token) {
+        if (pendingEffect == null || pendingEffect.token() != token)
+            return new Update(false, frame);
+        pendingEffect = null;
+        return accepted();
+    }
+
+    /** Commits a worker-owned Save result without repeating any blocking persistence work. */
+    private Update completeSave(Settings.PersistenceResult result) {
+        Objects.requireNonNull(result, "result");
         if (!result.isSuccessful()) {
             Settings.Failure failure = result.getFailure().orElseThrow();
             notices = List.of(Notice.failure(failure));
@@ -229,15 +303,17 @@ public final class SettingsFeature {
         liveAvailable = true;
         standard = MutableProfile.from(baseline.standard());
         uunp = MutableProfile.from(baseline.uunp());
+        selectedStandard = retainSelection(standard, selectedStandard);
+        selectedUunp = retainSelection(uunp, selectedUunp);
         notices = result.getDiagnostics().stream().map(Notice::warning).toList();
         outcome = OutcomeKind.SAVED;
         publish();
         return accepted();
     }
 
-    /** Reloads and recovers the on-disk pair while retaining the current draft if validation fails. */
-    private Update reload() {
-        Settings.InitializationResult result = Settings.initialize(directory);
+    /** Commits a worker-owned Reload result while retaining the current draft when validation failed. */
+    private Update completeReload(Settings.InitializationResult result) {
+        Objects.requireNonNull(result, "result");
         notices = initializationNotices(result);
         if (!result.isSuccessful()) {
             outcome = OutcomeKind.FAILED;
@@ -297,6 +373,10 @@ public final class SettingsFeature {
     private Validation validateName(String original, String name) {
         if (name.isBlank())
             return new Validation("SETTINGS_NAME_REQUIRED", "A Settings entry name is required.");
+        // Settings names become either JSON member names or string tokens; both share the reader's UTF-8 limit.
+        if (JacksonJson.exceedsTextLimit(name))
+            return new Validation("SETTINGS_NAME_RESOURCE_LIMIT",
+                    "A Settings entry name must not exceed 1 MiB when encoded as UTF-8.");
         if (!name.equals(original) && currentProfile().contains(name))
             return new Validation("SETTINGS_NAME_DUPLICATE", "That exact Settings entry already exists.");
         return null;
@@ -362,6 +442,11 @@ public final class SettingsFeature {
     /** Returns one accepted update around the latest frame. */
     private Update accepted() {
         return new Update(true, frame);
+    }
+
+    /** Returns one accepted update carrying a newly captured worker effect. */
+    private Update accepted(Effect effect) {
+        return new Update(true, frame, Optional.of(Objects.requireNonNull(effect, "effect")));
     }
 
     /** Returns the active mutable draft profile. */
@@ -559,6 +644,62 @@ public final class SettingsFeature {
     public record DismissNotice() implements Intent {
     }
 
+    /** Worker-bound Settings operation captured without touching the filesystem. */
+    public sealed interface Effect permits SaveEffect, ReloadEffect {
+        /** @return presentation-owned token used to reject stale completion callbacks */
+        long token();
+
+        /** @return normalized directory that owns the paired Settings documents */
+        Path directory();
+    }
+
+    /** Complete immutable Save input captured from both profile drafts. */
+    public record SaveEffect(long token, Path directory, Settings.Snapshot replacement) implements Effect {
+        /** Requires a positive token and complete detached persistence inputs. */
+        public SaveEffect {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(directory, "directory");
+            Objects.requireNonNull(replacement, "replacement");
+        }
+    }
+
+    /** Immutable Reload input captured before the blocking directory operation begins. */
+    public record ReloadEffect(long token, Path directory) implements Effect {
+        /** Requires a positive token and normalized Settings directory. */
+        public ReloadEffect {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(directory, "directory");
+        }
+    }
+
+    /** Tokenized Settings worker result accepted only by its matching pending effect. */
+    public sealed interface Completion permits SaveCompletion, ReloadCompletion {
+        /** @return presentation-owned effect token */
+        long token();
+    }
+
+    /** Completed atomic Save result returned by the application worker. */
+    public record SaveCompletion(long token, Settings.PersistenceResult result) implements Completion {
+        /** Requires a positive token and complete Settings persistence result. */
+        public SaveCompletion {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(result, "result");
+        }
+    }
+
+    /** Completed Reload/recovery result returned by the application worker. */
+    public record ReloadCompletion(long token, Settings.InitializationResult result) implements Completion {
+        /** Requires a positive token and complete Settings initialization result. */
+        public ReloadCompletion {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(result, "result");
+        }
+    }
+
     /** Immutable visible Settings entry with optional category membership. */
     public record EntryFrame(String name, Optional<Float> small, Optional<Float> big, Optional<Float> multiplier,
                              boolean inverted) {
@@ -643,11 +784,17 @@ public final class SettingsFeature {
         }
     }
 
-    /** Result of one task intent and its committed immutable frame. */
-    public record Update(boolean accepted, Frame frame) {
-        /** Requires a frame. */
+    /** Result of one task intent and its committed immutable frame, with optional worker-bound persistence. */
+    public record Update(boolean accepted, Frame frame, Optional<Effect> effect) {
+        /** Creates an update without a worker-bound effect. */
+        public Update(boolean accepted, Frame frame) {
+            this(accepted, frame, Optional.empty());
+        }
+
+        /** Requires a frame and defensively owned optional effect. */
         public Update {
             Objects.requireNonNull(frame, "frame");
+            Objects.requireNonNull(effect, "effect");
         }
     }
 }

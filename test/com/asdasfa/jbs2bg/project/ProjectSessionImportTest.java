@@ -4,6 +4,7 @@ import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -260,6 +261,75 @@ class ProjectSessionImportTest {
 
         assertThrows(CancellationException.class,
                 () -> BodySlidePresetFileParser.parse(source, context));
+    }
+
+    /**
+     * Rejects an oversized BodySlide source before DOM construction and publishes
+     * a stable resource diagnostic for that selected source.
+     *
+     * @throws Exception when the padded XML source cannot be written
+     */
+    @Test
+    void oversizedBodySlideSourceIsRejectedBeforeDomConstruction() throws Exception {
+        Path source = writePaddedXml("oversized.xml", 8 * 1024 * 1024 + 1);
+        ProjectSession session = ProjectSessions.create();
+        ProjectSnapshot before = session.newProject().getSnapshot();
+
+        SliderPresetImportOutcome outcome = session.importSliderPresets(List.of(source));
+
+        assertInstanceOf(RejectedOutcome.class, outcome.getProjectOutcome());
+        assertSame(before, outcome.getSnapshot());
+        assertEquals(1, outcome.getSourceOutcomes().size());
+        assertInstanceOf(RejectedOutcome.class, outcome.getSourceOutcomes().getFirst());
+        assertImportDiagnostic(outcome.getDiagnostics().getFirst(), source,
+                "SLIDER_PRESET_XML_RESOURCE_LIMIT", "/");
+    }
+
+    /**
+     * Retains the BodySlide byte bound while parsing so file growth after the
+     * metadata check cannot feed an oversized document into the DOM.
+     *
+     * @throws Exception when the padded XML source cannot be written or extended
+     */
+    @Test
+    void bodySlideParserRejectsGrowthBeyondDocumentLimitWhileReading() throws Exception {
+        Path source = writePaddedXml("growing.xml", 8 * 1024 * 1024);
+        ProjectOperationContext context = new ProjectOperationContext() {
+            private boolean grown;
+
+            /** Extends the source exactly once after the parser has completed its size precheck. */
+            @Override
+            public boolean cancellationRequested() {
+                if (!grown) {
+                    try {
+                        Files.write(source, new byte[]{(byte) ' '}, StandardOpenOption.APPEND);
+                    } catch (java.io.IOException exception) {
+                        throw new java.io.UncheckedIOException(exception);
+                    }
+                    grown = true;
+                }
+                return false;
+            }
+
+            /** Direct parser verification has no presentation progress observer. */
+            @Override
+            public void report(ProjectOperationProgress progress) {
+                // This parser seam reports through the owning batch rather than per XML byte.
+            }
+
+            /** Direct parser verification never reaches a commit boundary. */
+            @Override
+            public boolean beginCommit(String phase) {
+                return true;
+            }
+        };
+
+        BodySlidePresetFileParser.InvalidBodySlidePresetException exception = assertThrows(
+                BodySlidePresetFileParser.InvalidBodySlidePresetException.class,
+                () -> BodySlidePresetFileParser.parse(source, context));
+
+        assertEquals("SLIDER_PRESET_XML_RESOURCE_LIMIT", exception.getCode());
+        assertEquals("/", exception.getElement());
     }
 
     /**
@@ -546,6 +616,28 @@ class ProjectSessionImportTest {
     private Path writeXml(String fileName, String xml) throws Exception {
         Path source = tempDirectory.resolve(fileName);
         Files.write(source, xml.getBytes(StandardCharsets.UTF_8));
+        return source;
+    }
+
+    /**
+     * Writes one valid XML document padded with ordinary whitespace to an exact byte length.
+     *
+     * @param fileName temporary source filename
+     * @param length   exact UTF-8 byte length, including the root tags
+     * @return padded XML source
+     * @throws Exception when the source cannot be written
+     */
+    private Path writePaddedXml(String fileName, int length) throws Exception {
+        byte[] opening = "<SliderPresets>".getBytes(StandardCharsets.UTF_8);
+        byte[] closing = "</SliderPresets>".getBytes(StandardCharsets.UTF_8);
+        if (length < opening.length + closing.length)
+            throw new IllegalArgumentException("length cannot hold the BodySlide root tags");
+        byte[] xml = new byte[length];
+        Arrays.fill(xml, (byte) ' ');
+        System.arraycopy(opening, 0, xml, 0, opening.length);
+        System.arraycopy(closing, 0, xml, xml.length - closing.length, closing.length);
+        Path source = tempDirectory.resolve(fileName);
+        Files.write(source, xml);
         return source;
     }
 }

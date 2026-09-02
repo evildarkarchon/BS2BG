@@ -1327,6 +1327,27 @@ class ProjectSessionTest {
     }
 
     /**
+     * Bulk deletion resolves and removes repeated case-insensitive identities once while cascading relationships.
+     */
+    @Test
+    void bulkSliderPresetDeletionDeduplicatesCanonicalIdentities() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.create("Beta"));
+        session.apply(CustomMorphTargetEdits.create("All|Female", Arrays.asList("Alpha", "Beta")));
+
+        ProjectOutcome deleted = assertDoesNotThrow(
+                () -> session.apply(SliderPresetEdits.deleteAll(Arrays.asList("Alpha", "alpha"))));
+
+        assertInstanceOf(ChangedOutcome.class, deleted);
+        assertEquals(Arrays.asList("Beta"), sliderPresetNames(deleted.getSnapshot()));
+        assertEquals(Arrays.asList("Beta"),
+                deleted.getSnapshot().getCustomMorphTargets().getFirst().getSliderPresetNames());
+        assertSame(deleted.getSnapshot(), session.getSnapshot());
+    }
+
+    /**
      * Verifies that a recognized catalog edit cannot manufacture active state before
      * New Project or Open and reports the lifecycle problem without throwing.
      */
@@ -1362,6 +1383,10 @@ class ProjectSessionTest {
         assertOutcomeMethod("apply", ProjectEdit.class);
         assertEquals(SliderPresetImportOutcome.class,
                 ProjectSession.class.getMethod("importSliderPresets", List.class).getReturnType());
+        assertEquals(ProjectOutcome.class, Arrays.stream(ProjectSession.class.getDeclaredMethods())
+                .filter(method -> method.getName().equals("refreshSettings"))
+                .map(Method::getReturnType)
+                .findFirst().orElse(null));
 
         Set<String> methodNames = new HashSet<>();
         for (Method method : ProjectSession.class.getDeclaredMethods()) {
@@ -1371,7 +1396,7 @@ class ProjectSessionTest {
                 assertExternalType(parameterType);
         }
         assertEquals(new HashSet<>(Arrays.asList("getSnapshot", "newProject", "open", "save", "saveAs",
-                "importSliderPresets", "apply")), methodNames);
+                "importSliderPresets", "refreshSettings", "apply")), methodNames);
 
         Class<?> implementation = ProjectSessions.create().getClass();
         assertFalse(Modifier.isPublic(implementation.getModifiers()),

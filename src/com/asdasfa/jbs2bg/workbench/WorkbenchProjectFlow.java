@@ -383,6 +383,20 @@ public final class WorkbenchProjectFlow {
     }
 
     /**
+     * Re-derives Project Slider choices from already-published Settings and publishes the exact session outcome.
+     * Settings drafts and persistence remain owned by the Workbench Settings feature.
+     *
+     * @return changed or unchanged Project outcome from the authoritative session
+     * @throws IllegalStateException when the flow is awaiting an effect, running a job, or already closed
+     */
+    public ProjectOutcome refreshSettings() {
+        requireImmediateOperation();
+        ProjectOutcome outcome = projectSession.refreshSettings();
+        publish(outcome);
+        return outcome;
+    }
+
+    /**
      * Completes one pending platform effect. A missing or stale token is rejected without invoking ProjectSession.
      *
      * @param token    token of the effect being completed
@@ -571,7 +585,32 @@ public final class WorkbenchProjectFlow {
                     .anyMatch(diagnostic -> diagnostic.code().equals("STALE_RESULT"));
             if (!stale && result.lifecycle() != JobCoordinator.Lifecycle.CANCELLED)
                 result.value().ifPresent(this::publish);
-        }, Optional.of(() -> openSubmission(capturedSource)));
+        }, Optional.of(openRetryFactory(capturedSource)));
+    }
+
+    /**
+     * Retains the captured Open source while refusing a retry that would bypass the dirty-Project confirmation.
+     *
+     * @param source normalized source retained by the failed attempt
+     * @return retry factory whose availability follows the live Project dirty state
+     */
+    private JobCoordinator.RetryFactory<ProjectOutcome> openRetryFactory(Path source) {
+        Path capturedSource = Objects.requireNonNull(source, "source").toAbsolutePath().normalize();
+        return new JobCoordinator.RetryFactory<>() {
+            /** Recaptures the current Project basis between the coordinator's two availability checks. */
+            @Override
+            public JobCoordinator.Submission<ProjectOutcome> recapture() {
+                return openSubmission(capturedSource);
+            }
+
+            /** Prevents Activity retry from silently replacing unsaved Project content. */
+            @Override
+            public Optional<String> unavailableReason() {
+                return projectSession.getSnapshot().isDirty()
+                        ? Optional.of("Open retry is unavailable while the current Project has unsaved changes")
+                        : Optional.empty();
+            }
+        };
     }
 
     /**

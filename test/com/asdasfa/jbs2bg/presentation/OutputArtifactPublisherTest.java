@@ -3,6 +3,7 @@ package com.asdasfa.jbs2bg.presentation;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -81,6 +82,22 @@ final class OutputArtifactPublisherTest {
                 () -> OutputArtifactPublisher.publishAll(targetDirectory, List.of(ascii, longS)));
     }
 
+    /** The inter-process lock identity is reserved case-insensitively before any transaction move can begin. */
+    @Test
+    void rejectsOutputLockIdentityDuringPreflight(@TempDir Path targetDirectory) {
+        OutputArtifact lockCollision = new TestArtifact(".BS2BG-OUTPUT.LOCK", "replacement");
+        AtomicInteger moves = new AtomicInteger();
+
+        assertThrows(IOException.class, () -> OutputArtifactPublisher.publishAll(targetDirectory,
+                List.of(lockCollision), OutputArtifactPublisher.PublicationContext.nonCancellable(),
+                (source, target) -> {
+                    moves.incrementAndGet();
+                    throw new IOException("reserved lock identity reached transaction move");
+                }));
+
+        assertEquals(0, moves.get());
+    }
+
     /** Accepted cancellation after complete staging preserves prior destinations and removes staged bytes. */
     @Test
     void cancellationBeforeCommitPreservesEveryDestination(@TempDir Path targetDirectory) throws Exception {
@@ -117,7 +134,38 @@ final class OutputArtifactPublisherTest {
         assertNoTransactionDirectory(targetDirectory);
     }
 
-    /** A failure after one backup restores every pre-command destination and removes staged bytes. */
+    /** Backup preparation never vacates a live destination before its atomic replacement is ready. */
+    @Test
+    void liveDestinationsRemainPresentUntilReplacementIsAtomicallyInstalled(@TempDir Path targetDirectory)
+            throws Exception {
+        ProjectGeneratedOutput output = generatedOutput("Alpha");
+        List<Path> destinations = output.getArtifacts().stream()
+                .map(artifact -> targetDirectory.resolve(artifact.getFileName())).toList();
+        for (Path destination : destinations)
+            Files.writeString(destination, "prior " + destination.getFileName());
+        AtomicInteger moves = new AtomicInteger();
+
+        IOException failure = assertThrows(IOException.class, () -> OutputArtifactPublisher.publishAll(
+                targetDirectory, output.getArtifacts(), OutputArtifactPublisher.PublicationContext.nonCancellable(),
+                (source, target) -> {
+                    if (moves.incrementAndGet() == 2) {
+                        for (Path destination : destinations) {
+                            assertTrue(Files.isRegularFile(destination),
+                                    () -> "Live destination was vacated before replacement: " + destination);
+                        }
+                        throw new IOException("injected later install failure");
+                    }
+                    Files.move(source, target, StandardCopyOption.ATOMIC_MOVE,
+                            StandardCopyOption.REPLACE_EXISTING);
+                }));
+
+        assertEquals("injected later install failure", failure.getMessage());
+        for (Path destination : destinations)
+            assertEquals("prior " + destination.getFileName(), Files.readString(destination));
+        assertNoTransactionDirectory(targetDirectory);
+    }
+
+    /** A later replacement failure restores every pre-command destination and removes staged bytes. */
     @Test
     void atomicPublicationFailureRollsBackTheCompleteBatch(@TempDir Path targetDirectory) throws Exception {
         ProjectGeneratedOutput output = generatedOutput("Alpha");
@@ -131,7 +179,8 @@ final class OutputArtifactPublisherTest {
                 (source, target) -> {
                     if (moves.incrementAndGet() == 2)
                         throw new IOException("injected move failure");
-                    Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+                    Files.move(source, target, StandardCopyOption.ATOMIC_MOVE,
+                            StandardCopyOption.REPLACE_EXISTING);
                 }));
 
         assertEquals(3, moves.get());
@@ -149,15 +198,15 @@ final class OutputArtifactPublisherTest {
         for (OutputArtifact artifact : output.getArtifacts())
             Files.writeString(targetDirectory.resolve(artifact.getFileName()),
                     "prior " + artifact.getFileName());
-        int backupMoves = output.getArtifacts().size();
         AtomicInteger moves = new AtomicInteger();
 
         assertThrows(IOException.class, () -> OutputArtifactPublisher.publishAll(targetDirectory,
                 output.getArtifacts(), OutputArtifactPublisher.PublicationContext.nonCancellable(),
                 (source, target) -> {
                     int move = moves.incrementAndGet();
-                    Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
-                    if (move == backupMoves + 1)
+                    Files.move(source, target, StandardCopyOption.ATOMIC_MOVE,
+                            StandardCopyOption.REPLACE_EXISTING);
+                    if (move == 1)
                         throw new IOException("injected post-side-effect failure");
                 }));
 

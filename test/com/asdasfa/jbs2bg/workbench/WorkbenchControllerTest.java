@@ -9,7 +9,11 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javafx.scene.shape.SVGPath;
 import org.junit.jupiter.api.Test;
@@ -71,7 +75,19 @@ class WorkbenchControllerTest {
     void settingsAreaEditsAndPersistsBothProfilesThroughTheWorkbench() throws Exception {
         Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
         assertTrue(initialized.isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The deterministic Settings save settles before prolonged cancellation is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        flow.apply(SliderPresetEdits.create("Settings Refresh"));
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -80,6 +96,9 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
             controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
             ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ComboBox<SettingsFeature.Profile> profiles =
@@ -87,6 +106,7 @@ class WorkbenchControllerTest {
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
                     (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            TextField small = (TextField) loader.getNamespace().get("settingsSmallInput");
             TextField multiplier = (TextField) loader.getNamespace().get("settingsMultiplierInput");
             Button apply = (Button) loader.getNamespace().get("applySettingsEntryButton");
 
@@ -94,6 +114,7 @@ class WorkbenchControllerTest {
             profiles.fireEvent(new ActionEvent());
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            small.setText("0.25");
             multiplier.setText("2");
             apply.fire();
 
@@ -106,18 +127,108 @@ class WorkbenchControllerTest {
             CheckBox omit = (CheckBox) loader.getNamespace().get("omitRedundantSlidersCheck");
             omit.fire();
             ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+            multiplier.setText("9");
+            apply.fire();
 
-            assertEquals(2f, Settings.getMultiplier("Waist"));
-            assertEquals(3f, Settings.getMultiplierUUNP("Arms"));
+            assertTrue(jobs.frame().active());
+            assertEquals(1f, Settings.getMultiplier("Waist"));
+            assertEquals(1f, Settings.getMultiplierUUNP("Arms"));
+            assertEquals("3.0", multiplier.getText());
+            assertTrue(((ListView<?>) loader.getNamespace().get("activityList")).getItems().isEmpty());
+        });
+
+        Thread settingsWorker = worker.runNextAsync();
+        settingsWorker.join();
+        assertEquals(2f, Settings.getMultiplier("Waist"));
+        assertEquals(3f, Settings.getMultiplierUUNP("Arms"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+            FXMLLoader loader = loaderReference.get();
+            assertFalse(jobs.frame().active());
+            assertTrue(jobs.frame().technicalDiagnostics().isEmpty());
+            assertEquals(JobCoordinator.Lifecycle.COMPLETED,
+                    jobs.frame().attempt().orElseThrow().lifecycle());
+            assertEquals(25, flow.frame().snapshot().getSliderPresets().getFirst().getSliderChoices().stream()
+                    .filter(choice -> choice.getName().equals("Waist")).findFirst().orElseThrow()
+                    .getEffectiveSmallValue());
             assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
             assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("Settings saved"));
-            stage.close();
+            stageReference.get().close();
         });
 
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
         assertEquals(2f, Settings.getMultiplier("Waist"));
         assertEquals(3f, Settings.getMultiplierUUNP("Arms"));
         assertTrue(new GenerationPreferencesStore(temporaryDirectory).loadOrMigrate());
+    }
+
+    /** Reload returns immediately on JavaFX and applies the recovered pair only after worker and publication lanes. */
+    @Test
+    void settingsReloadRunsOnTheApplicationWorkerBeforePublishingItsFrame() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The deterministic Reload settles before prolonged cancellation is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        flow.apply(SliderPresetEdits.create("Reload Refresh"));
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
+        });
+        Files.writeString(temporaryDirectory.resolve("settings.json"),
+                "{\"Defaults\":{\"Waist\":{\"valueSmall\":0.5,\"valueBig\":1}},"
+                        + "\"Multipliers\":{\"Waist\":4},\"Inverted\":[]}");
+        Files.writeString(temporaryDirectory.resolve("settings_UUNP.json"),
+                "{\"Defaults\":{},\"Multipliers\":{},\"Inverted\":[]}");
+
+        FxTestToolkit.runOnFxThread(() -> {
+            ((Button) loaderReference.get().getNamespace().get("reloadSettingsButton")).fire();
+
+            assertTrue(jobs.frame().active());
+            assertEquals(1f, Settings.getMultiplier("Waist"));
+        });
+
+        Thread settingsWorker = worker.runNextAsync();
+        settingsWorker.join();
+        assertEquals(4f, Settings.getMultiplier("Waist"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+            FXMLLoader loader = loaderReference.get();
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            assertEquals(4f, entries.getItems().stream().filter(entry -> entry.name().equals("Waist"))
+                    .findFirst().orElseThrow().multiplier().orElseThrow());
+            assertEquals(50, flow.frame().snapshot().getSliderPresets().getFirst().getSliderChoices().stream()
+                    .filter(choice -> choice.getName().equals("Waist")).findFirst().orElseThrow()
+                    .getEffectiveSmallValue());
+            assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
+            assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("Settings reloaded"));
+            stageReference.get().close();
+        });
     }
 
     /**
@@ -595,6 +706,524 @@ class WorkbenchControllerTest {
             assertTrue(flow.frame().closed());
             assertEquals(1, platform.closeCount);
             stage.close();
+        });
+    }
+
+    /** Cancelling a platform chooser records a truthful terminal outcome and restores the semantic launcher focus. */
+    @Test
+    void cancelledProjectChooserPublishesFeedbackAndRestoresFocus() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondWith(WorkbenchProjectFlow.Response.cancelled());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform);
+            ToggleButton launcher = (ToggleButton) loader.getNamespace().get("templatesAreaButton");
+            stage.show();
+            launcher.requestFocus();
+            javafx.scene.Node focusBeforeChooser = stage.getScene().getFocusOwner();
+            assertNotNull(focusBeforeChooser);
+
+            ((MenuItem) loader.getNamespace().get("openProjectMenuItem")).fire();
+
+            @SuppressWarnings("unchecked")
+            ListView<WorkbenchFeedback.ActivityRecord> activity =
+                    (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+            WorkbenchFeedback.ActivityRecord cancelled = activity.getItems().getLast();
+            assertEquals("Open Project", cancelled.operation());
+            assertEquals(WorkbenchFeedback.Disposition.CANCELLED, cancelled.disposition());
+            assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("Cancelled"));
+            assertSame(focusBeforeChooser, stage.getScene().getFocusOwner());
+            stage.close();
+        });
+    }
+
+    /** Window close and File Exit confirm dirty Settings before allowing the ordinary clean-Project close. */
+    @Test
+    void dirtySettingsCloseCanBeCancelledBeforeDiscardClosesTheWindow() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.DISCARD);
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+
+            WindowEvent closeRequest = new WindowEvent(stage, WindowEvent.WINDOW_CLOSE_REQUEST);
+            stage.getOnCloseRequest().handle(closeRequest);
+
+            assertTrue(closeRequest.isConsumed());
+            assertEquals(0, platform.closeCount);
+            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            ListView<?> activity = (ListView<?>) loader.getNamespace().get("activityList");
+            assertEquals(WorkbenchFeedback.Disposition.CANCELLED,
+                    assertInstanceOf(WorkbenchFeedback.ActivityRecord.class,
+                            activity.getItems().getLast()).disposition());
+
+            ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
+
+            assertEquals(1, platform.closeCount);
+            assertTrue(flow.frame().closed());
+            stage.close();
+        });
+    }
+
+    /** Saving dirty Settings on close completes asynchronously before the dirty Project receives its own decision. */
+    @Test
+    void dirtySettingsSaveCompletesBeforeDirtyProjectCloseConfirmation() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The deterministic close-save settles before prolonged cancellation is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        flow.apply(SliderPresetEdits.create("Dirty Project"));
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
+        platform.respondWith(WorkbenchProjectFlow.Response.discard());
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            publication.runNext();
+            stageReference.set(stage);
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+
+            ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
+
+            assertTrue(jobs.frame().active());
+            assertEquals("Save Settings", jobs.frame().attempt().orElseThrow().operation().name());
+            assertTrue(flow.frame().snapshot().isDirty());
+            assertFalse(flow.frame().closed());
+            assertEquals(0, platform.closeCount);
+        });
+
+        Thread settingsWorker = worker.runNextAsync();
+        settingsWorker.join();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+
+            assertEquals(2f, Settings.getMultiplier("Waist"));
+            assertTrue(flow.frame().closed());
+            assertEquals(1, platform.closeCount);
+            stageReference.get().close();
+        });
+    }
+
+    /** An inline coordinator observes the close continuation before Save completion and closes exactly once. */
+    @Test
+    void dirtySettingsCloseSaveSurvivesInlineWorkerAndPublicationCompletion() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        JobCoordinator jobs = new JobCoordinator(new InlineExecutorService(), Runnable::run,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Inline completion leaves no interval for prolonged cancellation feedback.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+
+            ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
+
+            assertEquals(2f, Settings.getMultiplier("Waist"));
+            assertTrue(flow.frame().closed());
+            assertEquals(1, platform.closeCount);
+            stage.close();
+        });
+    }
+
+    /** A failed Settings close-save retains both the dirty draft and the Workbench window. */
+    @Test
+    void failedDirtySettingsCloseSaveKeepsTheDraftAndWindowOpen() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The deterministic failed save settles before prolonged cancellation is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
+        });
+        Files.deleteIfExists(temporaryDirectory.resolve("settings.json"));
+        Files.deleteIfExists(temporaryDirectory.resolve("settings_UUNP.json"));
+        Files.deleteIfExists(temporaryDirectory.resolve(".bs2bg-settings.lock"));
+        Files.delete(temporaryDirectory);
+
+        Thread settingsWorker = worker.runNextAsync();
+        settingsWorker.join();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+            FXMLLoader loader = loaderReference.get();
+
+            assertFalse(flow.frame().closed());
+            assertEquals(0, platform.closeCount);
+            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertEquals(JobCoordinator.Lifecycle.FAILED,
+                    jobs.frame().attempt().orElseThrow().lifecycle());
+            stageReference.get().setOnCloseRequest(null);
+            stageReference.get().close();
+        });
+    }
+
+    /** A close-save rejected during the shutdown/render gap cannot arm a later ordinary Settings Save to close. */
+    @Test
+    void rejectedSettingsAdmissionDoesNotLeaveAPhantomCloseContinuation() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // No admitted operation waits long enough for prolonged cancellation feedback.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            assertEquals(JobCoordinator.ShutdownResponse.READY, jobs.requestShutdown());
+
+            ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
+
+            assertFalse(jobs.frame().active());
+            assertFalse(flow.frame().closed());
+            assertEquals(0, platform.closeCount);
+            assertTrue(jobs.resumeAfterShutdown());
+            publication.runNext();
+            publication.runNext();
+            ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+            assertTrue(jobs.frame().active());
+        });
+
+        Thread settingsWorker = worker.runNextAsync();
+        settingsWorker.join();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+
+            assertFalse(flow.frame().closed());
+            assertEquals(0, platform.closeCount);
+            stageReference.get().setOnCloseRequest(null);
+            stageReference.get().close();
+        });
+    }
+
+    /** A failed close-save Retry recaptures its token, restores semantic focus, and closes only after retry success. */
+    @Test
+    void failedDirtySettingsCloseSaveRetryPreservesTheCloseIntentAndFocus() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Both deterministic attempts settle before prolonged cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
+        platform.respondFailureWith(WorkbenchFeedback.DialogAction.RETRY,
+                () -> assertDoesNotThrow(() -> Files.createDirectories(temporaryDirectory)));
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+        AtomicReference<javafx.scene.Node> returnFocus = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
+            stage.show();
+            ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            TextField editor = (TextField) loader.getNamespace().get("settingsEntryNameInput");
+            editor.requestFocus();
+            assertSame(editor, stage.getScene().getFocusOwner());
+            returnFocus.set(editor);
+            ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
+        });
+        Files.deleteIfExists(temporaryDirectory.resolve("settings.json"));
+        Files.deleteIfExists(temporaryDirectory.resolve("settings_UUNP.json"));
+        Files.deleteIfExists(temporaryDirectory.resolve(".bs2bg-settings.lock"));
+        Files.delete(temporaryDirectory);
+
+        Thread firstAttempt = worker.runNextAsync();
+        firstAttempt.join();
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+
+            assertTrue(jobs.frame().active());
+            assertEquals(0, platform.closeCount);
+            assertSame(returnFocus.get(), stageReference.get().getScene().getFocusOwner());
+        });
+
+        Thread retryAttempt = worker.runNextAsync();
+        retryAttempt.join();
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+
+            assertEquals(2f, Settings.getMultiplier("Waist"));
+            assertTrue(flow.frame().closed());
+            assertEquals(1, platform.closeCount);
+            stageReference.get().close();
+        });
+    }
+
+    /** A failed Save retry becomes ordinarily unavailable after the draft returns clean, without callback failure. */
+    @Test
+    void cleanSettingsDraftMakesFailedSaveRetryUnavailableWithoutTechnicalFailure() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The deterministic failed save settles before prolonged cancellation is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+        });
+        Files.deleteIfExists(temporaryDirectory.resolve("settings.json"));
+        Files.deleteIfExists(temporaryDirectory.resolve("settings_UUNP.json"));
+        Files.deleteIfExists(temporaryDirectory.resolve(".bs2bg-settings.lock"));
+        Files.delete(temporaryDirectory);
+        Thread failedAttempt = worker.runNextAsync();
+        failedAttempt.join();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+            FXMLLoader loader = loaderReference.get();
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).clear();
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            assertTrue(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            @SuppressWarnings("unchecked")
+            ListView<WorkbenchFeedback.ActivityRecord> activity =
+                    (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+            activity.getSelectionModel().selectLast();
+            Button retry = (Button) loader.getNamespace().get("retryActivityButton");
+            assertFalse(retry.isDisabled());
+
+            retry.fire();
+
+            assertTrue(((Label) loader.getNamespace().get("statusText")).getText()
+                    .contains("Settings have no unsaved changes to save."));
+            assertTrue(jobs.frame().technicalDiagnostics().isEmpty());
+            stageReference.get().setOnCloseRequest(null);
+            stageReference.get().close();
+        });
+    }
+
+    /** Cancelling a queued Settings close-save retains the draft/window and restores its semantic return focus. */
+    @Test
+    void cancelledDirtySettingsCloseSaveRestoresFocusWithoutClosing() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Cancellation is accepted before the deterministic worker starts.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+        AtomicReference<javafx.scene.Node> returnFocus = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            publication.runNext();
+            stageReference.set(stage);
+            stage.show();
+            ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            TextField editor = (TextField) loader.getNamespace().get("settingsEntryNameInput");
+            editor.requestFocus();
+            assertSame(editor, stage.getScene().getFocusOwner());
+            returnFocus.set(editor);
+            ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
+            assertEquals(JobCoordinator.CancelResponse.ACCEPTED, jobs.requestCancel());
+
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+
+            assertEquals(JobCoordinator.Lifecycle.CANCELLED,
+                    jobs.frame().attempt().orElseThrow().lifecycle());
+            assertFalse(flow.frame().closed());
+            assertEquals(0, platform.closeCount);
+            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertSame(returnFocus.get(), stage.getScene().getFocusOwner());
+            stageReference.get().setOnCloseRequest(null);
+            stageReference.get().close();
         });
     }
 
@@ -1229,12 +1858,59 @@ class WorkbenchControllerTest {
         });
     }
 
+    /** ExecutorService that runs submitted work inline for deterministic reentrancy coverage. */
+    private static final class InlineExecutorService extends AbstractExecutorService {
+        private boolean shutdown;
+
+        /** Marks the inline executor unavailable for later submissions. */
+        @Override
+        public void shutdown() {
+            shutdown = true;
+        }
+
+        /** Marks shutdown and reports that no queued tasks exist. */
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown = true;
+            return List.of();
+        }
+
+        /** @return whether shutdown was requested */
+        @Override
+        public boolean isShutdown() {
+            return shutdown;
+        }
+
+        /** @return whether the inline executor has terminated */
+        @Override
+        public boolean isTerminated() {
+            return shutdown;
+        }
+
+        /** Inline execution never needs to wait for termination. */
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            Objects.requireNonNull(unit, "unit");
+            return shutdown;
+        }
+
+        /** Executes one accepted task before returning to its submitter. */
+        @Override
+        public void execute(Runnable command) {
+            if (shutdown)
+                throw new java.util.concurrent.RejectedExecutionException("inline executor is shut down");
+            Objects.requireNonNull(command, "command").run();
+        }
+    }
+
     /**
      * Test adapter for modal platform effects; responses are consumed in user-interaction order.
      */
     private static final class RecordingPlatform implements WorkbenchPlatform {
         private final Deque<WorkbenchProjectFlow.Response> responses = new ArrayDeque<>();
         private final Deque<WorkbenchFeedback.DialogAction> confirmationResponses = new ArrayDeque<>();
+        private final Deque<WorkbenchFeedback.DialogAction> failureResponses = new ArrayDeque<>();
+        private final Deque<Runnable> failureHooks = new ArrayDeque<>();
         private final Deque<Optional<Path>> outputDirectoryResponses = new ArrayDeque<>();
         private final Deque<Optional<Path>> outputFileResponses = new ArrayDeque<>();
         private final List<String> clipboardTexts = new java.util.ArrayList<>();
@@ -1252,6 +1928,12 @@ class WorkbenchControllerTest {
          */
         void respondConfirmationWith(WorkbenchFeedback.DialogAction action) {
             confirmationResponses.addLast(action);
+        }
+
+        /** Adds the next failure-dialog action and a hook run immediately before that response is returned. */
+        void respondFailureWith(WorkbenchFeedback.DialogAction action, Runnable beforeResponse) {
+            failureResponses.addLast(action);
+            failureHooks.addLast(beforeResponse);
         }
 
         /** Adds the next Output directory-chooser result. */
@@ -1278,6 +1960,15 @@ class WorkbenchControllerTest {
         @Override
         public WorkbenchFeedback.DialogAction completeConfirmation(WorkbenchFeedback.DialogSpec spec, Stage owner) {
             return confirmationResponses.removeFirst();
+        }
+
+        /** Runs the scripted boundary hook before returning the next failure action. */
+        @Override
+        public WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+            if (failureResponses.isEmpty())
+                return WorkbenchFeedback.DialogAction.CLOSE;
+            failureHooks.removeFirst().run();
+            return failureResponses.removeFirst();
         }
 
         /** Records accepted clipboard text without consulting a JavaFX TextArea. */

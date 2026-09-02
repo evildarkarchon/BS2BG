@@ -1,11 +1,15 @@
 package com.asdasfa.jbs2bg.data;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -427,6 +431,92 @@ final class SettingsJacksonAdapterTest {
         assertEquals("/Future", limited.path());
         assertTrue(limited.line() > 0);
         assertTrue(limited.column() > 0);
+    }
+
+    /**
+     * Rejects an oversized source from metadata before whole-file allocation can
+     * surface an {@link OutOfMemoryError} outside the Settings diagnostic seam.
+     *
+     * @param directory isolated directory for the sparse oversized source
+     * @throws IOException when the sparse source cannot be created
+     */
+    @Test
+    void oversizedSettingsSourceIsRejectedBeforeWholeFileAllocation(@TempDir Path directory) throws IOException {
+        Path source = directory.resolve("oversized-settings.json");
+        try (FileChannel channel = FileChannel.open(source, StandardOpenOption.CREATE_NEW,
+                StandardOpenOption.WRITE)) {
+            channel.position((long) Integer.MAX_VALUE);
+            channel.write(ByteBuffer.wrap(new byte[]{0}));
+        }
+
+        Throwable failure = assertThrows(Throwable.class,
+                () -> SettingsJacksonAdapter.read(source, new java.util.ArrayList<>()));
+        SettingsJacksonAdapter.SettingsFormatException exception = assertInstanceOf(
+                SettingsJacksonAdapter.SettingsFormatException.class, failure);
+
+        assertEquals("SETTINGS_RESOURCE_LIMIT", exception.code());
+        assertEquals("/", exception.path());
+        assertEquals(1, exception.line());
+        assertEquals(1, exception.column());
+    }
+
+    /**
+     * Rejects every persisted slider-name position that the Settings reader would
+     * reject at its shared one-MiB UTF-8 text boundary.
+     */
+    @Test
+    void writerRejectsOversizedSliderNamesThatCannotBeReopened() {
+        String oversizedName = "x".repeat(1024 * 1024 + 1);
+        SettingsJacksonAdapter.SettingsProfile empty = new SettingsJacksonAdapter.SettingsProfile(
+                Map.of(), Map.of(), List.of());
+        SettingsJacksonAdapter.SettingsProfile oversizedDefault = new SettingsJacksonAdapter.SettingsProfile(
+                Map.of(oversizedName, new SettingsJacksonAdapter.DefaultValue(0f, 1f)), Map.of(), List.of());
+        SettingsJacksonAdapter.SettingsProfile oversizedMultiplier = new SettingsJacksonAdapter.SettingsProfile(
+                Map.of(), Map.of(oversizedName, Float.valueOf(1f)), List.of());
+        SettingsJacksonAdapter.SettingsProfile oversizedInverted = new SettingsJacksonAdapter.SettingsProfile(
+                Map.of(), Map.of(), List.of(oversizedName));
+
+        SettingsJacksonAdapter.SettingsFormatException defaultFailure = assertThrows(
+                SettingsJacksonAdapter.SettingsFormatException.class,
+                () -> SettingsJacksonAdapter.writePair(new SettingsJacksonAdapter.SettingsCandidate(
+                        oversizedDefault, empty, List.of())));
+        SettingsJacksonAdapter.SettingsFormatException multiplierFailure = assertThrows(
+                SettingsJacksonAdapter.SettingsFormatException.class,
+                () -> SettingsJacksonAdapter.writePair(new SettingsJacksonAdapter.SettingsCandidate(
+                        oversizedMultiplier, empty, List.of())));
+        SettingsJacksonAdapter.SettingsFormatException invertedFailure = assertThrows(
+                SettingsJacksonAdapter.SettingsFormatException.class,
+                () -> SettingsJacksonAdapter.writePair(new SettingsJacksonAdapter.SettingsCandidate(
+                        oversizedInverted, empty, List.of())));
+
+        assertEquals("SETTINGS_RESOURCE_LIMIT", defaultFailure.code());
+        assertEquals("SETTINGS_RESOURCE_LIMIT", multiplierFailure.code());
+        assertEquals("SETTINGS_RESOURCE_LIMIT", invertedFailure.code());
+        assertEquals("/Inverted/0", invertedFailure.path());
+    }
+
+    /**
+     * Rejects a canonical profile whose individually valid names collectively
+     * exceed the Settings reader's eight-MiB document boundary.
+     */
+    @Test
+    void writerRejectsDocumentLargerThanReaderLimit() {
+        Map<String, SettingsJacksonAdapter.DefaultValue> defaults = new LinkedHashMap<>();
+        String nameSuffix = "x".repeat(1024 * 1024 - 2);
+        for (int index = 0; index < 9; index++)
+            defaults.put(index + nameSuffix, new SettingsJacksonAdapter.DefaultValue(0f, 1f));
+        SettingsJacksonAdapter.SettingsProfile oversized = new SettingsJacksonAdapter.SettingsProfile(
+                defaults, Map.of(), List.of());
+        SettingsJacksonAdapter.SettingsProfile empty = new SettingsJacksonAdapter.SettingsProfile(
+                Map.of(), Map.of(), List.of());
+
+        SettingsJacksonAdapter.SettingsFormatException exception = assertThrows(
+                SettingsJacksonAdapter.SettingsFormatException.class,
+                () -> SettingsJacksonAdapter.writePair(new SettingsJacksonAdapter.SettingsCandidate(
+                        oversized, empty, List.of())));
+
+        assertEquals("SETTINGS_RESOURCE_LIMIT", exception.code());
+        assertEquals("/", exception.path());
     }
 
     /**

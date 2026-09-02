@@ -2,6 +2,9 @@ package com.asdasfa.jbs2bg.workbench;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -11,15 +14,21 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.asdasfa.jbs2bg.data.Settings;
+import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
+import com.asdasfa.jbs2bg.data.SettingsTestSupport;
+import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.ProjectDiagnosticCodes;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
@@ -369,6 +378,80 @@ class WorkbenchProjectFlowTest {
                         && diagnostic.message().contains("source changed")));
         assertEquals(before.snapshot(), session.getSnapshot());
         assertEquals(before, flow.frame());
+    }
+
+    /**
+     * A failed Open retry becomes unavailable after an unsaved edit, without translating the expected refusal into
+     * a technical callback failure or admitting replacement work.
+     */
+    @Test
+    void openRetryIsUnavailableAfterTheCurrentProjectBecomesDirty() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path source = temporaryDirectory.resolve("dirty-retry-source.jbs2bg");
+        Files.copy(Path.of("test-resources", "json-oracles", "project", "malformed-syntax.jbs2bg"), source);
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        flow.request(WorkbenchProjectFlow.Intent.NEW);
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
+                .effect().orElseThrow();
+        flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selected(source));
+        worker.runNext();
+        JobCoordinator.Attempt failed = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.FAILED, failed.lifecycle());
+
+        ProjectOutcome edited = flow.apply(SliderPresetEdits.create("Unsaved edit"));
+        Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source,
+                StandardCopyOption.REPLACE_EXISTING);
+
+        JobCoordinator.Admission retry = jobs.retry(failed.id());
+
+        assertFalse(retry.admitted());
+        assertFalse(jobs.frame().active());
+        assertTrue(jobs.frame().technicalDiagnostics().isEmpty());
+        assertEquals(edited.getSnapshot(), flow.frame().snapshot());
+        assertTrue(flow.frame().snapshot().isDirty());
+    }
+
+    /**
+     * Immediate Settings refresh publishes the exact session outcome through the normal Project frame boundary.
+     */
+    @Test
+    void refreshSettingsPublishesTheSessionOutcome() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.request(WorkbenchProjectFlow.Intent.NEW);
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        WorkbenchProjectFlow.Frame before = flow.frame();
+        Map<String, DefaultSliderValue> changedDefaults = new LinkedHashMap<>();
+        changedDefaults.put("Only", new DefaultSliderValue(0.3f, 0.7f));
+
+        try {
+            SettingsTestSupport.installDefaults(changedDefaults, Map.of());
+            ProjectOutcome refreshed = flow.refreshSettings();
+
+            assertInstanceOf(ChangedOutcome.class, refreshed);
+            assertEquals(refreshed.getSnapshot(), flow.frame().snapshot());
+            assertNotEquals(before.snapshot().getContentVersion(),
+                    flow.frame().snapshot().getContentVersion());
+            assertEquals(List.of("Only"), flow.frame().snapshot().getSliderPresets().getFirst()
+                    .getSliderChoices().stream().map(choice -> choice.getName()).toList());
+        } finally {
+            SettingsTestSupport.restoreRepositorySettings();
+        }
+    }
+
+    /**
+     * Settings refresh uses the same immediate-operation guard as direct edits while a platform effect is pending.
+     */
+    @Test
+    void refreshSettingsRejectsWhileAPlatformEffectIsPending() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.request(WorkbenchProjectFlow.Intent.SAVE_AS);
+
+        assertThrows(IllegalStateException.class, flow::refreshSettings);
     }
 
     /**

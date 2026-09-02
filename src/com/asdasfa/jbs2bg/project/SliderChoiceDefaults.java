@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -51,9 +52,7 @@ final class SliderChoiceDefaults {
      * @return stored value, configured default as a percentage, or zero when unconfigured
      */
     static int effectiveSmall(String name, Integer stored, boolean uunp) {
-        if (stored != null)
-            return stored.intValue();
-        return uunp ? Settings.getDefaultValueSmallUUNP(name) : Settings.getDefaultValueSmall(name);
+        return effectiveSmall(name, stored, uunp, Settings.snapshot());
     }
 
     /**
@@ -66,9 +65,51 @@ final class SliderChoiceDefaults {
      * @return stored value, configured default as a percentage, or zero when unconfigured
      */
     static int effectiveBig(String name, Integer stored, boolean uunp) {
+        return effectiveBig(name, stored, uunp, Settings.snapshot());
+    }
+
+    /**
+     * Resolves one small endpoint against a caller-pinned Settings generation.
+     *
+     * @param name     exact slider identity used by Settings
+     * @param stored   persisted endpoint, or null to use Settings
+     * @param uunp     whether the UUNP profile applies
+     * @param settings complete immutable Settings generation
+     * @return stored or pinned configured percentage, otherwise zero
+     */
+    private static int effectiveSmall(String name, Integer stored, boolean uunp, Settings.Snapshot settings) {
         if (stored != null)
             return stored.intValue();
-        return uunp ? Settings.getDefaultValueBigUUNP(name) : Settings.getDefaultValueBig(name);
+        DefaultSliderValue configured = defaults(uunp, settings).get(name);
+        return configured == null ? 0 : (int) (configured.getValueSmall() * 100);
+    }
+
+    /**
+     * Resolves one big endpoint against a caller-pinned Settings generation.
+     *
+     * @param name     exact slider identity used by Settings
+     * @param stored   persisted endpoint, or null to use Settings
+     * @param uunp     whether the UUNP profile applies
+     * @param settings complete immutable Settings generation
+     * @return stored or pinned configured percentage, otherwise zero
+     */
+    private static int effectiveBig(String name, Integer stored, boolean uunp, Settings.Snapshot settings) {
+        if (stored != null)
+            return stored.intValue();
+        DefaultSliderValue configured = defaults(uunp, settings).get(name);
+        return configured == null ? 0 : (int) (configured.getValueBig() * 100);
+    }
+
+    /**
+     * Selects the requested mode's immutable defaults from one complete Settings generation.
+     *
+     * @param uunp     whether the UUNP profile applies
+     * @param settings complete immutable Settings generation
+     * @return immutable defaults in pinned encounter order
+     */
+    private static Map<String, DefaultSliderValue> defaults(boolean uunp, Settings.Snapshot settings) {
+        Settings.Snapshot pinned = Objects.requireNonNull(settings, "settings");
+        return (uunp ? pinned.uunp() : pinned.standard()).defaults();
     }
 
     /**
@@ -80,10 +121,27 @@ final class SliderChoiceDefaults {
      * @return synthesized choices in settings order; callers sort as needed
      */
     static List<SliderChoiceSnapshot> synthesizeMissing(Set<String> representedNames, boolean uunp) {
-        Map<String, DefaultSliderValue> defaults = uunp ? Settings.getDefaultsMapUUNP() : Settings.getDefaultsMap();
+        return synthesizeMissing(representedNames, uunp, Settings.snapshot());
+    }
+
+    /**
+     * Synthesizes missing choices exclusively from one caller-pinned Settings generation.
+     *
+     * @param representedNames slider names already represented by explicit choices
+     * @param uunp             whether the UUNP profile applies
+     * @param settings         complete immutable Settings generation for this rebuild
+     * @return synthesized choices in pinned Settings encounter order
+     */
+    static List<SliderChoiceSnapshot> synthesizeMissing(Set<String> representedNames, boolean uunp,
+                                                        Settings.Snapshot settings) {
+        Map<String, DefaultSliderValue> configuredDefaults = defaults(uunp, settings);
         List<SliderChoiceSnapshot> synthesized = new ArrayList<>();
-        for (Map.Entry<String, DefaultSliderValue> entry : defaults.entrySet()) {
-            if (!representedNames.contains(entry.getKey()))
+        Set<String> completedNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        completedNames.addAll(representedNames);
+        for (Map.Entry<String, DefaultSliderValue> entry : configuredDefaults.entrySet()) {
+            // Settings intentionally accepts case-distinct keys, while a Slider
+            // Preset has one logical choice identity regardless of display casing.
+            if (completedNames.add(entry.getKey()))
                 synthesized.add(new SliderChoiceSnapshot(entry.getKey(), true, null, null,
                         (int) (entry.getValue().getValueSmall() * 100),
                         (int) (entry.getValue().getValueBig() * 100), 100, 100, true));
@@ -103,15 +161,29 @@ final class SliderChoiceDefaults {
      * @return complete choices in canonical case-insensitive order
      */
     static List<SliderChoiceSnapshot> rebuildForMode(List<SliderChoiceSnapshot> choices, boolean uunp) {
+        return rebuildForMode(choices, uunp, Settings.snapshot());
+    }
+
+    /**
+     * Rebuilds one complete choice list using exactly one immutable Settings generation for membership and endpoints.
+     *
+     * @param choices  current complete choices of the Slider Preset
+     * @param uunp     whether the UUNP profile applies
+     * @param settings complete immutable Settings generation for this rebuild
+     * @return rebuilt choices in canonical case-insensitive order
+     */
+    static List<SliderChoiceSnapshot> rebuildForMode(List<SliderChoiceSnapshot> choices, boolean uunp,
+                                                     Settings.Snapshot settings) {
+        Settings.Snapshot pinned = Objects.requireNonNull(settings, "settings");
         List<SliderChoiceSnapshot> rebuilt = new ArrayList<>();
         Set<String> representedNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         for (SliderChoiceSnapshot choice : choices) {
             if (choice.isMissingDefault())
                 continue;
             representedNames.add(choice.getName());
-            rebuilt.add(resolveEffective(choice, uunp));
+            rebuilt.add(resolveEffective(choice, uunp, pinned));
         }
-        rebuilt.addAll(synthesizeMissing(representedNames, uunp));
+        rebuilt.addAll(synthesizeMissing(representedNames, uunp, pinned));
         Collections.sort(rebuilt, NAME_ORDER);
         return rebuilt;
     }
@@ -129,13 +201,26 @@ final class SliderChoiceDefaults {
      * other value preserved
      */
     static SliderChoiceSnapshot resolveEffective(SliderChoiceSnapshot choice, boolean uunp) {
+        return resolveEffective(choice, uunp, Settings.snapshot());
+    }
+
+    /**
+     * Resolves one explicit choice exclusively against a caller-pinned Settings generation.
+     *
+     * @param choice   explicit choice whose stored endpoints remain authoritative
+     * @param uunp     whether the UUNP profile applies
+     * @param settings complete immutable Settings generation for endpoint fallback
+     * @return copied choice with effective endpoints from the pinned generation
+     */
+    static SliderChoiceSnapshot resolveEffective(SliderChoiceSnapshot choice, boolean uunp,
+                                                 Settings.Snapshot settings) {
         Integer storedSmall = choice.getStoredSmallValue().isPresent()
                 ? Integer.valueOf(choice.getStoredSmallValue().getAsInt()) : null;
         Integer storedBig = choice.getStoredBigValue().isPresent()
                 ? Integer.valueOf(choice.getStoredBigValue().getAsInt()) : null;
         return new SliderChoiceSnapshot(choice.getName(), choice.isEnabled(), storedSmall, storedBig,
-                effectiveSmall(choice.getName(), storedSmall, uunp),
-                effectiveBig(choice.getName(), storedBig, uunp),
+                effectiveSmall(choice.getName(), storedSmall, uunp, settings),
+                effectiveBig(choice.getName(), storedBig, uunp, settings),
                 choice.getPercentageMinimum(), choice.getPercentageMaximum(), choice.isMissingDefault());
     }
 
@@ -195,9 +280,10 @@ final class SliderChoiceDefaults {
      * @return a new list of mode-consistent copies in the same order
      */
     static List<SliderChoiceSnapshot> resolveEffective(List<SliderChoiceSnapshot> choices, boolean uunp) {
+        Settings.Snapshot settings = Settings.snapshot();
         List<SliderChoiceSnapshot> resolved = new ArrayList<>(choices.size());
         for (SliderChoiceSnapshot choice : choices)
-            resolved.add(resolveEffective(choice, uunp));
+            resolved.add(resolveEffective(choice, uunp, settings));
         return resolved;
     }
 }

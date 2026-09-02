@@ -378,6 +378,15 @@ public final class JobCoordinator implements AutoCloseable {
                 return new Admission(false, Optional.empty(), Optional.of(operation));
             }
         }
+        Optional<String> unavailableReason;
+        try {
+            unavailableReason = retryUnavailableReason(retryFactory);
+        } catch (RuntimeException | LinkageError failure) {
+            recordCallbackFailure("JOB_RETRY_AVAILABILITY_FAILED", failure);
+            return new Admission(false, Optional.empty(), Optional.of("Retry availability could not be checked"));
+        }
+        if (unavailableReason.isPresent())
+            return new Admission(false, Optional.empty(), unavailableReason);
         return recaptureRetry(selected, retryFactory);
     }
 
@@ -392,7 +401,27 @@ public final class JobCoordinator implements AutoCloseable {
             recordCallbackFailure("JOB_RETRY_CAPTURE_FAILED", failure);
             return new Admission(false, Optional.empty(), Optional.of("Retry could not be captured"));
         }
+        Optional<String> unavailableReason;
+        try {
+            unavailableReason = retryUnavailableReason(retryFactory);
+        } catch (RuntimeException | LinkageError failure) {
+            recordCallbackFailure("JOB_RETRY_AVAILABILITY_FAILED", failure);
+            return new Admission(false, Optional.empty(), Optional.of("Retry availability could not be checked"));
+        }
+        if (unavailableReason.isPresent())
+            return new Admission(false, Optional.empty(), unavailableReason);
         return submit(recaptured, Optional.of(failedAttempt));
+    }
+
+    /**
+     * Reads and validates one dynamic retry-availability result.
+     *
+     * @param retryFactory selected factory whose dependent state is being checked
+     * @return validated user-facing unavailability reason, otherwise empty
+     */
+    private static Optional<String> retryUnavailableReason(RetryFactory<?> retryFactory) {
+        return Objects.requireNonNull(retryFactory.unavailableReason(), "Retry availability returned null")
+                .map(value -> requireText(value, "retry unavailable reason"));
     }
 
     /**
@@ -629,8 +658,10 @@ public final class JobCoordinator implements AutoCloseable {
             }
             current.finish(result, clock.instant());
             current.cancelTimer();
-            current.submission().retryFactory().ifPresent(factory ->
-                    completedRetryFactories.put(current.id(), factory));
+            if (result.lifecycle().retryEligible()) {
+                current.submission().retryFactory().ifPresent(factory ->
+                        completedRetryFactories.put(current.id(), factory));
+            }
             active = null;
             published = commitFrame(current.attempt(), shutdownRequested);
         }
@@ -780,6 +811,16 @@ public final class JobCoordinator implements AutoCloseable {
                 case RUNNING, CANCELLING, FINISHING -> false;
             };
         }
+
+        /**
+         * @return true only when another attempt can usefully address a non-success terminal disposition
+         */
+        private boolean retryEligible() {
+            return switch (this) {
+                case COMPLETED_WITH_ISSUES, CANCELLED, FAILED -> true;
+                case RUNNING, CANCELLING, FINISHING, COMPLETED -> false;
+            };
+        }
     }
 
     /**
@@ -884,6 +925,15 @@ public final class JobCoordinator implements AutoCloseable {
          * @return a fresh submission whose inputs are captured at retry time
          */
         Submission<T> recapture();
+
+        /**
+         * Rechecks state that may have changed since the terminal attempt was published.
+         *
+         * @return a user-facing reason when retry is currently unavailable, otherwise empty
+         */
+        default Optional<String> unavailableReason() {
+            return Optional.empty();
+        }
     }
 
     /**
@@ -1088,7 +1138,7 @@ public final class JobCoordinator implements AutoCloseable {
         private Attempt attempt() {
             return new Attempt(id, operation(), retryOf, lifecycle, progress, startedAt,
                     Optional.ofNullable(completedAt), summary, effectsCommitted, diagnostics,
-                    cancellationProlonged, lifecycle.terminal() && submission.retryFactory().isPresent());
+                    cancellationProlonged, lifecycle.retryEligible() && submission.retryFactory().isPresent());
         }
     }
 

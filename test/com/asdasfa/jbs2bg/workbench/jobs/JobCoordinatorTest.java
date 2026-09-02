@@ -12,7 +12,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
@@ -272,6 +275,138 @@ class JobCoordinatorTest {
         assertEquals(Optional.of(firstId), terminal.retryOf());
         assertEquals(List.of("retry.jbs2bg"), terminal.operation().sourceLabels());
         assertEquals(List.of("retry.jbs2bg"), completedValues);
+    }
+
+    /**
+     * A successful terminal attempt neither advertises nor retains a retry factory that could replay committed work.
+     */
+    @Test
+    void completedAttemptDoesNotExposeOrRetainItsRetryFactory() {
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator coordinator = coordinator(worker);
+        AtomicReference<Boolean> recaptured = new AtomicReference<>(Boolean.FALSE);
+        JobCoordinator.Submission<String> submission = new JobCoordinator.Submission<>(
+                new JobCoordinator.Operation("Save As", List.of(), List.of("saved.jbs2bg"), Optional.empty()),
+                context -> JobCoordinator.Result.completed("saved", "Project saved",
+                        List.of("Project file replaced"), List.of()),
+                (attempt, result) -> {
+                    // The immutable terminal attempt below is the observable contract under test.
+                }, Optional.of(() -> {
+            recaptured.set(Boolean.TRUE);
+            return new JobCoordinator.Submission<>(
+                    new JobCoordinator.Operation("Save As", List.of(), List.of("saved.jbs2bg"), Optional.empty()),
+                    context -> JobCoordinator.Result.completed("saved again", "Project saved again",
+                            List.of("Project file replaced"), List.of()),
+                    (attempt, result) -> {
+                        // A successful first attempt must prevent this submission from being admitted.
+                    }, Optional.empty());
+        }));
+
+        JobCoordinator.AttemptId id = coordinator.submit(submission).attempt().orElseThrow();
+        worker.runNext();
+        JobCoordinator.Attempt completed = coordinator.frame().attempt().orElseThrow();
+        JobCoordinator.Admission retry = coordinator.retry(id);
+
+        assertFalse(completed.retryAvailable());
+        assertFalse(retry.admitted());
+        assertEquals(Boolean.FALSE, recaptured.get());
+    }
+
+    /**
+     * Completed-with-issues work retains Retry so a recovered or stale operation can be attempted again.
+     */
+    @Test
+    void completedWithIssuesAttemptRemainsRetryable() {
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator coordinator = coordinator(worker);
+        JobCoordinator.Submission<String> submission = new JobCoordinator.Submission<>(
+                new JobCoordinator.Operation("Open Project", List.of("recovered.jbs2bg"), List.of(), Optional.empty()),
+                context -> JobCoordinator.Result.completedWithIssues("recovered", "Project recovered", List.of(),
+                        List.of(new JobCoordinator.Diagnostic("RECOVERED", "Project needs attention",
+                                Optional.empty()))),
+                (attempt, result) -> {
+                    // Retry capability is asserted from the terminal attempt and admission below.
+                }, Optional.of(() -> new JobCoordinator.Submission<>(
+                        new JobCoordinator.Operation("Open Project", List.of("recovered.jbs2bg"), List.of(),
+                                Optional.empty()),
+                        context -> JobCoordinator.Result.failed("Still recovered", List.of()),
+                        (attempt, result) -> {
+                            // The linked retry only needs to prove admission for this contract.
+                        }, Optional.empty())));
+
+        JobCoordinator.AttemptId id = coordinator.submit(submission).attempt().orElseThrow();
+        worker.runNext();
+        JobCoordinator.Attempt completed = coordinator.frame().attempt().orElseThrow();
+
+        assertTrue(completed.retryAvailable());
+        assertTrue(coordinator.retry(id).admitted());
+    }
+
+    /**
+     * Retry rechecks dynamic availability after recapture so a state change in that window prevents admission.
+     */
+    @Test
+    void retryRechecksAvailabilityAfterRecapturingInputs() throws Exception {
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator coordinator = coordinator(worker);
+        CountDownLatch recaptureStarted = new CountDownLatch(1);
+        CountDownLatch releaseRecapture = new CountDownLatch(1);
+        AtomicBoolean unavailable = new AtomicBoolean();
+        AtomicInteger availabilityChecks = new AtomicInteger();
+        JobCoordinator.RetryFactory<String> retryFactory = new JobCoordinator.RetryFactory<>() {
+            /** Blocks after the first availability check so the test can change dependent state. */
+            @Override
+            public JobCoordinator.Submission<String> recapture() {
+                recaptureStarted.countDown();
+                try {
+                    if (!releaseRecapture.await(5, TimeUnit.SECONDS))
+                        throw new AssertionError("Retry recapture was not released");
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError("Retry recapture was interrupted", exception);
+                }
+                return new JobCoordinator.Submission<>(
+                        new JobCoordinator.Operation("Open Project", List.of("retry.jbs2bg"), List.of(),
+                                Optional.empty()),
+                        context -> JobCoordinator.Result.completed("opened", "Project opened",
+                                List.of("Project published"), List.of()),
+                        (attempt, result) -> {
+                            // Post-recapture unavailability must keep this submission out of the worker queue.
+                        }, Optional.empty());
+            }
+
+            /** Counts both required checks and follows the state changed while recapture is blocked. */
+            @Override
+            public Optional<String> unavailableReason() {
+                availabilityChecks.incrementAndGet();
+                return unavailable.get() ? Optional.of("Current Project became dirty") : Optional.empty();
+            }
+        };
+        JobCoordinator.Submission<String> first = new JobCoordinator.Submission<>(
+                new JobCoordinator.Operation("Open Project", List.of("first.jbs2bg"), List.of(), Optional.empty()),
+                context -> JobCoordinator.Result.failed("Open failed", List.of()),
+                (attempt, result) -> {
+                    // The failed terminal attempt is the retry source below.
+                }, Optional.of(retryFactory));
+        JobCoordinator.AttemptId failedId = coordinator.submit(first).attempt().orElseThrow();
+        worker.runNext();
+        FutureTask<JobCoordinator.Admission> retryTask = new FutureTask<>(() -> coordinator.retry(failedId));
+        Thread retryThread = Thread.ofPlatform().name("retry-availability-race").start(retryTask);
+        assertTrue(recaptureStarted.await(5, TimeUnit.SECONDS));
+
+        unavailable.set(true);
+        releaseRecapture.countDown();
+        JobCoordinator.Admission admission;
+        try {
+            admission = retryTask.get(5, TimeUnit.SECONDS);
+        } finally {
+            retryThread.join(5_000);
+        }
+
+        assertFalse(admission.admitted());
+        assertEquals(2, availabilityChecks.get());
+        assertFalse(coordinator.frame().active());
+        assertTrue(coordinator.frame().technicalDiagnostics().isEmpty());
     }
 
     /**

@@ -315,6 +315,7 @@ public final class WorkbenchController {
     private OutputFeature.Subscription outputSubscription;
     private long renderedTerminalAttemptId;
     private boolean closeAfterActiveJob;
+    private SettingsCloseContinuation settingsCloseContinuation;
     private boolean renderingTemplates;
     private boolean renderingSettings;
     private boolean renderingOutput;
@@ -750,17 +751,191 @@ public final class WorkbenchController {
         }
     }
 
-    /** Commits one Settings intent, publishes its reporting tier, and refreshes output-affecting Templates previews. */
-    private void dispatchSettings(SettingsFeature.Intent intent) {
+    /** Commits one Settings intent and admits any captured persistence effect to the application worker. */
+    private SettingsFeature.Update dispatchSettings(SettingsFeature.Intent intent) {
+        return dispatchSettings(intent, Optional.empty());
+    }
+
+    /**
+     * Commits one Settings intent, installing an optional token-keyed close continuation before worker admission.
+     *
+     * @param intent requested Settings task
+     * @param closeReturnTarget semantic focus to restore while continuing a close-save, otherwise empty
+     * @return committed feature update, or rejected update when coordinator admission failed
+     */
+    private SettingsFeature.Update dispatchSettings(SettingsFeature.Intent intent,
+                                                     Optional<WorkbenchNavigation.FocusTarget> closeReturnTarget) {
         if (settingsMutationsBlocked && isSettingsMutation(intent))
-            return;
+            return new SettingsFeature.Update(false, settingsFeature.frame());
         SettingsFeature.Update update = settingsFeature.dispatch(Objects.requireNonNull(intent, "intent"));
         renderSettings(update.frame());
-        publishSettingsOutcome(update);
-        if (update.accepted() && update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED)
-            renderTemplates(templatesFeature.refreshSettings().frame());
-        if (update.accepted())
+        if (update.effect().isPresent()) {
+            SettingsFeature.Effect effect = update.effect().orElseThrow();
+            closeReturnTarget.ifPresent(target ->
+                    settingsCloseContinuation = new SettingsCloseContinuation(effect.token(), target));
+            if (!submitSettingsEffect(effect)) {
+                if (settingsCloseContinuation != null && settingsCloseContinuation.effectToken() == effect.token())
+                    settingsCloseContinuation = null;
+                return new SettingsFeature.Update(false, settingsFeature.frame());
+            }
+        } else {
+            publishSettingsOutcome(update);
+        }
+        if (update.accepted() && update.effect().isEmpty())
             renderOutput(outputFeature.refreshGenerationSettings().frame());
+        return update;
+    }
+
+    /** Admits one immutable Settings effect to the existing application-wide coordinator. */
+    private boolean submitSettingsEffect(SettingsFeature.Effect effect) {
+        JobCoordinator.Admission admission = projectFlow.jobs().submit(settingsSubmission(effect));
+        if (!admission.admitted()) {
+            settingsFeature.cancel(effect.token());
+            renderSettings(settingsFeature.frame());
+        }
+        return admission.admitted();
+    }
+
+    /** Builds one retryable Settings submission whose retry recaptures current feature inputs. */
+    private JobCoordinator.Submission<SettingsFeature.Completion> settingsSubmission(SettingsFeature.Effect effect) {
+        JobCoordinator.Operation operation = new JobCoordinator.Operation(
+                effect instanceof SettingsFeature.SaveEffect ? "Save Settings" : "Reload Settings",
+                effect instanceof SettingsFeature.ReloadEffect ? List.of(effect.directory().toString()) : List.of(),
+                effect instanceof SettingsFeature.SaveEffect ? List.of(effect.directory().toString()) : List.of(),
+                Optional.empty());
+        return new JobCoordinator.Submission<>(operation,
+                context -> runSettingsEffect(effect, context),
+                (attempt, result) -> completeSettingsEffect(effect, result),
+                Optional.of(settingsRetryFactory(effect)));
+    }
+
+    /** Builds dynamic retry availability and recapture around the current Settings draft. */
+    private JobCoordinator.RetryFactory<SettingsFeature.Completion> settingsRetryFactory(
+            SettingsFeature.Effect previous) {
+        return new JobCoordinator.RetryFactory<>() {
+            /** Recaptures current inputs and transfers any close continuation to the new effect token. */
+            @Override
+            public JobCoordinator.Submission<SettingsFeature.Completion> recapture() {
+                return recaptureSettingsSubmission(previous);
+            }
+
+            /** Save needs a still-dirty valid draft; Reload always remains meaningful. */
+            @Override
+            public Optional<String> unavailableReason() {
+                return previous instanceof SettingsFeature.SaveEffect
+                        ? settingsFeature.saveRetryUnavailableReason() : Optional.empty();
+            }
+        };
+    }
+
+    /** Recaptures Save drafts or the Reload directory when the user explicitly retries a failed Settings job. */
+    private JobCoordinator.Submission<SettingsFeature.Completion> recaptureSettingsSubmission(
+            SettingsFeature.Effect previous) {
+        SettingsFeature.Intent intent = previous instanceof SettingsFeature.SaveEffect
+                ? new SettingsFeature.Save() : new SettingsFeature.Reload();
+        SettingsFeature.Update recaptured = settingsFeature.dispatch(intent);
+        SettingsFeature.Effect replacement = recaptured.effect().orElseThrow(
+                () -> new IllegalStateException("Settings retry could not recapture its persistence inputs"));
+        if (settingsCloseContinuation != null && settingsCloseContinuation.effectToken() == previous.token())
+            settingsCloseContinuation = settingsCloseContinuation.forEffect(replacement.token());
+        return settingsSubmission(replacement);
+    }
+
+    /** Executes only blocking Settings I/O on the worker and returns a detached tokenized result. */
+    private static JobCoordinator.Result<SettingsFeature.Completion> runSettingsEffect(
+            SettingsFeature.Effect effect, JobCoordinator.Context context) {
+        context.checkCancellation();
+        if (!context.beginCommit(effect instanceof SettingsFeature.SaveEffect
+                ? "Saving Settings" : "Reloading Settings"))
+            return JobCoordinator.Result.cancelled("Settings operation cancelled.", List.of(), List.of());
+        SettingsFeature.Completion completion;
+        boolean successful;
+        List<JobCoordinator.Diagnostic> diagnostics;
+        String successSummary;
+        String failureSummary;
+        if (effect instanceof SettingsFeature.SaveEffect save) {
+            Settings.PersistenceResult result = Settings.persist(save.directory(), save.replacement());
+            completion = new SettingsFeature.SaveCompletion(save.token(), result);
+            successful = result.isSuccessful();
+            diagnostics = settingsDiagnostics(result);
+            successSummary = "Settings saved.";
+            failureSummary = "Settings could not be saved.";
+        } else {
+            SettingsFeature.ReloadEffect reload = (SettingsFeature.ReloadEffect) effect;
+            Settings.InitializationResult result = Settings.initialize(reload.directory());
+            completion = new SettingsFeature.ReloadCompletion(reload.token(), result);
+            successful = result.isSuccessful();
+            diagnostics = settingsDiagnostics(result);
+            boolean recovered = result.getDiagnostics().stream()
+                    .anyMatch(value -> value.getCode().equals("SETTINGS_PUBLICATION_RECOVERED"));
+            successSummary = recovered ? "Settings recovered and reloaded." : "Settings reloaded.";
+            failureSummary = "Settings could not be reloaded.";
+        }
+        if (!successful)
+            return JobCoordinator.Result.failed(completion, failureSummary, diagnostics);
+        List<String> effects = List.of("Published Standard and UUNP Settings");
+        return diagnostics.isEmpty()
+                ? JobCoordinator.Result.completed(completion, successSummary, effects, List.of())
+                : JobCoordinator.Result.completedWithIssues(completion, successSummary, effects, diagnostics);
+    }
+
+    /** Converts one Save failure or warning set to coordinator-owned structured diagnostics. */
+    private static List<JobCoordinator.Diagnostic> settingsDiagnostics(Settings.PersistenceResult result) {
+        if (!result.isSuccessful())
+            return List.of(settingsDiagnostic(result.getFailure().orElseThrow()));
+        return result.getDiagnostics().stream().map(WorkbenchController::settingsDiagnostic).toList();
+    }
+
+    /** Converts one Reload failure or warning set to coordinator-owned structured diagnostics. */
+    private static List<JobCoordinator.Diagnostic> settingsDiagnostics(Settings.InitializationResult result) {
+        if (!result.isSuccessful())
+            return List.of(settingsDiagnostic(result.getFailure().orElseThrow()));
+        return result.getDiagnostics().stream().map(WorkbenchController::settingsDiagnostic).toList();
+    }
+
+    /** Preserves a Settings failure's stable code and source path in terminal job evidence. */
+    private static JobCoordinator.Diagnostic settingsDiagnostic(Settings.Failure failure) {
+        return new JobCoordinator.Diagnostic(failure.getCode(), failure.getMessage(),
+                Optional.of(failure.getSource() + " " + failure.getPath()));
+    }
+
+    /** Preserves a non-blocking Settings diagnostic in terminal job evidence. */
+    private static JobCoordinator.Diagnostic settingsDiagnostic(Settings.Diagnostic diagnostic) {
+        return new JobCoordinator.Diagnostic(diagnostic.getCode(), diagnostic.getMessage(),
+                Optional.of(diagnostic.getSource() + " " + diagnostic.getPath()));
+    }
+
+    /** Applies one terminal worker result on the serialized lane and continues a confirmed close only on Save success. */
+    private void completeSettingsEffect(SettingsFeature.Effect effect,
+                                        JobCoordinator.Result<SettingsFeature.Completion> result) {
+        SettingsFeature.Update update = result.value().isPresent()
+                ? settingsFeature.complete(result.value().orElseThrow()) : settingsFeature.cancel(effect.token());
+        renderSettings(update.frame());
+        boolean published = update.accepted() && (update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED
+                || update.frame().outcome() == SettingsFeature.OutcomeKind.RELOADED
+                || update.frame().outcome() == SettingsFeature.OutcomeKind.RECOVERED);
+        if (published)
+            refreshPublishedSettings();
+        SettingsCloseContinuation close = settingsCloseContinuation != null
+                && settingsCloseContinuation.effectToken() == effect.token() ? settingsCloseContinuation : null;
+        if (close != null) {
+            if (update.accepted() && update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED) {
+                settingsCloseContinuation = null;
+                requestFocus(close.returnTarget());
+                dispatchProject(WorkbenchProjectFlow.Intent.CLOSE);
+            }
+        }
+    }
+
+    /** Reprojects every Settings-dependent feature after the live pair is published. */
+    private void refreshPublishedSettings() {
+        projectFlow.refreshSettings();
+        WorkbenchProjectFlow.Frame projectFrame = projectFlow.frame();
+        // Settings-driven derived choices are not a second user Project command and must not create generic Activity.
+        renderedProjectSequence = projectFrame.sequence();
+        render(projectFrame);
+        renderTemplates(templatesFeature.refreshSettings().frame());
+        renderOutput(outputFeature.refreshGenerationSettings().frame());
     }
 
     /** Distinguishes local profile browsing from operations that can change live or on-disk Settings. */
@@ -1560,15 +1735,20 @@ public final class WorkbenchController {
                 : "Select a retryable failed Activity record while no operation is active.");
     }
 
-    /**
-     * Requests a coordinator-owned retry for the selected durable Activity attempt.
-     */
+    /** Requests a coordinator-owned retry and reports an ordinary dynamic admission rejection through status. */
     private void retrySelectedActivity() {
         WorkbenchFeedback.ActivityRecord selected = activityList.getSelectionModel().getSelectedItem();
         if (selected == null || selected.jobDetails().isEmpty())
             return;
-        projectFlow.jobs().retry(new JobCoordinator.AttemptId(
+        JobCoordinator.Admission admission = projectFlow.jobs().retry(new JobCoordinator.AttemptId(
                 selected.jobDetails().orElseThrow().attemptId()));
+        if (!admission.admitted()) {
+            String reason = admission.activeOperation().orElse("Retry is not available");
+            retryActivityButton.setAccessibleHelp(reason);
+            renderFeedback(feedback.publishStatus(new WorkbenchFeedback.Notification(
+                    "Retry " + selected.operation(), WorkbenchFeedback.Severity.INFORMATION,
+                    reason, WorkbenchFeedback.Disposition.CANCELLED)));
+        }
     }
 
     /**
@@ -1952,11 +2132,48 @@ public final class WorkbenchController {
             projectFlow.jobs().requestShutdown();
             return;
         }
+        if (intent == WorkbenchProjectFlow.Intent.CLOSE && settingsFeature.frame().dirty()) {
+            confirmDirtySettingsClose();
+            return;
+        }
+        dispatchProject(intent);
+    }
+
+    /** Dispatches directly to the Project flow after any Workbench-owned Settings close decision is complete. */
+    private void dispatchProject(WorkbenchProjectFlow.Intent intent) {
         activeOperation = Objects.requireNonNull(intent, "intent");
         try {
             apply(projectFlow.request(intent));
         } finally {
             activeOperation = null;
+        }
+    }
+
+    /** Offers Save, Discard, and Cancel for dirty Settings before entering the ordinary Project close flow. */
+    private void confirmDirtySettingsClose() {
+        WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
+        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.unsavedClose(
+                "Save Settings before closing?", "Closing now would discard unsaved Settings changes.");
+        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
+        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
+        renderFeedback(pendingFrame);
+        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
+        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(pending.token(), action)).frame());
+        if (action == WorkbenchFeedback.DialogAction.CANCEL) {
+            renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+                    "Close Workbench", WorkbenchFeedback.Severity.INFORMATION, "Close Workbench cancelled.",
+                    WorkbenchFeedback.Disposition.CANCELLED)));
+            requestFocus(returnTarget);
+            return;
+        }
+        if (action == WorkbenchFeedback.DialogAction.DISCARD) {
+            dispatchProject(WorkbenchProjectFlow.Intent.CLOSE);
+            return;
+        }
+        SettingsFeature.Update save = dispatchSettings(new SettingsFeature.Save(), Optional.of(returnTarget));
+        if (!save.accepted() || save.effect().isEmpty()) {
+            requestFocus(returnTarget);
+            return;
         }
     }
 
@@ -1999,8 +2216,18 @@ public final class WorkbenchController {
                         pendingDialog.token(), dialogAction(response));
                 renderFeedback(feedback.answerDialog(result).frame());
             }
+            if (response.kind() == WorkbenchProjectFlow.ResponseKind.CANCELLED)
+                publishProjectCancellation(activeOperation);
             current = projectFlow.respond(effect.token(), response);
         }
+    }
+
+    /** Publishes an accepted chooser or confirmation cancellation without inventing a Project publication. */
+    private void publishProjectCancellation(WorkbenchProjectFlow.Intent intent) {
+        OperationDescription operation = operationDescription(intent);
+        renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+                operation.name(), WorkbenchFeedback.Severity.INFORMATION,
+                operation.name() + " cancelled.", WorkbenchFeedback.Disposition.CANCELLED)));
     }
 
     /**
@@ -2070,6 +2297,7 @@ public final class WorkbenchController {
             if (terminal.id().value() > renderedTerminalAttemptId) {
                 renderedTerminalAttemptId = terminal.id().value();
                 renderTerminalJob(terminal);
+                restoreSettingsCloseFocus(terminal);
             }
             if (projectFrame.closed() && activeOperation == null && !finalClose) {
                 // Asynchronous close-after-save has no dispatch stack left to consume a CLOSE_WINDOW effect.
@@ -2162,6 +2390,14 @@ public final class WorkbenchController {
             showJobFailure(attempt);
     }
 
+    /** Restores a retained Settings close target only after terminal rendering has re-enabled its controls. */
+    private void restoreSettingsCloseFocus(JobCoordinator.Attempt attempt) {
+        if (settingsCloseContinuation != null && attempt.operation().name().equals("Save Settings")
+                && (attempt.lifecycle() == JobCoordinator.Lifecycle.FAILED
+                || attempt.lifecycle() == JobCoordinator.Lifecycle.CANCELLED))
+            requestFocus(settingsCloseContinuation.returnTarget());
+    }
+
     /**
      * Publishes and completes a typed failure dialog, translating Retry to a fresh linked attempt.
      */
@@ -2251,6 +2487,21 @@ public final class WorkbenchController {
         private OperationDescription {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(completedText, "completedText");
+        }
+    }
+
+    /** Token-keyed close intent retained across one failed or cancelled Settings Save and its explicit retries. */
+    private record SettingsCloseContinuation(long effectToken, WorkbenchNavigation.FocusTarget returnTarget) {
+        /** Requires a positive effect token and stable semantic return target. */
+        private SettingsCloseContinuation {
+            if (effectToken <= 0)
+                throw new IllegalArgumentException("effectToken must be positive");
+            Objects.requireNonNull(returnTarget, "returnTarget");
+        }
+
+        /** Transfers the same user close intent and focus target to a freshly recaptured retry effect. */
+        private SettingsCloseContinuation forEffect(long token) {
+            return new SettingsCloseContinuation(token, returnTarget);
         }
     }
 

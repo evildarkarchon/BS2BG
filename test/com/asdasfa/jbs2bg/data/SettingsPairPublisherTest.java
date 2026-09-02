@@ -2,6 +2,7 @@ package com.asdasfa.jbs2bg.data;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -163,6 +164,66 @@ final class SettingsPairPublisherTest {
         });
 
         assertEquals(5, moveCount.get());
+        assertArrayEquals(replacement.standardUtf8(), Files.readAllBytes(standard));
+        assertArrayEquals(replacement.uunpUtf8(), Files.readAllBytes(uunp));
+        assertNoTransactions(directory);
+    }
+
+    /** A cleanup failure after the durable commit leaves success and a committed journal for later recovery. */
+    @Test
+    void postCommitCleanupFailureLeavesCommittedPairForRecovery(@TempDir Path directory) throws IOException {
+        Path standard = directory.resolve("settings.json");
+        Path uunp = directory.resolve("settings_UUNP.json");
+        Files.writeString(standard, "prior-standard");
+        Files.writeString(uunp, "prior-uunp");
+        SettingsJacksonAdapter.SettingsPairBytes replacement = replacementPair();
+        AtomicInteger cleanupCalls = new AtomicInteger();
+
+        SettingsPairPublisher.publish(standard, uunp, replacement,
+                (source, target) -> Files.move(source, target, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING),
+                transaction -> {
+                    cleanupCalls.incrementAndGet();
+                    throw new IOException("injected post-commit cleanup failure");
+                });
+
+        assertEquals(1, cleanupCalls.get());
+        assertArrayEquals(replacement.standardUtf8(), Files.readAllBytes(standard));
+        assertArrayEquals(replacement.uunpUtf8(), Files.readAllBytes(uunp));
+        Path transaction;
+        try (var entries = Files.list(directory)) {
+            transaction = entries.filter(path -> path.getFileName().toString()
+                    .startsWith(".bs2bg-settings-stage-")).findFirst().orElseThrow();
+        }
+        assertTrue(Files.isRegularFile(transaction.resolve("committed")));
+
+        assertFalse(SettingsPairPublisher.recover(directory, standard, uunp));
+        assertArrayEquals(replacement.standardUtf8(), Files.readAllBytes(standard));
+        assertArrayEquals(replacement.uunpUtf8(), Files.readAllBytes(uunp));
+        assertNoTransactions(directory);
+    }
+
+    /** An empty transaction left after committed child cleanup is cleanup-only, not a reported rollback. */
+    @Test
+    void emptyPostCommitCleanupResidueDoesNotReportRollback(@TempDir Path directory) throws IOException {
+        Path standard = directory.resolve("settings.json");
+        Path uunp = directory.resolve("settings_UUNP.json");
+        Files.writeString(standard, "prior-standard");
+        Files.writeString(uunp, "prior-uunp");
+        SettingsJacksonAdapter.SettingsPairBytes replacement = replacementPair();
+
+        SettingsPairPublisher.publish(standard, uunp, replacement,
+                (source, target) -> Files.move(source, target, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING),
+                transaction -> {
+                    try (var entries = Files.list(transaction)) {
+                        for (Path child : entries.toList())
+                            Files.delete(child);
+                    }
+                    throw new IOException("injected final directory cleanup failure");
+                });
+
+        assertFalse(SettingsPairPublisher.recover(directory, standard, uunp));
         assertArrayEquals(replacement.standardUtf8(), Files.readAllBytes(standard));
         assertArrayEquals(replacement.uunpUtf8(), Files.readAllBytes(uunp));
         assertNoTransactions(directory);

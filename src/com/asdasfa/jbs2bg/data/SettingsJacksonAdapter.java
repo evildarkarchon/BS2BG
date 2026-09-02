@@ -69,7 +69,8 @@ final class SettingsJacksonAdapter {
      *
      * @param profile immutable profile to encode
      * @return canonical UTF-8 bytes
-     * @throws SettingsFormatException when a value is non-finite or Jackson cannot encode the profile
+     * @throws SettingsFormatException when a value is non-finite, text or output exceeds resource limits,
+     *                                 or Jackson cannot encode the profile
      */
     private static byte[] writeProfile(SettingsProfile profile) {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -79,24 +80,33 @@ final class SettingsJacksonAdapter {
             generator.writeName("Defaults");
             generator.writeStartObject();
             for (Map.Entry<String, DefaultValue> entry : profile.defaults().entrySet()) {
-                generator.writeName(entry.getKey());
+                String name = entry.getKey();
+                requireWritableText(name, child("/Defaults", name), "member name");
+                generator.writeName(name);
                 generator.writeStartObject();
                 writeFiniteNumber(generator, "valueSmall", entry.getValue().valueSmall(),
-                        child(child("/Defaults", entry.getKey()), "valueSmall"));
+                        child(child("/Defaults", name), "valueSmall"));
                 writeFiniteNumber(generator, "valueBig", entry.getValue().valueBig(),
-                        child(child("/Defaults", entry.getKey()), "valueBig"));
+                        child(child("/Defaults", name), "valueBig"));
                 generator.writeEndObject();
             }
             generator.writeEndObject();
             generator.writeName("Multipliers");
             generator.writeStartObject();
-            for (Map.Entry<String, Float> entry : profile.multipliers().entrySet())
-                writeFiniteNumber(generator, entry.getKey(), entry.getValue(), child("/Multipliers", entry.getKey()));
+            for (Map.Entry<String, Float> entry : profile.multipliers().entrySet()) {
+                String name = entry.getKey();
+                String path = child("/Multipliers", name);
+                requireWritableText(name, path, "member name");
+                writeFiniteNumber(generator, name, entry.getValue(), path);
+            }
             generator.writeEndObject();
             generator.writeName("Inverted");
             generator.writeStartArray();
-            for (String sliderName : profile.inverted())
+            int invertedIndex = 0;
+            for (String sliderName : profile.inverted()) {
+                requireWritableText(sliderName, "/Inverted/" + invertedIndex++, "string");
                 generator.writeString(sliderName);
+            }
             generator.writeEndArray();
             generator.writeEndObject();
             generator.writeRaw('\n');
@@ -107,7 +117,14 @@ final class SettingsJacksonAdapter {
             throw new SettingsFormatException("SETTINGS_WRITE_FAILED", "<detached-settings>", "/", 0, 0,
                     "Settings JSON could not be represented.");
         }
-        return output.toByteArray();
+        byte[] bytes = output.toByteArray();
+        // Every serialized profile must remain acceptable to the same reader that
+        // will consume it on Reload or the next application startup.
+        if (bytes.length > JacksonJson.settingsMaximumDocumentBytes()) {
+            throw new SettingsFormatException("SETTINGS_RESOURCE_LIMIT", "<detached-settings>", "/", 0, 0,
+                    "Settings output exceeds the 8 MiB document limit.");
+        }
+        return bytes;
     }
 
     /**
@@ -121,10 +138,38 @@ final class SettingsJacksonAdapter {
     }
 
     /**
+     * Applies the reader's UTF-8 text boundary before canonical bytes can become
+     * durable and make the next Settings reload fail.
+     *
+     * @param value slider name about to be serialized
+     * @param path  stable Settings location for a rejected value
+     * @param kind  human-readable JSON token kind
+     * @throws SettingsFormatException when the encoded text exceeds one MiB
+     */
+    private static void requireWritableText(String value, String path, String kind) {
+        if (JacksonJson.exceedsTextLimit(value)) {
+            throw new SettingsFormatException("SETTINGS_RESOURCE_LIMIT", "<detached-settings>", path, 0, 0,
+                    "Settings " + kind + " exceeds the 1 MiB UTF-8 limit.");
+        }
+    }
+
+    /**
      * Reads one Settings source into detached collections, translating I/O and streaming failures before
      * the caller can combine it with the other profile.
      */
     static SettingsProfile read(Path source, List<SettingsDiagnostic> diagnostics) {
+        long sourceSize;
+        try {
+            sourceSize = Files.size(source);
+        } catch (IOException exception) {
+            throw failure("SETTINGS_IO_FAILED", source, "/", 0, 0, exception.getMessage());
+        }
+        // Refuse oversized metadata before readAllBytes allocates; the byte-array
+        // check below still closes a concurrent file-growth race.
+        if (sourceSize > JacksonJson.settingsMaximumDocumentBytes()) {
+            throw failure("SETTINGS_RESOURCE_LIMIT", source, "/", 1, 1,
+                    "Settings input exceeds the 8 MiB limit.");
+        }
         byte[] bytes;
         try {
             bytes = Files.readAllBytes(source);

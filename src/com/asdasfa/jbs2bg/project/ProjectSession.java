@@ -106,6 +106,15 @@ public interface ProjectSession {
     SliderPresetImportOutcome importSliderPresets(List<Path> sources, ProjectOperationContext context);
 
     /**
+     * Re-derives the active Project's Slider choices from the already-published global Settings value.
+     * This operation owns only Project snapshot derivation; Settings drafts, persistence, loading, and configuration
+     * remain outside ProjectSession.
+     *
+     * @return a typed outcome preserving lifecycle metadata and reporting whether Project content changed
+     */
+    ProjectOutcome refreshSettings();
+
+    /**
      * Applies one explicit Project edit atomically. Unknown edit request types are
      * rejected with a structured diagnostic and the unchanged latest snapshot.
      *

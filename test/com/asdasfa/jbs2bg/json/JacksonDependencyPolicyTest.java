@@ -20,6 +20,11 @@ final class JacksonDependencyPolicyTest {
             "src/com/asdasfa/jbs2bg/project/ProjectJacksonAdapter.java",
             "src/com/asdasfa/jbs2bg/data/SettingsJacksonAdapter.java",
             "src/com/asdasfa/jbs2bg/presentation/BosJacksonWriter.java");
+    private static final List<String> INTERNAL_POLICY_CALLERS = List.of(
+            "src/com/asdasfa/jbs2bg/project/ProjectJacksonAdapter.java",
+            "src/com/asdasfa/jbs2bg/data/SettingsJacksonAdapter.java",
+            "src/com/asdasfa/jbs2bg/presentation/BosJacksonWriter.java",
+            "src/com/asdasfa/jbs2bg/workbench/settings/SettingsFeature.java");
 
     /**
      * Reports whether one source imports a Jackson type without hiding I/O failures from the policy test.
@@ -163,7 +168,7 @@ final class JacksonDependencyPolicyTest {
 
     /**
      * Enforces the friend-package boundary that Java source visibility cannot express:
-     * only the three owned adapters may call the public internal support class.
+     * only the owned adapters and Settings name-validation feature may call the public internal support class.
      */
     @Test
     void confinesInternalJacksonPolicyCallsToFormatAdapters() throws IOException {
@@ -175,7 +180,7 @@ final class JacksonDependencyPolicyTest {
                     .sorted()
                     .toList();
 
-            assertEquals(FORMAT_ADAPTERS.stream().sorted().toList(), callers);
+            assertEquals(INTERNAL_POLICY_CALLERS.stream().sorted().toList(), callers);
         }
     }
 }
