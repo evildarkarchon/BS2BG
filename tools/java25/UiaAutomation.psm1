@@ -7,9 +7,9 @@
     Wraps System.Windows.Automation so tools/java25/smoke-app-image.ps1 can locate JavaFX controls the way an
     assistive technology does: by accessible control type (role), accessible name, and tree relationships. Nothing
     here accepts caller-supplied coordinates, automation ids, CSS, or JavaFX internals. Pointer activation uses the
-    clickable point or bounding rectangle supplied by the semantically located UIA provider; JavaFX exposes the rest
-    of its scene graph through public accessibility support, so helpers otherwise see roles, names, relationships,
-    and patterns.
+    clickable point or visible content bounds supplied by the semantically located UIA provider; JavaFX exposes the
+    rest of its scene graph through public accessibility support, so helpers otherwise see roles, names,
+    relationships, and patterns.
 
     Every wait is bounded and every failure names what was being looked for, so a hung toolkit or a missing
     control fails the smoke run with a diagnosis instead of hanging it.
@@ -59,20 +59,6 @@ public static class BS2BGWindows
 {
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
-    [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT
-    {
-        public int dx;
-        public int dy;
-        public uint mouseData;
-        public uint dwFlags;
-        public uint time;
-        public IntPtr dwExtraInfo;
-    }
-    [StructLayout(LayoutKind.Sequential)] private struct INPUT
-    {
-        public uint type;
-        public MOUSEINPUT mouse;
-    }
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
@@ -86,10 +72,10 @@ public static class BS2BGWindows
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hWnd);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool SetCursorPos(int x, int y);
-    [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, INPUT[] inputs, int size);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
 
     private const uint BM_CLICK = 0x00F5;
-    private const uint INPUT_MOUSE = 0;
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     private const uint MOUSEEVENTF_LEFTUP = 0x0004;
     private const uint SWP_NOMOVE = 0x0002;
@@ -113,12 +99,18 @@ public static class BS2BGWindows
     {
         if (!SetCursorPos(x, y))
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-        var inputs = new[] {
-            new INPUT { type = INPUT_MOUSE, mouse = new MOUSEINPUT { dwFlags = MOUSEEVENTF_LEFTDOWN } },
-            new INPUT { type = INPUT_MOUSE, mouse = new MOUSEINPUT { dwFlags = MOUSEEVENTF_LEFTUP } }
-        };
-        if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT))) != inputs.Length)
-            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+    }
+
+    /// <summary>
+    /// Brings the top-level owner of a semantically located element to the foreground before global pointer input.
+    /// </summary>
+    /// <param name="hWnd">Native top-level window handle discovered through the UIA ancestor chain.</param>
+    /// <returns>Whether Windows accepted the foreground activation request.</returns>
+    public static bool ActivateWindow(IntPtr hWnd)
+    {
+        return SetForegroundWindow(hWnd);
     }
 
     /// <summary>
@@ -557,30 +549,106 @@ function Invoke-UiaElement {
     Clicks a semantic UIA element with the real Windows pointer at its provider-supplied location.
 .NOTES
     The element must first be located by accessible role/name/relationship. No fixed coordinates or row indexes are
-    accepted. JavaFX does not always implement TryGetClickablePoint, so its provider-supplied bounding-rectangle
-    center is the constrained fallback; UI Automation remains authoritative even across live DPI changes.
+    accepted. JavaFX does not always implement TryGetClickablePoint, so the center of its provider-supplied visible
+    text content (then the outer bounds) is the constrained fallback; UI Automation remains authoritative across DPI.
+.PARAMETER RefreshRoot
+    Optional semantic search root used to reacquire JavaFX peers before each clickable-point attempt.
+.PARAMETER RefreshCondition
+    Role/name condition paired with RefreshRoot; both refresh parameters must be supplied together.
 #>
 function Invoke-UiaPointerClick {
     [CmdletBinding()]
-    param([Parameter(Mandatory)] $Element)
-    if (-not $Element.Current.IsEnabled -or $Element.Current.IsOffscreen) {
-        throw "Element '$($Element.Current.Name)' is not enabled and onscreen for pointer activation."
+    param(
+        [Parameter(Mandatory)] $Element,
+        $RefreshRoot,
+        [System.Windows.Automation.Condition]$RefreshCondition
+    )
+    $refresh = $null -ne $RefreshRoot -or $null -ne $RefreshCondition
+    if ($refresh -and ($null -eq $RefreshRoot -or $null -eq $RefreshCondition)) {
+        throw 'RefreshRoot and RefreshCondition must be supplied together.'
     }
-    $point = [System.Windows.Point]::new(0.0, 0.0)
-    $locationSource = 'clickable-point'
-    if (-not $Element.TryGetClickablePoint([ref]$point)) {
-        $bounds = $Element.Current.BoundingRectangle
-        if ($bounds.IsEmpty -or $bounds.Width -le 0.0 -or $bounds.Height -le 0.0) {
-            throw "Element '$($Element.Current.Name)' exposed neither a clickable point nor usable provider bounds."
+    $point = $null
+    $bounds = $null
+    $fallbackBounds = $null
+    $fallbackSource = 'bounding-rectangle-center'
+    $handle = [IntPtr]::Zero
+    $elementName = ''
+    $clickablePointError = $null
+    $attemptCount = $(if ($refresh) { 20 } else { 1 })
+    for ($attempt = 0; $attempt -lt $attemptCount; $attempt++) {
+        if ($refresh) {
+            $candidate = Find-UiaElement -Root $RefreshRoot -Condition $RefreshCondition
+            if ($null -eq $candidate) {
+                Start-Sleep -Milliseconds 100
+                continue
+            }
+            $Element = $candidate
         }
-        # JavaFX 25 commonly omits TryGetClickablePoint even for visible buttons; its UIA bounds remain DPI-aware.
-        $point = [System.Windows.Point]::new(
-            $bounds.Left + ($bounds.Width / 2.0),
-            $bounds.Top + ($bounds.Height / 2.0))
-        $locationSource = 'bounding-rectangle-center'
+        try {
+            $elementName = $Element.Current.Name
+            if (-not $Element.Current.IsEnabled -or $Element.Current.IsOffscreen) {
+                throw "Element '$elementName' is not enabled and onscreen for pointer activation."
+            }
+            # Snapshot provider state before TryGetClickablePoint: JavaFX may invalidate its optional point peer.
+            $bounds = $Element.Current.BoundingRectangle
+            $textChild = Find-UiaElement -Root $Element -Condition (New-UiaCondition -ControlType 'Text')
+            if ($null -ne $textChild) {
+                $textBounds = $textChild.Current.BoundingRectangle
+                if (-not $textBounds.IsEmpty -and $textBounds.Width -gt 0.0 -and $textBounds.Height -gt 0.0) {
+                    $fallbackBounds = $textBounds
+                    $fallbackSource = 'descendant-text-center'
+                }
+            }
+            if ($null -eq $fallbackBounds) { $fallbackBounds = $bounds }
+            $ancestor = $Element
+            $handle = [IntPtr]::Zero
+            $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+            while ($null -ne $ancestor) {
+                $candidateHandle = [IntPtr]$ancestor.Current.NativeWindowHandle
+                if ($candidateHandle -ne [IntPtr]::Zero) {
+                    $handle = $candidateHandle
+                    break
+                }
+                $ancestor = $walker.GetParent($ancestor)
+            }
+            $candidatePoint = [System.Windows.Point]::new(0.0, 0.0)
+            if ($Element.TryGetClickablePoint([ref]$candidatePoint)) {
+                $point = $candidatePoint
+                $clickablePointError = $null
+                break
+            }
+            $clickablePointError = 'Provider returned no clickable point.'
+        }
+        catch {
+            $clickablePointError = $_.Exception.Message
+        }
+        if ($refresh) { Start-Sleep -Milliseconds 100 }
     }
+    $locationSource = 'clickable-point'
+    if ($null -eq $point) {
+        if ($fallbackBounds.IsEmpty -or $fallbackBounds.Width -le 0.0 -or $fallbackBounds.Height -le 0.0) {
+            throw "Element '$elementName' exposed neither a clickable point nor usable provider bounds."
+        }
+        # JavaFX 25 may omit a clickable point; visible descendant content is reliably inside the semantic control.
+        $point = [System.Windows.Point]::new(
+            $fallbackBounds.Left + ($fallbackBounds.Width / 2.0),
+            $fallbackBounds.Top + ($fallbackBounds.Height / 2.0))
+        $locationSource = $fallbackSource
+    }
+    if ($handle -eq [IntPtr]::Zero) {
+        throw "Element '$elementName' has no native ancestor for foreground pointer activation."
+    }
+    $activated = [BS2BGWindows]::ActivateWindow($handle)
+    # UIA focus can belong to a background JavaFX window; allow the foreground transition to settle before input.
+    Start-Sleep -Milliseconds 75
     [BS2BGWindows]::LeftClick([int][math]::Round($point.X), [int][math]::Round($point.Y))
-    return [ordered]@{ x = $point.X; y = $point.Y; source = $locationSource }
+    return [ordered]@{
+        x = $point.X
+        y = $point.Y
+        source = $locationSource
+        windowActivated = $activated
+        clickablePointError = $clickablePointError
+    }
 }
 
 <#

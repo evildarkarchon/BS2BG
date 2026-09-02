@@ -100,7 +100,7 @@ image process, host `jvm.dll` and JavaFX native libraries from the extracted run
 the configured bound.
 
 Windows UI Automation locates controls by accessible role/name and native ownership; pointer checks use only the
-provider-supplied clickable point, or its bounding-rectangle center when JavaFX omits that optional point, of a
+provider-supplied clickable point, or visible descendant-content bounds when JavaFX omits that optional point, of a
 semantically located element. The current issue #107
 workflow records these steps:
 

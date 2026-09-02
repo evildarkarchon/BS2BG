@@ -1454,7 +1454,9 @@ try {
             -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (-not $createTarget.Current.IsOffscreen) { $createTarget }
         } | Out-Null
-        $createPointer = Invoke-UiaPointerClick -Element $createTarget
+        $createTarget = Find-OuterControl -ControlType 'Button' -Name 'Create Custom Morph Target'
+        $createPointer = Invoke-UiaPointerClick -Element $createTarget -RefreshRoot $script:mainWindow `
+            -RefreshCondition (New-UiaCondition -ControlType 'Button' -Name 'Create Custom Morph Target')
         $createdTarget = Wait-UiaElement -Root $targetList -Condition (
             New-UiaCondition -ControlType 'ListItem' -Name 'ActorTypeNPC|Female') `
             -Description 'pointer-created Custom Morph Target' -TimeoutSeconds $StepTimeoutSeconds
@@ -1517,7 +1519,11 @@ try {
             New-UiaCondition -ControlType 'ListItem' -Name 'All|Female') `
             -Description 'pointer-selected relationship target' -TimeoutSeconds $StepTimeoutSeconds
         $allFemale.SetFocus()
-        $selectPointer = Invoke-UiaPointerClick -Element $allFemale
+        $allFemale = Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'All|Female') `
+            -Description 'refreshed pointer relationship target' -TimeoutSeconds $StepTimeoutSeconds
+        $selectPointer = Invoke-UiaPointerClick -Element $allFemale -RefreshRoot $targetList `
+            -RefreshCondition (New-UiaCondition -ControlType 'ListItem' -Name 'All|Female')
         Wait-UiaCondition -Description 'pointer target selection' -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (Get-UiaSelectionState -Element $allFemale) { $allFemale }
         } | Out-Null
@@ -1535,18 +1541,15 @@ try {
             if ($null -eq (Find-UiaElement -Root $assignedList -Condition (
                     New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic'))) { $true }
         } | Out-Null
-        Send-UiaKeys -ProcessId $script:app.Id -Keys '%a' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-UiaKeyboardFocus -Element $assignedList -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        $availableRelationship = Find-OuterControl -ControlType 'ComboBox' -Name 'Available Slider Preset'
-        Send-UiaKeys -ProcessId $script:app.Id -Keys '%v' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-UiaKeyboardFocus -Element $availableRelationship -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $assignAll = Find-OuterControl -ControlType 'Button' -Name 'Assign all Slider Presets'
         $assignAll.SetFocus()
         Wait-UiaCondition -Description 'onscreen assign-all relationship button' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (-not $assignAll.Current.IsOffscreen -and $assignAll.Current.IsEnabled) { $assignAll }
         } | Out-Null
-        $relationshipPointer = Invoke-UiaPointerClick -Element $assignAll
+        $assignAll = Find-OuterControl -ControlType 'Button' -Name 'Assign all Slider Presets'
+        $relationshipPointer = Invoke-UiaPointerClick -Element $assignAll -RefreshRoot $script:mainWindow `
+            -RefreshCondition (New-UiaCondition -ControlType 'Button' -Name 'Assign all Slider Presets')
         $uunpRelationship = Wait-UiaElement -Root $assignedList -Condition (
             New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic') `
             -Description 'pointer-assigned Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds
@@ -1559,6 +1562,10 @@ try {
                 -Name 'Success — Generate Output — Completed: Output generated.') `
             -Description 'Morphs relationship Generate Activity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $outputRegion = Find-OuterControl -ControlType 'Tab' -Name 'Generated Output tabs'
+        $morphsOutputTab = Wait-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') `
+            -Description 'Morphs Output tab' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $morphsOutputTab
         $beforeRelationshipRemoval = (Get-SelectedOutputText -Region $outputRegion -TabName 'Morphs' `
             -Description 'Morphs output before relationship removal').Text
         if (-not $beforeRelationshipRemoval.Contains('All|Female=CBBE Curvy|UUNP Athletic')) {
@@ -1569,7 +1576,11 @@ try {
         $removeRelationship = Find-OuterControl -ControlType 'Button' `
             -Name 'Remove selected Slider Preset relationship'
         $removeRelationship.SetFocus()
-        $removeRelationshipPointer = Invoke-UiaPointerClick -Element $removeRelationship
+        $removeRelationship = Find-OuterControl -ControlType 'Button' `
+            -Name 'Remove selected Slider Preset relationship'
+        $removeRelationshipPointer = Invoke-UiaPointerClick -Element $removeRelationship `
+            -RefreshRoot $script:mainWindow -RefreshCondition (
+                New-UiaCondition -ControlType 'Button' -Name 'Remove selected Slider Preset relationship')
         Choose-Confirmation -ButtonName 'Remove'
         Wait-UiaCondition -Description 'removed Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds -Test {
             if ($null -eq (Find-UiaElement -Root $assignedList -Condition (
@@ -1616,8 +1627,11 @@ try {
         } | Out-Null
 
         Set-UiaValue -Element $nameInput -Value 'Clear Me'
+        $createTarget = Find-OuterControl -ControlType 'Button' -Name 'Create Custom Morph Target'
         $createTarget.SetFocus()
-        $clearCreatePointer = Invoke-UiaPointerClick -Element $createTarget
+        $createTarget = Find-OuterControl -ControlType 'Button' -Name 'Create Custom Morph Target'
+        $clearCreatePointer = Invoke-UiaPointerClick -Element $createTarget -RefreshRoot $script:mainWindow `
+            -RefreshCondition (New-UiaCondition -ControlType 'Button' -Name 'Create Custom Morph Target')
         Wait-UiaElement -Root $targetList -Condition (
             New-UiaCondition -ControlType 'ListItem' -Name 'Clear Me') `
             -Description 'target for filtered catalog clear' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
@@ -1669,7 +1683,9 @@ try {
         Save-Screenshot -Path $morphsNarrowScreenshot
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
-        $availablePreset = Wait-FocusedControl -ControlType 'ComboBox' -Name 'Available Slider Preset'
+        $availablePresetLabel = Find-OuterControl -ControlType 'Text' -Name 'Available Slider Preset:'
+        $availablePreset = Get-FollowingControl -Element $availablePresetLabel -ControlType 'ComboBox'
+        Wait-UiaKeyboardFocus -Element $availablePreset -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Assert-ControlInsideClient -Element $availablePreset -Metrics (Get-UiaWindowMetrics -Window $script:mainWindow)
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1300 -LogicalHeight 800 `
