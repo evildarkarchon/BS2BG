@@ -130,6 +130,7 @@ class WorkbenchControllerTest {
                     .filter(preset -> preset.getName().equals("Alpha")).findFirst().orElseThrow());
             available.fireEvent(new ActionEvent());
             assign.fire();
+            assigned = controller.assignedMorphSliderPresetListNode();
 
             assertEquals(List.of("Alpha"), assigned.getItems().stream()
                     .map(SliderPresetSnapshot::getName).toList());
@@ -196,17 +197,20 @@ class WorkbenchControllerTest {
             available.setValue(available.getItems().getFirst());
             available.fireEvent(new ActionEvent());
             assign.fire();
+            assigned = controller.assignedMorphSliderPresetListNode();
             assigned.getSelectionModel().selectFirst();
             assigned.getSelectionModel().clearSelection();
             assertTrue(removeAssignment.isDisabled());
             assigned.getSelectionModel().selectFirst();
             platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
             removeAssignment.fire();
+            assigned = controller.assignedMorphSliderPresetListNode();
             assertTrue(assigned.getItems().isEmpty());
 
             available.setValue(available.getItems().getFirst());
             available.fireEvent(new ActionEvent());
             assign.fire();
+            assigned = controller.assignedMorphSliderPresetListNode();
             platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
             clearAssignments.fire();
             assertTrue(assigned.getItems().isEmpty());
@@ -253,6 +257,38 @@ class WorkbenchControllerTest {
             assertNotSame(initial, controller.customMorphTargetListNode());
             assertEquals(List.of("All|Female"), controller.customMorphTargetListNode().getItems().stream()
                     .map(CustomMorphTargetSnapshot::getName).toList());
+            stage.close();
+        });
+    }
+
+    /**
+     * Refilling an empty assigned-relationship list replaces only its JavaFX adapter so Windows UIA exposes the
+     * immutable relationships selected from a later target frame.
+     */
+    @Test
+    void morphsAssignedRelationshipsEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, new RecordingPlatform());
+            @SuppressWarnings("unchecked")
+            ListView<SliderPresetSnapshot> initial =
+                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
+            @SuppressWarnings("unchecked")
+            ListView<CustomMorphTargetSnapshot> targets =
+                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
+
+            targets.getSelectionModel().selectFirst();
+
+            assertNotSame(initial, controller.assignedMorphSliderPresetListNode());
+            assertEquals(List.of("Alpha"), controller.assignedMorphSliderPresetListNode().getItems().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
             stage.close();
         });
     }

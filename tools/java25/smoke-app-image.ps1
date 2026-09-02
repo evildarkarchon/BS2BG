@@ -1,8 +1,8 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, and Templates contracts
-    (issues #98-#106).
+    Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, Templates, and Morphs contracts
+    (issues #98-#107).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
@@ -13,7 +13,7 @@
     accessibility semantics, notifications, typed dialogs, startup, New, Open, Save, Save As, Project recovery,
     centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
     malformed/failed operation preservation, complete pointer-free Slider Preset choice editing and management,
-    coordinated dirty shutdown, and bounded process exit.
+    keyboard and semantic-pointer Custom Morph Target authoring, coordinated dirty shutdown, and bounded exit.
 #>
 [CmdletBinding()]
 param(
@@ -1465,7 +1465,12 @@ try {
 
         $sortLabel = Find-OuterControl -ControlType 'Text' -Name 'Sort Custom Morph Targets:'
         $sort = Get-FollowingControl -Element $sortLabel -ControlType 'ComboBox'
-        Send-UiaKeysToElement -Element $sort -Keys '{END}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $sort -Keys '{HOME}{DOWN}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'descending Custom Morph Target sort committed' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $value = Get-UiaText -Element $sort
+            if ($value.Contains('Name (Z–A)')) { $sort }
+        } | Out-Null
         Send-UiaKeysToElement -Element $targetList -Keys 'a' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaCondition -Description 'sorted Custom Morph Target type-ahead' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {

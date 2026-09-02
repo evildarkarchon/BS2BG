@@ -7,8 +7,9 @@
     Wraps System.Windows.Automation so tools/java25/smoke-app-image.ps1 can locate JavaFX controls the way an
     assistive technology does: by accessible control type (role), accessible name, and tree relationships. Nothing
     here accepts caller-supplied coordinates, automation ids, CSS, or JavaFX internals. Pointer activation uses the
-    clickable point supplied by the semantically located UIA provider; JavaFX exposes the rest of its scene graph
-    through public accessibility support, so helpers otherwise see roles, names, tree relationships, and patterns.
+    clickable point or bounding rectangle supplied by the semantically located UIA provider; JavaFX exposes the rest
+    of its scene graph through public accessibility support, so helpers otherwise see roles, names, relationships,
+    and patterns.
 
     Every wait is bounded and every failure names what was being looked for, so a hung toolkit or a missing
     control fails the smoke run with a diagnosis instead of hanging it.
@@ -553,10 +554,11 @@ function Invoke-UiaElement {
 
 <#
 .SYNOPSIS
-    Clicks a semantic UIA element with the real Windows pointer at its provider-supplied clickable point.
+    Clicks a semantic UIA element with the real Windows pointer at its provider-supplied location.
 .NOTES
     The element must first be located by accessible role/name/relationship. No fixed coordinates or row indexes are
-    accepted; UI Automation remains authoritative for the physical point even across live DPI changes.
+    accepted. JavaFX does not always implement TryGetClickablePoint, so its provider-supplied bounding-rectangle
+    center is the constrained fallback; UI Automation remains authoritative even across live DPI changes.
 #>
 function Invoke-UiaPointerClick {
     [CmdletBinding()]
@@ -565,11 +567,20 @@ function Invoke-UiaPointerClick {
         throw "Element '$($Element.Current.Name)' is not enabled and onscreen for pointer activation."
     }
     $point = [System.Windows.Point]::new(0.0, 0.0)
+    $locationSource = 'clickable-point'
     if (-not $Element.TryGetClickablePoint([ref]$point)) {
-        throw "Element '$($Element.Current.Name)' did not expose a provider-supplied clickable point."
+        $bounds = $Element.Current.BoundingRectangle
+        if ($bounds.IsEmpty -or $bounds.Width -le 0.0 -or $bounds.Height -le 0.0) {
+            throw "Element '$($Element.Current.Name)' exposed neither a clickable point nor usable provider bounds."
+        }
+        # JavaFX 25 commonly omits TryGetClickablePoint even for visible buttons; its UIA bounds remain DPI-aware.
+        $point = [System.Windows.Point]::new(
+            $bounds.Left + ($bounds.Width / 2.0),
+            $bounds.Top + ($bounds.Height / 2.0))
+        $locationSource = 'bounding-rectangle-center'
     }
     [BS2BGWindows]::LeftClick([int][math]::Round($point.X), [int][math]::Round($point.Y))
-    return [ordered]@{ x = $point.X; y = $point.Y }
+    return [ordered]@{ x = $point.X; y = $point.Y; source = $locationSource }
 }
 
 <#

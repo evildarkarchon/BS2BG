@@ -271,6 +271,8 @@ public final class WorkbenchController {
     @FXML
     private Label morphTargetSelectionText;
     @FXML
+    private Label assignedMorphSliderPresetLabel;
+    @FXML
     private ListView<SliderPresetSnapshot> assignedMorphSliderPresetList;
     @FXML
     private Button removeMorphSliderPresetButton;
@@ -392,6 +394,7 @@ public final class WorkbenchController {
     private boolean resetMorphsOnNextProjectFrame;
     private boolean sliderPresetListInitialized;
     private boolean customMorphTargetListInitialized;
+    private boolean assignedMorphSliderPresetListInitialized;
     private final Map<String, SliderChoiceRow> sliderChoiceRowsByName = new LinkedHashMap<>();
 
     /**
@@ -706,18 +709,11 @@ public final class WorkbenchController {
         clearCustomMorphTargetsButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.RequestClearVisible()));
         dismissMorphsInfoBarButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.DismissDiagnostics()));
 
-        assignedMorphSliderPresetList.setCellFactory(list -> new SliderPresetDisplayCell());
+        configureAssignedMorphSliderPresetList();
         availableMorphSliderPreset.setCellFactory(list -> new SliderPresetDisplayCell());
         availableMorphSliderPreset.setButtonCell(new SliderPresetDisplayCell());
         availableMorphSliderPreset.setOnAction(event -> assignMorphSliderPresetButton.setDisable(
                 morphsMutationsBlocked || availableMorphSliderPreset.getValue() == null));
-        assignedMorphSliderPresetList.getSelectionModel().selectedItemProperty().addListener(
-                (observable, previous, selected) -> {
-                    if (!renderingMorphs)
-                        dispatchMorphs(selected == null
-                                ? new MorphsFeature.ClearAssignedSliderPresetSelection()
-                                : new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of(selected.getName())));
-                });
         assignMorphSliderPresetButton.setOnAction(event -> {
             SliderPresetSnapshot preset = availableMorphSliderPreset.getValue();
             if (preset != null)
@@ -729,6 +725,18 @@ public final class WorkbenchController {
                 dispatchMorphs(new MorphsFeature.RemoveAssignedSliderPreset()));
         clearMorphSliderPresetsButton.setOnAction(event ->
                 dispatchMorphs(new MorphsFeature.RequestClearAssignments()));
+    }
+
+    /** Configures the current assigned-relationship ListView, including identity selection dispatch. */
+    private void configureAssignedMorphSliderPresetList() {
+        assignedMorphSliderPresetList.setCellFactory(list -> new SliderPresetDisplayCell());
+        assignedMorphSliderPresetList.getSelectionModel().selectedItemProperty().addListener(
+                (observable, previous, selected) -> {
+                    if (!renderingMorphs)
+                        dispatchMorphs(selected == null
+                                ? new MorphsFeature.ClearAssignedSliderPresetSelection()
+                                : new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of(selected.getName())));
+                });
     }
 
     /** Configures the current target ListView instance; empty/refill UIA recovery may replace that adapter node. */
@@ -1825,7 +1833,7 @@ public final class WorkbenchController {
                         "No selected Custom Morph Target is eligible for Morphs output.");
                 morphTargetSelectionText.setText("No Custom Morph Target selected");
                 morphTargetSelectionText.setAccessibleText("Custom Morph Target inspector: no selection");
-                assignedMorphSliderPresetList.getItems().clear();
+                reconcileAssignedMorphSliderPresetItems(List.of());
                 assignedMorphSliderPresetList.getSelectionModel().clearSelection();
                 availableMorphSliderPreset.getItems().clear();
                 availableMorphSliderPreset.setValue(null);
@@ -1847,8 +1855,7 @@ public final class WorkbenchController {
                 morphTargetOutputStatusText.setAccessibleText(outputStatus);
                 morphTargetSelectionText.setText("Selected: " + target.getName());
                 morphTargetSelectionText.setAccessibleText("Selected Custom Morph Target " + target.getName());
-                if (!List.copyOf(assignedMorphSliderPresetList.getItems()).equals(editor.assignedPresets()))
-                    assignedMorphSliderPresetList.getItems().setAll(editor.assignedPresets());
+                reconcileAssignedMorphSliderPresetItems(editor.assignedPresets());
                 assignedMorphSliderPresetList.getSelectionModel().clearSelection();
                 editor.assignedSelection().ifPresent(identity -> assignedMorphSliderPresetList.getItems().stream()
                         .filter(preset -> NameIdentity.of(preset.getName()).equals(identity))
@@ -2009,6 +2016,40 @@ public final class WorkbenchController {
         customMorphTargetListInitialized = true;
     }
 
+    /** Replaces an empty assigned-preset ListView when a later selected target refills its relationships. */
+    private void reconcileAssignedMorphSliderPresetItems(List<SliderPresetSnapshot> assignedPresets) {
+        boolean refill = assignedMorphSliderPresetListInitialized
+                && assignedMorphSliderPresetList.getItems().isEmpty() && !assignedPresets.isEmpty();
+        if (refill)
+            replaceEmptyAssignedMorphSliderPresetList();
+        if (!List.copyOf(assignedMorphSliderPresetList.getItems()).equals(assignedPresets))
+            assignedMorphSliderPresetList.getItems().setAll(assignedPresets);
+        assignedMorphSliderPresetListInitialized = true;
+    }
+
+    /** Replaces only the assigned-relationship JavaFX node while retaining its label and semantic focus. */
+    private void replaceEmptyAssignedMorphSliderPresetList() {
+        boolean restoreFocus = assignedMorphSliderPresetList.isFocused();
+        ListView<SliderPresetSnapshot> replacement = new ListView<>();
+        replacement.setId("assignedMorphSliderPresetList");
+        replacement.setAccessibleText("Assigned Slider Presets");
+        replacement.setFixedCellSize(MORPH_TARGET_CELL_HEIGHT);
+        replacement.setFocusTraversable(true);
+        replacement.setPrefHeight(120.0);
+        int index = morphsInspectorContent.getChildren().indexOf(assignedMorphSliderPresetList);
+        if (index < 0)
+            throw new IllegalStateException("Morphs inspector no longer owns the assigned Slider Preset list");
+        morphsInspectorContent.getChildren().set(index, replacement);
+        assignedMorphSliderPresetList = replacement;
+        assignedMorphSliderPresetLabel.setLabelFor(replacement);
+        configureAssignedMorphSliderPresetList();
+        if (restoreFocus) {
+            // Relationship reconciliation may refill while the list owns focus; the UIA node swap must preserve it.
+            replacement.requestFocus();
+            Platform.runLater(replacement::requestFocus);
+        }
+    }
+
     /** Keeps short target catalogs free of a redundant inner scrollbar while bounding large-list height. */
     private void sizeCustomMorphTargetList(int visibleCount) {
         int rows = Math.max(1, Math.min(MAX_VISIBLE_MORPH_TARGET_ROWS, visibleCount));
@@ -2165,6 +2206,11 @@ public final class WorkbenchController {
     /** @return current Custom Morph Target ListView, including an accessibility-driven refill replacement */
     ListView<CustomMorphTargetSnapshot> customMorphTargetListNode() {
         return customMorphTargetList;
+    }
+
+    /** @return current assigned Slider Preset ListView, including an accessibility-driven refill replacement */
+    ListView<SliderPresetSnapshot> assignedMorphSliderPresetListNode() {
+        return assignedMorphSliderPresetList;
     }
 
     /**
