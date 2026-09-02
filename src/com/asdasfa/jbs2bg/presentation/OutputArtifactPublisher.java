@@ -252,6 +252,8 @@ public final class OutputArtifactPublisher {
             requireSafeWindowsLeaf(fileName);
             if (OutputDirectoryLock.ownsFileName(fileName))
                 throw new IOException("Output artifact filename is reserved for destination locking: " + fileName);
+            if (ownsStagingFileName(fileName))
+                throw new IOException("Output artifact filename is reserved for transaction staging: " + fileName);
             if (artifactsByName.put(fileName, artifact) != null)
                 throw new IOException("Output artifact filenames collide without regard to case: " + fileName);
 
@@ -269,6 +271,11 @@ public final class OutputArtifactPublisher {
         }
         context.checkCancellation();
         return publications;
+    }
+
+    /** Returns whether a Windows leaf occupies the publisher-owned transaction-directory namespace. */
+    private static boolean ownsStagingFileName(String fileName) {
+        return fileName.regionMatches(true, 0, STAGING_PREFIX, 0, STAGING_PREFIX.length());
     }
 
     /** Indexes existing entries by Windows case-insensitive destination identity. */

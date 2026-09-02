@@ -829,10 +829,18 @@ public final class WorkbenchController {
 
     /** Builds one retryable Settings submission whose retry recaptures current feature inputs. */
     private JobCoordinator.Submission<SettingsFeature.Completion> settingsSubmission(SettingsFeature.Effect effect) {
+        String operationName = switch (effect) {
+            case SettingsFeature.SaveEffect ignored -> "Save Settings";
+            case SettingsFeature.ReloadEffect ignored -> "Reload Settings";
+            case SettingsFeature.PreferenceEffect ignored -> "Save Generation Preference";
+            case SettingsFeature.ReloadConfirmationEffect ignored -> throw new IllegalArgumentException(
+                    "Reload confirmation must complete before worker admission");
+        };
         JobCoordinator.Operation operation = new JobCoordinator.Operation(
-                effect instanceof SettingsFeature.SaveEffect ? "Save Settings" : "Reload Settings",
+                operationName,
                 effect instanceof SettingsFeature.ReloadEffect ? List.of(effect.directory().toString()) : List.of(),
-                effect instanceof SettingsFeature.SaveEffect ? List.of(effect.directory().toString()) : List.of(),
+                effect instanceof SettingsFeature.SaveEffect || effect instanceof SettingsFeature.PreferenceEffect
+                        ? List.of(effect.directory().toString()) : List.of(),
                 Optional.empty());
         return new JobCoordinator.Submission<>(operation,
                 context -> runSettingsEffect(effect, context),
@@ -874,38 +882,73 @@ public final class WorkbenchController {
     private static JobCoordinator.Result<SettingsFeature.Completion> runSettingsEffect(
             SettingsFeature.Effect effect, JobCoordinator.Context context) {
         context.checkCancellation();
-        if (!context.beginCommit(effect instanceof SettingsFeature.SaveEffect
-                ? "Saving Settings" : "Reloading Settings"))
+        String commitPhase = switch (effect) {
+            case SettingsFeature.SaveEffect ignored -> "Saving Settings";
+            case SettingsFeature.ReloadEffect ignored -> "Reloading Settings";
+            case SettingsFeature.PreferenceEffect ignored -> "Saving generation preference";
+            case SettingsFeature.ReloadConfirmationEffect ignored -> throw new IllegalArgumentException(
+                    "Reload confirmation cannot execute on the worker");
+        };
+        if (!context.beginCommit(commitPhase))
             return JobCoordinator.Result.cancelled("Settings operation cancelled.", List.of(), List.of());
         SettingsFeature.Completion completion;
         boolean successful;
         List<JobCoordinator.Diagnostic> diagnostics;
         String successSummary;
         String failureSummary;
-        if (effect instanceof SettingsFeature.SaveEffect save) {
-            Settings.PersistenceResult result = Settings.persist(save.directory(), save.replacement());
-            completion = new SettingsFeature.SaveCompletion(save.token(), result);
-            successful = result.isSuccessful();
-            diagnostics = settingsDiagnostics(result);
-            successSummary = "Settings saved.";
-            failureSummary = "Settings could not be saved.";
-        } else {
-            SettingsFeature.ReloadEffect reload = (SettingsFeature.ReloadEffect) effect;
-            Settings.InitializationResult result = Settings.initialize(reload.directory());
-            completion = new SettingsFeature.ReloadCompletion(reload.token(), result);
-            successful = result.isSuccessful();
-            diagnostics = settingsDiagnostics(result);
-            boolean recovered = result.getDiagnostics().stream()
-                    .anyMatch(value -> value.getCode().equals("SETTINGS_PUBLICATION_RECOVERED"));
-            successSummary = recovered ? "Settings recovered and reloaded." : "Settings reloaded.";
-            failureSummary = "Settings could not be reloaded.";
+        switch (effect) {
+            case SettingsFeature.SaveEffect save -> {
+                Settings.PersistenceResult result = Settings.persist(save.directory(), save.replacement());
+                completion = new SettingsFeature.SaveCompletion(save.token(), result);
+                successful = result.isSuccessful();
+                diagnostics = settingsDiagnostics(result);
+                successSummary = "Settings saved.";
+                failureSummary = "Settings could not be saved.";
+            }
+            case SettingsFeature.ReloadEffect reload -> {
+                Settings.InitializationResult result = Settings.initialize(reload.directory());
+                completion = new SettingsFeature.ReloadCompletion(reload.token(), result);
+                successful = result.isSuccessful();
+                diagnostics = settingsDiagnostics(result);
+                boolean recovered = result.getDiagnostics().stream()
+                        .anyMatch(value -> value.getCode().equals("SETTINGS_PUBLICATION_RECOVERED"));
+                successSummary = recovered ? "Settings recovered and reloaded." : "Settings reloaded.";
+                failureSummary = "Settings could not be reloaded.";
+            }
+            case SettingsFeature.PreferenceEffect preference -> {
+                try {
+                    new GenerationPreferencesStore(preference.directory()).save(preference.selected());
+                    completion = SettingsFeature.PreferenceCompletion.successful(preference.token());
+                    successful = true;
+                    diagnostics = List.of();
+                } catch (IOException failure) {
+                    SettingsFeature.PreferenceCompletion failed =
+                            SettingsFeature.PreferenceCompletion.failed(preference.token(), failure);
+                    completion = failed;
+                    successful = false;
+                    diagnostics = List.of(generationPreferenceDiagnostic(preference.directory(),
+                            failed.failureMessage().orElseThrow()));
+                }
+                successSummary = "Generation preference saved.";
+                failureSummary = "Generation preference could not be saved.";
+            }
+            case SettingsFeature.ReloadConfirmationEffect ignored -> throw new IllegalArgumentException(
+                    "Reload confirmation cannot execute on the worker");
         }
         if (!successful)
             return JobCoordinator.Result.failed(completion, failureSummary, diagnostics);
-        List<String> effects = List.of("Published Standard and UUNP Settings");
+        List<String> effects = effect instanceof SettingsFeature.PreferenceEffect
+                ? List.of("Published generated-output preference")
+                : List.of("Published Standard and UUNP Settings");
         return diagnostics.isEmpty()
                 ? JobCoordinator.Result.completed(completion, successSummary, effects, List.of())
                 : JobCoordinator.Result.completedWithIssues(completion, successSummary, effects, diagnostics);
+    }
+
+    /** Preserves a generation-preference failure's stable code and profile-local path in terminal job evidence. */
+    private static JobCoordinator.Diagnostic generationPreferenceDiagnostic(Path directory, String message) {
+        return new JobCoordinator.Diagnostic("GENERATION_PREFERENCES_IO_FAILED", message,
+                Optional.of(directory + " /omitRedundantSliders"));
     }
 
     /** Converts one Save failure or warning set to coordinator-owned structured diagnostics. */
@@ -943,9 +986,13 @@ public final class WorkbenchController {
         boolean published = update.accepted() && (update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED
                 || update.frame().outcome() == SettingsFeature.OutcomeKind.RELOADED
                 || update.frame().outcome() == SettingsFeature.OutcomeKind.RECOVERED);
-        if (published) {
+        boolean preferencePublished = effect instanceof SettingsFeature.PreferenceEffect
+                && update.accepted() && update.frame().outcome() == SettingsFeature.OutcomeKind.CHANGED;
+        if (published || preferencePublished) {
             if (projectFlow.jobs().frame().shutdownRequested())
                 settingsRefreshDeferred = true;
+            else if (preferencePublished)
+                renderOutput(outputFeature.refreshGenerationSettings().frame());
             else
                 refreshPublishedSettings();
         }

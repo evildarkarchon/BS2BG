@@ -117,6 +117,22 @@ final class OutputArtifactPublisherTest {
         assertEquals(0, moves.get());
     }
 
+    /** The transaction-directory namespace is reserved before an artifact can create recovery-shaped state. */
+    @Test
+    void rejectsOutputStagingPrefixDuringPreflight(@TempDir Path targetDirectory) {
+        OutputArtifact stageCollision = new TestArtifact(".bs2bg-output-stage-user.json", "replacement");
+        AtomicInteger moves = new AtomicInteger();
+
+        assertThrows(IOException.class, () -> OutputArtifactPublisher.publishAll(targetDirectory,
+                List.of(stageCollision), OutputArtifactPublisher.PublicationContext.nonCancellable(),
+                (source, target) -> {
+                    moves.incrementAndGet();
+                    throw new IOException("reserved staging namespace reached transaction move");
+                }));
+
+        assertEquals(0, moves.get());
+    }
+
     /** Accepted cancellation after complete staging preserves prior destinations and removes staged bytes. */
     @Test
     void cancellationBeforeCommitPreservesEveryDestination(@TempDir Path targetDirectory) throws Exception {

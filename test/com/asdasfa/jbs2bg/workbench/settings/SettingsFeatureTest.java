@@ -413,7 +413,7 @@ final class SettingsFeatureTest {
         assertFalse(Files.exists(transaction));
     }
 
-    /** The migrated output omission choice persists independently of the paired slider-configuration documents. */
+    /** The migrated output omission choice is captured for worker persistence before its frame commits. */
     @Test
     void omitRedundantSlidersPersistsInTheProfileLocalGenerationStore(@TempDir Path directory) throws Exception {
         assertTrue(Settings.initialize(directory).isSuccessful());
@@ -421,12 +421,22 @@ final class SettingsFeatureTest {
         store.save(false);
         SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
 
-        SettingsFeature.Update changed = feature.dispatch(
+        SettingsFeature.Update requested = feature.dispatch(
                 new SettingsFeature.ChangeOmitRedundantSliders(true));
+        SettingsFeature.PreferenceEffect preference = assertInstanceOf(SettingsFeature.PreferenceEffect.class,
+                requested.effect().orElseThrow());
+
+        assertTrue(requested.accepted());
+        assertFalse(requested.frame().omitRedundantSliders());
+        assertFalse(store.loadOrMigrate());
+
+        store.save(preference.selected());
+        SettingsFeature.Update changed = feature.complete(
+                SettingsFeature.PreferenceCompletion.successful(preference.token()));
 
         assertTrue(changed.accepted());
         assertTrue(changed.frame().omitRedundantSliders());
-        assertTrue(new GenerationPreferencesStore(directory).loadOrMigrate());
+        assertTrue(store.loadOrMigrate());
         SettingsFeature reopened = new SettingsFeature(directory, Settings.publishedState());
         assertTrue(reopened.frame().omitRedundantSliders());
     }

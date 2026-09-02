@@ -212,26 +212,21 @@ public final class SettingsFeature {
         return accepted();
     }
 
-    /** Persists the migrated generation preference immediately without changing either Settings JSON profile. */
+    /** Captures the migrated generation preference without touching either Settings JSON profile. */
     private Update changeOmit(boolean selected) {
         if (omitRedundantSliders == selected) {
             outcome = OutcomeKind.UNCHANGED;
             publish();
             return accepted();
         }
-        try {
-            generationPreferences.save(selected);
-        } catch (IOException exception) {
-            notices = List.of(Notice.preferenceFailure(directory, exception));
-            outcome = OutcomeKind.FAILED;
-            publish();
-            return new Update(false, frame);
-        }
-        omitRedundantSliders = selected;
-        notices = List.of();
-        outcome = OutcomeKind.CHANGED;
-        publish();
-        return accepted();
+        return capturePreference(selected);
+    }
+
+    /** Captures one generation-preference value for retryable worker persistence. */
+    private Update capturePreference(boolean selected) {
+        PreferenceEffect effect = new PreferenceEffect(nextEffectToken++, directory, selected);
+        pendingEffect = effect;
+        return accepted(effect);
     }
 
     /** Captures both drafts for later persistence without performing filesystem work on the presentation lane. */
@@ -322,6 +317,7 @@ public final class SettingsFeature {
         return switch (previous) {
             case SaveEffect saveEffect -> retrySave(saveEffect);
             case ReloadEffect ignored -> captureReload();
+            case PreferenceEffect preferenceEffect -> capturePreference(preferenceEffect.selected());
             case ReloadConfirmationEffect ignored -> new Update(false, frame);
         };
     }
@@ -350,17 +346,21 @@ public final class SettingsFeature {
         if (pendingEffect == null || pendingEffect.token() != value.token()
                 || !matches(pendingEffect, value))
             return new Update(false, frame);
+        Effect effect = pendingEffect;
         pendingEffect = null;
         return switch (value) {
             case SaveCompletion saveCompletion -> completeSave(saveCompletion.token(), saveCompletion.result());
             case ReloadCompletion reloadCompletion -> completeReload(reloadCompletion.result());
+            case PreferenceCompletion preferenceCompletion -> completePreference(
+                    ((PreferenceEffect) effect).selected(), preferenceCompletion);
         };
     }
 
     /** Returns whether one completion belongs to the exact pending worker-effect family. */
     private static boolean matches(Effect effect, Completion completion) {
         return effect instanceof SaveEffect && completion instanceof SaveCompletion
-                || effect instanceof ReloadEffect && completion instanceof ReloadCompletion;
+                || effect instanceof ReloadEffect && completion instanceof ReloadCompletion
+                || effect instanceof PreferenceEffect && completion instanceof PreferenceCompletion;
     }
 
     /**
@@ -425,6 +425,22 @@ public final class SettingsFeature {
         rejectedDraft = null;
         validation = List.of();
         outcome = result.getDiagnostics().isEmpty() ? OutcomeKind.RELOADED : OutcomeKind.RECOVERED;
+        publish();
+        return accepted();
+    }
+
+    /** Commits one worker-persisted generation preference or retains the prior value after failure. */
+    private Update completePreference(boolean selected, PreferenceCompletion completion) {
+        if (completion.failureMessage().isPresent()) {
+            notices = List.of(Notice.preferenceFailure(directory,
+                    completion.failureMessage().orElseThrow()));
+            outcome = OutcomeKind.FAILED;
+            publish();
+            return new Update(false, frame);
+        }
+        omitRedundantSliders = selected;
+        notices = List.of();
+        outcome = OutcomeKind.CHANGED;
         publish();
         return accepted();
     }
@@ -741,11 +757,11 @@ public final class SettingsFeature {
     }
 
     /** Tokenized Settings platform or worker operation captured without touching the filesystem. */
-    public sealed interface Effect permits ReloadConfirmationEffect, SaveEffect, ReloadEffect {
+    public sealed interface Effect permits ReloadConfirmationEffect, SaveEffect, ReloadEffect, PreferenceEffect {
         /** @return presentation-owned token used to reject stale completion callbacks */
         long token();
 
-        /** @return normalized directory that owns the paired Settings documents */
+        /** @return normalized directory that owns the Settings and generation-preference documents */
         Path directory();
     }
 
@@ -791,8 +807,18 @@ public final class SettingsFeature {
         }
     }
 
+    /** Immutable generation-preference input captured before its blocking profile-file write begins. */
+    public record PreferenceEffect(long token, Path directory, boolean selected) implements Effect {
+        /** Requires a positive token and normalized profile directory. */
+        public PreferenceEffect {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(directory, "directory");
+        }
+    }
+
     /** Tokenized Settings worker result accepted only by its matching pending effect. */
-    public sealed interface Completion permits SaveCompletion, ReloadCompletion {
+    public sealed interface Completion permits SaveCompletion, ReloadCompletion, PreferenceCompletion {
         /** @return presentation-owned effect token */
         long token();
     }
@@ -814,6 +840,40 @@ public final class SettingsFeature {
             if (token <= 0)
                 throw new IllegalArgumentException("token must be positive");
             Objects.requireNonNull(result, "result");
+        }
+    }
+
+    /** Completed generation-preference write with an optional detached I/O failure message. */
+    public record PreferenceCompletion(long token, Optional<String> failureMessage) implements Completion {
+        /** Requires a positive token and defensively owned optional failure text. */
+        public PreferenceCompletion {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(failureMessage, "failureMessage");
+            failureMessage = failureMessage.map(message -> {
+                if (message.isBlank())
+                    throw new IllegalArgumentException("failureMessage must not be blank");
+                return message;
+            });
+        }
+
+        /** @return a successful completion for one persisted preference token */
+        public static PreferenceCompletion successful(long token) {
+            return new PreferenceCompletion(token, Optional.empty());
+        }
+
+        /**
+         * Creates one failed completion without retaining a worker-thread exception object.
+         *
+         * @param token   completed effect token
+         * @param failure preference persistence failure
+         * @return detached failed completion
+         */
+        public static PreferenceCompletion failed(long token, IOException failure) {
+            Objects.requireNonNull(failure, "failure");
+            String message = failure.getMessage() == null || failure.getMessage().isBlank()
+                    ? "The generation preference could not be persisted." : failure.getMessage();
+            return new PreferenceCompletion(token, Optional.of(message));
         }
     }
 
@@ -869,8 +929,13 @@ public final class SettingsFeature {
         private static Notice preferenceFailure(Path directory, IOException failure) {
             String message = failure.getMessage() == null
                     ? "The generation preference could not be persisted." : failure.getMessage();
+            return preferenceFailure(directory, message);
+        }
+
+        /** Converts one detached worker failure message into profile-local generation preference evidence. */
+        private static Notice preferenceFailure(Path directory, String message) {
             return new Notice("GENERATION_PREFERENCES_IO_FAILED", directory.toString(), "/omitRedundantSliders",
-                    message, true);
+                    Objects.requireNonNull(message, "message"), true);
         }
 
         /** Requires complete diagnostic evidence. */

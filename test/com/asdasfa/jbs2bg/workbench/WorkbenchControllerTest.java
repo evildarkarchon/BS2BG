@@ -124,8 +124,6 @@ class WorkbenchControllerTest {
                     .filter(entry -> entry.name().equals("Arms")).findFirst().orElseThrow());
             multiplier.setText("3");
             apply.fire();
-            CheckBox omit = (CheckBox) loader.getNamespace().get("omitRedundantSlidersCheck");
-            omit.fire();
             ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
             multiplier.setText("9");
             apply.fire();
@@ -162,7 +160,61 @@ class WorkbenchControllerTest {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
         assertEquals(2f, Settings.getMultiplier("Waist"));
         assertEquals(3f, Settings.getMultiplierUUNP("Arms"));
-        assertTrue(new GenerationPreferencesStore(temporaryDirectory).loadOrMigrate());
+    }
+
+    /** The generation preference remains unchanged until its JavaFX-captured worker operation executes. */
+    @Test
+    void generationPreferenceToggleRunsOnTheApplicationWorker() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        GenerationPreferencesStore store = new GenerationPreferencesStore(temporaryDirectory);
+        store.save(false);
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The deterministic preference write settles before prolonged cancellation is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
+
+            ((CheckBox) loader.getNamespace().get("omitRedundantSlidersCheck")).fire();
+
+            assertTrue(jobs.frame().active());
+            assertEquals("omitRedundantSliders=false" + System.lineSeparator(),
+                    Files.readString(temporaryDirectory.resolve("workbench-generation.properties")));
+        });
+
+        Thread preferenceWorker = worker.runNextAsync();
+        preferenceWorker.join();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+            assertFalse(jobs.frame().active());
+            assertTrue(((CheckBox) loaderReference.get().getNamespace()
+                    .get("omitRedundantSlidersCheck")).isSelected());
+            stageReference.get().close();
+        });
+
+        assertEquals("omitRedundantSliders=true" + System.lineSeparator(),
+                Files.readString(temporaryDirectory.resolve("workbench-generation.properties")));
     }
 
     /** Reload returns immediately on JavaFX and applies the recovered pair only after worker and publication lanes. */
