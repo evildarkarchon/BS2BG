@@ -129,6 +129,8 @@ public final class MorphsFeature {
      *
      * @param intent immutable user task
      * @return whether the task was accepted and the resulting immutable frame
+     * @throws NullPointerException  when intent is null
+     * @throws IllegalStateException when an observer attempts reentrant dispatch during frame publication
      */
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
@@ -142,7 +144,8 @@ public final class MorphsFeature {
             case AssignSliderPreset assign -> assignSliderPreset(assign.identity());
             case AssignAllSliderPresets ignored -> assignAllSliderPresets();
             case SelectAssignedSliderPreset selectAssigned -> selectAssignedSliderPreset(selectAssigned.identity());
-            case RemoveAssignedSliderPreset ignored -> removeAssignedSliderPreset();
+            case ClearAssignedSliderPresetSelection ignored -> clearAssignedSliderPresetSelection();
+            case RemoveAssignedSliderPreset ignored -> requestRemoveAssignedSliderPreset();
             case RequestClearAssignments ignored -> requestClearAssignments();
             case ChangeFilter changeFilter -> changeFilter(changeFilter.text());
             case ChangeSort changeSort -> changeSort(changeSort.order());
@@ -172,16 +175,31 @@ public final class MorphsFeature {
             case CONFIRM_CLEAR_VISIBLE -> clearVisible(effect.identities());
             case CONFIRM_CLEAR_ASSIGNMENTS -> clearAssignments(effect.identities().getFirst());
             case CONFIRM_REMOVE -> remove(effect.identities().getFirst());
+            case CONFIRM_REMOVE_ASSIGNMENT -> removeAssignedSliderPreset(
+                    effect.identities().getFirst(), effect.identities().get(1));
         };
     }
 
-    /** Reconciles a later Project publication while retaining explicit filter and sort choices. */
+    /**
+     * Reconciles a later Project publication while retaining explicit filter and sort choices.
+     *
+     * @param projectFrame   latest coherent Project frame
+     * @param resetSelection whether lifecycle navigation clears target and relationship selections
+     * @return accepted immutable update, or the current frame when the sequence was already reconciled
+     */
     public Update acceptProjectFrame(WorkbenchProjectFlow.Frame projectFrame, boolean resetSelection) {
         return acceptProjectFrame(projectFrame, resetSelection,
                 Objects.requireNonNull(projectFrame, "projectFrame").diagnostics());
     }
 
-    /** Reconciles Project content while preserving kernel-selected ownership of operation diagnostics. */
+    /**
+     * Reconciles Project content while preserving kernel-selected ownership of operation diagnostics.
+     *
+     * @param projectFrame   latest coherent Project frame
+     * @param resetSelection whether lifecycle navigation clears target and relationship selections
+     * @param diagnostics    structured diagnostics owned by Morphs for this publication
+     * @return accepted immutable update, or the current frame when the sequence was already reconciled
+     */
     public Update acceptProjectFrame(WorkbenchProjectFlow.Frame projectFrame, boolean resetSelection,
                                      List<ProjectDiagnostic> diagnostics) {
         Objects.requireNonNull(projectFrame, "projectFrame");
@@ -370,13 +388,33 @@ public final class MorphsFeature {
         return new Update(true, frame, OutcomeKind.NONE);
     }
 
-    /** Removes the currently selected relationship through ProjectSession and clears that consumed selection. */
-    private Update removeAssignedSliderPreset() {
+    /** Clears only assigned-preset selection without changing the selected target or Project. */
+    private Update clearAssignedSliderPresetSelection() {
+        if (assignedSelection.isEmpty())
+            return new Update(false, frame, OutcomeKind.NONE);
+        assignedSelection = Optional.empty();
+        publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
+        return new Update(true, frame, OutcomeKind.NONE);
+    }
+
+    /** Captures both relationship endpoints before requesting destructive removal confirmation. */
+    private Update requestRemoveAssignedSliderPreset() {
         CustomMorphTargetSnapshot target = selectedTarget();
         if (target == null || assignedSelection.isEmpty())
             return new Update(false, frame, OutcomeKind.NONE);
+        NameIdentity targetIdentity = NameIdentity.of(target.getName());
+        NameIdentity presetIdentity = assignedSelection.orElseThrow();
+        pendingEffect = new Effect(nextEffectToken++, EffectKind.CONFIRM_REMOVE_ASSIGNMENT,
+                List.of(targetIdentity, presetIdentity), "Remove Slider Preset relationship",
+                "Remove " + presetIdentity.getName() + " from " + target.getName() + "?");
+        publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
+        return new Update(true, frame, Optional.of(pendingEffect), OutcomeKind.NONE);
+    }
+
+    /** Removes one captured relationship through ProjectSession after confirmation. */
+    private Update removeAssignedSliderPreset(NameIdentity targetIdentity, NameIdentity presetIdentity) {
         ProjectOutcome outcome = projectFlow.apply(CustomMorphTargetEdits.removeSliderPreset(
-                target.getName(), assignedSelection.orElseThrow().getName()));
+                targetIdentity.getName(), presetIdentity.getName()));
         return reconcileOutcome(outcome);
     }
 
@@ -525,7 +563,8 @@ public final class MorphsFeature {
 
     /** Closed family of task-oriented Morphs intents. */
     public sealed interface Intent permits Create, Select, AssignSliderPreset, AssignAllSliderPresets,
-            SelectAssignedSliderPreset, RemoveAssignedSliderPreset, RequestClearAssignments, ChangeFilter,
+            SelectAssignedSliderPreset, ClearAssignedSliderPresetSelection, RemoveAssignedSliderPreset,
+            RequestClearAssignments, ChangeFilter,
             ChangeSort, TypeAhead, RequestRemove, RequestClearVisible, ClearSelection, DismissDiagnostics {
     }
 
@@ -564,7 +603,11 @@ public final class MorphsFeature {
         }
     }
 
-    /** Removes the selected assigned Slider Preset from the selected target. */
+    /** Clears assigned Slider Preset selection while preserving the selected target. */
+    public record ClearAssignedSliderPresetSelection() implements Intent {
+    }
+
+    /** Requests confirmation before removing the selected Slider Preset relationship. */
     public record RemoveAssignedSliderPreset() implements Intent {
     }
 
@@ -651,7 +694,8 @@ public final class MorphsFeature {
     public enum EffectKind {
         CONFIRM_CLEAR_VISIBLE,
         CONFIRM_CLEAR_ASSIGNMENTS,
-        CONFIRM_REMOVE
+        CONFIRM_REMOVE,
+        CONFIRM_REMOVE_ASSIGNMENT
     }
 
     /** Immutable render input for the Morphs Area. */

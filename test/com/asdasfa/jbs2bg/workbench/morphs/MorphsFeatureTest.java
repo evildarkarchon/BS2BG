@@ -175,17 +175,31 @@ class MorphsFeatureTest {
 
         MorphsFeature.Update assignedAll = feature.dispatch(new MorphsFeature.AssignAllSliderPresets());
         feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Beta")));
+        MorphsFeature.Update clearedSelection = feature.dispatch(
+                new MorphsFeature.ClearAssignedSliderPresetSelection());
+        feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Beta")));
         projectFlow.apply(SliderPresetEdits.rename("Beta", "Delta"));
         MorphsFeature.Update renamed = feature.acceptProjectFrame(projectFlow.frame(), false);
         feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Delta")));
-        MorphsFeature.Update removed = feature.dispatch(new MorphsFeature.RemoveAssignedSliderPreset());
+        MorphsFeature.Update requestedRemoval = feature.dispatch(new MorphsFeature.RemoveAssignedSliderPreset());
+        MorphsFeature.Update cancelledRemoval = feature.respond(
+                requestedRemoval.effect().orElseThrow().token(), false);
+        MorphsFeature.Update requestedAgain = feature.dispatch(new MorphsFeature.RemoveAssignedSliderPreset());
+        MorphsFeature.Update removed = feature.respond(requestedAgain.effect().orElseThrow().token(), true);
         MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RequestClearAssignments());
         MorphsFeature.Update cleared = feature.respond(requested.effect().orElseThrow().token(), true);
 
         assertEquals(List.of("Alpha", "Beta", "Gamma"), assignedAll.frame().editor().orElseThrow()
                 .assignedPresets().stream().map(preset -> preset.getName()).toList());
+        assertTrue(clearedSelection.frame().editor().orElseThrow().assignedSelection().isEmpty());
         assertEquals(NameIdentity.of("All|Female"), renamed.frame().selection().orElseThrow());
         assertTrue(renamed.frame().editor().orElseThrow().assignedSelection().isEmpty());
+        assertEquals(MorphsFeature.EffectKind.CONFIRM_REMOVE_ASSIGNMENT,
+                requestedRemoval.effect().orElseThrow().kind());
+        assertEquals(List.of("Alpha", "Delta", "Gamma"), cancelledRemoval.frame().editor().orElseThrow()
+                .assignedPresets().stream().map(preset -> preset.getName()).toList());
+        assertEquals(NameIdentity.of("Delta"), cancelledRemoval.frame().editor().orElseThrow()
+                .assignedSelection().orElseThrow());
         assertEquals(List.of("Alpha", "Gamma"), removed.frame().editor().orElseThrow().assignedPresets().stream()
                 .map(preset -> preset.getName()).toList());
         assertEquals(MorphsFeature.EffectKind.CONFIRM_CLEAR_ASSIGNMENTS,

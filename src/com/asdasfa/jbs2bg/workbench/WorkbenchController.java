@@ -713,9 +713,10 @@ public final class WorkbenchController {
                 morphsMutationsBlocked || availableMorphSliderPreset.getValue() == null));
         assignedMorphSliderPresetList.getSelectionModel().selectedItemProperty().addListener(
                 (observable, previous, selected) -> {
-                    if (!renderingMorphs && selected != null)
-                        dispatchMorphs(new MorphsFeature.SelectAssignedSliderPreset(
-                                NameIdentity.of(selected.getName())));
+                    if (!renderingMorphs)
+                        dispatchMorphs(selected == null
+                                ? new MorphsFeature.ClearAssignedSliderPresetSelection()
+                                : new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of(selected.getName())));
                 });
         assignMorphSliderPresetButton.setOnAction(event -> {
             SliderPresetSnapshot preset = availableMorphSliderPreset.getValue();
@@ -945,6 +946,7 @@ public final class WorkbenchController {
     /** Realizes one tokenized destructive Morphs confirmation and returns its answer as an ordinary feature response. */
     private void completeMorphsEffect(MorphsFeature.Effect effect) {
         WorkbenchFeedback.DialogAction destructiveAction = effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE
+                || effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE_ASSIGNMENT
                 ? WorkbenchFeedback.DialogAction.REMOVE
                 : WorkbenchFeedback.DialogAction.CLEAR;
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.destructiveAction(
@@ -961,6 +963,7 @@ public final class WorkbenchController {
         if (confirmed) {
             String operation = switch (effect.kind()) {
                 case CONFIRM_REMOVE -> "Remove Custom Morph Target";
+                case CONFIRM_REMOVE_ASSIGNMENT -> "Remove Slider Preset assignment";
                 case CONFIRM_CLEAR_VISIBLE -> "Clear visible Custom Morph Targets";
                 case CONFIRM_CLEAR_ASSIGNMENTS -> "Clear Custom Morph Target assignments";
             };
@@ -975,7 +978,7 @@ public final class WorkbenchController {
             WorkbenchFeedback.Severity severity = update.outcomeKind() == MorphsFeature.OutcomeKind.FAILED
                     ? WorkbenchFeedback.Severity.FAILURE
                     : WorkbenchFeedback.Severity.VALIDATION;
-            renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+            renderFeedback(feedback.publishStatus(new WorkbenchFeedback.Notification(
                     "Morphs validation", severity, message, WorkbenchFeedback.Disposition.FAILED)));
             if (intent instanceof MorphsFeature.Create) {
                 customMorphTargetNameInput.requestFocus();
@@ -990,7 +993,6 @@ public final class WorkbenchController {
         String operation = switch (intent) {
             case MorphsFeature.Create ignored -> "Create Custom Morph Target";
             case MorphsFeature.AssignSliderPreset ignored -> "Assign Slider Preset";
-            case MorphsFeature.RemoveAssignedSliderPreset ignored -> "Remove Slider Preset assignment";
             case MorphsFeature.AssignAllSliderPresets ignored -> "Assign all Slider Presets";
             default -> null;
         };
@@ -1813,10 +1815,16 @@ public final class WorkbenchController {
             if (frame.editor().isEmpty()) {
                 morphTargetEditorFocusTarget.setText("No Custom Morph Target selected");
                 morphTargetConditionText.setText("Select a Custom Morph Target to inspect its condition.");
+                morphTargetConditionText.setAccessibleText(
+                        "Select a Custom Morph Target to inspect its BodyGen condition.");
                 morphTargetAssignmentCountText.setText("No Slider Presets assigned");
+                morphTargetAssignmentCountText.setAccessibleText("No Slider Presets assigned");
                 morphTargetOutputStatusText.setText(
                         "A target needs at least one Slider Preset to appear in Morphs output.");
+                morphTargetOutputStatusText.setAccessibleText(
+                        "No selected Custom Morph Target is eligible for Morphs output.");
                 morphTargetSelectionText.setText("No Custom Morph Target selected");
+                morphTargetSelectionText.setAccessibleText("No Custom Morph Target selected");
                 assignedMorphSliderPresetList.getItems().clear();
                 assignedMorphSliderPresetList.getSelectionModel().clearSelection();
                 availableMorphSliderPreset.getItems().clear();
@@ -1827,11 +1835,16 @@ public final class WorkbenchController {
                 int count = editor.assignedPresets().size();
                 morphTargetEditorFocusTarget.setText(target.getName());
                 morphTargetConditionText.setText("BodyGen condition: " + target.getName());
-                morphTargetAssignmentCountText.setText(count + (count == 1
-                        ? " assigned Slider Preset" : " assigned Slider Presets"));
-                morphTargetOutputStatusText.setText(count == 0
+                morphTargetConditionText.setAccessibleText("BodyGen condition: " + target.getName());
+                String assignmentCount = count + (count == 1
+                        ? " assigned Slider Preset" : " assigned Slider Presets");
+                morphTargetAssignmentCountText.setText(assignmentCount);
+                morphTargetAssignmentCountText.setAccessibleText(assignmentCount);
+                String outputStatus = count == 0
                         ? "Not in Morphs output — assign at least one Slider Preset."
-                        : "Included in Morphs output.");
+                        : "Included in Morphs output.";
+                morphTargetOutputStatusText.setText(outputStatus);
+                morphTargetOutputStatusText.setAccessibleText(outputStatus);
                 morphTargetSelectionText.setText("Selected: " + target.getName());
                 morphTargetSelectionText.setAccessibleText("Selected Custom Morph Target " + target.getName());
                 if (!List.copyOf(assignedMorphSliderPresetList.getItems()).equals(editor.assignedPresets()))

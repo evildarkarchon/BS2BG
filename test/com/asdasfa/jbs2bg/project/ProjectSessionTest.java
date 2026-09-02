@@ -719,10 +719,15 @@ class ProjectSessionTest {
         session.apply(CustomMorphTargetEdits.create("Alpha"));
         session.apply(CustomMorphTargetEdits.create("Beta"));
         session.apply(CustomMorphTargetEdits.create("Gamma"));
+        ProjectSnapshot before = session.getSnapshot();
 
+        ProjectOutcome rejected = session.apply(CustomMorphTargetEdits.deleteAll(
+                Arrays.asList("alpha", "missing")));
         ProjectOutcome deleted = session.apply(CustomMorphTargetEdits.deleteAll(
                 Arrays.asList("alpha", "ALPHA", "gamma")));
 
+        assertCustomMorphTargetRejected(rejected, ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NOT_FOUND, before);
+        assertEquals(Arrays.asList("Alpha", "Beta", "Gamma"), customMorphTargetNames(rejected.getSnapshot()));
         assertInstanceOf(ChangedOutcome.class, deleted);
         assertEquals(Arrays.asList("Beta"), customMorphTargetNames(deleted.getSnapshot()));
         assertSame(deleted.getSnapshot(), session.getSnapshot());

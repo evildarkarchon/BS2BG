@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -45,6 +46,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.Labeled;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
@@ -98,11 +100,24 @@ class WorkbenchControllerTest {
             ComboBox<SliderPresetSnapshot> available =
                     (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
             Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
+            Label condition = (Label) loader.getNamespace().get("morphTargetConditionText");
+            Label selection = (Label) loader.getNamespace().get("morphTargetSelectionText");
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> assigned =
                     (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
+            Set<Character> inspectorMnemonics = List.<Labeled>of(
+                            (Label) loader.getNamespace().get("assignedMorphSliderPresetLabel"),
+                            (Button) loader.getNamespace().get("removeMorphSliderPresetButton"),
+                            (Button) loader.getNamespace().get("clearMorphSliderPresetsButton"),
+                            (Label) loader.getNamespace().get("availableMorphSliderPresetLabel"),
+                            assign,
+                            (Button) loader.getNamespace().get("assignAllMorphSliderPresetsButton"))
+                    .stream().map(Labeled::getText).filter(text -> text.contains("_"))
+                    .map(text -> Character.toUpperCase(text.charAt(text.indexOf('_') + 1)))
+                    .collect(java.util.stream.Collectors.toSet());
 
             assertTrue(targets.isVisible());
+            assertEquals(Set.of('A', 'R', 'C', 'V', 'I', 'L'), inspectorMnemonics);
             assertEquals(List.of("Existing"), targets.getItems().stream()
                     .map(CustomMorphTargetSnapshot::getName).toList());
             name.setText("  All|Female  ");
@@ -121,9 +136,14 @@ class WorkbenchControllerTest {
             assertEquals(List.of("Alpha"), flow.frame().snapshot().getCustomMorphTargets().stream()
                     .filter(target -> target.getName().equals("Existing")).findFirst().orElseThrow()
                     .getSliderPresetNames());
+            assertEquals("BodyGen condition: Existing", condition.getAccessibleText());
+            assertEquals("Selected Custom Morph Target Existing", selection.getAccessibleText());
             filter.setText("all");
             assertNull(targets.getSelectionModel().getSelectedItem());
             assertTrue(assigned.getItems().isEmpty());
+            assertEquals("No Custom Morph Target selected", selection.getAccessibleText());
+            assertEquals("Select a Custom Morph Target to inspect its BodyGen condition.",
+                    condition.getAccessibleText());
             stage.close();
         });
     }
@@ -169,6 +189,7 @@ class WorkbenchControllerTest {
             create.fire();
             assertTrue(((HBox) loader.getNamespace().get("morphsInfoBar")).isVisible());
             assertFalse(((HBox) loader.getNamespace().get("templatesInfoBar")).isVisible());
+            assertTrue(((ListView<?>) loader.getNamespace().get("activityList")).getItems().isEmpty());
 
             targets.getSelectionModel().select(targets.getItems().stream()
                     .filter(target -> target.getName().equals("Existing")).findFirst().orElseThrow());
@@ -176,6 +197,10 @@ class WorkbenchControllerTest {
             available.fireEvent(new ActionEvent());
             assign.fire();
             assigned.getSelectionModel().selectFirst();
+            assigned.getSelectionModel().clearSelection();
+            assertTrue(removeAssignment.isDisabled());
+            assigned.getSelectionModel().selectFirst();
+            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
             removeAssignment.fire();
             assertTrue(assigned.getItems().isEmpty());
 

@@ -351,14 +351,11 @@
                                                                         focusTraversable="true" styleClass="title"
                                                                         text="No Custom Morph Target selected" />
                                                                 <Label fx:id="morphTargetConditionText"
-                                                                        accessibleText="BodyGen condition"
                                                                         text="Select a Custom Morph Target to inspect its condition."
                                                                         wrapText="true" />
                                                                 <Label fx:id="morphTargetAssignmentCountText"
-                                                                        accessibleText="Assigned Slider Preset count"
                                                                         text="No Slider Presets assigned" wrapText="true" />
                                                                 <Label fx:id="morphTargetOutputStatusText"
-                                                                        accessibleText="Custom Morph Target output eligibility"
                                                                         styleClass="validation-message"
                                                                         text="A target needs at least one Slider Preset to appear in Morphs output."
                                                                         wrapText="true" />
@@ -531,7 +528,8 @@
                                                                                 focusTraversable="true"
                                                                                 text="No Custom Morph Target selected"
                                                                                 wrapText="true" />
-                                                                        <Label labelFor="$assignedMorphSliderPresetList"
+                                                                        <Label fx:id="assignedMorphSliderPresetLabel"
+                                                                                labelFor="$assignedMorphSliderPresetList"
                                                                                 mnemonicParsing="true"
                                                                                 text="_Assigned Slider Presets:" />
                                                                         <ListView fx:id="assignedMorphSliderPresetList"
@@ -545,8 +543,9 @@
                                                                         <Button fx:id="clearMorphSliderPresetsButton"
                                                                                 accessibleText="Clear assigned Slider Presets"
                                                                                 maxWidth="Infinity" mnemonicParsing="true"
-                                                                                text="C_lear assigned Slider Presets" />
-                                                                        <Label labelFor="$availableMorphSliderPreset"
+                                                                                text="_Clear assigned Slider Presets" />
+                                                                        <Label fx:id="availableMorphSliderPresetLabel"
+                                                                                labelFor="$availableMorphSliderPreset"
                                                                                 mnemonicParsing="true"
                                                                                 text="A_vailable Slider Preset:" />
                                                                         <ComboBox fx:id="availableMorphSliderPreset"
@@ -555,11 +554,11 @@
                                                                         <Button fx:id="assignMorphSliderPresetButton"
                                                                                 accessibleText="Assign selected Slider Preset"
                                                                                 maxWidth="Infinity" mnemonicParsing="true"
-                                                                                text="_Assign Slider Preset" />
+                                                                                text="Ass_ign Slider Preset" />
                                                                         <Button fx:id="assignAllMorphSliderPresetsButton"
                                                                                 accessibleText="Assign all Slider Presets"
                                                                                 maxWidth="Infinity" mnemonicParsing="true"
-                                                                                text="Assign _All Slider Presets" />
+                                                                                text="Assign A_ll Slider Presets" />
                                                                     </children>
                                                                 </VBox>
                                                             </content>

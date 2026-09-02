@@ -897,7 +897,7 @@ try {
         $focusCycle = @(
             @{ Role = 'List'; Name = 'Custom Morph Targets' },
             @{ Role = 'Text'; Name = 'Custom Morph Target editor' },
-            @{ Role = 'Text'; Name = 'Selected Custom Morph Target' },
+            @{ Role = 'Text'; Name = 'No Custom Morph Target selected' },
             @{ Role = 'Text'; Name = 'Output generated text' },
             @{ Role = 'List'; Name = 'Activity' },
             @{ Role = 'Text'; Name = 'Workbench status' },
@@ -936,7 +936,7 @@ try {
         Assert-ControlInsideClient -Element $inspectorLauncher -Metrics $narrowMetrics
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Text' -Name 'Selected Custom Morph Target' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'No Custom Morph Target selected' | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
@@ -953,6 +953,18 @@ try {
         }
         $editor = Find-OuterControl -ControlType 'Text' -Name 'Custom Morph Target editor'
         Assert-ControlInsideClient -Element $editor -Metrics $minimumMetrics
+        $listLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open Morphs list'
+        Send-UiaKeysToElement -Element $listLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $minimumTargetList = Wait-FocusedControl -ControlType 'List' -Name 'Custom Morph Targets'
+        Assert-ControlInsideClient -Element $minimumTargetList -Metrics $minimumMetrics
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $listLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $inspectorLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open Morphs inspector'
+        Send-UiaKeysToElement -Element $inspectorLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $minimumInspector = Wait-FocusedControl -ControlType 'Text' -Name 'No Custom Morph Target selected'
+        Assert-ControlInsideClient -Element $minimumInspector -Metrics $minimumMetrics
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
         $minimumDrawer = Find-OuterControl -ControlType 'Slider' -Name 'Output drawer height'
         Assert-ControlInsideClient -Element $minimumDrawer -Metrics $minimumMetrics
@@ -1421,6 +1433,12 @@ try {
 
         $nameLabel = Find-OuterControl -ControlType 'Text' -Name 'Custom Morph Target name:'
         $nameInput = Get-FollowingControl -Element $nameLabel -ControlType 'Edit'
+        Set-UiaValue -Element $nameInput -Value '   '
+        Send-UiaKeysToElement -Element $nameInput -Keys '{TAB}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-ProjectDiagnostics -Description 'required Custom Morph Target validation' -Predicate {
+            param($value) $value.Contains('CUSTOM_MORPH_TARGET_NAME_REQUIRED')
+        } | Out-Null
+        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' -Name 'Dismiss Morphs validation')
         Set-UiaValue -Element $nameInput -Value 'All|Female'
         Send-UiaKeysToElement -Element $nameInput -Keys '{TAB}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-ProjectDiagnostics -Description 'duplicate Custom Morph Target validation' -Predicate {
@@ -1472,6 +1490,13 @@ try {
             -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (-not $removeTarget.Current.IsEnabled) { $true }
         } | Out-Null
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'No Custom Morph Target selected') `
+            -Description 'cleared accessible target selection state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' `
+                -Name 'Select a Custom Morph Target to inspect its BodyGen condition.') `
+            -Description 'cleared accessible BodyGen condition state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
         foreach ($identityName in @('All|Female', 'ActorTypeNPC|Female')) {
             $identity = Wait-UiaElement -Root $targetList -Condition (
@@ -1495,12 +1520,20 @@ try {
             New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic') `
             -Description 'relationship prepared for pointer assign-all' -TimeoutSeconds $StepTimeoutSeconds
         Select-UiaElement -Element $initialUunp
-        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' `
-            -Name 'Remove selected Slider Preset relationship')
+        $prepareRemoveRelationship = Find-OuterControl -ControlType 'Button' `
+            -Name 'Remove selected Slider Preset relationship'
+        Send-UiaKeysToElement -Element $prepareRemoveRelationship -Keys '{ENTER}' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Remove'
         Wait-UiaCondition -Description 'prepared available relationship' -TimeoutSeconds $StepTimeoutSeconds -Test {
             if ($null -eq (Find-UiaElement -Root $assignedList -Condition (
                     New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic'))) { $true }
         } | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '%a' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $assignedList -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $availableRelationship = Find-OuterControl -ControlType 'ComboBox' -Name 'Available Slider Preset'
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '%v' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $availableRelationship -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $assignAll = Find-OuterControl -ControlType 'Button' -Name 'Assign all Slider Presets'
         $assignAll.SetFocus()
         Wait-UiaCondition -Description 'onscreen assign-all relationship button' `
@@ -1531,6 +1564,7 @@ try {
             -Name 'Remove selected Slider Preset relationship'
         $removeRelationship.SetFocus()
         $removeRelationshipPointer = Invoke-UiaPointerClick -Element $removeRelationship
+        Choose-Confirmation -ButtonName 'Remove'
         Wait-UiaCondition -Description 'removed Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds -Test {
             if ($null -eq (Find-UiaElement -Root $assignedList -Condition (
                     New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic'))) { $true }
@@ -1560,6 +1594,19 @@ try {
         Wait-UiaCondition -Description 'confirmed relationship clear' -TimeoutSeconds $StepTimeoutSeconds -Test {
             $items = Find-UiaElements -Root $assignedList -Condition (New-UiaCondition -ControlType 'ListItem')
             if (@($items).Count -eq 0) { $true }
+        } | Out-Null
+        $removeTarget = Find-OuterControl -ControlType 'Button' -Name 'Remove selected Custom Morph Target'
+        Send-UiaKeysToElement -Element $removeTarget -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Cancel'
+        Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'ActorTypeNPC|Female') `
+            -Description 'cancelled Custom Morph Target removal' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $removeTarget -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Remove'
+        Wait-UiaCondition -Description 'confirmed Custom Morph Target removal' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($null -eq (Find-UiaElement -Root $targetList -Condition (
+                    New-UiaCondition -ControlType 'ListItem' -Name 'ActorTypeNPC|Female'))) { $true }
         } | Out-Null
 
         Set-UiaValue -Element $nameInput -Value 'Clear Me'
@@ -1626,7 +1673,7 @@ try {
             Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-workbench-morphs.txt') -Encoding utf8
         $observations['morphsManagement'] = [ordered]@{
             existing = 'All|Female'
-            validation = 'CUSTOM_MORPH_TARGET_NAME_DUPLICATE'
+            validation = @('CUSTOM_MORPH_TARGET_NAME_REQUIRED', 'CUSTOM_MORPH_TARGET_NAME_DUPLICATE')
             pointerCreated = 'ActorTypeNPC|Female'
             pointerCoordinates = [ordered]@{
                 create = $createPointer
@@ -1638,6 +1685,7 @@ try {
             relationshipAdded = 'UUNP Athletic'
             relationshipRemoved = 'UUNP Athletic'
             relationshipCleared = 'ActorTypeNPC|Female'
+            removed = 'ActorTypeNPC|Female'
             clearVisibleRemoved = 'Clear Me'
             generatedBeforeRemoval = $beforeRelationshipRemoval
             savedAndReopened = $morphsManagedName
