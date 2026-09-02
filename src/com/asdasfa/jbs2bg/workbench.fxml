@@ -194,6 +194,79 @@
                                                                 </VBox>
                                                             </content>
                                                         </ScrollPane>
+                                                        <ScrollPane fx:id="morphsPrimaryScroll"
+                                                                accessibleText="Custom Morph Target management"
+                                                                fitToWidth="true" focusTraversable="false"
+                                                                hbarPolicy="NEVER" managed="false" visible="false"
+                                                                VBox.vgrow="ALWAYS">
+                                                            <content>
+                                                                <VBox fx:id="morphsPrimaryContent" spacing="6.0">
+                                                                    <children>
+                                                                        <HBox fx:id="morphsInfoBar"
+                                                                                accessibleText="Morphs notification"
+                                                                                alignment="CENTER_LEFT"
+                                                                                focusTraversable="false" managed="false"
+                                                                                spacing="6.0" styleClass="info-bar morphs-info-bar"
+                                                                                visible="false">
+                                                                            <padding>
+                                                                                <Insets bottom="6.0" left="8.0" right="8.0" top="6.0" />
+                                                                            </padding>
+                                                                            <children>
+                                                                                <VBox spacing="2.0" HBox.hgrow="ALWAYS">
+                                                                                    <children>
+                                                                                        <Label fx:id="morphsInfoBarCue"
+                                                                                                styleClass="feedback-cue"
+                                                                                                text="Validation" />
+                                                                                        <Label fx:id="morphsInfoBarMessage"
+                                                                                                text="Validation message"
+                                                                                                wrapText="true" />
+                                                                                    </children>
+                                                                                </VBox>
+                                                                                <Button fx:id="dismissMorphsInfoBarButton"
+                                                                                        accessibleText="Dismiss Morphs validation"
+                                                                                        mnemonicParsing="true" text="_Dismiss" />
+                                                                            </children>
+                                                                        </HBox>
+                                                                        <Label labelFor="$customMorphTargetFilter"
+                                                                                mnemonicParsing="true"
+                                                                                text="_Filter Custom Morph Targets:" />
+                                                                        <TextField fx:id="customMorphTargetFilter"
+                                                                                accessibleText="Filter Custom Morph Targets"
+                                                                                promptText="Filter by condition or name" />
+                                                                        <Label labelFor="$customMorphTargetSort"
+                                                                                mnemonicParsing="true"
+                                                                                text="_Sort Custom Morph Targets:" />
+                                                                        <ComboBox fx:id="customMorphTargetSort"
+                                                                                accessibleText="Custom Morph Target sort"
+                                                                                maxWidth="Infinity" />
+                                                                        <ListView fx:id="customMorphTargetList"
+                                                                                accessibleText="Custom Morph Targets"
+                                                                                fixedCellSize="28.0"
+                                                                                focusTraversable="true"
+                                                                                VBox.vgrow="ALWAYS" />
+                                                                        <Label labelFor="$customMorphTargetNameInput"
+                                                                                mnemonicParsing="true"
+                                                                                text="Custom Morph Target _name:" />
+                                                                        <TextField fx:id="customMorphTargetNameInput"
+                                                                                accessibleHelp="BodyGen condition syntax such as All|Female is preserved."
+                                                                                accessibleText="Custom Morph Target name"
+                                                                                promptText="All|Female" />
+                                                                        <Button fx:id="createCustomMorphTargetButton"
+                                                                                accessibleText="Create Custom Morph Target"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Create Custom Morph Target" />
+                                                                        <Button fx:id="removeCustomMorphTargetButton"
+                                                                                accessibleText="Remove selected Custom Morph Target"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Remove Custom Morph Target" />
+                                                                        <Button fx:id="clearCustomMorphTargetsButton"
+                                                                                accessibleText="Clear visible Custom Morph Targets"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="C_lear visible Custom Morph Targets" />
+                                                                    </children>
+                                                                </VBox>
+                                                            </content>
+                                                        </ScrollPane>
                                                         <ScrollPane fx:id="settingsPrimaryScroll"
                                                                 accessibleText="Settings profiles and entries"
                                                                 fitToWidth="true" focusTraversable="false"
@@ -268,6 +341,30 @@
                                                                         <VBox fx:id="sliderChoiceRows" spacing="8.0" />
                                                                     </content>
                                                                 </ScrollPane>
+                                                            </children>
+                                                        </VBox>
+                                                        <VBox fx:id="morphsEditorContent" alignment="TOP_LEFT"
+                                                                managed="false" spacing="8.0" visible="false">
+                                                            <children>
+                                                                <Label fx:id="morphTargetEditorFocusTarget"
+                                                                        accessibleText="Custom Morph Target editor"
+                                                                        focusTraversable="true" styleClass="title"
+                                                                        text="No Custom Morph Target selected" />
+                                                                <Label fx:id="morphTargetConditionText"
+                                                                        accessibleText="BodyGen condition"
+                                                                        text="Select a Custom Morph Target to inspect its condition."
+                                                                        wrapText="true" />
+                                                                <Label fx:id="morphTargetAssignmentCountText"
+                                                                        accessibleText="Assigned Slider Preset count"
+                                                                        text="No Slider Presets assigned" wrapText="true" />
+                                                                <Label fx:id="morphTargetOutputStatusText"
+                                                                        accessibleText="Custom Morph Target output eligibility"
+                                                                        styleClass="validation-message"
+                                                                        text="A target needs at least one Slider Preset to appear in Morphs output."
+                                                                        wrapText="true" />
+                                                                <Region VBox.vgrow="ALWAYS" />
+                                                                <Label text="Use the inspector to manage Slider Preset relationships."
+                                                                        wrapText="true" />
                                                             </children>
                                                         </VBox>
                                                         <VBox fx:id="settingsEditorContent" alignment="TOP_LEFT"
@@ -416,6 +513,53 @@
                                                                                 blockIncrement="1.0" majorTickUnit="20.0"
                                                                                 max="100.0" min="0.0" value="100.0" />
                                                                         <Label fx:id="gangMaximumValue" text="100%" />
+                                                                    </children>
+                                                                </VBox>
+                                                            </content>
+                                                        </ScrollPane>
+                                                        <ScrollPane fx:id="morphsInspectorScroll"
+                                                                accessibleText="Custom Morph Target relationship editor"
+                                                                fitToWidth="true" focusTraversable="false"
+                                                                hbarPolicy="NEVER" managed="false" visible="false"
+                                                                VBox.vgrow="ALWAYS">
+                                                            <content>
+                                                                <VBox fx:id="morphsInspectorContent" spacing="8.0">
+                                                                    <children>
+                                                                        <Label styleClass="title" text="Slider Preset relationships" />
+                                                                        <Label fx:id="morphTargetSelectionText"
+                                                                                accessibleText="Selected Custom Morph Target"
+                                                                                focusTraversable="true"
+                                                                                text="No Custom Morph Target selected"
+                                                                                wrapText="true" />
+                                                                        <Label labelFor="$assignedMorphSliderPresetList"
+                                                                                mnemonicParsing="true"
+                                                                                text="_Assigned Slider Presets:" />
+                                                                        <ListView fx:id="assignedMorphSliderPresetList"
+                                                                                accessibleText="Assigned Slider Presets"
+                                                                                fixedCellSize="28.0" focusTraversable="true"
+                                                                                prefHeight="120.0" />
+                                                                        <Button fx:id="removeMorphSliderPresetButton"
+                                                                                accessibleText="Remove selected Slider Preset relationship"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Remove assigned Slider Preset" />
+                                                                        <Button fx:id="clearMorphSliderPresetsButton"
+                                                                                accessibleText="Clear assigned Slider Presets"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="C_lear assigned Slider Presets" />
+                                                                        <Label labelFor="$availableMorphSliderPreset"
+                                                                                mnemonicParsing="true"
+                                                                                text="A_vailable Slider Preset:" />
+                                                                        <ComboBox fx:id="availableMorphSliderPreset"
+                                                                                accessibleText="Available Slider Preset"
+                                                                                maxWidth="Infinity" />
+                                                                        <Button fx:id="assignMorphSliderPresetButton"
+                                                                                accessibleText="Assign selected Slider Preset"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Assign Slider Preset" />
+                                                                        <Button fx:id="assignAllMorphSliderPresetsButton"
+                                                                                accessibleText="Assign all Slider Presets"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="Assign _All Slider Presets" />
                                                                     </children>
                                                                 </VBox>
                                                             </content>

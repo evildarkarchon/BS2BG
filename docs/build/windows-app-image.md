@@ -99,7 +99,8 @@ empty working directory with every host-Java discovery path removed. The origina
 image process, host `jvm.dll` and JavaFX native libraries from the extracted runtime, and exit with code 0 inside
 the configured bound.
 
-Windows UI Automation locates controls only by accessible role/name and native ownership. The current issue #106
+Windows UI Automation locates controls by accessible role/name and native ownership; pointer checks use only the
+provider-supplied clickable point of a semantically located element. The current issue #107
 workflow records these steps:
 
 1. Extract the clean image, verify launcher configuration/version, install representative, recovery, malformed,
@@ -119,39 +120,44 @@ workflow records these steps:
    identities; filter, sort, and type ahead in visible order; reject duplicate create/rename; duplicate and
    inline-rename with F2; Cancel then confirm Remove and Clear Visible; verify stable selection, complete
    relationship cascades, canonical Slider choice persistence, and save/reopen continuity.
-8. Edit Standard and UUNP Settings, persist the pair, prove live output-affecting preview behavior, then exercise
+8. Author Custom Morph Targets through the real Morphs list/editor/inspector: preserve BodyGen conditions and
+   eligible random initial assignment, reject duplicate names, filter/sort/type ahead with stable identity, add and
+   remove Slider Preset relationships, clear relationships and the frozen visible target set, and prove real-pointer
+   create/select/relationship gestures. Verify Output invalidation/regeneration, save/reopen continuity, High
+   Contrast, narrow overlays, semantic focus, and measured DPI/client bounds.
+9. Edit Standard and UUNP Settings, persist the pair, prove live output-affecting preview behavior, then exercise
    successful, malformed/partial, failed, and cancelled BodySlide imports with captured-source, diagnostics,
    committed-effect, selection, focus, and Activity evidence.
-9. Generate one captured Project/Settings basis; inspect keyboard-selectable Templates/Morphs/BoS tabs as read-only
+10. Generate one captured Project/Settings basis; inspect keyboard-selectable Templates/Morphs/BoS tabs as read-only
    text; copy the selected accepted bytes; publish the complete INI/BoS set and one selected BoS file with exact
    UTF-8 bytes; force a locked-destination batch failure and prove rollback before a linked retry. Then preserve
    accepted Output across Save, invalidate it after a Project edit, and prove cancelled/stale Generate attempts
    publish no artifacts, do not reveal Output, retain focus, and record complete Activity evidence.
-10. Save As a clean New Project and verify the canonical file and adopted identity.
-11. Open a recovered Project and require captured source/basis, both ordered
+11. Save As a clean New Project and verify the canonical file and adopted identity.
+12. Open a recovered Project and require captured source/basis, both ordered
    `SLIDER_PRESET_ASSIGNMENT_MISSING` diagnostics, committed effect, retry capability, and dirty title.
-12. Cancel and then explicitly discard a dirty New request.
-13. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
-14. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes; repair the
+13. Cancel and then explicitly discard a dirty New request.
+14. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
+15. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes; repair the
     captured source and Retry it as a newly linked successful attempt.
-15. Change the selected high-token-count source after detached parsing begins, require `STALE_RESULT`, zero effects,
+16. Change the selected high-token-count source after detached parsing begins, require `STALE_RESULT`, zero effects,
     a durable Completed-with-issues Activity record, and preservation of the active Project.
-16. Open the regenerated high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
+17. Open the regenerated high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
     New/Open/Save/Save As disabled while Exit remains available, then Cancel and require zero committed effects.
-17. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
+18. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
     recover through Save As.
-18. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
+19. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
     prompt and prove admission resumes, then repeat and Discard to require bounded exit 0 with no image process.
 
 Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
 launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/15`; its durable artifacts include the Workbench,
-responsive, and Templates-management UIA trees plus `workbench-high-contrast.png` and
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/16`; its durable artifacts include the Workbench,
+responsive, Templates-management, and Morphs-management UIA trees plus `workbench-high-contrast.png` and
 `workbench-reduced-motion.png`, the populated Templates High Contrast screenshot
 `workbench-templates-high-contrast.png`, the selected Slider editor High Contrast screenshot
 `workbench-templates-editor-high-contrast.png`, and the narrow Templates clipping screenshot
-`workbench-templates-narrow.png`. The accessibility
+`workbench-templates-narrow.png`, `workbench-morphs-high-contrast.png`, and `workbench-morphs-narrow.png`. The accessibility
 preference changes use documented Windows SPI calls and restore the exact original state in `finally`; see
 [workbench-platform.md](workbench-platform.md).
 
@@ -294,8 +300,8 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
-- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/15`; steps with durations;
-  typed navigation, semantic focus, Output interaction, live themes, High Contrast, reduced motion, feedback,
+- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/16`; steps with durations;
+  typed navigation, semantic focus, keyboard and real-pointer Morphs authoring, Output interaction, live themes, High Contrast, reduced motion, feedback,
   dialogs, native DPI and responsive/minimum geometry; Project recovery, New/Open/Save/Save As, failure
   preservation/retry and dirty shutdown; the expected/observed process model; bounded exit; environment scrubbing;
   and diagnostics including native-access warning lines, which must be none).

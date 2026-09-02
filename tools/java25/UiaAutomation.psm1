@@ -6,8 +6,9 @@
 .DESCRIPTION
     Wraps System.Windows.Automation so tools/java25/smoke-app-image.ps1 can locate JavaFX controls the way an
     assistive technology does: by accessible control type (role), accessible name, and tree relationships. Nothing
-    here uses coordinates, automation ids, CSS, or JavaFX internals; JavaFX exposes its scene graph to UIA through
-    its public accessibility support, so these helpers only ever see roles, names, and standard UIA patterns.
+    here accepts caller-supplied coordinates, automation ids, CSS, or JavaFX internals. Pointer activation uses the
+    clickable point supplied by the semantically located UIA provider; JavaFX exposes the rest of its scene graph
+    through public accessibility support, so helpers otherwise see roles, names, tree relationships, and patterns.
 
     Every wait is bounded and every failure names what was being looked for, so a hung toolkit or a missing
     control fails the smoke run with a diagnosis instead of hanging it.
@@ -17,6 +18,7 @@ Set-StrictMode -Version Latest
 
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName WindowsBase
 
 # Native dialogs the JavaFX window owns (FileChooser) are ordinary Win32 top-level windows, but neither the UIA
 # desktop root (owned windows are not root children) nor JavaFX's own UIA provider (it only knows its scene graph)
@@ -56,6 +58,20 @@ public static class BS2BGWindows
 {
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+    [StructLayout(LayoutKind.Sequential)] private struct INPUT
+    {
+        public uint type;
+        public MOUSEINPUT mouse;
+    }
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
@@ -68,8 +84,13 @@ public static class BS2BGWindows
     [DllImport("user32.dll", SetLastError = true)] private static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hWnd);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, INPUT[] inputs, int size);
 
     private const uint BM_CLICK = 0x00F5;
+    private const uint INPUT_MOUSE = 0;
+    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    private const uint MOUSEEVENTF_LEFTUP = 0x0004;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOZORDER = 0x0004;
     private const uint SWP_NOACTIVATE = 0x0010;
@@ -79,6 +100,24 @@ public static class BS2BGWindows
     public static bool ClickButton(IntPtr hWnd)
     {
         return PostMessageW(hWnd, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    /// <summary>
+    /// Moves the system pointer to a provider-supplied clickable point and emits one real left-button click.
+    /// </summary>
+    /// <param name="x">Physical desktop X coordinate returned by UI Automation.</param>
+    /// <param name="y">Physical desktop Y coordinate returned by UI Automation.</param>
+    /// <exception cref="System.ComponentModel.Win32Exception">Thrown when Windows rejects the move or input.</exception>
+    public static void LeftClick(int x, int y)
+    {
+        if (!SetCursorPos(x, y))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        var inputs = new[] {
+            new INPUT { type = INPUT_MOUSE, mouse = new MOUSEINPUT { dwFlags = MOUSEEVENTF_LEFTDOWN } },
+            new INPUT { type = INPUT_MOUSE, mouse = new MOUSEINPUT { dwFlags = MOUSEEVENTF_LEFTUP } }
+        };
+        if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT))) != inputs.Length)
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     }
 
     /// <summary>
@@ -514,6 +553,27 @@ function Invoke-UiaElement {
 
 <#
 .SYNOPSIS
+    Clicks a semantic UIA element with the real Windows pointer at its provider-supplied clickable point.
+.NOTES
+    The element must first be located by accessible role/name/relationship. No fixed coordinates or row indexes are
+    accepted; UI Automation remains authoritative for the physical point even across live DPI changes.
+#>
+function Invoke-UiaPointerClick {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Element)
+    if (-not $Element.Current.IsEnabled -or $Element.Current.IsOffscreen) {
+        throw "Element '$($Element.Current.Name)' is not enabled and onscreen for pointer activation."
+    }
+    $point = [System.Windows.Point]::new(0.0, 0.0)
+    if (-not $Element.TryGetClickablePoint([ref]$point)) {
+        throw "Element '$($Element.Current.Name)' did not expose a provider-supplied clickable point."
+    }
+    [BS2BGWindows]::LeftClick([int][math]::Round($point.X), [int][math]::Round($point.Y))
+    return [ordered]@{ x = $point.X; y = $point.Y }
+}
+
+<#
+.SYNOPSIS
     Activates a native Win32 button that UIA exposes without an Invoke pattern, through its own window handle.
 .NOTES
     The common file dialog's Open/Save split button is exposed by UIA's legacy proxy as a bare Pane with no
@@ -896,6 +956,7 @@ Export-ModuleMember -Function @(
     'Get-ProcessTopLevelWindows',
     'Get-UiaProcessWindows',
     'Invoke-UiaElement',
+    'Invoke-UiaPointerClick',
     'Invoke-UiaNativeButton',
     'Send-UiaAccelerator',
     'Send-UiaKeysToElement',

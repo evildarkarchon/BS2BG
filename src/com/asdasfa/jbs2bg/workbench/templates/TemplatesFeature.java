@@ -152,7 +152,22 @@ public final class TemplatesFeature {
      * @return accepted immutable feature update
      */
     public Update acceptProjectFrame(WorkbenchProjectFlow.Frame projectFrame, boolean resetSelection) {
+        return acceptProjectFrame(projectFrame, resetSelection,
+                Objects.requireNonNull(projectFrame, "projectFrame").diagnostics());
+    }
+
+    /**
+     * Reconciles Project content while letting the kernel preserve feature ownership of operation diagnostics.
+     *
+     * @param projectFrame   latest coherent Project frame
+     * @param resetSelection whether lifecycle navigation requires drafts and selection to be cleared
+     * @param diagnostics    diagnostics owned by Templates for this publication
+     * @return accepted immutable feature update
+     */
+    public Update acceptProjectFrame(WorkbenchProjectFlow.Frame projectFrame, boolean resetSelection,
+                                     List<ProjectDiagnostic> diagnostics) {
         Objects.requireNonNull(projectFrame, "projectFrame");
+        Objects.requireNonNull(diagnostics, "diagnostics");
         if (projectFrame.sequence() == frame.projectSequence())
             return new Update(true, frame);
         if (resetSelection) {
@@ -161,7 +176,7 @@ public final class TemplatesFeature {
             view.clearSelection();
         }
         lastOutcomeKind = OutcomeKind.NONE;
-        reconcile(projectFrame, projectFrame.diagnostics());
+        reconcile(projectFrame, diagnostics);
         return new Update(true, frame);
     }
 

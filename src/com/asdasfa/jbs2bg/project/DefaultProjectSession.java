@@ -583,6 +583,8 @@ final class DefaultProjectSession implements ProjectSession {
                 return clearCustomMorphTargetSliderPresets(presets3);
             if (edit instanceof CustomMorphTargetEdits.Delete delete)
                 return deleteCustomMorphTarget(delete);
+            if (edit instanceof CustomMorphTargetEdits.DeleteAll all)
+                return deleteCustomMorphTargets(all);
             if (edit instanceof CustomMorphTargetEdits.Clear)
                 return clearCustomMorphTargets();
             if (edit instanceof SliderPresetEdits.Create create1)
@@ -906,6 +908,26 @@ final class DefaultProjectSession implements ProjectSession {
         if (target.isEmpty())
             return rejectedCustomMorphTargetNotFound();
         return outcome(project.removeCustomMorphTarget(target.get().getName()));
+    }
+
+    /**
+     * Resolves an entire caller-frozen Custom Morph Target identity set before removing it as one Project edit.
+     *
+     * @param edit immutable filtered bulk deletion
+     * @return changed, unchanged, or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome deleteCustomMorphTargets(CustomMorphTargetEdits.DeleteAll edit) {
+        if (edit.getNames() == null)
+            return rejectedCustomMorphTargetName(ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_REQUIRED,
+                    "Filtered Custom Morph Target clearing requires an identity selection.");
+        Set<String> canonicalNames = new LinkedHashSet<>(edit.getNames().size());
+        for (String name : edit.getNames()) {
+            Optional<CustomMorphTargetSnapshot> found = project.findCustomMorphTarget(name);
+            if (found.isEmpty())
+                return rejectedCustomMorphTargetNotFound();
+            canonicalNames.add(found.orElseThrow().getName());
+        }
+        return outcome(project.removeCustomMorphTargets(new ArrayList<>(canonicalNames)));
     }
 
     /**

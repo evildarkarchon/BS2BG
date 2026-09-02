@@ -622,6 +622,22 @@ final class Project {
     }
 
     /**
+     * Removes several already-resolved Custom Morph Targets as one immutable fold. No intermediate aggregate is
+     * published, so a captured visible-set command cannot expose a partial deletion.
+     *
+     * @param names existing logical Custom Morph Target names
+     * @return the next aggregate, or this aggregate when the selection is empty
+     * @throws IllegalArgumentException when a name does not identify a Custom Morph Target
+     */
+    Project removeCustomMorphTargets(List<String> names) {
+        Objects.requireNonNull(names, "names");
+        Project next = this;
+        for (String name : names)
+            next = next.removeCustomMorphTarget(Objects.requireNonNull(name, "name"));
+        return next;
+    }
+
+    /**
      * Removes every Custom Morph Target.
      *
      * @return the next aggregate, or {@code this} when there are none

@@ -24,6 +24,8 @@ import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
+import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
+import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
@@ -66,6 +68,169 @@ class WorkbenchControllerTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    /**
+     * The Morphs JavaFX adapter renders immutable target frames and translates catalog and relationship controls into
+     * typed intents without retaining control-local Project state.
+     */
+    @Test
+    void morphsControlsCreateFilterAndAssignThroughTheAuthoritativeProjectFlow() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(SliderPresetEdits.create("Beta"));
+        flow.apply(CustomMorphTargetEdits.create("Existing"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            controller.attach(flow, stage, new RecordingPlatform());
+            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+            @SuppressWarnings("unchecked")
+            ListView<CustomMorphTargetSnapshot> targets =
+                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
+            TextField name = (TextField) loader.getNamespace().get("customMorphTargetNameInput");
+            TextField filter = (TextField) loader.getNamespace().get("customMorphTargetFilter");
+            Button create = (Button) loader.getNamespace().get("createCustomMorphTargetButton");
+            @SuppressWarnings("unchecked")
+            ComboBox<SliderPresetSnapshot> available =
+                    (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
+            Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
+            @SuppressWarnings("unchecked")
+            ListView<SliderPresetSnapshot> assigned =
+                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
+
+            assertTrue(targets.isVisible());
+            assertEquals(List.of("Existing"), targets.getItems().stream()
+                    .map(CustomMorphTargetSnapshot::getName).toList());
+            name.setText("  All|Female  ");
+            create.fire();
+            assertEquals("All|Female", targets.getSelectionModel().getSelectedItem().getName());
+
+            targets.getSelectionModel().select(targets.getItems().stream()
+                    .filter(target -> target.getName().equals("Existing")).findFirst().orElseThrow());
+            available.setValue(available.getItems().stream()
+                    .filter(preset -> preset.getName().equals("Alpha")).findFirst().orElseThrow());
+            available.fireEvent(new ActionEvent());
+            assign.fire();
+
+            assertEquals(List.of("Alpha"), assigned.getItems().stream()
+                    .map(SliderPresetSnapshot::getName).toList());
+            assertEquals(List.of("Alpha"), flow.frame().snapshot().getCustomMorphTargets().stream()
+                    .filter(target -> target.getName().equals("Existing")).findFirst().orElseThrow()
+                    .getSliderPresetNames());
+            filter.setText("all");
+            assertNull(targets.getSelectionModel().getSelectedItem());
+            assertTrue(assigned.getItems().isEmpty());
+            stage.close();
+        });
+    }
+
+    /**
+     * Morphs validation stays pane-local, relationship removal is immediate, and destructive relationship/catalog
+     * clears consume the correctly named confirmation actions without retargeting selection.
+     */
+    @Test
+    void morphsValidationAndDestructiveActionsUseSafeTypedFeedback() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(CustomMorphTargetEdits.create("Another"));
+        flow.apply(CustomMorphTargetEdits.create("Existing"));
+        RecordingPlatform platform = new RecordingPlatform();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, platform);
+            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+            @SuppressWarnings("unchecked")
+            ListView<CustomMorphTargetSnapshot> targets =
+                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
+            TextField name = (TextField) loader.getNamespace().get("customMorphTargetNameInput");
+            Button create = (Button) loader.getNamespace().get("createCustomMorphTargetButton");
+            @SuppressWarnings("unchecked")
+            ComboBox<SliderPresetSnapshot> available =
+                    (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
+            Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
+            @SuppressWarnings("unchecked")
+            ListView<SliderPresetSnapshot> assigned =
+                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
+            Button removeAssignment = (Button) loader.getNamespace().get("removeMorphSliderPresetButton");
+            Button clearAssignments = (Button) loader.getNamespace().get("clearMorphSliderPresetsButton");
+            Button removeTarget = (Button) loader.getNamespace().get("removeCustomMorphTargetButton");
+            Button clearTargets = (Button) loader.getNamespace().get("clearCustomMorphTargetsButton");
+            TextField filter = (TextField) loader.getNamespace().get("customMorphTargetFilter");
+
+            name.setText("existing");
+            create.fire();
+            assertTrue(((HBox) loader.getNamespace().get("morphsInfoBar")).isVisible());
+            assertFalse(((HBox) loader.getNamespace().get("templatesInfoBar")).isVisible());
+
+            targets.getSelectionModel().select(targets.getItems().stream()
+                    .filter(target -> target.getName().equals("Existing")).findFirst().orElseThrow());
+            available.setValue(available.getItems().getFirst());
+            available.fireEvent(new ActionEvent());
+            assign.fire();
+            assigned.getSelectionModel().selectFirst();
+            removeAssignment.fire();
+            assertTrue(assigned.getItems().isEmpty());
+
+            available.setValue(available.getItems().getFirst());
+            available.fireEvent(new ActionEvent());
+            assign.fire();
+            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
+            clearAssignments.fire();
+            assertTrue(assigned.getItems().isEmpty());
+
+            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
+            removeTarget.fire();
+            assertEquals(2, flow.frame().snapshot().getCustomMorphTargets().size());
+            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
+            removeTarget.fire();
+            assertEquals(List.of("Another"), flow.frame().snapshot().getCustomMorphTargets().stream()
+                    .map(CustomMorphTargetSnapshot::getName).toList());
+            assertNull(targets.getSelectionModel().getSelectedItem());
+
+            filter.setText("ano");
+            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
+            clearTargets.fire();
+            assertTrue(flow.frame().snapshot().getCustomMorphTargets().isEmpty());
+            stage.close();
+        });
+    }
+
+    /**
+     * Refilling an empty Morphs list replaces only its JavaFX adapter so the Windows UIA provider receives a fresh
+     * virtualized child subtree without changing feature identity state.
+     */
+    @Test
+    void morphsEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, new RecordingPlatform());
+            @SuppressWarnings("unchecked")
+            ListView<CustomMorphTargetSnapshot> initial =
+                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
+            TextField name = (TextField) loader.getNamespace().get("customMorphTargetNameInput");
+
+            name.setText("All|Female");
+            ((Button) loader.getNamespace().get("createCustomMorphTargetButton")).fire();
+
+            assertNotSame(initial, controller.customMorphTargetListNode());
+            assertEquals(List.of("All|Female"), controller.customMorphTargetListNode().getItems().stream()
+                    .map(CustomMorphTargetSnapshot::getName).toList());
+            stage.close();
+        });
+    }
 
     /**
      * The Settings Area edits both profiles through immutable feature frames, persists them as one pair, and records
@@ -1807,9 +1972,11 @@ class WorkbenchControllerTest {
             stage.show();
 
             sendControlKey(root, KeyCode.DIGIT2);
-            Button primary = (Button) loader.getNamespace().get("primaryContentButton");
-            Button editor = (Button) loader.getNamespace().get("editorButton");
-            Button inspector = (Button) loader.getNamespace().get("inspectorButton");
+            @SuppressWarnings("unchecked")
+            ListView<CustomMorphTargetSnapshot> primary =
+                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
+            Label editor = (Label) loader.getNamespace().get("morphTargetEditorFocusTarget");
+            Label inspector = (Label) loader.getNamespace().get("morphTargetSelectionText");
             Label output = (Label) loader.getNamespace().get("outputFocusTarget");
             assertSame(primary, scene.getFocusOwner());
 

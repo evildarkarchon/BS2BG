@@ -91,6 +91,16 @@ public final class CustomMorphTargetEdits {
     }
 
     /**
+     * Requests one atomic removal of a caller-frozen Custom Morph Target identity set.
+     *
+     * @param names existing Custom Morph Target names in the captured visible order
+     * @return an immutable bulk-deletion request
+     */
+    public static ProjectEdit deleteAll(List<String> names) {
+        return new DeleteAll(names);
+    }
+
+    /**
      * Requests removal of every Custom Morph Target from the active Project.
      *
      * @return the immutable clear request
@@ -282,6 +292,25 @@ public final class CustomMorphTargetEdits {
          */
         String getName() {
             return name;
+        }
+    }
+
+    /** Immutable filtered bulk deletion interpreted only by the ProjectSession module. */
+    static final class DeleteAll implements CustomMorphTargetEdit {
+        private final List<String> names;
+
+        /**
+         * Defensively copies the caller-owned visible identity selection before apply time.
+         *
+         * @param names selected names, or null for session validation
+         */
+        DeleteAll(List<String> names) {
+            this.names = names == null ? null : ImmutableValues.copyOf(names, "names");
+        }
+
+        /** @return immutable selected names, or null when omitted */
+        List<String> getNames() {
+            return names;
         }
     }
 

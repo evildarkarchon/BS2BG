@@ -24,6 +24,10 @@ Describe 'UI Automation selection helpers' {
     It 'exports stable logical-selection inspection for packaged list tests' {
         Get-Command Get-UiaSelectionState -ErrorAction Stop | Should -Not -BeNullOrEmpty
     }
+
+    It 'exports provider-located pointer activation for packaged pointer tests' {
+        Get-Command Invoke-UiaPointerClick -ErrorAction Stop | Should -Not -BeNullOrEmpty
+    }
 }
 
 Describe 'UI Automation generated-text helpers' {

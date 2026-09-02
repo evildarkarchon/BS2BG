@@ -49,6 +49,7 @@ $firstSaveName = 'new-project.jbs2bg'
 $retrySaveName = 'save-retry.jbs2bg'
 $shutdownProjectName = 'shutdown-recovery.jbs2bg'
 $templatesManagedName = 'templates-managed.jbs2bg'
+$morphsManagedName = 'morphs-managed.jbs2bg'
 $accessibilityState = Get-SystemAccessibilityPreferences
 
 $evidenceDir = Split-Path -Parent $EvidencePath
@@ -846,6 +847,9 @@ try {
             if ($entry.Value -ceq 'Templates') {
                 Wait-FocusedControl -ControlType 'List' -Name 'Slider Presets' | Out-Null
             }
+            elseif ($entry.Value -ceq 'Morphs') {
+                Wait-FocusedControl -ControlType 'List' -Name 'Custom Morph Targets' | Out-Null
+            }
             elseif ($entry.Value -ceq 'Settings') {
                 Wait-FocusedControl -ControlType 'List' -Name 'Settings entries' | Out-Null
             }
@@ -871,18 +875,18 @@ try {
         }
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs primary content' | Out-Null
+        Wait-FocusedControl -ControlType 'List' -Name 'Custom Morph Targets' | Out-Null
         if ((Get-UiaToggleState -Element (Get-AreaButton -Name 'Output')) -ne 'Off') {
             throw 'Escape did not close the Output drawer.'
         }
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F6}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs editor' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Custom Morph Target editor' | Out-Null
         $ctrlBackquote = '^' + [char]96
         Send-UiaKeys -ProcessId $script:app.Id -Keys $ctrlBackquote -TimeoutSeconds $StepTimeoutSeconds
         Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys $ctrlBackquote -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs editor' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Custom Morph Target editor' | Out-Null
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
         Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
@@ -891,9 +895,9 @@ try {
         $morphsRail.SetFocus()
         Wait-UiaKeyboardFocus -Element $morphsRail -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $focusCycle = @(
-            @{ Role = 'Button'; Name = 'Morphs primary content' },
-            @{ Role = 'Button'; Name = 'Morphs editor' },
-            @{ Role = 'Button'; Name = 'Morphs inspector' },
+            @{ Role = 'List'; Name = 'Custom Morph Targets' },
+            @{ Role = 'Text'; Name = 'Custom Morph Target editor' },
+            @{ Role = 'Text'; Name = 'Selected Custom Morph Target' },
             @{ Role = 'Text'; Name = 'Output generated text' },
             @{ Role = 'List'; Name = 'Activity' },
             @{ Role = 'Text'; Name = 'Workbench status' },
@@ -904,7 +908,7 @@ try {
             Wait-FocusedControl -ControlType $target.Role -Name $target.Name | Out-Null
         }
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs editor' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Custom Morph Target editor' | Out-Null
         $observations['keyboardNavigation'] = [ordered]@{
             areas = $areaEvidence
             outputPreservedArea = 'Morphs'
@@ -932,12 +936,12 @@ try {
         Assert-ControlInsideClient -Element $inspectorLauncher -Metrics $narrowMetrics
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs inspector' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Selected Custom Morph Target' | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Button' -Name 'Morphs primary content' | Out-Null
+        Wait-FocusedControl -ControlType 'List' -Name 'Custom Morph Targets' | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaKeyboardFocus -Element (Get-AreaButton -Name 'Morphs') -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
@@ -947,7 +951,7 @@ try {
                 [math]::Abs($minimumMetrics.LogicalClientHeight - 600.0) -gt 2.0) {
             throw "Workbench minimum client geometry did not settle at 800x600: $($minimumMetrics.LogicalClientWidth)x$($minimumMetrics.LogicalClientHeight)."
         }
-        $editor = Find-OuterControl -ControlType 'Button' -Name 'Morphs editor'
+        $editor = Find-OuterControl -ControlType 'Text' -Name 'Custom Morph Target editor'
         Assert-ControlInsideClient -Element $editor -Metrics $minimumMetrics
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
         $minimumDrawer = Find-OuterControl -ControlType 'Slider' -Name 'Output drawer height'
@@ -1390,6 +1394,258 @@ try {
             rangeValidation = 'reversed maximum clamped to minimum'
         }
         'pointer-free Slider choice/profile/gang editing, browse, validation, management, and reopen passed'
+    }
+
+    Invoke-SmokeStep -Name 'author-custom-morph-targets-with-keyboard-and-pointer' -Action {
+        $representativePath = Join-Path $workDir $openedProjectName
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path $representativePath -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $openedProjectName" | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+
+        $targetList = Find-OuterControl -ControlType 'List' -Name 'Custom Morph Targets'
+        $allFemale = Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'All|Female') `
+            -Description 'existing Custom Morph Target' -TimeoutSeconds $StepTimeoutSeconds
+        Set-SystemHighContrast -Enabled:$true
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
+            -Description 'populated Morphs High Contrast state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $morphsHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-morphs-high-contrast.png'
+        Save-Screenshot -Path $morphsHighContrastScreenshot
+        Set-SystemHighContrast -Enabled:$false
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
+            -Description 'Morphs theme restored after High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $nameLabel = Find-OuterControl -ControlType 'Text' -Name 'Custom Morph Target name:'
+        $nameInput = Get-FollowingControl -Element $nameLabel -ControlType 'Edit'
+        Set-UiaValue -Element $nameInput -Value 'All|Female'
+        Send-UiaKeysToElement -Element $nameInput -Keys '{TAB}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-ProjectDiagnostics -Description 'duplicate Custom Morph Target validation' -Predicate {
+            param($value) $value.Contains('CUSTOM_MORPH_TARGET_NAME_DUPLICATE')
+        } | Out-Null
+        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' -Name 'Dismiss Morphs validation')
+
+        Set-UiaValue -Element $nameInput -Value 'ActorTypeNPC|Female'
+        $createTarget = Find-OuterControl -ControlType 'Button' -Name 'Create Custom Morph Target'
+        $createTarget.SetFocus()
+        Wait-UiaCondition -Description 'onscreen Custom Morph Target create button' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (-not $createTarget.Current.IsOffscreen) { $createTarget }
+        } | Out-Null
+        $createPointer = Invoke-UiaPointerClick -Element $createTarget
+        $createdTarget = Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'ActorTypeNPC|Female') `
+            -Description 'pointer-created Custom Morph Target' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'pointer-created target selected by identity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Get-UiaSelectionState -Element $createdTarget) { $createdTarget }
+        } | Out-Null
+
+        $sortLabel = Find-OuterControl -ControlType 'Text' -Name 'Sort Custom Morph Targets:'
+        $sort = Get-FollowingControl -Element $sortLabel -ControlType 'ComboBox'
+        Send-UiaKeysToElement -Element $sort -Keys '{END}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $targetList -Keys 'a' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'sorted Custom Morph Target type-ahead' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $targetList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name 'All|Female')
+            if ($null -ne $candidate -and (Get-UiaSelectionState -Element $candidate)) { $candidate }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $targetList -Keys 'a' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'repeated Custom Morph Target type-ahead cycle' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $targetList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name 'ActorTypeNPC|Female')
+            if ($null -ne $candidate -and (Get-UiaSelectionState -Element $candidate)) { $candidate }
+        } | Out-Null
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        $filterLabel = Find-OuterControl -ControlType 'Text' -Name 'Filter Custom Morph Targets:'
+        $filter = Get-FollowingControl -Element $filterLabel -ControlType 'Edit'
+        Wait-UiaKeyboardFocus -Element $filter -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $filter -Keys 'all' -TimeoutSeconds $StepTimeoutSeconds
+        $removeTarget = Find-OuterControl -ControlType 'Button' -Name 'Remove selected Custom Morph Target'
+        Wait-UiaCondition -Description 'filter-hidden Custom Morph Target clears management target' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (-not $removeTarget.Current.IsEnabled) { $true }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+        foreach ($identityName in @('All|Female', 'ActorTypeNPC|Female')) {
+            $identity = Wait-UiaElement -Root $targetList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name $identityName) `
+                -Description "visible Custom Morph Target '$identityName'" -TimeoutSeconds $StepTimeoutSeconds
+            if (Get-UiaSelectionState -Element $identity) {
+                throw "Clearing the filter silently restored Custom Morph Target '$identityName'."
+            }
+        }
+
+        $allFemale = Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'All|Female') `
+            -Description 'pointer-selected relationship target' -TimeoutSeconds $StepTimeoutSeconds
+        $allFemale.SetFocus()
+        $selectPointer = Invoke-UiaPointerClick -Element $allFemale
+        Wait-UiaCondition -Description 'pointer target selection' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Get-UiaSelectionState -Element $allFemale) { $allFemale }
+        } | Out-Null
+        $assignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+        $initialUunp = Wait-UiaElement -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic') `
+            -Description 'relationship prepared for pointer assign-all' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $initialUunp
+        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' `
+            -Name 'Remove selected Slider Preset relationship')
+        Wait-UiaCondition -Description 'prepared available relationship' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($null -eq (Find-UiaElement -Root $assignedList -Condition (
+                    New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic'))) { $true }
+        } | Out-Null
+        $assignAll = Find-OuterControl -ControlType 'Button' -Name 'Assign all Slider Presets'
+        $assignAll.SetFocus()
+        Wait-UiaCondition -Description 'onscreen assign-all relationship button' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (-not $assignAll.Current.IsOffscreen -and $assignAll.Current.IsEnabled) { $assignAll }
+        } | Out-Null
+        $relationshipPointer = Invoke-UiaPointerClick -Element $assignAll
+        $uunpRelationship = Wait-UiaElement -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic') `
+            -Description 'pointer-assigned Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds
+
+        $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        $targetList.SetFocus()
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^g' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $activity -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Success — Generate Output — Completed: Output generated.') `
+            -Description 'Morphs relationship Generate Activity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $outputRegion = Find-OuterControl -ControlType 'Tab' -Name 'Generated Output tabs'
+        $beforeRelationshipRemoval = (Get-SelectedOutputText -Region $outputRegion -TabName 'Morphs' `
+            -Description 'Morphs output before relationship removal').Text
+        if (-not $beforeRelationshipRemoval.Contains('All|Female=CBBE Curvy|UUNP Athletic')) {
+            throw 'Generated Morphs output omitted the pointer-authored Slider Preset relationship.'
+        }
+
+        Select-UiaElement -Element $uunpRelationship
+        $removeRelationship = Find-OuterControl -ControlType 'Button' `
+            -Name 'Remove selected Slider Preset relationship'
+        $removeRelationship.SetFocus()
+        $removeRelationshipPointer = Invoke-UiaPointerClick -Element $removeRelationship
+        Wait-UiaCondition -Description 'removed Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($null -eq (Find-UiaElement -Root $assignedList -Condition (
+                    New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic'))) { $true }
+        } | Out-Null
+        Wait-UiaCondition -Description 'Morphs edit invalidates generated Output' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($outputRegion.Current.HelpText.Contains('Project changed—Generate again.')) { $outputRegion }
+        } | Out-Null
+        $targetList.SetFocus()
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^g' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'regenerated Morphs output after relationship removal' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = (Get-SelectedOutputText -Region $outputRegion -TabName 'Morphs' `
+                -Description 'regenerated Morphs output').Text
+            if ($candidate.Contains('All|Female=CBBE Curvy') `
+                    -and -not $candidate.Contains('All|Female=CBBE Curvy|UUNP Athletic')) { $candidate }
+        } | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+
+        $createdTarget = Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'ActorTypeNPC|Female') `
+            -Description 'target for confirmed relationship clear' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $createdTarget
+        $clearRelationships = Find-OuterControl -ControlType 'Button' -Name 'Clear assigned Slider Presets'
+        Send-UiaKeysToElement -Element $clearRelationships -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Clear'
+        Wait-UiaCondition -Description 'confirmed relationship clear' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $items = Find-UiaElements -Root $assignedList -Condition (New-UiaCondition -ControlType 'ListItem')
+            if (@($items).Count -eq 0) { $true }
+        } | Out-Null
+
+        Set-UiaValue -Element $nameInput -Value 'Clear Me'
+        $createTarget.SetFocus()
+        $clearCreatePointer = Invoke-UiaPointerClick -Element $createTarget
+        Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Clear Me') `
+            -Description 'target for filtered catalog clear' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $filter -Keys 'clear me' -TimeoutSeconds $StepTimeoutSeconds
+        $clearTargets = Find-OuterControl -ControlType 'Button' -Name 'Clear visible Custom Morph Targets'
+        Send-UiaKeysToElement -Element $clearTargets -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Cancel'
+        Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'Clear Me') `
+            -Description 'cancelled filtered target clear' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $clearTargets -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Clear'
+        Wait-UiaCondition -Description 'confirmed filtered target clear' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($null -eq (Find-UiaElement -Root $targetList -Condition (
+                    New-UiaCondition -ControlType 'ListItem' -Name 'Clear Me'))) { $true }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+
+        $morphsManagedPath = Join-Path $workDir $morphsManagedName
+        Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
+        Complete-FileDialog -Title $saveDialogTitle -Path $morphsManagedPath -ConfirmButton 'Save'
+        Wait-MainWindow -Title "$applicationTitle - $morphsManagedName" | Out-Null
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path $morphsManagedPath -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $morphsManagedName" | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        $targetList = Find-OuterControl -ControlType 'List' -Name 'Custom Morph Targets'
+        $allFemale = Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'All|Female') `
+            -Description 'saved and reopened Custom Morph Target' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $allFemale
+        $assignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+        Wait-UiaElement -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
+            -Description 'saved and reopened target relationship' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $narrowMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        $filterLabel = Find-OuterControl -ControlType 'Text' -Name 'Filter Custom Morph Targets:'
+        $filter = Get-FollowingControl -Element $filterLabel -ControlType 'Edit'
+        Wait-UiaKeyboardFocus -Element $filter -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $morphsSurface = Find-OuterControl -ControlType 'Pane' -Name 'Custom Morph Target management'
+        Assert-ControlInsideClient -Element $morphsSurface -Metrics $narrowMetrics
+        $morphsNarrowScreenshot = Join-Path $diagnosticsDir 'workbench-morphs-narrow.png'
+        Save-Screenshot -Path $morphsNarrowScreenshot
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
+        $availablePreset = Wait-FocusedControl -ControlType 'ComboBox' -Name 'Available Slider Preset'
+        Assert-ControlInsideClient -Element $availablePreset -Metrics (Get-UiaWindowMetrics -Window $script:mainWindow)
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1300 -LogicalHeight 800 `
+            -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Get-UiaTree -Element $script:mainWindow |
+            Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-workbench-morphs.txt') -Encoding utf8
+        $observations['morphsManagement'] = [ordered]@{
+            existing = 'All|Female'
+            validation = 'CUSTOM_MORPH_TARGET_NAME_DUPLICATE'
+            pointerCreated = 'ActorTypeNPC|Female'
+            pointerCoordinates = [ordered]@{
+                create = $createPointer
+                select = $selectPointer
+                assignAll = $relationshipPointer
+                removeRelationship = $removeRelationshipPointer
+                filteredCreate = $clearCreatePointer
+            }
+            relationshipAdded = 'UUNP Athletic'
+            relationshipRemoved = 'UUNP Athletic'
+            relationshipCleared = 'ActorTypeNPC|Female'
+            clearVisibleRemoved = 'Clear Me'
+            generatedBeforeRemoval = $beforeRelationshipRemoval
+            savedAndReopened = $morphsManagedName
+            scalePercent = [math]::Round($narrowMetrics.Dpi * 100.0 / 96.0)
+        }
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        'keyboard and pointer target authoring, relationships, validation, Output, accessibility, narrow mode, and reopen passed'
     }
 
     Invoke-SmokeStep -Name 'manage-settings-and-import-bodyslide-through-workbench' -Action {
@@ -2258,7 +2514,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/15'
+        schema = 'bs2bg.windows-app-image-smoke/16'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion
@@ -2291,8 +2547,11 @@ finally {
             workbenchTree = 'smoke-diagnostics/uia-tree-workbench.txt'
             responsiveWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-responsive.txt'
             templatesWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-templates.txt'
+            morphsWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-morphs.txt'
             templatesNarrowScreenshot = 'smoke-diagnostics/workbench-templates-narrow.png'
             templatesHighContrastScreenshot = 'smoke-diagnostics/workbench-templates-high-contrast.png'
+            morphsNarrowScreenshot = 'smoke-diagnostics/workbench-morphs-narrow.png'
+            morphsHighContrastScreenshot = 'smoke-diagnostics/workbench-morphs-high-contrast.png'
             highContrastScreenshot = 'smoke-diagnostics/workbench-high-contrast.png'
             reducedMotionScreenshot = 'smoke-diagnostics/workbench-reduced-motion.png'
         }

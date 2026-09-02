@@ -709,6 +709,26 @@ class ProjectSessionTest {
     }
 
     /**
+     * A visible-set delete is one atomic Project edit, deduplicates case-insensitive identities, and preserves every
+     * target outside the captured operand.
+     */
+    @Test
+    void bulkCustomMorphTargetDeletionUsesTheCapturedLogicalIdentitySet() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(CustomMorphTargetEdits.create("Alpha"));
+        session.apply(CustomMorphTargetEdits.create("Beta"));
+        session.apply(CustomMorphTargetEdits.create("Gamma"));
+
+        ProjectOutcome deleted = session.apply(CustomMorphTargetEdits.deleteAll(
+                Arrays.asList("alpha", "ALPHA", "gamma")));
+
+        assertInstanceOf(ChangedOutcome.class, deleted);
+        assertEquals(Arrays.asList("Beta"), customMorphTargetNames(deleted.getSnapshot()));
+        assertSame(deleted.getSnapshot(), session.getSnapshot());
+    }
+
+    /**
      * Verifies that promotion from the NPC Database copies source values and uses
      * only plugin name plus editor ID, without regard to case, as Project identity.
      */

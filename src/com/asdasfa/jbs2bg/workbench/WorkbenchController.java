@@ -14,7 +14,9 @@ import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
 import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
+import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
+import com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
@@ -59,6 +61,8 @@ import javafx.stage.WindowEvent;
 public final class WorkbenchController {
     private static final double SLIDER_PRESET_CELL_HEIGHT = 28.0;
     private static final int MAX_VISIBLE_SLIDER_PRESET_ROWS = 8;
+    private static final double MORPH_TARGET_CELL_HEIGHT = 28.0;
+    private static final int MAX_VISIBLE_MORPH_TARGET_ROWS = 8;
 
     private final WorkbenchNavigation navigation = new WorkbenchNavigation();
     private final WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.systemUTC());
@@ -225,6 +229,60 @@ public final class WorkbenchController {
     @FXML
     private Label gangMaximumValue;
     @FXML
+    private ScrollPane morphsPrimaryScroll;
+    @FXML
+    private VBox morphsPrimaryContent;
+    @FXML
+    private HBox morphsInfoBar;
+    @FXML
+    private Label morphsInfoBarCue;
+    @FXML
+    private Label morphsInfoBarMessage;
+    @FXML
+    private Button dismissMorphsInfoBarButton;
+    @FXML
+    private TextField customMorphTargetFilter;
+    @FXML
+    private ComboBox<MorphsFeature.SortOrder> customMorphTargetSort;
+    @FXML
+    private ListView<CustomMorphTargetSnapshot> customMorphTargetList;
+    @FXML
+    private TextField customMorphTargetNameInput;
+    @FXML
+    private Button createCustomMorphTargetButton;
+    @FXML
+    private Button removeCustomMorphTargetButton;
+    @FXML
+    private Button clearCustomMorphTargetsButton;
+    @FXML
+    private VBox morphsEditorContent;
+    @FXML
+    private Label morphTargetEditorFocusTarget;
+    @FXML
+    private Label morphTargetConditionText;
+    @FXML
+    private Label morphTargetAssignmentCountText;
+    @FXML
+    private Label morphTargetOutputStatusText;
+    @FXML
+    private ScrollPane morphsInspectorScroll;
+    @FXML
+    private VBox morphsInspectorContent;
+    @FXML
+    private Label morphTargetSelectionText;
+    @FXML
+    private ListView<SliderPresetSnapshot> assignedMorphSliderPresetList;
+    @FXML
+    private Button removeMorphSliderPresetButton;
+    @FXML
+    private Button clearMorphSliderPresetsButton;
+    @FXML
+    private ComboBox<SliderPresetSnapshot> availableMorphSliderPreset;
+    @FXML
+    private Button assignMorphSliderPresetButton;
+    @FXML
+    private Button assignAllMorphSliderPresetsButton;
+    @FXML
     private ScrollPane settingsPrimaryScroll;
     @FXML
     private VBox settingsPrimaryContent;
@@ -303,6 +361,7 @@ public final class WorkbenchController {
     private WorkbenchNavigation.Frame navigationFrame = navigation.currentFrame();
     private WorkbenchProjectFlow projectFlow;
     private TemplatesFeature templatesFeature;
+    private MorphsFeature morphsFeature;
     private SettingsFeature settingsFeature;
     private OutputFeature outputFeature;
     private Stage stage;
@@ -319,14 +378,20 @@ public final class WorkbenchController {
     // Settings publication may beat a competing shutdown gate; derived refresh waits until admission resumes.
     private boolean settingsRefreshDeferred;
     private boolean renderingTemplates;
+    private boolean renderingMorphs;
     private boolean renderingSettings;
     private boolean renderingOutput;
+    private boolean templatesOwnProjectDiagnostics;
+    private boolean morphsOwnProjectDiagnostics;
     private TextField activeRenameField;
     private SliderPresetCell activeRenameCell;
     private boolean templatesMutationsBlocked;
+    private boolean morphsMutationsBlocked;
     private boolean settingsMutationsBlocked;
     private boolean resetTemplatesOnNextProjectFrame;
+    private boolean resetMorphsOnNextProjectFrame;
     private boolean sliderPresetListInitialized;
+    private boolean customMorphTargetListInitialized;
     private final Map<String, SliderChoiceRow> sliderChoiceRowsByName = new LinkedHashMap<>();
 
     /**
@@ -522,6 +587,7 @@ public final class WorkbenchController {
             throw new IllegalStateException("WorkbenchController is already attached");
         projectFlow = Objects.requireNonNull(flow, "flow");
         templatesFeature = new TemplatesFeature(projectFlow, Clock.systemUTC());
+        morphsFeature = new MorphsFeature(projectFlow, Clock.systemUTC());
         settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup, migrationPolicy);
         outputFeature = new OutputFeature(projectFlow, () -> new OutputFeature.GenerationSettings(
                 Settings.snapshot(), settingsFeature.frame().omitRedundantSliders()));
@@ -529,6 +595,7 @@ public final class WorkbenchController {
         platform = Objects.requireNonNull(platformAdapter, "platformAdapter");
         configureProjectCommands();
         configureTemplates();
+        configureMorphs();
         configureSettings();
         configureOutput();
         configureNavigation();
@@ -554,6 +621,7 @@ public final class WorkbenchController {
         renderNavigation(navigationFrame);
         render(projectFlow.frame());
         renderTemplates(templatesFeature.frame());
+        renderMorphs(morphsFeature.frame());
         renderOutput(outputFeature.frame());
         renderFeedback(feedback.frame());
         if (workbenchRoot.getWidth() > 0.0)
@@ -615,6 +683,88 @@ public final class WorkbenchController {
                 dispatchTemplates(new TemplatesFeature.DismissDiagnostics()));
         importBodySlideButton.setOnAction(event -> dispatch(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE));
         configureGangControls();
+    }
+
+    /**
+     * Translates Morphs catalog and relationship controls into feature-specific typed intents.
+     */
+    private void configureMorphs() {
+        customMorphTargetSort.getItems().setAll(MorphsFeature.SortOrder.values());
+        customMorphTargetSort.setValue(morphsFeature.frame().sortOrder());
+        configureCustomMorphTargetList();
+        customMorphTargetFilter.textProperty().addListener((observable, previous, current) -> {
+            if (!renderingMorphs)
+                dispatchMorphs(new MorphsFeature.ChangeFilter(current));
+        });
+        customMorphTargetSort.setOnAction(event -> {
+            if (!renderingMorphs && customMorphTargetSort.getValue() != null)
+                dispatchMorphs(new MorphsFeature.ChangeSort(customMorphTargetSort.getValue()));
+        });
+        createCustomMorphTargetButton.setOnAction(event ->
+                dispatchMorphs(new MorphsFeature.Create(customMorphTargetNameInput.getText())));
+        removeCustomMorphTargetButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.RequestRemove()));
+        clearCustomMorphTargetsButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.RequestClearVisible()));
+        dismissMorphsInfoBarButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.DismissDiagnostics()));
+
+        assignedMorphSliderPresetList.setCellFactory(list -> new SliderPresetDisplayCell());
+        availableMorphSliderPreset.setCellFactory(list -> new SliderPresetDisplayCell());
+        availableMorphSliderPreset.setButtonCell(new SliderPresetDisplayCell());
+        availableMorphSliderPreset.setOnAction(event -> assignMorphSliderPresetButton.setDisable(
+                morphsMutationsBlocked || availableMorphSliderPreset.getValue() == null));
+        assignedMorphSliderPresetList.getSelectionModel().selectedItemProperty().addListener(
+                (observable, previous, selected) -> {
+                    if (!renderingMorphs && selected != null)
+                        dispatchMorphs(new MorphsFeature.SelectAssignedSliderPreset(
+                                NameIdentity.of(selected.getName())));
+                });
+        assignMorphSliderPresetButton.setOnAction(event -> {
+            SliderPresetSnapshot preset = availableMorphSliderPreset.getValue();
+            if (preset != null)
+                dispatchMorphs(new MorphsFeature.AssignSliderPreset(NameIdentity.of(preset.getName())));
+        });
+        assignAllMorphSliderPresetsButton.setOnAction(event ->
+                dispatchMorphs(new MorphsFeature.AssignAllSliderPresets()));
+        removeMorphSliderPresetButton.setOnAction(event ->
+                dispatchMorphs(new MorphsFeature.RemoveAssignedSliderPreset()));
+        clearMorphSliderPresetsButton.setOnAction(event ->
+                dispatchMorphs(new MorphsFeature.RequestClearAssignments()));
+    }
+
+    /** Configures the current target ListView instance; empty/refill UIA recovery may replace that adapter node. */
+    private void configureCustomMorphTargetList() {
+        customMorphTargetList.setCellFactory(list -> new ListCell<>() {
+            /** {@inheritDoc} */
+            @Override
+            protected void updateItem(CustomMorphTargetSnapshot target, boolean empty) {
+                super.updateItem(target, empty);
+                if (empty || target == null) {
+                    setText(null);
+                    setAccessibleText(null);
+                    setAccessibleHelp(null);
+                    return;
+                }
+                int count = target.getSliderPresetNames().size();
+                setText(target.getName());
+                setAccessibleText(target.getName());
+                setAccessibleHelp(count + (count == 1
+                        ? " assigned Slider Preset" : " assigned Slider Presets")
+                        + (count == 0 ? ". Not included in Morphs output." : ". Included in Morphs output."));
+            }
+        });
+        customMorphTargetList.getSelectionModel().selectedItemProperty().addListener(
+                (observable, previous, selected) -> {
+                    if (!renderingMorphs)
+                        dispatchMorphs(selected == null
+                                ? new MorphsFeature.ClearSelection()
+                                : new MorphsFeature.Select(NameIdentity.of(selected.getName())));
+                });
+        customMorphTargetList.addEventFilter(KeyEvent.KEY_TYPED, event -> {
+            if (!(event.getTarget() instanceof TextInputControl) && event.getCharacter().length() == 1
+                    && !event.isControlDown() && !event.isAltDown()) {
+                dispatchMorphs(new MorphsFeature.TypeAhead(event.getCharacter().charAt(0)));
+                event.consume();
+            }
+        });
     }
 
     /**
@@ -751,6 +901,130 @@ public final class WorkbenchController {
         } finally {
             renderingOutput = false;
         }
+    }
+
+    /** Commits a typed Morphs update before rendering Project chrome or later platform effects. */
+    private void dispatchMorphs(MorphsFeature.Intent intent) {
+        if (morphsMutationsBlocked && isMorphsMutation(intent))
+            return;
+        morphsOwnProjectDiagnostics = true;
+        try {
+            MorphsFeature.Update update = morphsFeature.dispatch(Objects.requireNonNull(intent, "intent"));
+            renderMorphsUpdate(update);
+            update.effect().ifPresent(this::completeMorphsEffect);
+            publishMorphsOutcome(intent, update);
+            if (intent instanceof MorphsFeature.Create && update.accepted()
+                    && update.outcomeKind() == MorphsFeature.OutcomeKind.CHANGED)
+                customMorphTargetNameInput.clear();
+        } finally {
+            morphsOwnProjectDiagnostics = false;
+        }
+    }
+
+    /** Distinguishes Project mutations from local Morphs browsing while a central job owns admission. */
+    private static boolean isMorphsMutation(MorphsFeature.Intent intent) {
+        return intent instanceof MorphsFeature.Create
+                || intent instanceof MorphsFeature.AssignSliderPreset
+                || intent instanceof MorphsFeature.AssignAllSliderPresets
+                || intent instanceof MorphsFeature.RemoveAssignedSliderPreset
+                || intent instanceof MorphsFeature.RequestClearAssignments
+                || intent instanceof MorphsFeature.RequestRemove
+                || intent instanceof MorphsFeature.RequestClearVisible;
+    }
+
+    /** Renders one Morphs update and refreshes Project chrome without replaying lifecycle-only feedback. */
+    private void renderMorphsUpdate(MorphsFeature.Update update) {
+        if (update.frame().projectSequence() != renderedProjectSequence) {
+            // Morphs owns task wording and inline validation, so suppress the lifecycle-only generic projection.
+            renderedProjectSequence = update.frame().projectSequence();
+            render(projectFlow.frame());
+        }
+        renderMorphs(update.frame());
+    }
+
+    /** Realizes one tokenized destructive Morphs confirmation and returns its answer as an ordinary feature response. */
+    private void completeMorphsEffect(MorphsFeature.Effect effect) {
+        WorkbenchFeedback.DialogAction destructiveAction = effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE
+                ? WorkbenchFeedback.DialogAction.REMOVE
+                : WorkbenchFeedback.DialogAction.CLEAR;
+        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.destructiveAction(
+                effect.title(), effect.message(), destructiveAction);
+        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
+        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
+        renderFeedback(pendingFrame);
+        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
+        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
+                pending.token(), action)).frame());
+        boolean confirmed = action == destructiveAction;
+        MorphsFeature.Update response = morphsFeature.respond(effect.token(), confirmed);
+        renderMorphsUpdate(response);
+        if (confirmed) {
+            String operation = switch (effect.kind()) {
+                case CONFIRM_REMOVE -> "Remove Custom Morph Target";
+                case CONFIRM_CLEAR_VISIBLE -> "Clear visible Custom Morph Targets";
+                case CONFIRM_CLEAR_ASSIGNMENTS -> "Clear Custom Morph Target assignments";
+            };
+            publishMorphsMutation(operation, response, true);
+        }
+    }
+
+    /** Routes Morphs validation and task outcomes into the accepted inline, status, Activity, and failure tiers. */
+    private void publishMorphsOutcome(MorphsFeature.Intent intent, MorphsFeature.Update update) {
+        if (!update.frame().diagnostics().isEmpty()) {
+            String message = ProjectDiagnosticFormatter.format(update.frame().diagnostics());
+            WorkbenchFeedback.Severity severity = update.outcomeKind() == MorphsFeature.OutcomeKind.FAILED
+                    ? WorkbenchFeedback.Severity.FAILURE
+                    : WorkbenchFeedback.Severity.VALIDATION;
+            renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+                    "Morphs validation", severity, message, WorkbenchFeedback.Disposition.FAILED)));
+            if (intent instanceof MorphsFeature.Create) {
+                customMorphTargetNameInput.requestFocus();
+                Platform.runLater(customMorphTargetNameInput::requestFocus);
+            }
+            if (update.outcomeKind() == MorphsFeature.OutcomeKind.FAILED)
+                showMorphsFailure(update);
+            return;
+        }
+        if (!update.accepted() || update.effect().isPresent())
+            return;
+        String operation = switch (intent) {
+            case MorphsFeature.Create ignored -> "Create Custom Morph Target";
+            case MorphsFeature.AssignSliderPreset ignored -> "Assign Slider Preset";
+            case MorphsFeature.RemoveAssignedSliderPreset ignored -> "Remove Slider Preset assignment";
+            case MorphsFeature.AssignAllSliderPresets ignored -> "Assign all Slider Presets";
+            default -> null;
+        };
+        if (operation != null)
+            publishMorphsMutation(operation, update, intent instanceof MorphsFeature.AssignAllSliderPresets);
+    }
+
+    /** Publishes one accepted Morphs mutation through the status or durable Activity path. */
+    private void publishMorphsMutation(String operation, MorphsFeature.Update update, boolean durable) {
+        if (!update.accepted())
+            return;
+        WorkbenchFeedback.Notification notification = new WorkbenchFeedback.Notification(operation,
+                update.outcomeKind() == MorphsFeature.OutcomeKind.UNCHANGED
+                        ? WorkbenchFeedback.Severity.INFORMATION : WorkbenchFeedback.Severity.SUCCESS,
+                update.outcomeKind() == MorphsFeature.OutcomeKind.UNCHANGED
+                        ? operation + " made no changes." : operation + " completed.",
+                WorkbenchFeedback.Disposition.COMPLETED);
+        renderFeedback(durable ? feedback.publishActivity(notification) : feedback.publishStatus(notification));
+    }
+
+    /** Presents an unexpected synchronous Morphs failure without losing the semantic launcher focus. */
+    private void showMorphsFailure(MorphsFeature.Update update) {
+        WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
+        String details = ProjectDiagnosticFormatter.format(update.frame().diagnostics());
+        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
+                "Morphs editing failed", "The Custom Morph Target could not be edited.",
+                details.isBlank() ? "No diagnostic details were provided." : details, false);
+        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
+        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
+        renderFeedback(pendingFrame);
+        WorkbenchFeedback.DialogAction action = platform.completeFailure(spec, stage);
+        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
+                pending.token(), action)).frame());
+        requestFocus(returnTarget);
     }
 
     /** Commits one Settings intent and admits any captured persistence effect to the application worker. */
@@ -1237,14 +1511,19 @@ public final class WorkbenchController {
     private void dispatchTemplates(TemplatesFeature.Intent intent) {
         if (templatesMutationsBlocked && isTemplatesMutation(intent))
             return;
-        TemplatesFeature.Update update = templatesFeature.dispatch(Objects.requireNonNull(intent, "intent"));
-        renderTemplatesUpdate(update);
-        update.effect().ifPresent(this::completeTemplatesEffect);
-        publishTemplatesOutcome(intent, update);
-        if ((intent instanceof TemplatesFeature.CommitRename && update.accepted())
-                || intent instanceof TemplatesFeature.CancelRename) {
-            sliderPresetList.requestFocus();
-            Platform.runLater(sliderPresetList::requestFocus);
+        templatesOwnProjectDiagnostics = true;
+        try {
+            TemplatesFeature.Update update = templatesFeature.dispatch(Objects.requireNonNull(intent, "intent"));
+            renderTemplatesUpdate(update);
+            update.effect().ifPresent(this::completeTemplatesEffect);
+            publishTemplatesOutcome(intent, update);
+            if ((intent instanceof TemplatesFeature.CommitRename && update.accepted())
+                    || intent instanceof TemplatesFeature.CancelRename) {
+                sliderPresetList.requestFocus();
+                Platform.runLater(sliderPresetList::requestFocus);
+            }
+        } finally {
+            templatesOwnProjectDiagnostics = false;
         }
     }
 
@@ -1495,6 +1774,94 @@ public final class WorkbenchController {
     }
 
     /**
+     * Renders one immutable Morphs frame while suppressing control listeners from becoming a second command path.
+     */
+    private void renderMorphs(MorphsFeature.Frame frame) {
+        renderingMorphs = true;
+        try {
+            customMorphTargetFilter.setText(frame.filterText());
+            customMorphTargetSort.setValue(frame.sortOrder());
+            reconcileCustomMorphTargetItems(frame.visibleTargets());
+            sizeCustomMorphTargetList(frame.visibleTargets().size());
+            CustomMorphTargetSnapshot selectedTarget = customMorphTargetList.getSelectionModel().getSelectedItem();
+            Optional<NameIdentity> currentTarget = selectedTarget == null ? Optional.empty()
+                    : Optional.of(NameIdentity.of(selectedTarget.getName()));
+            if (!currentTarget.equals(frame.selection())) {
+                customMorphTargetList.getSelectionModel().clearSelection();
+                frame.selection().ifPresent(identity -> customMorphTargetList.getItems().stream()
+                        .filter(target -> NameIdentity.of(target.getName()).equals(identity))
+                        .findFirst().ifPresent(customMorphTargetList.getSelectionModel()::select));
+            }
+
+            boolean validationVisible = !frame.diagnostics().isEmpty();
+            morphsInfoBar.setManaged(validationVisible);
+            morphsInfoBar.setVisible(validationVisible);
+            if (validationVisible) {
+                String message = ProjectDiagnosticFormatter.format(frame.diagnostics());
+                WorkbenchFeedback.Severity severity = frame.outcomeKind() == MorphsFeature.OutcomeKind.FAILED
+                        ? WorkbenchFeedback.Severity.FAILURE : WorkbenchFeedback.Severity.VALIDATION;
+                morphsInfoBarCue.setText(severity.cue());
+                morphsInfoBarMessage.setText(message);
+                morphsInfoBar.setAccessibleHelp(severity.cue() + ": " + message);
+                setSeverityStyle(morphsInfoBar, severity);
+            }
+
+            boolean selected = frame.editor().isPresent();
+            createCustomMorphTargetButton.setDisable(morphsMutationsBlocked);
+            removeCustomMorphTargetButton.setDisable(morphsMutationsBlocked || !selected);
+            clearCustomMorphTargetsButton.setDisable(morphsMutationsBlocked || frame.visibleTargets().isEmpty());
+            if (frame.editor().isEmpty()) {
+                morphTargetEditorFocusTarget.setText("No Custom Morph Target selected");
+                morphTargetConditionText.setText("Select a Custom Morph Target to inspect its condition.");
+                morphTargetAssignmentCountText.setText("No Slider Presets assigned");
+                morphTargetOutputStatusText.setText(
+                        "A target needs at least one Slider Preset to appear in Morphs output.");
+                morphTargetSelectionText.setText("No Custom Morph Target selected");
+                assignedMorphSliderPresetList.getItems().clear();
+                assignedMorphSliderPresetList.getSelectionModel().clearSelection();
+                availableMorphSliderPreset.getItems().clear();
+                availableMorphSliderPreset.setValue(null);
+            } else {
+                MorphsFeature.EditorFrame editor = frame.editor().orElseThrow();
+                CustomMorphTargetSnapshot target = editor.target();
+                int count = editor.assignedPresets().size();
+                morphTargetEditorFocusTarget.setText(target.getName());
+                morphTargetConditionText.setText("BodyGen condition: " + target.getName());
+                morphTargetAssignmentCountText.setText(count + (count == 1
+                        ? " assigned Slider Preset" : " assigned Slider Presets"));
+                morphTargetOutputStatusText.setText(count == 0
+                        ? "Not in Morphs output — assign at least one Slider Preset."
+                        : "Included in Morphs output.");
+                morphTargetSelectionText.setText("Selected: " + target.getName());
+                morphTargetSelectionText.setAccessibleText("Selected Custom Morph Target " + target.getName());
+                if (!List.copyOf(assignedMorphSliderPresetList.getItems()).equals(editor.assignedPresets()))
+                    assignedMorphSliderPresetList.getItems().setAll(editor.assignedPresets());
+                assignedMorphSliderPresetList.getSelectionModel().clearSelection();
+                editor.assignedSelection().ifPresent(identity -> assignedMorphSliderPresetList.getItems().stream()
+                        .filter(preset -> NameIdentity.of(preset.getName()).equals(identity))
+                        .findFirst().ifPresent(assignedMorphSliderPresetList.getSelectionModel()::select));
+                SliderPresetSnapshot availableSelection = availableMorphSliderPreset.getValue();
+                availableMorphSliderPreset.getItems().setAll(editor.availablePresets());
+                if (availableSelection == null || editor.availablePresets().stream()
+                        .noneMatch(preset -> preset.getName().equalsIgnoreCase(availableSelection.getName())))
+                    availableMorphSliderPreset.setValue(null);
+            }
+            boolean assignedSelected = frame.editor().stream()
+                    .anyMatch(editor -> editor.assignedSelection().isPresent());
+            boolean hasAssignments = frame.editor().stream().anyMatch(editor -> !editor.assignedPresets().isEmpty());
+            boolean hasAvailable = frame.editor().stream().anyMatch(editor -> !editor.availablePresets().isEmpty());
+            availableMorphSliderPreset.setDisable(morphsMutationsBlocked || !hasAvailable);
+            assignMorphSliderPresetButton.setDisable(morphsMutationsBlocked || !hasAvailable
+                    || availableMorphSliderPreset.getValue() == null);
+            assignAllMorphSliderPresetsButton.setDisable(morphsMutationsBlocked || !hasAvailable);
+            removeMorphSliderPresetButton.setDisable(morphsMutationsBlocked || !assignedSelected);
+            clearMorphSliderPresetsButton.setDisable(morphsMutationsBlocked || !hasAssignments);
+        } finally {
+            renderingMorphs = false;
+        }
+    }
+
+    /**
      * Renders one immutable Templates frame while suppressing control listeners from becoming a second command path.
      */
     private void renderTemplates(TemplatesFeature.Frame frame) {
@@ -1617,6 +1984,50 @@ public final class WorkbenchController {
     }
 
     /**
+     * Replaces an empty target ListView only when a later frame refills it, preserving JavaFX 25 UIA child discovery.
+     */
+    private void reconcileCustomMorphTargetItems(List<CustomMorphTargetSnapshot> visibleTargets) {
+        boolean refill = customMorphTargetListInitialized && customMorphTargetList.getItems().isEmpty()
+                && !visibleTargets.isEmpty();
+        if (refill)
+            replaceEmptyCustomMorphTargetList();
+        if (!List.copyOf(customMorphTargetList.getItems()).equals(visibleTargets))
+            customMorphTargetList.getItems().setAll(visibleTargets);
+        customMorphTargetListInitialized = true;
+    }
+
+    /** Keeps short target catalogs free of a redundant inner scrollbar while bounding large-list height. */
+    private void sizeCustomMorphTargetList(int visibleCount) {
+        int rows = Math.max(1, Math.min(MAX_VISIBLE_MORPH_TARGET_ROWS, visibleCount));
+        double height = rows * MORPH_TARGET_CELL_HEIGHT + 2.0;
+        customMorphTargetList.setMinHeight(height);
+        customMorphTargetList.setPrefHeight(height);
+        customMorphTargetList.setMaxHeight(height);
+    }
+
+    /** Replaces only the JavaFX adapter node after an empty-to-populated target transition. */
+    private void replaceEmptyCustomMorphTargetList() {
+        boolean restoreFocus = customMorphTargetList.isFocused();
+        ListView<CustomMorphTargetSnapshot> replacement = new ListView<>();
+        replacement.setId("customMorphTargetList");
+        replacement.setAccessibleText("Custom Morph Targets");
+        replacement.setFixedCellSize(MORPH_TARGET_CELL_HEIGHT);
+        replacement.setFocusTraversable(true);
+        VBox.setVgrow(replacement, javafx.scene.layout.Priority.ALWAYS);
+        int index = morphsPrimaryContent.getChildren().indexOf(customMorphTargetList);
+        if (index < 0)
+            throw new IllegalStateException("Morphs primary content no longer owns the Custom Morph Target list");
+        morphsPrimaryContent.getChildren().set(index, replacement);
+        customMorphTargetList = replacement;
+        configureCustomMorphTargetList();
+        if (restoreFocus) {
+            // A filter clear can refill the list while it owns focus; the UIA node swap must retain that focus.
+            replacement.requestFocus();
+            Platform.runLater(replacement::requestFocus);
+        }
+    }
+
+    /**
      * Avoids replacing an unchanged ListView collection because JavaFX 25 UI Automation can drop every virtualized
      * cell after a no-op empty/refill notification sequence. Changed membership or values still replace atomically.
      */
@@ -1736,6 +2147,11 @@ public final class WorkbenchController {
      */
     ListView<SliderPresetSnapshot> sliderPresetListNode() {
         return sliderPresetList;
+    }
+
+    /** @return current Custom Morph Target ListView, including an accessibility-driven refill replacement */
+    ListView<CustomMorphTargetSnapshot> customMorphTargetListNode() {
+        return customMorphTargetList;
     }
 
     /**
@@ -1945,6 +2361,15 @@ public final class WorkbenchController {
                 return;
             }
         }
+        if (navigationFrame.activeArea() == WorkbenchNavigation.Area.MORPHS
+                && event.isControlDown() && event.getCode() == KeyCode.K) {
+            if (navigationFrame.narrowMode())
+                applyNavigation(navigation.openPrimaryContent(currentSemanticFocus()));
+            customMorphTargetFilter.requestFocus();
+            Platform.runLater(customMorphTargetFilter::requestFocus);
+            event.consume();
+            return;
+        }
         WorkbenchNavigation.Transition transition = null;
         if (event.isControlDown()) {
             transition = switch (event.getCode()) {
@@ -1980,6 +2405,11 @@ public final class WorkbenchController {
                 && templatesFeature.frame().selection().isPresent()) {
             dispatchTemplates(new TemplatesFeature.ClearSelection());
             event.consume();
+        } else if (event.getCode() == KeyCode.ESCAPE
+                && navigationFrame.activeArea() == WorkbenchNavigation.Area.MORPHS
+                && morphsFeature.frame().selection().isPresent()) {
+            dispatchMorphs(new MorphsFeature.ClearSelection());
+            event.consume();
         }
     }
 
@@ -2011,6 +2441,7 @@ public final class WorkbenchController {
 
         String area = frame.activeArea().displayName();
         boolean templatesActive = frame.activeArea() == WorkbenchNavigation.Area.TEMPLATES;
+        boolean morphsActive = frame.activeArea() == WorkbenchNavigation.Area.MORPHS;
         boolean settingsActive = frame.activeArea() == WorkbenchNavigation.Area.SETTINGS;
         templatesPrimaryScroll.setManaged(templatesActive);
         templatesPrimaryScroll.setVisible(templatesActive);
@@ -2018,13 +2449,19 @@ public final class WorkbenchController {
         templatesEditorContent.setVisible(templatesActive);
         templatesInspectorScroll.setManaged(templatesActive);
         templatesInspectorScroll.setVisible(templatesActive);
+        morphsPrimaryScroll.setManaged(morphsActive);
+        morphsPrimaryScroll.setVisible(morphsActive);
+        morphsEditorContent.setManaged(morphsActive);
+        morphsEditorContent.setVisible(morphsActive);
+        morphsInspectorScroll.setManaged(morphsActive);
+        morphsInspectorScroll.setVisible(morphsActive);
         settingsPrimaryScroll.setManaged(settingsActive);
         settingsPrimaryScroll.setVisible(settingsActive);
         settingsEditorContent.setManaged(settingsActive);
         settingsEditorContent.setVisible(settingsActive);
         settingsInspectorContent.setManaged(settingsActive);
         settingsInspectorContent.setVisible(settingsActive);
-        boolean placeholderActive = !templatesActive && !settingsActive;
+        boolean placeholderActive = !templatesActive && !morphsActive && !settingsActive;
         primaryContentButton.setManaged(placeholderActive);
         primaryContentButton.setVisible(placeholderActive);
         editorButton.setManaged(placeholderActive);
@@ -2092,10 +2529,15 @@ public final class WorkbenchController {
         WorkbenchNavigation.Landmark landmark;
         if (focusOwner == sliderPresetFilter || focusOwner == sliderPresetList
                 || focusOwner == sliderPresetNameInput || focusOwner == importBodySlideButton
+                || focusOwner == customMorphTargetFilter || focusOwner == customMorphTargetSort
+                || focusOwner == customMorphTargetList || focusOwner == customMorphTargetNameInput
+                || focusOwner == createCustomMorphTargetButton || focusOwner == removeCustomMorphTargetButton
+                || focusOwner == clearCustomMorphTargetsButton
                 || focusOwner == settingsProfileChoice || focusOwner == settingsEntryList
                 || focusOwner == newSettingsEntryName || focusOwner == addSettingsEntryButton) {
             landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
         } else if (focusOwner == templateEditorFocusTarget || focusOwner == sliderPresetProfile
+                || focusOwner == morphTargetEditorFocusTarget
                 || sliderChoiceRowsByName.values().stream().anyMatch(row -> row.contains(focusOwner))
                 || focusOwner == settingsEntryNameInput || focusOwner == settingsSmallInput
                 || focusOwner == settingsBigInput || focusOwner == settingsMultiplierInput
@@ -2103,6 +2545,10 @@ public final class WorkbenchController {
                 || focusOwner == removeSettingsEntryButton) {
             landmark = WorkbenchNavigation.Landmark.EDITOR;
         } else if (focusOwner == templateSelectionText
+                || focusOwner == morphTargetSelectionText || focusOwner == assignedMorphSliderPresetList
+                || focusOwner == availableMorphSliderPreset || focusOwner == assignMorphSliderPresetButton
+                || focusOwner == assignAllMorphSliderPresetsButton || focusOwner == removeMorphSliderPresetButton
+                || focusOwner == clearMorphSliderPresetsButton
                 || templatesFocusNodes().entrySet().stream()
                 .anyMatch(entry -> entry.getKey() != TemplatesControlFocus.PROFILE
                         && entry.getValue() == focusOwner)
@@ -2144,8 +2590,9 @@ public final class WorkbenchController {
         if (node == null || !node.isVisible() || node.isDisabled() || node.getParent() == null) {
             node = switch (target.area()) {
                 case TEMPLATES -> sliderPresetList;
+                case MORPHS -> customMorphTargetList;
                 case SETTINGS -> settingsEntryList;
-                case MORPHS, NPC_DATABASE -> editorButton;
+                case NPC_DATABASE -> editorButton;
             };
         }
         Node resolved = node;
@@ -2163,20 +2610,24 @@ public final class WorkbenchController {
             case PRIMARY_LAUNCHER -> showPrimaryOverlayButton;
             case PRIMARY_CONTENT -> switch (target.area()) {
                 case TEMPLATES -> sliderPresetList;
+                case MORPHS -> customMorphTargetList;
                 case SETTINGS -> settingsEntryList;
-                case MORPHS, NPC_DATABASE -> primaryContentButton;
+                case NPC_DATABASE -> primaryContentButton;
             };
             case EDITOR -> switch (target.area()) {
                 case TEMPLATES -> firstSliderChoiceControl().orElse(templateEditorFocusTarget);
+                case MORPHS -> morphTargetEditorFocusTarget;
                 case SETTINGS -> settingsEntryNameInput;
-                case MORPHS, NPC_DATABASE -> editorButton;
+                case NPC_DATABASE -> editorButton;
             };
             case INSPECTOR_LAUNCHER -> showInspectorOverlayButton;
             case INSPECTOR -> switch (target.area()) {
                 case TEMPLATES -> renameSliderPresetButton.isDisabled()
                         ? templateSelectionText : renameSliderPresetButton;
+                case MORPHS -> availableMorphSliderPreset.isDisabled()
+                        ? morphTargetSelectionText : availableMorphSliderPreset;
                 case SETTINGS -> saveSettingsButton.isDisabled() ? settingsNoticeText : saveSettingsButton;
-                case MORPHS, NPC_DATABASE -> inspectorButton;
+                case NPC_DATABASE -> inspectorButton;
             };
             case OUTPUT_LAUNCHER -> outputAreaButton;
             case OUTPUT -> outputFocusTarget;
@@ -2320,15 +2771,23 @@ public final class WorkbenchController {
         projectStatusText.setText(projectStatus(frame));
         diagnosticsText.setText(ProjectDiagnosticFormatter.format(frame.diagnostics()));
         boolean lifecyclePublication = frame.sequence() != renderedProjectSequence;
-        boolean resetFeatures = resetTemplatesOnNextProjectFrame || lifecyclePublication
+        boolean lifecycleReset = lifecyclePublication
                 && (activeOperation == WorkbenchProjectFlow.Intent.NEW
                 || activeOperation == WorkbenchProjectFlow.Intent.OPEN);
+        boolean resetTemplates = resetTemplatesOnNextProjectFrame || lifecycleReset;
+        boolean resetMorphs = resetMorphsOnNextProjectFrame || lifecycleReset;
+        boolean resetOutput = resetTemplatesOnNextProjectFrame || resetMorphsOnNextProjectFrame || lifecycleReset;
         if (templatesFeature != null && templatesFeature.frame().projectSequence() != frame.sequence()) {
-            renderTemplates(templatesFeature.acceptProjectFrame(frame, resetFeatures).frame());
+            renderTemplates(templatesFeature.acceptProjectFrame(frame, resetTemplates,
+                    morphsOwnProjectDiagnostics ? List.of() : frame.diagnostics()).frame());
         }
+        if (morphsFeature != null && morphsFeature.frame().projectSequence() != frame.sequence())
+            renderMorphs(morphsFeature.acceptProjectFrame(frame, resetMorphs,
+                    templatesOwnProjectDiagnostics ? List.of() : frame.diagnostics()).frame());
         if (outputFeature != null)
-            renderOutput(outputFeature.acceptProjectFrame(frame, resetFeatures).frame());
+            renderOutput(outputFeature.acceptProjectFrame(frame, resetOutput).frame());
         resetTemplatesOnNextProjectFrame = false;
+        resetMorphsOnNextProjectFrame = false;
         if (!frame.closed() && frame.sequence() != renderedProjectSequence) {
             renderedProjectSequence = frame.sequence();
             publishProjectFeedback(frame);
@@ -2342,6 +2801,7 @@ public final class WorkbenchController {
         Objects.requireNonNull(frame, "frame");
         boolean blocked = frame.active() || frame.shutdownRequested();
         templatesMutationsBlocked = frame.projectMutationsBlocked();
+        morphsMutationsBlocked = frame.projectMutationsBlocked();
         settingsMutationsBlocked = frame.projectMutationsBlocked();
         newProjectMenuItem.setDisable(blocked);
         openProjectMenuItem.setDisable(blocked);
@@ -2350,6 +2810,7 @@ public final class WorkbenchController {
         importBodySlideButton.setDisable(blocked);
         generateOutputButton.setDisable(blocked);
         renderTemplates(templatesFeature.frame());
+        renderMorphs(morphsFeature.frame());
         renderSettings(settingsFeature.frame());
         renderOutput(outputFeature.frame());
         updateActivityRetry(activityList.getSelectionModel().getSelectedItem());
@@ -2373,6 +2834,11 @@ public final class WorkbenchController {
                     && (terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED
                     || terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES))
                 resetTemplatesOnNextProjectFrame = true;
+            if (terminal.operation().name().equals("Open Project")
+                    && projectFrame.sequence() != morphsFeature.frame().projectSequence()
+                    && (terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED
+                    || terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES))
+                resetMorphsOnNextProjectFrame = true;
             // The job terminal record is the authoritative feedback source for async work.
             renderedProjectSequence = projectFrame.sequence();
             render(projectFrame);
@@ -2764,6 +3230,24 @@ public final class WorkbenchController {
                 activeRenameCell = null;
             if (activeRenameField == renameField)
                 activeRenameField = null;
+        }
+    }
+
+    /** Renders one Slider Preset relationship endpoint by its canonical Project display name. */
+    private static final class SliderPresetDisplayCell extends ListCell<SliderPresetSnapshot> {
+        /** {@inheritDoc} */
+        @Override
+        protected void updateItem(SliderPresetSnapshot preset, boolean empty) {
+            super.updateItem(preset, empty);
+            if (empty || preset == null) {
+                setText(null);
+                setAccessibleText(null);
+                setAccessibleHelp(null);
+            } else {
+                setText(preset.getName());
+                setAccessibleText(preset.getName());
+                setAccessibleHelp("Slider Preset relationship " + preset.getName());
+            }
         }
     }
 
