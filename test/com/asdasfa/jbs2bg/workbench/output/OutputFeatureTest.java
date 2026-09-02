@@ -424,6 +424,89 @@ class OutputFeatureTest {
                 Files.readString(temporaryDirectory.resolve("templates.ini")));
     }
 
+    /** A selected-BoS retry re-resolves the failed attempt's Slider Preset instead of the current UI selection. */
+    @Test
+    void failedSelectedBosExportRetriesItsOriginalArtifactIdentity() throws Exception {
+        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.create("Beta"));
+        OutputFeature feature = new OutputFeature(projectFlow,
+                () -> new OutputFeature.GenerationSettings(Settings.snapshot(), false));
+        feature.dispatch(new OutputFeature.Generate());
+        worker.runNext();
+        feature.dispatch(new OutputFeature.SelectTab(OutputFeature.Tab.BOS_JSON));
+        feature.dispatch(new OutputFeature.SelectBosArtifact("Alpha"));
+        OutputArtifact alpha = feature.frame().displayedArtifact().orElseThrow();
+        feature.dispatch(new OutputFeature.SelectBosArtifact("Beta"));
+        OutputArtifact beta = feature.frame().displayedArtifact().orElseThrow();
+        assertFalse(java.util.Arrays.equals(alpha.getBytes(), beta.getBytes()));
+        feature.dispatch(new OutputFeature.SelectBosArtifact("Alpha"));
+
+        Path destination = temporaryDirectory.resolve("original-destination.json");
+        Files.createDirectory(destination);
+        OutputFeature.ChooseExportFile chooser = assertInstanceOf(OutputFeature.ChooseExportFile.class,
+                feature.dispatch(new OutputFeature.ExportSelected()).effect().orElseThrow());
+        assertTrue(feature.completeSelectedExport(chooser.token(), Optional.of(destination)).accepted());
+        worker.runNext();
+        JobCoordinator.Attempt failed = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.FAILED, failed.lifecycle());
+        Files.delete(destination);
+
+        assertTrue(feature.dispatch(new OutputFeature.SelectBosArtifact("Beta")).accepted());
+        assertTrue(jobs.retry(failed.id()).admitted());
+        worker.runNext();
+
+        assertArrayEquals(alpha.getBytes(), Files.readAllBytes(destination));
+        JobCoordinator.Attempt retried = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED, retried.lifecycle());
+        assertEquals(failed.id(), retried.retryOf().orElseThrow());
+    }
+
+    /** A selected-BoS retry requires a new destination after its original Slider Preset identity is renamed. */
+    @Test
+    void failedSelectedBosExportCannotRetargetAReplacementArtifact() throws Exception {
+        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.create("Beta"));
+        OutputFeature feature = new OutputFeature(projectFlow,
+                () -> new OutputFeature.GenerationSettings(Settings.snapshot(), false));
+        feature.dispatch(new OutputFeature.Generate());
+        worker.runNext();
+        feature.dispatch(new OutputFeature.SelectTab(OutputFeature.Tab.BOS_JSON));
+        feature.dispatch(new OutputFeature.SelectBosArtifact("Alpha"));
+
+        Path destination = temporaryDirectory.resolve("renamed-source.json");
+        Files.createDirectory(destination);
+        OutputFeature.ChooseExportFile chooser = assertInstanceOf(OutputFeature.ChooseExportFile.class,
+                feature.dispatch(new OutputFeature.ExportSelected()).effect().orElseThrow());
+        assertTrue(feature.completeSelectedExport(chooser.token(), Optional.of(destination)).accepted());
+        worker.runNext();
+        JobCoordinator.Attempt failed = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.FAILED, failed.lifecycle());
+        Files.delete(destination);
+
+        projectFlow.apply(SliderPresetEdits.rename("Alpha", "Renamed"));
+        feature.acceptProjectFrame(projectFlow.frame());
+        assertTrue(feature.dispatch(new OutputFeature.Generate()).accepted());
+        worker.runNext();
+        assertEquals(OutputFeature.Freshness.FRESH, feature.frame().freshness());
+
+        JobCoordinator.Admission retry = jobs.retry(failed.id());
+
+        assertFalse(retry.admitted());
+        assertEquals(Optional.of("The original BoS artifact is no longer available; choose a new destination."),
+                retry.activeOperation());
+        assertFalse(Files.exists(destination));
+    }
+
     /** Selected BoS export preserves a case-insensitive JSON extension and adds one only when absent. */
     @Test
     void selectedBosExportPublishesOnlyTheDisplayedAcceptedArtifact() throws Exception {

@@ -228,6 +228,47 @@ class ProjectSessionSaveTest {
     }
 
     /**
+     * A writer resource rejection preserves the dirty Project and prior identity without staging or replacing bytes.
+     *
+     * @throws Exception when temporary test data cannot be prepared or inspected
+     */
+    @Test
+    void resourceLimitSaveAsPreservesDirtyIdentityAndExistingTarget() throws Exception {
+        Path original = tempDirectory.resolve("resource-original.jbs2bg");
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.saveAs(original);
+        String oversizedName = "😀".repeat((1024 * 1024) / 4 + 1);
+        ProjectOutcome edited = session.apply(SliderPresetEdits.create(oversizedName));
+        ProjectSnapshot dirty = edited.getSnapshot();
+        Path target = tempDirectory.resolve("resource-target.jbs2bg");
+        byte[] previous = "previous target bytes".getBytes(StandardCharsets.UTF_8);
+        Files.write(target, previous);
+
+        assertInstanceOf(ChangedOutcome.class, edited);
+        ProjectOutcome outcome = session.saveAs(target);
+
+        assertEquals(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT,
+                outcome.getDiagnostics().getFirst().getCode());
+        assertInstanceOf(RejectedOutcome.class, outcome);
+        assertSame(dirty, outcome.getSnapshot());
+        assertSame(dirty, session.getSnapshot());
+        assertTrue(dirty.isDirty());
+        assertEquals(original.toAbsolutePath().normalize(), dirty.getFileIdentity().orElseThrow());
+        assertArrayEquals(previous, Files.readAllBytes(target));
+        assertEquals(target.toAbsolutePath().normalize(),
+                outcome.getDiagnostics().getFirst().getSourceLocation().getPath().orElseThrow());
+        assertEquals("/SliderPresets",
+                outcome.getDiagnostics().getFirst().getSourceLocation().getElement().orElseThrow());
+        try (var siblings = Files.list(tempDirectory)) {
+            assertFalse(siblings.anyMatch(path -> path.getFileName().toString()
+                            .startsWith(".resource-target.jbs2bg-")),
+                    "resource rejection must occur before staging");
+        }
+    }
+
+    /**
      * Verifies that Save failure at an adopted path preserves the exact dirty
      * snapshot, its file identity, and all latest Project content.
      *

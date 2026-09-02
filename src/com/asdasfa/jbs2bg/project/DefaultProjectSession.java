@@ -236,11 +236,11 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Translates an owned adapter failure without publishing any part of its candidate.
+     * Translates an owned adapter failure while preserving the currently published session snapshot.
      *
-     * @param source    requested Project file
+     * @param source    requested Project source or destination
      * @param exception codec-free failure with stable source diagnostics
-     * @return filesystem failure or document rejection carrying the unchanged snapshot
+     * @return adapter I/O failure or format rejection carrying the unchanged snapshot
      */
     private ProjectOutcome projectFormatFailure(Path source,
                                                 ProjectJacksonAdapter.ProjectFormatException exception) {
@@ -471,8 +471,9 @@ final class DefaultProjectSession implements ProjectSession {
      * only after the completed replacement succeeds. Content is untouched, so the
      * save is Unchanged exactly when the Project was already clean at that identity.
      *
-     * @param target requested Project destination
-     * @return changed, unchanged, or failed outcome at the operation boundary
+     * @param target  requested Project destination
+     * @param context operation context retained through serialization and replacement
+     * @return changed, unchanged, rejected, cancelled, or failed outcome at the operation boundary
      */
     private ProjectOutcome persist(Path target, ProjectOperationContext context) {
         Path normalizedTarget;
@@ -487,6 +488,8 @@ final class DefaultProjectSession implements ProjectSession {
             ProjectFileWriter.write(snapshot, normalizedTarget, context);
         } catch (CancellationException exception) {
             return new CancelledOutcome(snapshot);
+        } catch (ProjectJacksonAdapter.ProjectFormatException exception) {
+            return saveFormatFailure(normalizedTarget, exception);
         } catch (IOException exception) {
             return failedOperation(ProjectDiagnosticCodes.PROJECT_FILE_WRITE_FAILED, Optional.of(normalizedTarget),
                     "/", "The Project file could not be written: " + exception.getMessage());
@@ -498,6 +501,22 @@ final class DefaultProjectSession implements ProjectSession {
 
         return publish(project, Optional.of(normalizedTarget), false, ProjectLifecycleStatus.FILE_BACKED,
                 false, NO_DIAGNOSTICS);
+    }
+
+    /**
+     * Translates writer-side adapter failures without widening unexpected serialization failures into rejections.
+     * Only the user-correctable resource limit retains its owned code and Project path.
+     *
+     * @param normalizedTarget normalized requested Project destination
+     * @param exception        codec-free writer failure
+     * @return resource-limit rejection or generic failed-Save outcome carrying the unchanged snapshot
+     */
+    private ProjectOutcome saveFormatFailure(Path normalizedTarget,
+                                             ProjectJacksonAdapter.ProjectFormatException exception) {
+        if (ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT.equals(exception.code()))
+            return projectFormatFailure(normalizedTarget, exception);
+        return failedOperation(ProjectDiagnosticCodes.PROJECT_SAVE_FAILED, Optional.of(normalizedTarget), "/",
+                "The Project could not be saved: " + exception.getMessage());
     }
 
     /**

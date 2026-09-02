@@ -231,6 +231,229 @@ class WorkbenchControllerTest {
         });
     }
 
+    /** Dirty Reload cancellation retains the draft, while Save persists it before the original Reload continues. */
+    @Test
+    void dirtySettingsReloadConfirmsAndSavesBeforeReloading() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The deterministic Reload settles before prolonged cancellation is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+        });
+        Files.writeString(temporaryDirectory.resolve("settings.json"),
+                "{\"Defaults\":{\"Waist\":{\"valueSmall\":0.5,\"valueBig\":1}},"
+                        + "\"Multipliers\":{\"Waist\":4},\"Inverted\":[]}");
+        Files.writeString(temporaryDirectory.resolve("settings_UUNP.json"),
+                "{\"Defaults\":{},\"Multipliers\":{},\"Inverted\":[]}");
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = loaderReference.get();
+            Button reload = (Button) loader.getNamespace().get("reloadSettingsButton");
+            reload.fire();
+
+            assertFalse(jobs.frame().active());
+            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
+
+            reload.fire();
+
+            assertTrue(jobs.frame().active());
+            assertEquals("Save Settings", jobs.frame().attempt().orElseThrow().operation().name());
+            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
+        });
+
+        Thread saveWorker = worker.runNextAsync();
+        saveWorker.join();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+            assertTrue(jobs.frame().active());
+            assertEquals("Reload Settings", jobs.frame().attempt().orElseThrow().operation().name());
+            assertEquals(2f, Settings.getMultiplier("Waist"));
+        });
+
+        Thread reloadWorker = worker.runNextAsync();
+        reloadWorker.join();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+            FXMLLoader loader = loaderReference.get();
+            assertFalse(jobs.frame().active());
+            assertEquals(2f, Settings.getMultiplier("Waist"));
+            assertTrue(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
+            stageReference.get().close();
+        });
+    }
+
+    /** Dirty Reload Discard admits Reload directly and replaces the retained draft only after worker completion. */
+    @Test
+    void dirtySettingsReloadDiscardAdmitsReloadWithoutSaving() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The deterministic Reload settles before prolonged cancellation is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.DISCARD);
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+        });
+        Files.writeString(temporaryDirectory.resolve("settings.json"),
+                "{\"Defaults\":{\"Waist\":{\"valueSmall\":0.5,\"valueBig\":1}},"
+                        + "\"Multipliers\":{\"Waist\":4},\"Inverted\":[]}");
+        Files.writeString(temporaryDirectory.resolve("settings_UUNP.json"),
+                "{\"Defaults\":{},\"Multipliers\":{},\"Inverted\":[]}");
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = loaderReference.get();
+            ((Button) loader.getNamespace().get("reloadSettingsButton")).fire();
+
+            assertTrue(jobs.frame().active());
+            assertEquals("Reload Settings", jobs.frame().attempt().orElseThrow().operation().name());
+            assertEquals(1f, Settings.getMultiplier("Waist"));
+            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
+        });
+
+        Thread reloadWorker = worker.runNextAsync();
+        reloadWorker.join();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            publication.runNext();
+            publication.runNext();
+            FXMLLoader loader = loaderReference.get();
+            assertFalse(jobs.frame().active());
+            assertEquals(4f, Settings.getMultiplier("Waist"));
+            assertTrue(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertEquals("4.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
+            stageReference.get().close();
+        });
+    }
+
+    /** A shutdown request racing Save completion cancels the chained Reload without a callback failure. */
+    @Test
+    void shutdownRaceCancelsChainedSettingsReloadWithoutCallbackFailure() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The Save reaches commit before shutdown races its chained Reload admission.
+                }, callbackFailure::set);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
+        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            publication.runNext();
+            loaderReference.set(loader);
+            stageReference.set(stage);
+            @SuppressWarnings("unchecked")
+            ListView<SettingsFeature.EntryFrame> entries =
+                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+            entries.getSelectionModel().select(entries.getItems().stream()
+                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
+            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
+            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((Button) loader.getNamespace().get("reloadSettingsButton")).fire();
+
+            assertTrue(jobs.frame().active());
+            assertEquals("Save Settings", jobs.frame().attempt().orElseThrow().operation().name());
+            publication.runNext();
+        });
+
+        Thread saveWorker = worker.runNextAsync();
+        saveWorker.join();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            publication.runNext();
+            ((MenuItem) loaderReference.get().getNamespace().get("exitMenuItem")).fire();
+            assertTrue(jobs.frame().active());
+            assertTrue(jobs.frame().shutdownRequested());
+
+            publication.runNext();
+
+            assertNull(callbackFailure.get());
+            assertTrue(jobs.frame().technicalDiagnostics().isEmpty());
+            assertFalse(jobs.frame().active());
+            assertTrue(flow.frame().closed());
+            assertEquals(1, platform.closeCount);
+            stageReference.get().setOnCloseRequest(null);
+            stageReference.get().close();
+        });
+    }
+
     /**
      * The Templates import launcher captures a multiple-file chooser response, falls back to the logical Slider
      * Preset list while admission disables the launcher, and completion updates Project and Activity without moving

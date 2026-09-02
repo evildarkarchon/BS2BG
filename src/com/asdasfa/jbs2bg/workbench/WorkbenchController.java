@@ -316,6 +316,8 @@ public final class WorkbenchController {
     private long renderedTerminalAttemptId;
     private boolean closeAfterActiveJob;
     private SettingsCloseContinuation settingsCloseContinuation;
+    // Settings publication may beat a competing shutdown gate; derived refresh waits until admission resumes.
+    private boolean settingsRefreshDeferred;
     private boolean renderingTemplates;
     private boolean renderingSettings;
     private boolean renderingOutput;
@@ -771,6 +773,8 @@ public final class WorkbenchController {
         renderSettings(update.frame());
         if (update.effect().isPresent()) {
             SettingsFeature.Effect effect = update.effect().orElseThrow();
+            if (effect instanceof SettingsFeature.ReloadConfirmationEffect confirmation)
+                return completeSettingsReloadConfirmation(confirmation);
             closeReturnTarget.ifPresent(target ->
                     settingsCloseContinuation = new SettingsCloseContinuation(effect.token(), target));
             if (!submitSettingsEffect(effect)) {
@@ -786,8 +790,35 @@ public final class WorkbenchController {
         return update;
     }
 
+    /** Publishes and resolves one dirty-Reload dialog before admitting the selected Settings worker operation. */
+    private SettingsFeature.Update completeSettingsReloadConfirmation(
+            SettingsFeature.ReloadConfirmationEffect effect) {
+        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.unsavedClose(
+                effect.title(), effect.message());
+        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
+        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
+        renderFeedback(pendingFrame);
+        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
+        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
+                pending.token(), action)).frame());
+        SettingsFeature.ReloadDecision decision = switch (action) {
+            case SAVE -> SettingsFeature.ReloadDecision.SAVE;
+            case DISCARD -> SettingsFeature.ReloadDecision.DISCARD;
+            case CANCEL -> SettingsFeature.ReloadDecision.CANCEL;
+            case COPY_DETAILS, RETRY, REMOVE, CLEAR, CLOSE -> throw new IllegalArgumentException(
+                    "Dirty Settings Reload returned an unsupported dialog action: " + action);
+        };
+        SettingsFeature.Update response = settingsFeature.respondReload(effect.token(), decision);
+        renderSettings(response.frame());
+        if (response.effect().isPresent() && !submitSettingsEffect(response.effect().orElseThrow()))
+            return new SettingsFeature.Update(false, settingsFeature.frame());
+        return response;
+    }
+
     /** Admits one immutable Settings effect to the existing application-wide coordinator. */
     private boolean submitSettingsEffect(SettingsFeature.Effect effect) {
+        if (effect instanceof SettingsFeature.ReloadConfirmationEffect)
+            throw new IllegalArgumentException("Reload confirmation must complete before worker admission");
         JobCoordinator.Admission admission = projectFlow.jobs().submit(settingsSubmission(effect));
         if (!admission.admitted()) {
             settingsFeature.cancel(effect.token());
@@ -831,9 +862,7 @@ public final class WorkbenchController {
     /** Recaptures Save drafts or the Reload directory when the user explicitly retries a failed Settings job. */
     private JobCoordinator.Submission<SettingsFeature.Completion> recaptureSettingsSubmission(
             SettingsFeature.Effect previous) {
-        SettingsFeature.Intent intent = previous instanceof SettingsFeature.SaveEffect
-                ? new SettingsFeature.Save() : new SettingsFeature.Reload();
-        SettingsFeature.Update recaptured = settingsFeature.dispatch(intent);
+        SettingsFeature.Update recaptured = settingsFeature.retry(previous);
         SettingsFeature.Effect replacement = recaptured.effect().orElseThrow(
                 () -> new IllegalStateException("Settings retry could not recapture its persistence inputs"));
         if (settingsCloseContinuation != null && settingsCloseContinuation.effectToken() == previous.token())
@@ -905,7 +934,7 @@ public final class WorkbenchController {
                 Optional.of(diagnostic.getSource() + " " + diagnostic.getPath()));
     }
 
-    /** Applies one terminal worker result on the serialized lane and continues a confirmed close only on Save success. */
+    /** Applies one terminal worker result and continues a confirmed Close or Reload only after Save succeeds. */
     private void completeSettingsEffect(SettingsFeature.Effect effect,
                                         JobCoordinator.Result<SettingsFeature.Completion> result) {
         SettingsFeature.Update update = result.value().isPresent()
@@ -914,8 +943,14 @@ public final class WorkbenchController {
         boolean published = update.accepted() && (update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED
                 || update.frame().outcome() == SettingsFeature.OutcomeKind.RELOADED
                 || update.frame().outcome() == SettingsFeature.OutcomeKind.RECOVERED);
-        if (published)
-            refreshPublishedSettings();
+        if (published) {
+            if (projectFlow.jobs().frame().shutdownRequested())
+                settingsRefreshDeferred = true;
+            else
+                refreshPublishedSettings();
+        }
+        // Rejected admission already cancels the feature effect; shutdown races are an ordinary abandoned continuation.
+        update.effect().ifPresent(this::submitSettingsEffect);
         SettingsCloseContinuation close = settingsCloseContinuation != null
                 && settingsCloseContinuation.effectToken() == effect.token() ? settingsCloseContinuation : null;
         if (close != null) {
@@ -2313,6 +2348,10 @@ public final class WorkbenchController {
             // The settled job no longer needs the shutdown gate; a confirmed Save must be able to claim admission.
             if (!projectFlow.jobs().resumeAfterShutdown())
                 throw new IllegalStateException("Shutdown-ready coordinator could not resume before Close");
+            if (settingsRefreshDeferred) {
+                settingsRefreshDeferred = false;
+                refreshPublishedSettings();
+            }
             dispatch(WorkbenchProjectFlow.Intent.CLOSE);
         }
     }

@@ -3,6 +3,9 @@ package com.asdasfa.jbs2bg.presentation;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -14,6 +17,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.TreeMap;
 import java.util.concurrent.CancellationException;
 import java.util.regex.Pattern;
@@ -24,7 +28,12 @@ import java.util.stream.Stream;
  */
 public final class OutputArtifactPublisher {
     private static final String STAGING_PREFIX = ".bs2bg-output-stage-";
+    private static final String PREPARED_MARKER = "prepared";
+    private static final String PREPARED_STAGED_MARKER = "prepared.staged";
+    private static final String COMMITTED_MARKER = "committed";
+    private static final String COMMITTED_STAGED_MARKER = "committed.staged";
     private static final int MAX_COMPONENT_UTF16_CODE_UNITS = 255;
+    private static final int MAX_MARKER_UTF8_BYTES = MAX_COMPONENT_UTF16_CODE_UNITS * 3;
     private static final Pattern RESERVED_BASENAME = Pattern.compile(
             "(?:CON|PRN|AUX|NUL|CLOCK\\$|COM[1-9¹²³]|LPT[1-9¹²³])",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
@@ -76,9 +85,149 @@ public final class OutputArtifactPublisher {
         Path directory = normalizeDirectory(targetDirectory);
         OutputDirectoryLock directoryLock = OutputDirectoryLock.acquire(directory);
         try (directoryLock) {
+            context.checkCancellation();
+            // Once admitted, prior-transaction housekeeping must finish without leaving another mixed batch.
+            recover(directory);
             List<Publication> publications = preflight(directory, artifacts, context);
             publishSet(directory, publications, context, atomicMove);
         }
+    }
+
+    /**
+     * Resolves one interrupted transaction while the destination lock is held. This prior-transaction housekeeping
+     * is deliberately non-cancellable after admission: prepared but uncommitted state is restored from durable
+     * prior-state records, while committed state is verified and cleaned without rollback.
+     *
+     * @param directory locked Output destination directory
+     * @throws IOException when recovery state is ambiguous, malformed, or cannot restore the complete prior batch
+     */
+    private static void recover(Path directory) throws IOException {
+        List<Path> transactions;
+        try (Stream<Path> entries = Files.list(directory)) {
+            transactions = entries.filter(path -> path.getFileName().toString().startsWith(STAGING_PREFIX))
+                    .toList();
+        }
+        if (transactions.isEmpty())
+            return;
+        if (transactions.size() != 1)
+            throw new IOException("Output recovery found more than one interrupted transaction.");
+
+        Path transaction = transactions.getFirst();
+        if (!Files.isDirectory(transaction, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(transaction))
+            throw new IOException("Output recovery state is not a transaction directory: " + transaction);
+        OptionalInt preparedCount = readPreparedCount(transaction);
+        if (preparedCount.isEmpty()) {
+            // This protocol never changes a live destination before the prepared marker becomes visible.
+            deleteTree(transaction);
+            return;
+        }
+
+        List<Publication> publications = readRecoveryPublications(directory, transaction,
+                preparedCount.getAsInt());
+        if (hasCommittedMarker(transaction)) {
+            for (Publication publication : publications)
+                requireRestored(publication.target, true);
+            deleteTree(transaction);
+            return;
+        }
+
+        IOException recoveryFailure = restorePrior(publications, OutputArtifactPublisher::moveAtomically, true);
+        if (recoveryFailure != null)
+            throw new IOException("Output recovery could not restore the complete prior batch.", recoveryFailure);
+        deleteTree(transaction);
+    }
+
+    /** Returns the prepared artifact count, or empty only when no live replacement could have started. */
+    private static OptionalInt readPreparedCount(Path transaction) throws IOException {
+        Path marker = transaction.resolve(PREPARED_MARKER);
+        if (!Files.exists(marker, LinkOption.NOFOLLOW_LINKS))
+            return OptionalInt.empty();
+        if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(marker)
+                || Files.size(marker) != Integer.BYTES)
+            throw new IOException("Output publication prepared marker is malformed: " + marker);
+        int count = ByteBuffer.wrap(Files.readAllBytes(marker)).getInt();
+        long entryCount;
+        try (Stream<Path> entries = Files.list(transaction)) {
+            entryCount = entries.count();
+        }
+        if (count <= 0 || count > entryCount)
+            throw new IOException("Output publication prepared marker has an invalid artifact count: " + count);
+        return OptionalInt.of(count);
+    }
+
+    /** Reconstructs every safely bounded destination and prior-state record from one prepared journal. */
+    private static List<Publication> readRecoveryPublications(Path directory, Path transaction, int count)
+            throws IOException {
+        Map<String, Path> targets = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        List<Publication> publications = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            String member = Integer.toString(index);
+            String targetName = readLeafMarker(transaction.resolve(member + ".target"));
+            Path target = directory.resolve(targetName).normalize();
+            if (!directory.equals(target.getParent()) || targets.put(targetName, target) != null)
+                throw new IOException("Output recovery contains an ambiguous target: " + targetName);
+
+            Path backup = transaction.resolve(member + ".backup");
+            Path existingMarker = transaction.resolve(member + ".existing");
+            Path absentMarker = transaction.resolve(member + ".absent");
+            boolean hasBackup = Files.exists(backup, LinkOption.NOFOLLOW_LINKS);
+            boolean hasExisting = Files.exists(existingMarker, LinkOption.NOFOLLOW_LINKS);
+            boolean wasAbsent = Files.exists(absentMarker, LinkOption.NOFOLLOW_LINKS);
+            if (wasAbsent == (hasBackup || hasExisting) || hasBackup != hasExisting)
+                throw new IOException("Output recovery member has incomplete or conflicting prior state: " + member);
+
+            Path existing = null;
+            if (hasBackup) {
+                if (!Files.isRegularFile(backup, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(backup))
+                    throw new IOException("Output recovery backup is not a regular file: " + backup);
+                String existingName = readLeafMarker(existingMarker);
+                if (String.CASE_INSENSITIVE_ORDER.compare(targetName, existingName) != 0)
+                    throw new IOException("Output recovery prior destination does not match its target: " + member);
+                existing = directory.resolve(existingName).normalize();
+                if (!directory.equals(existing.getParent()))
+                    throw new IOException("Output recovery prior destination escapes its directory: " + existingName);
+            } else if (!Files.isRegularFile(absentMarker, LinkOption.NOFOLLOW_LINKS)
+                    || Files.isSymbolicLink(absentMarker) || Files.size(absentMarker) != 0L) {
+                throw new IOException("Output recovery absence marker is malformed: " + absentMarker);
+            }
+
+            Publication publication = new Publication(target, existing, index);
+            publication.assignJournalPaths(transaction);
+            publications.add(publication);
+        }
+        return publications;
+    }
+
+    /** Reads one forced UTF-8 journal leaf and applies the same destination-name policy used by preflight. */
+    private static String readLeafMarker(Path marker) throws IOException {
+        if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(marker))
+            throw new IOException("Output recovery filename marker is not a regular file: " + marker);
+        long size = Files.size(marker);
+        if (size <= 0L || size > MAX_MARKER_UTF8_BYTES)
+            throw new IOException("Output recovery filename marker has an invalid size: " + marker);
+        String name;
+        try {
+            name = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(Files.readAllBytes(marker)))
+                    .toString();
+        } catch (CharacterCodingException exception) {
+            throw new IOException("Output recovery filename marker is not valid UTF-8: " + marker, exception);
+        }
+        requireSafeWindowsLeaf(name);
+        return name;
+    }
+
+    /** Returns whether the exact durable commit marker makes the installed batch authoritative. */
+    private static boolean hasCommittedMarker(Path transaction) throws IOException {
+        Path marker = transaction.resolve(COMMITTED_MARKER);
+        if (!Files.exists(marker, LinkOption.NOFOLLOW_LINKS))
+            return false;
+        if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(marker)
+                || Files.size(marker) != 1L)
+            throw new IOException("Output publication commit marker is malformed: " + marker);
+        return true;
     }
 
     /** Resolves the existing non-symbolic-link target directory before inspecting its entries. */
@@ -189,9 +338,22 @@ public final class OutputArtifactPublisher {
             context.checkCancellation();
             if (!context.beginCommit())
                 throw new CancellationException("Output publication was cancelled before commit");
-            installArtifacts(stagingDirectory, publications, atomicMove);
+            prepareRecoveryJournal(stagingDirectory, publications);
+            installArtifacts(publications, atomicMove);
+            commit(stagingDirectory);
         } catch (IOException | RuntimeException | Error failure) {
             publicationFailure = failure;
+            try {
+                if (hasCommittedMarker(stagingDirectory)) {
+                    // An atomic commit move may report failure after becoming visible; the new batch is coherent.
+                    publicationFailure = null;
+                    return;
+                }
+            } catch (IOException markerFailure) {
+                failure.addSuppressed(markerFailure);
+                preserveRecoveryDirectory = true;
+                throw failure;
+            }
             IOException rollbackFailure = rollback(publications, atomicMove);
             if (rollbackFailure != null) {
                 failure.addSuppressed(rollbackFailure);
@@ -210,6 +372,39 @@ public final class OutputArtifactPublisher {
                 }
             }
         }
+    }
+
+    /**
+     * Forces every target identity and prior-state record before atomically exposing the prepared artifact count.
+     * No live destination may change until this method completes.
+     */
+    private static void prepareRecoveryJournal(Path stagingDirectory, List<Publication> publications)
+            throws IOException {
+        for (Publication publication : publications) {
+            publication.assignJournalPaths(stagingDirectory);
+            writeAndFlush(publication.targetMarker,
+                    publication.target.getFileName().toString().getBytes(StandardCharsets.UTF_8));
+            if (publication.existing == null) {
+                writeAndFlush(publication.absentMarker, new byte[0]);
+                continue;
+            }
+            writeAndFlush(publication.existingMarker,
+                    publication.existing.getFileName().toString().getBytes(StandardCharsets.UTF_8));
+            Path stagedBackup = publication.backup.resolveSibling(publication.backup.getFileName() + ".staged");
+            Files.copy(publication.existing, stagedBackup);
+            forceExisting(stagedBackup);
+            moveAtomically(stagedBackup, publication.backup);
+        }
+        Path stagedMarker = stagingDirectory.resolve(PREPARED_STAGED_MARKER);
+        writeAndFlush(stagedMarker, ByteBuffer.allocate(Integer.BYTES).putInt(publications.size()).array());
+        moveAtomically(stagedMarker, stagingDirectory.resolve(PREPARED_MARKER));
+    }
+
+    /** Stages and atomically exposes the sole commit marker after every replacement has completed. */
+    private static void commit(Path stagingDirectory) throws IOException {
+        Path stagedMarker = stagingDirectory.resolve(COMMITTED_STAGED_MARKER);
+        writeAndFlush(stagedMarker, new byte[]{1});
+        moveAtomically(stagedMarker, stagingDirectory.resolve(COMMITTED_MARKER));
     }
 
     /** Writes and forces every defensively returned byte array before reporting its real completed unit. */
@@ -232,19 +427,8 @@ public final class OutputArtifactPublisher {
         }
     }
 
-    /**
-     * Copies and forces every prior target before atomically replacing live destinations without further
-     * cancellation points. Originals remain continuously addressable if the process stops between replacements.
-     */
-    private static void installArtifacts(Path stagingDirectory, List<Publication> publications,
-                                          AtomicMove atomicMove) throws IOException {
-        for (Publication publication : publications) {
-            if (publication.existing == null)
-                continue;
-            publication.backup = stagingDirectory.resolve(publication.index + ".backup");
-            Files.copy(publication.existing, publication.backup);
-            forceExisting(publication.backup);
-        }
+    /** Atomically replaces live destinations without further cancellation points. */
+    private static void installArtifacts(List<Publication> publications, AtomicMove atomicMove) throws IOException {
         for (Publication publication : publications) {
             try {
                 atomicMove.move(publication.staged, publication.target);
@@ -260,22 +444,43 @@ public final class OutputArtifactPublisher {
 
     /** Restores prior destinations and removes newly installed artifacts in reverse publication order. */
     private static IOException rollback(List<Publication> publications, AtomicMove atomicMove) {
+        return restorePrior(publications, atomicMove, false);
+    }
+
+    /**
+     * Restores durable prior-state records in reverse order. Recovery restores every member because process-local
+     * install flags were lost; immediate rollback limits work to members whose atomic move may have completed.
+     */
+    private static IOException restorePrior(List<Publication> publications, AtomicMove atomicMove,
+                                            boolean recoverEveryMember) {
         IOException rollbackFailure = null;
         for (int index = publications.size() - 1; index >= 0; index--) {
             Publication publication = publications.get(index);
             try {
-                if (!publication.installed)
+                if (!recoverEveryMember && !publication.installed)
                     continue;
-                if (publication.backup == null) {
+                if (publication.existing == null) {
                     Files.deleteIfExists(publication.target);
-                } else if (Files.exists(publication.backup, LinkOption.NOFOLLOW_LINKS)) {
+                    requireRestored(publication.target, false);
+                } else {
+                    if (!Files.isRegularFile(publication.backup, LinkOption.NOFOLLOW_LINKS)
+                            || Files.isSymbolicLink(publication.backup))
+                        throw new IOException("Output prior-state backup is unavailable: " + publication.backup);
+                    Path stagedRestore = publication.backup.resolveSibling(
+                            publication.backup.getFileName() + ".restore-staged");
+                    Files.copy(publication.backup, stagedRestore, StandardCopyOption.REPLACE_EXISTING);
+                    forceExisting(stagedRestore);
                     try {
-                        atomicMove.move(publication.backup, publication.existing);
+                        atomicMove.move(stagedRestore, publication.existing);
                     } catch (IOException failure) {
-                        if (Files.exists(publication.backup, LinkOption.NOFOLLOW_LINKS)
-                                || !Files.exists(publication.existing, LinkOption.NOFOLLOW_LINKS))
+                        if (Files.exists(stagedRestore, LinkOption.NOFOLLOW_LINKS)
+                                || !Files.isRegularFile(publication.existing, LinkOption.NOFOLLOW_LINKS)
+                                || Files.isSymbolicLink(publication.existing))
                             throw failure;
                     }
+                    if (!publication.target.equals(publication.existing))
+                        Files.deleteIfExists(publication.target);
+                    requireRestored(publication.existing, true);
                 }
             } catch (IOException failure) {
                 if (rollbackFailure == null)
@@ -286,9 +491,29 @@ public final class OutputArtifactPublisher {
         return rollbackFailure;
     }
 
+    /** Requires rollback or restart recovery to leave exactly the recorded prior member state. */
+    private static void requireRestored(Path target, boolean shouldExist) throws IOException {
+        boolean regular = Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(target);
+        if (shouldExist && !regular)
+            throw new IOException("Output prior destination was not restored: " + target);
+        if (!shouldExist && Files.exists(target, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("Output prior absence was not restored: " + target);
+    }
+
     /** Forces a complete backup before a replacement can consume its corresponding staged artifact. */
     private static void forceExisting(Path target) throws IOException {
         try (FileChannel channel = FileChannel.open(target, StandardOpenOption.WRITE)) {
+            channel.force(true);
+        }
+    }
+
+    /** Writes every marker byte and forces its content before an atomic state transition can expose it. */
+    private static void writeAndFlush(Path target, byte[] bytes) throws IOException {
+        try (FileChannel channel = FileChannel.open(target, StandardOpenOption.CREATE_NEW,
+                StandardOpenOption.WRITE)) {
+            ByteBuffer content = ByteBuffer.wrap(bytes);
+            while (content.hasRemaining())
+                channel.write(content);
             channel.force(true);
         }
     }
@@ -369,6 +594,9 @@ public final class OutputArtifactPublisher {
         private final int index;
         private Path staged;
         private Path backup;
+        private Path targetMarker;
+        private Path existingMarker;
+        private Path absentMarker;
         private boolean installed;
 
         /** Captures one completely preflighted destination before any staged bytes exist. */
@@ -377,6 +605,23 @@ public final class OutputArtifactPublisher {
             this.target = target;
             this.existing = existing;
             this.index = index;
+        }
+
+        /** Reconstructs one journal-owned member without requiring its no-longer-available artifact bytes. */
+        private Publication(Path target, Path existing, int index) {
+            this.artifact = null;
+            this.target = target;
+            this.existing = existing;
+            this.index = index;
+        }
+
+        /** Resolves the durable prior-state and filename records owned by this transaction member. */
+        private void assignJournalPaths(Path stagingDirectory) {
+            String member = Integer.toString(index);
+            backup = stagingDirectory.resolve(member + ".backup");
+            targetMarker = stagingDirectory.resolve(member + ".target");
+            existingMarker = stagingDirectory.resolve(member + ".existing");
+            absentMarker = stagingDirectory.resolve(member + ".absent");
         }
     }
 }

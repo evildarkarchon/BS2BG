@@ -170,7 +170,8 @@ final class ProjectJacksonAdapter {
 
     /**
      * Writes deterministic UTF-8 Project bytes in canonical domain order. The
-     * method only returns after the snapshot passes the aggregate integrity check.
+     * method only returns after the snapshot passes the aggregate integrity check
+     * and the reader's text-token and document-byte limits.
      *
      * @param snapshot detached Project content
      * @return newly owned canonical bytes without a BOM or final newline
@@ -193,6 +194,10 @@ final class ProjectJacksonAdapter {
         } catch (JacksonException exception) {
             throw failure(WRITE_FAILED_CODE, "<memory>", "/", 0, 0,
                     readableMessage(exception, "Project JSON could not be represented."));
+        }
+        if (output.size() > JacksonJson.projectMaximumDocumentBytes()) {
+            throw failure(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, "<memory>", "/", 0, 0,
+                    "Project output exceeds the 64 MiB document limit.");
         }
         return output.toByteArray();
     }
@@ -560,28 +565,37 @@ final class ProjectJacksonAdapter {
     private static void writeProject(JsonGenerator generator, Project project) {
         generator.writeStartObject();
         generator.writeName("SliderPresets");
-        writeSliderPresets(generator, project.getSliderPresets());
+        writeSliderPresets(generator, project.getSliderPresets(), "/SliderPresets");
         generator.writeName("CustomMorphTargets");
-        writeTargets(generator, project.getCustomMorphTargets());
+        writeTargets(generator, project.getCustomMorphTargets(), "/CustomMorphTargets");
         generator.writeName("MorphedNPCs");
-        writeNpcMorphAssignments(generator, project.getNpcMorphAssignments());
+        writeNpcMorphAssignments(generator, project.getNpcMorphAssignments(), "/MorphedNPCs");
         generator.writeEndObject();
     }
 
     /**
      * Writes Slider Presets while preserving explicit nulls and omission of unchanged synthesized defaults.
+     *
+     * @param generator   active canonical generator
+     * @param presets     canonical Slider Presets
+     * @param catalogPath bounded diagnostic path of the Slider Preset catalog
      */
-    private static void writeSliderPresets(JsonGenerator generator, List<SliderPresetSnapshot> presets) {
+    private static void writeSliderPresets(JsonGenerator generator, List<SliderPresetSnapshot> presets,
+                                           String catalogPath) {
         generator.writeStartObject();
         for (SliderPresetSnapshot preset : presets) {
-            generator.writeName(preset.getName());
+            writeDynamicName(generator, preset.getName(), catalogPath);
+            String presetPath = child(catalogPath, preset.getName());
             generator.writeStartObject();
             generator.writeBooleanProperty("isUUNP", preset.isUunp());
             generator.writeName("SetSliders");
             generator.writeStartArray();
+            int persistedIndex = 0;
             for (SliderChoiceSnapshot choice : preset.getSliderChoices()) {
-                if (!isOmittedMissingDefault(choice))
-                    writeSliderChoice(generator, choice);
+                if (!isOmittedMissingDefault(choice)) {
+                    writeSliderChoice(generator, choice, presetPath + "/SetSliders/" + persistedIndex);
+                    persistedIndex++;
+                }
             }
             generator.writeEndArray();
             generator.writeEndObject();
@@ -591,10 +605,14 @@ final class ProjectJacksonAdapter {
 
     /**
      * Writes one explicit Slider Choice in the established fixed-field order.
+     *
+     * @param generator  active canonical generator
+     * @param choice     explicit persisted Slider Choice
+     * @param choicePath diagnostic path of the choice's output-array position
      */
-    private static void writeSliderChoice(JsonGenerator generator, SliderChoiceSnapshot choice) {
+    private static void writeSliderChoice(JsonGenerator generator, SliderChoiceSnapshot choice, String choicePath) {
         generator.writeStartObject();
-        generator.writeStringProperty("name", choice.getName());
+        writeStringProperty(generator, "name", choice.getName(), child(choicePath, "name"));
         generator.writeBooleanProperty("enabled", choice.isEnabled());
         if (choice.getStoredSmallValue().isPresent())
             generator.writeNumberProperty("valueSmall", choice.getStoredSmallValue().getAsInt());
@@ -619,14 +637,20 @@ final class ProjectJacksonAdapter {
 
     /**
      * Writes canonical Custom Morph Targets and their canonical assignment names.
+     *
+     * @param generator   active canonical generator
+     * @param targets     canonical Custom Morph Targets
+     * @param catalogPath bounded diagnostic path of the Custom Morph Target catalog
      */
-    private static void writeTargets(JsonGenerator generator, List<CustomMorphTargetSnapshot> targets) {
+    private static void writeTargets(JsonGenerator generator, List<CustomMorphTargetSnapshot> targets,
+                                     String catalogPath) {
         generator.writeStartObject();
         for (CustomMorphTargetSnapshot target : targets) {
-            generator.writeName(target.getName());
+            writeDynamicName(generator, target.getName(), catalogPath);
+            String targetPath = child(catalogPath, target.getName());
             generator.writeStartObject();
             generator.writeName("SliderPresets");
-            writeAssignments(generator, target.getSliderPresetNames());
+            writeAssignments(generator, target.getSliderPresetNames(), targetPath + "/SliderPresets");
             generator.writeEndObject();
         }
         generator.writeEndObject();
@@ -634,19 +658,24 @@ final class ProjectJacksonAdapter {
 
     /**
      * Writes NPC Morph Assignments, deliberately retaining repeated display-name members.
+     *
+     * @param generator   active canonical generator
+     * @param assignments canonical NPC Morph Assignments
+     * @param catalogPath bounded diagnostic path of the NPC Morph Assignment catalog
      */
     private static void writeNpcMorphAssignments(
-            JsonGenerator generator, List<NpcMorphAssignmentSnapshot> assignments) {
+            JsonGenerator generator, List<NpcMorphAssignmentSnapshot> assignments, String catalogPath) {
         generator.writeStartObject();
         for (NpcMorphAssignmentSnapshot assignment : assignments) {
-            generator.writeName(assignment.getDisplayName());
+            writeDynamicName(generator, assignment.getDisplayName(), catalogPath);
+            String assignmentPath = child(catalogPath, assignment.getDisplayName());
             generator.writeStartObject();
-            generator.writeStringProperty("Mod", assignment.getPluginName());
-            generator.writeStringProperty("EditorId", assignment.getEditorId());
-            generator.writeStringProperty("Race", assignment.getRace());
-            generator.writeStringProperty("FormId", assignment.getFormId());
+            writeStringProperty(generator, "Mod", assignment.getPluginName(), child(assignmentPath, "Mod"));
+            writeStringProperty(generator, "EditorId", assignment.getEditorId(), child(assignmentPath, "EditorId"));
+            writeStringProperty(generator, "Race", assignment.getRace(), child(assignmentPath, "Race"));
+            writeStringProperty(generator, "FormId", assignment.getFormId(), child(assignmentPath, "FormId"));
             generator.writeName("SliderPresets");
-            writeAssignments(generator, assignment.getSliderPresetNames());
+            writeAssignments(generator, assignment.getSliderPresetNames(), assignmentPath + "/SliderPresets");
             generator.writeEndObject();
         }
         generator.writeEndObject();
@@ -654,12 +683,59 @@ final class ProjectJacksonAdapter {
 
     /**
      * Writes one deterministic array of canonical Slider Preset names.
+     *
+     * @param generator   active canonical generator
+     * @param assignments canonical Slider Preset names
+     * @param arrayPath   diagnostic path of the assignment array
      */
-    private static void writeAssignments(JsonGenerator generator, List<String> assignments) {
+    private static void writeAssignments(JsonGenerator generator, List<String> assignments, String arrayPath) {
         generator.writeStartArray();
-        for (String assignment : assignments)
+        for (int index = 0; index < assignments.size(); index++) {
+            String assignment = assignments.get(index);
+            requireWritableText(assignment, arrayPath + "/" + index, "string");
             generator.writeString(assignment);
+        }
         generator.writeEndArray();
+    }
+
+    /**
+     * Writes one dynamic property name after applying the reader's UTF-8 byte limit.
+     *
+     * @param generator active canonical generator
+     * @param name      dynamic property name
+     * @param ownerPath bounded diagnostic path of the containing object
+     */
+    private static void writeDynamicName(JsonGenerator generator, String name, String ownerPath) {
+        // Diagnose the bounded owner rather than retaining a potentially one-MiB property name in the exception.
+        requireWritableText(name, ownerPath, "member name");
+        generator.writeName(name);
+    }
+
+    /**
+     * Writes one string property after applying the reader's UTF-8 byte limit.
+     *
+     * @param generator active canonical generator
+     * @param name      fixed property name
+     * @param value     dynamic string value
+     * @param path      diagnostic path of the property
+     */
+    private static void writeStringProperty(JsonGenerator generator, String name, String value, String path) {
+        requireWritableText(value, path, "string");
+        generator.writeStringProperty(name, value);
+    }
+
+    /**
+     * Enforces the reader's accepted one-MiB UTF-8 limit before text reaches the output buffer.
+     *
+     * @param value dynamic text that would be written
+     * @param path  bounded diagnostic path for a rejection
+     * @param kind  stable description of the JSON token kind
+     */
+    private static void requireWritableText(String value, String path, String kind) {
+        if (JacksonJson.exceedsTextLimit(value)) {
+            throw failure(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, "<memory>", path, 0, 0,
+                    "Project " + kind + " exceeds the 1 MiB UTF-8 limit.");
+        }
     }
 
     /**

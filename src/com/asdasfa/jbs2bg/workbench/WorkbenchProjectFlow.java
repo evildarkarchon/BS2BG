@@ -77,9 +77,13 @@ public final class WorkbenchProjectFlow {
     }
 
     /**
-     * Adds the canonical extension without changing a caller-supplied case-insensitive match.
+     * Adds the canonical extension without changing a caller-supplied case-insensitive match. Shared with the
+     * JavaFX chooser boundary so native and substituted platform responses cannot drift.
+     *
+     * @param selected caller-selected Project path
+     * @return normalized absolute path with the canonical extension
      */
-    private static Path projectPath(Path selected) {
+    static Path projectPath(Path selected) {
         Path normalized = selected.toAbsolutePath().normalize();
         Path fileName = normalized.getFileName();
         String name = fileName == null ? normalized.toString() : fileName.toString();

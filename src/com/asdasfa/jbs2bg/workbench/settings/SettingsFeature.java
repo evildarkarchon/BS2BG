@@ -36,6 +36,8 @@ public final class SettingsFeature {
     private long revision;
     private long nextEffectToken = 1;
     private Effect pendingEffect;
+    // Token linkage keeps one confirmed Reload alive only across its Save and explicit retry chain.
+    private Long reloadAfterSaveToken;
     private Frame frame;
 
     /**
@@ -234,6 +236,13 @@ public final class SettingsFeature {
 
     /** Captures both drafts for later persistence without performing filesystem work on the presentation lane. */
     private Update save() {
+        // A fresh Save is a new user intent, not an implicit retry of an abandoned Save-then-Reload chain.
+        reloadAfterSaveToken = null;
+        return captureSave();
+    }
+
+    /** Captures both drafts without deciding whether an existing Reload continuation transfers to the new token. */
+    private Update captureSave() {
         if (rejectedDraft != null)
             return new Update(false, frame);
         if (pendingEffect != null)
@@ -253,9 +262,81 @@ public final class SettingsFeature {
     private Update reload() {
         if (pendingEffect != null)
             return new Update(false, frame);
+        // A fresh Reload decision supersedes any abandoned Save continuation from an earlier attempt.
+        reloadAfterSaveToken = null;
+        if (frame.dirty()) {
+            ReloadConfirmationEffect effect = new ReloadConfirmationEffect(nextEffectToken++, directory,
+                    "Save Settings before reloading?",
+                    "Reloading now would discard unsaved Standard and UUNP Settings changes.");
+            pendingEffect = effect;
+            return accepted(effect);
+        }
+        return captureReload();
+    }
+
+    /** Captures a worker-owned Reload after a clean request, confirmed discard, or explicit failed-job retry. */
+    private Update captureReload() {
         ReloadEffect effect = new ReloadEffect(nextEffectToken++, directory);
         pendingEffect = effect;
         return accepted(effect);
+    }
+
+    /**
+     * Resolves one matching dirty-Reload confirmation without allowing a stale dialog to discard current drafts.
+     *
+     * @param token    presentation-owned confirmation token
+     * @param decision explicit Save, Discard, or Cancel response
+     * @return the retained frame and optional worker effect selected by the response
+     */
+    public Update respondReload(long token, ReloadDecision decision) {
+        Objects.requireNonNull(decision, "decision");
+        if (!(pendingEffect instanceof ReloadConfirmationEffect confirmation) || confirmation.token() != token)
+            return new Update(false, frame);
+        pendingEffect = null;
+        return switch (decision) {
+            case SAVE -> saveThenReload();
+            case DISCARD -> captureReload();
+            case CANCEL -> accepted();
+        };
+    }
+
+    /** Captures Save while retaining the original Reload intent under the new worker token. */
+    private Update saveThenReload() {
+        Update update = captureSave();
+        update.effect().filter(SaveEffect.class::isInstance)
+                .map(SaveEffect.class::cast)
+                .ifPresent(effect -> reloadAfterSaveToken = effect.token());
+        return update;
+    }
+
+    /**
+     * Recaptures current worker input for one failed Settings operation without repeating an already-answered dialog.
+     *
+     * @param previous failed Save or Reload effect whose operation identity must be retained
+     * @return a fresh tokenized worker effect, or the unchanged frame when recapture is unavailable
+     */
+    public Update retry(Effect previous) {
+        Objects.requireNonNull(previous, "previous");
+        if (pendingEffect != null)
+            return new Update(false, frame);
+        return switch (previous) {
+            case SaveEffect saveEffect -> retrySave(saveEffect);
+            case ReloadEffect ignored -> captureReload();
+            case ReloadConfirmationEffect ignored -> new Update(false, frame);
+        };
+    }
+
+    /** Transfers Save-then-Reload only when Activity retries the exact failed or cancelled Save token. */
+    private Update retrySave(SaveEffect previous) {
+        boolean transferReload = reloadAfterSaveToken != null && reloadAfterSaveToken == previous.token();
+        reloadAfterSaveToken = null;
+        Update update = captureSave();
+        if (transferReload) {
+            update.effect().filter(SaveEffect.class::isInstance)
+                    .map(SaveEffect.class::cast)
+                    .ifPresent(effect -> reloadAfterSaveToken = effect.token());
+        }
+        return update;
     }
 
     /**
@@ -267,13 +348,19 @@ public final class SettingsFeature {
     public Update complete(Completion completion) {
         Completion value = Objects.requireNonNull(completion, "completion");
         if (pendingEffect == null || pendingEffect.token() != value.token()
-                || pendingEffect instanceof SaveEffect != value instanceof SaveCompletion)
+                || !matches(pendingEffect, value))
             return new Update(false, frame);
         pendingEffect = null;
         return switch (value) {
-            case SaveCompletion saveCompletion -> completeSave(saveCompletion.result());
+            case SaveCompletion saveCompletion -> completeSave(saveCompletion.token(), saveCompletion.result());
             case ReloadCompletion reloadCompletion -> completeReload(reloadCompletion.result());
         };
+    }
+
+    /** Returns whether one completion belongs to the exact pending worker-effect family. */
+    private static boolean matches(Effect effect, Completion completion) {
+        return effect instanceof SaveEffect && completion instanceof SaveCompletion
+                || effect instanceof ReloadEffect && completion instanceof ReloadCompletion;
     }
 
     /**
@@ -289,8 +376,14 @@ public final class SettingsFeature {
         return accepted();
     }
 
-    /** Commits a worker-owned Save result without repeating any blocking persistence work. */
-    private Update completeSave(Settings.PersistenceResult result) {
+    /**
+     * Commits a worker-owned Save result and admits a token-linked Reload only after successful persistence.
+     *
+     * @param token  completed Save effect token
+     * @param result detached persistence result
+     * @return the committed Save frame with an optional continuation Reload effect
+     */
+    private Update completeSave(long token, Settings.PersistenceResult result) {
         Objects.requireNonNull(result, "result");
         if (!result.isSuccessful()) {
             Settings.Failure failure = result.getFailure().orElseThrow();
@@ -308,7 +401,10 @@ public final class SettingsFeature {
         notices = result.getDiagnostics().stream().map(Notice::warning).toList();
         outcome = OutcomeKind.SAVED;
         publish();
-        return accepted();
+        if (reloadAfterSaveToken == null || reloadAfterSaveToken != token)
+            return accepted();
+        reloadAfterSaveToken = null;
+        return captureReload();
     }
 
     /** Commits a worker-owned Reload result while retaining the current draft when validation failed. */
@@ -644,13 +740,34 @@ public final class SettingsFeature {
     public record DismissNotice() implements Intent {
     }
 
-    /** Worker-bound Settings operation captured without touching the filesystem. */
-    public sealed interface Effect permits SaveEffect, ReloadEffect {
+    /** Tokenized Settings platform or worker operation captured without touching the filesystem. */
+    public sealed interface Effect permits ReloadConfirmationEffect, SaveEffect, ReloadEffect {
         /** @return presentation-owned token used to reject stale completion callbacks */
         long token();
 
         /** @return normalized directory that owns the paired Settings documents */
         Path directory();
+    }
+
+    /** User choices that protect dirty profile drafts before Reload may reach the worker. */
+    public enum ReloadDecision {
+        SAVE,
+        DISCARD,
+        CANCEL
+    }
+
+    /** Immutable dirty-Reload confirmation content captured before the modal platform boundary. */
+    public record ReloadConfirmationEffect(long token, Path directory, String title, String message)
+            implements Effect {
+        /** Requires a positive token and complete accessible confirmation content. */
+        public ReloadConfirmationEffect {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            Objects.requireNonNull(directory, "directory");
+            if (Objects.requireNonNull(title, "title").isBlank()
+                    || Objects.requireNonNull(message, "message").isBlank())
+                throw new IllegalArgumentException("Reload confirmation title and message must not be blank");
+        }
     }
 
     /** Complete immutable Save input captured from both profile drafts. */

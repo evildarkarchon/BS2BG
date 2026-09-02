@@ -351,6 +351,75 @@ final class ProjectJacksonCompatibilityTest {
     }
 
     /**
+     * Canonical writing rejects a string whose UTF-8 representation exceeds the reader's text limit.
+     */
+    @Test
+    void canonicalWriterRejectsStringBeyondOwnedUtf8Limit() {
+        String oversizedName = "😀".repeat((1024 * 1024) / 4 + 1);
+        SliderChoiceSnapshot choice = new SliderChoiceSnapshot(
+                oversizedName, true, 0, 1, 0, 1, 0, 100, false);
+
+        ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
+                ProjectJacksonAdapter.ProjectFormatException.class,
+                () -> ProjectJacksonAdapter.write(snapshotWithChoices(List.of(choice))));
+
+        assertEquals(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, exception.code());
+        assertEquals("<memory>", exception.source());
+        assertEquals("/SliderPresets/Wide/SetSliders/0/name", exception.path());
+    }
+
+    /**
+     * Canonical writing rejects a dynamic member name beyond the reader's UTF-8 limit without echoing it.
+     */
+    @Test
+    void canonicalWriterRejectsMemberNameBeyondOwnedUtf8Limit() {
+        String oversizedName = "😀".repeat((1024 * 1024) / 4 + 1);
+        ProjectSnapshot snapshot = new ProjectSnapshot(
+                List.of(new SliderPresetSnapshot(oversizedName, false, List.of())),
+                List.of(), List.of(), Optional.empty(), true, ProjectLifecycleStatus.UNTITLED);
+
+        ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
+                ProjectJacksonAdapter.ProjectFormatException.class,
+                () -> ProjectJacksonAdapter.write(snapshot));
+
+        assertEquals(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, exception.code());
+        assertEquals("<memory>", exception.source());
+        assertEquals("/SliderPresets", exception.path());
+    }
+
+    /**
+     * Canonical writing rejects total output beyond 64 MiB even when every individual token remains legal.
+     */
+    @Test
+    void canonicalWriterRejectsDocumentBeyondOwnedByteLimit() {
+        String maximumNamePrefix = "x".repeat((1024 * 1024) - 2);
+        List<SliderChoiceSnapshot> choices = java.util.stream.IntStream.range(0, 64)
+                .mapToObj(index -> new SliderChoiceSnapshot(
+                        maximumNamePrefix + (index < 10 ? "0" : "") + index,
+                        true, 0, 1, 0, 1, 0, 100, false))
+                .toList();
+
+        ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
+                ProjectJacksonAdapter.ProjectFormatException.class,
+                () -> ProjectJacksonAdapter.write(snapshotWithChoices(choices)));
+
+        assertEquals(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, exception.code());
+        assertEquals("<memory>", exception.source());
+        assertEquals("/", exception.path());
+    }
+
+    /**
+     * Builds a valid writable Project around the requested explicit Slider Choices.
+     *
+     * @param choices explicit choices to persist
+     * @return valid detached Project snapshot
+     */
+    private static ProjectSnapshot snapshotWithChoices(List<SliderChoiceSnapshot> choices) {
+        return new ProjectSnapshot(List.of(new SliderPresetSnapshot("Wide", false, choices)),
+                List.of(), List.of(), Optional.empty(), true, ProjectLifecycleStatus.UNTITLED);
+    }
+
+    /**
      * Ordinary Unicode and escaped path characters retain display casing through canonical writing.
      */
     @Test

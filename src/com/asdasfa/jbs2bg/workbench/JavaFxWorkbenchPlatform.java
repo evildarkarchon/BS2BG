@@ -46,15 +46,30 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
     }
 
     /**
-     * Shows the native Open or Save chooser and translates cancellation without inventing a path.
+     * Translates a native Project chooser result while completing Save As filenames with the canonical extension.
+     *
+     * @param selected selected native file, or null when the chooser was dismissed
+     * @param save     whether the result came from the Save As chooser
+     * @return cancellation, the exact Open path, or a normalized absolute Save As path with the canonical extension
+     */
+    static WorkbenchProjectFlow.Response projectChooserResponse(File selected, boolean save) {
+        if (selected == null)
+            return WorkbenchProjectFlow.Response.cancelled();
+        Path selectedPath = selected.toPath();
+        if (save)
+            selectedPath = WorkbenchProjectFlow.projectPath(selectedPath);
+        return WorkbenchProjectFlow.Response.selected(selectedPath);
+    }
+
+    /**
+     * Shows the native Open or Save chooser and translates its selected file according to the chooser mode.
      */
     private static WorkbenchProjectFlow.Response chooseProject(Stage owner, boolean save) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(save ? "Save BS2BG Project" : "Open BS2BG Project");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("BS2BG Project (*.jbs2bg)", "*.jbs2bg"));
         File selected = save ? chooser.showSaveDialog(owner) : chooser.showOpenDialog(owner);
-        return selected == null ? WorkbenchProjectFlow.Response.cancelled()
-                : WorkbenchProjectFlow.Response.selected(selected.toPath());
+        return projectChooserResponse(selected, save);
     }
 
     /** Shows the ordered multi-source BodySlide XML chooser. */
