@@ -68,10 +68,6 @@
 	-fx-background-color: #000;
 }
 
-/* SetSliders ScrollPane */
-#spSetSlidersList > .viewport {
-	-fx-background-color: #000;
-}
 /* ImageView ScrollPane */
 #spImageContainer > .viewport {
 	-fx-background-color: #000;
@@ -80,25 +76,6 @@
 /* Morph Target Name Label */
 #lblTargetName {
 	-fx-text-fill: #ff7800;
-}
-
-/* Rename Warning Label*/
-#lblRenameWarning {
-	-fx-text-fill: #ff7800;
-}
-
-/* SetSliderControl */
-.setSliderControl {
-	-fx-background-color: derive(-fx-base, 5%);
-}
-.setSliderControl .text-field {
-	-fx-text-fill: -fx-light-text-color;
-	-fx-background-color: #000;
-	-fx-focus-color: transparent;
-	-fx-faint-focus-color: transparent;
-}
-.setSliderControl .lblContainer {
-	-fx-background-color: derive(-fx-base, 25%);
 }
 
 /* CustomConfirm */
@@ -122,4 +99,59 @@
 }
 .textColor3 {
 	-fx-text-fill: #0000d3;
+}
+
+/* Column filter checklist (FilteredTableAdapter / ColumnFilterMenu) */
+.column-filter .custom-menu-item:focused {
+	-fx-background-color: transparent;
+}
+.filter-panel {
+	-fx-spacing: 10px;
+}
+.filter-panel .list-view {
+	-fx-control-inner-background: rgb(5, 5, 5);
+	-fx-control-inner-background-alt: derive(-fx-control-inner-background, 5%);
+}
+.filter-indicator {
+	-fx-fill: -fx-light-text-color;
+}
+
+/* Workbench shell: borders keep pane and focus boundaries meaningful without depending on fill color alone. */
+.navigation-rail,
+.status-bar,
+.placeholder-pane,
+.output-drawer {
+	-fx-border-color: derive(-fx-base, 55%);
+	-fx-border-width: 1px;
+}
+
+.navigation-rail {
+	-fx-background-color: derive(-fx-base, 8%);
+}
+
+.placeholder-pane {
+	-fx-padding: 12px;
+	-fx-background-color: derive(-fx-base, 4%);
+}
+
+.output-drawer {
+	-fx-background-color: derive(-fx-base, 12%);
+	-fx-border-width: 2px 1px 1px 1px;
+}
+
+/* The focusable Output landmark needs a visible keyboard cue even though its semantic role remains a heading. */
+.output-focus-target:focused {
+	-fx-border-color: -fx-focus-color;
+	-fx-border-width: 2px;
+	-fx-padding: 2px;
+}
+
+/* The overlay stays transparent so only the reparented side pane obscures the inline editor. */
+.overlay-layer {
+	-fx-padding: 8px;
+}
+
+.title {
+	-fx-font-size: 1.25em;
+	-fx-font-weight: bold;
 }

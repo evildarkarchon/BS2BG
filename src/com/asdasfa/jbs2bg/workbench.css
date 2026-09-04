@@ -1,0 +1,198 @@
+/* Application-owned Fluent token layer. JavaFX Modena remains the public control foundation. */
+#workbenchRoot {
+    -fx-background-color: -bs-background;
+    -fx-font-family: "Segoe UI";
+    -fx-font-size: 13px;
+}
+
+#workbenchRoot .label,
+#workbenchRoot .button,
+#workbenchRoot .toggle-button,
+#workbenchRoot .combo-box,
+#workbenchRoot .list-view,
+#workbenchRoot .text-field,
+#workbenchRoot .scroll-pane,
+#workbenchRoot .text-area {
+    -fx-text-fill: -bs-text;
+}
+
+#workbenchRoot .scroll-pane,
+#workbenchRoot .scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+#workbenchRoot .navigation-rail,
+#workbenchRoot .status-bar,
+#workbenchRoot .output-drawer,
+#workbenchRoot .placeholder-pane,
+#workbenchRoot .info-bar {
+    -fx-background-color: -bs-surface;
+    -fx-border-color: -bs-border;
+    -fx-border-width: 1px;
+}
+
+#workbenchRoot .navigation-rail {
+    -fx-border-width: 0 1px 0 0;
+}
+
+#workbenchRoot .status-bar {
+    -fx-border-width: 1px 0 0 0;
+}
+
+#workbenchRoot .output-drawer {
+    -fx-border-width: 1px 0 0 0;
+}
+
+#workbenchRoot .placeholder-pane {
+    -fx-padding: 12px;
+}
+
+#workbenchRoot .slider-choice-row {
+    -fx-background-color: -bs-surface;
+    -fx-border-color: -bs-border;
+    -fx-border-width: 1px;
+    -fx-padding: 10px;
+}
+
+#workbenchRoot .slider-choice-preview {
+    -fx-font-family: "Consolas";
+    -fx-font-weight: bold;
+}
+
+#workbenchRoot .output-text {
+    -fx-font-family: "Consolas";
+}
+
+#workbenchRoot .tab-pane > .tab-header-area > .headers-region > .tab {
+    -fx-background-color: -bs-surface;
+    -fx-border-color: -bs-border;
+    -fx-border-width: 1px;
+}
+
+#workbenchRoot .tab-pane > .tab-header-area > .headers-region > .tab:selected {
+    -fx-background-color: -bs-selection;
+    -fx-border-color: -bs-accent;
+    -fx-border-width: 1px 1px 3px 1px;
+}
+
+#workbenchRoot .tab-pane > .tab-header-area > .headers-region > .tab .tab-label {
+    -fx-text-fill: -bs-text;
+}
+
+#workbenchRoot .tab-pane:focused > .tab-header-area > .headers-region > .tab:selected {
+    -fx-border-color: -bs-focus;
+    -fx-border-width: 2px 2px 3px 2px;
+}
+
+#workbenchRoot .slider-choice-default-state {
+    -fx-font-size: 11px;
+}
+
+#workbenchRoot .title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+#workbenchRoot .feedback-cue {
+    -fx-font-weight: bold;
+}
+
+#workbenchRoot .validation-text {
+    -fx-text-fill: -bs-warning;
+    -fx-border-color: -bs-warning;
+    -fx-border-width: 0 0 0 3px;
+    -fx-padding: 2px 0 2px 6px;
+}
+
+#workbenchRoot .list-cell:filled:selected {
+    -fx-background-color: -bs-selection;
+    -fx-text-fill: -bs-selection-text;
+    -fx-border-color: -bs-accent;
+    -fx-border-width: 1px 1px 1px 4px;
+}
+
+#workbenchRoot .info-bar {
+    -fx-border-width: 1px 1px 1px 4px;
+}
+
+#workbenchRoot .severity-information { -fx-border-color: -bs-information; }
+#workbenchRoot .severity-validation { -fx-border-color: -bs-warning; }
+#workbenchRoot .severity-success { -fx-border-color: -bs-success; }
+#workbenchRoot .severity-warning { -fx-border-color: -bs-warning; }
+#workbenchRoot .severity-failure { -fx-border-color: -bs-failure; }
+
+#workbenchRoot .semantic-icon {
+    -fx-fill: transparent;
+    -fx-stroke: -bs-text;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+    -fx-stroke-width: 2px;
+    -fx-scale-x: 0.72;
+    -fx-scale-y: 0.72;
+}
+
+#workbenchRoot .severity-information .semantic-icon { -fx-stroke: -bs-information; }
+#workbenchRoot .severity-validation .semantic-icon { -fx-stroke: -bs-warning; }
+#workbenchRoot .severity-success .semantic-icon { -fx-stroke: -bs-success; }
+#workbenchRoot .severity-warning .semantic-icon { -fx-stroke: -bs-warning; }
+#workbenchRoot .severity-failure .semantic-icon { -fx-stroke: -bs-failure; }
+
+#workbenchRoot .toggle-button:selected {
+    -fx-background-color: -bs-selection;
+    -fx-text-fill: -bs-selection-text;
+    -fx-border-color: -bs-accent;
+    -fx-border-width: 1px 1px 1px 4px;
+}
+
+#workbenchRoot .button:focused,
+#workbenchRoot .check-box:focused,
+#workbenchRoot .toggle-button:focused,
+#workbenchRoot .combo-box:focused,
+#workbenchRoot .list-view:focused,
+#workbenchRoot .text-field:focused,
+#workbenchRoot .text-area:focused,
+#workbenchRoot .slider:focused,
+#workbenchRoot .label:focused {
+    -fx-border-color: -bs-focus;
+    -fx-border-width: 2px;
+    -fx-border-insets: -2px;
+}
+
+#workbenchRoot:workbench-high-contrast .navigation-rail,
+#workbenchRoot:workbench-high-contrast .status-bar,
+#workbenchRoot:workbench-high-contrast .output-drawer,
+#workbenchRoot:workbench-high-contrast .placeholder-pane,
+#workbenchRoot:workbench-high-contrast .info-bar {
+    -fx-border-width: 2px;
+}
+
+#workbenchRoot:workbench-high-contrast .slider-choice-row {
+    -fx-border-width: 2px;
+}
+
+#workbenchRoot:workbench-high-contrast .tab-pane > .tab-header-area > .headers-region > .tab {
+    -fx-border-width: 2px;
+}
+
+#workbenchRoot:workbench-high-contrast .tab-pane > .tab-header-area > .headers-region > .tab:selected {
+    -fx-border-width: 2px 2px 4px 2px;
+}
+
+#workbenchRoot:workbench-high-contrast .semantic-icon {
+    -fx-stroke: -bs-text;
+    -fx-stroke-width: 2.5px;
+}
+
+#workbenchRoot:workbench-high-contrast .button:disabled,
+#workbenchRoot:workbench-high-contrast .check-box:disabled,
+#workbenchRoot:workbench-high-contrast .toggle-button:disabled,
+#workbenchRoot:workbench-high-contrast .combo-box:disabled {
+    -fx-opacity: 1;
+    -fx-text-fill: -bs-disabled;
+    -fx-border-color: -bs-disabled;
+}
+
+#workbenchRoot:workbench-high-contrast .list-cell:filled:selected,
+#workbenchRoot:workbench-high-contrast .validation-text {
+    -fx-border-width: 2px 2px 2px 4px;
+}

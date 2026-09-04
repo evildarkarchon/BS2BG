@@ -1,191 +1,84 @@
 package com.asdasfa.jbs2bg.data;
 
-import java.io.File;
-import java.util.Arrays;
-import java.util.List;
-
-import com.eclipsesource.json.JsonArray;
-import com.eclipsesource.json.JsonObject;
-import com.eclipsesource.json.JsonObject.Member;
-
-import javafx.beans.property.SimpleStringProperty;
-import javafx.collections.ObservableList;
+import java.util.Objects;
 
 /**
- *
- * @author Totiman
+ * Immutable NPC Database source row. Project promotion copies these values into
+ * an independent NPC Morph Assignment through ProjectSession.
  */
-public class NPC extends MorphTarget {
+public final class NPC {
 
-	private String mod = "Skyrim.esm";
-	private String editorId = "";
-	private String race = "";
-	private String formId = "";
-	
-	private SimpleStringProperty sliderPresetsString = new SimpleStringProperty("");
+    private final String mod;
+    private final String name;
+    private final String editorId;
+    private final String race;
+    private final String formId;
 
-	private File imageFile = null;
+    /**
+     * Parses one legacy NPC text row for the session-scoped NPC Database.
+     *
+     * @param line pipe-delimited plugin, name, editor ID, race, and form ID values
+     * @throws NullPointerException     when line is null
+     * @throws IllegalArgumentException when the row does not contain every required value
+     */
+    public NPC(String line) {
+        String[] values = Objects.requireNonNull(line, "line").split("\\|");
+        if (values.length < 5)
+            throw new IllegalArgumentException("NPC row must contain plugin, name, editor ID, race, and form ID");
+        for (int index = 0; index < values.length; index++)
+            values[index] = values[index].trim();
 
-	public NPC(String line) {
-		String[] vars = line.split("\\|");
-		for (int i = 0; i < vars.length; i++) {
-			vars[i] = vars[i].trim();
-		}
-		mod = vars[0];
-		name = vars[1];
-		editorId = vars[2];
-		race = vars[3];
-		String temp[] = race.split("\"");
-		race = temp[0].trim();
-		formId = vars[4];
-		
-		trimFormId();
+        mod = values[0];
+        editorId = values[2];
+        String displayName = values[1];
+        name = displayName.isEmpty() ? "Unnamed (" + editorId + ")" : displayName;
+        String[] raceParts = values[3].split("\"");
+        race = raceParts[0].trim();
+        formId = normalizeFormId(values[4]);
+    }
 
-		if (name.isEmpty())
-			name = "Unnamed " + "(" + editorId + ")";
+    /**
+     * Normalizes a legacy load-order-prefixed form ID for Project promotion.
+     */
+    private static String normalizeFormId(String value) {
+        String normalized = value.trim();
+        if (normalized.length() > 6)
+            normalized = normalized.substring(normalized.length() - 6);
+        return normalized.replaceFirst("^0+(?!$)", "");
+    }
 
-		vars = null;
-		temp = null;
+    /**
+     * @return source plugin or mod name
+     */
+    public String getMod() {
+        return mod;
+    }
 
-		findImageFile();
-	}
+    /**
+     * @return NPC display name
+     */
+    public String getName() {
+        return name;
+    }
 
-	public NPC(Member member, ObservableList<SliderPreset> sliderPresets) {
-		name = member.getName();
+    /**
+     * @return NPC editor ID
+     */
+    public String getEditorId() {
+        return editorId;
+    }
 
-		JsonObject jo = member.getValue().asObject();
-		mod = jo.getString("Mod", "");
-		editorId = jo.getString("EditorId", "");
-		race = jo.getString("Race", "");
-		formId = jo.getString("FormId", "");
-		
-		trimFormId();
+    /**
+     * @return NPC race
+     */
+    public String getRace() {
+        return race;
+    }
 
-		JsonArray ja = jo.get("SliderPresets").asArray();
-		for (int i = 0; i < ja.size(); i++) {
-			String presetName = ja.get(i).asString();
-
-			SliderPreset sliderPreset = null;
-			for (int j = 0; j < sliderPresets.size(); j++) { // Search the list for existing sliderPreset
-				SliderPreset sp = sliderPresets.get(j);
-				if (sp.getName().equals(presetName)) {
-					sliderPreset = sp;
-					break;
-				}
-			}
-			if (sliderPreset != null)
-				addSliderPreset(sliderPreset);
-		}
-
-		findImageFile();
-	}
-	
-	@Override
-	public void clearSliderPresets() {
-		super.clearSliderPresets();
-		setSliderPresetsString();
-	}
-	
-	@Override
-	public void sortPresets() {
-		super.sortPresets();
-		setSliderPresetsString();
-	}
-	
-	public void setSliderPresetsString() {
-		if (sliderPresets.size() > 0) {
-			String s = "";
-			
-			String[] values = new String[sliderPresets.size()];
-			for (int i = 0; i < sliderPresets.size(); i++) {
-				values[i] = sliderPresets.get(i).getName();
-			}
-			List<String> valuesList = Arrays.asList(values);
-			s += String.join("|", valuesList);
-			s = s.trim();
-			
-			sliderPresetsString.set(s);
-		} else {
-			sliderPresetsString.set("");
-		}
-	}
-	
-	public SimpleStringProperty getSliderPresetsString() {
-		return sliderPresetsString;
-	}
-	
-	private void trimFormId() {
-		formId = formId.trim();
-		
-		int length = formId.length();
-		if (length > 6) { // Trim mod index
-			// Remove first n numbers from 8-digit hexadecimal until 6 digits are left
-			int trimBeginIndex = length - 6; // xx123456
-			if (trimBeginIndex > 0 && trimBeginIndex < length)
-				formId = formId.substring(trimBeginIndex);
-		}
-		
-		formId = formId.replaceFirst("^0+(?!$)", ""); // Remove leading zeroes
-	}
-
-	private String[] imageExt = { ".jpg", "jpeg", ".png", ".bmp" };
-
-	private void findImageFile() {
-		File file = null;
-		for (int i = 0; i < imageExt.length; i++) {
-			String fileWithEdid = "images/" + name + " (" + editorId + ")" + imageExt[i];
-			file = new File(fileWithEdid);
-			if (file.exists()) {
-				imageFile = file;
-				return;
-			}
-		}
-
-		for (int i = 0; i < imageExt.length; i++) {
-			String fileNoEdid = "images/" + name + imageExt[i];
-			file = new File(fileNoEdid);
-			if (file.exists()) {
-				imageFile = file;
-				return;
-			}
-		}
-	}
-
-	public String getMod() {
-		return mod;
-	}
-
-	public String getEditorId() {
-		return editorId;
-	}
-
-	public String getRace() {
-		return race;
-	}
-
-	public String getFormId() {
-		return formId;
-	}
-
-	public File getImageFile() {
-		return imageFile;
-	}
-
-	@Override
-	public String toLine() {
-		String line;
-		line = mod + "|" + formId + "=";
-
-		String[] values = new String[sliderPresets.size()];
-		for (int i = 0; i < sliderPresets.size(); i++) {
-			values[i] = sliderPresets.get(i).getName();
-		}
-		List<String> valuesList = Arrays.asList(values);
-		line += String.join("|", valuesList);
-		line = line.trim();
-
-		values = null;
-
-		return line;
-	}
+    /**
+     * @return normalized six-digit-or-shorter form ID
+     */
+    public String getFormId() {
+        return formId;
+    }
 }

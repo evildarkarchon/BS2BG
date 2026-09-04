@@ -1,0 +1,825 @@
+{
+  "schema": "bs2bg.windows-app-image/2",
+  "recordedAtUtc": "2026-08-29T08:55:04.8128134+00:00",
+  "gitCommit": "c2fd0cef89072fb351de3ecc6b5154c8f3aa27ac",
+  "checkpointResult": true,
+  "application": {
+    "name": "BS2BG",
+    "version": "1.1.2",
+    "mainClass": "com.asdasfa.jbs2bg.Launcher",
+    "mainJar": "jbs2bg-1.0-SNAPSHOT.jar",
+    "description": "jBS2BG: BodySlide Slider Presets to BodyGen and BodyTypes of Skyrim outputs",
+    "vendor": "asdasfa"
+  },
+  "gate": {
+    "source": "verify-java25.ps1 (this run)",
+    "evidence": "target/reproducibility/java25-verification.json",
+    "completeApplicationGate": true,
+    "tests": 239,
+    "mavenVersion": "3.9.16",
+    "mavenVersionOutput": [
+      "Apache Maven 3.9.16 (2bdd9fddda4b155ebf8000e807eb73fd829a51d5)",
+      "Maven home: C:\\Users\\evild\\.m2\\wrapper\\dists\\apache-maven-3.9.16\\0daed3be3ebd1c706f0e69e8b07c6b73f5cc4ea3dfce72a8d0ec2e849ca2ddb0",
+      "Java version: 25.0.4.1, vendor: Eclipse Adoptium, runtime: C:\\Users\\evild\\AppData\\Local\\BS2BG\\build-toolchains\\temurin-25.0.4.1+1-windows-x64",
+      "Default locale: en_US, platform encoding: UTF-8",
+      "OS name: \"windows 11\", version: \"10.0\", arch: \"amd64\", family: \"windows\""
+    ]
+  },
+  "toolchain": {
+    "jdkId": "temurin-25.0.4.1+1-windows-x64",
+    "implementor": "Eclipse Adoptium",
+    "implementorVersion": "Temurin-25.0.4.1+1",
+    "javaVersion": "25.0.4.1",
+    "javaRuntimeVersion": "25.0.4.1+1-LTS",
+    "jdkArchiveSha256": "00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283",
+    "javafxId": "openjfx-25.0.4-windows-x64-jmods",
+    "javafxVersion": "25.0.4",
+    "javafxArchiveSha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
+    "architecture": {
+      "processorArchitecture": "AMD64",
+      "jdkReleaseOsArch": "x86_64",
+      "javaOsArch": "amd64"
+    },
+    "packagingTools": {
+      "jdeps": "25.0.4.1",
+      "jlink": "25.0.4.1",
+      "jpackage": "25.0.4.1"
+    }
+  },
+  "payload": {
+    "stagingDir": "target/app-image-input",
+    "artifacts": [
+      {
+        "path": "jbs2bg-1.0-SNAPSHOT.jar",
+        "sha256": "610615775f6640dc2b63c9a2b8a2ff07e04198458d01e493e18be69fbf60abb4",
+        "size": 389342
+      },
+      {
+        "path": "lib/commons-io-2.6.jar",
+        "sha256": "f877d304660ac2a142f3865badfc971dec7ed73c747c7f8d5d2f5139ca736513",
+        "size": 214788
+      },
+      {
+        "path": "lib/jackson-core-3.1.5.jar",
+        "sha256": "9431b7fa2673bbb618c11d865fe15e13222fd182a214ff998cb7e56afd8f35d2",
+        "size": 598605
+      },
+      {
+        "path": "lib/juniversalchardet-2.1.0.jar",
+        "sha256": "988d74471cea29f6c64d4066c9f31a0d0f10a8241f79868ec1a04da42c6a8bed",
+        "size": 222853
+      },
+      {
+        "path": "lib/minimal-json-0.9.5.jar",
+        "sha256": "69ff84463d1d7cc5cfdb8baf2b6e5f7af153d351bf0dbee3bbc8916247afac74",
+        "size": 34221
+      }
+    ],
+    "dependencyTree": "target/reproducibility/dependency-tree.txt",
+    "javafxOnClasspath": false
+  },
+  "runtime": {
+    "measuredModules": [
+      "java.base",
+      "java.logging",
+      "java.prefs",
+      "java.xml",
+      "javafx.controls",
+      "javafx.fxml"
+    ],
+    "explicitModules": {
+      "jdk.charsets": "CharsetProvider for extended charsets that Charset.forName resolves at runtime from juniversalchardet detections"
+    },
+    "requestedModules": [
+      "java.base",
+      "java.logging",
+      "java.prefs",
+      "java.xml",
+      "javafx.controls",
+      "javafx.fxml",
+      "jdk.charsets"
+    ],
+    "imageModules": [
+      "java.base",
+      "java.datatransfer",
+      "java.xml",
+      "java.prefs",
+      "java.desktop",
+      "java.logging",
+      "java.scripting",
+      "javafx.base",
+      "jdk.unsupported",
+      "javafx.graphics",
+      "javafx.controls",
+      "javafx.fxml",
+      "jdk.charsets"
+    ],
+    "serviceBindings": [
+      "java.datatransfer binds java.desktop jrt:/java.desktop",
+      "java.base binds java.desktop jrt:/java.desktop",
+      "java.base binds java.logging jrt:/java.logging",
+      "java.base binds jdk.charsets jrt:/jdk.charsets"
+    ],
+    "moduleResolutionFile": "target/reproducibility/app-image-module-resolution.txt",
+    "jdepsOutputFile": "target/reproducibility/app-image-jdeps-output.txt",
+    "jlinkOptions": [
+      "--strip-debug",
+      "--no-header-files",
+      "--no-man-pages",
+      "--strip-native-commands"
+    ],
+    "jlinkOutputFile": "target/reproducibility/app-image-jlink-output.txt",
+    "release": {
+      "JAVA_VERSION": "25.0.4.1",
+      "MODULES": "java.base java.datatransfer java.xml java.prefs java.desktop java.logging java.scripting javafx.base jdk.unsupported javafx.graphics javafx.controls javafx.fxml jdk.charsets"
+    },
+    "nativeCommandsStripped": true
+  },
+  "image": {
+    "directory": "target/app-image/BS2BG",
+    "fileCount": 237,
+    "totalBytes": 102502472,
+    "sha256": "9cc700d62415fdc4f332656f4bcdf6d98226e82e1391681762ff4b863eb17b29",
+    "fileHashesFile": "target/reproducibility/app-image-sha256.txt",
+    "archive": "BS2BG-1.1.2-windows-x64.zip",
+    "archiveSha256": "4509afeadcc4af1744fb95eff9766eb48c2af81951a44e65bc42ce5eff9bfc6b",
+    "launcherConfig": {
+      "Application": {
+        "win.norestart": [
+          "true"
+        ],
+        "app.classpath": [
+          "$APPDIR\\jbs2bg-1.0-SNAPSHOT.jar",
+          "$APPDIR\\lib\\commons-io-2.6.jar",
+          "$APPDIR\\lib\\jackson-core-3.1.5.jar",
+          "$APPDIR\\lib\\juniversalchardet-2.1.0.jar",
+          "$APPDIR\\lib\\minimal-json-0.9.5.jar"
+        ],
+        "app.mainclass": [
+          "com.asdasfa.jbs2bg.Launcher"
+        ]
+      },
+      "JavaOptions": {
+        "java-options": [
+          "-Djpackage.app-version=1.1.2",
+          "--enable-native-access=javafx.graphics"
+        ]
+      }
+    },
+    "jpackageState": {
+      "toolVersion": "25.0.4.1",
+      "platform": "windows"
+    },
+    "javaOptions": [
+      "--enable-native-access=javafx.graphics"
+    ],
+    "notices": {
+      "file": "THIRD-PARTY-NOTICES.txt",
+      "components": [
+        {
+          "jar": "commons-io-2.6.jar",
+          "coordinates": "commons-io:commons-io:2.6",
+          "licenses": [],
+          "extractedFiles": [
+            "notices/commons-io-2.6/LICENSE.txt",
+            "notices/commons-io-2.6/NOTICE.txt"
+          ]
+        },
+        {
+          "jar": "jackson-core-3.1.5.jar",
+          "coordinates": "tools.jackson.core:jackson-core:3.1.5",
+          "licenses": [
+            "The Apache Software License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0.txt)"
+          ],
+          "extractedFiles": [
+            "notices/jackson-core-3.1.5/LICENSE",
+            "notices/jackson-core-3.1.5/NOTICE"
+          ]
+        },
+        {
+          "jar": "juniversalchardet-2.1.0.jar",
+          "coordinates": "com.github.albfernandez:juniversalchardet:2.1.0",
+          "licenses": [
+            "Mozilla Public License Version 1.1 (https://www.mozilla.org/en-US/MPL/1.1/)",
+            "GENERAL PUBLIC LICENSE, version 3 (GPL-3.0) (http://www.gnu.org/licenses/gpl.txt)",
+            "GNU LESSER GENERAL PUBLIC LICENSE, version 3 (LGPL-3.0) (http://www.gnu.org/licenses/lgpl.txt)"
+          ],
+          "extractedFiles": []
+        },
+        {
+          "jar": "minimal-json-0.9.5.jar",
+          "coordinates": "com.eclipsesource.minimal-json:minimal-json:0.9.5",
+          "licenses": [
+            "MIT License (http://opensource.org/licenses/MIT)"
+          ],
+          "extractedFiles": []
+        }
+      ],
+      "runtimeComponents": [
+        {
+          "name": "Eclipse Adoptium Temurin-25.0.4.1+1 (Eclipse Temurin JDK, jlink'd runtime)",
+          "version": "25.0.4.1+1-LTS",
+          "license": "GNU General Public License v2.0 with the Classpath Exception",
+          "noticesPath": "runtime/legal/<module>/ (LICENSE, ASSEMBLY_EXCEPTION, ADDITIONAL_LICENSE_INFO and third-party .md files per JDK module)"
+        },
+        {
+          "name": "OpenJFX (Gluon JavaFX Windows x64 JMODs)",
+          "version": "25.0.4",
+          "license": "GNU General Public License v2.0 with the Classpath Exception",
+          "noticesPath": "runtime/legal/{javafx.base,javafx.graphics,javafx.controls,javafx.fxml}/"
+        }
+      ]
+    },
+    "jpackageOutputFile": "target/reproducibility/app-image-jpackage-output.txt"
+  },
+  "smoke": {
+    "schema": "bs2bg.windows-app-image-smoke/5",
+    "recordedAtUtc": "2026-08-29T01:55:24.3082279-07:00",
+    "passed": true,
+    "expectedAppVersion": "1.1.2",
+    "archive": "D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip",
+    "timeouts": {
+      "startupSeconds": 90,
+      "stepSeconds": 30,
+      "exitSeconds": 30
+    },
+    "steps": [
+      {
+        "name": "extract-clean-image",
+        "passed": true,
+        "seconds": 0.81,
+        "detail": "extracted D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip to C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image; working directory C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\work holds representative.jbs2bg, recovery-source.jbs2bg, and malformed-project.jbs2bg"
+      },
+      {
+        "name": "launch-packaged-launcher-without-system-java",
+        "passed": true,
+        "seconds": 1.35,
+        "detail": "application pid 15680 hosts the JVM in the launcher process; jvm.dll from C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll; window 'jBS2BG' after 1.2 s; settings present: settings_UUNP.json, settings.json"
+      },
+      {
+        "name": "verify-first-run-canonical-settings-pair",
+        "passed": true,
+        "seconds": 0.02,
+        "detail": "created canonical UTF-8 pair settings_UUNP.json, settings.json with no transaction state"
+      },
+      {
+        "name": "open-recoverable-project",
+        "passed": true,
+        "seconds": 1.63,
+        "detail": "opened recovery-source.jbs2bg as dirty/recovered with both ordered missing-relationship diagnostics"
+      },
+      {
+        "name": "save-recovered-project",
+        "passed": true,
+        "seconds": 0.45,
+        "detail": "saved recovered recovery-source.jbs2bg through its adopted identity and retained only Alpha/Beta relationships"
+      },
+      {
+        "name": "exit-after-project-recovery",
+        "passed": true,
+        "seconds": 0.36,
+        "detail": "exit code 0 after 0.35 s (bound 30 s)"
+      },
+      {
+        "name": "install-legacy-settings-edit",
+        "passed": true,
+        "seconds": 0.0,
+        "detail": "installed legacy pair: Standard sha256 5eacbfd61e3e687eb202e6a05218cb8dc9311483add4cf191b74444a799de423; UUNP sha256 bf9ea2b987964c749b11621e32ead4263308ea7fab47e98027c3fe1ac0a8b9b8"
+      },
+      {
+        "name": "launch-after-legacy-settings-edit",
+        "passed": true,
+        "seconds": 1.46,
+        "detail": "application pid 36988 hosts the JVM in the launcher process; jvm.dll from C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll; window 'jBS2BG' after 1.4 s; settings present: settings_UUNP.json, settings.json; retained the externally edited legacy Settings pair"
+      },
+      {
+        "name": "open-representative-project",
+        "passed": true,
+        "seconds": 1.29,
+        "detail": "title 'jBS2BG - representative.jbs2bg'; Slider Presets lists CBBE Curvy, UUNP Athletic"
+      },
+      {
+        "name": "generate-preview-copy-and-export-bos-artifact",
+        "passed": true,
+        "seconds": 1.87,
+        "detail": "BoS 'CBBE Curvy': preview/export bytes exact and clipboard content exact after Windows newline normalization, 259 UTF-8 bytes, sha256 61aa61a6d81cdad620127690332e3ff9b626f4c0855ef84e3e4aeafb48117569"
+      },
+      {
+        "name": "generate-templates-output",
+        "passed": true,
+        "seconds": 0.04,
+        "detail": "Templates output: 71 chars, 2 lines: CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0 | UUNP Athletic=Arms@0.25:0.75"
+      },
+      {
+        "name": "load-representative-morph-content",
+        "passed": true,
+        "seconds": 0.04,
+        "detail": "Custom Morph Targets lists All|Female; row exposes 'HousecarlWhiterun' (ControlType.DataItem) and 'Skyrim.esm'"
+      },
+      {
+        "name": "create-custom-morph-target",
+        "passed": true,
+        "seconds": 0.3,
+        "detail": "Custom Morph Targets lists All|Female, All|Female|NordRace; title shows the unsaved marker"
+      },
+      {
+        "name": "cancel-open-preserves-active-project",
+        "passed": true,
+        "seconds": 1.3,
+        "detail": "cancelled the native Open dialog; retained dirty representative.jbs2bg, 2 presets, 2 targets, and row exposes 'HousecarlWhiterun' (ControlType.DataItem) and 'Skyrim.esm'"
+      },
+      {
+        "name": "malformed-open-rejects-transactionally",
+        "passed": true,
+        "seconds": 1.59,
+        "detail": "rejected malformed-project.jbs2bg with source coordinates; retained dirty representative.jbs2bg, 2 presets, 2 targets, and row exposes 'HousecarlWhiterun' (ControlType.DataItem) and 'Skyrim.esm'"
+      },
+      {
+        "name": "assign-slider-presets-to-target",
+        "passed": true,
+        "seconds": 0.11,
+        "detail": "'All|Female|NordRace' has 2 Slider Presets: CBBE Curvy, UUNP Athletic"
+      },
+      {
+        "name": "generate-morphs-output",
+        "passed": true,
+        "seconds": 0.33,
+        "detail": "Morphs output: 112 chars, 4 lines: All|Female=CBBE Curvy|UUNP Athletic | All|Female|NordRace=CBBE Curvy|UUNP Athletic | Skyrim.esm|A2C94=UUNP Athletic | "
+      },
+      {
+        "name": "save-project-as",
+        "passed": true,
+        "seconds": 1.14,
+        "detail": "saved smoke-output.jbs2bg (title clean); Custom Morph Targets All|Female, All|Female|NordRace; NPCs Skyrim.esm / HousecarlWhiterun"
+      },
+      {
+        "name": "prepare-project-save-overwrite",
+        "passed": true,
+        "seconds": 0.03,
+        "detail": "added 'All|Female|SaveRetry' after Save As; title remains dirty until ordinary Save publishes it"
+      },
+      {
+        "name": "failed-project-save-preserves-destination-and-lifecycle",
+        "passed": true,
+        "seconds": 0.47,
+        "detail": "locked overwrite failed with PROJECT_FILE_WRITE_FAILED; destination hash 1f4906f4db14935983a81483fbb5a276c2911d3d2a0287e8bf542519c8f7bbe8, dirty title, and zero staging files were preserved"
+      },
+      {
+        "name": "retry-project-save-after-overwrite-failure",
+        "passed": true,
+        "seconds": 0.45,
+        "detail": "ordinary Save retry replaced the destination with 'All|Female|SaveRetry' and restored the clean title"
+      },
+      {
+        "name": "prepare-unsaved-project-for-new",
+        "passed": true,
+        "seconds": 0.03,
+        "detail": "added 'All|Female|Discarded' without saving so New must confirm the discard boundary"
+      },
+      {
+        "name": "new-project-discards-confirmed-changes",
+        "passed": true,
+        "seconds": 0.51,
+        "detail": "confirmed New after a dirty edit; the untitled Project is empty and 'All|Female|Discarded' remains absent from saved bytes"
+      },
+      {
+        "name": "exit-after-new",
+        "passed": true,
+        "seconds": 0.37,
+        "detail": "exit code 0 after 0.36 s (bound 30 s)"
+      },
+      {
+        "name": "prepare-interrupted-settings-publication",
+        "passed": true,
+        "seconds": 0.01,
+        "detail": "assembled an interrupted publication after the Standard install and before the UUNP install"
+      },
+      {
+        "name": "recover-settings-relaunch-and-reopen-saved-project",
+        "passed": true,
+        "seconds": 3.53,
+        "detail": "application pid 62420 hosts the JVM in the launcher process; jvm.dll from C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll; window 'jBS2BG' after 1.4 s; settings present: settings_UUNP.json, settings.json; restored exact prior Settings pair and output; reopened smoke-output.jbs2bg: Slider Presets CBBE Curvy, UUNP Athletic; Custom Morph Targets All|Female, All|Female|NordRace, All|Female|SaveRetry; 'All|Female|NordRace' -> CBBE Curvy, UUNP Athletic; row exposes 'HousecarlWhiterun' (ControlType.DataItem) and 'Skyrim.esm'"
+      },
+      {
+        "name": "close-and-exit",
+        "passed": true,
+        "seconds": 0.35,
+        "detail": "exit code 0 after 0.34 s (bound 30 s)"
+      },
+      {
+        "name": "verify-settings-recovery-diagnostic",
+        "passed": true,
+        "seconds": 0.0,
+        "detail": "observed SETTINGS_PUBLICATION_RECOVERED in packaged launcher diagnostics"
+      }
+    ],
+    "observations": {
+      "extractedImage": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG",
+      "launcher": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\BS2BG.exe",
+      "launcherSha256": "cfee2ac2f9e825256f10cb6ca2975590499cea1c9253fca4c9a8e3658b0a2b0e",
+      "expectedProcessModel": "single-launcher-process",
+      "workingDirectory": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\work",
+      "archiveSha256": "4509afeadcc4af1744fb95eff9766eb48c2af81951a44e65bc42ce5eff9bfc6b",
+      "environment": {
+        "removedVariables": [
+          "JAVA_HOME"
+        ],
+        "removedPathEntries": [
+          "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath",
+          "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\java8path",
+          "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath"
+        ],
+        "keptPathEntryCount": 72
+      },
+      "firstRunLaunch": {
+        "processModel": "single-launcher-process",
+        "applicationPid": 15680,
+        "applicationExe": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\BS2BG.exe",
+        "startupSeconds": 1.22,
+        "runtimeModules": [
+          {
+            "module": "jli.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\jli.dll"
+          },
+          {
+            "module": "jvm.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll"
+          },
+          {
+            "module": "jimage.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\jimage.dll"
+          },
+          {
+            "module": "java.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\java.dll"
+          },
+          {
+            "module": "prism_d3d.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\javafx\\prism_d3d.dll"
+          },
+          {
+            "module": "glass.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\javafx\\glass.dll"
+          },
+          {
+            "module": "javafx_font.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\javafx\\javafx_font.dll"
+          }
+        ],
+        "settingsFilesCreated": [
+          "settings_UUNP.json",
+          "settings.json"
+        ]
+      },
+      "firstRunSettings": {
+        "files": [
+          "settings_UUNP.json",
+          "settings.json"
+        ],
+        "standardSha256": "85ac19f600fc3a36f15a1e1fcb9c94bac813f6106708689e1d81cf38e8927543",
+        "uunpSha256": "965c635bd49e1992f6a89a728926d2864d7b60fd5abb03656ed93260d0e21f19",
+        "canonicalUtf8NoBomWithFinalLf": true
+      },
+      "recoveredProject": {
+        "file": "recovery-source.jbs2bg",
+        "title": "jBS2BG - *recovery-source.jbs2bg",
+        "diagnostics": "WARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /CustomMorphTargets/Target/SliderPresets/1 (line 7, column 43): Slider Preset assignment 'Missing Target' does not exist and was omitted.\r\nWARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /MorphedNPCs/NPC/SliderPresets/1 (line 15, column 33): Slider Preset assignment 'Missing NPC' does not exist and was omitted.\nWARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg ...\nOK"
+      },
+      "savedRecoveredProject": {
+        "file": "recovery-source.jbs2bg",
+        "sha256": "e71be2f081f206b711fb221d7287177d144bc688924327b6469ad33077630f76",
+        "targetSliderPresets": [
+          "Alpha",
+          "Beta"
+        ],
+        "npcSliderPresets": [
+          "Beta"
+        ],
+        "cleanTitle": "jBS2BG - recovery-source.jbs2bg"
+      },
+      "exitAfterProjectRecovery": {
+        "applicationPid": 15680,
+        "closeRequestedAtUtc": "2026-08-29T01:55:28.5799297-07:00",
+        "exitCode": 0,
+        "exitWaitSeconds": 0.35,
+        "boundedBySeconds": 30
+      },
+      "legacySettingsEdit": {
+        "standardFixture": "D:\\repos\\BS2BG\\test-resources\\json-oracles\\settings\\standard.json",
+        "uunpFixture": "D:\\repos\\BS2BG\\test-resources\\json-oracles\\settings\\uunp.json",
+        "standardSha256": "5eacbfd61e3e687eb202e6a05218cb8dc9311483add4cf191b74444a799de423",
+        "uunpSha256": "bf9ea2b987964c749b11621e32ead4263308ea7fab47e98027c3fe1ac0a8b9b8"
+      },
+      "legacySettingsLaunch": {
+        "processModel": "single-launcher-process",
+        "applicationPid": 36988,
+        "applicationExe": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\BS2BG.exe",
+        "startupSeconds": 1.42,
+        "runtimeModules": [
+          {
+            "module": "jli.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\jli.dll"
+          },
+          {
+            "module": "jvm.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll"
+          },
+          {
+            "module": "jimage.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\jimage.dll"
+          },
+          {
+            "module": "java.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\java.dll"
+          },
+          {
+            "module": "prism_d3d.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\javafx\\prism_d3d.dll"
+          },
+          {
+            "module": "glass.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\javafx\\glass.dll"
+          },
+          {
+            "module": "javafx_font.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\javafx\\javafx_font.dll"
+          }
+        ],
+        "settingsFilesCreated": [
+          "settings_UUNP.json",
+          "settings.json"
+        ]
+      },
+      "openedProject": {
+        "file": "representative.jbs2bg",
+        "sliderPresets": [
+          "CBBE Curvy",
+          "UUNP Athletic"
+        ]
+      },
+      "bosArtifact": {
+        "sliderPreset": "CBBE Curvy",
+        "file": "smoke-bos.json",
+        "bytes": 259,
+        "sha256": "61aa61a6d81cdad620127690332e3ff9b626f4c0855ef84e3e4aeafb48117569",
+        "clipboardContentExactAfterWindowsNewlineNormalization": true,
+        "previewExportBytesExact": true
+      },
+      "templatesOutput": {
+        "length": 71,
+        "lines": 2,
+        "excerpt": "CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0 | UUNP Athletic=Arms@0.25:0.75",
+        "standardSettingsLine": "CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0",
+        "uunpSettingsLine": "UUNP Athletic=Arms@0.25:0.75"
+      },
+      "loadedMorphContent": {
+        "customMorphTargets": "All|Female",
+        "npcMorphAssignment": "Skyrim.esm / HousecarlWhiterun"
+      },
+      "createdCustomMorphTarget": "All|Female|NordRace",
+      "cancelledProjectOpen": {
+        "title": "jBS2BG - *representative.jbs2bg",
+        "sliderPresets": [
+          "CBBE Curvy",
+          "UUNP Athletic"
+        ],
+        "customMorphTargets": [
+          "All|Female",
+          "All|Female|NordRace"
+        ],
+        "npcMorphAssignment": "Skyrim.esm / HousecarlWhiterun"
+      },
+      "malformedProjectOpen": {
+        "source": "malformed-project.jbs2bg",
+        "diagnostic": "ERROR [PROJECT_JSON_MALFORMED] malformed-project.jbs2bg /SliderPresets (line 2, column 1): Unexpected end-of-input: expected close marker for Object (start marker at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); byte offset: #UNKNOWN])\nERROR [PROJECT_JSON_MALFORMED] malformed-project.jbs2bg /SliderPresets (line 2, column 1): Unexpected end-of-input: ...\nOK",
+        "preservedTitle": "jBS2BG - *representative.jbs2bg",
+        "sliderPresets": [
+          "CBBE Curvy",
+          "UUNP Athletic"
+        ],
+        "customMorphTargets": [
+          "All|Female",
+          "All|Female|NordRace"
+        ],
+        "npcMorphAssignment": "Skyrim.esm / HousecarlWhiterun"
+      },
+      "assignedSliderPresets": {
+        "target": "All|Female|NordRace",
+        "presets": [
+          "CBBE Curvy",
+          "UUNP Athletic"
+        ],
+        "count": "2"
+      },
+      "morphsOutput": {
+        "length": 112,
+        "lines": 4,
+        "excerpt": "All|Female=CBBE Curvy|UUNP Athletic | All|Female|NordRace=CBBE Curvy|UUNP Athletic | Skyrim.esm|A2C94=UUNP Athletic | "
+      },
+      "savedProject": {
+        "file": "smoke-output.jbs2bg",
+        "sha256": "1f4906f4db14935983a81483fbb5a276c2911d3d2a0287e8bf542519c8f7bbe8",
+        "customMorphTargets": [
+          "All|Female",
+          "All|Female|NordRace"
+        ],
+        "npcMorphAssignments": [
+          "Skyrim.esm / HousecarlWhiterun"
+        ]
+      },
+      "projectSavePending": {
+        "target": "All|Female|SaveRetry",
+        "customMorphTargets": [
+          "All|Female",
+          "All|Female|NordRace",
+          "All|Female|SaveRetry"
+        ],
+        "dirtyTitle": "jBS2BG - *smoke-output.jbs2bg"
+      },
+      "failedProjectSave": {
+        "file": "smoke-output.jbs2bg",
+        "preservedSha256": "1f4906f4db14935983a81483fbb5a276c2911d3d2a0287e8bf542519c8f7bbe8",
+        "preservedDirtyTitle": "jBS2BG - *smoke-output.jbs2bg",
+        "diagnostic": "ERROR [PROJECT_FILE_WRITE_FAILED] smoke-output.jbs2bg: The Project file could not be written: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\work\\.smoke-output.jbs2bg-18408894647850926806.tmp -> C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\work\\smoke-output.jbs2bg\nERROR [PROJECT_FILE_WRITE_FAILED] smoke-output.jbs2bg: The Project file could not be written: ...\nOK",
+        "stagingFiles": []
+      },
+      "retriedProjectSave": {
+        "file": "smoke-output.jbs2bg",
+        "priorSha256": "1f4906f4db14935983a81483fbb5a276c2911d3d2a0287e8bf542519c8f7bbe8",
+        "savedSha256": "db43974b3e93973f555785dbc0957cad719ebfae98729a7ef83b2647e867af1e",
+        "customMorphTargets": [
+          "All|Female",
+          "All|Female|NordRace",
+          "All|Female|SaveRetry"
+        ],
+        "cleanTitle": "jBS2BG - smoke-output.jbs2bg"
+      },
+      "newProjectPendingDiscard": {
+        "target": "All|Female|Discarded",
+        "customMorphTargets": [
+          "All|Female",
+          "All|Female|Discarded",
+          "All|Female|NordRace",
+          "All|Female|SaveRetry"
+        ],
+        "dirtyTitle": "jBS2BG - *smoke-output.jbs2bg"
+      },
+      "newProject": {
+        "title": "jBS2BG",
+        "discardedTarget": "All|Female|Discarded",
+        "sliderPresetCount": 0,
+        "customMorphTargetCount": 0
+      },
+      "exitAfterNew": {
+        "applicationPid": 36988,
+        "closeRequestedAtUtc": "2026-08-29T01:55:39.8843557-07:00",
+        "exitCode": 0,
+        "exitWaitSeconds": 0.36,
+        "boundedBySeconds": 30
+      },
+      "interruptedSettingsPublication": {
+        "transactionDirectory": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\work\\.bs2bg-settings-stage-smoke-interrupted",
+        "installedMembers": [
+          "settings.json"
+        ],
+        "absentMembers": [
+          "settings_UUNP.json"
+        ],
+        "priorStandardSha256": "5eacbfd61e3e687eb202e6a05218cb8dc9311483add4cf191b74444a799de423",
+        "priorUunpSha256": "bf9ea2b987964c749b11621e32ead4263308ea7fab47e98027c3fe1ac0a8b9b8"
+      },
+      "observedProcessModel": "single-launcher-process",
+      "recoveryLaunch": {
+        "processModel": "single-launcher-process",
+        "applicationPid": 62420,
+        "applicationExe": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\BS2BG.exe",
+        "startupSeconds": 1.41,
+        "runtimeModules": [
+          {
+            "module": "jli.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\jli.dll"
+          },
+          {
+            "module": "jvm.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll"
+          },
+          {
+            "module": "jimage.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\jimage.dll"
+          },
+          {
+            "module": "java.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\java.dll"
+          },
+          {
+            "module": "prism_d3d.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\javafx\\prism_d3d.dll"
+          },
+          {
+            "module": "glass.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\javafx\\glass.dll"
+          },
+          {
+            "module": "javafx_font.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\image\\BS2BG\\runtime\\bin\\javafx\\javafx_font.dll"
+          }
+        ],
+        "settingsFilesCreated": [
+          "settings_UUNP.json",
+          "settings.json"
+        ]
+      },
+      "reopenedProject": {
+        "file": "smoke-output.jbs2bg",
+        "sliderPresets": [
+          "CBBE Curvy",
+          "UUNP Athletic"
+        ],
+        "customMorphTargets": [
+          "All|Female",
+          "All|Female|NordRace",
+          "All|Female|SaveRetry"
+        ],
+        "targetSliderPresets": [
+          "CBBE Curvy",
+          "UUNP Athletic"
+        ],
+        "recoveredSettingsOutput": "CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0 | UUNP Athletic=Arms@0.25:0.75",
+        "exactPriorSettingsPairRestored": true
+      },
+      "exit": {
+        "applicationPid": 62420,
+        "closeRequestedAtUtc": "2026-08-29T01:55:43.7871712-07:00",
+        "exitCode": 0,
+        "exitWaitSeconds": 0.34,
+        "boundedBySeconds": 30
+      },
+      "settingsRecoveryDiagnostic": {
+        "code": "SETTINGS_PUBLICATION_RECOVERED",
+        "occurrences": 1
+      }
+    },
+    "process": {
+      "expectedModel": "single-launcher-process",
+      "model": "single-launcher-process",
+      "applicationPid": 62420,
+      "exitCode": 0,
+      "exitWaitSeconds": 0.34,
+      "lifecycles": [
+        {
+          "applicationPid": 15680,
+          "closeRequestedAtUtc": "2026-08-29T01:55:28.5799297-07:00",
+          "exitCode": 0,
+          "exitWaitSeconds": 0.35,
+          "boundedBySeconds": 30
+        },
+        {
+          "applicationPid": 36988,
+          "closeRequestedAtUtc": "2026-08-29T01:55:39.8843557-07:00",
+          "exitCode": 0,
+          "exitWaitSeconds": 0.36,
+          "boundedBySeconds": 30
+        },
+        {
+          "applicationPid": 62420,
+          "closeRequestedAtUtc": "2026-08-29T01:55:43.7871712-07:00",
+          "exitCode": 0,
+          "exitWaitSeconds": 0.34,
+          "boundedBySeconds": 30
+        }
+      ],
+      "killed": []
+    },
+    "diagnostics": {
+      "directory": "target/reproducibility/smoke-diagnostics/",
+      "stderrLines": 63,
+      "stderrExcerpt": [
+        "Aug 29, 2026 1:55:27 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask",
+        "INFO: Opening jBS2BG file...",
+        "Aug 29, 2026 1:55:28 AM com.asdasfa.jbs2bg.MainController lambda$openFromFile$0",
+        "INFO: Opening jBS2BG file done.",
+        "Aug 29, 2026 1:55:28 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask",
+        "INFO: Saving jBS2BG file...",
+        "Aug 29, 2026 1:55:28 AM com.asdasfa.jbs2bg.MainController lambda$scheduleSave$0",
+        "INFO: Saving jBS2BG file done.",
+        "Aug 29, 2026 1:55:29 AM com.asdasfa.jbs2bg.MainController onPostInit",
+        "WARNING: SETTINGS_MEMBER_UNKNOWN: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\work\\settings.json /Defaults/Waist/FutureDefault",
+        "Unknown Settings member 'FutureDefault' was ignored.",
+        "Aug 29, 2026 1:55:29 AM com.asdasfa.jbs2bg.MainController onPostInit",
+        "WARNING: SETTINGS_MEMBER_UNKNOWN: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524\\work\\settings.json /Future",
+        "Unknown Settings member 'Future' was ignored.",
+        "Aug 29, 2026 1:55:31 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask",
+        "INFO: Opening jBS2BG file...",
+        "Aug 29, 2026 1:55:31 AM com.asdasfa.jbs2bg.MainController lambda$openFromFile$0",
+        "INFO: Opening jBS2BG file done.",
+        "Aug 29, 2026 1:55:33 AM com.asdasfa.jbs2bg.PopupBosViewController exportBosJson",
+        "INFO: Exporting BoS JSON file..."
+      ],
+      "nativeAccessWarnings": [],
+      "uiaTreeBosPreview": "smoke-diagnostics/uia-tree-bos-preview.txt",
+      "uiaTreeAfterReopen": "smoke-diagnostics/uia-tree-after-reopen.txt"
+    },
+    "workRoot": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-smoke-20260829-085524",
+    "workRootKept": false
+  }
+}

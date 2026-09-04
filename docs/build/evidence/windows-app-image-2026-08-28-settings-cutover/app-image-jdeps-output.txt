@@ -1,0 +1,19 @@
+jdeps --multi-release 25 --print-module-deps --module-path D:\repos\BS2BG\target\app-image-measure\javafx.base\classes;D:\repos\BS2BG\target\app-image-measure\javafx.graphics\classes;D:\repos\BS2BG\target\app-image-measure\javafx.controls\classes;D:\repos\BS2BG\target\app-image-measure\javafx.fxml\classes --class-path D:\repos\BS2BG\target\app-image-input\lib\* D:\repos\BS2BG\target\app-image-input\jbs2bg-1.0-SNAPSHOT.jar D:\repos\BS2BG\target\app-image-input\lib\commons-io-2.6.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\juniversalchardet-2.1.0.jar D:\repos\BS2BG\target\app-image-input\lib\minimal-json-0.9.5.jar
+
+Warning: split package: tools.jackson.core file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.async file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.base file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.exc file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.filter file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.internal.shaded.fdp file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.internal.shaded.fdp.bte file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.internal.shaded.fdp.chr file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.io file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.io.schubfach file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.json file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.json.async file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.sym file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.tree file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.type file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+Warning: split package: tools.jackson.core.util file:///D:/repos/BS2BG/target/app-image-input/lib/jackson-core-3.1.5.jar D:\repos\BS2BG\target\app-image-input\lib\jackson-core-3.1.5.jar
+java.base,java.logging,java.prefs,java.xml,javafx.controls,javafx.fxml

@@ -1,0 +1,19 @@
+BS2BG 1.1.2 - corresponding source
+
+Bundled runtime
+---------------
+Eclipse Adoptium Temurin-25.0.4.1+1 (Eclipse Temurin JDK, jlink'd runtime) 25.0.4.1+1-LTS
+  Source: https://github.com/openjdk/jdk25u/archive/refs/tags/jdk-25.0.4.1-ga.zip
+OpenJFX (Gluon JavaFX Windows x64 JMODs) 25.0.4
+  Source: https://github.com/openjdk/jfx25u/archive/refs/tags/25.0.4%2B3.zip
+
+Application libraries (app/lib)
+-------------------------------
+commons-io:commons-io:2.6
+  Source: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.6/commons-io-2.6-sources.jar
+tools.jackson.core:jackson-core:3.1.5
+  Source: https://repo.maven.apache.org/maven2/tools/jackson/core/jackson-core/3.1.5/jackson-core-3.1.5-sources.jar
+com.github.albfernandez:juniversalchardet:2.1.0
+  Source: https://repo.maven.apache.org/maven2/com/github/albfernandez/juniversalchardet/2.1.0/juniversalchardet-2.1.0-sources.jar
+
+These versioned source locations correspond to the exact components in THIRD-PARTY-COMPONENTS.json.

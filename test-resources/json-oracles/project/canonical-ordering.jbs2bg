@@ -1,0 +1,14 @@
+{
+  "MorphedNPCs": {
+    "Late": {"Mod":"Zulu.esm","EditorId":"Zulu","Race":"NordRace","FormId":"2","SliderPresets":["Zulu"]},
+    "Early": {"Mod":"Alpha.esm","EditorId":"Alpha","Race":"NordRace","FormId":"1","SliderPresets":["Alpha"]}
+  },
+  "CustomMorphTargets": {
+    "Zulu Target": {"SliderPresets":["Zulu"]},
+    "Alpha Target": {"SliderPresets":["Alpha"]}
+  },
+  "SliderPresets": {
+    "Zulu": {"SetSliders":[],"isUUNP":false},
+    "Alpha": {"SetSliders":[],"isUUNP":false}
+  }
+}

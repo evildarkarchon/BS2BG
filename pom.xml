@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.asdasfa</groupId>
+    <artifactId>jbs2bg</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <name>jBS2BG</name>
+
+    <!--
+        Java 25 / JavaFX 25 application build (issues #94 and #96, parent #81).
+
+        This POM is the complete application gate: every production source under src/ compiles for release 25
+        with full lint enforcement, every resource under src/ and assets/ is packaged, and the test phase loads
+        the FXML/controller graphs on the pinned toolkit. No source include list may be reintroduced.
+        Every version here is pinned on purpose. Run tools/java25/verify-java25.ps1 for the reproducible run; it
+        provisions the checksum-verified Temurin 25 toolchain that .mvn/toolchains.xml points at and fails closed
+        on any drift. The Maven host JDK may be newer (e.g. JDK 26) but compilation and tests always fork the
+        toolchain JDK selected by maven-toolchains-plugin.
+    -->
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <javafx.version>25.0.4</javafx.version>
+        <maven.compiler.release>25</maven.compiler.release>
+        <junit.version>5.11.4</junit.version>
+        <jackson-core.version>3.1.5</jackson-core.version>
+
+        <!-- Pinned build inputs; tools/java25/toolchain-lock.json mirrors the Maven distribution and JDK pins. -->
+        <bs2bg.maven.version>3.9.16</bs2bg.maven.version>
+        <bs2bg.toolchain.jdk.version>25</bs2bg.toolchain.jdk.version>
+        <bs2bg.toolchain.jdk.vendor>temurin</bs2bg.toolchain.jdk.vendor>
+        <!--
+            Full Temurin build that must own the test JVM. Surefire forwards it to Java25ToolchainGuardTest, and
+            tools/java25/verify-java25.ps1 fails closed if it differs from jdk.release.JAVA_RUNTIME_VERSION in the lock.
+        -->
+        <bs2bg.toolchain.jdk.runtimeVersion>25.0.4.1+1-LTS</bs2bg.toolchain.jdk.runtimeVersion>
+
+        <!--
+            Application version stamped on the Windows app-image by jpackage (issue #97). Surefire forwards it to
+            WindowsAppImageGateTest, which fails if it differs from Main.APP_VERSION (the About dialog's version),
+            so the packaged image and the running application can never disagree about their version.
+        -->
+        <bs2bg.app.version>1.1.2</bs2bg.app.version>
+        <!-- Staging directory handed to jpackage as its input: the application jar plus lib/ with runtime dependencies. -->
+        <bs2bg.appImage.input>${project.build.directory}/app-image-input</bs2bg.appImage.input>
+
+        <!-- Material lifecycle and verification plugins, pinned so the default bindings cannot drift. -->
+        <maven-clean-plugin.version>3.5.0</maven-clean-plugin.version>
+        <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
+        <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
+        <maven-jar-plugin.version>3.5.0</maven-jar-plugin.version>
+        <maven-install-plugin.version>3.1.4</maven-install-plugin.version>
+        <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
+        <maven-site-plugin.version>3.22.0</maven-site-plugin.version>
+        <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+        <maven-toolchains-plugin.version>3.2.0</maven-toolchains-plugin.version>
+        <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
+
+        <!-- OpenRewrite is opt-in through the openrewrite profile; these no-auth pins resolve from Maven Central. -->
+        <rewrite-maven-plugin.version>6.46.1</rewrite-maven-plugin.version>
+        <rewrite-migrate-java.version>3.42.1</rewrite-migrate-java.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson-core.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.albfernandez</groupId>
+            <artifactId>juniversalchardet</artifactId>
+            <version>2.1.0</version>
+        </dependency>
+        <!--
+            JavaFX is 'provided': it compiles and tests against the Maven Central jars, but the packaged image gets
+            JavaFX from the bundled runtime that tools/java25/package-java25.ps1 links out of the pinned Gluon JMODs.
+            The provided scope keeps these jars (and their transitive javafx-graphics/base) out of the staged lib/
+            payload and the jar manifest's Class-Path, so they can never end up on the classpath of the image.
+        -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
+            <version>${javafx.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <sourceDirectory>src</sourceDirectory>
+        <testSourceDirectory>test</testSourceDirectory>
+        <resources>
+            <resource>
+                <directory>src</directory>
+                <excludes>
+                    <exclude>**/*.java</exclude>
+                </excludes>
+            </resource>
+            <resource>
+                <directory>assets</directory>
+            </resource>
+        </resources>
+        <testResources>
+            <testResource>
+                <directory>test-resources</directory>
+            </testResource>
+        </testResources>
+
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-clean-plugin</artifactId>
+                    <version>${maven-clean-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>${maven-resources-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven-jar-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>${maven-install-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>${maven-deploy-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-site-plugin</artifactId>
+                    <version>${maven-site-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>${maven-enforcer-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-toolchains-plugin</artifactId>
+                    <version>${maven-toolchains-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>${maven-dependency-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.openrewrite.maven</groupId>
+                    <artifactId>rewrite-maven-plugin</artifactId>
+                    <version>${rewrite-maven-plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
+        <plugins>
+            <!-- Fail closed on any drift in the Maven distribution, host JDK, architecture, or plugin/dependency pins. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-pinned-build-inputs</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[${bs2bg.maven.version}]</version>
+                                    <message>The build must run through the committed Maven Wrapper (Apache Maven ${bs2bg.maven.version}).</message>
+                                </requireMavenVersion>
+                                <!-- The Maven host JDK may be newer than the toolchain, but never older than the target release. -->
+                                <requireJavaVersion>
+                                    <version>[${bs2bg.toolchain.jdk.version},)</version>
+                                    <message>Maven must be bootstrapped by JDK ${bs2bg.toolchain.jdk.version} or newer; compilation and tests use the toolchain JDK.</message>
+                                </requireJavaVersion>
+                                <requireOS>
+                                    <family>windows</family>
+                                    <arch>amd64</arch>
+                                    <message>The Java 25 baseline is pinned to Windows x64.</message>
+                                </requireOS>
+                                <requirePluginVersions>
+                                    <banLatest>true</banLatest>
+                                    <banRelease>true</banRelease>
+                                    <banSnapshots>true</banSnapshots>
+                                    <phases>clean,deploy</phases>
+                                    <message>Every lifecycle plugin must be pinned to an explicit version.</message>
+                                </requirePluginVersions>
+                                <banDynamicVersions>
+                                    <message>Dependency versions must be exact; ranges, LATEST, and RELEASE are banned.</message>
+                                </banDynamicVersions>
+                                <dependencyConvergence>
+                                    <message>Every resolved dependency must converge on one reviewed version.</message>
+                                </dependencyConvergence>
+                                <!-- JavaFX incubator modules are not part of the accepted JavaFX 25 surface. -->
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>org.openjfx:javafx-incubator-*</exclude>
+                                        <!-- The completed Jackson cutover must also reject transitive reintroduction. -->
+                                        <exclude>com.eclipsesource.minimal-json:*</exclude>
+                                        <!-- Output publication and remaining file reads use owned JDK adapters. -->
+                                        <exclude>commons-io:commons-io</exclude>
+                                        <!-- Issue #100 selected application-owned vectors; no dormant icon stack ships. -->
+                                        <exclude>org.kordamp.ikonli:*</exclude>
+                                    </excludes>
+                                    <message>JavaFX incubators, retired libraries, and the unselected icon stack stay disabled.</message>
+                                </bannedDependencies>
+                            </rules>
+                            <fail>true</fail>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--
+                Select the provisioned Temurin 25 JDK for compilation and tests. .mvn/toolchains.xml resolves
+                BS2BG_JDK25_HOME, which tools/java25/verify-java25.ps1 exports after verifying the JDK checksum
+                and release metadata. Without a matching toolchain the build fails instead of silently using the
+                Maven host JDK.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-toolchains-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>select-java25-toolchain</id>
+                        <goals>
+                            <goal>toolchain</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <toolchains>
+                        <jdk>
+                            <version>${bs2bg.toolchain.jdk.version}</version>
+                            <vendor>${bs2bg.toolchain.jdk.vendor}</vendor>
+                        </jdk>
+                    </toolchains>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <!--
+                    Every production source compiles, for release 25, with every lint category enabled and
+                    promoted to an error. No include/exclude list and no sourcepath override may be added here:
+                    ProductionSourceGateTest and tools/java25 fail closed if one appears, because a source-filtered
+                    build is not the application gate. Preview features stay disabled: no enable-preview flag may
+                    be added to compilerArgs or to the Surefire argLine.
+                -->
+                <configuration>
+                    <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <arg>-Xlint:all</arg>
+                        <arg>-Werror</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <!--
+                    The argLine carries exactly one flag: JavaFX loads its native glass/prism libraries through
+                    System.load, which JDK 25 warns about and a later release will refuse without native access.
+                    It is not a preview flag; adding enable-preview here would silently reopen preview features
+                    for the tests, and Java25ToolchainGuardTest asserts it never reaches the JVM.
+                    The two timeouts keep a hung JavaFX toolkit (or a modal dialog opened by mistake) from hanging
+                    the build: the fork is killed after the first bound and its exit is forced after the second.
+                -->
+                <configuration>
+                    <argLine>--enable-native-access=ALL-UNNAMED</argLine>
+                    <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
+                    <systemPropertyVariables>
+                        <bs2bg.toolchain.jdk.runtimeVersion>${bs2bg.toolchain.jdk.runtimeVersion}</bs2bg.toolchain.jdk.runtimeVersion>
+                        <bs2bg.app.version>${bs2bg.app.version}</bs2bg.app.version>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+
+            <!--
+                App-image staging (issue #97). The wrapper, not the packaging script, assembles everything jpackage
+                consumes: the application jar goes to target/app-image-input and every runtime-scoped dependency to
+                target/app-image-input/lib. jpackage walks that whole tree and puts each jar on the launcher's
+                classpath, so no manifest Class-Path is required for the image; the manifest still carries one
+                (lib/-prefixed) so the staged jar also runs with `java -jar` plus a JavaFX module path in a dev loop.
+                JavaFX is excluded twice on purpose (provided scope above, excludeGroupIds here): the runtime image
+                supplies it, and a JavaFX jar on the classpath would be the unsupported unnamed-module configuration.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <outputDirectory>${bs2bg.appImage.input}</outputDirectory>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.asdasfa.jbs2bg.Launcher</mainClass>
+                            <addClasspath>true</addClasspath>
+                            <classpathPrefix>lib/</classpathPrefix>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>stage-app-image-dependencies</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${bs2bg.appImage.input}/lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                            <excludeGroupIds>org.openjfx</excludeGroupIds>
+                            <overWriteReleases>true</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>openrewrite</id>
+            <build>
+                <plugins>
+                    <!--
+                        Keep source migration separate from the application gate: this profile is activated only by
+                        tools/java25/run-openrewrite.ps1, and no Rewrite goal is bound to a lifecycle phase. The recipe
+                        is composite and may update both Java sources and pom.xml, so dryRun is the runner's default.
+                    -->
+                    <plugin>
+                        <groupId>org.openrewrite.maven</groupId>
+                        <artifactId>rewrite-maven-plugin</artifactId>
+                        <configuration>
+                            <activeRecipes>
+                                <recipe>org.openrewrite.java.migrate.UpgradeToJava25</recipe>
+                            </activeRecipes>
+                            <exportDatatables>true</exportDatatables>
+                            <failOnInvalidActiveRecipes>true</failOnInvalidActiveRecipes>
+                            <pomCacheDirectory>${project.build.directory}/rewrite-cache</pomCacheDirectory>
+                        </configuration>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.openrewrite.recipe</groupId>
+                                <artifactId>rewrite-migrate-java</artifactId>
+                                <version>${rewrite-migrate-java.version}</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+</project>

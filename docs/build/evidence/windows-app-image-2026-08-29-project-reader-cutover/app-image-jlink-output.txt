@@ -1,0 +1,2 @@
+jlink --module-path C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64\jmods;C:\Users\evild\AppData\Local\BS2BG\build-toolchains\openjfx-25.0.4-windows-x64-jmods --add-modules java.base,java.logging,java.prefs,java.xml,javafx.controls,javafx.fxml,jdk.charsets --output D:\repos\BS2BG\target\app-image-runtime --strip-debug --no-header-files --no-man-pages --strip-native-commands
+

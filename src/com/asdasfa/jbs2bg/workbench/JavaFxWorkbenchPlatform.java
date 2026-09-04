@@ -1,0 +1,169 @@
+package com.asdasfa.jbs2bg.workbench;
+
+import java.io.File;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+import javafx.stage.FileChooser;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
+import javafx.stage.DirectoryChooser;
+import javafx.stage.Stage;
+
+/**
+ * JavaFX implementation of Workbench file choosers, confirmations, and final window closure.
+ */
+final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
+
+    /** Copies exact accepted Output text without consulting any preview control. */
+    @Override
+    public boolean copyOutputText(String text) {
+        ClipboardContent content = new ClipboardContent();
+        content.putString(Objects.requireNonNull(text, "text"));
+        return Clipboard.getSystemClipboard().setContent(content);
+    }
+
+    /** Shows the complete-batch Output directory chooser. */
+    @Override
+    public Optional<Path> chooseOutputDirectory(Stage owner) {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Export Accepted Output");
+        File selected = chooser.showDialog(Objects.requireNonNull(owner, "owner"));
+        return selected == null ? Optional.empty() : Optional.of(selected.toPath());
+    }
+
+    /** Shows the selected-BoS save chooser with the accepted mapping as its initial filename. */
+    @Override
+    public Optional<Path> chooseOutputFile(String suggestedFileName, Stage owner) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Export Selected BoS JSON");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON files (*.json)", "*.json"));
+        chooser.setInitialFileName(Objects.requireNonNull(suggestedFileName, "suggestedFileName"));
+        File selected = chooser.showSaveDialog(Objects.requireNonNull(owner, "owner"));
+        return selected == null ? Optional.empty() : Optional.of(selected.toPath());
+    }
+
+    /**
+     * Translates a native Project chooser result while completing Save As filenames with the canonical extension.
+     *
+     * @param selected selected native file, or null when the chooser was dismissed
+     * @param save     whether the result came from the Save As chooser
+     * @return cancellation, the exact Open path, or a normalized absolute Save As path with the canonical extension
+     */
+    static WorkbenchProjectFlow.Response projectChooserResponse(File selected, boolean save) {
+        if (selected == null)
+            return WorkbenchProjectFlow.Response.cancelled();
+        Path selectedPath = selected.toPath();
+        if (save)
+            selectedPath = WorkbenchProjectFlow.projectPath(selectedPath);
+        return WorkbenchProjectFlow.Response.selected(selectedPath);
+    }
+
+    /**
+     * Shows the native Open or Save chooser and translates its selected file according to the chooser mode.
+     */
+    private static WorkbenchProjectFlow.Response chooseProject(Stage owner, boolean save) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(save ? "Save BS2BG Project" : "Open BS2BG Project");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("BS2BG Project (*.jbs2bg)", "*.jbs2bg"));
+        File selected = save ? chooser.showSaveDialog(owner) : chooser.showOpenDialog(owner);
+        return projectChooserResponse(selected, save);
+    }
+
+    /** Shows the ordered multi-source BodySlide XML chooser. */
+    private static WorkbenchProjectFlow.Response chooseBodySlideSources(Stage owner) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Import BodySlide Presets");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("BodySlide Presets (*.xml)", "*.xml"));
+        List<File> selected = chooser.showOpenMultipleDialog(owner);
+        return selected == null || selected.isEmpty() ? WorkbenchProjectFlow.Response.cancelled()
+                : WorkbenchProjectFlow.Response.selectedSources(selected.stream().map(File::toPath).toList());
+    }
+
+    /**
+     * Returns the typed dialog contract for one Project confirmation effect.
+     *
+     * @param kind Project platform-effect kind
+     * @return typed destructive confirmation request, or empty for chooser/final-window effects
+     * @throws NullPointerException when kind is null
+     */
+    static Optional<WorkbenchFeedback.DialogSpec> dialogSpec(WorkbenchProjectFlow.EffectKind kind) {
+        return switch (Objects.requireNonNull(kind, "kind")) {
+            case CONFIRM_NEW -> Optional.of(WorkbenchFeedback.DialogSpec.destructiveConfirmation(
+                    "Create a new Project?", "The current Project has unsaved changes."));
+            case CONFIRM_OPEN -> Optional.of(WorkbenchFeedback.DialogSpec.destructiveConfirmation(
+                    "Open another Project?", "The current Project has unsaved changes."));
+            case CONFIRM_CLOSE -> Optional.of(WorkbenchFeedback.DialogSpec.unsavedClose(
+                    "Save changes before closing?", "Closing now would discard unsaved Project changes."));
+            case CHOOSE_BODYSLIDE_SOURCES, CHOOSE_OPEN_PATH, CHOOSE_SAVE_PATH, CLOSE_WINDOW -> Optional.empty();
+        };
+    }
+
+    /**
+     * Converts one typed dialog action to the Project flow's ordinary response intent.
+     *
+     * @param action action returned by the typed dialog
+     * @return ordinary Project-flow response
+     * @throws NullPointerException     when action is null
+     * @throws IllegalArgumentException when action belongs only to failure dialogs
+     */
+    private static WorkbenchProjectFlow.Response response(WorkbenchFeedback.DialogAction action) {
+        return switch (Objects.requireNonNull(action, "action")) {
+            case SAVE -> WorkbenchProjectFlow.Response.save();
+            case DISCARD -> WorkbenchProjectFlow.Response.discard();
+            case CANCEL, CLOSE -> WorkbenchProjectFlow.Response.cancelled();
+            case COPY_DETAILS, RETRY, REMOVE, CLEAR -> throw new IllegalArgumentException(
+                    action + " is not a Project confirmation response");
+        };
+    }
+
+    /**
+     * Completes the requested modal effect using public JavaFX dialogs owned by the Workbench window.
+     */
+    @Override
+    public WorkbenchProjectFlow.Response complete(WorkbenchProjectFlow.Effect effect, Stage owner) {
+        Objects.requireNonNull(effect, "effect");
+        Objects.requireNonNull(owner, "owner");
+        return switch (effect.kind()) {
+            case CHOOSE_OPEN_PATH -> chooseProject(owner, false);
+            case CHOOSE_SAVE_PATH -> chooseProject(owner, true);
+            case CHOOSE_BODYSLIDE_SOURCES -> chooseBodySlideSources(owner);
+            case CONFIRM_NEW, CONFIRM_OPEN -> response(JavaFxWorkbenchDialogs.show(
+                    dialogSpec(effect.kind()).orElseThrow(), owner));
+            case CONFIRM_CLOSE -> response(JavaFxWorkbenchDialogs.show(
+                    dialogSpec(effect.kind()).orElseThrow(), owner));
+            case CLOSE_WINDOW -> throw new IllegalArgumentException("CLOSE_WINDOW is not a modal platform effect");
+        };
+    }
+
+    /**
+     * Shows a typed failure dialog only after durable feedback state has published it.
+     */
+    @Override
+    public WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+        if (Objects.requireNonNull(spec, "spec").kind() != WorkbenchFeedback.DialogKind.FAILURE)
+            throw new IllegalArgumentException("Only failure dialogs use the failure platform seam");
+        return JavaFxWorkbenchDialogs.show(spec, Objects.requireNonNull(owner, "owner"));
+    }
+
+    /**
+     * Shows a destructive feature confirmation through the same owned application-modal renderer.
+     */
+    @Override
+    public WorkbenchFeedback.DialogAction completeConfirmation(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+        if (Objects.requireNonNull(spec, "spec").kind()
+                != WorkbenchFeedback.DialogKind.DESTRUCTIVE_CONFIRMATION)
+            throw new IllegalArgumentException("Only destructive confirmations use this platform seam");
+        return JavaFxWorkbenchDialogs.show(spec, Objects.requireNonNull(owner, "owner"));
+    }
+
+    /**
+     * Closes the JavaFX Stage after the Project flow has already entered its terminal state.
+     */
+    @Override
+    public void closeWindow(Stage owner) {
+        Objects.requireNonNull(owner, "owner").close();
+    }
+}

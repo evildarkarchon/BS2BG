@@ -1,0 +1,17 @@
+{
+  "SliderPresets": {
+    "İstanbul/˜😀": {"isUUNP": false, "SetSliders": []}
+  },
+  "CustomMorphTargets": {
+    "条件|女性": {"SliderPresets": ["İstanbul/˜😀"]}
+  },
+  "MorphedNPCs": {
+    "守衛😀": {
+      "Mod": "Mód/˜.esm",
+      "EditorId": "Éditeur😀",
+      "Race": "種族",
+      "FormId": "000000",
+      "SliderPresets": ["İstanbul/˜😀"]
+    }
+  }
+}
