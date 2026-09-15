@@ -22,7 +22,11 @@ Read the file at the referenced path, including its comments. Resolve a bare tic
 
 ## Existing GitHub references
 
-Existing GitHub issues remain historical references; this configuration change does not migrate or close them. Fetch explicitly referenced GitHub issues with `gh issue view <number> --repo evildarkarchon/BS2BG --comments`, running `gh` outside the sandbox. New tracker work uses local Markdown. External pull requests are not a triage request surface.
+Existing GitHub issues remain historical references. Resolve migrated issue numbers through the mappings below and use their local files for current status and updates. For an unmigrated issue or an explicit request for GitHub history, use `gh issue view <number> --repo evildarkarchon/BS2BG --comments`, running `gh` outside the sandbox. New tracker work uses local Markdown. External pull requests are not a triage request surface.
+
+### Migrated issues
+
+- **#80, #81–#93, and #98–#112**: Java 25 and JavaFX 25 modernization. The spec is `.scratch/java25-javafx25-modernization/spec.md`; the GitHub-to-local ticket mapping is `.scratch/java25-javafx25-modernization/README.md`. GitHub source issues were left unchanged during migration.
 
 ## Wayfinding operations
 
