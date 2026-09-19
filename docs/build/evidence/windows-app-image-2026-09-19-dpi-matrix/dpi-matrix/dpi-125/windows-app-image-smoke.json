@@ -1,0 +1,502 @@
+{
+  "schema": "bs2bg.windows-app-image-smoke/17",
+  "recordedAtUtc": "2026-09-19T09:57:45.7109904+00:00",
+  "passed": true,
+  "expectedAppVersion": "1.1.2",
+  "archive": "D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip",
+  "timeouts": {
+    "startupSeconds": 90,
+    "stepSeconds": 30,
+    "exitSeconds": 30,
+    "expectedDpiPercent": 125
+  },
+  "steps": [
+    {
+      "name": "extract-clean-image",
+      "passed": true,
+      "seconds": 5.66,
+      "detail": "extracted archive, installed four Project fixtures, and staged interrupted Settings recovery in C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work"
+    },
+    {
+      "name": "launch-workbench-without-system-java",
+      "passed": true,
+      "seconds": 1.54,
+      "detail": "launcher pid 76000 hosts image-local jvm.dll; Workbench appeared after 1.4 s"
+    },
+    {
+      "name": "verify-workbench-shell-and-first-run-settings",
+      "passed": true,
+      "seconds": 0.42,
+      "detail": "five typed navigation destinations and the canonical Settings pair are accessible"
+    },
+    {
+      "name": "verify-workbench-feedback-semantics",
+      "passed": true,
+      "seconds": 0.05,
+      "detail": "Activity keyboard reachability and idle Cancel state passed without changing Windows preferences"
+    },
+    {
+      "name": "verify-keyboard-navigation-focus-and-output-drawer",
+      "passed": true,
+      "seconds": 1.61,
+      "detail": "typed shortcuts, semantic focus return, drawer resize, alias, and F6 cycle passed through packaged UIA"
+    },
+    {
+      "name": "verify-responsive-layout-and-minimum-geometry",
+      "passed": true,
+      "seconds": 1.1,
+      "detail": "narrow overlays, semantic restoration, 800x600 minimum, breakpoint, and live-DPI geometry passed"
+    },
+    {
+      "name": "edit-and-manage-slider-presets-without-pointer",
+      "passed": true,
+      "seconds": 37.58,
+      "detail": "pointer-free Slider choice/profile/gang editing, browse, validation, management, and reopen passed"
+    },
+    {
+      "name": "author-custom-morph-targets-with-keyboard-and-pointer",
+      "passed": true,
+      "seconds": 42.89,
+      "detail": "keyboard and pointer target authoring, relationships, validation, Output, accessibility, narrow mode, and reopen passed"
+    },
+    {
+      "name": "manage-settings-and-import-bodyslide-through-workbench",
+      "passed": true,
+      "seconds": 49.32,
+      "detail": "paired Settings editing/recovery and successful, malformed, partial, failed, and cancelled imports passed"
+    },
+    {
+      "name": "generate-inspect-invalidate-cancel-and-stale-output",
+      "passed": true,
+      "seconds": 28.84,
+      "detail": "fresh, save-only, invalidated, cancelled, and stale Output contracts passed through packaged UIA"
+    },
+    {
+      "name": "save-as-new-project",
+      "passed": true,
+      "seconds": 6.25,
+      "detail": "saved clean untitled Project as new-project.jbs2bg"
+    },
+    {
+      "name": "open-recovered-project-with-complete-diagnostics",
+      "passed": true,
+      "seconds": 6.37,
+      "detail": "opened a dirty recovered Project with diagnostics, warning InfoBar, Activity, and status projection"
+    },
+    {
+      "name": "cancel-then-discard-dirty-new",
+      "passed": true,
+      "seconds": 1.34,
+      "detail": "Cancel preserved the dirty Project; Discard then established a clean New Project"
+    },
+    {
+      "name": "save-recovered-project-through-adopted-identity",
+      "passed": true,
+      "seconds": 6.9,
+      "detail": "Save used the adopted identity and published a clean file-backed Project"
+    },
+    {
+      "name": "malformed-open-preserves-active-project-and-linked-retry",
+      "passed": true,
+      "seconds": 6.71,
+      "detail": "malformed Open preserved active bytes; Retry re-read the repaired source as a linked successful attempt"
+    },
+    {
+      "name": "changed-source-open-rejects-stale-completion",
+      "passed": true,
+      "seconds": 11.81,
+      "detail": "changing the selected source during detached parsing produced stale Activity and committed no effect"
+    },
+    {
+      "name": "central-job-admission-progress-and-cancellation",
+      "passed": true,
+      "seconds": 6.82,
+      "detail": "one Open owned global admission, published truthful progress, accepted Cancel, and committed no effect"
+    },
+    {
+      "name": "failed-save-preserves-dirty-project-then-save-as-recovers",
+      "passed": true,
+      "seconds": 13.59,
+      "detail": "failed Save preserved dirty identity and diagnostics; Save As retry recovered to a clean identity"
+    },
+    {
+      "name": "verify-final-accessibility-themes-and-system-preferences",
+      "passed": true,
+      "seconds": 20.31,
+      "detail": "theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed"
+    },
+    {
+      "name": "active-job-shutdown-cancel-resume-then-discard",
+      "passed": true,
+      "seconds": 21.12,
+      "detail": "exit code 0 after 0.4 s"
+    }
+  ],
+  "observations": {
+    "extractedImage": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG",
+    "launcher": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG\\BS2BG.exe",
+    "launcherSha256": "cfee2ac2f9e825256f10cb6ca2975590499cea1c9253fca4c9a8e3658b0a2b0e",
+    "archiveSha256": "c73d9414a15b133ea37a2b06841d004b8641cd1c73d95353732567554e513ef7",
+    "workingDirectory": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work",
+    "cancellableProjectBytes": 27300106,
+    "environment": {
+      "removedVariables": [
+        "JAVA_HOME"
+      ],
+      "removedPathEntries": [
+        "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath",
+        "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\java8path",
+        "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath",
+        "C:\\Program Files\\OpenJDK\\jdk-26.0.2.1\\bin"
+      ],
+      "keptPathEntryCount": 73
+    },
+    "observedProcessModel": "single-launcher-process",
+    "launch": {
+      "applicationPid": 76000,
+      "applicationExe": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG\\BS2BG.exe",
+      "startupSeconds": 1.41,
+      "runtimeModules": [
+        {
+          "module": "jli.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG\\runtime\\bin\\jli.dll"
+        },
+        {
+          "module": "jvm.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll"
+        },
+        {
+          "module": "jimage.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG\\runtime\\bin\\jimage.dll"
+        },
+        {
+          "module": "java.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG\\runtime\\bin\\java.dll"
+        },
+        {
+          "module": "prism_d3d.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG\\runtime\\bin\\javafx\\prism_d3d.dll"
+        },
+        {
+          "module": "glass.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG\\runtime\\bin\\javafx\\glass.dll"
+        },
+        {
+          "module": "javafx_font.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\image\\BS2BG\\runtime\\bin\\javafx\\javafx_font.dll"
+        }
+      ]
+    },
+    "settingsRecoveryActivity": "Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.",
+    "workbenchAreas": [
+      "Templates",
+      "Morphs",
+      "NPC Database",
+      "Output",
+      "Settings"
+    ],
+    "keyboardNavigation": {
+      "areas": [
+        "Templates",
+        "Morphs",
+        "NPC Database",
+        "Settings"
+      ],
+      "outputPreservedArea": "Morphs",
+      "drawerRange": {
+        "before": 220.0,
+        "after": 240.0
+      },
+      "focusCycle": [
+        "Custom Morph Targets",
+        "Custom Morph Target editor",
+        "Custom Morph Target inspector: no selection",
+        "Output generated text",
+        "Activity",
+        "Workbench status",
+        "Morphs"
+      ]
+    },
+    "responsiveLayout": {
+      "expectedScalePercent": 125,
+      "initial": {
+        "dpi": 120,
+        "scalePercent": 125.0,
+        "windowPhysical": {
+          "left": 459,
+          "top": 131,
+          "width": 1643,
+          "height": 1047
+        },
+        "clientPhysical": {
+          "left": 468,
+          "top": 169,
+          "width": 1625,
+          "height": 1000
+        },
+        "clientLogical": {
+          "width": 1300.0,
+          "height": 800.0
+        }
+      },
+      "narrow": {
+        "dpi": 120,
+        "scalePercent": 125.0,
+        "windowPhysical": {
+          "left": 459,
+          "top": 131,
+          "width": 1517,
+          "height": 922
+        },
+        "clientPhysical": {
+          "left": 468,
+          "top": 169,
+          "width": 1499,
+          "height": 875
+        },
+        "clientLogical": {
+          "width": 1199.2,
+          "height": 700.0
+        }
+      },
+      "minimum": {
+        "dpi": 120,
+        "scalePercent": 125.0,
+        "windowPhysical": {
+          "left": 459,
+          "top": 131,
+          "width": 1019,
+          "height": 798
+        },
+        "clientPhysical": {
+          "left": 468,
+          "top": 169,
+          "width": 1001,
+          "height": 751
+        },
+        "clientLogical": {
+          "width": 800.8,
+          "height": 600.8
+        }
+      },
+      "wide": {
+        "dpi": 120,
+        "scalePercent": 125.0,
+        "windowPhysical": {
+          "left": 459,
+          "top": 131,
+          "width": 1518,
+          "height": 922
+        },
+        "clientPhysical": {
+          "left": 468,
+          "top": 169,
+          "width": 1500,
+          "height": 875
+        },
+        "clientLogical": {
+          "width": 1200.0,
+          "height": 700.0
+        }
+      }
+    },
+    "templatesManagement": {
+      "browsed": [
+        "CBBE Curvy",
+        "UUNP Athletic"
+      ],
+      "createdRejected": "SLIDER_PRESET_NAME_DUPLICATE",
+      "created": "Delta Created",
+      "duplicated": "Curvy Copy",
+      "renameCancelled": "Temporary Name",
+      "renamed": "Curvy Copy Renamed",
+      "removed": "UUNP Athletic",
+      "clearVisiblePreserved": "CBBE Curvy",
+      "savedAndReopened": "templates-managed.jbs2bg",
+      "profile": "Standard",
+      "editedChoice": "Waist@50:50",
+      "gangModes": [
+        "All-Min",
+        "All-Max"
+      ],
+      "rangeValidation": "reversed maximum clamped to minimum"
+    },
+    "morphsCreatePointer": {
+      "x": 805.0,
+      "y": 642.0,
+      "source": "descendant-text-center",
+      "windowActivated": true,
+      "clickablePointError": "Provider returned no clickable point."
+    },
+    "morphsManagement": {
+      "existing": "All|Female",
+      "validation": [
+        "CUSTOM_MORPH_TARGET_NAME_REQUIRED",
+        "CUSTOM_MORPH_TARGET_NAME_DUPLICATE"
+      ],
+      "pointerCreated": "ActorTypeNPC|Female",
+      "pointerCoordinates": {
+        "create": {
+          "x": 805.0,
+          "y": 642.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "select": {
+          "x": 733.0,
+          "y": 529.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "assignAll": {
+          "x": 1923.0,
+          "y": 761.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "removeRelationship": {
+          "x": 1923.5,
+          "y": 645.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "filteredCreate": {
+          "x": 805.0,
+          "y": 558.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        }
+      },
+      "relationshipAdded": "UUNP Athletic",
+      "relationshipRemoved": "UUNP Athletic",
+      "relationshipCleared": "ActorTypeNPC|Female",
+      "initialAssignment": "CBBE Curvy",
+      "individuallyAssigned": "CBBE Curvy",
+      "removed": "ActorTypeNPC|Female",
+      "clearVisibleRemoved": "Clear Me",
+      "generatedBeforeRemoval": "ActorTypeNPC|Female=CBBE Curvy\nAll|Female=CBBE Curvy|UUNP Athletic\nSkyrim.esm|A2C94=UUNP Athletic\n",
+      "savedAndReopened": "morphs-managed.jbs2bg",
+      "scalePercent": 125.0
+    },
+    "settingsAndBodySlideImport": {
+      "settings": [
+        "Standard Waist multiplier 2",
+        "UUNP Arms multiplier 3",
+        "Omit Redundant Sliders true"
+      ],
+      "success": "Settings Output",
+      "partial": "Timestamp: 2026-09-19T09:59:35.070667300Z. Attempt: 12. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\malformed.xml, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\partial-valid.xml. Destinations: none. Captured basis: Project content version 59@167cd1c2. Effects committed: Imported partial-valid.xml. Diagnostics: SLIDER_PRESET_XML_MALFORMED. Retry available: true.",
+      "failed": "Timestamp: 2026-09-19T09:59:53.283917700Z. Attempt: 14. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\a-failed-malformed.xml, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\z-failed-locked.xml. Destinations: none. Captured basis: Project content version 60@167cd1c2. Effects committed: none. Diagnostics: SLIDER_PRESET_XML_MALFORMED, SLIDER_PRESET_XML_READ_FAILED. Retry available: true.",
+      "cancelled": "Timestamp: 2026-09-19T10:00:05.131155800Z. Attempt: 16. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\a-cancel-first.xml, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\z-cancel-large.xml. Destinations: none. Captured basis: Project content version 60@167cd1c2. Effects committed: Imported a-cancel-first.xml. Diagnostics: none. Retry available: true.",
+      "progress": "Save Project, Replacing Project file, indeterminate.",
+      "savedProject": "settings-import-results.jbs2bg"
+    },
+    "generatedOutput": {
+      "completed": "Timestamp: 2026-09-19T09:58:52.126663500Z. Attempt: 5. Sources: none. Destinations: none. Captured basis: Project content version 49@167cd1c2; Settings fe166285; omit redundant sliders: false. Effects committed: Generated Output published. Diagnostics: none. Retry available: false.",
+      "templatesCharacters": 213,
+      "morphsCharacters": 0,
+      "bosCharacters": 461,
+      "tabs": [
+        "Templates",
+        "Morphs",
+        "BoS JSON"
+      ],
+      "readOnly": true,
+      "clipboardExact": true,
+      "completeExport": "Timestamp: 2026-09-19T10:00:12.358739800Z. Attempt: 19. Sources: templates.ini, morphs.ini, Committed Before Cancel -> Committed Before Cancel.json, Partial Commit -> Partial Commit.json, Settings Output -> Settings Output.json. Destinations: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\accepted-output. Captured basis: Project content version 61@167cd1c2; Settings 9a09eab6; omit redundant sliders: true. Effects committed: Published 5 Output artifacts. Diagnostics: none. Retry available: false.",
+      "selectedExport": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\selected-output.JSON",
+      "atomicFailureAndRetry": "Timestamp: 2026-09-19T10:00:25.112417400Z. Attempt: 22. Retry of attempt: 21. Sources: templates.ini, morphs.ini, Committed Before Cancel -> Committed Before Cancel.json, Partial Commit -> Partial Commit.json, Settings Output -> Settings Output.json. Destinations: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\atomic-output-failure. Captured basis: Project content version 61@167cd1c2; Settings 9a09eab6; omit redundant sliders: true. Effects committed: Published 5 Output artifacts. Diagnostics: none. Retry available: false.",
+      "savePreserved": true,
+      "contentInvalidated": true,
+      "cancellation": "Timestamp: 2026-09-19T10:00:33.552893700Z. Attempt: 25. Sources: none. Destinations: none. Captured basis: Project content version 63@167cd1c2; Settings 9a09eab6; omit redundant sliders: true. Effects committed: none. Diagnostics: none. Retry available: true.",
+      "stale": "Timestamp: 2026-09-19T10:00:33.994938400Z. Attempt: 26. Sources: none. Destinations: none. Captured basis: Project content version 63@167cd1c2; Settings 9a09eab6; omit redundant sliders: true. Effects committed: none. Diagnostics: STALE_RESULT. Retry available: true.",
+      "focusPreserved": "Slider Preset list / name field"
+    },
+    "firstSaveAs": {
+      "file": "new-project.jbs2bg",
+      "sha256": "5b2aaa5ea4708a95beb7566441b6f831316f958ebcdd1b7e7266bf2acb99993d"
+    },
+    "recoveredProject": {
+      "title": "BS2BG Preview - *recovery-source.jbs2bg",
+      "diagnostics": "WARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /CustomMorphTargets/Target/SliderPresets/1 (line 7, column 43): Slider Preset assignment 'Missing Target' does not exist and was omitted.\nWARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /MorphedNPCs/NPC/SliderPresets/1 (line 15, column 33): Slider Preset assignment 'Missing NPC' does not exist and was omitted."
+    },
+    "malformedOpen": {
+      "preservedTitle": "BS2BG Preview - recovery-source.jbs2bg",
+      "diagnostics": "ERROR [PROJECT_JSON_MALFORMED] malformed-project.jbs2bg /SliderPresets (line 2, column 1): Unexpected end-of-input: expected close marker for Object (start marker at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); byte offset: #UNKNOWN])",
+      "retryLinked": true,
+      "retrySource": "malformed-project.jbs2bg"
+    },
+    "staleOpen": {
+      "preservedTitle": "BS2BG Preview - malformed-project.jbs2bg",
+      "changedInput": "cancellable-project.jbs2bg",
+      "diagnostic": "STALE_RESULT",
+      "effects": "none"
+    },
+    "centralJobCancellation": {
+      "progress": "Open Project, Reading Project, 29%.",
+      "preservedTitle": "BS2BG Preview - malformed-project.jbs2bg",
+      "effects": "none"
+    },
+    "saveFailureRecovery": {
+      "diagnostic": "ERROR [PROJECT_FILE_WRITE_FAILED] vanishing-recovery.jbs2bg: The Project file could not be written: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745\\work\\vanishing\\.vanishing-recovery.jbs2bg-1834972490889048621.tmp",
+      "retry": "save-retry.jbs2bg"
+    },
+    "appearance": {
+      "phase": "after-authoring-before-shutdown",
+      "initialHighContrast": false,
+      "initialClientAreaAnimation": true,
+      "choices": [
+        "System",
+        "Light",
+        "Dark"
+      ],
+      "highContrastOverride": true,
+      "reducedMotionObserved": true,
+      "restoredHighContrast": false,
+      "restoredClientAreaAnimation": true,
+      "systemEffectiveTheme": "Effective theme: Dark theme",
+      "iconImplementation": "application-owned-bundled-vectors"
+    },
+    "activeJobShutdown": {
+      "cancellationSettledBeforePrompt": true,
+      "cancelResumedAdmission": true,
+      "secondCloseDiscarded": true
+    },
+    "exit": {
+      "exitCode": 0,
+      "exitWaitSeconds": 0.4,
+      "boundedBySeconds": 30
+    }
+  },
+  "process": {
+    "expectedModel": "single-launcher-process",
+    "model": "single-launcher-process",
+    "applicationPid": 76000,
+    "exitCode": 0,
+    "exitWaitSeconds": 0.4,
+    "killed": []
+  },
+  "diagnostics": {
+    "directory": "smoke-diagnostics/",
+    "stderrLines": 0,
+    "stderrExcerpt": [],
+    "nativeAccessWarnings": [],
+    "workbenchTree": "smoke-diagnostics/uia-tree-workbench.txt",
+    "responsiveWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-responsive.txt",
+    "templatesWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-templates.txt",
+    "morphsWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-morphs.txt",
+    "templatesNarrowScreenshot": "smoke-diagnostics/workbench-templates-narrow.png",
+    "templatesHighContrastScreenshot": "smoke-diagnostics/workbench-templates-high-contrast.png",
+    "morphsNarrowScreenshot": "smoke-diagnostics/workbench-morphs-narrow.png",
+    "morphsHighContrastScreenshot": "smoke-diagnostics/workbench-morphs-high-contrast.png",
+    "highContrastScreenshot": "smoke-diagnostics/workbench-high-contrast.png",
+    "reducedMotionScreenshot": "smoke-diagnostics/workbench-reduced-motion.png"
+  },
+  "workRoot": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-095745",
+  "workRootKept": false
+}

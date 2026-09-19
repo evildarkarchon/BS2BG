@@ -33,6 +33,11 @@ This adapter currently targets the primary display using English Windows Setting
 or changed monitor identities fail closed. Keep the interactive desktop idle: scaling temporarily changes the
 whole primary display. This focused matrix does not replace mixed-monitor, hot-plug, or broader release audits.
 
+The [2026-09-19 automated matrix](evidence/windows-app-image-2026-09-19-dpi-matrix/README.md) passed all 20 packaged
+workflows at each of 100%, 125%, and 150%, using one unchanged archive and restoring the captured original scale.
+Its clean Java gate passed 464 tests, and PowerShell verification passed 132 tests. The matrix also exposed and
+verified a fix for short-catalog viewport sizing at fractional scales.
+
 The archive SHA-256 must remain unchanged throughout. Each scale gets independent evidence and screenshots under
 `target/reproducibility/dpi-matrix/dpi-<percent>/`; `windows-app-image-dpi-matrix.json` records the aggregate result,
 captured display, requested cases, restoration, and any workflow/restoration errors. Matrix packaging evidence
@@ -400,8 +405,8 @@ The issue #99 Workbench navigation checkpoint at 100% scale is retained under
 implementation commit `23612aee86a35fb97c2012d7075c1fc95f61b90d`; 268 tests in 32 suites and all 12 packaged
 workflows passed. The smoke evidence records 96 DPI/100% scale and an exact 800x600 logical minimum client. The
 238-file image digest is `194e1990d3590958ed1fed1a596aa6af11517d8aac82045fbc6ad0d313a4b80f`; the archive SHA-256 is
-`3bb708bcf407d79f12d1ef66611692dfccaf82d8887ec4693a1b24a534c22805`. Equivalent retained runs from
-125% and 150% interactive sessions remain necessary to complete the three-scale execution matrix.
+`3bb708bcf407d79f12d1ef66611692dfccaf82d8887ec4693a1b24a534c22805`. This historical checkpoint covers 100% only;
+the later automated matrix above supplies all three scales from newer source.
 
 The issue #100 Workbench platform checkpoint at 100% scale is retained under
 `docs/build/evidence/windows-app-image-2026-08-29-workbench-platform-100-percent/`. It was built from the clean
@@ -411,15 +416,16 @@ restoration, reduced motion, semantic icon/keyboard help, the Activity F6 landma
 projections, typed destructive dialogs, 96 DPI/100% scale, and the exact 800x600 logical minimum. High Contrast
 and reduced-motion screenshots are retained beside the UIA trees. The 238-file image digest is
 `48106a0a9828b49df3a8eaa5cd4b2a22a09129d9b602360e579cd7e150127197`; the archive SHA-256 is
-`4d1ea4b5473d978c4000ad39cb1af347fa90dcc3272861634b7e5a326821f07a`. Equivalent retained runs from
-125% and 150% interactive sessions remain necessary to complete the three-scale execution matrix.
+`4d1ea4b5473d978c4000ad39cb1af347fa90dcc3272861634b7e5a326821f07a`. This historical checkpoint covers 100% only;
+the later automated matrix above supplies all three scales from newer source.
 
 The Custom Morph Target authoring checkpoint (local ticket 23, formerly #107) is retained under
 [`windows-app-image-2026-09-19-morphs-100-percent`](evidence/windows-app-image-2026-09-19-morphs-100-percent/README.md).
 The clean source commit `544953ae105f81c8f018f3b3b54c47c1f2271a5e` passed 456 Java tests in 44 suites,
 104 PowerShell tests, and all 20 packaged workflows with exit code 0. It includes keyboard and real-pointer Morphs
 authoring, exact Output bytes and transactional export, the final system-accessibility phase, and visually inspected
-window-only screenshots. Native scale was 96 DPI / 100%; this run does not claim the outstanding 125%/150% matrix.
+window-only screenshots. Native scale was 96 DPI / 100%; the later automated matrix above provides separate
+125%/150% evidence from newer source.
 
 ## Reverting the single-codec cutover
 

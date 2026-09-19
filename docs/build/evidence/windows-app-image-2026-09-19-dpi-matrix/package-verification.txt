@@ -1,0 +1,246 @@
+
+==> Proving the checkpoint starts from a clean committed checkout
+Source checkout: clean at f4281ac6fcb916f5f72eca5eb7498b8522ed4125
+
+==> Running the complete application gate (verify-java25.ps1)
+
+==> Checking host and pinned inputs
+Maven Wrapper pins Apache Maven 3.9.16 (sha256 5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce)
+pom.xml pins release 25 and toolchain runtime 25.0.4.1+1-LTS (matches the lock)
+pom.xml compiles all 106 production sources (-Xlint:all -Werror)
+
+==> Provisioning Temurin-25.0.4.1+1 (Windows x64)
+[provision] Temurin JDK already provisioned at C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64 (sha256 00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283)
+JDK verified: Eclipse Adoptium Temurin-25.0.4.1+1 os.arch=amd64 at C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64
+
+==> Provisioning JavaFX 25.0.4 JMODs (Windows x64)
+[provision] JavaFX JMODs already provisioned at C:\Users\evild\AppData\Local\BS2BG\build-toolchains\openjfx-25.0.4-windows-x64-jmods (sha256 c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1)
+JavaFX verified: javafx.base, javafx.graphics, javafx.controls, javafx.fxml @ 25.0.4 at C:\Users\evild\AppData\Local\BS2BG\build-toolchains\openjfx-25.0.4-windows-x64-jmods
+
+==> Selecting the Maven host JDK
+Maven bootstraps on: C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64 (provisioned toolchain)
+Toolchain for compile/test: C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64
+
+==> Running the Maven Wrapper: clean verify
+mvnw.cmd --batch-mode --strict-checksums --show-version -Dstyle.color=never clean verify dependency:tree -DoutputFile=D:\repos\BS2BG\target\reproducibility\dependency-tree.txt dependency:build-classpath -Dmdep.outputFile=D:\repos\BS2BG\target\reproducibility\test-classpath.txt
+Apache Maven 3.9.16 (2bdd9fddda4b155ebf8000e807eb73fd829a51d5)
+Maven home: C:\Users\evild\.m2\wrapper\dists\apache-maven-3.9.16\0daed3be3ebd1c706f0e69e8b07c6b73f5cc4ea3dfce72a8d0ec2e849ca2ddb0
+Java version: 25.0.4.1, vendor: Eclipse Adoptium, runtime: C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64
+Default locale: en_US, platform encoding: UTF-8
+OS name: "windows 11", version: "10.0", arch: "amd64", family: "windows"
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -------------------------< com.asdasfa:jbs2bg >-------------------------
+[INFO] Building jBS2BG 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ jbs2bg ---
+[INFO] Deleting D:\repos\BS2BG\target
+[INFO] 
+[INFO] --- enforcer:3.6.3:enforce (enforce-pinned-build-inputs) @ jbs2bg ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed
+[INFO] Rule 1: org.apache.maven.enforcer.rules.version.RequireJavaVersion passed
+[INFO] Rule 2: org.apache.maven.enforcer.rules.RequireOS passed
+[INFO] Rule 3: org.apache.maven.enforcer.rules.RequirePluginVersions passed
+[INFO] Rule 4: org.apache.maven.enforcer.rules.dependency.BanDynamicVersions passed
+[INFO] Rule 5: org.apache.maven.enforcer.rules.dependency.DependencyConvergence passed
+[INFO] Rule 6: org.apache.maven.enforcer.rules.dependency.BannedDependencies passed
+[INFO] 
+[INFO] --- toolchains:3.2.0:toolchain (select-java25-toolchain) @ jbs2bg ---
+[INFO] Required toolchain: jdk [ vendor='temurin' version='25' ]
+[INFO] Found matching toolchain for type jdk: JDK[C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64]
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ jbs2bg ---
+[INFO] Copying 10 resources from src to target\classes
+[INFO] Copying 1 resource from assets to target\classes
+[INFO] 
+[INFO] --- compiler:3.16.0:compile (default-compile) @ jbs2bg ---
+[INFO] Toolchain in maven-compiler-plugin: JDK[C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64]
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 106 source files with javac [forked debug release 25] to target\classes
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ jbs2bg ---
+[INFO] Copying 38 resources from test-resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.16.0:testCompile (default-testCompile) @ jbs2bg ---
+[INFO] Toolchain in maven-compiler-plugin: JDK[C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64]
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 50 source files with javac [forked debug release 25] to target\test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ jbs2bg ---
+[INFO] Toolchain in maven-surefire-plugin: JDK[C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64]
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest
+Sep 19, 2026 2:47:44 AM com.sun.javafx.application.PlatformImpl startup
+WARNING: Unsupported JavaFX configuration: classes were loaded from 'unnamed module @2d6eabae'
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.125 s -- in com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest
+[INFO] Running com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.497 s -- in com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest
+[INFO] Running com.asdasfa.jbs2bg.build.LauncherTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.028 s -- in com.asdasfa.jbs2bg.build.LauncherTest
+[INFO] Running com.asdasfa.jbs2bg.build.ProductionSourceGateTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.166 s -- in com.asdasfa.jbs2bg.build.ProductionSourceGateTest
+[INFO] Running com.asdasfa.jbs2bg.build.WindowsAppImageGateTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.asdasfa.jbs2bg.build.WindowsAppImageGateTest
+[INFO] Running com.asdasfa.jbs2bg.data.NpcDatabaseEntryTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.asdasfa.jbs2bg.data.NpcDatabaseEntryTest
+[INFO] Running com.asdasfa.jbs2bg.data.ProjectPersistenceCompatibilityTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.095 s -- in com.asdasfa.jbs2bg.data.ProjectPersistenceCompatibilityTest
+[INFO] Running com.asdasfa.jbs2bg.data.SettingsDirectoryLockTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.405 s -- in com.asdasfa.jbs2bg.data.SettingsDirectoryLockTest
+[INFO] Running com.asdasfa.jbs2bg.data.SettingsJacksonAdapterTest
+[INFO] Tests run: 20, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.164 s -- in com.asdasfa.jbs2bg.data.SettingsJacksonAdapterTest
+[INFO] Running com.asdasfa.jbs2bg.data.SettingsPairPublisherTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.086 s -- in com.asdasfa.jbs2bg.data.SettingsPairPublisherTest
+[INFO] Running com.asdasfa.jbs2bg.filtering.FilteredViewTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.asdasfa.jbs2bg.filtering.FilteredViewTest
+[INFO] Running com.asdasfa.jbs2bg.filtering.VisibleScopeCommandsTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.asdasfa.jbs2bg.filtering.VisibleScopeCommandsTest
+[INFO] Running com.asdasfa.jbs2bg.fx.DialogGraphicsTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in com.asdasfa.jbs2bg.fx.DialogGraphicsTest
+[INFO] Running com.asdasfa.jbs2bg.fx.FilteredTableAdapterTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in com.asdasfa.jbs2bg.fx.FilteredTableAdapterTest
+[INFO] Running com.asdasfa.jbs2bg.json.JacksonDependencyPolicyTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.032 s -- in com.asdasfa.jbs2bg.json.JacksonDependencyPolicyTest
+[INFO] Running com.asdasfa.jbs2bg.json.JacksonJsonTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.244 s -- in com.asdasfa.jbs2bg.json.JacksonJsonTest
+[INFO] Running com.asdasfa.jbs2bg.presentation.BosJacksonWriterTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in com.asdasfa.jbs2bg.presentation.BosJacksonWriterTest
+[INFO] Running com.asdasfa.jbs2bg.presentation.OutputArtifactPublisherLockTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.383 s -- in com.asdasfa.jbs2bg.presentation.OutputArtifactPublisherLockTest
+[INFO] Running com.asdasfa.jbs2bg.presentation.OutputArtifactPublisherTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.421 s -- in com.asdasfa.jbs2bg.presentation.OutputArtifactPublisherTest
+[INFO] Running com.asdasfa.jbs2bg.presentation.OutputRoutePolicyTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.asdasfa.jbs2bg.presentation.OutputRoutePolicyTest
+[INFO] Running com.asdasfa.jbs2bg.presentation.ProjectOutputFormatterTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.065 s -- in com.asdasfa.jbs2bg.presentation.ProjectOutputFormatterTest
+[INFO] Running com.asdasfa.jbs2bg.presentation.ProjectPresentationTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.asdasfa.jbs2bg.presentation.ProjectPresentationTest
+[INFO] Running com.asdasfa.jbs2bg.project.ProjectJacksonCompatibilityTest
+[INFO] Tests run: 29, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.195 s -- in com.asdasfa.jbs2bg.project.ProjectJacksonCompatibilityTest
+[INFO] Running com.asdasfa.jbs2bg.project.ProjectSessionImportTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.163 s -- in com.asdasfa.jbs2bg.project.ProjectSessionImportTest
+[INFO] Running com.asdasfa.jbs2bg.project.ProjectSessionOpenTest
+[INFO] Tests run: 24, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.160 s -- in com.asdasfa.jbs2bg.project.ProjectSessionOpenTest
+[INFO] Running com.asdasfa.jbs2bg.project.ProjectSessionSaveTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.059 s -- in com.asdasfa.jbs2bg.project.ProjectSessionSaveTest
+[INFO] Running com.asdasfa.jbs2bg.project.ProjectSessionSliderChoiceTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.086 s -- in com.asdasfa.jbs2bg.project.ProjectSessionSliderChoiceTest
+[INFO] Running com.asdasfa.jbs2bg.project.ProjectSessionTest
+[INFO] Tests run: 39, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.170 s -- in com.asdasfa.jbs2bg.project.ProjectSessionTest
+[INFO] Running com.asdasfa.jbs2bg.project.ProjectTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.asdasfa.jbs2bg.project.ProjectTest
+[INFO] Running com.asdasfa.jbs2bg.project.SliderChoiceSnapshotTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.asdasfa.jbs2bg.project.SliderChoiceSnapshotTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.JavaFxWorkbenchDialogsTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in com.asdasfa.jbs2bg.workbench.JavaFxWorkbenchDialogsTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.JavaFxWorkbenchPlatformTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.asdasfa.jbs2bg.workbench.JavaFxWorkbenchPlatformTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.jobs.JobCoordinatorTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.asdasfa.jbs2bg.workbench.jobs.JobCoordinatorTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.morphs.MorphsFeatureTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.asdasfa.jbs2bg.workbench.morphs.MorphsFeatureTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.output.OutputFeatureTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.146 s -- in com.asdasfa.jbs2bg.workbench.output.OutputFeatureTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.SemanticIconsTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.asdasfa.jbs2bg.workbench.SemanticIconsTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.settings.SettingsFeatureTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.168 s -- in com.asdasfa.jbs2bg.workbench.settings.SettingsFeatureTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.templates.TemplatesFeatureTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.055 s -- in com.asdasfa.jbs2bg.workbench.templates.TemplatesFeatureTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.WorkbenchAppearanceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.asdasfa.jbs2bg.workbench.WorkbenchAppearanceTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.WorkbenchControllerTest
+[INFO] Tests run: 52, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.966 s -- in com.asdasfa.jbs2bg.workbench.WorkbenchControllerTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.WorkbenchFeedbackTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.asdasfa.jbs2bg.workbench.WorkbenchFeedbackTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.WorkbenchGeometryTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in com.asdasfa.jbs2bg.workbench.WorkbenchGeometryTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.WorkbenchNavigationTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.asdasfa.jbs2bg.workbench.WorkbenchNavigationTest
+[INFO] Running com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlowTest
+[INFO] Tests run: 24, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.257 s -- in com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlowTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 464, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- dependency:3.11.0:copy-dependencies (stage-app-image-dependencies) @ jbs2bg ---
+[INFO] 
+[INFO] --- jar:3.5.0:jar (default-jar) @ jbs2bg ---
+[INFO] Set Build-Jdk-Spec based on toolchain in maven-jar-plugin JDK[C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64]
+[INFO] Building jar: D:\repos\BS2BG\target\app-image-input\jbs2bg-1.0-SNAPSHOT.jar
+[INFO] 
+[INFO] --- dependency:3.11.0:tree (default-cli) @ jbs2bg ---
+[INFO] Wrote dependency tree to: D:\repos\BS2BG\target\reproducibility\dependency-tree.txt
+[INFO] 
+[INFO] --- dependency:3.11.0:build-classpath (default-cli) @ jbs2bg ---
+[INFO] Wrote classpath file 'D:\repos\BS2BG\target\reproducibility\test-classpath.txt'.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  16.900 s
+[INFO] Finished at: 2026-09-19T02:47:54-07:00
+[INFO] ------------------------------------------------------------------------
+
+==> Recording reproducibility evidence
+Surefire: 464 tests in 44 suites on Eclipse Adoptium 25.0.4.1+1-LTS
+Required gate suites present and green: 32
+Artifact jbs2bg-1.0-SNAPSHOT.jar: 106 production classes and 11 resources present
+Evidence written to D:\repos\BS2BG\target\reproducibility\java25-verification.json
+
+=====================================================================================
+COMPLETE APPLICATION GATE: green
+  compiled 106 production sources for release 25 (-Xlint:all -Werror)
+  packaged 106 classes and 11 resources into jbs2bg-1.0-SNAPSHOT.jar
+  ran 464 tests in 44 suites on Eclipse Adoptium 25.0.4.1+1-LTS, including the 32 required gate suites
+=====================================================================================
+
+Java 25 application verification run completed successfully.
+Toolchain: Eclipse Adoptium Temurin-25.0.4.1+1 at C:\Users\evild\AppData\Local\BS2BG\build-toolchains\temurin-25.0.4.1+1-windows-x64
+JavaFX JMODs: 25.0.4 at C:\Users\evild\AppData\Local\BS2BG\build-toolchains\openjfx-25.0.4-windows-x64-jmods
+Packaging tools: jdeps 25.0.4.1, jimage 25.0.4.1, jlink 25.0.4.1, jpackage 25.0.4.1
+
+==> Reading the payload staged by the Maven Wrapper
+Application jar: jbs2bg-1.0-SNAPSHOT.jar; dependencies: jackson-core-3.1.5.jar, juniversalchardet-2.1.0.jar
+JSON codec: tools.jackson.core:jackson-core:3.1.5 in jackson-core-3.1.5.jar (single-codec policy passed)
+
+==> Measuring the runtime module closure with jdeps
+Measured: java.base, java.logging, java.prefs, java.xml, javafx.controls, javafx.fxml
+Explicit additions: jdk.charsets
+
+==> Linking the runtime from the pinned Temurin and JavaFX inputs
+Runtime: Java 25.0.4.1 with 13 modules (java.base java.datatransfer java.xml java.prefs java.desktop java.logging java.scripting javafx.base jdk.unsupported javafx.graphics javafx.controls javafx.fxml jdk.charsets)
+
+==> Assembling third-party notices
+Notices: D:\repos\BS2BG\target\app-image-notices\THIRD-PARTY-NOTICES.txt
+
+==> Building the non-modular Windows x64 app-image with jpackage
+
+==> Verifying the application image
+Runtime compression: 21360/21360 resources, 54.97% resource-byte reduction
+Image: 235 files, 61.5 MB, digest 8a53497faf438a5ee59892018bbec06a1dc1c482bfdee8006a3804671738d5bb
+
+==> Archiving the image
+Archive: D:\repos\BS2BG\target\BS2BG-1.1.2-windows-x64.zip (42.7 MB, sha256 c73d9414a15b133ea37a2b06841d004b8641cd1c73d95353732567554e513ef7)
+
+==> Smoke-testing the packaged launcher from a clean extracted location
+
+==> Recording app-image evidence
+Evidence written to D:\repos\BS2BG\target\reproducibility\windows-app-image.json
+
+=====================================================================================
+WINDOWS APP-IMAGE CHECKPOINT: green
+  BS2BG 1.1.2 on Temurin-25.0.4.1+1 + JavaFX 25.0.4, 13 runtime modules
+  image digest 8a53497faf438a5ee59892018bbec06a1dc1c482bfdee8006a3804671738d5bb
+  150% packaged workflows: 20/20 steps passed; exit code 0
+  100% packaged workflows: 20/20 steps passed; exit code 0
+  125% packaged workflows: 20/20 steps passed; exit code 0
+  primary display restored to 100%
+=====================================================================================
