@@ -1532,8 +1532,12 @@ try {
         } | Out-Null
         $availablePresetLabel = Find-OuterControl -ControlType 'Text' -Name 'Available Slider Preset:'
         $availablePreset = Get-FollowingControl -Element $availablePresetLabel -ControlType 'ComboBox'
-        Send-UiaKeysToElement -Element $availablePreset -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $availablePreset -Keys '{F4}{HOME}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         $assignOne = Find-OuterControl -ControlType 'Button' -Name 'Assign selected Slider Preset'
+        Wait-UiaCondition -Description 'individual Slider Preset choice committed' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($assignOne.Current.IsEnabled -and (Get-UiaText -Element $availablePreset) -ceq 'CBBE Curvy') { $true }
+        } | Out-Null
         Send-UiaKeysToElement -Element $assignOne -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaCondition -Description 'individually assigned Slider Preset relationship' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {
