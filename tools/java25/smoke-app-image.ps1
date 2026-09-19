@@ -1934,10 +1934,17 @@ try {
             -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (Get-UiaSelectionState -Element $bosTab) { $bosTab }
         } | Out-Null
-        $generatedBos = (Get-SelectedOutputText -Region $outputRegion -TabName 'BoS JSON' `
-            -Description 'selected BoS JSON output text').Text
-        if ([string]::IsNullOrWhiteSpace($generatedBos)) {
-            throw 'Generated BoS JSON output was empty for a Project with Slider Presets.'
+        $bosChoiceLabel = Find-OuterControl -ControlType 'Text' -Name 'BoS Slider Preset:'
+        $bosChoice = Get-FollowingControl -Element $bosChoiceLabel -ControlType 'ComboBox'
+        # Import cancellation preserves an earlier-sorting preset; explicitly choose the artifact whose bytes
+        # this workflow compares instead of assuming Generate selected the Templates editor's preset.
+        Send-UiaKeysToElement -Element $bosChoice -Keys '{F4}{END}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $generatedBos = Wait-UiaCondition -Description 'Settings Output BoS artifact selected and rendered' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaText -Element $bosChoice) -cne 'Settings Output') { return }
+            $candidate = (Get-SelectedOutputText -Region $outputRegion -TabName 'BoS JSON' `
+                -Description 'selected BoS JSON output text').Text
+            if (($candidate | ConvertFrom-Json).string.bodyname -ceq 'Settings Output') { $candidate }
         }
 
         Select-UiaElement -Element $templatesTab
@@ -2044,6 +2051,10 @@ try {
             Complete-DirectoryDialog -Title 'Export Accepted Output' -Path $failureDirectory
             $failureDialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $applicationTitle `
                 -TimeoutSeconds $StepTimeoutSeconds
+            # The terminal failure dialog proves rollback has settled. Release the test's exclusive handle before
+            # opening a second reader to inspect those preserved bytes; the lock also denies our own readback.
+            $lockedMorphs.Dispose()
+            $lockedMorphs = $null
             if ([IO.File]::ReadAllText((Join-Path $failureDirectory 'templates.ini'), $utf8) -cne 'prior templates' `
                     -or [IO.File]::ReadAllText((Join-Path $failureDirectory 'morphs.ini'), $utf8) -cne 'prior morphs') {
                 throw 'Failed complete Output export changed a prior destination.'
@@ -2054,8 +2065,6 @@ try {
             if (@(Get-ChildItem -LiteralPath $failureDirectory -Filter '.bs2bg-output-stage-*' -Force).Count -ne 0) {
                 throw 'Failed complete Output export left a transaction directory after complete rollback.'
             }
-            $lockedMorphs.Dispose()
-            $lockedMorphs = $null
             $retry = Wait-UiaElement -Root $failureDialog -Condition (
                 New-UiaCondition -ControlType 'Button' -Name 'Retry') -Description 'Output export Retry action' `
                 -TimeoutSeconds $StepTimeoutSeconds
