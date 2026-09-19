@@ -9,7 +9,7 @@
     discovery path, proves that the launcher process hosts the bundled JVM, and drives the Workbench through
     Windows UI Automation by accessible role and name. The run covers typed navigation, focus cycling and return,
     captured Output generation and tab inspection, Output drawer interaction, responsive/minimum geometry,
-    live themes, High Contrast, reduced motion,
+    live themes, High Contrast, reduced motion in a final accessibility phase after authoring,
     accessibility semantics, notifications, typed dialogs, startup, New, Open, Save, Save As, Project recovery,
     centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
     malformed/failed operation preservation, complete pointer-free Slider Preset choice editing and management,
@@ -746,82 +746,12 @@ try {
         'five typed navigation destinations and the canonical Settings pair are accessible'
     }
 
-    Invoke-SmokeStep -Name 'verify-live-themes-high-contrast-reduced-motion-and-semantics' -Action {
-        $themeLabel = Find-OuterControl -ControlType 'Text' -Name 'Theme:'
-        $themeChoice = Get-FollowingControl -Element $themeLabel -ControlType 'ComboBox'
+    Invoke-SmokeStep -Name 'verify-workbench-feedback-semantics' -Action {
         $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
         $cancel = Find-OuterControl -ControlType 'Button' -Name 'Cancel current operation'
         if ($activity.Current.IsKeyboardFocusable -ne $true) { throw 'Activity is not keyboard reachable.' }
         if ($cancel.Current.IsEnabled) { throw 'Cancel must be disabled while no cancellable operation is active.' }
-
-        Set-SystemHighContrast -Enabled:$false
-        Send-UiaKeysToElement -Element $themeChoice -Keys '{HOME}{DOWN}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Light theme') `
-            -Description 'explicit Light theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        Send-UiaKeysToElement -Element $themeChoice -Keys '{DOWN}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
-            -Description 'explicit Dark theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-
-        Set-SystemHighContrast -Enabled:$true
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
-            -Description 'live High Contrast override' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        $highContrastScreenshot = Join-Path $diagnosticsDir 'workbench-high-contrast.png'
-        Save-Screenshot -Path $highContrastScreenshot
-        if (-not (Test-Path -LiteralPath $highContrastScreenshot -PathType Leaf)) {
-            throw 'The packaged semantic-icon High Contrast screenshot was not captured.'
-        }
-
-        Set-SystemHighContrast -Enabled:$false
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
-            -Description 'theme restored after High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-
-        Set-SystemClientAreaAnimation -Enabled:$true
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Motion preference: Standard motion') `
-            -Description 'standard motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        Set-SystemClientAreaAnimation -Enabled:$false
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Motion preference: Reduced motion') `
-            -Description 'live reduced-motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        $reducedMotionScreenshot = Join-Path $diagnosticsDir 'workbench-reduced-motion.png'
-        Save-Screenshot -Path $reducedMotionScreenshot
-        if (-not (Test-Path -LiteralPath $reducedMotionScreenshot -PathType Leaf)) {
-            throw 'The packaged reduced-motion screenshot was not captured.'
-        }
-
-        Restore-SystemAccessibilityPreferences -State $accessibilityState
-        Send-UiaKeysToElement -Element $themeChoice -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
-        $systemTheme = Wait-UiaCondition -Description 'System theme resolved from restored Windows preferences' `
-            -TimeoutSeconds $StepTimeoutSeconds -Test {
-                foreach ($name in @('Effective theme: Light theme', 'Effective theme: Dark theme',
-                        'Effective theme: High Contrast theme')) {
-                    $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
-                        New-UiaCondition -ControlType 'Text' -Name $name)
-                    if ($null -ne $candidate) { return $candidate }
-                }
-            }
-        $expectedMotion = if ($accessibilityState.ClientAreaAnimation) {
-            'Motion preference: Standard motion'
-        } else {
-            'Motion preference: Reduced motion'
-        }
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name $expectedMotion) `
-            -Description 'restored motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        $observations['appearance'] = [ordered]@{
-            choices = @('System', 'Light', 'Dark')
-            highContrastOverride = $true
-            reducedMotionObserved = $true
-            restoredHighContrast = $accessibilityState.HighContrast
-            restoredClientAreaAnimation = $accessibilityState.ClientAreaAnimation
-            systemEffectiveTheme = $systemTheme.Current.Name
-            iconImplementation = 'application-owned-bundled-vectors'
-        }
-        'theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed'
+        'Activity keyboard reachability and idle Cancel state passed without changing Windows preferences'
     }
 
     Invoke-SmokeStep -Name 'verify-keyboard-navigation-focus-and-output-drawer' -Action {
@@ -1003,16 +933,6 @@ try {
                 New-UiaCondition -ControlType 'ListItem' -Name $presetName) `
                 -Description "Slider Preset '$presetName'" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         }
-        Set-SystemHighContrast -Enabled:$true
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
-            -Description 'populated Templates High Contrast state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        $templatesHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-templates-high-contrast.png'
-        Save-Screenshot -Path $templatesHighContrastScreenshot
-        Set-SystemHighContrast -Enabled:$false
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
-            -Description 'Templates theme restored after High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $filterLabel = Find-OuterControl -ControlType 'Text' -Name 'Filter Slider Presets:'
         $filter = Get-FollowingControl -Element $filterLabel -ControlType 'Edit'
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
@@ -1325,16 +1245,6 @@ try {
                 -or -not $reopenedWaistPreview.Current.HelpText.Contains('Waist@0.5')) {
             throw 'Reopened Slider choice range or exact BodyGen preview did not match the saved edit.'
         }
-        Set-SystemHighContrast -Enabled:$true
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
-            -Description 'Slider editor High Contrast state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        $templatesEditorHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-templates-editor-high-contrast.png'
-        Save-Screenshot -Path $templatesEditorHighContrastScreenshot
-        Set-SystemHighContrast -Enabled:$false
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
-            -Description 'Slider editor theme restored after High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $templatesNarrow = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
             -TimeoutSeconds $StepTimeoutSeconds
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
@@ -1420,16 +1330,6 @@ try {
         $allFemale = Wait-UiaElement -Root $targetList -Condition (
             New-UiaCondition -ControlType 'ListItem' -Name 'All|Female') `
             -Description 'existing Custom Morph Target' -TimeoutSeconds $StepTimeoutSeconds
-        Set-SystemHighContrast -Enabled:$true
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
-            -Description 'populated Morphs High Contrast state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        $morphsHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-morphs-high-contrast.png'
-        Save-Screenshot -Path $morphsHighContrastScreenshot
-        Set-SystemHighContrast -Enabled:$false
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
-            -Description 'Morphs theme restored after High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
         $nameLabel = Find-OuterControl -ControlType 'Text' -Name 'Custom Morph Target name:'
         $nameInput = Get-FollowingControl -Element $nameLabel -ControlType 'Edit'
@@ -1606,17 +1506,28 @@ try {
             New-UiaCondition -ControlType 'ListItem' -Name 'ActorTypeNPC|Female') `
             -Description 'target for confirmed relationship clear' -TimeoutSeconds $StepTimeoutSeconds
         Select-UiaElement -Element $createdTarget
-        $initialAssignments = @(Find-UiaElements -Root $assignedList -Condition (
-            New-UiaCondition -ControlType 'ListItem'))
-        if ($initialAssignments.Count -ne 1 -or $initialAssignments[0].Current.Name -notin @('CBBE Curvy', 'UUNP Athletic')) {
-            throw 'A new Custom Morph Target must start with exactly one eligible Slider Preset.'
+        # Selection updates the inspector asynchronously and may replace its virtualized list peer. Resolve both
+        # the selected identity and current list before asserting the new target's automatic initial relationship.
+        $initialAssignment = Wait-UiaCondition -Description 'created target has exactly one eligible Slider Preset' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $selectedInspector = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Text' -Name 'Selected Custom Morph Target ActorTypeNPC|Female')
+            if ($null -eq $selectedInspector) { return }
+            $currentAssignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+            $items = @(Find-UiaElements -Root $currentAssignedList -Condition (
+                New-UiaCondition -ControlType 'ListItem'))
+            if ($items.Count -eq 1 -and $items[0].Current.Name -cin @('CBBE Curvy', 'UUNP Athletic')) {
+                return [pscustomobject]@{ List = $currentAssignedList; Name = $items[0].Current.Name }
+            }
         }
-        $initialAssignmentName = $initialAssignments[0].Current.Name
+        $assignedList = $initialAssignment.List
+        $initialAssignmentName = $initialAssignment.Name
         $clearRelationships = Find-OuterControl -ControlType 'Button' -Name 'Clear assigned Slider Presets'
         Send-UiaKeysToElement -Element $clearRelationships -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Choose-Confirmation -ButtonName 'Clear'
         Wait-UiaCondition -Description 'confirmed relationship clear' -TimeoutSeconds $StepTimeoutSeconds -Test {
-            $items = Find-UiaElements -Root $assignedList -Condition (New-UiaCondition -ControlType 'ListItem')
+            $currentAssignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+            $items = Find-UiaElements -Root $currentAssignedList -Condition (New-UiaCondition -ControlType 'ListItem')
             if (@($items).Count -eq 0) { $true }
         } | Out-Null
         $availablePresetLabel = Find-OuterControl -ControlType 'Text' -Name 'Available Slider Preset:'
@@ -1624,9 +1535,12 @@ try {
         Send-UiaKeysToElement -Element $availablePreset -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
         $assignOne = Find-OuterControl -ControlType 'Button' -Name 'Assign selected Slider Preset'
         Send-UiaKeysToElement -Element $assignOne -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-UiaElement -Root $assignedList -Condition (
-            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
-            -Description 'individually assigned Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-UiaCondition -Description 'individually assigned Slider Preset relationship' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $currentAssignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+            Find-UiaElement -Root $currentAssignedList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy')
+        } | Out-Null
         $removeTarget = Find-OuterControl -ControlType 'Button' -Name 'Remove selected Custom Morph Target'
         Send-UiaKeysToElement -Element $removeTarget -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Choose-Confirmation -ButtonName 'Cancel'
@@ -2529,6 +2443,129 @@ try {
         'failed Save preserved dirty identity and diagnostics; Save As retry recovered to a clean identity'
     }
 
+    Invoke-SmokeStep -Name 'verify-final-accessibility-themes-and-system-preferences' -Action {
+        # Windows creates transient cover windows while changing accessibility preferences. Keep every system
+        # transition after pointer authoring and file workflows; load this verified fixture before toggling anything.
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $templatesManagedName) -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $templatesManagedName" | Out-Null
+        Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1300 -LogicalHeight 800 `
+            -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^1' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Templates' | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        $filterLabel = Find-OuterControl -ControlType 'Text' -Name 'Filter Slider Presets:'
+        $filter = Get-FollowingControl -Element $filterLabel -ControlType 'Edit'
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
+        Wait-UiaElement -Root $presetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
+            -Description 'saved Slider Preset for final accessibility coverage' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $themeLabel = Find-OuterControl -ControlType 'Text' -Name 'Theme:'
+        $themeChoice = Get-FollowingControl -Element $themeLabel -ControlType 'ComboBox'
+        $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        $cancel = Find-OuterControl -ControlType 'Button' -Name 'Cancel current operation'
+        if ($activity.Current.IsKeyboardFocusable -ne $true) { throw 'Activity is not keyboard reachable.' }
+        if ($cancel.Current.IsEnabled) { throw 'Cancel must be disabled while no cancellable operation is active.' }
+
+        if ($accessibilityState.HighContrast) { Set-SystemHighContrast -Enabled:$false }
+        Send-UiaKeysToElement -Element $themeChoice -Keys '{HOME}{DOWN}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Light theme') `
+            -Description 'explicit Light theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeysToElement -Element $themeChoice -Keys '{DOWN}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
+            -Description 'explicit Dark theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Set-SystemHighContrast -Enabled:$true
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
+            -Description 'live High Contrast override' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $highContrastScreenshot = Join-Path $diagnosticsDir 'workbench-high-contrast.png'
+        Save-Screenshot -Path $highContrastScreenshot
+        if (-not (Test-Path -LiteralPath $highContrastScreenshot -PathType Leaf)) {
+            throw 'The packaged semantic-icon High Contrast screenshot was not captured.'
+        }
+
+        $templatesHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-templates-high-contrast.png'
+        Save-Screenshot -Path $templatesHighContrastScreenshot
+        Send-UiaKeysToElement -Element $presetList -Keys 'c' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Slider' -Name 'Waist Minimum in Slider Preset CBBE Curvy') `
+            -Description 'selected Slider editor in High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $templatesEditorHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-templates-editor-high-contrast.png'
+        Save-Screenshot -Path $templatesEditorHighContrastScreenshot
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        $targetFilterLabel = Find-OuterControl -ControlType 'Text' -Name 'Filter Custom Morph Targets:'
+        $targetFilter = Get-FollowingControl -Element $targetFilterLabel -ControlType 'Edit'
+        Send-UiaKeysToElement -Element $targetFilter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        $targetList = Find-OuterControl -ControlType 'List' -Name 'Custom Morph Targets'
+        Wait-UiaElement -Root $targetList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'All|Female') `
+            -Description 'populated Morphs High Contrast state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $morphsHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-morphs-high-contrast.png'
+        Save-Screenshot -Path $morphsHighContrastScreenshot
+
+        Set-SystemHighContrast -Enabled:$false
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
+            -Description 'theme restored after High Contrast' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Set-SystemClientAreaAnimation -Enabled:$true
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Motion preference: Standard motion') `
+            -Description 'standard motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Set-SystemClientAreaAnimation -Enabled:$false
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Motion preference: Reduced motion') `
+            -Description 'live reduced-motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $reducedMotionScreenshot = Join-Path $diagnosticsDir 'workbench-reduced-motion.png'
+        Save-Screenshot -Path $reducedMotionScreenshot
+        if (-not (Test-Path -LiteralPath $reducedMotionScreenshot -PathType Leaf)) {
+            throw 'The packaged reduced-motion screenshot was not captured.'
+        }
+
+        Restore-SystemAccessibilityPreferences -State $accessibilityState
+        Send-UiaKeysToElement -Element $themeChoice -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        $systemTheme = Wait-UiaCondition -Description 'System theme resolved from restored Windows preferences' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+                foreach ($name in @('Effective theme: Light theme', 'Effective theme: Dark theme',
+                        'Effective theme: High Contrast theme')) {
+                    $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                        New-UiaCondition -ControlType 'Text' -Name $name)
+                    if ($null -ne $candidate) { return $candidate }
+                }
+            }
+        $expectedMotion = if ($accessibilityState.ClientAreaAnimation) {
+            'Motion preference: Standard motion'
+        } else {
+            'Motion preference: Reduced motion'
+        }
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name $expectedMotion) `
+            -Description 'restored motion preference' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $observations['appearance'] = [ordered]@{
+            phase = 'after-authoring-before-shutdown'
+            initialHighContrast = $accessibilityState.HighContrast
+            initialClientAreaAnimation = $accessibilityState.ClientAreaAnimation
+            choices = @('System', 'Light', 'Dark')
+            highContrastOverride = $true
+            reducedMotionObserved = $true
+            restoredHighContrast = $accessibilityState.HighContrast
+            restoredClientAreaAnimation = $accessibilityState.ClientAreaAnimation
+            systemEffectiveTheme = $systemTheme.Current.Name
+            iconImplementation = 'application-owned-bundled-vectors'
+        }
+        'theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed'
+    }
+
     Invoke-SmokeStep -Name 'active-job-shutdown-cancel-resume-then-discard' -Action {
         $shutdownProject = Join-Path $workDir $shutdownProjectName
         Copy-Item -LiteralPath $FixtureRecoveryProject -Destination $shutdownProject
@@ -2601,7 +2638,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/16'
+        schema = 'bs2bg.windows-app-image-smoke/17'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion

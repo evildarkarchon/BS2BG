@@ -110,7 +110,7 @@ workflow records these steps:
 2. Launch `BS2BG Preview` without system Java and verify the bundled single-process runtime.
 3. Verify Templates, Morphs, NPC Database, Output, and Settings typed destinations plus paired Settings recovery and
    its durable Activity evidence.
-4. Drive System/Light/Dark, High Contrast, reduced motion, Activity focus, and the idle Cancel state.
+4. Verify Activity focus and the idle Cancel state without changing system accessibility preferences.
 5. Drive Ctrl+1/2/3/5, Ctrl+4, Ctrl+Backquote, Escape, and F6; require active-Area preservation, semantic focus
    return/cycling, standard Toggle state, and keyboard resizing through the Output drawer's RangeValue control.
 6. Measure live native DPI/client insets, cross the 1200-logical-pixel breakpoint, drive narrow List/Inspector
@@ -125,8 +125,8 @@ workflow records these steps:
 8. Author Custom Morph Targets through the real Morphs list/editor/inspector: preserve BodyGen conditions and
    eligible random initial assignment, reject duplicate names, filter/sort/type ahead with stable identity, individually add and
    remove Slider Preset relationships, clear relationships and the frozen visible target set, and prove real-pointer
-   create/select/relationship gestures. Verify Output invalidation/regeneration, save/reopen continuity, High
-   Contrast, narrow overlays, semantic focus, and measured DPI/client bounds.
+   create/select/relationship gestures. Verify Output invalidation/regeneration, save/reopen continuity,
+   narrow overlays, semantic focus, and measured DPI/client bounds.
 9. Edit Standard and UUNP Settings, persist the pair, prove live output-affecting preview behavior, then exercise
    successful, malformed/partial, failed, and cancelled BodySlide imports with captured-source, diagnostics,
    committed-effect, selection, focus, and Activity evidence.
@@ -148,13 +148,18 @@ workflow records these steps:
     New/Open/Save/Save As disabled while Exit remains available, then Cancel and require zero committed effects.
 18. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
     recover through Save As.
-19. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
+19. Run the separate system-accessibility phase after authoring and file workflows: drive System/Light/Dark,
+    verify High Contrast override,
+    capture the populated Templates/editor and Morphs surfaces, verify reduced motion, and restore the captured
+    Windows preferences. Keeping system theme transitions here prevents their temporary cover windows from
+    disrupting earlier pointer input.
+20. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
     prompt and prove admission resumes, then repeat and Discard to require bounded exit 0 with no image process.
 
 Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
 launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/16`; its durable artifacts include the Workbench,
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/17`; its durable artifacts include the Workbench,
 responsive, Templates-management, and Morphs-management UIA trees plus `workbench-high-contrast.png` and
 `workbench-reduced-motion.png`, the populated Templates High Contrast screenshot
 `workbench-templates-high-contrast.png`, the selected Slider editor High Contrast screenshot
@@ -302,7 +307,7 @@ focused window.
 - `image`: file count, size, the image digest (SHA-256 over every file's path and hash;
   `app-image-sha256.txt` lists them), the archive name and hash, the parsed launcher configuration, the
   jpackage state (tool version, platform), the JVM options, notice components, and the dependency/source manifest paths.
-- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/16`; steps with durations;
+- `smoke`: the complete Workbench smoke evidence (schema `bs2bg.windows-app-image-smoke/17`; steps with durations;
   typed navigation, semantic focus, keyboard and real-pointer Morphs authoring, Output interaction, live themes, High Contrast, reduced motion, feedback,
   dialogs, native DPI and responsive/minimum geometry; Project recovery, New/Open/Save/Save As, failure
   preservation/retry and dirty shutdown; the expected/observed process model; bounded exit; environment scrubbing;
