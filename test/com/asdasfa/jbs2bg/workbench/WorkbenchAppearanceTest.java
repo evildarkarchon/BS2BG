@@ -2,6 +2,8 @@ package com.asdasfa.jbs2bg.workbench;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
@@ -119,6 +121,19 @@ class WorkbenchAppearanceTest {
 
         WorkbenchAppearanceStore restarted = new WorkbenchAppearanceStore(temporaryDirectory);
         assertEquals(WorkbenchAppearance.ThemeChoice.DARK, restarted.load());
+    }
+
+    /**
+     * An oversized preference containing an otherwise valid theme cannot make startup accept the unbounded tail.
+     */
+    @Test
+    void oversizedThemePreferenceDefaultsToSystem() throws Exception {
+        Files.writeString(temporaryDirectory.resolve(WorkbenchAppearanceStore.FILE_NAME),
+                "theme=DARK" + " ".repeat(4096), StandardCharsets.UTF_8);
+
+        WorkbenchAppearance.ThemeChoice choice = new WorkbenchAppearanceStore(temporaryDirectory).load();
+
+        assertEquals(WorkbenchAppearance.ThemeChoice.SYSTEM, choice);
     }
 
     /**

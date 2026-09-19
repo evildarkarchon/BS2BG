@@ -1,12 +1,14 @@
 package com.asdasfa.jbs2bg.data;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.asdasfa.jbs2bg.json.JacksonJson;
 import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
@@ -458,6 +461,45 @@ final class SettingsJacksonAdapterTest {
         assertEquals("/", exception.path());
         assertEquals(1, exception.line());
         assertEquals(1, exception.column());
+    }
+
+    /**
+     * A source that grows after metadata inspection is consumed only through the first byte past the document limit.
+     */
+    @Test
+    void growingSettingsStreamIsRejectedAtTheBound() {
+        int maximum = Math.toIntExact(JacksonJson.settingsMaximumDocumentBytes());
+        long[] consumed = {0};
+        InputStream growingSource = new InputStream() {
+            private long remaining = maximum + 8192L;
+
+            @Override
+            public int read() {
+                if (remaining == 0)
+                    return -1;
+                remaining--;
+                consumed[0]++;
+                return ' ';
+            }
+
+            @Override
+            public int read(byte[] target, int offset, int length) {
+                if (remaining == 0)
+                    return -1;
+                int count = (int) Math.min(remaining, length);
+                Arrays.fill(target, offset, offset + count, (byte) ' ');
+                remaining -= count;
+                consumed[0] += count;
+                return count;
+            }
+        };
+
+        SettingsJacksonAdapter.SettingsFormatException exception = assertThrows(
+                SettingsJacksonAdapter.SettingsFormatException.class,
+                () -> SettingsJacksonAdapter.readBounded(Path.of("growing-settings.json"), growingSource));
+
+        assertEquals("SETTINGS_RESOURCE_LIMIT", exception.code());
+        assertEquals(maximum + 1L, consumed[0]);
     }
 
     /**

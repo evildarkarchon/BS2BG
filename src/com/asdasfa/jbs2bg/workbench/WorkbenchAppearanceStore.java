@@ -1,6 +1,8 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +16,8 @@ import java.util.Objects;
 public final class WorkbenchAppearanceStore {
     static final String FILE_NAME = "workbench-appearance.properties";
     private static final String THEME_PREFIX = "theme=";
+    // Accepted values need only a few bytes; this leaves format headroom while keeping startup work negligible.
+    private static final int MAXIMUM_PREFERENCE_BYTES = 128;
 
     private final Path directory;
     private final Path file;
@@ -37,7 +41,16 @@ public final class WorkbenchAppearanceStore {
     public WorkbenchAppearance.ThemeChoice load() throws IOException {
         if (!Files.exists(file))
             return WorkbenchAppearance.ThemeChoice.SYSTEM;
-        String content = Files.readString(file).trim();
+        if (Files.size(file) > MAXIMUM_PREFERENCE_BYTES)
+            return WorkbenchAppearance.ThemeChoice.SYSTEM;
+        byte[] bytes;
+        try (InputStream input = Files.newInputStream(file)) {
+            // The extra byte detects replacement or growth after the metadata check without consuming the tail.
+            bytes = input.readNBytes(MAXIMUM_PREFERENCE_BYTES + 1);
+        }
+        if (bytes.length > MAXIMUM_PREFERENCE_BYTES)
+            return WorkbenchAppearance.ThemeChoice.SYSTEM;
+        String content = new String(bytes, StandardCharsets.UTF_8).trim();
         if (!content.startsWith(THEME_PREFIX))
             return WorkbenchAppearance.ThemeChoice.SYSTEM;
         String value = content.substring(THEME_PREFIX.length()).trim().toUpperCase(Locale.ROOT);

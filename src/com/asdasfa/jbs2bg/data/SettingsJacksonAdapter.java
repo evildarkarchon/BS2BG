@@ -2,6 +2,7 @@ package com.asdasfa.jbs2bg.data;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -164,21 +165,17 @@ final class SettingsJacksonAdapter {
         } catch (IOException exception) {
             throw failure("SETTINGS_IO_FAILED", source, "/", 0, 0, exception.getMessage());
         }
-        // Refuse oversized metadata before readAllBytes allocates; the byte-array
-        // check below still closes a concurrent file-growth race.
+        // Refuse oversized metadata before opening the source; the bounded stream
+        // read below still closes a concurrent replacement or file-growth race.
         if (sourceSize > JacksonJson.settingsMaximumDocumentBytes()) {
             throw failure("SETTINGS_RESOURCE_LIMIT", source, "/", 1, 1,
                     "Settings input exceeds the 8 MiB limit.");
         }
         byte[] bytes;
-        try {
-            bytes = Files.readAllBytes(source);
+        try (InputStream input = Files.newInputStream(source)) {
+            bytes = readBounded(source, input);
         } catch (IOException exception) {
             throw failure("SETTINGS_IO_FAILED", source, "/", 0, 0, exception.getMessage());
-        }
-        if (bytes.length > JacksonJson.settingsMaximumDocumentBytes()) {
-            throw failure("SETTINGS_RESOURCE_LIMIT", source, "/", 1, 1,
-                    "Settings input exceeds the 8 MiB limit.");
         }
         try (JsonParser parser = JacksonJson.settingsReaderFactory()
                 .createParser(ObjectReadContext.empty(), bytes, 0, bytes.length)) {
@@ -188,6 +185,27 @@ final class SettingsJacksonAdapter {
         } catch (JacksonException exception) {
             throw jacksonFailure(exception, source, "/", exception.getLocation());
         }
+    }
+
+    /**
+     * Reads one already-open Settings stream and rejects content beyond the document boundary.
+     * The caller owns the stream lifetime.
+     *
+     * @param source diagnostic identity for the Settings document
+     * @param input  open Settings byte stream
+     * @return complete accepted document bytes
+     * @throws IOException             when the stream cannot be read
+     * @throws SettingsFormatException when the document exceeds eight MiB
+     */
+    static byte[] readBounded(Path source, InputStream input) throws IOException {
+        int maximum = Math.toIntExact(JacksonJson.settingsMaximumDocumentBytes());
+        // One extra byte distinguishes an exact-limit document from a growing source without reading its tail.
+        byte[] bytes = input.readNBytes(maximum + 1);
+        if (bytes.length > maximum) {
+            throw failure("SETTINGS_RESOURCE_LIMIT", source, "/", 1, 1,
+                    "Settings input exceeds the 8 MiB limit.");
+        }
+        return bytes;
     }
 
     /**
