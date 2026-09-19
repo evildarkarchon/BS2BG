@@ -1,0 +1,173 @@
+Window 'BS2BG Preview - morphs-managed.jbs2bg' [Window,Transform]
+  MenuBar ''
+    MenuItem 'File' [Invoke,ExpandCollapse]
+      Text 'File'
+        Text 'File'
+  Button 'Templates' [Toggle]
+    Text 'Templates'
+  Button 'Morphs' [Toggle]
+    Text 'Morphs'
+  Button 'NPC Database' [Toggle]
+    Text 'NPC Database'
+  Button 'Output' [Toggle]
+    Text 'Output'
+  Button 'Settings' [Toggle]
+    Text 'Settings'
+  Text 'Theme:'
+    Text 'Theme:'
+  ComboBox '' [Value,ExpandCollapse]
+    List '' [Selection,Scroll]
+    Text 'System'
+  Text 'Effective theme: Dark theme'
+    Text 'Dark theme'
+  Text 'Motion preference: Standard motion'
+    Text 'Standard motion'
+  Text 'Morphs Area'
+    Text 'Morphs'
+  Button 'Generate Project output' [Invoke]
+    Text 'Generate'
+  Text 'Project status'
+    Text 'Saved Project'
+  Text 'Success'
+    Text 'Success'
+  Text 'Project opened.'
+    Text 'Project opened.'
+  Button 'Dismiss' [Invoke]
+    Text 'Dismiss'
+  Pane 'Custom Morph Target management' [Scroll]
+    Text 'Filter Custom Morph Targets:'
+      Text 'Filter Custom Morph Targets:'
+    Edit '' [Value,Text]
+      Text 'Filter by condition or name'
+      Text ''
+    Text 'Sort Custom Morph Targets:'
+      Text 'Sort Custom Morph Targets:'
+    ComboBox '' [Value,ExpandCollapse]
+      List '' [Selection,Scroll]
+      Text 'Name (Z–A)'
+    List 'Custom Morph Targets' [Selection,Scroll]
+      ListItem 'All|Female' [SelectionItem,ScrollItem]
+        Text 'All|Female'
+    Text 'Custom Morph Target name:'
+      Text 'Custom Morph Target name:'
+    Edit '' [Value,Text]
+      Text 'All|Female'
+      Text ''
+    Button 'Create Custom Morph Target' [Invoke]
+      Text 'Create Custom Morph Target'
+    Button 'Remove selected Custom Morph Target' [Invoke]
+      Text 'Remove Custom Morph Tar...'
+    Button 'Clear visible Custom Morph Targets' [Invoke]
+      Text 'Clear visible Custom Morph ...'
+  Text 'Custom Morph Target editor'
+    Text 'All|Female'
+  Text 'BodyGen condition: All|Female'
+    Text 'BodyGen condition: All|Female'
+  Text '1 assigned Slider Preset'
+    Text '1 assigned Slider Preset'
+  Text 'Included in Morphs output.'
+    Text 'Included in Morphs output.'
+  Text 'Use the inspector to manage Slider Preset relationships.'
+    Text 'Use the inspector to manage Slider Preset relationships.'
+  Pane 'Custom Morph Target relationship editor' [Scroll]
+    Text 'Slider Preset relationships'
+      Text 'Slider Preset relations...'
+    Text 'Selected Custom Morph Target All|Female'
+      Text 'Selected: All|Female'
+    Text 'Assigned Slider Presets:'
+      Text 'Assigned Slider Presets:'
+    List 'Assigned Slider Presets' [Selection,Scroll]
+      ListItem 'CBBE Curvy' [SelectionItem,ScrollItem]
+        Text 'CBBE Curvy'
+    Button 'Remove selected Slider Preset relationship' [Invoke]
+      Text 'Remove assigned Slider Preset'
+    Button 'Clear assigned Slider Presets' [Invoke]
+      Text 'Clear assigned Slider Presets'
+    Text 'Available Slider Preset:'
+      Text 'Available Slider Preset:'
+    ComboBox '' [Value,ExpandCollapse]
+      Text ''
+    Button 'Assign selected Slider Preset' [Invoke]
+      Text 'Assign Slider Preset'
+    Button 'Assign all Slider Presets' [Invoke]
+      Text 'Assign All Slider Presets'
+  Text 'Project diagnostics'
+    Text 'Project diagnostics'
+  Edit '' [Value,Text]
+    Pane '' [Scroll]
+      Text ''
+  Text 'Activity'
+    Text 'Activity'
+  List 'Activity' [Selection,Scroll]
+    ListItem 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.' [SelectionItem,ScrollItem]
+      Text 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.' [SelectionItem,ScrollItem]
+      Text 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.'
+    ListItem 'Success — Create Slider Preset — Completed: Create Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Create Slider Preset — Completed: Create Slider Preset completed.'
+    ListItem 'Success — Edit Slider choices — Completed: Edit Slider choices changed.' [SelectionItem,ScrollItem]
+      Text 'Success — Edit Slider choices — Completed: Edit Slider choices changed.'
+    ListItem 'Information — Edit Slider choices — Completed: No Slider choice values changed.' [SelectionItem,ScrollItem]
+      Text 'Information — Edit Slider choices — Completed: No Slider choice values changed.'
+    ListItem 'Success — Edit Slider choices — Completed: Edit Slider choices changed.' [SelectionItem,ScrollItem]
+      Text 'Success — Edit Slider choices — Completed: Edit Slider choices changed.'
+    ListItem 'Success — Edit Slider choices — Completed: Edit Slider choices changed.' [SelectionItem,ScrollItem]
+      Text 'Success — Edit Slider choices — Completed: Edit Slider choices changed.'
+    ListItem 'Success — Duplicate Slider Preset — Completed: Duplicate Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Duplicate Slider Preset — Completed: Duplicate Slider Preset completed.'
+    ListItem 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.' [SelectionItem,ScrollItem]
+      Text 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.'
+    ListItem 'Success — Rename Slider Preset — Completed: Rename Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Rename Slider Preset — Completed: Rename Slider Preset completed.'
+    ListItem 'Success — Remove Slider Preset — Completed: Remove Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset — Completed: Remove Slider Preset completed.'
+    ListItem 'Success — Clear visible Slider Presets — Completed: Clear visible Slider Presets completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear visible Slider Presets — Completed: Clear visible Slider Presets completed.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.'
+    ListItem 'Success — Assign all Slider Presets — Completed: Assign all Slider Presets completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Assign all Slider Presets — Completed: Assign all Slider Presets completed.'
+    ListItem 'Success — Generate Output — Completed: Output generated.' [SelectionItem,ScrollItem]
+      Text 'Success — Generate Output — Completed: Output generated.'
+    ListItem 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.'
+    ListItem 'Success — Generate Output — Completed: Output generated.' [SelectionItem,ScrollItem]
+      Text 'Success — Generate Output — Completed: Output generated.'
+    ListItem 'Success — Clear Custom Morph Target assignments — Completed: Clear Custom Morph Target assignments completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear Custom Morph Target assignments — Completed: Clear Custom Morph Target assignments completed.'
+    ListItem 'Success — Remove Custom Morph Target — Completed: Remove Custom Morph Target completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Custom Morph Target — Completed: Remove Custom Morph Target completed.'
+    ListItem 'Success — Clear visible Custom Morph Targets — Completed: Clear visible Custom Morph Targets completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear visible Custom Morph Targets — Completed: Clear visible Custom Morph Targets completed.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Button 'Retry selected activity' [Invoke]
+    Text 'Retry'
+  Text 'Workbench status'
+    Text 'Success — Completed — Project opened.'
+  Button 'Cancel current operation' [Invoke]
+    Text 'Cancel'

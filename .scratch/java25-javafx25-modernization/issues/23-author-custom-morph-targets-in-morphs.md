@@ -1,6 +1,6 @@
 # Author Custom Morph Targets in Morphs
 
-Status: ready-for-agent
+Status: resolved
 Source: [GitHub #107](https://github.com/evildarkarchon/BS2BG/issues/107)
 GitHub state at migration: open (no closure reason)
 Created: 2026-08-29T07:12:50Z
@@ -26,7 +26,7 @@ Author Custom Morph Targets in Morphs.
 - [x] Users can create, edit, remove, clear, filter, sort, select, validate, and report Custom Morph Targets.
 - [x] Slider Preset relationship editing preserves Project referential integrity and accepted BodyGen condition semantics.
 - [x] Selection remains identity-stable through filtering, sorting, edits, removal, and Project refreshes without silent retargeting.
-- [ ] Packaged keyboard and pointer tests verify authoring, relationship edits, validation, output continuity, accessibility, themes, DPI, and narrow mode.
+- [x] Packaged keyboard and pointer tests verify authoring, relationship edits, validation, output continuity, accessibility, themes, DPI, and narrow mode.
 
 ## Blocked by
 
@@ -50,3 +50,20 @@ Verification so far: the clean Java 25 gate passes 456 tests without skips, and 
 99 tests. Packaged verification is still in progress: the first run exposed stale window-title lookup; after its
 fix, reopening reached a native file chooser whose File name control was exposed as a Pane without ValuePattern.
 The final packaged criterion remains unchecked until a complete successful run is retained.
+
+### Completion — 2026-09-19
+
+Resolved after the clean checkpoint from `544953ae105f81c8f018f3b3b54c47c1f2271a5e`: 456 Java tests,
+104 PowerShell tests, and all 20 packaged workflows passed without skips; the launcher exited with code 0.
+[Retained evidence](../../../docs/build/evidence/windows-app-image-2026-09-19-morphs-100-percent/README.md)
+includes exact output/export checks, keyboard and real-pointer authoring, native DPI measurements, UIA trees,
+and visually inspected application-only screenshots.
+
+The final pass also corrects inherited automation assumptions: native file/address controls exposed as Panes,
+empty read-only text documents, BoS artifact identity, exclusive-lock readback, and import fixtures exceeding the
+current 8 MiB parser limit. Production parser limits remain unchanged. At the user's request, all system High
+Contrast/motion tests run after authoring and file workflows, before shutdown. Screenshot capture and pointer
+input wait for Windows transition covers to clear.
+
+Standards and Spec reviews have no remaining findings. This checkpoint verifies 100% display scale; 125% and
+150% execution remains part of the wider Workbench scale matrix rather than being claimed by this run.

@@ -1,0 +1,772 @@
+{
+  "schema": "bs2bg.windows-app-image/2",
+  "recordedAtUtc": "2026-09-19T08:07:11.8691511+00:00",
+  "gitCommit": "544953ae105f81c8f018f3b3b54c47c1f2271a5e",
+  "checkpointResult": true,
+  "sourceCheckout": {
+    "required": true,
+    "clean": true,
+    "commit": "544953ae105f81c8f018f3b3b54c47c1f2271a5e"
+  },
+  "application": {
+    "name": "BS2BG",
+    "version": "1.1.2",
+    "mainClass": "com.asdasfa.jbs2bg.Launcher",
+    "mainJar": "jbs2bg-1.0-SNAPSHOT.jar",
+    "description": "jBS2BG: BodySlide Slider Presets to BodyGen and BodyTypes of Skyrim outputs",
+    "vendor": "asdasfa"
+  },
+  "gate": {
+    "source": "verify-java25.ps1 (this run)",
+    "evidence": "target/reproducibility/java25-verification.json",
+    "completeApplicationGate": true,
+    "tests": 456,
+    "mavenVersion": "3.9.16",
+    "mavenVersionOutput": [
+      "Apache Maven 3.9.16 (2bdd9fddda4b155ebf8000e807eb73fd829a51d5)",
+      "Maven home: C:\\Users\\evild\\.m2\\wrapper\\dists\\apache-maven-3.9.16\\0daed3be3ebd1c706f0e69e8b07c6b73f5cc4ea3dfce72a8d0ec2e849ca2ddb0",
+      "Java version: 25.0.4.1, vendor: Eclipse Adoptium, runtime: C:\\Users\\evild\\AppData\\Local\\BS2BG\\build-toolchains\\temurin-25.0.4.1+1-windows-x64",
+      "Default locale: en_US, platform encoding: UTF-8",
+      "OS name: \"windows 11\", version: \"10.0\", arch: \"amd64\", family: \"windows\""
+    ]
+  },
+  "toolchain": {
+    "jdkId": "temurin-25.0.4.1+1-windows-x64",
+    "implementor": "Eclipse Adoptium",
+    "implementorVersion": "Temurin-25.0.4.1+1",
+    "javaVersion": "25.0.4.1",
+    "javaRuntimeVersion": "25.0.4.1+1-LTS",
+    "jdkArchiveSha256": "00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283",
+    "javafxId": "openjfx-25.0.4-windows-x64-jmods",
+    "javafxVersion": "25.0.4",
+    "javafxArchiveSha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
+    "architecture": {
+      "processorArchitecture": "AMD64",
+      "jdkReleaseOsArch": "x86_64",
+      "javaOsArch": "amd64"
+    },
+    "packagingTools": {
+      "jdeps": "25.0.4.1",
+      "jimage": "25.0.4.1",
+      "jlink": "25.0.4.1",
+      "jpackage": "25.0.4.1"
+    }
+  },
+  "payload": {
+    "stagingDir": "target/app-image-input",
+    "artifacts": [
+      {
+        "path": "jbs2bg-1.0-SNAPSHOT.jar",
+        "sha256": "400ee93ef4dcacd5a4d644f873b6b3b467debcc4481ff1bf0e4bafb9fc8327a5",
+        "size": 782482
+      },
+      {
+        "path": "lib/jackson-core-3.1.5.jar",
+        "sha256": "9431b7fa2673bbb618c11d865fe15e13222fd182a214ff998cb7e56afd8f35d2",
+        "size": 598605
+      },
+      {
+        "path": "lib/juniversalchardet-2.1.0.jar",
+        "sha256": "988d74471cea29f6c64d4066c9f31a0d0f10a8241f79868ec1a04da42c6a8bed",
+        "size": 222853
+      }
+    ],
+    "dependencyTree": "target/reproducibility/dependency-tree.txt",
+    "javafxOnClasspath": false,
+    "jsonCodec": {
+      "coordinate": "tools.jackson.core:jackson-core:3.1.5",
+      "jar": "jackson-core-3.1.5.jar",
+      "onlyProductionCodec": true,
+      "inspection": "embedded Maven coordinates and class-entry paths across the application and every library jar",
+      "shadedFallbacks": false
+    }
+  },
+  "runtime": {
+    "measuredModules": [
+      "java.base",
+      "java.logging",
+      "java.prefs",
+      "java.xml",
+      "javafx.controls",
+      "javafx.fxml"
+    ],
+    "explicitModules": {
+      "jdk.charsets": "CharsetProvider for extended charsets that Charset.forName resolves at runtime from juniversalchardet detections"
+    },
+    "requestedModules": [
+      "java.base",
+      "java.logging",
+      "java.prefs",
+      "java.xml",
+      "javafx.controls",
+      "javafx.fxml",
+      "jdk.charsets"
+    ],
+    "imageModules": [
+      "java.base",
+      "java.datatransfer",
+      "java.xml",
+      "java.prefs",
+      "java.desktop",
+      "java.logging",
+      "java.scripting",
+      "javafx.base",
+      "jdk.unsupported",
+      "javafx.graphics",
+      "javafx.controls",
+      "javafx.fxml",
+      "jdk.charsets"
+    ],
+    "serviceBindings": [
+      "java.datatransfer binds java.desktop jrt:/java.desktop",
+      "java.base binds java.desktop jrt:/java.desktop",
+      "java.base binds java.logging jrt:/java.logging",
+      "java.base binds jdk.charsets jrt:/jdk.charsets"
+    ],
+    "moduleResolutionFile": "target/reproducibility/app-image-module-resolution.txt",
+    "jdepsOutputFile": "target/reproducibility/app-image-jdeps-output.txt",
+    "jlinkOptions": [
+      "--compress",
+      "zip-6",
+      "--strip-debug",
+      "--no-header-files",
+      "--no-man-pages",
+      "--strip-native-commands"
+    ],
+    "jlinkOutputFile": "target/reproducibility/app-image-jlink-output.txt",
+    "compression": {
+      "algorithm": "zip-6",
+      "resources": 21360,
+      "compressedResources": 21360,
+      "uncompressedBytes": 69458223,
+      "storedBytes": 31274305,
+      "savingsBytes": 38183918,
+      "savingsPercent": 54.97,
+      "verification": "jimage list --verbose on the runtime copied into the final jpackage app-image"
+    },
+    "release": {
+      "JAVA_VERSION": "25.0.4.1",
+      "MODULES": "java.base java.datatransfer java.xml java.prefs java.desktop java.logging java.scripting javafx.base jdk.unsupported javafx.graphics javafx.controls javafx.fxml jdk.charsets"
+    },
+    "nativeCommandsStripped": true
+  },
+  "image": {
+    "directory": "target/app-image/BS2BG",
+    "fileCount": 235,
+    "totalBytes": 64511636,
+    "sha256": "18880efa905d1265007a7c91a14e2d48bba9c1eda574cc670dbb351d693addb4",
+    "fileHashesFile": "target/reproducibility/app-image-sha256.txt",
+    "archive": "BS2BG-1.1.2-windows-x64.zip",
+    "archiveSha256": "39644788943405f5e6d9f07c2f24798cf3dc08515bf695d9a8b1eca418a6429f",
+    "launcherConfig": {
+      "Application": {
+        "win.norestart": [
+          "true"
+        ],
+        "app.classpath": [
+          "$APPDIR\\jbs2bg-1.0-SNAPSHOT.jar",
+          "$APPDIR\\lib\\jackson-core-3.1.5.jar",
+          "$APPDIR\\lib\\juniversalchardet-2.1.0.jar"
+        ],
+        "app.mainclass": [
+          "com.asdasfa.jbs2bg.Launcher"
+        ]
+      },
+      "JavaOptions": {
+        "java-options": [
+          "-Djpackage.app-version=1.1.2",
+          "--enable-native-access=javafx.graphics"
+        ]
+      }
+    },
+    "jpackageState": {
+      "toolVersion": "25.0.4.1",
+      "platform": "windows"
+    },
+    "javaOptions": [
+      "--enable-native-access=javafx.graphics"
+    ],
+    "notices": {
+      "file": "THIRD-PARTY-NOTICES.txt",
+      "componentManifest": "THIRD-PARTY-COMPONENTS.json",
+      "correspondingSource": "CORRESPONDING-SOURCE.txt",
+      "components": [
+        {
+          "jar": "jackson-core-3.1.5.jar",
+          "coordinates": "tools.jackson.core:jackson-core:3.1.5",
+          "sha256": "9431b7fa2673bbb618c11d865fe15e13222fd182a214ff998cb7e56afd8f35d2",
+          "size": 598605,
+          "sourceUrl": "https://repo.maven.apache.org/maven2/tools/jackson/core/jackson-core/3.1.5/jackson-core-3.1.5-sources.jar",
+          "licenses": [
+            "The Apache Software License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0.txt)"
+          ],
+          "extractedFiles": [
+            "notices/jackson-core-3.1.5/LICENSE",
+            "notices/jackson-core-3.1.5/NOTICE"
+          ]
+        },
+        {
+          "jar": "juniversalchardet-2.1.0.jar",
+          "coordinates": "com.github.albfernandez:juniversalchardet:2.1.0",
+          "sha256": "988d74471cea29f6c64d4066c9f31a0d0f10a8241f79868ec1a04da42c6a8bed",
+          "size": 222853,
+          "sourceUrl": "https://repo.maven.apache.org/maven2/com/github/albfernandez/juniversalchardet/2.1.0/juniversalchardet-2.1.0-sources.jar",
+          "licenses": [
+            "Mozilla Public License Version 1.1 (https://www.mozilla.org/en-US/MPL/1.1/)",
+            "GENERAL PUBLIC LICENSE, version 3 (GPL-3.0) (http://www.gnu.org/licenses/gpl.txt)",
+            "GNU LESSER GENERAL PUBLIC LICENSE, version 3 (LGPL-3.0) (http://www.gnu.org/licenses/lgpl.txt)"
+          ],
+          "extractedFiles": []
+        }
+      ],
+      "runtimeComponents": [
+        {
+          "id": "temurin-25.0.4.1+1-windows-x64",
+          "name": "Eclipse Adoptium Temurin-25.0.4.1+1 (Eclipse Temurin JDK, jlink'd runtime)",
+          "version": "25.0.4.1+1-LTS",
+          "binaryUrl": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_x64_windows_hotspot_25.0.4.1_1.zip",
+          "binarySha256": "00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283",
+          "sourceUrl": "https://github.com/openjdk/jdk25u/archive/refs/tags/jdk-25.0.4.1-ga.zip",
+          "sourceRevision": "598c9b864328adc4ce1049ea70b2e4b14cc5a051",
+          "modules": [
+            "java.base",
+            "java.datatransfer",
+            "java.xml",
+            "java.prefs",
+            "java.desktop",
+            "java.logging",
+            "java.scripting",
+            "javafx.base",
+            "jdk.unsupported",
+            "javafx.graphics",
+            "javafx.controls",
+            "javafx.fxml",
+            "jdk.charsets"
+          ],
+          "license": "GNU General Public License v2.0 with the Classpath Exception",
+          "noticesPath": "runtime/legal/<module>/ (LICENSE, ASSEMBLY_EXCEPTION, ADDITIONAL_LICENSE_INFO and third-party .md files per JDK module)"
+        },
+        {
+          "id": "openjfx-25.0.4-windows-x64-jmods",
+          "name": "OpenJFX (Gluon JavaFX Windows x64 JMODs)",
+          "version": "25.0.4",
+          "binaryUrl": "https://download2.gluonhq.com/openjfx/25.0.4/openjfx-25.0.4_windows-x64_bin-jmods.zip",
+          "binarySha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
+          "sourceUrl": "https://github.com/openjdk/jfx25u/archive/refs/tags/25.0.4%2B3.zip",
+          "sourceRevision": "96aaf07f6404c4d7ccad1aa75498ec7d2196047a",
+          "modules": [
+            "javafx.base",
+            "javafx.graphics",
+            "javafx.controls",
+            "javafx.fxml"
+          ],
+          "license": "GNU General Public License v2.0 with the Classpath Exception",
+          "noticesPath": "runtime/legal/{javafx.base,javafx.graphics,javafx.controls,javafx.fxml}/"
+        }
+      ]
+    },
+    "jpackageOutputFile": "target/reproducibility/app-image-jpackage-output.txt"
+  },
+  "smoke": {
+    "schema": "bs2bg.windows-app-image-smoke/17",
+    "recordedAtUtc": "2026-09-19T01:07:46.8678101-07:00",
+    "passed": true,
+    "expectedAppVersion": "1.1.2",
+    "archive": "D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip",
+    "timeouts": {
+      "startupSeconds": 90,
+      "stepSeconds": 30,
+      "exitSeconds": 30,
+      "expectedDpiPercent": 100
+    },
+    "steps": [
+      {
+        "name": "extract-clean-image",
+        "passed": true,
+        "seconds": 5.15,
+        "detail": "extracted archive, installed four Project fixtures, and staged interrupted Settings recovery in C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work"
+      },
+      {
+        "name": "launch-workbench-without-system-java",
+        "passed": true,
+        "seconds": 1.5,
+        "detail": "launcher pid 69664 hosts image-local jvm.dll; Workbench appeared after 1.4 s"
+      },
+      {
+        "name": "verify-workbench-shell-and-first-run-settings",
+        "passed": true,
+        "seconds": 0.39,
+        "detail": "five typed navigation destinations and the canonical Settings pair are accessible"
+      },
+      {
+        "name": "verify-workbench-feedback-semantics",
+        "passed": true,
+        "seconds": 0.05,
+        "detail": "Activity keyboard reachability and idle Cancel state passed without changing Windows preferences"
+      },
+      {
+        "name": "verify-keyboard-navigation-focus-and-output-drawer",
+        "passed": true,
+        "seconds": 1.59,
+        "detail": "typed shortcuts, semantic focus return, drawer resize, alias, and F6 cycle passed through packaged UIA"
+      },
+      {
+        "name": "verify-responsive-layout-and-minimum-geometry",
+        "passed": true,
+        "seconds": 1.06,
+        "detail": "narrow overlays, semantic restoration, 800x600 minimum, breakpoint, and live-DPI geometry passed"
+      },
+      {
+        "name": "edit-and-manage-slider-presets-without-pointer",
+        "passed": true,
+        "seconds": 37.31,
+        "detail": "pointer-free Slider choice/profile/gang editing, browse, validation, management, and reopen passed"
+      },
+      {
+        "name": "author-custom-morph-targets-with-keyboard-and-pointer",
+        "passed": true,
+        "seconds": 27.53,
+        "detail": "keyboard and pointer target authoring, relationships, validation, Output, accessibility, narrow mode, and reopen passed"
+      },
+      {
+        "name": "manage-settings-and-import-bodyslide-through-workbench",
+        "passed": true,
+        "seconds": 49.32,
+        "detail": "paired Settings editing/recovery and successful, malformed, partial, failed, and cancelled imports passed"
+      },
+      {
+        "name": "generate-inspect-invalidate-cancel-and-stale-output",
+        "passed": true,
+        "seconds": 29.15,
+        "detail": "fresh, save-only, invalidated, cancelled, and stale Output contracts passed through packaged UIA"
+      },
+      {
+        "name": "save-as-new-project",
+        "passed": true,
+        "seconds": 6.21,
+        "detail": "saved clean untitled Project as new-project.jbs2bg"
+      },
+      {
+        "name": "open-recovered-project-with-complete-diagnostics",
+        "passed": true,
+        "seconds": 6.35,
+        "detail": "opened a dirty recovered Project with diagnostics, warning InfoBar, Activity, and status projection"
+      },
+      {
+        "name": "cancel-then-discard-dirty-new",
+        "passed": true,
+        "seconds": 1.34,
+        "detail": "Cancel preserved the dirty Project; Discard then established a clean New Project"
+      },
+      {
+        "name": "save-recovered-project-through-adopted-identity",
+        "passed": true,
+        "seconds": 6.78,
+        "detail": "Save used the adopted identity and published a clean file-backed Project"
+      },
+      {
+        "name": "malformed-open-preserves-active-project-and-linked-retry",
+        "passed": true,
+        "seconds": 6.67,
+        "detail": "malformed Open preserved active bytes; Retry re-read the repaired source as a linked successful attempt"
+      },
+      {
+        "name": "changed-source-open-rejects-stale-completion",
+        "passed": true,
+        "seconds": 11.98,
+        "detail": "changing the selected source during detached parsing produced stale Activity and committed no effect"
+      },
+      {
+        "name": "central-job-admission-progress-and-cancellation",
+        "passed": true,
+        "seconds": 6.73,
+        "detail": "one Open owned global admission, published truthful progress, accepted Cancel, and committed no effect"
+      },
+      {
+        "name": "failed-save-preserves-dirty-project-then-save-as-recovers",
+        "passed": true,
+        "seconds": 13.49,
+        "detail": "failed Save preserved dirty identity and diagnostics; Save As retry recovered to a clean identity"
+      },
+      {
+        "name": "verify-final-accessibility-themes-and-system-preferences",
+        "passed": true,
+        "seconds": 20.47,
+        "detail": "theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed"
+      },
+      {
+        "name": "active-job-shutdown-cancel-resume-then-discard",
+        "passed": true,
+        "seconds": 21.09,
+        "detail": "exit code 0 after 0.38 s"
+      }
+    ],
+    "observations": {
+      "extractedImage": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG",
+      "launcher": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG\\BS2BG.exe",
+      "launcherSha256": "cfee2ac2f9e825256f10cb6ca2975590499cea1c9253fca4c9a8e3658b0a2b0e",
+      "archiveSha256": "39644788943405f5e6d9f07c2f24798cf3dc08515bf695d9a8b1eca418a6429f",
+      "workingDirectory": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work",
+      "cancellableProjectBytes": 27300106,
+      "environment": {
+        "removedVariables": [
+          "JAVA_HOME"
+        ],
+        "removedPathEntries": [
+          "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath",
+          "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\java8path",
+          "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath",
+          "C:\\Program Files\\OpenJDK\\jdk-26.0.2.1\\bin"
+        ],
+        "keptPathEntryCount": 73
+      },
+      "observedProcessModel": "single-launcher-process",
+      "launch": {
+        "applicationPid": 69664,
+        "applicationExe": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG\\BS2BG.exe",
+        "startupSeconds": 1.38,
+        "runtimeModules": [
+          {
+            "module": "jli.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG\\runtime\\bin\\jli.dll"
+          },
+          {
+            "module": "jvm.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll"
+          },
+          {
+            "module": "jimage.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG\\runtime\\bin\\jimage.dll"
+          },
+          {
+            "module": "java.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG\\runtime\\bin\\java.dll"
+          },
+          {
+            "module": "prism_d3d.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG\\runtime\\bin\\javafx\\prism_d3d.dll"
+          },
+          {
+            "module": "glass.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG\\runtime\\bin\\javafx\\glass.dll"
+          },
+          {
+            "module": "javafx_font.dll",
+            "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\image\\BS2BG\\runtime\\bin\\javafx\\javafx_font.dll"
+          }
+        ]
+      },
+      "settingsRecoveryActivity": "Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.",
+      "workbenchAreas": [
+        "Templates",
+        "Morphs",
+        "NPC Database",
+        "Output",
+        "Settings"
+      ],
+      "keyboardNavigation": {
+        "areas": [
+          "Templates",
+          "Morphs",
+          "NPC Database",
+          "Settings"
+        ],
+        "outputPreservedArea": "Morphs",
+        "drawerRange": {
+          "before": 220.0,
+          "after": 240.0
+        },
+        "focusCycle": [
+          "Custom Morph Targets",
+          "Custom Morph Target editor",
+          "Custom Morph Target inspector: no selection",
+          "Output generated text",
+          "Activity",
+          "Workbench status",
+          "Morphs"
+        ]
+      },
+      "responsiveLayout": {
+        "expectedScalePercent": 100,
+        "initial": {
+          "dpi": 96,
+          "scalePercent": 100.0,
+          "windowPhysical": {
+            "left": 622,
+            "top": 200,
+            "width": 1316,
+            "height": 839
+          },
+          "clientPhysical": {
+            "left": 630,
+            "top": 231,
+            "width": 1300,
+            "height": 800
+          },
+          "clientLogical": {
+            "width": 1300.0,
+            "height": 800.0
+          }
+        },
+        "narrow": {
+          "dpi": 96,
+          "scalePercent": 100.0,
+          "windowPhysical": {
+            "left": 622,
+            "top": 200,
+            "width": 1215,
+            "height": 739
+          },
+          "clientPhysical": {
+            "left": 630,
+            "top": 231,
+            "width": 1199,
+            "height": 700
+          },
+          "clientLogical": {
+            "width": 1199.0,
+            "height": 700.0
+          }
+        },
+        "minimum": {
+          "dpi": 96,
+          "scalePercent": 100.0,
+          "windowPhysical": {
+            "left": 622,
+            "top": 200,
+            "width": 816,
+            "height": 639
+          },
+          "clientPhysical": {
+            "left": 630,
+            "top": 231,
+            "width": 800,
+            "height": 600
+          },
+          "clientLogical": {
+            "width": 800.0,
+            "height": 600.0
+          }
+        },
+        "wide": {
+          "dpi": 96,
+          "scalePercent": 100.0,
+          "windowPhysical": {
+            "left": 622,
+            "top": 200,
+            "width": 1216,
+            "height": 739
+          },
+          "clientPhysical": {
+            "left": 630,
+            "top": 231,
+            "width": 1200,
+            "height": 700
+          },
+          "clientLogical": {
+            "width": 1200.0,
+            "height": 700.0
+          }
+        }
+      },
+      "templatesManagement": {
+        "browsed": [
+          "CBBE Curvy",
+          "UUNP Athletic"
+        ],
+        "createdRejected": "SLIDER_PRESET_NAME_DUPLICATE",
+        "created": "Delta Created",
+        "duplicated": "Curvy Copy",
+        "renameCancelled": "Temporary Name",
+        "renamed": "Curvy Copy Renamed",
+        "removed": "UUNP Athletic",
+        "clearVisiblePreserved": "CBBE Curvy",
+        "savedAndReopened": "templates-managed.jbs2bg",
+        "profile": "Standard",
+        "editedChoice": "Waist@50:50",
+        "gangModes": [
+          "All-Min",
+          "All-Max"
+        ],
+        "rangeValidation": "reversed maximum clamped to minimum"
+      },
+      "morphsCreatePointer": {
+        "x": 900.0,
+        "y": 586.0,
+        "source": "clickable-point",
+        "windowActivated": true,
+        "clickablePointError": null
+      },
+      "morphsManagement": {
+        "existing": "All|Female",
+        "validation": [
+          "CUSTOM_MORPH_TARGET_NAME_REQUIRED",
+          "CUSTOM_MORPH_TARGET_NAME_DUPLICATE"
+        ],
+        "pointerCreated": "ActorTypeNPC|Female",
+        "pointerCoordinates": {
+          "create": {
+            "x": 900.0,
+            "y": 586.0,
+            "source": "clickable-point",
+            "windowActivated": true,
+            "clickablePointError": null
+          },
+          "select": {
+            "x": 900.0,
+            "y": 512.0,
+            "source": "clickable-point",
+            "windowActivated": true,
+            "clickablePointError": null
+          },
+          "assignAll": {
+            "x": 1794.0,
+            "y": 686.0,
+            "source": "clickable-point",
+            "windowActivated": true,
+            "clickablePointError": null
+          },
+          "removeRelationship": {
+            "x": 1794.0,
+            "y": 595.0,
+            "source": "clickable-point",
+            "windowActivated": true,
+            "clickablePointError": null
+          },
+          "filteredCreate": {
+            "x": 900.0,
+            "y": 520.0,
+            "source": "clickable-point",
+            "windowActivated": true,
+            "clickablePointError": null
+          }
+        },
+        "relationshipAdded": "UUNP Athletic",
+        "relationshipRemoved": "UUNP Athletic",
+        "relationshipCleared": "ActorTypeNPC|Female",
+        "initialAssignment": "UUNP Athletic",
+        "individuallyAssigned": "CBBE Curvy",
+        "removed": "ActorTypeNPC|Female",
+        "clearVisibleRemoved": "Clear Me",
+        "generatedBeforeRemoval": "ActorTypeNPC|Female=UUNP Athletic\nAll|Female=CBBE Curvy|UUNP Athletic\nSkyrim.esm|A2C94=UUNP Athletic\n",
+        "savedAndReopened": "morphs-managed.jbs2bg",
+        "scalePercent": 100.0
+      },
+      "settingsAndBodySlideImport": {
+        "settings": [
+          "Standard Waist multiplier 2",
+          "UUNP Arms multiplier 3",
+          "Omit Redundant Sliders true"
+        ],
+        "success": "Settings Output",
+        "partial": "Timestamp: 2026-09-19T08:09:20.028403Z. Attempt: 12. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\malformed.xml, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\partial-valid.xml. Destinations: none. Captured basis: Project content version 59@2def7228. Effects committed: Imported partial-valid.xml. Diagnostics: SLIDER_PRESET_XML_MALFORMED. Retry available: true.",
+        "failed": "Timestamp: 2026-09-19T08:09:38.213454700Z. Attempt: 14. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\a-failed-malformed.xml, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\z-failed-locked.xml. Destinations: none. Captured basis: Project content version 60@2def7228. Effects committed: none. Diagnostics: SLIDER_PRESET_XML_MALFORMED, SLIDER_PRESET_XML_READ_FAILED. Retry available: true.",
+        "cancelled": "Timestamp: 2026-09-19T08:09:50.041696500Z. Attempt: 16. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\a-cancel-first.xml, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\z-cancel-large.xml. Destinations: none. Captured basis: Project content version 60@2def7228. Effects committed: Imported a-cancel-first.xml. Diagnostics: none. Retry available: true.",
+        "progress": "Save Project, Replacing Project file, indeterminate.",
+        "savedProject": "settings-import-results.jbs2bg"
+      },
+      "generatedOutput": {
+        "completed": "Timestamp: 2026-09-19T08:08:43.221669500Z. Attempt: 5. Sources: none. Destinations: none. Captured basis: Project content version 49@2def7228; Settings fe166285; omit redundant sliders: false. Effects committed: Generated Output published. Diagnostics: none. Retry available: false.",
+        "templatesCharacters": 213,
+        "morphsCharacters": 0,
+        "bosCharacters": 461,
+        "tabs": [
+          "Templates",
+          "Morphs",
+          "BoS JSON"
+        ],
+        "readOnly": true,
+        "clipboardExact": true,
+        "completeExport": "Timestamp: 2026-09-19T08:09:57.081921500Z. Attempt: 19. Sources: templates.ini, morphs.ini, Committed Before Cancel -> Committed Before Cancel.json, Partial Commit -> Partial Commit.json, Settings Output -> Settings Output.json. Destinations: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\accepted-output. Captured basis: Project content version 61@2def7228; Settings 9a09eab6; omit redundant sliders: true. Effects committed: Published 5 Output artifacts. Diagnostics: none. Retry available: false.",
+        "selectedExport": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\selected-output.JSON",
+        "atomicFailureAndRetry": "Timestamp: 2026-09-19T08:10:09.696442400Z. Attempt: 22. Retry of attempt: 21. Sources: templates.ini, morphs.ini, Committed Before Cancel -> Committed Before Cancel.json, Partial Commit -> Partial Commit.json, Settings Output -> Settings Output.json. Destinations: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\atomic-output-failure. Captured basis: Project content version 61@2def7228; Settings 9a09eab6; omit redundant sliders: true. Effects committed: Published 5 Output artifacts. Diagnostics: none. Retry available: false.",
+        "savePreserved": true,
+        "contentInvalidated": true,
+        "cancellation": "Timestamp: 2026-09-19T08:10:18.305808400Z. Attempt: 25. Sources: none. Destinations: none. Captured basis: Project content version 63@2def7228; Settings 9a09eab6; omit redundant sliders: true. Effects committed: none. Diagnostics: none. Retry available: true.",
+        "stale": "Timestamp: 2026-09-19T08:10:19.021809100Z. Attempt: 26. Sources: none. Destinations: none. Captured basis: Project content version 63@2def7228; Settings 9a09eab6; omit redundant sliders: true. Effects committed: none. Diagnostics: STALE_RESULT. Retry available: true.",
+        "focusPreserved": "Slider Preset list / name field"
+      },
+      "firstSaveAs": {
+        "file": "new-project.jbs2bg",
+        "sha256": "5b2aaa5ea4708a95beb7566441b6f831316f958ebcdd1b7e7266bf2acb99993d"
+      },
+      "recoveredProject": {
+        "title": "BS2BG Preview - *recovery-source.jbs2bg",
+        "diagnostics": "WARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /CustomMorphTargets/Target/SliderPresets/1 (line 7, column 43): Slider Preset assignment 'Missing Target' does not exist and was omitted.\nWARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /MorphedNPCs/NPC/SliderPresets/1 (line 15, column 33): Slider Preset assignment 'Missing NPC' does not exist and was omitted."
+      },
+      "malformedOpen": {
+        "preservedTitle": "BS2BG Preview - recovery-source.jbs2bg",
+        "diagnostics": "ERROR [PROJECT_JSON_MALFORMED] malformed-project.jbs2bg /SliderPresets (line 2, column 1): Unexpected end-of-input: expected close marker for Object (start marker at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); byte offset: #UNKNOWN])",
+        "retryLinked": true,
+        "retrySource": "malformed-project.jbs2bg"
+      },
+      "staleOpen": {
+        "preservedTitle": "BS2BG Preview - malformed-project.jbs2bg",
+        "changedInput": "cancellable-project.jbs2bg",
+        "diagnostic": "STALE_RESULT",
+        "effects": "none"
+      },
+      "centralJobCancellation": {
+        "progress": "Open Project, Reading Project, 31%.",
+        "preservedTitle": "BS2BG Preview - malformed-project.jbs2bg",
+        "effects": "none"
+      },
+      "saveFailureRecovery": {
+        "diagnostic": "ERROR [PROJECT_FILE_WRITE_FAILED] vanishing-recovery.jbs2bg: The Project file could not be written: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746\\work\\vanishing\\.vanishing-recovery.jbs2bg-15220375688252436897.tmp",
+        "retry": "save-retry.jbs2bg"
+      },
+      "appearance": {
+        "phase": "after-authoring-before-shutdown",
+        "initialHighContrast": false,
+        "initialClientAreaAnimation": true,
+        "choices": [
+          "System",
+          "Light",
+          "Dark"
+        ],
+        "highContrastOverride": true,
+        "reducedMotionObserved": true,
+        "restoredHighContrast": false,
+        "restoredClientAreaAnimation": true,
+        "systemEffectiveTheme": "Effective theme: Dark theme",
+        "iconImplementation": "application-owned-bundled-vectors"
+      },
+      "activeJobShutdown": {
+        "cancellationSettledBeforePrompt": true,
+        "cancelResumedAdmission": true,
+        "secondCloseDiscarded": true
+      },
+      "exit": {
+        "exitCode": 0,
+        "exitWaitSeconds": 0.38,
+        "boundedBySeconds": 30
+      }
+    },
+    "process": {
+      "expectedModel": "single-launcher-process",
+      "model": "single-launcher-process",
+      "applicationPid": 69664,
+      "exitCode": 0,
+      "exitWaitSeconds": 0.38,
+      "killed": []
+    },
+    "diagnostics": {
+      "directory": "target/reproducibility/smoke-diagnostics/",
+      "stderrLines": 0,
+      "stderrExcerpt": [],
+      "nativeAccessWarnings": [],
+      "workbenchTree": "smoke-diagnostics/uia-tree-workbench.txt",
+      "responsiveWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-responsive.txt",
+      "templatesWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-templates.txt",
+      "morphsWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-morphs.txt",
+      "templatesNarrowScreenshot": "smoke-diagnostics/workbench-templates-narrow.png",
+      "templatesHighContrastScreenshot": "smoke-diagnostics/workbench-templates-high-contrast.png",
+      "morphsNarrowScreenshot": "smoke-diagnostics/workbench-morphs-narrow.png",
+      "morphsHighContrastScreenshot": "smoke-diagnostics/workbench-morphs-high-contrast.png",
+      "highContrastScreenshot": "smoke-diagnostics/workbench-high-contrast.png",
+      "reducedMotionScreenshot": "smoke-diagnostics/workbench-reduced-motion.png"
+    },
+    "workRoot": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260919-080746",
+    "workRootKept": false
+  }
+}

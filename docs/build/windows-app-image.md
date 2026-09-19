@@ -380,6 +380,13 @@ and reduced-motion screenshots are retained beside the UIA trees. The 238-file i
 `4d1ea4b5473d978c4000ad39cb1af347fa90dcc3272861634b7e5a326821f07a`. Equivalent retained runs from
 125% and 150% interactive sessions remain necessary to complete the three-scale execution matrix.
 
+The Custom Morph Target authoring checkpoint (local ticket 23, formerly #107) is retained under
+[`windows-app-image-2026-09-19-morphs-100-percent`](evidence/windows-app-image-2026-09-19-morphs-100-percent/README.md).
+The clean source commit `544953ae105f81c8f018f3b3b54c47c1f2271a5e` passed 456 Java tests in 44 suites,
+104 PowerShell tests, and all 20 packaged workflows with exit code 0. It includes keyboard and real-pointer Morphs
+authoring, exact Output bytes and transactional export, the final system-accessibility phase, and visually inspected
+window-only screenshots. Native scale was 96 DPI / 100%; this run does not claim the outstanding 125%/150% matrix.
+
 ## Reverting the single-codec cutover
 
 The dependency removal, temporary-oracle cleanup, permanent corpus expectations, convergence/retired-codec

@@ -4,7 +4,7 @@ Local tracker migrated from GitHub issue #80 and all 28 native subissues on 2026
 
 GitHub source issues were left unchanged. Source plans #62 and #76 remain external references. Local numbers preserve native subissue order; execute in dependency order, not filename order. A `resolved` status records GitHub closure, including superseded tickets; it does not assert that unchecked acceptance criteria were implemented.
 
-The next open, unblocked implementation ticket at migration is [#107](issues/23-author-custom-morph-targets-in-morphs.md). The release ticket [#93](issues/13-close-parity-and-produce-the-verified-2-0-release-candidate.md) follows [#112](issues/28-remove-migration-scaffolding-and-prove-complete-workbench-parity.md).
+The next open, unblocked implementation ticket is [24 — Author NPC Morph Assignments in Morphs](issues/24-author-npc-morph-assignments-in-morphs.md). [Ticket 23](issues/23-author-custom-morph-targets-in-morphs.md) was resolved locally on 2026-09-19 with retained verification evidence. The table below preserves migration-time statuses; each ticket's `Status:` line is authoritative for current work. The release ticket [#93](issues/13-close-parity-and-produce-the-verified-2-0-release-candidate.md) follows [#112](issues/28-remove-migration-scaffolding-and-prove-complete-workbench-parity.md).
 
 | Local ticket | GitHub | Status at migration | Native blockers (local) |
 | --- | --- | --- | --- |
