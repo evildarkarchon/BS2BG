@@ -799,7 +799,6 @@ function Set-UiaFileDialogName {
         [Parameter(Mandatory)] [string]$Value,
         [int]$TimeoutSeconds = 30
     )
-    $processId = $Dialog.Current.ProcessId
     $dialogHandle = $Dialog.Current.NativeWindowHandle
     if ($dialogHandle -eq 0) { throw 'The native file dialog has no window handle.' }
     Wait-UiaElement -Root $Dialog -Condition (New-UiaCondition -Name 'File name:') `
@@ -842,6 +841,7 @@ function Set-UiaNativeDialogText {
         [Parameter(Mandatory)] [ValidateSet('%n', '^l')] [string]$Shortcut,
         [int]$TimeoutSeconds = 30
     )
+    $processId = $Dialog.Current.ProcessId
     $dialogHandle = $Dialog.Current.NativeWindowHandle
     if ($dialogHandle -eq 0) { throw 'The native dialog has no window handle.' }
     Send-UiaKeys -ProcessId $processId -Keys $Shortcut -TimeoutSeconds $TimeoutSeconds

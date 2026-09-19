@@ -79,6 +79,32 @@ Describe 'UI Automation native filename helpers' {
     }
 }
 
+Describe 'UI Automation native dialog process ownership' {
+    It 'uses the supplied dialog process for standalone address typing despite a different caller variable' {
+        InModuleScope UiaAutomation {
+            $processId = 999
+            $dialog = [pscustomobject]@{ Current = [pscustomobject]@{ ProcessId = 123; NativeWindowHandle = 456 } }
+            Mock Send-UiaKeys {}
+            Mock Get-UiaText { return 'C:\chosen+folder' }
+            Mock Wait-UiaCondition {
+                if ($Description -eq 'native Edit focus within the requested dialog') {
+                    return [pscustomobject]@{}
+                }
+                & $Test
+            }
+
+            Set-UiaNativeDialogText -Dialog $dialog -Value 'C:\chosen+folder' -Shortcut '^l' -TimeoutSeconds 1
+
+            Should -Invoke Send-UiaKeys -Times 2 -Exactly -ParameterFilter { $ProcessId -eq 123 }
+            Should -Invoke Send-UiaKeys -Times 0 -Exactly -ParameterFilter { $ProcessId -eq 999 }
+            Should -Invoke Send-UiaKeys -Times 1 -Exactly -ParameterFilter {
+                $Keys -ceq '^aC:\chosen{+}folder'
+            }
+            Should -Invoke Get-UiaText -Times 1 -Exactly
+        }
+    }
+}
+
 Describe 'UI Automation pointer provider retries' {
     BeforeEach {
         InModuleScope UiaAutomation {
