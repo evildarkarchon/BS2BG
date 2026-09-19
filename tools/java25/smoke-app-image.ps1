@@ -1701,7 +1701,7 @@ try {
         $partialImport = Join-Path $workDir 'partial-valid.xml'
         $malformedImport = Join-Path $workDir 'malformed.xml'
         $failedMalformed = Join-Path $workDir 'a-failed-malformed.xml'
-        $failedMissing = Join-Path $workDir 'z-failed-missing.xml'
+        $failedLocked = Join-Path $workDir 'z-failed-locked.xml'
         $cancelFirst = Join-Path $workDir 'a-cancel-first.xml'
         $cancelLarge = Join-Path $workDir 'z-cancel-large.xml'
         [IO.File]::WriteAllText($validImport,
@@ -1710,15 +1710,17 @@ try {
             '<SliderPresets><Preset name="Partial Commit"/></SliderPresets>')
         [IO.File]::WriteAllText($malformedImport, '<SliderPresets><Preset name="Broken">')
         [IO.File]::WriteAllText($failedMalformed,
-            '<SliderPresets><Preset name="Broken"/>' + [string]::new(' ', 20000000))
-        [IO.File]::WriteAllText($failedMissing,
+            '<SliderPresets><Preset name="Broken"/>')
+        [IO.File]::WriteAllText($failedLocked,
             '<SliderPresets><Preset name="Must Not Commit"/></SliderPresets>')
         [IO.File]::WriteAllText($cancelFirst,
             '<SliderPresets><Preset name="Committed Before Cancel"/></SliderPresets>')
         $cancelWriter = [IO.StreamWriter]::new($cancelLarge, $false, [Text.UTF8Encoding]::new($false))
         try {
             $cancelWriter.Write('<SliderPresets>')
-            for ($index = 0; $index -lt 400000; $index++) {
+            # Stay below the parser's 8 MiB source cap while retaining substantial DOM/default-choice work so
+            # cancellation can be observed after the first source commits, without production delays or hooks.
+            for ($index = 0; $index -lt 100000; $index++) {
                 $cancelWriter.Write('<Preset name="Cancelled Source ')
                 $cancelWriter.Write($index)
                 $cancelWriter.Write('"/>')
@@ -1727,6 +1729,9 @@ try {
         }
         finally {
             $cancelWriter.Dispose()
+        }
+        if ((Get-Item -LiteralPath $cancelLarge).Length -gt 8MB) {
+            throw 'The cancellation fixture must remain inside the production 8 MiB BodySlide source limit.'
         }
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^1' -TimeoutSeconds $StepTimeoutSeconds
@@ -1787,25 +1792,30 @@ try {
             throw 'Saved partial-import Project retained the malformed source.'
         }
 
-        $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import BodySlide Presets'
-        Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
-        Complete-MultipleFileDialog -Title 'Import BodySlide Presets' `
-            -Paths @($failedMalformed, $failedMissing) -ConfirmButton 'Open'
-        # The worker is occupied reading the large first source, making removal of the already selected second
-        # source deterministic without adding a production test hook or racing the native chooser.
-        Remove-Item -LiteralPath $failedMissing -Force
-        $failureDialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $applicationTitle `
-            -TimeoutSeconds $StepTimeoutSeconds
-        Send-UiaAccelerator -Window $failureDialog -Keys '{ESC}'
-        $failedActivity = Wait-UiaCondition -Description 'failed BodySlide import Activity' `
-            -TimeoutSeconds $StepTimeoutSeconds -Test {
-            $items = Find-UiaElements -Root $settingsActivity -Condition (New-UiaCondition -ControlType 'ListItem')
-            foreach ($item in $items) {
-                if ($item.Current.Name.Contains('Import BodySlide Presets') `
-                        -and $item.Current.Name.Contains('Failed') `
-                        -and $item.Current.HelpText.Contains('SLIDER_PRESET_XML_MALFORMED') `
-                        -and $item.Current.HelpText.Contains('SLIDER_PRESET_XML_READ_FAILED')) { return $item }
+        # The chooser admits existing locked files, while the worker receives a genuine sharing-violation read
+        # failure. Hold the lock through the observed outcome so no parser-speed or selected-file deletion race is needed.
+        $failedSourceLock = [IO.File]::Open($failedLocked, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+        try {
+            $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import BodySlide Presets'
+            Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+            Complete-MultipleFileDialog -Title 'Import BodySlide Presets' `
+                -Paths @($failedMalformed, $failedLocked) -ConfirmButton 'Open'
+            $failureDialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $applicationTitle `
+                -TimeoutSeconds $StepTimeoutSeconds
+            Send-UiaAccelerator -Window $failureDialog -Keys '{ESC}'
+            $failedActivity = Wait-UiaCondition -Description 'failed BodySlide import Activity' `
+                -TimeoutSeconds $StepTimeoutSeconds -Test {
+                $items = Find-UiaElements -Root $settingsActivity -Condition (New-UiaCondition -ControlType 'ListItem')
+                foreach ($item in $items) {
+                    if ($item.Current.Name.Contains('Import BodySlide Presets') `
+                            -and $item.Current.Name.Contains('Failed') `
+                            -and $item.Current.HelpText.Contains('SLIDER_PRESET_XML_MALFORMED') `
+                            -and $item.Current.HelpText.Contains('SLIDER_PRESET_XML_READ_FAILED')) { return $item }
+                }
             }
+        }
+        finally {
+            $failedSourceLock.Dispose()
         }
 
         if (-not (Get-UiaSelectionState -Element $settingsOutput)) {
