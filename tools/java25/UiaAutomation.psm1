@@ -811,23 +811,55 @@ function Set-UiaFileDialogName {
         $valuePattern.SetValue($Value)
     }
     else {
-        Send-UiaKeys -ProcessId $processId -Keys '%n' -TimeoutSeconds $TimeoutSeconds
-        $field = Wait-UiaCondition -Description 'filename Edit focus within the native file dialog' `
-            -TimeoutSeconds $TimeoutSeconds -Test {
-            $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-            if ($null -eq $focused -or $focused.Current.ProcessId -ne $processId `
-                    -or $focused.Current.ClassName -cne 'Edit' -or -not $focused.Current.HasKeyboardFocus) { return }
-            $ancestor = $focused
-            for ($depth = 0; $depth -lt 64 -and $null -ne $ancestor; $depth++) {
-                if ($ancestor.Current.NativeWindowHandle -eq $dialogHandle) { return $focused }
-                $ancestor = Get-UiaParent -Element $ancestor
-            }
-        }
-        # SendKeys reserves these characters even when they occur inside an otherwise ordinary absolute path.
-        $literalKeys = [regex]::Replace($Value, '[+^%~(){}\[\]]', { param($match) '{' + $match.Value + '}' })
-        Send-UiaKeys -ProcessId $processId -Keys ('^a' + $literalKeys) -TimeoutSeconds $TimeoutSeconds
+        Set-UiaNativeDialogText -Dialog $Dialog -Value $Value -Shortcut '%n' -TimeoutSeconds $TimeoutSeconds
+        return
     }
     Wait-UiaCondition -Description 'exact native file dialog filename text' -TimeoutSeconds $TimeoutSeconds -Test {
+        if ((Get-UiaText -Element $field) -ceq $Value) { $true }
+    } | Out-Null
+}
+
+<#
+.SYNOPSIS
+    Focuses a native dialog text field through its filename or address shortcut, then sets and verifies literal text.
+.PARAMETER Dialog
+    Owned window resolved by its exact title and process through Wait-UiaOwnedWindow.
+.PARAMETER Value
+    Literal filename or absolute directory path to type without interpreting SendKeys metacharacters.
+.PARAMETER Shortcut
+    Alt+N selects the filename field; Ctrl+L selects the address bar.
+.PARAMETER TimeoutSeconds
+    Bounded wait for exact dialog ownership, native Edit focus, and case-sensitive text readback.
+.NOTES
+    Native Windows proxies can expose real Edit controls as unnamed Panes without ValuePattern. Validate the
+    focused control's native class and ancestor handle instead of trusting its incomplete UIA control role.
+#>
+function Set-UiaNativeDialogText {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Dialog,
+        [Parameter(Mandatory)] [string]$Value,
+        [Parameter(Mandatory)] [ValidateSet('%n', '^l')] [string]$Shortcut,
+        [int]$TimeoutSeconds = 30
+    )
+    $dialogHandle = $Dialog.Current.NativeWindowHandle
+    if ($dialogHandle -eq 0) { throw 'The native dialog has no window handle.' }
+    Send-UiaKeys -ProcessId $processId -Keys $Shortcut -TimeoutSeconds $TimeoutSeconds
+    $field = Wait-UiaCondition -Description 'native Edit focus within the requested dialog' `
+        -TimeoutSeconds $TimeoutSeconds -Test {
+        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+        if ($null -eq $focused -or $focused.Current.ProcessId -ne $processId `
+                -or $focused.Current.ClassName -cne 'Edit' -or -not $focused.Current.HasKeyboardFocus) { return }
+        $ancestor = $focused
+        for ($depth = 0; $depth -lt 64 -and $null -ne $ancestor; $depth++) {
+            if ($ancestor.Current.NativeWindowHandle -eq $dialogHandle) { return $focused }
+            $ancestor = Get-UiaParent -Element $ancestor
+        }
+    }
+    # SendKeys reserves these characters even when they occur inside an otherwise ordinary absolute path.
+    $literalKeys = [regex]::Replace($Value, '[+^%~(){}\[\]]', { param($match) '{' + $match.Value + '}' })
+    Send-UiaKeys -ProcessId $processId -Keys ('^a' + $literalKeys) -TimeoutSeconds $TimeoutSeconds
+    Wait-UiaCondition -Description 'exact native dialog text' -TimeoutSeconds $TimeoutSeconds -Test {
         if ((Get-UiaText -Element $field) -ceq $Value) { $true }
     } | Out-Null
 }
@@ -1125,6 +1157,7 @@ Export-ModuleMember -Function @(
     'Expand-UiaElement',
     'Set-UiaValue',
     'Set-UiaFileDialogName',
+    'Set-UiaNativeDialogText',
     'Get-UiaText',
     'Get-UiaReadOnlyState',
     'Wait-UiaKeyboardFocus',

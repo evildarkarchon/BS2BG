@@ -314,36 +314,28 @@ function Complete-FileDialog {
 function Complete-DirectoryDialog {
     param([string]$Title, [string]$Path)
     $dialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $StepTimeoutSeconds
-    $focusableCondition = New-Object System.Windows.Automation.OrCondition(@(
-        (New-UiaCondition -ControlType 'Edit'),
-        (New-UiaCondition -ControlType 'List'),
-        (New-UiaCondition -ControlType 'Tree'),
-        (New-UiaCondition -ControlType 'Button')))
-    $focusTarget = Wait-UiaCondition -Description "focusable child in '$Title'" `
-        -TimeoutSeconds $StepTimeoutSeconds -Test {
-        foreach ($candidate in (Find-UiaElements -Root $dialog -Condition $focusableCondition)) {
-            if ($candidate.Current.IsKeyboardFocusable) { return $candidate }
-        }
-    }
-    # The top-level native dialog is not focusable; Ctrl+L is routed from one of its real child controls.
-    Send-UiaKeysToElement -Element $focusTarget -Keys '^l' -TimeoutSeconds $StepTimeoutSeconds
     $dialogProcessId = $dialog.Current.ProcessId
-    $address = Wait-UiaCondition -Description "address bar in '$Title'" -TimeoutSeconds $StepTimeoutSeconds -Test {
-        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-        if ($null -ne $focused -and $focused.Current.ProcessId -eq $dialogProcessId `
-                -and $focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit) {
-            $focused
+    Set-UiaNativeDialogText -Dialog $dialog -Value $Path -Shortcut '^l' -TimeoutSeconds $StepTimeoutSeconds
+    Send-UiaKeys -ProcessId $dialogProcessId -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+    # Typed text alone does not prove navigation: wait for the accepted breadcrumb before choosing the folder,
+    # otherwise the native dialog can still submit its previous (often home) directory.
+    Wait-UiaElement -Root $dialog -Condition (New-UiaCondition -Name "Address: $Path") `
+        -Description "accepted directory address '$Path'" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+    $confirmConditions = foreach ($role in @('Button', 'Pane')) {
+        foreach ($name in @('Select Folder', 'Open', 'Select')) {
+            New-UiaCondition -ControlType $role -Name $name
         }
     }
-    Set-UiaValue -Element $address -Value $Path
-    Send-UiaKeysToElement -Element $address -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
-    $confirmCondition = New-Object System.Windows.Automation.OrCondition(@(
-        (New-UiaCondition -ControlType 'Button' -Name 'Select Folder'),
-        (New-UiaCondition -ControlType 'Button' -Name 'Open'),
-        (New-UiaCondition -ControlType 'Button' -Name 'Select')))
+    $confirmCondition = New-Object System.Windows.Automation.OrCondition($confirmConditions)
     $confirm = Wait-UiaElement -Root $dialog -Condition $confirmCondition `
         -Description "directory confirmation in '$Title'" -TimeoutSeconds $StepTimeoutSeconds
-    Invoke-UiaElement -Element $confirm
+    $invoke = $null
+    if ($confirm.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$invoke)) {
+        $invoke.Invoke()
+    }
+    else {
+        Invoke-UiaNativeButton -Element $confirm
+    }
 }
 
 <#
