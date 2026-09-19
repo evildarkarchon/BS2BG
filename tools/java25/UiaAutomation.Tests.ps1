@@ -79,6 +79,45 @@ Describe 'UI Automation native filename helpers' {
     }
 }
 
+Describe 'UI Automation empty read-only documents' {
+    BeforeEach {
+        InModuleScope UiaAutomation {
+            $script:documentChildren = @([pscustomobject]@{ Current = [pscustomobject]@{ Name = '' } })
+            $script:documentValue = [pscustomobject]@{
+                Current = [pscustomobject]@{ Value = 'Generated Morphs output'; IsReadOnly = $true }
+            }
+            $range = [pscustomobject]@{}
+            $range | Add-Member ScriptMethod GetText { param($length) return 'Generated Morphs output' }
+            $script:documentText = [pscustomobject]@{ DocumentRange = $range }
+            $script:documentElement = [pscustomobject]@{}
+            $script:documentElement | Add-Member ScriptMethod TryGetCurrentPattern {
+                param($pattern, $result)
+                $result.Value = if ($pattern -eq [System.Windows.Automation.ValuePattern]::Pattern) {
+                    $script:documentValue
+                } else {
+                    $script:documentText
+                }
+                return $true
+            }
+            Mock Find-UiaElements { return $script:documentChildren }
+        }
+    }
+
+    It 'returns a present empty text document instead of its accessible label' {
+        InModuleScope UiaAutomation {
+            $actual = Get-UiaText -Element $script:documentElement
+            $actual | Should -BeExactly ''
+        }
+    }
+
+    It 'retains the pattern fallback when no document text descendant exists' {
+        InModuleScope UiaAutomation {
+            $script:documentChildren = @()
+            Get-UiaText -Element $script:documentElement | Should -BeExactly 'Generated Morphs output'
+        }
+    }
+}
+
 Describe 'UI Automation native dialog process ownership' {
     It 'uses the supplied dialog process for standalone address typing despite a different caller variable' {
         InModuleScope UiaAutomation {

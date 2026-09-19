@@ -1991,6 +1991,11 @@ try {
                 @($expectedMorphsBytes, $exportedMorphs, 'morphs.ini'),
                 @($expectedBosBytes, $exportedBos, 'Settings Output.json'))) {
             if ([Convert]::ToBase64String($comparison[0]) -cne [Convert]::ToBase64String($comparison[1])) {
+                $observations['exportByteMismatch'] = [ordered]@{
+                    artifact = $comparison[2]
+                    expected = [Convert]::ToBase64String($comparison[0])
+                    actual = [Convert]::ToBase64String($comparison[1])
+                }
                 throw "Complete export bytes differ from accepted $($comparison[2]) Output."
             }
         }

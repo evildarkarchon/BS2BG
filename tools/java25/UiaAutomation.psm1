@@ -884,9 +884,10 @@ function Get-UiaText {
         if (-not $valueReadOnly -and -not [string]::IsNullOrEmpty($valueText)) { return $valueText }
     }
     if ($valueReadOnly) {
+        # A present empty Text node is an empty document, not a missing provider. Dropping it would fall back to
+        # JavaFX's accessible label and misreport legitimate zero-byte output as generated text.
         $readOnlyText = @(Find-UiaElements -Root $Element -Condition (
-            New-UiaCondition -ControlType 'Text') | ForEach-Object { [string]$_.Current.Name } |
-                Where-Object { $_ })
+            New-UiaCondition -ControlType 'Text') | ForEach-Object { [string]$_.Current.Name })
         if ($readOnlyText.Count -gt 0) {
             return $readOnlyText -join [Environment]::NewLine
         }
