@@ -2699,7 +2699,7 @@ finally {
             killed = $killed
         }
         diagnostics = [ordered]@{
-            directory = 'target/reproducibility/smoke-diagnostics/'
+            directory = 'smoke-diagnostics/'
             stderrLines = @($stderr -split '\r?\n' | Where-Object { $_ }).Count
             stderrExcerpt = @($stderr -split '\r?\n' | Where-Object { $_ } | Select-Object -First 20)
             nativeAccessWarnings = $restricted

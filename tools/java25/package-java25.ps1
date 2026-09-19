@@ -46,13 +46,25 @@
     Build and verify the image without launching it. Not a checkpoint result; the evidence says so.
 
 .PARAMETER ExpectedDpiPercent
-    Require the packaged window to report this display scale. Use 100, 125, or 150 for the Workbench scale matrix;
-    zero records and accepts whichever supported scale the current interactive desktop uses.
+    Require the packaged window to report this display scale; zero records and accepts whichever supported scale
+    the current interactive desktop uses.
+
+.PARAMETER DpiMatrix
+    Build once and exercise the same archive at the requested scales on the primary display, automatically
+    restoring the original scale. Requires PowerShell 7 and cannot be combined with SkipSmoke or ExpectedDpiPercent.
+
+.PARAMETER DpiRecoveryPath
+    Persistent recovery record outside target/, retained if the matrix is interrupted before display restoration.
+
+.PARAMETER DpiScalePercents
+    Ordered matrix cases, defaulting to 100, 125, and 150. The display must support every requested value.
 
 .EXAMPLE
     .\tools\java25\package-java25.ps1
 .EXAMPLE
     .\tools\java25\package-java25.ps1 -SkipVerify -SkipSmoke
+.EXAMPLE
+    .\tools\java25\package-java25.ps1 -DpiMatrix
 #>
 [CmdletBinding()]
 param(
@@ -60,11 +72,20 @@ param(
     [string]$MavenJavaHome = $env:BS2BG_MAVEN_JAVA_HOME,
     [switch]$SkipVerify,
     [switch]$SkipSmoke,
-    [ValidateSet(0, 100, 125, 150)] [int]$ExpectedDpiPercent = 0
+    [ValidateScript({ $_ -ge 0 })] [int]$ExpectedDpiPercent = 0,
+    [switch]$DpiMatrix,
+    [string]$DpiRecoveryPath = (Join-Path $PSScriptRoot '../../.bs2bg-dpi-matrix-recovery.json'),
+    [int[]]$DpiScalePercents = @(100,125,150)
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Reject incompatible modes before tool provisioning or removal of earlier build outputs.
+if ($DpiMatrix -and $SkipSmoke) { throw 'DpiMatrix cannot be combined with SkipSmoke.' }
+if ($DpiMatrix -and $ExpectedDpiPercent -ne 0) { throw 'DpiMatrix cannot be combined with ExpectedDpiPercent.' }
+if ($PSBoundParameters.ContainsKey('DpiScalePercents') -and -not $DpiMatrix) { throw 'DpiScalePercents requires DpiMatrix.' }
+if ($DpiMatrix -and $PSVersionTable.PSVersion.Major -lt 7) { throw 'DpiMatrix requires PowerShell 7.' }
 
 Import-Module (Join-Path $PSScriptRoot 'Java25Toolchain.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'WindowsAppImage.psm1') -Force
@@ -97,6 +118,11 @@ $explicitModules = [ordered]@{
 
 # Wrapped so a thrown verification error always yields exit code 1, however the script was invoked.
 try {
+
+if ($DpiMatrix) {
+    Import-Module (Join-Path $PSScriptRoot 'DpiMatrix.psm1') -Force
+    Assert-DpiMatrixRecoveryAvailable -RecoveryPath $DpiRecoveryPath
+}
 
 $checkpointResult = (-not $SkipVerify -and -not $SkipSmoke)
 $sourceCheckout = $null
@@ -334,6 +360,7 @@ Write-Host "Archive: $archivePath ($([math]::Round((Get-Item -LiteralPath $archi
 # 7. Packaged smoke run
 # ---------------------------------------------------------------------------------------------------------------
 $smokeEvidence = $null
+$matrixEvidence = $null
 $smokeEvidencePath = Join-Path $evidenceDir 'windows-app-image-smoke.json'
 if ($SkipSmoke) {
     Write-Step 'Skipping the packaged smoke run (-SkipSmoke: not a checkpoint result)'
@@ -349,14 +376,26 @@ else {
         EvidencePath   = $smokeEvidencePath
         ExpectedAppVersion = $appVersion
     }
-    if ($ExpectedDpiPercent -gt 0) { $smokeArguments['ExpectedDpiPercent'] = $ExpectedDpiPercent }
-    & (Join-Path $PSScriptRoot 'smoke-app-image.ps1') @smokeArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "smoke-app-image.ps1 exited with code $LASTEXITCODE; see $smokeEvidencePath and the diagnostics beside it."
+    if ($DpiMatrix) {
+        $smokeArguments.Remove('LauncherName')
+        $smokeArguments['EvidencePath'] = Join-Path $evidenceDir 'dpi-matrix/windows-app-image-dpi-matrix.json'
+        $smokeArguments['RecoveryPath'] = $DpiRecoveryPath
+        $smokeArguments['ScalePercents'] = $DpiScalePercents
+        $matrixEvidence = Invoke-DpiMatrix @smokeArguments
+        if (-not $matrixEvidence.passed -or $matrixEvidence.archiveSha256 -ne $archiveSha256) {
+            throw 'The display-scale matrix did not pass against the packaged archive hash.'
+        }
     }
-    $smokeEvidence = Get-Content -LiteralPath $smokeEvidencePath -Raw | ConvertFrom-Json
-    if (-not $smokeEvidence.PSObject.Properties['passed'] -or -not $smokeEvidence.passed) {
-        throw "The packaged smoke run did not pass; see $smokeEvidencePath."
+    else {
+        if ($ExpectedDpiPercent -gt 0) { $smokeArguments['ExpectedDpiPercent'] = $ExpectedDpiPercent }
+        & (Join-Path $PSScriptRoot 'smoke-app-image.ps1') @smokeArguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "smoke-app-image.ps1 exited with code $LASTEXITCODE; see $smokeEvidencePath and the diagnostics beside it."
+        }
+        $smokeEvidence = Get-Content -LiteralPath $smokeEvidencePath -Raw | ConvertFrom-Json
+        if (-not $smokeEvidence.PSObject.Properties['passed'] -or -not $smokeEvidence.passed) {
+            throw "The packaged smoke run did not pass; see $smokeEvidencePath."
+        }
     }
 }
 
@@ -365,7 +404,7 @@ else {
 # ---------------------------------------------------------------------------------------------------------------
 Write-Step 'Recording app-image evidence'
 $evidence = [ordered]@{
-    schema            = 'bs2bg.windows-app-image/2'
+    schema            = $(if ($DpiMatrix) { 'bs2bg.windows-app-image/3' } else { 'bs2bg.windows-app-image/2' })
     recordedAtUtc     = $startedAt.ToString('o')
     gitCommit         = $gateEvidence.gitCommit
     checkpointResult  = $checkpointResult
@@ -459,8 +498,11 @@ $evidence = [ordered]@{
         }
         jpackageOutputFile = 'target/reproducibility/app-image-jpackage-output.txt'
     }
-    smoke             = $(if ($smokeEvidence) { $smokeEvidence } else { [ordered]@{ skipped = $true; reason = '-SkipSmoke' } })
+    smoke             = $(if ($smokeEvidence) { $smokeEvidence } elseif ($DpiMatrix) {
+        [ordered]@{ mode = 'dpi-matrix'; evidenceFile = 'target/reproducibility/dpi-matrix/windows-app-image-dpi-matrix.json' }
+    } else { [ordered]@{ skipped = $true; reason = '-SkipSmoke' } })
 }
+if ($DpiMatrix) { $evidence['dpiMatrix'] = $matrixEvidence }
 $evidencePath = Join-Path $evidenceDir 'windows-app-image.json'
 $evidence | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $evidencePath -Encoding utf8
 Write-Host "Evidence written to $evidencePath"
@@ -477,7 +519,16 @@ else {
     Write-Host 'WINDOWS APP-IMAGE CHECKPOINT: green' -ForegroundColor Green
     Write-Host "  $launcherName $appVersion on $($release['IMPLEMENTOR_VERSION']) + JavaFX $($lock.javafx.version), $($imageRuntime.Modules.Count) runtime modules" -ForegroundColor Green
     Write-Host "  image digest $($digest.Sha256)" -ForegroundColor Green
-    Write-Host "  packaged workflows: $(@($smokeEvidence.steps | Where-Object { $_.passed }).Count)/$(@($smokeEvidence.steps).Count) steps passed; exit code $($smokeEvidence.process.exitCode) after $($smokeEvidence.process.exitWaitSeconds) s" -ForegroundColor Green
+    if ($DpiMatrix) {
+        foreach ($run in $matrixEvidence.runs) {
+            $scaleEvidence = Get-Content -LiteralPath $run.evidencePath -Raw | ConvertFrom-Json
+            Write-Host "  $($run.scalePercent)% packaged workflows: $(@($scaleEvidence.steps | Where-Object { $_.passed }).Count)/$(@($scaleEvidence.steps).Count) steps passed; exit code $($scaleEvidence.process.exitCode)" -ForegroundColor Green
+        }
+        Write-Host "  primary display restored to $($matrixEvidence.restoration.scalePercent)%" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  packaged workflows: $(@($smokeEvidence.steps | Where-Object { $_.passed }).Count)/$(@($smokeEvidence.steps).Count) steps passed; exit code $($smokeEvidence.process.exitCode) after $($smokeEvidence.process.exitWaitSeconds) s" -ForegroundColor Green
+    }
     Write-Host '=====================================================================================' -ForegroundColor Green
 }
 exit 0

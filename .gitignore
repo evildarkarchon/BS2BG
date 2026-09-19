@@ -457,3 +457,5 @@ graphify-out/
 .playwright-mcp/
 BS2BG.code-workspace
 .bs2bg-settings.lock
+# Durable display recovery must survive Maven clean without becoming source changes.
+/.bs2bg-dpi-matrix-recovery.json*

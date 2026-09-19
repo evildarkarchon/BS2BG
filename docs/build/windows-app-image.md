@@ -14,19 +14,53 @@ ADR-0003 records the Java 25 baseline this checkpoint ships.
 .\tools\java25\package-java25.ps1
 ```
 
-For the issue #99 display-scale matrix, run the same clean commit/archive from interactive Windows sessions at
-100%, 125%, and 150%; each run fails if the session does not match the requested scale:
+To build once and automatically exercise the same archive across the display-scale matrix, run from PowerShell 7:
 
 ```powershell
-.\tools\java25\package-java25.ps1 -ExpectedDpiPercent 100
-.\tools\java25\package-java25.ps1 -ExpectedDpiPercent 125
-.\tools\java25\package-java25.ps1 -ExpectedDpiPercent 150
+.\tools\java25\package-java25.ps1 -DpiMatrix
+# Optional cases; these must be offered by the detected display.
+.\tools\java25\package-java25.ps1 -DpiMatrix -DpiScalePercents 100,125,150,175
 ```
 
-One invocation can prove only its current interactive desktop scale. The JSON records native DPI and physical and
-logical client geometry; when each result is retained under a distinct evidence directory, the three runs form the
-issue #99 Workbench scale matrix without changing production code or introducing a test-only route. This focused
-matrix does not replace the broader release accessibility or mixed-monitor audit.
+The default cases are 100%, 125%, and 150%; neither current DPI, supported choices, monitor numbering, nor the
+restoration percentage is assumed. The runner discovers the primary monitor's native device identity and selects
+the display marked **Make this my main display** in Windows Settings. It reads the available standard scale
+choices, applies each requested choice through UI Automation, and verifies both Settings and a native per-monitor
+DPI probe. Each fresh packaged process independently reports its actual window DPI and must match the probe.
+Windows defines 96 DPI as the percentage-conversion reference; that constant is not a claimed monitor reading.
+
+This adapter currently targets the primary display using English Windows Settings. Custom scaling and ambiguous
+or changed monitor identities fail closed. Keep the interactive desktop idle: scaling temporarily changes the
+whole primary display. This focused matrix does not replace mixed-monitor, hot-plug, or broader release audits.
+
+The archive SHA-256 must remain unchanged throughout. Each scale gets independent evidence and screenshots under
+`target/reproducibility/dpi-matrix/dpi-<percent>/`; `windows-app-image-dpi-matrix.json` records the aggregate result,
+captured display, requested cases, restoration, and any workflow/restoration errors. Matrix packaging evidence
+uses `bs2bg.windows-app-image/3`; the existing single-scale packaging format remains `/2`.
+
+The original scale is recorded before mutation in `.bs2bg-dpi-matrix-recovery.json` at the repository root, outside
+Maven's disposable `target/`. The record and its lock/staging siblings are ignored by Git. Restoration runs in
+`finally` and verifies the captured native DPI; a pending record survives a killed runner. A session-wide mutex
+prevents competing matrices, even with different recovery paths or worktrees. To recover an interrupted run:
+
+```powershell
+.\tools\java25\smoke-dpi-matrix.ps1 -RestoreOnly
+```
+
+Recovery refuses a live owner, another account/machine, or a changed primary monitor. A completed recovery record
+is a no-op, so repeating the command cannot undo a later intentional user change. `-DpiRecoveryPath` on packaging
+and `-RecoveryPath` on the standalone command select a different durable path, which must also be outside `target/`.
+New matrices refuse unresolved records; they do not replace the original setting with a partially changed one.
+
+For a manually configured single-scale session, `-ExpectedDpiPercent 125` (or another percentage) still validates
+the current scale without changing it. It cannot be combined with `-DpiMatrix`. `-SkipSmoke` cannot be combined
+with the matrix; `-SkipVerify` remains a developer run, not a clean checkpoint.
+
+The implementation uses the documented [Display Settings URI](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-settings),
+[monitor device identity](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaydevicesw),
+[thread DPI awareness](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setthreaddpiawarenesscontext),
+and [window DPI](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getdpiforwindow) APIs.
+It does not write DPI registry values, use private display-configuration requests, or force JavaFX rendering scale.
 
 The script:
 
