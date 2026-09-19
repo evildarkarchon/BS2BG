@@ -1225,7 +1225,7 @@ try {
         $unneededListScroll = Find-UiaElement -Root $presetList -Condition (
             New-UiaCondition -ControlType 'ScrollBar')
         if ($null -ne $unneededListScroll -and -not $unneededListScroll.Current.IsOffscreen) {
-            throw 'A one-row Slider Preset list exposed an unnecessary inner scrollbar.'
+            throw 'A short Slider Preset catalog exposed an unnecessary inner scrollbar.'
         }
         Send-UiaKeysToElement -Element $presetList -Keys 'c' -TimeoutSeconds $StepTimeoutSeconds
         $reopenedCbbe = Wait-UiaElement -Root $presetList -Condition (

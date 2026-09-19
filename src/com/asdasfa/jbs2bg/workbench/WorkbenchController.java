@@ -23,6 +23,8 @@ import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.DoubleBinding;
 import javafx.fxml.FXML;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -741,6 +743,7 @@ public final class WorkbenchController {
 
     /** Configures the current target ListView instance; empty/refill UIA recovery may replace that adapter node. */
     private void configureCustomMorphTargetList() {
+        configureCatalogHeight(customMorphTargetList, MORPH_TARGET_CELL_HEIGHT, MAX_VISIBLE_MORPH_TARGET_ROWS);
         customMorphTargetList.setCellFactory(list -> new ListCell<>() {
             /** {@inheritDoc} */
             @Override
@@ -1501,6 +1504,7 @@ public final class WorkbenchController {
      * Configures the current Slider Preset ListView instance; the UIA empty/refill workaround may replace that node.
      */
     private void configureSliderPresetList() {
+        configureCatalogHeight(sliderPresetList, SLIDER_PRESET_CELL_HEIGHT, MAX_VISIBLE_SLIDER_PRESET_ROWS);
         sliderPresetList.setEditable(true);
         sliderPresetList.setFixedCellSize(SLIDER_PRESET_CELL_HEIGHT);
         sliderPresetList.setCellFactory(list -> new SliderPresetCell());
@@ -1797,7 +1801,6 @@ public final class WorkbenchController {
             customMorphTargetFilter.setText(frame.filterText());
             customMorphTargetSort.setValue(frame.sortOrder());
             reconcileCustomMorphTargetItems(frame.visibleTargets());
-            sizeCustomMorphTargetList(frame.visibleTargets().size());
             CustomMorphTargetSnapshot selectedTarget = customMorphTargetList.getSelectionModel().getSelectedItem();
             Optional<NameIdentity> currentTarget = selectedTarget == null ? Optional.empty()
                     : Optional.of(NameIdentity.of(selectedTarget.getName()));
@@ -1895,7 +1898,6 @@ public final class WorkbenchController {
             sliderPresetFilter.setText(frame.filterText());
             sliderPresetSort.setValue(frame.sortOrder());
             reconcileSliderPresetItems(frame.visiblePresets());
-            sizeSliderPresetList(frame.visiblePresets().size());
             reconcileSliderPresetSelection(frame.selection());
             boolean validationVisible = !frame.diagnostics().isEmpty();
             templatesInfoBar.setManaged(validationVisible);
@@ -2055,15 +2057,6 @@ public final class WorkbenchController {
         }
     }
 
-    /** Keeps short target catalogs free of a redundant inner scrollbar while bounding large-list height. */
-    private void sizeCustomMorphTargetList(int visibleCount) {
-        int rows = Math.max(1, Math.min(MAX_VISIBLE_MORPH_TARGET_ROWS, visibleCount));
-        double height = rows * MORPH_TARGET_CELL_HEIGHT + 2.0;
-        customMorphTargetList.setMinHeight(height);
-        customMorphTargetList.setPrefHeight(height);
-        customMorphTargetList.setMaxHeight(height);
-    }
-
     /** Replaces only the JavaFX adapter node after an empty-to-populated target transition. */
     private void replaceEmptyCustomMorphTargetList() {
         boolean restoreFocus = customMorphTargetList.isFocused();
@@ -2103,13 +2096,23 @@ public final class WorkbenchController {
     /**
      * Shows only the rows that exist (up to the accepted cap) so a short catalog does not expose a pointless inner
      * scrollbar; larger catalogs scroll within the list while the management pane handles minimum-height overflow.
+     * Tracks CSS, scene attachment, and the owner's render scale for the lifetime of this adapter ListView.
+     *
+     * @param list current Templates or Morphs catalog control
+     * @param cellHeight fixed logical cell height used by its ListView
+     * @param maximumRows largest catalog viewport before scrolling is required
      */
-    private void sizeSliderPresetList(int visibleCount) {
-        int rows = Math.max(1, Math.min(MAX_VISIBLE_SLIDER_PRESET_ROWS, visibleCount));
-        double height = rows * SLIDER_PRESET_CELL_HEIGHT + 2.0;
-        sliderPresetList.setMinHeight(height);
-        sliderPresetList.setPrefHeight(height);
-        sliderPresetList.setMaxHeight(height);
+    private void configureCatalogHeight(ListView<?> list, double cellHeight, int maximumRows) {
+        DoubleBinding height = Bindings.createDoubleBinding(() -> {
+            int rows = Math.max(1, Math.min(maximumRows, list.getItems().size()));
+            // Snap each CSS inset independently, then round the total outward. Otherwise subtracting fractional
+            // insets can leave VirtualFlow a fraction of a pixel short and expose a redundant vertical scrollbar.
+            return list.snapSizeY(Math.ceil(list.snapSizeY(rows * cellHeight)
+                    + list.snappedTopInset() + list.snappedBottomInset()));
+        }, list.getItems(), list.insetsProperty(), list.sceneProperty(), stage.renderScaleYProperty());
+        list.minHeightProperty().bind(height);
+        list.prefHeightProperty().bind(height);
+        list.maxHeightProperty().bind(height);
     }
 
     /**

@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import com.asdasfa.jbs2bg.Main;
 import com.asdasfa.jbs2bg.data.Settings;
@@ -51,9 +52,12 @@ import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
 import javafx.css.PseudoClass;
+import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.AccessibleRole;
+import javafx.scene.AccessibleAttribute;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -84,6 +88,76 @@ class WorkbenchControllerTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    /** Short catalogs remain fully visible as pixel snapping changes, without redundant accessible scrollbars. */
+    @ParameterizedTest
+    @CsvSource({"1.0,false", "1.25,false", "1.5,false", "1.75,false",
+            "1.0,true", "1.25,true", "1.5,true", "1.75,true"})
+    void shortCatalogsFitAllRowsAtFractionalRenderScales(double renderScale, boolean morphs) throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(SliderPresetEdits.create("Beta"));
+        flow.apply(CustomMorphTargetEdits.create("First"));
+        flow.apply(CustomMorphTargetEdits.create("Second"));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            stage.getScene().getStylesheets().add(Main.class.getResource("workbench.css").toExternalForm());
+            stage.setForceIntegerRenderScale(false);
+            stage.setRenderScaleX(renderScale);
+            stage.setRenderScaleY(renderScale);
+            controller.attach(flow, stage, new RecordingPlatform());
+            if (morphs)
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+            ListView<?> catalog = morphs ? controller.customMorphTargetListNode() : controller.sliderPresetListNode();
+            try {
+                stage.show();
+                stage.setRenderScaleX(renderScale);
+                stage.setRenderScaleY(renderScale);
+                settleCatalogLayout(root);
+                assertShortCatalogHasNoVerticalScrollbar(catalog);
+                // A displayed window can move to another monitor without any Project frame changing.
+                stage.setRenderScaleX(1.5);
+                stage.setRenderScaleY(1.5);
+                settleCatalogLayout(root);
+                assertShortCatalogHasNoVerticalScrollbar(catalog);
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** Waits for CSS/navigation and VirtualFlow's deferred cell metrics to finish real layout pulses. */
+    private static void settleCatalogLayout(Parent root) {
+        Object loop = new Object();
+        int[] pulses = {0};
+        Runnable listener = () -> {
+            if (++pulses[0] == 2)
+                Platform.runLater(() -> Platform.exitNestedEventLoop(loop, null));
+            else
+                Platform.requestNextPulse();
+        };
+        root.getScene().addPostLayoutPulseListener(listener);
+        try {
+            Platform.requestNextPulse();
+            Platform.enterNestedEventLoop(loop);
+        } finally {
+            root.getScene().removePostLayoutPulseListener(listener);
+        }
+    }
+
+    /** Asserts user-visible list overflow through JavaFX's public accessibility surface. */
+    private static void assertShortCatalogHasNoVerticalScrollbar(ListView<?> list) {
+        list.layout();
+        assertEquals(2, list.getItems().size());
+        Node scrollbar = (Node) list.queryAccessibleAttribute(AccessibleAttribute.VERTICAL_SCROLLBAR);
+        assertTrue(scrollbar == null || !scrollbar.isVisible(),
+                () -> list.getId() + " unnecessarily scrolls: height=" + list.getHeight()
+                        + ", top=" + list.snappedTopInset() + ", bottom=" + list.snappedBottomInset());
+    }
 
     /**
      * The Morphs JavaFX adapter renders immutable target frames and translates catalog and relationship controls into
@@ -1142,9 +1216,10 @@ class WorkbenchControllerTest {
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
+            Parent root = loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
             controller.attach(flow, stage, new RecordingPlatform());
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> initial =
@@ -1158,7 +1233,9 @@ class WorkbenchControllerTest {
             assertNotSame(initial, controller.sliderPresetListNode());
             assertEquals(List.of("Alpha"), controller.sliderPresetListNode().getItems().stream()
                     .map(SliderPresetSnapshot::getName).toList());
-            assertEquals(30.0, controller.sliderPresetListNode().getPrefHeight());
+            root.applyCss();
+            assertTrue(controller.sliderPresetListNode().getPrefHeight() >= 28.0);
+            assertTrue(controller.sliderPresetListNode().getPrefHeight() < 56.0);
             assertEquals(28.0, controller.sliderPresetListNode().getFixedCellSize());
             assertSame(name.getParent(), controller.sliderPresetListNode().getParent());
             stage.close();
