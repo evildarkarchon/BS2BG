@@ -455,8 +455,9 @@ function Wait-UiaWindow {
         [Parameter(Mandatory)] [string]$Title,
         [int]$TimeoutSeconds = 60
     )
-    $condition = New-UiaCondition -ControlType 'Window' -Name $Title -ProcessId $ProcessId
-    return Wait-UiaElement -Root ([System.Windows.Automation.AutomationElement]::RootElement) -Condition $condition -Scope 'Children' -Description "window '$Title' of process $ProcessId" -TimeoutSeconds $TimeoutSeconds
+    # Root UIA name matching can retain the old JavaFX title after Save As. Reacquire the native handle on each
+    # poll, then verify the current UIA name and role just as for owned file dialogs.
+    return Wait-UiaOwnedWindow -ProcessId $ProcessId -Title $Title -TimeoutSeconds $TimeoutSeconds
 }
 
 <#
@@ -576,6 +577,10 @@ function Invoke-UiaPointerClick {
     $clickablePointError = $null
     $attemptCount = $(if ($refresh) { 20 } else { 1 })
     for ($attempt = 0; $attempt -lt $attemptCount; $attempt++) {
+        # A refreshed peer may move or disappear; never carry coordinates or a native owner across attempts.
+        $fallbackBounds = $null
+        $fallbackSource = 'bounding-rectangle-center'
+        $handle = [IntPtr]::Zero
         if ($refresh) {
             $candidate = Find-UiaElement -Root $RefreshRoot -Condition $RefreshCondition
             if ($null -eq $candidate) {
@@ -591,6 +596,7 @@ function Invoke-UiaPointerClick {
             }
             # Snapshot provider state before TryGetClickablePoint: JavaFX may invalidate its optional point peer.
             $bounds = $Element.Current.BoundingRectangle
+            $fallbackBounds = $bounds
             $textChild = Find-UiaElement -Root $Element -Condition (New-UiaCondition -ControlType 'Text')
             if ($null -ne $textChild) {
                 $textBounds = $textChild.Current.BoundingRectangle
@@ -599,7 +605,6 @@ function Invoke-UiaPointerClick {
                     $fallbackSource = 'descendant-text-center'
                 }
             }
-            if ($null -eq $fallbackBounds) { $fallbackBounds = $bounds }
             $ancestor = $Element
             $handle = [IntPtr]::Zero
             $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
@@ -626,7 +631,7 @@ function Invoke-UiaPointerClick {
     }
     $locationSource = 'clickable-point'
     if ($null -eq $point) {
-        if ($fallbackBounds.IsEmpty -or $fallbackBounds.Width -le 0.0 -or $fallbackBounds.Height -le 0.0) {
+        if ($null -eq $fallbackBounds -or $fallbackBounds.IsEmpty -or $fallbackBounds.Width -le 0.0 -or $fallbackBounds.Height -le 0.0) {
             throw "Element '$elementName' exposed neither a clickable point nor usable provider bounds."
         }
         # JavaFX 25 may omit a clickable point; visible descendant content is reliably inside the semantic control.
@@ -638,10 +643,7 @@ function Invoke-UiaPointerClick {
     if ($handle -eq [IntPtr]::Zero) {
         throw "Element '$elementName' has no native ancestor for foreground pointer activation."
     }
-    $activated = [BS2BGWindows]::ActivateWindow($handle)
-    # UIA focus can belong to a background JavaFX window; allow the foreground transition to settle before input.
-    Start-Sleep -Milliseconds 75
-    [BS2BGWindows]::LeftClick([int][math]::Round($point.X), [int][math]::Round($point.Y))
+    $activated = Invoke-UiaNativePointerClick -Handle $handle -Point $point
     return [ordered]@{
         x = $point.X
         y = $point.Y
@@ -649,6 +651,21 @@ function Invoke-UiaPointerClick {
         windowActivated = $activated
         clickablePointError = $clickablePointError
     }
+}
+
+<#
+.SYNOPSIS
+    Activates the provider-resolved window and emits pointer input at its captured point.
+.NOTES
+    Keeps native input at one boundary so provider retry tests never move the real pointer.
+#>
+function Invoke-UiaNativePointerClick {
+    param([IntPtr]$Handle, [System.Windows.Point]$Point)
+    $activated = [BS2BGWindows]::ActivateWindow($Handle)
+    # UIA focus can belong to a background JavaFX window; allow the foreground transition to settle before input.
+    Start-Sleep -Milliseconds 75
+    [BS2BGWindows]::LeftClick([int][math]::Round($Point.X), [int][math]::Round($Point.Y))
+    return $activated
 }
 
 <#

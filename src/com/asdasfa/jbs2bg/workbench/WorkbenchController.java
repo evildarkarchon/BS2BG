@@ -920,7 +920,9 @@ public final class WorkbenchController {
         try {
             MorphsFeature.Update update = morphsFeature.dispatch(Objects.requireNonNull(intent, "intent"));
             renderMorphsUpdate(update);
-            update.effect().ifPresent(this::completeMorphsEffect);
+            // The confirmed edit owns diagnostics; reporting the request would hide a rejected or failed response.
+            if (update.effect().isPresent())
+                update = completeMorphsEffect(update.effect().orElseThrow());
             publishMorphsOutcome(intent, update);
             if (intent instanceof MorphsFeature.Create && update.accepted()
                     && update.outcomeKind() == MorphsFeature.OutcomeKind.CHANGED)
@@ -951,8 +953,10 @@ public final class WorkbenchController {
         renderMorphs(update.frame());
     }
 
-    /** Realizes one tokenized destructive Morphs confirmation and returns its answer as an ordinary feature response. */
-    private void completeMorphsEffect(MorphsFeature.Effect effect) {
+    /**
+     * Realizes one tokenized destructive Morphs confirmation and returns its completed feature response for reporting.
+     */
+    private MorphsFeature.Update completeMorphsEffect(MorphsFeature.Effect effect) {
         WorkbenchFeedback.DialogAction destructiveAction = effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE
                 || effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE_ASSIGNMENT
                 ? WorkbenchFeedback.DialogAction.REMOVE
@@ -977,6 +981,7 @@ public final class WorkbenchController {
             };
             publishMorphsMutation(operation, response, true);
         }
+        return response;
     }
 
     /** Routes Morphs validation and task outcomes into the accepted inline, status, Activity, and failure tiers. */

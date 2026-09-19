@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -19,6 +20,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import javafx.scene.shape.SVGPath;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.asdasfa.jbs2bg.Main;
 import com.asdasfa.jbs2bg.data.Settings;
@@ -27,6 +30,17 @@ import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
+import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
+import com.asdasfa.jbs2bg.project.FailedOutcome;
+import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
+import com.asdasfa.jbs2bg.project.ProjectEdit;
+import com.asdasfa.jbs2bg.project.ProjectOperationContext;
+import com.asdasfa.jbs2bg.project.ProjectOutcome;
+import com.asdasfa.jbs2bg.project.ProjectSession;
+import com.asdasfa.jbs2bg.project.ProjectSnapshot;
+import com.asdasfa.jbs2bg.project.RejectedOutcome;
+import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
+import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
@@ -229,6 +243,46 @@ class WorkbenchControllerTest {
             clearTargets.fire();
             assertTrue(flow.frame().snapshot().getCustomMorphTargets().isEmpty());
             stage.close();
+        });
+    }
+
+    /** Confirms that destructive responses report validation or failure while retaining the selected target. */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void confirmedMorphsRemovalReportsRejectedAndFailedOutcomes(boolean failed) throws Exception {
+        RefusingEditSession session = new RefusingEditSession(ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        flow.apply(CustomMorphTargetEdits.create("Existing"));
+        session.refuseEdits(failed);
+        RecordingPlatform platform = new RecordingPlatform();
+        java.util.concurrent.atomic.AtomicBoolean failureShown = new java.util.concurrent.atomic.AtomicBoolean();
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
+        platform.respondFailureWith(WorkbenchFeedback.DialogAction.CLOSE, () -> failureShown.set(true));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            try {
+                controller.attach(flow, stage, platform);
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                ListView<?> targets = (ListView<?>) loader.getNamespace().get("customMorphTargetList");
+                targets.getSelectionModel().selectFirst();
+                ((Button) loader.getNamespace().get("removeCustomMorphTargetButton")).fire();
+
+                assertTrue(((Label) loader.getNamespace().get("morphsInfoBarMessage")).getText()
+                        .contains("The target could not be removed."));
+                assertTrue(((Label) loader.getNamespace().get("statusText")).getText()
+                        .contains("The target could not be removed."));
+                assertEquals(failed, failureShown.get());
+                assertEquals("Existing", ((CustomMorphTargetSnapshot) targets.getSelectionModel()
+                        .getSelectedItem()).getName());
+                assertEquals(1, flow.frame().snapshot().getCustomMorphTargets().size());
+                assertTrue(((ListView<?>) loader.getNamespace().get("activityList")).getItems().isEmpty());
+            } finally {
+                stage.close();
+            }
         });
     }
 
@@ -2403,6 +2457,78 @@ class WorkbenchControllerTest {
             if (shutdown)
                 throw new java.util.concurrent.RejectedExecutionException("inline executor is shut down");
             Objects.requireNonNull(command, "command").run();
+        }
+    }
+
+    /** Delegates lifecycle operations while supplying deterministic Project edit rejection or failure. */
+    private static final class RefusingEditSession implements ProjectSession {
+        private final ProjectSession delegate;
+        private boolean refuse;
+        private boolean failed;
+
+        /** Wraps a real session so fixture setup and snapshots retain production semantics. */
+        private RefusingEditSession(ProjectSession delegate) {
+            this.delegate = delegate;
+        }
+
+        /** Arms the requested outcome only after fixture creation through the public Project seam. */
+        private void refuseEdits(boolean failure) {
+            refuse = true;
+            failed = failure;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectSnapshot getSnapshot() {
+            return delegate.getSnapshot();
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome newProject() {
+            return delegate.newProject();
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome open(Path source, ProjectOperationContext context) {
+            return delegate.open(source, context);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome save(ProjectOperationContext context) {
+            return delegate.save(context);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome saveAs(Path target, ProjectOperationContext context) {
+            return delegate.saveAs(target, context);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public SliderPresetImportOutcome importSliderPresets(List<Path> sources, ProjectOperationContext context) {
+            return delegate.importSliderPresets(sources, context);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ProjectOutcome refreshSettings() {
+            return delegate.refreshSettings();
+        }
+
+        /** Preserves the Project while returning a structured diagnostic after rejection is armed. */
+        @Override
+        public ProjectOutcome apply(ProjectEdit edit) {
+            if (!refuse)
+                return delegate.apply(edit);
+            List<ProjectDiagnostic> diagnostics = List.of(new ProjectDiagnostic("TEST_MORPH_REMOVE",
+                    DiagnosticSeverity.ERROR, new SourceLocation(Optional.empty(), Optional.of("custom-target"),
+                    OptionalInt.empty(), OptionalInt.empty()), "The target could not be removed."));
+            return failed ? new FailedOutcome(delegate.getSnapshot(), diagnostics)
+                    : new RejectedOutcome(delegate.getSnapshot(), diagnostics);
         }
     }
 

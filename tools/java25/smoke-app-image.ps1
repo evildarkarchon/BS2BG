@@ -1605,6 +1605,12 @@ try {
             New-UiaCondition -ControlType 'ListItem' -Name 'ActorTypeNPC|Female') `
             -Description 'target for confirmed relationship clear' -TimeoutSeconds $StepTimeoutSeconds
         Select-UiaElement -Element $createdTarget
+        $initialAssignments = @(Find-UiaElements -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem'))
+        if ($initialAssignments.Count -ne 1 -or $initialAssignments[0].Current.Name -notin @('CBBE Curvy', 'UUNP Athletic')) {
+            throw 'A new Custom Morph Target must start with exactly one eligible Slider Preset.'
+        }
+        $initialAssignmentName = $initialAssignments[0].Current.Name
         $clearRelationships = Find-OuterControl -ControlType 'Button' -Name 'Clear assigned Slider Presets'
         Send-UiaKeysToElement -Element $clearRelationships -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Choose-Confirmation -ButtonName 'Clear'
@@ -1612,6 +1618,14 @@ try {
             $items = Find-UiaElements -Root $assignedList -Condition (New-UiaCondition -ControlType 'ListItem')
             if (@($items).Count -eq 0) { $true }
         } | Out-Null
+        $availablePresetLabel = Find-OuterControl -ControlType 'Text' -Name 'Available Slider Preset:'
+        $availablePreset = Get-FollowingControl -Element $availablePresetLabel -ControlType 'ComboBox'
+        Send-UiaKeysToElement -Element $availablePreset -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        $assignOne = Find-OuterControl -ControlType 'Button' -Name 'Assign selected Slider Preset'
+        Send-UiaKeysToElement -Element $assignOne -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
+            -Description 'individually assigned Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $removeTarget = Find-OuterControl -ControlType 'Button' -Name 'Remove selected Custom Morph Target'
         Send-UiaKeysToElement -Element $removeTarget -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Choose-Confirmation -ButtonName 'Cancel'
@@ -1707,6 +1721,8 @@ try {
             relationshipAdded = 'UUNP Athletic'
             relationshipRemoved = 'UUNP Athletic'
             relationshipCleared = 'ActorTypeNPC|Female'
+            initialAssignment = $initialAssignmentName
+            individuallyAssigned = 'CBBE Curvy'
             removed = 'ActorTypeNPC|Female'
             clearVisibleRemoved = 'Clear Me'
             generatedBeforeRemoval = $beforeRelationshipRemoval
