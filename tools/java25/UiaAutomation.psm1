@@ -664,7 +664,32 @@ function Invoke-UiaNativePointerClick {
     $activated = [BS2BGWindows]::ActivateWindow($Handle)
     # High Contrast can leave a native CoverWindow above the app after its theme updates; focus alone cannot prove
     # pointer delivery. Wait for the physical hit-test owner instead of clicking through the transition overlay.
-    Wait-UiaCondition -Description 'pointer point owned by the activated application window' -TimeoutSeconds 15 -Test {
+    Wait-UiaPointOwner -Handle $Handle -Point $Point
+    [BS2BGWindows]::LeftClick([int][math]::Round($Point.X), [int][math]::Round($Point.Y))
+    return $activated
+}
+
+<#
+.SYNOPSIS
+    Waits until the physical hit-test point belongs to the exact intended native window.
+.PARAMETER Handle
+    Native owner handle obtained from the semantically identified application window or control ancestry.
+.PARAMETER Point
+    Physical screen point whose hit-test ancestry must contain the intended window handle.
+.PARAMETER TimeoutSeconds
+    Bounded wait for transient covering windows to disappear; defaults to 15 seconds.
+.NOTES
+    Used before pointer input and visual capture because accessible content can update underneath a native
+    High Contrast transition cover. Same-process membership alone does not establish the intended window owner.
+#>
+function Wait-UiaPointOwner {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [IntPtr]$Handle,
+        [Parameter(Mandatory)] [System.Windows.Point]$Point,
+        [int]$TimeoutSeconds = 15
+    )
+    Wait-UiaCondition -Description 'pointer point owned by the activated application window' -TimeoutSeconds $TimeoutSeconds -Test {
         $hit = [System.Windows.Automation.AutomationElement]::FromPoint($Point)
         $hitClass = if ($null -ne $hit) { $hit.Current.ClassName } else { '<none>' }
         $hitProcess = if ($null -ne $hit) { $hit.Current.ProcessId } else { 0 }
@@ -675,8 +700,6 @@ function Invoke-UiaNativePointerClick {
         }
         throw "Pointer point is covered by class '$hitClass' in process $hitProcess."
     } | Out-Null
-    [BS2BGWindows]::LeftClick([int][math]::Round($Point.X), [int][math]::Round($Point.Y))
-    return $activated
 }
 
 <#
@@ -1147,6 +1170,7 @@ Export-ModuleMember -Function @(
     'Wait-UiaElement',
     'Wait-UiaWindow',
     'Wait-UiaOwnedWindow',
+    'Wait-UiaPointOwner',
     'Get-ProcessTopLevelWindows',
     'Get-UiaProcessWindows',
     'Invoke-UiaElement',

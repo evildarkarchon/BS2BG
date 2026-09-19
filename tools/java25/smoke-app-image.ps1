@@ -178,21 +178,35 @@ function Save-FailureDiagnostics {
     catch {
         # Diagnostics are best effort and must never hide the original smoke failure.
     }
-    Save-Screenshot -Path (Join-Path $diagnosticsDir "failure-$safe.png")
+    Save-Screenshot -Path (Join-Path $diagnosticsDir "failure-$safe.png") -BestEffort
 }
 
 <#
 .SYNOPSIS
-    Saves a best-effort screenshot of the virtual Windows desktop.
+    Saves the uncovered Workbench window in physical pixels, excluding unrelated desktop content.
 .PARAMETER Path
     PNG destination path.
+.PARAMETER BestEffort
+    Suppresses capture failures only when collecting diagnostics for an already failed workflow.
+.NOTES
+    Required evidence fails closed if the window remains covered or capture fails.
 #>
 function Save-Screenshot {
-    param([string]$Path)
+    param([string]$Path, [switch]$BestEffort)
     try {
         Add-Type -AssemblyName System.Drawing
-        Add-Type -AssemblyName System.Windows.Forms
-        $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        if ($null -eq $script:mainWindow) { throw 'No Workbench window is available for capture.' }
+        $metrics = Get-UiaWindowMetrics -Window $script:mainWindow
+        $center = [System.Windows.Point]::new($metrics.WindowLeft + $metrics.WindowWidth / 2.0,
+            $metrics.WindowTop + $metrics.WindowHeight / 2.0)
+        $captureWaitSeconds = if ($BestEffort) { 1 } else { $StepTimeoutSeconds }
+        # Theme state can update before Windows removes its full-screen transition cover. Require the actual
+        # app under the capture point so a saved "Please wait" image cannot count as accessibility evidence.
+        Wait-UiaPointOwner -Handle ([IntPtr]$script:mainWindow.Current.NativeWindowHandle) -Point $center `
+            -TimeoutSeconds $captureWaitSeconds
+        $metrics = Get-UiaWindowMetrics -Window $script:mainWindow
+        $bounds = [System.Drawing.Rectangle]::new($metrics.WindowLeft, $metrics.WindowTop,
+            $metrics.WindowWidth, $metrics.WindowHeight)
         $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
         $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
         try {
@@ -205,7 +219,8 @@ function Save-Screenshot {
         }
     }
     catch {
-        # Locked or headless desktops may reject capture; textual diagnostics remain.
+        if (-not $BestEffort) { throw }
+        # Failure diagnostics must preserve the original error when the desktop cannot be captured.
     }
 }
 

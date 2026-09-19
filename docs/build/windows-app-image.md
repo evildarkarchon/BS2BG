@@ -156,8 +156,10 @@ workflow records these steps:
 20. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
     prompt and prove admission resumes, then repeat and Discard to require bounded exit 0 with no image process.
 
-Every wait is bounded. The first failure captures all visible process windows, their UIA trees, a screenshot, and
-launcher stdout/stderr. Because real accelerators and focus are used, the desktop must not be touched during the run.
+Every wait is bounded. The first failure records all visible process windows, their UIA trees, a best-effort
+Workbench screenshot, and launcher stdout/stderr. Required screenshots wait until the Workbench is uncovered
+after system transitions, capture only its physical window bounds, and fail the run if capture is unavailable.
+Because real accelerators and focus are used, the desktop must not be touched during the run.
 
 The smoke evidence schema is `bs2bg.windows-app-image-smoke/17`; its durable artifacts include the Workbench,
 responsive, Templates-management, and Morphs-management UIA trees plus `workbench-high-contrast.png` and
