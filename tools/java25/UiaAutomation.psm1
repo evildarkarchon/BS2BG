@@ -662,8 +662,19 @@ function Invoke-UiaPointerClick {
 function Invoke-UiaNativePointerClick {
     param([IntPtr]$Handle, [System.Windows.Point]$Point)
     $activated = [BS2BGWindows]::ActivateWindow($Handle)
-    # UIA focus can belong to a background JavaFX window; allow the foreground transition to settle before input.
-    Start-Sleep -Milliseconds 75
+    # High Contrast can leave a native CoverWindow above the app after its theme updates; focus alone cannot prove
+    # pointer delivery. Wait for the physical hit-test owner instead of clicking through the transition overlay.
+    Wait-UiaCondition -Description 'pointer point owned by the activated application window' -TimeoutSeconds 15 -Test {
+        $hit = [System.Windows.Automation.AutomationElement]::FromPoint($Point)
+        $hitClass = if ($null -ne $hit) { $hit.Current.ClassName } else { '<none>' }
+        $hitProcess = if ($null -ne $hit) { $hit.Current.ProcessId } else { 0 }
+        $ancestor = $hit
+        for ($depth = 0; $depth -lt 64 -and $null -ne $ancestor; $depth++) {
+            if ([IntPtr]$ancestor.Current.NativeWindowHandle -eq $Handle) { return $true }
+            $ancestor = Get-UiaParent -Element $ancestor
+        }
+        throw "Pointer point is covered by class '$hitClass' in process $hitProcess."
+    } | Out-Null
     [BS2BGWindows]::LeftClick([int][math]::Round($Point.X), [int][math]::Round($Point.Y))
     return $activated
 }

@@ -1456,6 +1456,8 @@ try {
         $createTarget = Find-OuterControl -ControlType 'Button' -Name 'Create Custom Morph Target'
         $createPointer = Invoke-UiaPointerClick -Element $createTarget -RefreshRoot $script:mainWindow `
             -RefreshCondition (New-UiaCondition -ControlType 'Button' -Name 'Create Custom Morph Target')
+        # Keep the attempted provider point even when the following authoring assertion fails.
+        $observations['morphsCreatePointer'] = $createPointer
         $createdTarget = Wait-UiaElement -Root $targetList -Condition (
             New-UiaCondition -ControlType 'ListItem' -Name 'ActorTypeNPC|Female') `
             -Description 'pointer-created Custom Morph Target' -TimeoutSeconds $StepTimeoutSeconds
