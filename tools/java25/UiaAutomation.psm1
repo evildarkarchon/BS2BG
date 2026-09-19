@@ -769,6 +769,60 @@ function Set-UiaValue {
 
 <#
 .SYNOPSIS
+    Sets and verifies the filename text inside an already identified native file dialog.
+.PARAMETER Dialog
+    Owned window resolved by its exact title and process through Wait-UiaOwnedWindow.
+.PARAMETER Value
+    Literal filename text, including quoted absolute paths for multiple selection.
+.PARAMETER TimeoutSeconds
+    Bounded wait for the filename field, focus ownership, and exact text readback.
+.NOTES
+    The Windows proxy can expose the filename label as a Static Pane and its edit as an unnamed Pane without
+    ValuePattern. Alt+N follows the dialog's label association; verify the focused native Edit belongs to this
+    dialog before typing, and verify the result instead of assuming keyboard delivery succeeded.
+#>
+function Set-UiaFileDialogName {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Dialog,
+        [Parameter(Mandatory)] [string]$Value,
+        [int]$TimeoutSeconds = 30
+    )
+    $processId = $Dialog.Current.ProcessId
+    $dialogHandle = $Dialog.Current.NativeWindowHandle
+    if ($dialogHandle -eq 0) { throw 'The native file dialog has no window handle.' }
+    Wait-UiaElement -Root $Dialog -Condition (New-UiaCondition -Name 'File name:') `
+        -Description 'native file dialog filename label' -TimeoutSeconds $TimeoutSeconds | Out-Null
+    $field = Find-UiaElement -Root $Dialog -Condition (New-UiaCondition -ControlType 'Edit' -Name 'File name:')
+    $valuePattern = $null
+    if ($null -ne $field -and $field.TryGetCurrentPattern(
+            [System.Windows.Automation.ValuePattern]::Pattern, [ref]$valuePattern)) {
+        $valuePattern.SetValue($Value)
+    }
+    else {
+        Send-UiaKeys -ProcessId $processId -Keys '%n' -TimeoutSeconds $TimeoutSeconds
+        $field = Wait-UiaCondition -Description 'filename Edit focus within the native file dialog' `
+            -TimeoutSeconds $TimeoutSeconds -Test {
+            $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+            if ($null -eq $focused -or $focused.Current.ProcessId -ne $processId `
+                    -or $focused.Current.ClassName -cne 'Edit' -or -not $focused.Current.HasKeyboardFocus) { return }
+            $ancestor = $focused
+            for ($depth = 0; $depth -lt 64 -and $null -ne $ancestor; $depth++) {
+                if ($ancestor.Current.NativeWindowHandle -eq $dialogHandle) { return $focused }
+                $ancestor = Get-UiaParent -Element $ancestor
+            }
+        }
+        # SendKeys reserves these characters even when they occur inside an otherwise ordinary absolute path.
+        $literalKeys = [regex]::Replace($Value, '[+^%~(){}\[\]]', { param($match) '{' + $match.Value + '}' })
+        Send-UiaKeys -ProcessId $processId -Keys ('^a' + $literalKeys) -TimeoutSeconds $TimeoutSeconds
+    }
+    Wait-UiaCondition -Description 'exact native file dialog filename text' -TimeoutSeconds $TimeoutSeconds -Test {
+        if ((Get-UiaText -Element $field) -ceq $Value) { $true }
+    } | Out-Null
+}
+
+<#
+.SYNOPSIS
     Reads editable Value text; for read-only controls prefers descendant document text, then TextPattern/Value/name.
 .NOTES
     JavaFX 25 read-only TextArea can expose its accessibility label through both ValuePattern and TextPattern while
@@ -1059,6 +1113,7 @@ Export-ModuleMember -Function @(
     'Select-UiaElement',
     'Expand-UiaElement',
     'Set-UiaValue',
+    'Set-UiaFileDialogName',
     'Get-UiaText',
     'Get-UiaReadOnlyState',
     'Wait-UiaKeyboardFocus',

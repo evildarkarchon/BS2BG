@@ -288,9 +288,7 @@ function Send-FileCommand {
 function Complete-FileDialog {
     param([string]$Title, [string]$Path, [string]$ConfirmButton)
     $dialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $StepTimeoutSeconds
-    $fileName = Wait-UiaElement -Root $dialog -Condition (
-        New-UiaCondition -ControlType 'Edit' -Name 'File name:') -Description "'File name:' in '$Title'" -TimeoutSeconds $StepTimeoutSeconds
-    Set-UiaValue -Element $fileName -Value $Path
+    Set-UiaFileDialogName -Dialog $dialog -Value $Path -TimeoutSeconds $StepTimeoutSeconds
     $confirmRole = New-Object System.Windows.Automation.OrCondition(@(
         (New-UiaCondition -ControlType 'Pane' -Name $ConfirmButton),
         (New-UiaCondition -ControlType 'SplitButton' -Name $ConfirmButton),
@@ -348,6 +346,10 @@ function Complete-DirectoryDialog {
     Invoke-UiaElement -Element $confirm
 }
 
+<#
+.SYNOPSIS
+    Completes an owned native file dialog with quoted absolute paths for a multi-file import.
+#>
 function Complete-MultipleFileDialog {
     param(
         [Parameter(Mandatory)] [string] $Title,
@@ -356,11 +358,8 @@ function Complete-MultipleFileDialog {
     )
     if ($Paths.Count -eq 0) { throw 'At least one file path is required.' }
     $dialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $Title -TimeoutSeconds $StepTimeoutSeconds
-    $fileName = Wait-UiaElement -Root $dialog -Condition (
-        New-UiaCondition -ControlType 'Edit' -Name 'File name:') `
-        -Description "$Title file name" -TimeoutSeconds $StepTimeoutSeconds
     $quotedPaths = ($Paths | ForEach-Object { '"' + $_ + '"' }) -join ' '
-    Set-UiaValue -Element $fileName -Value $quotedPaths
+    Set-UiaFileDialogName -Dialog $dialog -Value $quotedPaths -TimeoutSeconds $StepTimeoutSeconds
     $confirmRole = New-Object System.Windows.Automation.OrCondition(@(
         (New-UiaCondition -ControlType 'Pane' -Name $ConfirmButton),
         (New-UiaCondition -ControlType 'SplitButton' -Name $ConfirmButton),

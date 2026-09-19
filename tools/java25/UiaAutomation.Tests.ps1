@@ -36,6 +36,49 @@ Describe 'UI Automation generated-text helpers' {
     }
 }
 
+Describe 'UI Automation native filename helpers' {
+    BeforeEach {
+        InModuleScope UiaAutomation {
+            $script:filenameWritten = $null
+            $script:filenameReadback = 'C:\fixtures\selected.jbs2bg'
+            $script:filenamePattern = [pscustomobject]@{}
+            $script:filenamePattern | Add-Member ScriptMethod SetValue {
+                param($value)
+                $script:filenameWritten = $value
+            }
+            $script:filenameField = [pscustomobject]@{}
+            $script:filenameField | Add-Member ScriptMethod TryGetCurrentPattern {
+                param($pattern, $result)
+                $result.Value = $script:filenamePattern
+                return $true
+            }
+            Mock Wait-UiaElement { return $script:filenameField }
+            Mock Find-UiaElement { return $script:filenameField }
+            Mock Get-UiaText { return $script:filenameReadback }
+            Mock Send-UiaKeys { throw 'The ValuePattern path must not emit keyboard input.' }
+        }
+    }
+
+    It 'uses the available ValuePattern and verifies the exact filename text' {
+        InModuleScope UiaAutomation {
+            $dialog = [pscustomobject]@{ Current = [pscustomobject]@{ ProcessId = 123; NativeWindowHandle = 456 } }
+            Set-UiaFileDialogName -Dialog $dialog -Value 'C:\fixtures\selected.jbs2bg' -TimeoutSeconds 1
+            $script:filenameWritten | Should -BeExactly 'C:\fixtures\selected.jbs2bg'
+            Should -Invoke Send-UiaKeys -Times 0 -Exactly
+        }
+    }
+
+    It 'rejects a write whose readback differs instead of submitting the wrong filename' {
+        InModuleScope UiaAutomation {
+            $dialog = [pscustomobject]@{ Current = [pscustomobject]@{ ProcessId = 123; NativeWindowHandle = 456 } }
+            $script:filenameReadback = 'C:\fixtures\other.jbs2bg'
+            {
+                Set-UiaFileDialogName -Dialog $dialog -Value 'C:\fixtures\selected.jbs2bg' -TimeoutSeconds 1
+            } | Should -Throw '*exact native file dialog filename text*'
+        }
+    }
+}
+
 Describe 'UI Automation pointer provider retries' {
     BeforeEach {
         InModuleScope UiaAutomation {

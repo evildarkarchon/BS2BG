@@ -22,10 +22,10 @@ Author Custom Morph Targets in Morphs.
 
 ## Acceptance criteria
 
-- [ ] The Morphs Area renders Custom Morph Targets from immutable frames and dispatches typed intents through the authoritative Project flow.
-- [ ] Users can create, edit, remove, clear, filter, sort, select, validate, and report Custom Morph Targets.
-- [ ] Slider Preset relationship editing preserves Project referential integrity and accepted BodyGen condition semantics.
-- [ ] Selection remains identity-stable through filtering, sorting, edits, removal, and Project refreshes without silent retargeting.
+- [x] The Morphs Area renders Custom Morph Targets from immutable frames and dispatches typed intents through the authoritative Project flow.
+- [x] Users can create, edit, remove, clear, filter, sort, select, validate, and report Custom Morph Targets.
+- [x] Slider Preset relationship editing preserves Project referential integrity and accepted BodyGen condition semantics.
+- [x] Selection remains identity-stable through filtering, sorting, edits, removal, and Project refreshes without silent retargeting.
 - [ ] Packaged keyboard and pointer tests verify authoring, relationship edits, validation, output continuity, accessibility, themes, DPI, and narrow mode.
 
 ## Blocked by
@@ -35,3 +35,18 @@ Author Custom Morph Targets in Morphs.
 ## Comments
 
 No comments at migration.
+
+### Implementation audit — 2026-09-19
+
+The authoring implementation was already present in `4bbdfb6` through `25e56e1`. Editing means Slider Preset
+relationship editing, preserving the accepted BodyGen condition identity; this ticket does not add target renaming.
+
+Follow-up `f23499d` routes rejected and failed confirmed Remove/Clear responses through normal Morphs reporting,
+adds red/green controller regressions, and strengthens packaged initial-assignment and individual-assignment checks.
+UI Automation now reacquires windows by native handle and refreshes pointer fallback coordinates on every retry.
+Standards and Spec reviews found no remaining feature mismatch.
+
+Verification so far: the clean Java 25 gate passes 456 tests without skips, and the PowerShell tooling suite passes
+99 tests. Packaged verification is still in progress: the first run exposed stale window-title lookup; after its
+fix, reopening reached a native file chooser whose File name control was exposed as a Pane without ValuePattern.
+The final packaged criterion remains unchecked until a complete successful run is retained.

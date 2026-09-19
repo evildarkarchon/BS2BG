@@ -1,10 +1,11 @@
 # Windows app-image packaging checkpoint
 
-Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#106 and inherited gates). A green run proves
+Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#107 and inherited gates). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
 starts from a clean extracted location without any system Java, exercises typed navigation, semantic focus, Output,
 responsive/minimum geometry, live themes, High Contrast, reduced motion, feedback, typed dialogs, Project lifecycle,
-failure preservation, pointer-free Slider Preset choice editing and catalog management, and dirty shutdown, and exits cleanly.
+failure preservation, pointer-free Slider Preset choice editing and catalog management, keyboard and pointer Custom Morph
+Target authoring, and dirty shutdown, and exits cleanly.
 ADR-0003 records the Java 25 baseline this checkpoint ships.
 
 ## One command
@@ -122,7 +123,7 @@ workflow records these steps:
    inline-rename with F2; Cancel then confirm Remove and Clear Visible; verify stable selection, complete
    relationship cascades, canonical Slider choice persistence, and save/reopen continuity.
 8. Author Custom Morph Targets through the real Morphs list/editor/inspector: preserve BodyGen conditions and
-   eligible random initial assignment, reject duplicate names, filter/sort/type ahead with stable identity, add and
+   eligible random initial assignment, reject duplicate names, filter/sort/type ahead with stable identity, individually add and
    remove Slider Preset relationships, clear relationships and the frozen visible target set, and prove real-pointer
    create/select/relationship gestures. Verify Output invalidation/regeneration, save/reopen continuity, High
    Contrast, narrow overlays, semantic focus, and measured DPI/client bounds.
