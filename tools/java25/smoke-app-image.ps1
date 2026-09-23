@@ -2385,6 +2385,20 @@ try {
         Wait-UiaKeyboardFocus -Element $fillLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
         Send-UiaKeysToElement -Element $fillLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FillEmptyFlyout | Out-Null
+        $outside = Find-OuterControl -ControlType 'Text' -Name 'Morphs editor: no selection'
+        Invoke-UiaPointerClick -Element $outside -RefreshRoot $script:mainWindow `
+            -RefreshCondition (New-UiaCondition -ControlType 'Text' -Name 'Morphs editor: no selection') | Out-Null
+        Wait-FillEmptyFlyoutClosed
+        $fillLauncher = Find-OuterControl -ControlType 'Button' -Name 'Fill Empty NPC Morph Assignments'
+        Wait-UiaKeyboardFocus -Element $fillLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        foreach ($identity in @(@('Fill Visible One', 'FillOne'), @('Fill Visible Two', 'FillTwo'))) {
+            $afterOutside = @(Get-NpcAssignedPresetNames -List $npcList -DisplayName $identity[0] `
+                -PluginName 'FillTest.esp' -EditorId $identity[1])
+            if ($afterOutside.Count -ne 0) { throw 'Outside-click dismissal changed the Project.' }
+        }
+
+        Send-UiaKeysToElement -Element $fillLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         $flyout = Wait-FillEmptyFlyout
         $selectAll = Wait-UiaElement -Root $flyout -Condition (
             New-UiaCondition -ControlType 'Button' -Name 'Select All Slider Presets') `
@@ -2512,6 +2526,7 @@ try {
             alreadyAssignedPreserved = 'FillTest.esp/AlreadyAssigned'
             filteredOutEmptyPreserved = 'Hidden.esp/OutsideFilter'
             keyboardDismissal = $true
+            outsideDismissal = $true
             cancelledWithoutEffects = $true
             savedAndReopened = $fillEmptyManagedName
             generatedMorphs = $generatedMorphs
@@ -2525,12 +2540,10 @@ try {
             -EditorId 'HousecarlWhiterun' -Description 'NPC with editor-ID-specific jpeg portrait'
         Select-UiaElement -Element $lydia
         $lydiaPortraitName = 'NPC portrait: Lydia, plugin Skyrim.esm, editor ID HousecarlWhiterun'
-        $lydiaPortrait = Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Image' -Name $lydiaPortraitName) `
-            -Description 'identity-stable Lydia portrait' -TimeoutSeconds $StepTimeoutSeconds
         $jpegStatus = Wait-PortraitStatusContains -Expected 'Lydia (HousecarlWhiterun).jpeg'
-        if (-not $lydiaPortrait.Current.IsEnabled -or $lydiaPortrait.Current.IsOffscreen) {
-            throw 'The selected NPC portrait is not visible and enabled.'
+        if ($null -ne (Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Image' -Name $lydiaPortraitName))) {
+            throw 'The selection-following inspector portrait duplicated the named NPC in accessibility.'
         }
         $portraitScreenshot = Join-Path $diagnosticsDir 'workbench-portrait-jpeg-priority.png'
         Save-Screenshot -Path $portraitScreenshot
@@ -2577,10 +2590,6 @@ try {
         $fallback = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Portrait Fallback' `
             -PluginName 'Portrait.esp' -EditorId 'Fallback' -Description 'NPC with name-only png portrait'
         Select-UiaElement -Element $fallback
-        $fallbackPortraitName = 'NPC portrait: Portrait Fallback, plugin Portrait.esp, editor ID Fallback'
-        Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Image' -Name $fallbackPortraitName) `
-            -Description 'identity-stable name-only fallback portrait' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $pngStatus = Wait-PortraitStatusContains -Expected 'Portrait Fallback.png'
         $filter = Get-FollowingControl -Element (
             Find-OuterControl -ControlType 'Text' -Name 'Filter NPC Morph Assignments:') -ControlType 'Edit'
@@ -2610,10 +2619,8 @@ try {
         $narrowMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
             -TimeoutSeconds $StepTimeoutSeconds
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
-        $lydiaPortrait = Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Image' -Name $lydiaPortraitName) `
-            -Description 'narrow-mode Lydia portrait' -TimeoutSeconds $StepTimeoutSeconds
-        Assert-ControlInsideClient -Element $lydiaPortrait -Metrics $narrowMetrics
+        $narrowStatus = Find-OuterControl -ControlType 'Text' -Name 'NPC portrait status'
+        Assert-ControlInsideClient -Element $narrowStatus -Metrics $narrowMetrics
         $narrowOpenViewer = Find-OuterControl -ControlType 'Button' -Name 'Open NPC portrait viewer'
         Assert-ControlInsideClient -Element $narrowOpenViewer -Metrics $narrowMetrics
         $narrowScreenshot = Join-Path $diagnosticsDir 'workbench-portrait-narrow.png'

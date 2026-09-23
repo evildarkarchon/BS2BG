@@ -606,7 +606,7 @@
                                                                             <children>
                                                                                 <Label styleClass="title" text="NPC portrait" />
                                                                                 <ImageView fx:id="npcPortraitImage"
-                                                                                        accessibleText="No NPC portrait selected"
+                                                                                        accessibleRole="NODE" mouseTransparent="true"
                                                                                         fitHeight="180.0" fitWidth="200.0"
                                                                                         preserveRatio="true" smooth="true" />
                                                                                 <Label fx:id="npcPortraitStatus"

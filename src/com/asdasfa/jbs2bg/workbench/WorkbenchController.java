@@ -969,14 +969,11 @@ public final class WorkbenchController {
         npcPortraitImage.setImage(null);
         openNpcPortraitViewerButton.setDisable(true);
         if (npc == null) {
-            npcPortraitImage.setAccessibleText("No NPC portrait selected");
             npcPortraitStatus.setText("No NPC portrait selected");
             npcPortraitStatus.setAccessibleHelp("Select an NPC Morph Assignment to inspect its portrait.");
             return;
         }
-        String portraitName = "NPC portrait: " + npc.getDisplayName() + ", plugin " + npc.getPluginName()
-                + ", editor ID " + npc.getEditorId();
-        npcPortraitImage.setAccessibleText(portraitName);
+        // The selected NPC is already named by the catalog and inspector; only the dedicated viewer names its image.
         Optional<Path> file = NpcPortraitFiles.find(Path.of("images"), npc);
         if (file.isEmpty()) {
             String expected = "images/" + npc.getDisplayName() + " (" + npc.getEditorId() + ").jpg";
@@ -1045,7 +1042,9 @@ public final class WorkbenchController {
         Label dimensions = new Label("Loading image dimensions…");
         dimensions.setAccessibleText("NPC portrait dimensions: loading");
         ImageView fullView = new ImageView();
-        fullView.setAccessibleText(npcPortraitImage.getAccessibleText());
+        fullView.setAccessibleText("NPC portrait: " + displayName + ", plugin "
+                + renderedPortraitIdentity.getPluginName() + ", editor ID "
+                + renderedPortraitIdentity.getEditorId());
         fullView.setPreserveRatio(true);
         fullView.setSmooth(true);
         Image fullImage = new Image(file.toUri().toString(), true);

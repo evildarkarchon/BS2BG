@@ -164,12 +164,13 @@ class WorkbenchControllerTest {
                 ImageView portrait = (ImageView) loader.getNamespace().get("npcPortraitImage");
                 Label status = (Label) loader.getNamespace().get("npcPortraitStatus");
                 Button viewer = (Button) loader.getNamespace().get("openNpcPortraitViewerButton");
-                assertEquals("NPC portrait: NoPortraitFixture, plugin Skyrim.esm, editor ID HousecarlWhiterun",
-                        portrait.getAccessibleText());
+                assertEquals(AccessibleRole.NODE, portrait.getAccessibleRole());
+                assertNull(portrait.getAccessibleText(),
+                        "the named NPC inspector makes its adjacent thumbnail decorative");
                 assertTrue(status.getText().contains("NoPortraitFixture (HousecarlWhiterun).jpg"));
                 assertTrue(viewer.isDisabled());
                 ((TextField) loader.getNamespace().get("npcMorphAssignmentFilter")).setText("no match");
-                assertEquals("No NPC portrait selected", portrait.getAccessibleText());
+                assertNull(portrait.getAccessibleText());
                 assertNull(portrait.getImage());
             } finally {
                 stage.close();
