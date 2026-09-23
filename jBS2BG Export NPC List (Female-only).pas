@@ -27,6 +27,7 @@ End;
 
 // Called for each selected record in the TES5Edit tree
 
+
 // If an entire plugin is selected then all records in the plugin will be processed
 Function Process(e : IInterface) : integer;
 
@@ -34,9 +35,12 @@ Var i : integer;
   strTemp, strMod, strName, strEditorId, strRace, strFormId : string;
 Begin
   If Signature(e) <> 'NPC_' Then exit;
+
+
+// this is probably not correct, but will serve as a placeholder until I can figure out the right solution.
+
   If Not ElementExists(GetElementEditValues(e, 'RNAM'),
      'RACE \ DATA - Data \ Flags \ Playable') Then exit;
-
 
   If Not ElementExists(e, 'ACBS - Configuration\Flags\Is CharGen Face Preset')
      And ElementExists(e, 'ACBS - Configuration\Flags\Female')
