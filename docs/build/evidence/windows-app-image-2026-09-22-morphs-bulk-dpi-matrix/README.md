@@ -12,3 +12,5 @@ Image: 235 files, SHA-256 `cf9242817183a86349757e399a99aee1d322876a701cae3f68ae2
 Archive: `BS2BG-1.1.2-windows-x64.zip`, SHA-256 `eda011559fc64cb8c01bbb34e2032993c40e782f3d4ffc7daf500e67eaec3ded`.
 
 The [matrix report](dpi-matrix/windows-app-image-dpi-matrix.json) and [package report](windows-app-image.json) record the source commit, archive identity, all three smoke results, and display restoration. Per-scale smoke reports, UIA trees, and screenshots are retained under `dpi-matrix/dpi-100/`, `dpi-matrix/dpi-125/`, and `dpi-matrix/dpi-150/`. Paths inside generated reports refer to the machine-local build and temporary smoke directories; the archive remains generated output under `target/`.
+
+This matrix covers the primary display. Mixed-monitor moves remain part of the later release audit described in the [packaging guide](../../windows-app-image.md).
