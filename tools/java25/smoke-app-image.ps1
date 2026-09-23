@@ -864,12 +864,12 @@ try {
         }
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F6}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs editor' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs editor: no selection' | Out-Null
         $ctrlBackquote = '^' + [char]96
         Send-UiaKeys -ProcessId $script:app.Id -Keys $ctrlBackquote -TimeoutSeconds $StepTimeoutSeconds
         Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys $ctrlBackquote -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs editor' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs editor: no selection' | Out-Null
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
         Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
@@ -879,7 +879,7 @@ try {
         Wait-UiaKeyboardFocus -Element $morphsRail -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $focusCycle = @(
             @{ Role = 'List'; Name = 'Custom Morph Targets' },
-            @{ Role = 'Text'; Name = 'Morphs editor' },
+            @{ Role = 'Text'; Name = 'Morphs editor: no selection' },
             @{ Role = 'Text'; Name = 'Morphs inspector: no selection' },
             @{ Role = 'Text'; Name = 'Output generated text' },
             @{ Role = 'List'; Name = 'Activity' },
@@ -891,7 +891,7 @@ try {
             Wait-FocusedControl -ControlType $target.Role -Name $target.Name | Out-Null
         }
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs editor' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs editor: no selection' | Out-Null
         $observations['keyboardNavigation'] = [ordered]@{
             areas = $areaEvidence
             outputPreservedArea = 'Morphs'
@@ -934,7 +934,7 @@ try {
                 [math]::Abs($minimumMetrics.LogicalClientHeight - 600.0) -gt 2.0) {
             throw "Workbench minimum client geometry did not settle at 800x600: $($minimumMetrics.LogicalClientWidth)x$($minimumMetrics.LogicalClientHeight)."
         }
-        $editor = Find-OuterControl -ControlType 'Text' -Name 'Morphs editor'
+        $editor = Find-OuterControl -ControlType 'Text' -Name 'Morphs editor: no selection'
         Assert-ControlInsideClient -Element $editor -Metrics $minimumMetrics
         $listLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open Morphs list'
         Send-UiaKeysToElement -Element $listLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
@@ -1784,10 +1784,22 @@ try {
         Set-UiaValue -Element $editorId -Value 'PointerEditor'
         Set-UiaValue -Element $race -Value 'NordRace'
         Set-UiaValue -Element $formId -Value '000ABC13'
+        $npcSurface = Find-OuterControl -ControlType 'Pane' -Name 'Morphs management'
+        # The NPC form follows both catalogs; scroll its owning pane before a physical click on the Create button.
+        $npcScroll = $null
+        if (-not $npcSurface.TryGetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern,
+                [ref]$npcScroll)) {
+            throw 'Morphs management did not expose its Scroll pattern.'
+        }
+        $npcScroll.SetScrollPercent(-1.0, 100.0)
         $createNpc = Find-OuterControl -ControlType 'Button' -Name 'Create NPC Morph Assignment'
         $createNpc.SetFocus()
-        Wait-UiaCondition -Description 'onscreen NPC create button' -TimeoutSeconds $StepTimeoutSeconds -Test {
-            if (-not $createNpc.Current.IsOffscreen -and $createNpc.Current.IsEnabled) { $createNpc }
+        Wait-UiaCondition -Description 'NPC create button inside its scrolled pane' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $paneBounds = $npcSurface.Current.BoundingRectangle
+            $buttonBounds = $createNpc.Current.BoundingRectangle
+            if ($createNpc.Current.IsEnabled -and $buttonBounds.Top -ge $paneBounds.Top `
+                    -and $buttonBounds.Bottom -le $paneBounds.Bottom) { $createNpc }
         } | Out-Null
         $createNpc = Find-OuterControl -ControlType 'Button' -Name 'Create NPC Morph Assignment'
         $createPointer = Invoke-UiaPointerClick -Element $createNpc -RefreshRoot $script:mainWindow `
@@ -1820,7 +1832,7 @@ try {
         $sort = Get-FollowingControl -Element (
             Find-OuterControl -ControlType 'Text' -Name 'Sort NPC Morph Assignments:') -ControlType 'ComboBox'
         $initialSort = Get-UiaText -Element $sort
-        Send-UiaKeysToElement -Element $sort -Keys '{END}' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $sort -Keys '{F4}{END}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaCondition -Description 'NPC sort choice committed' -TimeoutSeconds $StepTimeoutSeconds -Test {
             $current = Get-UiaText -Element $sort
             if ($current -cne $initialSort -and $current.Contains('Plugin')) { $sort }
@@ -1861,6 +1873,16 @@ try {
 
         $originalLydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
             -EditorId 'HousecarlWhiterun' -Description 'original Lydia for relationship editing'
+        # Return the NPC catalog to the visible pane before its own real-pointer selection.
+        $npcScroll.SetScrollPercent(-1.0, 0.0)
+        Wait-UiaCondition -Description 'NPC catalog row inside its scrolled pane' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $paneBounds = $npcSurface.Current.BoundingRectangle
+            $rowBounds = $originalLydia.Current.BoundingRectangle
+            if ($rowBounds.Top -ge $paneBounds.Top -and $rowBounds.Bottom -le $paneBounds.Bottom) {
+                $originalLydia
+            }
+        } | Out-Null
         $originalLydia.SetFocus()
         $selectPointer = Invoke-UiaPointerClick -Element $originalLydia -RefreshRoot $npcList `
             -RefreshCondition (New-UiaCondition -ControlType 'ListItem' -Name $originalLydia.Current.Name)
