@@ -1,0 +1,153 @@
+Window 'BS2BG Preview' [Window,Transform]
+  MenuBar ''
+    MenuItem 'File' [Invoke,ExpandCollapse]
+      Text 'File'
+        Text 'File'
+  Button 'Templates' [Toggle]
+    Text 'Templates'
+  Button 'Morphs' [Toggle]
+    Text 'Morphs'
+  Button 'NPC Database' [Toggle]
+    Text 'NPC Database'
+  Button 'Output' [Toggle]
+    Text 'Output'
+  Button 'Settings' [Toggle]
+    Text 'Settings'
+  Text 'Theme:'
+    Text 'Theme:'
+  ComboBox '' [Value,ExpandCollapse]
+    List '' [Selection,Scroll]
+    Text 'System'
+  Text 'Effective theme: Dark theme'
+    Text 'Dark theme'
+  Text 'Motion preference: Standard motion'
+    Text 'Standard motion'
+  Text 'Morphs Area'
+    Text 'Morphs'
+  Button 'Generate Project output' [Invoke]
+    Text 'Generate'
+  Text 'Project status'
+    Text 'Untitled Project'
+  Pane 'Morphs management' [Scroll]
+    Text 'Filter Custom Morph Targets:'
+      Text 'Filter Custom Morph Targets:'
+    Edit '' [Value,Text]
+      Text 'Filter by condition or name'
+      Text ''
+    Text 'Sort Custom Morph Targets:'
+      Text 'Sort Custom Morph Targets:'
+    ComboBox '' [Value,ExpandCollapse]
+      List '' [Selection,Scroll]
+      Text 'Name (A–Z)'
+    List 'Custom Morph Targets' [Selection,Scroll]
+    Text 'Custom Morph Target name:'
+      Text 'Custom Morph Target name:'
+    Edit '' [Value,Text]
+      Text 'All|Female'
+      Text ''
+    Button 'Create Custom Morph Target' [Invoke]
+      Text 'Create Custom Morph Tar...'
+    Button 'Remove selected Custom Morph Target' [Invoke]
+      Text 'Remove Custom Morph T...'
+    Button 'Clear visible Custom Morph Targets' [Invoke]
+      Text 'Clear visible Custom Mor...'
+    Text 'NPC Morph Assignments'
+      Text 'NPC Morph Assign...'
+    Text 'Filter NPC Morph Assignments:'
+      Text 'Filter NPC Morph Assignmen...'
+    Edit '' [Value,Text]
+      Text 'Filter by name, plugin, ID, race, or Form ID'
+      Text ''
+    Text 'Sort NPC Morph Assignments:'
+      Text 'Sort NPC Morph Assignments:'
+    ComboBox '' [Value,ExpandCollapse]
+      List '' [Selection,Scroll]
+      Text 'Display name (A–Z)'
+    List 'NPC Morph Assignments' [Selection,Scroll]
+    Text 'NPC display name:'
+      Text 'NPC display name:'
+    Edit '' [Value,Text]
+      Text 'Optional display name'
+      Text ''
+    Text 'NPC plugin name:'
+      Text 'NPC plugin name:'
+    Edit '' [Value,Text]
+      Text 'Example.esp'
+      Text ''
+    Text 'NPC editor ID:'
+      Text 'NPC editor ID:'
+    Edit '' [Value,Text]
+      Text 'ActorEditorID'
+      Text ''
+    Text 'NPC race:'
+      Text 'NPC race:'
+    Edit '' [Value,Text]
+      Text 'Race'
+      Text ''
+    Text 'NPC Form ID:'
+      Text 'NPC Form ID:'
+    Edit '' [Value,Text]
+      Text '000ABC'
+      Text ''
+    Button 'Create NPC Morph Assignment' [Invoke]
+      Text 'Create NPC Morph Assign...'
+    Button 'Remove selected NPC Morph Assignment' [Invoke]
+      Text 'Remove NPC Morph Assi...'
+    Button 'Clear visible NPC Morph Assignments' [Invoke]
+      Text 'Clear visible NPC Morph ...'
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Text 'Morphs editor: no selection'
+    Text 'No Morphs selection'
+  Text 'Select a Custom Morph Target or NPC Morph Assignment to inspect it.'
+    Text 'Select a Custom Morph Target or NPC Morph Assignment to inspect it.'
+  Text 'No Slider Presets assigned'
+    Text 'No Slider Presets assigned'
+  Text 'No selected Morphs entry is eligible for output.'
+    Text 'A Morphs entry needs at least one Slider Preset to appear in output.'
+  Text 'Use the inspector to manage Slider Preset relationships.'
+    Text 'Use the inspector to manage Slider Preset relationships.'
+  Pane 'Slider Preset relationship editor' [Scroll]
+    Text 'Slider Preset relationships'
+      Text 'Slider Preset relations...'
+    Text 'Morphs inspector: no selection'
+      Text 'No Morphs selection'
+    Text 'Assigned Slider Presets:'
+      Text 'Assigned Slider Presets:'
+    List 'Assigned Slider Presets' [Selection,Scroll]
+    Button 'Remove selected Slider Preset relationship' [Invoke]
+      Text 'Remove assigned Slider Preset'
+    Button 'Clear assigned Slider Presets' [Invoke]
+      Text 'Clear assigned Slider Presets'
+    Text 'Available Slider Preset:'
+      Text 'Available Slider Preset:'
+    ComboBox '' [Value,ExpandCollapse]
+      List '' [Selection,Scroll]
+      Text ''
+    Button 'Assign selected Slider Preset' [Invoke]
+      Text 'Assign Slider Preset'
+    Button 'Assign all Slider Presets' [Invoke]
+      Text 'Assign All Slider Presets'
+  Text 'Project diagnostics'
+    Text 'Project diagnostics'
+  Edit '' [Value,Text]
+    Pane '' [Scroll]
+      Text ''
+  Text 'Activity'
+    Text 'Activity'
+  List 'Activity' [Selection,Scroll]
+    ListItem 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.' [SelectionItem,ScrollItem]
+      Text 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.'
+    ScrollBar '' [RangeValue]
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Button 'Retry selected activity' [Invoke]
+    Text 'Retry'
+  Text 'Workbench status'
+    Text 'Warning — Completed with issues — SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.'
+  Button 'Cancel current operation' [Invoke]
+    Text 'Cancel'
