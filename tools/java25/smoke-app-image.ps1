@@ -1,8 +1,8 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, Templates, and Morphs contracts
-    (issues #98-#109).
+    Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, Templates, Morphs, and NPC Database
+    contracts (issues #98-#110).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
@@ -14,6 +14,7 @@
     centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
     malformed/failed operation preservation, complete pointer-free Slider Preset choice editing and management,
     keyboard and semantic-pointer Custom Morph Target authoring, visible-set Fill Empty actions, portrait inspection,
+    transactional NPC Database import, source management, catalog inspection, filtering, sorting, and accessibility,
     coordinated dirty shutdown, and bounded exit.
 #>
 [CmdletBinding()]
@@ -53,6 +54,13 @@ $templatesManagedName = 'templates-managed.jbs2bg'
 $morphsManagedName = 'morphs-managed.jbs2bg'
 $fillEmptyManagedName = 'fill-empty-managed.jbs2bg'
 $fillEmptyFixtureName = 'fill-empty-source.jbs2bg'
+$npcPrimaryName = 'npc-primary.txt'
+$npcSecondaryName = 'npc-secondary.txt'
+$npcMixedValidName = 'npc-mixed-valid.txt'
+$npcMalformedName = 'npc-malformed.txt'
+$npcFailedLockedName = 'npc-failed-locked.txt'
+$npcCancelFirstName = 'a-npc-cancel-first.txt'
+$npcCancelLargeName = 'z-npc-cancel-large.txt'
 $accessibilityState = Get-SystemAccessibilityPreferences
 
 $evidenceDir = Split-Path -Parent $EvidencePath
@@ -162,6 +170,28 @@ function New-PortraitFixture {
     finally {
         $graphics.Dispose()
         $bitmap.Dispose()
+    }
+}
+
+<#
+.SYNOPSIS
+    Writes enough valid NPC rows to observe cancellation after a preceding source completes.
+.PARAMETER Path
+    Destination fixture path.
+.NOTES
+    Natural charset detection and row parsing keep the second source active without production delays or hooks.
+#>
+function New-CancellableNpcSourceFixture {
+    param([Parameter(Mandatory)] [string]$Path, [int]$RowCount = 250000)
+    $writer = [IO.StreamWriter]::new($Path, $false, [Text.UTF8Encoding]::new($false), 1MB)
+    try {
+        for ($index = 0; $index -lt $RowCount; $index++) {
+            $identity = $index.ToString('D6', [Globalization.CultureInfo]::InvariantCulture)
+            $writer.WriteLine("Bulk.esm | Cancel Source $identity | BulkId$identity | NordRace | 0000A000")
+        }
+    }
+    finally {
+        $writer.Dispose()
     }
 }
 
@@ -637,6 +667,178 @@ function Wait-PortraitStatusContains {
 
 <#
 .SYNOPSIS
+    Waits for an NPC Database label's displayed value while locating it by its stable accessible name.
+.PARAMETER Name
+    Stable accessible label name.
+.PARAMETER Expected
+    Exact displayed text, including any field prefix.
+.OUTPUTS
+    The matched displayed text.
+#>
+function Wait-NpcDatabaseText {
+    param([Parameter(Mandatory)] [string]$Name, [Parameter(Mandatory)] [string]$Expected)
+    $condition = New-UiaCondition -ControlType 'Text' -Name $Name
+    return Wait-UiaCondition -Description "$Name displays '$Expected'" -TimeoutSeconds $StepTimeoutSeconds -Test {
+        $label = Find-UiaElement -Root $script:mainWindow -Condition $condition
+        if ($null -ne $label) {
+            $actual = $label.Current.HelpText
+            if ($actual -ceq $Expected) { $actual }
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    Locates the keyboard sort ComboBox by its owned description or one of its domain choices.
+.NOTES
+    JavaFX 25's Windows provider can expose a ComboBox with an empty UIA Name despite its JavaFX accessibleText;
+    the bound label and HelpText still describe it, and its ValuePattern exposes the selected sort choice.
+#>
+function Wait-NpcDatabaseSort {
+    $choices = @('Source order') + @('Name', 'Master', 'Race', 'EditorID', 'FormID' |
+        ForEach-Object { "$_ ascending"; "$_ descending" })
+    return Wait-UiaCondition -Description 'NPC Database sort ComboBox' `
+        -TimeoutSeconds $StepTimeoutSeconds -Test {
+        foreach ($combo in @(Find-UiaElements -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'ComboBox'))) {
+            if ($combo.Current.HelpText.StartsWith('NPC Database sort:', [StringComparison]::Ordinal) -or
+                    $choices -ccontains (Get-UiaText -Element $combo)) { return $combo }
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    Finds a selectable NPC catalog cell under the row with the complete logical identity.
+.PARAMETER Table
+    Current accessible NPC Database catalog.
+.PARAMETER DisplayName
+    Display name included in the accessible row prefix.
+.PARAMETER PluginName
+    Plugin half of the logical identity.
+.PARAMETER EditorId
+    Editor-ID half of the logical identity.
+#>
+function Find-NpcDatabaseRow {
+    param(
+        [Parameter(Mandatory)] $Table,
+        [Parameter(Mandatory)] [string]$DisplayName,
+        [Parameter(Mandatory)] [string]$PluginName,
+        [Parameter(Mandatory)] [string]$EditorId
+    )
+    $prefix = "$DisplayName. Plugin: $PluginName. Editor ID: $EditorId."
+    foreach ($row in @(Find-UiaElements -Root $Table -Condition (
+            New-UiaCondition -ControlType 'Custom'))) {
+        if ($row.Current.Name.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            return Find-UiaElement -Root $row -Condition (
+                New-UiaCondition -ControlType 'DataItem' -Name $DisplayName)
+        }
+    }
+    return $null
+}
+
+<#
+.SYNOPSIS
+    Waits for one identity-stable NPC Database row after import, filtering, or sorting.
+#>
+function Wait-NpcDatabaseRow {
+    param(
+        [Parameter(Mandatory)] $Table,
+        [Parameter(Mandatory)] [string]$DisplayName,
+        [Parameter(Mandatory)] [string]$PluginName,
+        [Parameter(Mandatory)] [string]$EditorId
+    )
+    return Wait-UiaCondition -Description "NPC Database row $DisplayName in $PluginName/$EditorId" `
+        -TimeoutSeconds $StepTimeoutSeconds -Test {
+        Find-NpcDatabaseRow -Table $Table -DisplayName $DisplayName `
+            -PluginName $PluginName -EditorId $EditorId
+    }
+}
+
+<#
+.SYNOPSIS
+    Returns the table's logical row index from a selectable NPC name cell.
+#>
+function Get-NpcDatabaseRowIndex {
+    param([Parameter(Mandatory)] $Cell)
+    $pattern = $null
+    if (-not $Cell.TryGetCurrentPattern([System.Windows.Automation.GridItemPattern]::Pattern,
+            [ref]$pattern)) {
+        throw "NPC catalog cell '$($Cell.Current.Name)' exposes no GridItemPattern."
+    }
+    return [int]$pattern.Current.Row
+}
+
+<#
+.SYNOPSIS
+    Finds the application-owned checklist popup for one NPC Database table column.
+#>
+function Wait-NpcFilterPopup {
+    param([Parameter(Mandatory)] [string]$Column)
+    $condition = New-UiaCondition -ControlType 'List' -Name "$Column NPC Database filter choices"
+    return Wait-UiaCondition -Description "$Column NPC Database filter popup" `
+        -TimeoutSeconds $StepTimeoutSeconds -Test {
+        foreach ($window in @(Get-UiaProcessWindows -ProcessId $script:app.Id)) {
+            if ($null -ne (Find-UiaElement -Root $window -Condition $condition)) { return $window }
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    Waits for the named NPC Database filter popup to close after Apply or Escape.
+#>
+function Wait-NpcFilterPopupClosed {
+    param([Parameter(Mandatory)] [string]$Column)
+    $condition = New-UiaCondition -ControlType 'List' -Name "$Column NPC Database filter choices"
+    Wait-UiaCondition -Description "$Column NPC Database filter popup closed" `
+        -TimeoutSeconds $StepTimeoutSeconds -Test {
+        foreach ($window in @(Get-UiaProcessWindows -ProcessId $script:app.Id)) {
+            if ($null -ne (Find-UiaElement -Root $window -Condition $condition)) { return $false }
+        }
+        return $true
+    } | Out-Null
+}
+
+<#
+.SYNOPSIS
+    Selects one exact checkbox choice through its containing accessible list item.
+.PARAMETER List
+    Named NPC Database column checklist.
+.PARAMETER Value
+    Exact source cell value presented by the checklist row or checkbox.
+#>
+function Wait-NpcFilterChoice {
+    param([Parameter(Mandatory)] $List, [Parameter(Mandatory)] [string]$Value)
+    return Wait-UiaCondition -Description "NPC Database filter choice '$Value'" `
+        -TimeoutSeconds $StepTimeoutSeconds -Test {
+        foreach ($row in @(Find-UiaElements -Root $List -Condition (
+                New-UiaCondition -ControlType 'ListItem'))) {
+            if ($row.Current.Name -ceq $Value -or $null -ne (Find-UiaElement -Root $row -Condition (
+                    New-UiaCondition -ControlType 'CheckBox' -Name $Value))) { return $row }
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    Fails if a rejected NPC source appears in the accessible source list with any row count.
+.PARAMETER List
+    Current NPC Database sources list.
+.PARAMETER FileName
+    Source filename whose committed list item must be absent.
+#>
+function Assert-NpcSourceAbsent {
+    param([Parameter(Mandatory)] $List, [Parameter(Mandatory)] [string]$FileName)
+    $items = @(Find-UiaElements -Root $List -Condition (
+        New-UiaCondition -ControlType 'ListItem') | Where-Object {
+        $_.Current.Name.StartsWith("$FileName, ", [StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($items.Count -gt 0) { throw "Rejected NPC source $FileName appeared in source management." }
+}
+
+<#
+.SYNOPSIS
     Selects a theme through the current header ComboBox's accessible choice list.
 .PARAMETER Name
     System, Light, or Dark choice to commit.
@@ -936,6 +1138,24 @@ try {
         New-PortraitFixture -Path (Join-Path $imagesDir 'Lydia (HousecarlWhiterun).jpeg') -Color 'Firebrick'
         New-PortraitFixture -Path (Join-Path $imagesDir 'Lydia.jpg') -Color 'DodgerBlue'
         New-PortraitFixture -Path (Join-Path $imagesDir 'Portrait Fallback.png') -Color 'ForestGreen'
+        $utf8 = [Text.UTF8Encoding]::new($false)
+        [IO.File]::WriteAllLines((Join-Path $workDir $npcPrimaryName), @(
+            'Skyrim.esm | Lydia | HousecarlWhiterun | NordRace "Nord" | 000A2C94',
+            '',
+            'Other.esm | | FemaleNord | NordRace | 0001A696 | ignored field'), $utf8)
+        [IO.File]::WriteAllLines((Join-Path $workDir $npcSecondaryName), @(
+            'skyrim.esm | Shadow Lydia | housecarlwhiterun | NordRace | 000A2C95',
+            'Dawnguard.esm | Serana | SeranaEditor | BretonRace | 0000000B'), $utf8)
+        [IO.File]::WriteAllLines((Join-Path $workDir $npcMixedValidName), @(
+            'Extra.esm | Mixed Survivor | MixedEditor | OrcRace | 00000013'), $utf8)
+        [IO.File]::WriteAllLines((Join-Path $workDir $npcMalformedName), @(
+            'Broken.esm | Rejected Staging | RejectEditor | NordRace | 00000ABC',
+            'not an NPC row'), $utf8)
+        [IO.File]::WriteAllLines((Join-Path $workDir $npcFailedLockedName), @(
+            'Locked.esm | Rejected Locked | LockedEditor | NordRace | 00000015'), $utf8)
+        [IO.File]::WriteAllLines((Join-Path $workDir $npcCancelFirstName), @(
+            'Cancel.esm | Retained After Cancel | PriorEditor | NordRace | 00000014'), $utf8)
+        New-CancellableNpcSourceFixture -Path (Join-Path $workDir $npcCancelLargeName)
         $settingsTransaction = Join-Path $workDir '.bs2bg-settings-stage-packaged-recovery'
         New-Item -ItemType Directory -Path $settingsTransaction -Force | Out-Null
         $repositorySettings = (Resolve-Path (Join-Path $PSScriptRoot '..\..\settings.json')).Path
@@ -949,7 +1169,9 @@ try {
         $observations['archiveSha256'] = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
         $observations['workingDirectory'] = $workDir
         $observations['cancellableProjectBytes'] = (Get-Item -LiteralPath $cancellableProject).Length
-        "extracted archive, installed five Project fixtures and three portraits, and staged interrupted Settings recovery in $workDir"
+        $observations['cancellableNpcSourceBytes'] = (Get-Item -LiteralPath (
+            Join-Path $workDir $npcCancelLargeName)).Length
+        "extracted archive, installed five Project fixtures, seven NPC sources, and three portraits, and staged interrupted Settings recovery in $workDir"
     }
 
     Invoke-SmokeStep -Name 'launch-workbench-without-system-java' -Action {
@@ -1027,7 +1249,7 @@ try {
                 Wait-FocusedControl -ControlType 'List' -Name 'Settings entries' | Out-Null
             }
             else {
-                Wait-FocusedControl -ControlType 'Button' -Name "$($entry.Value) primary content" | Out-Null
+                Wait-FocusedControl -ControlType 'List' -Name 'NPC Database sources' | Out-Null
             }
             $areaEvidence += $entry.Value
         }
@@ -2646,6 +2868,498 @@ try {
         'portrait filename priority, selection, viewer accessibility, fallback, no-image state, and narrow mode passed'
     }
 
+    Invoke-SmokeStep -Name 'import-inspect-and-manage-npc-database-sources' -Action {
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^3' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'NPC Database' | Out-Null
+        $sourceList = Wait-FocusedControl -ControlType 'List' -Name 'NPC Database sources'
+        $catalog = Find-OuterControl -ControlType 'Table' -Name 'NPC Database catalog'
+        $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import NPC Database sources'
+        $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        $primaryPath = Join-Path $workDir $npcPrimaryName
+        $secondaryPath = Join-Path $workDir $npcSecondaryName
+        $malformedPath = Join-Path $workDir $npcMalformedName
+        $mixedValidPath = Join-Path $workDir $npcMixedValidName
+        $failedLockedPath = Join-Path $workDir $npcFailedLockedName
+        $cancelFirstPath = Join-Path $workDir $npcCancelFirstName
+        $cancelLargePath = Join-Path $workDir $npcCancelLargeName
+
+        Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-MultipleFileDialog -Title 'Import NPC Database Sources' `
+            -Paths @($primaryPath, $secondaryPath) -ConfirmButton 'Open'
+        $successActivity = Wait-UiaCondition -Description 'successful NPC Database import Activity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            foreach ($item in @(Find-UiaElements -Root $activity -Condition (
+                    New-UiaCondition -ControlType 'ListItem'))) {
+                if ($item.Current.Name.Contains('Import NPC Database Sources') `
+                        -and $item.Current.Name.Contains('Completed') `
+                        -and $item.Current.HelpText.Contains($npcPrimaryName) `
+                        -and $item.Current.HelpText.Contains($npcSecondaryName)) { return $item }
+            }
+        }
+        $successEvidence = $successActivity.Current.HelpText
+        $sourceList = Find-OuterControl -ControlType 'List' -Name 'NPC Database sources'
+        $catalog = Find-OuterControl -ControlType 'Table' -Name 'NPC Database catalog'
+        foreach ($sourceName in @("$npcPrimaryName, 2 rows", "$npcSecondaryName, 2 rows")) {
+            Wait-UiaElement -Root $sourceList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name $sourceName) `
+                -Description "committed NPC source $sourceName" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        }
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        if (-not $catalog.Current.HelpText.Contains('3 of 3 NPC Database entries visible')) {
+            throw 'NPC catalog omitted its current summary from accessible help.'
+        }
+        $lydia = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+        Select-UiaElement -Element $lydia
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'Lydia' | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC Database source' -Expected "Source: $primaryPath" | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC plugin' -Expected 'Plugin: Skyrim.esm' | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC editor ID' -Expected 'Editor ID: HousecarlWhiterun' | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC race' -Expected 'Race: NordRace' | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC Form ID' -Expected 'Form ID: A2C94' | Out-Null
+        if ($null -ne (Find-NpcDatabaseRow -Table $catalog -DisplayName 'Shadow Lydia' `
+                -PluginName 'skyrim.esm' -EditorId 'housecarlwhiterun')) {
+            throw 'The later source displaced the first imported NPC identity.'
+        }
+        $fallback = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Unnamed (FemaleNord)' `
+            -PluginName 'Other.esm' -EditorId 'FemaleNord'
+        Select-UiaElement -Element $fallback
+        Wait-NpcDatabaseText -Name 'NPC Form ID' -Expected 'Form ID: 1A696' | Out-Null
+        $lydia = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+        Select-UiaElement -Element $lydia
+        $portraitStatus = Find-OuterControl -ControlType 'Text' -Name 'NPC Database portrait status'
+        Wait-UiaCondition -Description 'NPC Database editor-ID-specific portrait' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $status = $portraitStatus.Current.HelpText
+            if ($status.Contains('Lydia (HousecarlWhiterun).jpeg')) { $status }
+        } | Out-Null
+        $openViewer = Find-OuterControl -ControlType 'Button' -Name 'Open NPC Database portrait viewer'
+        if (-not $openViewer.Current.IsEnabled -or -not $openViewer.Current.IsKeyboardFocusable) {
+            throw 'The selected NPC Database portrait viewer is not keyboard accessible.'
+        }
+        Send-UiaKeysToElement -Element $openViewer -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $viewer = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title 'NPC Portrait — Lydia' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaElement -Root $viewer -Condition (
+            New-UiaCondition -ControlType 'Image' `
+                -Name 'NPC portrait: Lydia, plugin Skyrim.esm, editor ID HousecarlWhiterun') `
+            -Description 'accessible NPC Database portrait image' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-UiaElement -Root $viewer -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'NPC portrait dimensions: 320 × 320 pixels') `
+            -Description 'NPC Database portrait dimensions' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $zoom = Wait-UiaElement -Root $viewer -Condition (
+            New-UiaCondition -ControlType 'Slider' -Name 'NPC portrait zoom') `
+            -Description 'NPC Database portrait zoom' -TimeoutSeconds $StepTimeoutSeconds
+        $zoomBefore = Get-UiaRangeValue -Element $zoom
+        Send-UiaKeysToElement -Element $zoom -Keys '{RIGHT}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'NPC Database portrait keyboard zoom' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ((Get-UiaRangeValue -Element $zoom) -gt $zoomBefore) { $true }
+        } | Out-Null
+        Send-UiaAccelerator -Window $viewer -Keys '{ESC}'
+        Wait-UiaKeyboardFocus -Element $openViewer -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $sortChoice = Wait-NpcDatabaseSort
+        if (-not $sortChoice.Current.IsKeyboardFocusable -or -not $sortChoice.Current.IsEnabled) {
+            throw 'The NPC Database sort control is not keyboard accessible.'
+        }
+        Send-UiaKeysToElement -Element $sortChoice -Keys '{F4}{HOME}{DOWN}{ENTER}' `
+            -TimeoutSeconds $StepTimeoutSeconds
+        $sortedNames = Wait-UiaCondition -Description 'ascending NPC catalog name sort' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $lydiaCell = Find-NpcDatabaseRow -Table $catalog -DisplayName 'Lydia' `
+                -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+            $seranaCell = Find-NpcDatabaseRow -Table $catalog -DisplayName 'Serana' `
+                -PluginName 'Dawnguard.esm' -EditorId 'SeranaEditor'
+            $unnamedCell = Find-NpcDatabaseRow -Table $catalog -DisplayName 'Unnamed (FemaleNord)' `
+                -PluginName 'Other.esm' -EditorId 'FemaleNord'
+            if ($null -eq $lydiaCell -or $null -eq $seranaCell -or $null -eq $unnamedCell) { return }
+            $positions = @(
+                (Get-NpcDatabaseRowIndex -Cell $lydiaCell)
+                (Get-NpcDatabaseRowIndex -Cell $seranaCell)
+                (Get-NpcDatabaseRowIndex -Cell $unnamedCell)
+            )
+            if ($positions[0] -lt $positions[1] -and $positions[1] -lt $positions[2]) {
+                @('Lydia', 'Serana', 'Unnamed (FemaleNord)')
+            }
+        }
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'Lydia' | Out-Null
+        $serana = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Serana' `
+            -PluginName 'Dawnguard.esm' -EditorId 'SeranaEditor'
+        Select-UiaElement -Element $serana
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'Serana' | Out-Null
+        foreach ($column in @('Name', 'Master', 'Race', 'EditorID', 'FormID')) {
+            $filterButton = Find-OuterControl -ControlType 'Button' -Name "Filter $column column"
+            if (-not $filterButton.Current.IsEnabled -or -not $filterButton.Current.IsKeyboardFocusable) {
+                throw "The $column NPC Database filter is not keyboard accessible."
+            }
+        }
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        $nameFilter = Wait-FocusedControl -ControlType 'Button' -Name 'Filter Name column'
+        Send-UiaKeysToElement -Element $nameFilter -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $namePopup = Wait-NpcFilterPopup -Column 'Name'
+        $nameChoices = Wait-UiaElement -Root $namePopup -Condition (
+            New-UiaCondition -ControlType 'List' -Name 'Name NPC Database filter choices') `
+            -Description 'Name filter checkbox choices' -TimeoutSeconds $StepTimeoutSeconds
+        $seranaChoice = Wait-NpcFilterChoice -List $nameChoices -Value 'Serana'
+        Select-UiaElement -Element $seranaChoice
+        Send-UiaKeysToElement -Element $nameChoices -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        $nameApply = Wait-UiaElement -Root $namePopup -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Apply Name filter') `
+            -Description 'accessible Name filter Apply' -TimeoutSeconds $StepTimeoutSeconds
+        $nameCancel = Wait-UiaElement -Root $namePopup -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Cancel Name filter') `
+            -Description 'accessible Name filter Cancel' -TimeoutSeconds $StepTimeoutSeconds
+        if (-not $nameApply.Current.IsKeyboardFocusable -or -not $nameCancel.Current.IsKeyboardFocusable) {
+            throw 'The Name filter popup actions are not keyboard accessible.'
+        }
+        Send-UiaKeysToElement -Element $nameChoices -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-NpcFilterPopupClosed -Column 'Name'
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        $nameFilter = Find-OuterControl -ControlType 'Button' -Name 'Filter Name column'
+        Send-UiaKeysToElement -Element $nameFilter -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $namePopup = Wait-NpcFilterPopup -Column 'Name'
+        $nameChoices = Wait-UiaElement -Root $namePopup -Condition (
+            New-UiaCondition -ControlType 'List' -Name 'Name NPC Database filter choices') `
+            -Description 'reopened Name filter checkbox choices' -TimeoutSeconds $StepTimeoutSeconds
+        $seranaChoice = Wait-NpcFilterChoice -List $nameChoices -Value 'Serana'
+        Select-UiaElement -Element $seranaChoice
+        Send-UiaKeysToElement -Element $nameChoices -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $nameChoices -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-NpcFilterPopupClosed -Column 'Name'
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '2 of 3 NPC Database entries visible; 1 filtered columns.' | Out-Null
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'No NPC selected' | Out-Null
+        $masterFilter = Find-OuterControl -ControlType 'Button' -Name 'Filter Master column'
+        Send-UiaKeysToElement -Element $masterFilter -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $masterPopup = Wait-NpcFilterPopup -Column 'Master'
+        $masterChoices = Wait-UiaElement -Root $masterPopup -Condition (
+            New-UiaCondition -ControlType 'List' -Name 'Master NPC Database filter choices') `
+            -Description 'Master filter checkbox choices' -TimeoutSeconds $StepTimeoutSeconds
+        $otherChoice = Wait-NpcFilterChoice -List $masterChoices -Value 'Other.esm'
+        Select-UiaElement -Element $otherChoice
+        Send-UiaKeysToElement -Element $masterChoices -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        $masterApply = Wait-UiaElement -Root $masterPopup -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Apply Master filter') `
+            -Description 'accessible Master filter Apply' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $masterApply -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-NpcFilterPopupClosed -Column 'Master'
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '1 of 3 NPC Database entries visible; 2 filtered columns.' | Out-Null
+        $reset = Find-OuterControl -ControlType 'Button' -Name 'Clear NPC Database filters'
+        Send-UiaKeysToElement -Element $reset -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'No NPC selected' | Out-Null
+
+        $initialScreenshot = Join-Path $diagnosticsDir 'workbench-npc-database.png'
+        Save-Screenshot -Path $initialScreenshot
+        $observations['npcDatabaseCatalog'] = [ordered]@{
+            sources = @($npcPrimaryName, $npcSecondaryName)
+            visibleRows = @('Lydia', 'Unnamed (FemaleNord)', 'Serana')
+            firstSourceWins = 'Lydia'
+            normalizedFormId = 'A2C94'
+            fallbackName = 'Unnamed (FemaleNord)'
+            sortedNames = $sortedNames
+            sortChoice = 'Name ascending via keyboard'
+            hiddenSelectionCleared = $true
+            portrait = 'Lydia (HousecarlWhiterun).jpeg'
+            successActivity = $successEvidence
+        }
+        'ordered source import, identity deduplication, row inspection, portrait, sorting, and filtering passed'
+    }
+
+    Invoke-SmokeStep -Name 'reject-mixed-failed-and-cancelled-npc-database-sources' -Action {
+        $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        $sourceList = Find-OuterControl -ControlType 'List' -Name 'NPC Database sources'
+        $catalog = Find-OuterControl -ControlType 'Table' -Name 'NPC Database catalog'
+        $malformedPath = Join-Path $workDir $npcMalformedName
+        $mixedValidPath = Join-Path $workDir $npcMixedValidName
+        $failedLockedPath = Join-Path $workDir $npcFailedLockedName
+        $cancelFirstPath = Join-Path $workDir $npcCancelFirstName
+        $cancelLargePath = Join-Path $workDir $npcCancelLargeName
+
+        $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import NPC Database sources'
+        Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-MultipleFileDialog -Title 'Import NPC Database Sources' `
+            -Paths @($malformedPath, $mixedValidPath) -ConfirmButton 'Open'
+        $mixedActivity = Wait-UiaCondition -Description 'mixed NPC Database import Activity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            foreach ($item in @(Find-UiaElements -Root $activity -Condition (
+                    New-UiaCondition -ControlType 'ListItem'))) {
+                if ($item.Current.Name.Contains('Import NPC Database Sources') `
+                        -and $item.Current.Name.Contains('Completed with issues') `
+                        -and $item.Current.HelpText.Contains('NPC_DATABASE_SOURCE_MALFORMED') `
+                        -and $item.Current.HelpText.Contains($npcMixedValidName)) { return $item }
+            }
+        }
+        $mixedEvidence = $mixedActivity.Current.HelpText
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '4 of 4 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        Wait-UiaElement -Root $sourceList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name "$npcMixedValidName, 1 row") `
+            -Description 'committed valid source from mixed NPC import' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Mixed Survivor' `
+            -PluginName 'Extra.esm' -EditorId 'MixedEditor' | Out-Null
+        if ($null -ne (Find-NpcDatabaseRow -Table $catalog -DisplayName 'Rejected Staging' `
+                -PluginName 'Broken.esm' -EditorId 'RejectEditor')) {
+            throw 'The malformed NPC source published a row before its bad line.'
+        }
+        Assert-NpcSourceAbsent -List $sourceList -FileName $npcMalformedName
+        $malformedDiagnostics = Wait-UiaCondition -Description 'line-numbered malformed NPC diagnostic' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $value = (Find-OuterControl -ControlType 'Text' -Name 'NPC Database diagnostics').Current.HelpText
+            if ($value.Contains('NPC_DATABASE_SOURCE_MALFORMED') `
+                    -and $value.Contains("$npcMalformedName`:2")) { $value }
+        }
+
+        # A sharing violation is a stable read failure after the native chooser accepts an existing file.
+        $failedSourceLock = [IO.File]::Open($failedLockedPath, [IO.FileMode]::Open,
+                [IO.FileAccess]::Read, [IO.FileShare]::None)
+        try {
+            $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import NPC Database sources'
+            Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+            Complete-MultipleFileDialog -Title 'Import NPC Database Sources' `
+                -Paths @($malformedPath, $failedLockedPath) -ConfirmButton 'Open'
+            $failureDialog = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $applicationTitle `
+                -TimeoutSeconds $StepTimeoutSeconds
+            Send-UiaAccelerator -Window $failureDialog -Keys '{ESC}'
+            $failedActivity = Wait-UiaCondition -Description 'failed NPC Database import Activity' `
+                -TimeoutSeconds $StepTimeoutSeconds -Test {
+                foreach ($item in @(Find-UiaElements -Root $activity -Condition (
+                        New-UiaCondition -ControlType 'ListItem'))) {
+                    if ($item.Current.Name.Contains('Import NPC Database Sources') `
+                            -and $item.Current.Name.Contains('Failed') `
+                            -and $item.Current.HelpText.Contains('NPC_DATABASE_SOURCE_MALFORMED') `
+                            -and $item.Current.HelpText.Contains('NPC_DATABASE_SOURCE_READ_FAILED')) { return $item }
+                }
+            }
+            $failedEvidence = $failedActivity.Current.HelpText
+        }
+        finally {
+            $failedSourceLock.Dispose()
+        }
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '4 of 4 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        if ($null -ne (Find-NpcDatabaseRow -Table $catalog -DisplayName 'Rejected Locked' `
+                -PluginName 'Locked.esm' -EditorId 'LockedEditor')) {
+            throw 'A failed NPC source changed the catalog.'
+        }
+
+        Select-UiaElement -Element $failedActivity
+        $retry = Find-OuterControl -ControlType 'Button' -Name 'Retry selected activity'
+        if (-not $retry.Current.IsEnabled) { throw 'The failed NPC import did not offer an Activity retry.' }
+        Send-UiaKeysToElement -Element $retry -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $retryActivity = Wait-UiaCondition -Description 'linked NPC Database read-failure retry' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            foreach ($item in @(Find-UiaElements -Root $activity -Condition (
+                    New-UiaCondition -ControlType 'ListItem'))) {
+                if ($item.Current.Name.Contains('Import NPC Database Sources') `
+                        -and $item.Current.Name.Contains('Completed with issues') `
+                        -and $item.Current.HelpText.Contains('Retry of attempt:') `
+                        -and $item.Current.HelpText.Contains($npcFailedLockedName) `
+                        -and $item.Current.HelpText.Contains('NPC_DATABASE_SOURCE_MALFORMED')) { return $item }
+            }
+        }
+        $retryEvidence = $retryActivity.Current.HelpText
+        Wait-UiaElement -Root $sourceList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name "$npcFailedLockedName, 1 row") `
+            -Description 'unlocked NPC source committed by retry' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '5 of 5 NPC Database entries visible; 0 filtered columns.' | Out-Null
+
+        $importButton = Find-OuterControl -ControlType 'Button' -Name 'Import NPC Database sources'
+        Send-UiaKeysToElement -Element $importButton -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-MultipleFileDialog -Title 'Import NPC Database Sources' `
+            -Paths @($cancelFirstPath, $cancelLargePath) -ConfirmButton 'Open'
+        $progress = Wait-UiaCondition -Description 'NPC Database second-source 50 percent progress' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'ProgressBar' -Name 'Current operation progress')
+            if ($null -ne $candidate -and $candidate.Current.HelpText.Contains('50%') `
+                    -and $candidate.Current.HelpText.Contains('Reading NPC Database sources')) { return $candidate }
+        }
+        $progressEvidence = $progress.Current.HelpText
+        $cancel = Wait-UiaCondition -Description 'enabled NPC Database import cancellation' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Button' -Name 'Cancel current operation')
+            if ($null -ne $candidate -and $candidate.Current.IsEnabled) { return $candidate }
+        }
+        Invoke-UiaElement -Element $cancel
+        $cancelledActivity = Wait-UiaCondition -Description 'cancelled NPC Database import Activity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            foreach ($item in @(Find-UiaElements -Root $activity -Condition (
+                    New-UiaCondition -ControlType 'ListItem'))) {
+                if ($item.Current.Name.Contains('Import NPC Database Sources') `
+                        -and $item.Current.Name.Contains('Cancelled') `
+                        -and $item.Current.HelpText.Contains($npcCancelFirstName) `
+                        -and $item.Current.HelpText.Contains($npcCancelLargeName) `
+                        -and $item.Current.HelpText.Contains('Effects committed: Imported ')) { return $item }
+            }
+        }
+        $cancelledEvidence = $cancelledActivity.Current.HelpText
+        Wait-UiaElement -Root $sourceList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name "$npcCancelFirstName, 1 row") `
+            -Description 'first NPC source retained after cancellation' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Assert-NpcSourceAbsent -List $sourceList -FileName $npcCancelLargeName
+        if ($null -ne (Find-NpcDatabaseRow -Table $catalog -DisplayName 'Cancel Source 000000' `
+                -PluginName 'Bulk.esm' -EditorId 'BulkId000000')) {
+            throw 'The cancelled in-progress NPC source published a partial catalog row.'
+        }
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '6 of 6 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        $observations['npcDatabaseImportOutcomes'] = [ordered]@{
+            malformed = $malformedDiagnostics
+            mixed = $mixedEvidence
+            failed = $failedEvidence
+            retry = $retryEvidence
+            cancelled = $cancelledEvidence
+            progress = $progressEvidence
+            committedBeforeCancellation = $npcCancelFirstName
+            rejectedInProgressSource = $npcCancelLargeName
+        }
+        'malformed, mixed, locked-read, linked retry, and cancelled NPC source outcomes retained truthful catalog and Activity state'
+    }
+
+    Invoke-SmokeStep -Name 'remove-clear-reimport-and-resize-npc-database' -Action {
+        $sourceList = Find-OuterControl -ControlType 'List' -Name 'NPC Database sources'
+        $catalog = Find-OuterControl -ControlType 'Table' -Name 'NPC Database catalog'
+        $primarySource = Wait-UiaElement -Root $sourceList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name "$npcPrimaryName, 2 rows") `
+            -Description 'first NPC source for removal' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $primarySource
+        $remove = Find-OuterControl -ControlType 'Button' -Name 'Remove selected NPC Database source'
+        if (-not $remove.Current.IsEnabled) { throw 'Selected NPC source cannot be removed by keyboard.' }
+        Send-UiaKeysToElement -Element $remove -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Cancel'
+        Wait-UiaElement -Root $sourceList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name "$npcPrimaryName, 2 rows") `
+            -Description 'cancelled NPC source removal' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $remove = Find-OuterControl -ControlType 'Button' -Name 'Remove selected NPC Database source'
+        Send-UiaKeysToElement -Element $remove -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Remove'
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '5 of 5 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        Assert-NpcSourceAbsent -List $sourceList -FileName $npcPrimaryName
+        $shadow = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Shadow Lydia' `
+            -PluginName 'skyrim.esm' -EditorId 'housecarlwhiterun'
+        Select-UiaElement -Element $shadow
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'Shadow Lydia' | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC Database source' `
+            -Expected "Source: $(Join-Path $workDir $npcSecondaryName)" | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC Form ID' -Expected 'Form ID: A2C95' | Out-Null
+        $missingPortrait = Wait-UiaCondition -Description 'NPC Database missing portrait state' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $status = (Find-OuterControl -ControlType 'Text' `
+                -Name 'NPC Database portrait status').Current.HelpText
+            if ($status.Contains('No portrait found')) { $status }
+        }
+        if ((Find-OuterControl -ControlType 'Button' `
+                -Name 'Open NPC Database portrait viewer').Current.IsEnabled) {
+            throw 'The missing NPC Database portrait still enabled its viewer.'
+        }
+
+        $clear = Find-OuterControl -ControlType 'Button' -Name 'Clear visible NPC Database entries'
+        Send-UiaKeysToElement -Element $clear -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Cancel'
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '5 of 5 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        $clear = Find-OuterControl -ControlType 'Button' -Name 'Clear visible NPC Database entries'
+        Send-UiaKeysToElement -Element $clear -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Clear'
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '0 of 0 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        foreach ($sourceName in @($npcSecondaryName, $npcMixedValidName,
+                $npcFailedLockedName, $npcCancelFirstName)) {
+            Wait-UiaElement -Root $sourceList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name "$sourceName, 0 rows") `
+                -Description "cleared source $sourceName" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        }
+        if ((Find-OuterControl -ControlType 'Button' -Name 'Clear visible NPC Database entries').Current.IsEnabled) {
+            throw 'Clear visible NPC Database entries remained enabled for an empty catalog.'
+        }
+
+        $import = Find-OuterControl -ControlType 'Button' -Name 'Import NPC Database sources'
+        Send-UiaKeysToElement -Element $import -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Complete-MultipleFileDialog -Title 'Import NPC Database Sources' `
+            -Paths @((Join-Path $workDir $npcPrimaryName)) -ConfirmButton 'Open'
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '2 of 2 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        $lydia = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+        Select-UiaElement -Element $lydia
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'Lydia' | Out-Null
+        $narrowMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
+        $inspectorName = Wait-FocusedControl -ControlType 'Text' -Name 'Selected NPC Database entry'
+        Assert-ControlInsideClient -Element $inspectorName -Metrics $narrowMetrics
+        $narrowStatus = Find-OuterControl -ControlType 'Text' -Name 'NPC Database portrait status'
+        Assert-ControlInsideClient -Element $narrowStatus -Metrics $narrowMetrics
+        $narrowViewer = Find-OuterControl -ControlType 'Button' -Name 'Open NPC Database portrait viewer'
+        Assert-ControlInsideClient -Element $narrowViewer -Metrics $narrowMetrics
+        $narrowScreenshot = Join-Path $diagnosticsDir 'workbench-npc-database-narrow.png'
+        Save-Screenshot -Path $narrowScreenshot
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        $inspectorLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open NPC Database inspector'
+        Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^3' -TimeoutSeconds $StepTimeoutSeconds
+        $narrowSources = Wait-FocusedControl -ControlType 'List' -Name 'NPC Database sources'
+        Assert-ControlInsideClient -Element $narrowSources -Metrics $narrowMetrics
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element (Get-AreaButton -Name 'NPC Database') `
+            -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $minimumMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 700 -LogicalHeight 500 `
+            -AllowMinimumClamp -TimeoutSeconds $StepTimeoutSeconds
+        if ([math]::Abs($minimumMetrics.LogicalClientWidth - 800.0) -gt 2.0 -or
+                [math]::Abs($minimumMetrics.LogicalClientHeight - 600.0) -gt 2.0) {
+            throw "Populated NPC Database minimum client geometry did not settle at 800x600: $($minimumMetrics.LogicalClientWidth)x$($minimumMetrics.LogicalClientHeight)."
+        }
+        $minimumCatalog = Find-OuterControl -ControlType 'Table' -Name 'NPC Database catalog'
+        Assert-ControlInsideClient -Element $minimumCatalog -Metrics $minimumMetrics
+        $minimumSortChoice = Wait-NpcDatabaseSort
+        Assert-ControlInsideClient -Element $minimumSortChoice -Metrics $minimumMetrics
+        $minimumNameFilter = Find-OuterControl -ControlType 'Button' -Name 'Filter Name column'
+        Assert-ControlInsideClient -Element $minimumNameFilter -Metrics $minimumMetrics
+        $minimumInspectorLauncher = Find-OuterControl -ControlType 'Button' `
+            -Name 'Open NPC Database inspector'
+        Assert-ControlInsideClient -Element $minimumInspectorLauncher -Metrics $minimumMetrics
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
+        $minimumInspector = Wait-FocusedControl -ControlType 'Text' -Name 'Selected NPC Database entry'
+        Assert-ControlInsideClient -Element $minimumInspector -Metrics $minimumMetrics
+        $minimumScreenshot = Join-Path $diagnosticsDir 'workbench-npc-database-minimum.png'
+        Save-Screenshot -Path $minimumScreenshot
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaKeyboardFocus -Element $minimumInspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1300 -LogicalHeight 800 `
+            -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^3' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'NPC Database' | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '2 of 2 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        Get-UiaTree -Element $script:mainWindow |
+            Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-workbench-npc-database.txt') -Encoding utf8
+        $observations['npcDatabaseManagement'] = [ordered]@{
+            removalRevealed = 'Shadow Lydia'
+            missingPortrait = $missingPortrait
+            clearRetainedSources = @($npcSecondaryName, $npcMixedValidName,
+                $npcFailedLockedName, $npcCancelFirstName)
+            reimported = $npcPrimaryName
+            survivedProjectNew = $true
+            narrowScalePercent = [math]::Round($narrowMetrics.Dpi * 100.0 / 96.0)
+            minimumClient = ConvertTo-WindowMetricsEvidence -Metrics $minimumMetrics
+        }
+        'source removal, duplicate reveal, clear/reimport, session scope, and narrow keyboard overlays passed'
+    }
+
     Invoke-SmokeStep -Name 'manage-settings-and-import-bodyslide-through-workbench' -Action {
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^5' -TimeoutSeconds $StepTimeoutSeconds
         Wait-AreaSelected -Name 'Settings' | Out-Null
@@ -3520,6 +4234,33 @@ try {
             New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
             -Description 'portrait restored to explicit Dark theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^3' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'NPC Database' | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '2 of 2 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        $databaseCatalog = Find-OuterControl -ControlType 'Table' -Name 'NPC Database catalog'
+        $databaseLydia = Wait-NpcDatabaseRow -Table $databaseCatalog -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+        Select-UiaElement -Element $databaseLydia
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'Lydia' | Out-Null
+        $databasePortrait = Find-OuterControl -ControlType 'Text' -Name 'NPC Database portrait status'
+        Wait-UiaCondition -Description 'NPC Database Dark portrait' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $status = $databasePortrait.Current.HelpText
+            if ($status.Contains('Lydia (HousecarlWhiterun).jpeg')) { $status }
+        } | Out-Null
+        $databaseDarkScreenshot = Join-Path $diagnosticsDir 'workbench-npc-database-dark.png'
+        Save-Screenshot -Path $databaseDarkScreenshot
+        Select-CurrentThemeChoice -Name 'Light'
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Light theme') `
+            -Description 'NPC Database under explicit Light theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $databaseLightScreenshot = Join-Path $diagnosticsDir 'workbench-npc-database-light.png'
+        Save-Screenshot -Path $databaseLightScreenshot
+        Select-CurrentThemeChoice -Name 'Dark'
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
+            -Description 'NPC Database restored to explicit Dark theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
         Set-SystemHighContrast -Enabled:$true
         Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'Text' -Name 'Effective theme: High Contrast theme') `
@@ -3562,6 +4303,16 @@ try {
         Wait-PortraitStatusContains -Expected 'Lydia (HousecarlWhiterun).jpeg' | Out-Null
         $portraitHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-portrait-high-contrast.png'
         Save-Screenshot -Path $portraitHighContrastScreenshot
+
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^3' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'NPC Database' | Out-Null
+        $databaseCatalog = Find-OuterControl -ControlType 'Table' -Name 'NPC Database catalog'
+        $databaseLydia = Wait-NpcDatabaseRow -Table $databaseCatalog -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+        Select-UiaElement -Element $databaseLydia
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'Lydia' | Out-Null
+        $databaseHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-npc-database-high-contrast.png'
+        Save-Screenshot -Path $databaseHighContrastScreenshot
 
         Set-SystemHighContrast -Enabled:$false
         Wait-UiaElement -Root $script:mainWindow -Condition (
@@ -3614,6 +4365,8 @@ try {
             iconImplementation = 'application-owned-bundled-vectors'
             portraitScreenshots = @('workbench-portrait-light.png', 'workbench-portrait-dark.png',
                 'workbench-portrait-high-contrast.png')
+            npcDatabaseScreenshots = @('workbench-npc-database-light.png',
+                'workbench-npc-database-dark.png', 'workbench-npc-database-high-contrast.png')
         }
         'theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed'
     }
@@ -3690,7 +4443,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/18'
+        schema = 'bs2bg.windows-app-image-smoke/19'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion
@@ -3725,6 +4478,7 @@ finally {
             templatesWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-templates.txt'
             morphsWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-morphs.txt'
             npcMorphsWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-npc-morphs.txt'
+            npcDatabaseWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-npc-database.txt'
             portraitsWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-portraits.txt'
             templatesNarrowScreenshot = 'smoke-diagnostics/workbench-templates-narrow.png'
             npcMorphsNarrowScreenshot = 'smoke-diagnostics/workbench-npc-morphs-narrow.png'
@@ -3739,6 +4493,12 @@ finally {
             portraitLightScreenshot = 'smoke-diagnostics/workbench-portrait-light.png'
             portraitDarkScreenshot = 'smoke-diagnostics/workbench-portrait-dark.png'
             portraitHighContrastScreenshot = 'smoke-diagnostics/workbench-portrait-high-contrast.png'
+            npcDatabaseScreenshot = 'smoke-diagnostics/workbench-npc-database.png'
+            npcDatabaseNarrowScreenshot = 'smoke-diagnostics/workbench-npc-database-narrow.png'
+            npcDatabaseMinimumScreenshot = 'smoke-diagnostics/workbench-npc-database-minimum.png'
+            npcDatabaseLightScreenshot = 'smoke-diagnostics/workbench-npc-database-light.png'
+            npcDatabaseDarkScreenshot = 'smoke-diagnostics/workbench-npc-database-dark.png'
+            npcDatabaseHighContrastScreenshot = 'smoke-diagnostics/workbench-npc-database-high-contrast.png'
         }
         workRoot = $WorkRoot
         workRootKept = [bool]$KeepWorkRoot

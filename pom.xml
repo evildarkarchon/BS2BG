@@ -73,7 +73,7 @@
         <dependency>
             <groupId>com.github.albfernandez</groupId>
             <artifactId>juniversalchardet</artifactId>
-            <version>2.1.0</version>
+            <version>2.5.0</version>
         </dependency>
         <!--
             JavaFX is 'provided': it compiles and tests against the Maven Central jars, but the packaged image gets

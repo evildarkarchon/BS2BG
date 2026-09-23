@@ -1,11 +1,11 @@
 # Windows app-image packaging checkpoint
 
-Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#107 and inherited gates). A green run proves
+Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#110 and inherited gates). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
 starts from a clean extracted location without any system Java, exercises typed navigation, semantic focus, Output,
 responsive/minimum geometry, live themes, High Contrast, reduced motion, feedback, typed dialogs, Project lifecycle,
 failure preservation, pointer-free Slider Preset choice editing and catalog management, keyboard and pointer Custom Morph
-Target authoring, and dirty shutdown, and exits cleanly.
+Target authoring, NPC Database source import and inspection, and dirty shutdown, and exits cleanly.
 ADR-0003 records the Java 25 baseline this checkpoint ships.
 
 ## One command
@@ -141,11 +141,12 @@ the configured bound.
 
 Windows UI Automation locates controls by accessible role/name and native ownership; pointer checks use only the
 provider-supplied clickable point, or visible descendant-content bounds when JavaFX omits that optional point, of a
-semantically located element. The current issue #107
+semantically located element. The current issue #110
 workflow records these steps:
 
 1. Extract the clean image, verify launcher configuration/version, install representative, recovery, malformed,
-   and high-token-count cancellable Project fixtures, and stage an interrupted paired Settings publication.
+   and high-token-count cancellable Project fixtures, seven NPC Database text sources, and portraits, then stage an
+   interrupted paired Settings publication.
 2. Launch `BS2BG Preview` without system Java and verify the bundled single-process runtime.
 3. Verify Templates, Morphs, NPC Database, Output, and Settings typed destinations plus paired Settings recovery and
    its durable Activity evidence.
@@ -166,33 +167,46 @@ workflow records these steps:
    remove Slider Preset relationships, clear relationships and the frozen visible target set, and prove real-pointer
    create/select/relationship gestures. Verify Output invalidation/regeneration, save/reopen continuity,
    narrow overlays, semantic focus, and measured DPI/client bounds.
-9. Edit Standard and UUNP Settings, persist the pair, prove live output-affecting preview behavior, then exercise
+9. Import ordered NPC Database text sources through the native multi-file chooser; verify source management,
+   first-source identity ownership, trimmed and fallback fields, normalized Form IDs, an accessible table and
+   inspector, portrait priority, viewer image/dimensions/zoom and keyboard Close. Choose Name ascending through the
+   sort ComboBox with the keyboard and verify visible order and identity retention. Exercise five accessible column
+   filter launchers, checkbox popup Escape/Space/Enter behavior, combined exact-cell criteria, and selection clearing.
+10. Import mixed valid and malformed NPC sources, an all-failed malformed/locked batch, a linked retry after
+    releasing the lock, and a cancellable batch; verify source-transaction boundaries, source-line diagnostics,
+    warning and failure Activity, truthful progress,
+    preservation of prior committed rows, and zero rows from the cancelled in-progress source.
+11. Cancel and confirm source removal and visible-entry clear, reveal a later duplicate after removing its first
+    source, then reimport. Verify the catalog survives Project New, narrow list/inspector overlays at the 1199-pixel
+    breakpoint and the populated 800x600 minimum client, measured bounds including the sort control, keyboard focus
+    return, and saved UIA tree/screenshot evidence.
+12. Edit Standard and UUNP Settings, persist the pair, prove live output-affecting preview behavior, then exercise
    successful, malformed/partial, failed, and cancelled BodySlide imports with captured-source, diagnostics,
    committed-effect, selection, focus, and Activity evidence.
-10. Generate one captured Project/Settings basis; inspect keyboard-selectable Templates/Morphs/BoS tabs as read-only
+13. Generate one captured Project/Settings basis; inspect keyboard-selectable Templates/Morphs/BoS tabs as read-only
    text; copy the selected accepted bytes; publish the complete INI/BoS set and one selected BoS file with exact
    UTF-8 bytes; force a locked-destination batch failure and prove rollback before a linked retry. Then preserve
    accepted Output across Save, invalidate it after a Project edit, and prove cancelled/stale Generate attempts
    publish no artifacts, do not reveal Output, retain focus, and record complete Activity evidence.
-11. Save As a clean New Project and verify the canonical file and adopted identity.
-12. Open a recovered Project and require captured source/basis, both ordered
+14. Save As a clean New Project and verify the canonical file and adopted identity.
+15. Open a recovered Project and require captured source/basis, both ordered
    `SLIDER_PRESET_ASSIGNMENT_MISSING` diagnostics, committed effect, retry capability, and dirty title.
-13. Cancel and then explicitly discard a dirty New request.
-14. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
-15. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes; repair the
+16. Cancel and then explicitly discard a dirty New request.
+17. Reopen the recovery fixture, Save through its adopted identity, and verify its clean canonical relationships.
+18. Reject a malformed Open with `PROJECT_JSON_MALFORMED` while preserving active identity and bytes; repair the
     captured source and Retry it as a newly linked successful attempt.
-16. Change the selected high-token-count source after detached parsing begins, require `STALE_RESULT`, zero effects,
+19. Change the selected high-token-count source after detached parsing begins, require `STALE_RESULT`, zero effects,
     a durable Completed-with-issues Activity record, and preservation of the active Project.
-17. Open the regenerated high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
+20. Open the regenerated high-token-count fixture, require global admission ownership and truthful ProgressBar phase, verify
     New/Open/Save/Save As disabled while Exit remains available, then Cancel and require zero committed effects.
-18. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
+21. Force an adopted-path Save failure, require `PROJECT_FILE_WRITE_FAILED` and dirty-state preservation, then
     recover through Save As.
-19. Run the separate system-accessibility phase after authoring and file workflows: drive System/Light/Dark,
+22. Run the separate system-accessibility phase after authoring and file workflows: drive System/Light/Dark,
     verify High Contrast override,
-    capture the populated Templates/editor and Morphs surfaces, verify reduced motion, and restore the captured
+    capture the populated Templates/editor, Morphs, and NPC Database surfaces, verify reduced motion, and restore the captured
     Windows preferences. Keeping system theme transitions here prevents their temporary cover windows from
     disrupting earlier pointer input.
-20. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
+23. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
     prompt and prove admission resumes, then repeat and Discard to require bounded exit 0 with no image process.
 
 Every wait is bounded. The first failure records all visible process windows, their UIA trees, a best-effort
@@ -200,12 +214,13 @@ Workbench screenshot, and launcher stdout/stderr. Required screenshots wait unti
 after system transitions, capture only its physical window bounds, and fail the run if capture is unavailable.
 Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/17`; its durable artifacts include the Workbench,
-responsive, Templates-management, and Morphs-management UIA trees plus `workbench-high-contrast.png` and
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/19`; its durable artifacts include the Workbench,
+responsive, Templates-management, Morphs-management, and NPC Database UIA trees plus `workbench-high-contrast.png` and
 `workbench-reduced-motion.png`, the populated Templates High Contrast screenshot
 `workbench-templates-high-contrast.png`, the selected Slider editor High Contrast screenshot
 `workbench-templates-editor-high-contrast.png`, and the narrow Templates clipping screenshot
-`workbench-templates-narrow.png`, `workbench-morphs-high-contrast.png`, and `workbench-morphs-narrow.png`. The accessibility
+`workbench-templates-narrow.png`, `workbench-morphs-high-contrast.png`, `workbench-morphs-narrow.png`, and NPC Database
+wide, narrow, 800x600 minimum, Light, Dark, and High Contrast screenshots. The accessibility
 preference changes use documented Windows SPI calls and restore the exact original state in `finally`; see
 [workbench-platform.md](workbench-platform.md).
 

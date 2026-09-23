@@ -3,14 +3,24 @@ package com.asdasfa.jbs2bg.workbench;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 
+import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.Settings;
+import com.asdasfa.jbs2bg.filtering.ColumnCriterion;
+import com.asdasfa.jbs2bg.filtering.FilterColumn;
+import com.asdasfa.jbs2bg.filtering.NpcTableColumns;
+import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
+import com.asdasfa.jbs2bg.filtering.SortKey;
+import com.asdasfa.jbs2bg.filtering.SortDirection;
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
 import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
@@ -22,6 +32,8 @@ import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature;
 import com.asdasfa.jbs2bg.workbench.morphs.NpcPortraitFiles;
+import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseFeature;
+import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseImporter;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
@@ -30,6 +42,10 @@ import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.DoubleBinding;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
@@ -49,6 +65,10 @@ import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableRow;
+import javafx.scene.control.TableView;
+import javafx.scene.control.cell.CheckBoxListCell;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
@@ -185,6 +205,70 @@ public final class WorkbenchController {
     private Button clearSliderPresetsButton;
     @FXML
     private Button importBodySlideButton;
+    @FXML
+    private ScrollPane npcDatabasePrimaryScroll;
+    @FXML
+    private Label npcSourceCountText;
+    @FXML
+    private ListView<NpcDatabaseFeature.Source> npcSourceList;
+    @FXML
+    private Button importNpcSourcesButton;
+    @FXML
+    private Button removeNpcSourceButton;
+    @FXML
+    private Button clearNpcDatabaseButton;
+    @FXML
+    private VBox npcDatabaseEditorContent;
+    @FXML
+    private Label npcCatalogSummary;
+    @FXML
+    private ComboBox<String> npcSortChoice;
+    @FXML
+    private ToggleButton npcNameFilterButton;
+    @FXML
+    private ToggleButton npcMasterFilterButton;
+    @FXML
+    private ToggleButton npcRaceFilterButton;
+    @FXML
+    private ToggleButton npcEditorIdFilterButton;
+    @FXML
+    private ToggleButton npcFormIdFilterButton;
+    @FXML
+    private Button clearNpcFiltersButton;
+    @FXML
+    private TableView<NPC> npcCatalogTable;
+    @FXML
+    private TableColumn<NPC, String> npcNameColumn;
+    @FXML
+    private TableColumn<NPC, String> npcMasterColumn;
+    @FXML
+    private TableColumn<NPC, String> npcRaceColumn;
+    @FXML
+    private TableColumn<NPC, String> npcEditorIdColumn;
+    @FXML
+    private TableColumn<NPC, String> npcFormIdColumn;
+    @FXML
+    private ScrollPane npcDatabaseInspectorScroll;
+    @FXML
+    private Label npcInspectorName;
+    @FXML
+    private Label npcInspectorSource;
+    @FXML
+    private Label npcInspectorMaster;
+    @FXML
+    private Label npcInspectorEditorId;
+    @FXML
+    private Label npcInspectorRace;
+    @FXML
+    private Label npcInspectorFormId;
+    @FXML
+    private ImageView npcDatabasePortraitImage;
+    @FXML
+    private Label npcDatabasePortraitStatus;
+    @FXML
+    private Button openNpcDatabasePortraitViewerButton;
+    @FXML
+    private Label npcDatabaseDiagnostics;
     @FXML
     private VBox templatesEditorContent;
     @FXML
@@ -417,6 +501,8 @@ public final class WorkbenchController {
     private WorkbenchProjectFlow projectFlow;
     private TemplatesFeature templatesFeature;
     private MorphsFeature morphsFeature;
+    private NpcDatabaseFeature npcDatabaseFeature;
+    private NpcDatabaseImporter npcDatabaseImporter;
     private SettingsFeature settingsFeature;
     private OutputFeature outputFeature;
     private Stage stage;
@@ -434,6 +520,7 @@ public final class WorkbenchController {
     private boolean settingsRefreshDeferred;
     private boolean renderingTemplates;
     private boolean renderingMorphs;
+    private boolean renderingNpcDatabase;
     private boolean renderingSettings;
     private boolean renderingOutput;
     private boolean templatesOwnProjectDiagnostics;
@@ -455,10 +542,20 @@ public final class WorkbenchController {
     private String renderedPortraitDisplayName;
     private Path renderedPortraitPath;
     private Image renderedPortraitImage;
+    private NpcMorphAssignmentIdentity renderedDatabasePortraitIdentity;
+    private String renderedDatabasePortraitDisplayName;
+    private Path renderedDatabasePortraitPath;
+    private Image renderedDatabasePortraitImage;
     private Popup fillEmptyPopup;
     private Parent fillEmptyPopupRoot;
     private Stage npcPortraitViewer;
     private Parent npcPortraitViewerRoot;
+    private Path npcPortraitViewerPath;
+    private Popup npcFilterPopup;
+    private Parent npcFilterPopupRoot;
+    private String npcFilterExpandedColumn;
+    private final Map<String, ToggleButton> npcFilterButtons = new LinkedHashMap<>();
+    private final Map<String, List<SortKey>> npcSortChoices = new LinkedHashMap<>();
     private final Map<String, SliderChoiceRow> sliderChoiceRowsByName = new LinkedHashMap<>();
 
     /**
@@ -655,6 +752,8 @@ public final class WorkbenchController {
         projectFlow = Objects.requireNonNull(flow, "flow");
         templatesFeature = new TemplatesFeature(projectFlow, Clock.systemUTC());
         morphsFeature = new MorphsFeature(projectFlow, Clock.systemUTC());
+        npcDatabaseFeature = new NpcDatabaseFeature();
+        npcDatabaseImporter = new NpcDatabaseImporter(npcDatabaseFeature, projectFlow.jobs(), this::renderNpcDatabase);
         settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup, migrationPolicy);
         outputFeature = new OutputFeature(projectFlow, () -> new OutputFeature.GenerationSettings(
                 Settings.snapshot(), settingsFeature.frame().omitRedundantSliders()));
@@ -663,6 +762,7 @@ public final class WorkbenchController {
         configureProjectCommands();
         configureTemplates();
         configureMorphs();
+        configureNpcDatabase();
         configureSettings();
         configureOutput();
         configureNavigation();
@@ -682,6 +782,8 @@ public final class WorkbenchController {
         stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> {
             if (fillEmptyPopup != null)
                 fillEmptyPopup.hide();
+            if (npcFilterPopup != null)
+                npcFilterPopup.hide();
             if (npcPortraitViewer != null)
                 npcPortraitViewer.close();
             appearanceAdapter.close();
@@ -693,6 +795,7 @@ public final class WorkbenchController {
         render(projectFlow.frame());
         renderTemplates(templatesFeature.frame());
         renderMorphs(morphsFeature.frame());
+        renderNpcDatabase(npcDatabaseFeature.frame());
         renderOutput(outputFeature.frame());
         renderFeedback(feedback.frame());
         if (workbenchRoot.getWidth() > 0.0)
@@ -1016,6 +1119,66 @@ public final class WorkbenchController {
         }
     }
 
+    /** Follows stable NPC Database selection without allowing a prior asynchronous thumbnail to replace it. */
+    private void renderNpcDatabasePortrait(NPC npc) {
+        NpcMorphAssignmentIdentity identity = npc == null ? null : ProjectIdentities.npcDatabaseEntry(npc);
+        String displayName = npc == null ? null : npc.getName();
+        if (Objects.equals(identity, renderedDatabasePortraitIdentity)
+                && Objects.equals(displayName, renderedDatabasePortraitDisplayName))
+            return;
+        renderedDatabasePortraitIdentity = identity;
+        renderedDatabasePortraitDisplayName = displayName;
+        renderedDatabasePortraitPath = null;
+        renderedDatabasePortraitImage = null;
+        npcDatabasePortraitImage.setImage(null);
+        openNpcDatabasePortraitViewerButton.setDisable(true);
+        if (npc == null) {
+            npcDatabasePortraitStatus.setText("No NPC portrait selected");
+            npcDatabasePortraitStatus.setAccessibleHelp("Select an NPC Database entry to inspect its portrait.");
+            return;
+        }
+        Optional<Path> file = NpcPortraitFiles.find(Path.of("images"), npc.getName(), npc.getEditorId());
+        if (file.isEmpty()) {
+            String expected = "images/" + npc.getName() + " (" + npc.getEditorId() + ").jpg";
+            String status = "No portrait found. Expected " + expected
+                    + " (or .jpeg, .png, .bmp), then a display-name-only image.";
+            npcDatabasePortraitStatus.setText(status);
+            npcDatabasePortraitStatus.setAccessibleHelp(status);
+            return;
+        }
+        renderedDatabasePortraitPath = file.orElseThrow();
+        String filename = renderedDatabasePortraitPath.getFileName().toString();
+        Image image = new Image(renderedDatabasePortraitPath.toUri().toString(), 200.0, 180.0,
+                true, true, true);
+        renderedDatabasePortraitImage = image;
+        npcDatabasePortraitImage.setImage(image);
+        String loading = "Loading portrait: " + filename;
+        npcDatabasePortraitStatus.setText(loading);
+        npcDatabasePortraitStatus.setAccessibleHelp(loading);
+        image.progressProperty().addListener((observable, previous, current) ->
+                finishNpcDatabasePortraitLoad(image, filename));
+        image.errorProperty().addListener((observable, previous, current) ->
+                finishNpcDatabasePortraitLoad(image, filename));
+        finishNpcDatabasePortraitLoad(image, filename);
+    }
+
+    /** Enables the database viewer only for the current successfully decoded portrait. */
+    private void finishNpcDatabasePortraitLoad(Image image, String filename) {
+        if (renderedDatabasePortraitImage != image)
+            return;
+        if (image.isError()) {
+            npcDatabasePortraitImage.setImage(null);
+            String status = "Could not load portrait: " + filename;
+            npcDatabasePortraitStatus.setText(status);
+            npcDatabasePortraitStatus.setAccessibleHelp(status);
+        } else if (image.getProgress() >= 1.0 && image.getWidth() > 0.0) {
+            String status = "Portrait file: " + filename;
+            npcDatabasePortraitStatus.setText(status);
+            npcDatabasePortraitStatus.setAccessibleHelp(status);
+            openNpcDatabasePortraitViewerButton.setDisable(false);
+        }
+    }
+
     /**
      * Opens the selected portrait in a keyboard-closeable, zoomable owned viewer while a full-resolution image loads
      * in the background. The filename and dimensions remain available as text for assistive technology.
@@ -1024,13 +1187,32 @@ public final class WorkbenchController {
         if (renderedPortraitPath == null || renderedPortraitIdentity == null || renderedPortraitImage == null
                 || renderedPortraitImage.isError() || renderedPortraitImage.getProgress() < 1.0)
             return;
-        if (npcPortraitViewer != null && npcPortraitViewer.isShowing()) {
-            npcPortraitViewer.toFront();
-            npcPortraitViewer.requestFocus();
+        showPortraitViewer(renderedPortraitPath, renderedPortraitDisplayName, renderedPortraitIdentity,
+                openNpcPortraitViewerButton);
+    }
+
+    /** Opens the selected NPC Database portrait through the same accessible viewer used by Morphs. */
+    private void showNpcDatabasePortraitViewer() {
+        if (renderedDatabasePortraitPath == null || renderedDatabasePortraitIdentity == null
+                || renderedDatabasePortraitImage == null || renderedDatabasePortraitImage.isError()
+                || renderedDatabasePortraitImage.getProgress() < 1.0)
             return;
+        showPortraitViewer(renderedDatabasePortraitPath, renderedDatabasePortraitDisplayName,
+                renderedDatabasePortraitIdentity, openNpcDatabasePortraitViewerButton);
+    }
+
+    /** Builds one owned portrait window and restores focus to the visible launching Area when it closes. */
+    private void showPortraitViewer(Path file, String displayName, NpcMorphAssignmentIdentity identity,
+                                    Button launcher) {
+        if (npcPortraitViewer != null && npcPortraitViewer.isShowing()) {
+            if (file.equals(npcPortraitViewerPath)) {
+                npcPortraitViewer.toFront();
+                npcPortraitViewer.requestFocus();
+                return;
+            }
+            // A different selected NPC needs its own image; the old viewer cannot be reused with stale content.
+            npcPortraitViewer.close();
         }
-        Path file = renderedPortraitPath;
-        String displayName = renderedPortraitDisplayName;
         VBox content = new VBox(10.0);
         content.setId("workbenchRoot");
         content.getStyleClass().add("npc-portrait-viewer");
@@ -1043,8 +1225,7 @@ public final class WorkbenchController {
         dimensions.setAccessibleText("NPC portrait dimensions: loading");
         ImageView fullView = new ImageView();
         fullView.setAccessibleText("NPC portrait: " + displayName + ", plugin "
-                + renderedPortraitIdentity.getPluginName() + ", editor ID "
-                + renderedPortraitIdentity.getEditorId());
+                + identity.getPluginName() + ", editor ID " + identity.getEditorId());
         fullView.setPreserveRatio(true);
         fullView.setSmooth(true);
         Image fullImage = new Image(file.toUri().toString(), true);
@@ -1095,14 +1276,18 @@ public final class WorkbenchController {
         close.setOnAction(event -> viewer.close());
         npcPortraitViewer = viewer;
         npcPortraitViewerRoot = content;
+        npcPortraitViewerPath = file;
         applySatelliteAppearance(content);
         viewer.setOnHidden(event -> {
-            npcPortraitViewer = null;
-            npcPortraitViewerRoot = null;
+            if (npcPortraitViewer == viewer) {
+                npcPortraitViewer = null;
+                npcPortraitViewerRoot = null;
+                npcPortraitViewerPath = null;
+            }
             if (stage.isShowing())
                 Platform.runLater(() -> {
-                    if (canRestoreFocus(openNpcPortraitViewerButton))
-                        openNpcPortraitViewerButton.requestFocus();
+                    if (canRestoreFocus(launcher))
+                        launcher.requestFocus();
                     else
                         requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
                                 WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
@@ -1201,6 +1386,408 @@ public final class WorkbenchController {
                 event.consume();
             }
         });
+    }
+
+    /** Connects source management, column filtering, catalog sorting, and selection to one window-scoped catalog. */
+    private void configureNpcDatabase() {
+        npcSourceList.setCellFactory(list -> new ListCell<>() {
+            /** {@inheritDoc} */
+            @Override
+            protected void updateItem(NpcDatabaseFeature.Source source, boolean empty) {
+                super.updateItem(source, empty);
+                if (empty || source == null) {
+                    setText(null);
+                    setAccessibleText(null);
+                    setAccessibleHelp(null);
+                    return;
+                }
+                String count = source.rowCount() + (source.rowCount() == 1 ? " row" : " rows");
+                setText(source.path().getFileName() + " — " + count);
+                setAccessibleText(source.path().getFileName() + ", " + count);
+                setAccessibleHelp("Source file: " + source.path());
+            }
+        });
+        npcSourceList.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
+            if (!renderingNpcDatabase) {
+                npcDatabaseFeature.selectSource(selected == null ? Optional.empty() : Optional.of(selected.path()));
+                renderNpcDatabase(npcDatabaseFeature.frame());
+            }
+        });
+        npcNameColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getName()));
+        npcMasterColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getMod()));
+        npcRaceColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getRace()));
+        npcEditorIdColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getEditorId()));
+        npcFormIdColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getFormId()));
+        npcCatalogTable.setRowFactory(table -> new TableRow<>() {
+            /** {@inheritDoc} */
+            @Override
+            protected void updateItem(NPC npc, boolean empty) {
+                super.updateItem(npc, empty);
+                setAccessibleText(empty || npc == null ? null : npc.getName() + ". Plugin: " + npc.getMod()
+                        + ". Editor ID: " + npc.getEditorId() + ". Race: " + npc.getRace()
+                        + ". Form ID: " + npc.getFormId() + ".");
+            }
+        });
+        npcCatalogTable.setSortPolicy(table -> {
+            if (renderingNpcDatabase)
+                return true;
+            List<SortKey> keys = new ArrayList<>();
+            for (TableColumn<NPC, ?> column : table.getSortOrder()) {
+                keys.add(column.getSortType() == TableColumn.SortType.DESCENDING
+                        ? SortKey.descending(column.getText()) : SortKey.ascending(column.getText()));
+            }
+            npcDatabaseFeature.setSortOrder(keys);
+            renderNpcDatabase(npcDatabaseFeature.frame());
+            return true;
+        });
+        npcCatalogTable.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
+            if (!renderingNpcDatabase) {
+                if (selected == null)
+                    npcDatabaseFeature.clearSelection();
+                else
+                    npcDatabaseFeature.selectRow(ProjectIdentities.npcDatabaseEntry(selected));
+                renderNpcDatabase(npcDatabaseFeature.frame());
+            }
+        });
+        npcCatalogTable.addEventFilter(KeyEvent.KEY_TYPED, event -> {
+            if (event.getCharacter().length() == 1 && !event.isControlDown() && !event.isAltDown()
+                    && !Character.isISOControl(event.getCharacter().charAt(0))
+                    && !Character.isWhitespace(event.getCharacter().charAt(0))) {
+                NpcDatabaseFeature.Frame typed = npcDatabaseFeature.typeAhead(
+                        event.getCharacter().charAt(0), System.nanoTime());
+                renderNpcDatabase(typed);
+                typed.selectedRow().ifPresent(row -> npcCatalogTable.scrollTo(typed.visibleRows().indexOf(row)));
+                event.consume();
+            }
+        });
+        npcSortChoices.put("Source order", List.of());
+        for (FilterColumn<NPC> column : NpcTableColumns.npcDatabase()) {
+            npcSortChoices.put(column.getId() + " ascending", List.of(SortKey.ascending(column.getId())));
+            npcSortChoices.put(column.getId() + " descending", List.of(SortKey.descending(column.getId())));
+        }
+        npcSortChoice.getItems().setAll(npcSortChoices.keySet());
+        npcSortChoice.setAccessibleHelp("NPC Database sort: source order or any catalog column ascending or descending.");
+        npcSortChoice.setOnAction(event -> {
+            if (!renderingNpcDatabase && npcSortChoices.containsKey(npcSortChoice.getValue())) {
+                npcDatabaseFeature.setSortOrder(npcSortChoices.get(npcSortChoice.getValue()));
+                renderNpcDatabase(npcDatabaseFeature.frame());
+            }
+        });
+        npcFilterButtons.put("Name", npcNameFilterButton);
+        npcFilterButtons.put("Master", npcMasterFilterButton);
+        npcFilterButtons.put("Race", npcRaceFilterButton);
+        npcFilterButtons.put("EditorID", npcEditorIdFilterButton);
+        npcFilterButtons.put("FormID", npcFormIdFilterButton);
+        npcFilterButtons.forEach((column, button) ->
+                button.setOnAction(event -> showNpcColumnFilter(column, button)));
+        clearNpcFiltersButton.setOnAction(event -> {
+            npcDatabaseFeature.clearAllCriteria();
+            renderNpcDatabase(npcDatabaseFeature.frame());
+        });
+        importNpcSourcesButton.setOnAction(event -> chooseNpcSources());
+        removeNpcSourceButton.setOnAction(event -> removeSelectedNpcSource());
+        clearNpcDatabaseButton.setOnAction(event -> clearVisibleNpcDatabaseEntries());
+        openNpcDatabasePortraitViewerButton.setOnAction(event -> showNpcDatabasePortraitViewer());
+        renderNpcDatabase(npcDatabaseFeature.frame());
+    }
+
+    /** Opens a keyboard checklist for one named column; its choices come from all catalog rows. */
+    private void showNpcColumnFilter(String columnId, ToggleButton launcher) {
+        if (npcFilterPopup != null) {
+            boolean sameColumn = columnId.equals(npcFilterExpandedColumn);
+            npcFilterPopup.hide();
+            if (sameColumn)
+                return;
+        }
+        FilterColumn<NPC> column = NpcTableColumns.npcDatabase().stream()
+                .filter(candidate -> candidate.getId().equals(columnId)).findFirst().orElseThrow();
+        ColumnCriterion criterion = npcDatabaseFeature.frame().criteria().stream()
+                .filter(candidate -> candidate.getColumnId().equals(columnId)).findFirst().orElse(null);
+        Set<String> values = new TreeSet<>();
+        for (NPC row : npcDatabaseFeature.frame().rows())
+            values.add(column.cellValueOf(row));
+        List<NpcFilterChoice> choices = values.stream()
+                .map(value -> new NpcFilterChoice(value, criterion == null || criterion.admits(value))).toList();
+        ListView<NpcFilterChoice> checklist = new ListView<>(FXCollections.observableArrayList(choices));
+        checklist.setId("npcColumnFilterChoices");
+        checklist.setAccessibleText(columnId + " NPC Database filter choices");
+        checklist.setCellFactory(CheckBoxListCell.forListView(NpcFilterChoice::selectedProperty));
+        checklist.setPrefHeight(210.0);
+        checklist.setPrefWidth(245.0);
+        Button all = new Button("All");
+        all.setAccessibleText("Show all " + columnId + " values");
+        all.setOnAction(event -> choices.forEach(choice -> choice.setSelected(true)));
+        Button none = new Button("None");
+        none.setAccessibleText("Hide all " + columnId + " values");
+        none.setOnAction(event -> choices.forEach(choice -> choice.setSelected(false)));
+        Button apply = new Button("Apply");
+        apply.setAccessibleText("Apply " + columnId + " filter");
+        Button cancel = new Button("Cancel");
+        cancel.setAccessibleText("Cancel " + columnId + " filter");
+        HBox actions = new HBox(6.0, all, none, apply, cancel);
+        VBox content = new VBox(8.0, new Label("Filter " + columnId), checklist, actions);
+        content.setId("workbenchRoot");
+        content.getStyleClass().add("npc-column-filter-popup");
+        content.setAccessibleText(columnId + " NPC Database filter checklist");
+        Popup popup = new Popup();
+        popup.setAutoHide(true);
+        popup.setConsumeAutoHidingEvents(true);
+        popup.getContent().setAll(content);
+        popup.getScene().getStylesheets().add(WorkbenchController.class
+                .getResource("/com/asdasfa/jbs2bg/workbench.css").toExternalForm());
+        apply.setOnAction(event -> {
+            List<String> hidden = choices.stream().filter(choice -> !choice.isSelected())
+                    .map(NpcFilterChoice::value).toList();
+            npcDatabaseFeature.setCriterion(ColumnCriterion.hiding(columnId, hidden));
+            renderNpcDatabase(npcDatabaseFeature.frame());
+            popup.hide();
+        });
+        cancel.setOnAction(event -> popup.hide());
+        checklist.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.SPACE && checklist.getSelectionModel().getSelectedItem() != null) {
+                NpcFilterChoice choice = checklist.getSelectionModel().getSelectedItem();
+                choice.setSelected(!choice.isSelected());
+                event.consume();
+            } else if (event.getCode() == KeyCode.ENTER) {
+                apply.fire();
+                event.consume();
+            }
+        });
+        // The focused ListView may consume Escape before Popup hideOnEscape sees it in the packaged runtime.
+        popup.getScene().addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.ESCAPE) {
+                popup.hide();
+                event.consume();
+            }
+        });
+        npcFilterPopup = popup;
+        npcFilterPopupRoot = content;
+        npcFilterExpandedColumn = columnId;
+        applySatelliteAppearance(content);
+        renderNpcFilterButtons(npcDatabaseFeature.frame());
+        popup.setOnHidden(event -> {
+            npcFilterPopup = null;
+            npcFilterPopupRoot = null;
+            npcFilterExpandedColumn = null;
+            renderNpcFilterButtons(npcDatabaseFeature.frame());
+            if (stage.isShowing())
+                Platform.runLater(() -> {
+                    if (canRestoreFocus(launcher))
+                        launcher.requestFocus();
+                    else
+                        requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
+                                WorkbenchNavigation.Landmark.EDITOR));
+                });
+        });
+        Bounds anchor = launcher.localToScreen(launcher.getBoundsInLocal());
+        popup.show(stage, anchor.getMinX(), anchor.getMaxY());
+        checklist.getSelectionModel().selectFirst();
+        Platform.runLater(checklist::requestFocus);
+    }
+
+    /** Keeps each filter button's text, toggle state, and expanded/active description in sync with the feature. */
+    private void renderNpcFilterButtons(NpcDatabaseFeature.Frame frame) {
+        npcFilterButtons.forEach((column, button) -> {
+            boolean active = frame.criteria().stream().anyMatch(criterion ->
+                    criterion.getColumnId().equals(column));
+            boolean expanded = npcFilterPopup != null && column.equals(npcFilterExpandedColumn);
+            button.setText(column + (active ? " *" : ""));
+            button.setSelected(expanded);
+            button.setAccessibleHelp(column + " column filter, " + (active ? "active" : "inactive")
+                    + ", " + (expanded ? "expanded" : "collapsed")
+                    + ". Enter or Space opens the checklist."
+                    + (frame.rows().isEmpty() ? " No catalog values yet." : ""));
+        });
+    }
+
+    /** One checklist cell whose selected state means its exact column value stays visible. */
+    private static final class NpcFilterChoice {
+        private final String value;
+        private final BooleanProperty selected;
+
+        /** Captures one exact visible column value for an open filter checklist. */
+        private NpcFilterChoice(String value, boolean selected) {
+            this.value = Objects.requireNonNull(value, "value");
+            this.selected = new SimpleBooleanProperty(selected);
+        }
+
+        /** @return exact cell value */
+        private String value() {
+            return value;
+        }
+
+        /** @return whether this value remains visible if the checklist is applied */
+        private boolean isSelected() {
+            return selected.get();
+        }
+
+        /** Changes this pending checklist choice without affecting the catalog until Apply. */
+        private void setSelected(boolean selected) {
+            this.selected.set(selected);
+        }
+
+        /** @return JavaFX property used only by the checkbox cell */
+        private BooleanProperty selectedProperty() {
+            return selected;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public String toString() {
+            return value;
+        }
+    }
+
+    /** Renders the immutable catalog frame while suppressing selection echoes from JavaFX list replacements. */
+    private void renderNpcDatabase(NpcDatabaseFeature.Frame frame) {
+        renderingNpcDatabase = true;
+        try {
+            if (!npcSourceList.getItems().equals(frame.sources()))
+                npcSourceList.getItems().setAll(frame.sources());
+            NpcDatabaseFeature.Source selectedSource = npcSourceList.getSelectionModel().getSelectedItem();
+            Optional<Path> currentSource = selectedSource == null ? Optional.empty()
+                    : Optional.of(selectedSource.path());
+            if (!currentSource.equals(frame.selectedSource())) {
+                npcSourceList.getSelectionModel().clearSelection();
+                frame.selectedSource().ifPresent(path -> frame.sources().stream()
+                        .filter(source -> source.path().equals(path)).findFirst()
+                        .ifPresent(npcSourceList.getSelectionModel()::select));
+            }
+            if (!npcCatalogTable.getItems().equals(frame.visibleRows()))
+                npcCatalogTable.getItems().setAll(frame.visibleRows());
+            List<TableColumn<NPC, ?>> sortedColumns = new ArrayList<>();
+            for (SortKey key : frame.sortOrder()) {
+                TableColumn<NPC, ?> column = npcCatalogTable.getColumns().stream()
+                        .filter(candidate -> candidate.getText().equals(key.getColumnId()))
+                        .findFirst().orElseThrow();
+                column.setSortType(key.getDirection() == SortDirection.DESCENDING
+                        ? TableColumn.SortType.DESCENDING : TableColumn.SortType.ASCENDING);
+                sortedColumns.add(column);
+            }
+            if (!npcCatalogTable.getSortOrder().equals(sortedColumns))
+                npcCatalogTable.getSortOrder().setAll(sortedColumns);
+            String sortLabel = npcSortChoices.entrySet().stream()
+                    .filter(entry -> entry.getValue().equals(frame.sortOrder()))
+                    .map(Map.Entry::getKey).findFirst().orElse("Multiple columns");
+            npcSortChoice.setValue(sortLabel);
+            NPC selectedTableRow = npcCatalogTable.getSelectionModel().getSelectedItem();
+            Optional<NpcMorphAssignmentIdentity> currentRow = selectedTableRow == null ? Optional.empty()
+                    : Optional.of(ProjectIdentities.npcDatabaseEntry(selectedTableRow));
+            Optional<NpcMorphAssignmentIdentity> selectedRow = frame.selectedRow()
+                    .map(ProjectIdentities::npcDatabaseEntry);
+            if (!currentRow.equals(selectedRow)) {
+                npcCatalogTable.getSelectionModel().clearSelection();
+                frame.selectedRow().ifPresent(selected -> npcCatalogTable.getItems().stream()
+                        .filter(row -> ProjectIdentities.npcDatabaseEntry(row)
+                                .equals(ProjectIdentities.npcDatabaseEntry(selected)))
+                        .findFirst().ifPresent(npcCatalogTable.getSelectionModel()::select));
+            }
+            renderNpcDatabaseLabel(npcSourceCountText, frame.sources().size() + (frame.sources().size() == 1
+                    ? " source loaded" : " sources loaded"));
+            String summary = frame.visibleRows().size() + " of " + frame.rows().size()
+                    + " NPC Database entries visible; " + frame.criteria().size() + " filtered columns.";
+            renderNpcDatabaseLabel(npcCatalogSummary, summary);
+            npcCatalogTable.setAccessibleHelp(summary + " Select a row to inspect its details.");
+            boolean blocked = projectFlow.jobs().frame().active() || projectFlow.jobs().frame().shutdownRequested();
+            importNpcSourcesButton.setDisable(blocked);
+            removeNpcSourceButton.setDisable(blocked || frame.selectedSource().isEmpty());
+            clearNpcDatabaseButton.setDisable(blocked || frame.visibleRows().isEmpty());
+            clearNpcFiltersButton.setDisable(frame.criteria().isEmpty());
+            renderNpcFilterButtons(frame);
+            NPC selected = frame.selectedRow().orElse(null);
+            renderNpcDatabaseLabel(npcInspectorName, selected == null ? "No NPC selected" : selected.getName());
+            renderNpcDatabaseLabel(npcInspectorSource, "Source: " + (selected == null ? "none"
+                    : frame.sourceOf(selected).map(Path::toString).orElse("unknown")));
+            renderNpcDatabaseLabel(npcInspectorMaster, "Plugin: " + (selected == null ? "none" : selected.getMod()));
+            renderNpcDatabaseLabel(npcInspectorEditorId,
+                    "Editor ID: " + (selected == null ? "none" : selected.getEditorId()));
+            renderNpcDatabaseLabel(npcInspectorRace, "Race: " + (selected == null ? "none" : selected.getRace()));
+            renderNpcDatabaseLabel(npcInspectorFormId,
+                    "Form ID: " + (selected == null ? "none" : selected.getFormId()));
+            renderNpcDatabasePortrait(selected);
+            renderNpcDatabaseLabel(npcDatabaseDiagnostics, frame.diagnostics().isEmpty() ? "No source diagnostics"
+                    : String.join(System.lineSeparator(), frame.diagnostics().stream()
+                    .map(diagnostic -> diagnostic.code() + ": " + diagnostic.source()
+                            + (diagnostic.line().isPresent() ? ":" + diagnostic.line().orElseThrow() : "")
+                            + " — " + diagnostic.message()).toList()));
+        } finally {
+            renderingNpcDatabase = false;
+        }
+    }
+
+    /** Exposes a dynamic label value through UI Automation HelpText while its stable accessible name stays locatable. */
+    private static void renderNpcDatabaseLabel(Label label, String value) {
+        label.setText(value);
+        label.setAccessibleHelp(value);
+    }
+
+    /** Captures chooser paths once and admits their source-level transaction batch to the central coordinator. */
+    private void chooseNpcSources() {
+        Optional<List<Path>> selected = platform.chooseNpcSources(stage);
+        if (selected.isEmpty() || selected.orElseThrow().isEmpty()) {
+            renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+                    "Import NPC Database Sources", WorkbenchFeedback.Severity.INFORMATION,
+                    "NPC Database import cancelled before reading sources.", WorkbenchFeedback.Disposition.CANCELLED)));
+            return;
+        }
+        List<Path> sources = selected.orElseThrow().stream().map(path -> path.toAbsolutePath().normalize()).toList();
+        JobCoordinator.Admission admission = npcDatabaseImporter.submit(sources);
+        if (!admission.admitted())
+            renderFeedback(feedback.publishStatus(new WorkbenchFeedback.Notification(
+                    "Import NPC Database Sources", WorkbenchFeedback.Severity.VALIDATION,
+                    "Another operation is active; retry the import when it finishes.",
+                    WorkbenchFeedback.Disposition.FAILED)));
+    }
+
+    /** Removes one selected source after a typed destructive confirmation. */
+    private void removeSelectedNpcSource() {
+        Optional<Path> selected = npcDatabaseFeature.frame().selectedSource();
+        if (selected.isEmpty() || projectFlow.jobs().frame().active())
+            return;
+        Path source = selected.orElseThrow();
+        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.destructiveAction(
+                "Remove NPC Database source?", "Remove " + source.getFileName() + " from this session's catalog?",
+                WorkbenchFeedback.DialogAction.REMOVE);
+        if (!confirmNpcDatabaseAction(spec, WorkbenchFeedback.DialogAction.REMOVE))
+            return;
+        npcDatabaseFeature.removeSource(source);
+        renderNpcDatabase(npcDatabaseFeature.frame());
+        renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+                "Remove NPC Database Source", WorkbenchFeedback.Severity.SUCCESS,
+                "Removed source " + source.getFileName() + ".", WorkbenchFeedback.Disposition.COMPLETED)));
+    }
+
+    /** Clears exactly the visible identities captured before the confirmation dialog. */
+    private void clearVisibleNpcDatabaseEntries() {
+        if (projectFlow.jobs().frame().active())
+            return;
+        List<NpcMorphAssignmentIdentity> identities = npcDatabaseFeature.visibleSet().getIdentities();
+        if (identities.isEmpty())
+            return;
+        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.destructiveAction(
+                "Clear visible NPC Database entries?",
+                "Clear " + identities.size() + " visible entries from this session's catalog?",
+                WorkbenchFeedback.DialogAction.CLEAR);
+        if (!confirmNpcDatabaseAction(spec, WorkbenchFeedback.DialogAction.CLEAR))
+            return;
+        npcDatabaseFeature.clearEntries(identities);
+        renderNpcDatabase(npcDatabaseFeature.frame());
+        renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+                "Clear visible NPC Database entries", WorkbenchFeedback.Severity.SUCCESS,
+                "Cleared " + identities.size() + " visible entries.", WorkbenchFeedback.Disposition.COMPLETED)));
+    }
+
+    /** Publishes and completes one source-management confirmation while retaining its launcher focus. */
+    private boolean confirmNpcDatabaseAction(WorkbenchFeedback.DialogSpec spec,
+                                             WorkbenchFeedback.DialogAction acceptance) {
+        WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
+        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
+        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
+        renderFeedback(pendingFrame);
+        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
+        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(pending.token(), action)).frame());
+        requestFocus(returnTarget);
+        return action == acceptance;
     }
 
     /**
@@ -1897,7 +2484,9 @@ public final class WorkbenchController {
                     ? frame.dirty() ? "Unsaved Settings changes." : "Standard and UUNP Settings are saved together."
                     : settingsNoticeSummary(frame));
             omitRedundantSlidersCheck.setSelected(frame.omitRedundantSliders());
-            omitRedundantSlidersCheck.setDisable(settingsMutationsBlocked);
+            boolean backgroundJobBlocked = projectFlow.jobs().frame().active()
+                    || projectFlow.jobs().frame().shutdownRequested();
+            omitRedundantSlidersCheck.setDisable(settingsMutationsBlocked || backgroundJobBlocked);
             boolean editable = frame.editor().isPresent() && !settingsMutationsBlocked;
             for (javafx.scene.control.Control control : List.of(settingsEntryNameInput, settingsSmallInput,
                     settingsBigInput, settingsMultiplierInput, settingsInvertedCheck, applySettingsEntryButton,
@@ -1905,9 +2494,9 @@ public final class WorkbenchController {
                 control.setDisable(!editable);
             newSettingsEntryName.setDisable(settingsMutationsBlocked);
             addSettingsEntryButton.setDisable(settingsMutationsBlocked);
-            saveSettingsButton.setDisable(settingsMutationsBlocked || !frame.dirty()
+            saveSettingsButton.setDisable(settingsMutationsBlocked || backgroundJobBlocked || !frame.dirty()
                     || !frame.validation().isEmpty());
-            reloadSettingsButton.setDisable(settingsMutationsBlocked);
+            reloadSettingsButton.setDisable(settingsMutationsBlocked || backgroundJobBlocked);
             importBodySlideButton.setDisable(settingsMutationsBlocked || projectFlow.jobs().frame().active()
                     || projectFlow.jobs().frame().shutdownRequested() || !frame.liveAvailable());
         } finally {
@@ -2930,6 +3519,8 @@ public final class WorkbenchController {
     private void renderAppearance(WorkbenchAppearance.Frame frame) {
         if (fillEmptyPopupRoot != null)
             JavaFxWorkbenchAppearance.applyTo(fillEmptyPopupRoot, frame);
+        if (npcFilterPopupRoot != null)
+            JavaFxWorkbenchAppearance.applyTo(npcFilterPopupRoot, frame);
         if (npcPortraitViewerRoot != null)
             JavaFxWorkbenchAppearance.applyTo(npcPortraitViewerRoot, frame);
         String theme = switch (frame.effectiveTheme()) {
@@ -3017,6 +3608,13 @@ public final class WorkbenchController {
             event.consume();
             return;
         }
+        if (navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
+                && event.isControlDown() && event.getCode() == KeyCode.K) {
+            npcNameFilterButton.requestFocus();
+            Platform.runLater(npcNameFilterButton::requestFocus);
+            event.consume();
+            return;
+        }
         WorkbenchNavigation.Transition transition = null;
         if (event.isControlDown()) {
             transition = switch (event.getCode()) {
@@ -3058,6 +3656,12 @@ public final class WorkbenchController {
                 || morphsFeature.frame().npcSelection().isPresent())) {
             dispatchMorphs(new MorphsFeature.ClearSelection());
             event.consume();
+        } else if (event.getCode() == KeyCode.ESCAPE
+                && navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
+                && npcDatabaseFeature.frame().selectedRow().isPresent()) {
+            npcDatabaseFeature.clearSelection();
+            renderNpcDatabase(npcDatabaseFeature.frame());
+            event.consume();
         }
     }
 
@@ -3073,6 +3677,8 @@ public final class WorkbenchController {
      */
     private void applyNavigation(WorkbenchNavigation.Transition transition) {
         navigationFrame = transition.frame();
+        if (navigationFrame.activeArea() != WorkbenchNavigation.Area.NPC_DATABASE && npcFilterPopup != null)
+            npcFilterPopup.hide();
         renderNavigation(navigationFrame);
         if (navigationFrame.activeArea() == WorkbenchNavigation.Area.MORPHS
                 && navigationFrame.overlay() == WorkbenchNavigation.Overlay.INSPECTOR
@@ -3081,6 +3687,11 @@ public final class WorkbenchController {
             // must reveal the selected NPC portrait and its viewer action before the relationships below it.
             morphsInspectorScroll.setVvalue(0.0);
             Platform.runLater(() -> morphsInspectorScroll.setVvalue(0.0));
+        }
+        if (navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
+                && navigationFrame.overlay() == WorkbenchNavigation.Overlay.INSPECTOR) {
+            npcDatabaseInspectorScroll.setVvalue(0.0);
+            Platform.runLater(() -> npcDatabaseInspectorScroll.setVvalue(0.0));
         }
         transition.focusTarget().ifPresent(this::requestFocus);
     }
@@ -3098,6 +3709,7 @@ public final class WorkbenchController {
         String area = frame.activeArea().displayName();
         boolean templatesActive = frame.activeArea() == WorkbenchNavigation.Area.TEMPLATES;
         boolean morphsActive = frame.activeArea() == WorkbenchNavigation.Area.MORPHS;
+        boolean npcDatabaseActive = frame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE;
         boolean settingsActive = frame.activeArea() == WorkbenchNavigation.Area.SETTINGS;
         templatesPrimaryScroll.setManaged(templatesActive);
         templatesPrimaryScroll.setVisible(templatesActive);
@@ -3111,13 +3723,19 @@ public final class WorkbenchController {
         morphsEditorContent.setVisible(morphsActive);
         morphsInspectorScroll.setManaged(morphsActive);
         morphsInspectorScroll.setVisible(morphsActive);
+        npcDatabasePrimaryScroll.setManaged(npcDatabaseActive);
+        npcDatabasePrimaryScroll.setVisible(npcDatabaseActive);
+        npcDatabaseEditorContent.setManaged(npcDatabaseActive);
+        npcDatabaseEditorContent.setVisible(npcDatabaseActive);
+        npcDatabaseInspectorScroll.setManaged(npcDatabaseActive);
+        npcDatabaseInspectorScroll.setVisible(npcDatabaseActive);
         settingsPrimaryScroll.setManaged(settingsActive);
         settingsPrimaryScroll.setVisible(settingsActive);
         settingsEditorContent.setManaged(settingsActive);
         settingsEditorContent.setVisible(settingsActive);
         settingsInspectorContent.setManaged(settingsActive);
         settingsInspectorContent.setVisible(settingsActive);
-        boolean placeholderActive = !templatesActive && !morphsActive && !settingsActive;
+        boolean placeholderActive = !templatesActive && !morphsActive && !npcDatabaseActive && !settingsActive;
         primaryContentButton.setManaged(placeholderActive);
         primaryContentButton.setVisible(placeholderActive);
         editorButton.setManaged(placeholderActive);
@@ -3195,11 +3813,16 @@ public final class WorkbenchController {
                 || focusOwner == npcRaceInput || focusOwner == npcFormIdInput
                 || focusOwner == createNpcMorphAssignmentButton || focusOwner == removeNpcMorphAssignmentButton
                 || focusOwner == clearNpcMorphAssignmentsButton
+                || focusOwner == npcSourceList || focusOwner == importNpcSourcesButton
+                || focusOwner == removeNpcSourceButton || focusOwner == clearNpcDatabaseButton
                 || focusOwner == settingsProfileChoice || focusOwner == settingsEntryList
                 || focusOwner == newSettingsEntryName || focusOwner == addSettingsEntryButton) {
             landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
         } else if (focusOwner == templateEditorFocusTarget || focusOwner == sliderPresetProfile
                 || focusOwner == morphTargetEditorFocusTarget
+                || focusOwner == npcCatalogTable || focusOwner == npcSortChoice
+                || npcFilterButtons.containsValue(focusOwner)
+                || focusOwner == clearNpcFiltersButton
                 || sliderChoiceRowsByName.values().stream().anyMatch(row -> row.contains(focusOwner))
                 || focusOwner == settingsEntryNameInput || focusOwner == settingsSmallInput
                 || focusOwner == settingsBigInput || focusOwner == settingsMultiplierInput
@@ -3208,6 +3831,8 @@ public final class WorkbenchController {
             landmark = WorkbenchNavigation.Landmark.EDITOR;
         } else if (focusOwner == templateSelectionText
                 || focusOwner == morphTargetSelectionText || focusOwner == assignedMorphSliderPresetList
+                || focusOwner == npcInspectorName || focusOwner == npcInspectorSource
+                || focusOwner == openNpcDatabasePortraitViewerButton
                 || focusOwner == availableMorphSliderPreset || focusOwner == assignMorphSliderPresetButton
                 || focusOwner == assignAllMorphSliderPresetsButton || focusOwner == removeMorphSliderPresetButton
                 || focusOwner == clearMorphSliderPresetsButton
@@ -3255,7 +3880,7 @@ public final class WorkbenchController {
                 case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
                         ? npcMorphAssignmentList : customMorphTargetList;
                 case SETTINGS -> settingsEntryList;
-                case NPC_DATABASE -> editorButton;
+                case NPC_DATABASE -> npcCatalogTable;
             };
         }
         Node resolved = node;
@@ -3276,13 +3901,13 @@ public final class WorkbenchController {
                 case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
                         ? npcMorphAssignmentList : customMorphTargetList;
                 case SETTINGS -> settingsEntryList;
-                case NPC_DATABASE -> primaryContentButton;
+                case NPC_DATABASE -> npcSourceList;
             };
             case EDITOR -> switch (target.area()) {
                 case TEMPLATES -> firstSliderChoiceControl().orElse(templateEditorFocusTarget);
                 case MORPHS -> morphTargetEditorFocusTarget;
                 case SETTINGS -> settingsEntryNameInput;
-                case NPC_DATABASE -> editorButton;
+                case NPC_DATABASE -> npcCatalogTable;
             };
             case INSPECTOR_LAUNCHER -> showInspectorOverlayButton;
             case INSPECTOR -> switch (target.area()) {
@@ -3292,7 +3917,7 @@ public final class WorkbenchController {
                         ? morphTargetSelectionText : availableMorphSliderPreset.isDisabled()
                         ? morphTargetSelectionText : availableMorphSliderPreset;
                 case SETTINGS -> saveSettingsButton.isDisabled() ? settingsNoticeText : saveSettingsButton;
-                case NPC_DATABASE -> inspectorButton;
+                case NPC_DATABASE -> npcInspectorName;
             };
             case OUTPUT_LAUNCHER -> outputAreaButton;
             case OUTPUT -> outputFocusTarget;
@@ -3442,6 +4067,10 @@ public final class WorkbenchController {
         boolean resetTemplates = resetTemplatesOnNextProjectFrame || lifecycleReset;
         boolean resetMorphs = resetMorphsOnNextProjectFrame || lifecycleReset;
         boolean resetOutput = resetTemplatesOnNextProjectFrame || resetMorphsOnNextProjectFrame || lifecycleReset;
+        if (lifecycleReset && npcDatabaseFeature != null) {
+            npcDatabaseFeature.clearAllSelections();
+            renderNpcDatabase(npcDatabaseFeature.frame());
+        }
         if (templatesFeature != null && templatesFeature.frame().projectSequence() != frame.sequence()) {
             renderTemplates(templatesFeature.acceptProjectFrame(frame, resetTemplates,
                     morphsOwnProjectDiagnostics ? List.of() : frame.diagnostics()).frame());
@@ -3473,9 +4102,13 @@ public final class WorkbenchController {
         saveProjectMenuItem.setDisable(blocked);
         saveAsProjectMenuItem.setDisable(blocked);
         importBodySlideButton.setDisable(blocked);
+        importNpcSourcesButton.setDisable(blocked);
+        removeNpcSourceButton.setDisable(blocked || npcDatabaseFeature.frame().selectedSource().isEmpty());
+        clearNpcDatabaseButton.setDisable(blocked || npcDatabaseFeature.frame().visibleRows().isEmpty());
         generateOutputButton.setDisable(blocked);
         renderTemplates(templatesFeature.frame());
         renderMorphs(morphsFeature.frame());
+        renderNpcDatabase(npcDatabaseFeature.frame());
         renderSettings(settingsFeature.frame());
         renderOutput(outputFeature.frame());
         updateActivityRetry(activityList.getSelectionModel().getSelectedItem());
@@ -3504,6 +4137,12 @@ public final class WorkbenchController {
                     && (terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED
                     || terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES))
                 resetMorphsOnNextProjectFrame = true;
+            if (terminal.operation().name().equals("Open Project")
+                    && (terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED
+                    || terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES)) {
+                npcDatabaseFeature.clearAllSelections();
+                renderNpcDatabase(npcDatabaseFeature.frame());
+            }
             // The job terminal record is the authoritative feedback source for async work.
             renderedProjectSequence = projectFrame.sequence();
             render(projectFrame);

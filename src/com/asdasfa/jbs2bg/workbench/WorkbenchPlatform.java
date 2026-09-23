@@ -1,6 +1,7 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 import javafx.stage.Stage;
@@ -38,6 +39,16 @@ interface WorkbenchPlatform {
      * @return selected file, or empty when cancelled
      */
     default Optional<Path> chooseOutputFile(String suggestedFileName, Stage owner) {
+        return Optional.empty();
+    }
+
+    /**
+     * Chooses ordered text files to import into the session-scoped NPC Database.
+     *
+     * @param owner owning application window
+     * @return selected files in chooser order, or empty when dismissed
+     */
+    default Optional<List<Path>> chooseNpcSources(Stage owner) {
         return Optional.empty();
     }
 

@@ -33,6 +33,9 @@ public final class NPC {
         String displayName = values[1];
         name = displayName.isEmpty() ? "Unnamed (" + editorId + ")" : displayName;
         String[] raceParts = values[3].split("\"");
+        // String.split drops a trailing empty value, so a lone quote otherwise has no race part to inspect.
+        if (raceParts.length == 0)
+            throw new IllegalArgumentException("NPC race contains no value before the quote");
         race = raceParts[0].trim();
         formId = normalizeFormId(values[4]);
     }

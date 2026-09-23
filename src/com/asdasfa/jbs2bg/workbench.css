@@ -10,6 +10,7 @@
 #workbenchRoot .toggle-button,
 #workbenchRoot .combo-box,
 #workbenchRoot .list-view,
+#workbenchRoot .table-view,
 #workbenchRoot .text-field,
 #workbenchRoot .scroll-pane,
 #workbenchRoot .text-area {
@@ -55,6 +56,7 @@
 }
 
 #workbenchRoot .npc-portrait-section,
+#workbenchRoot.npc-column-filter-popup,
 #workbenchRoot.fill-empty-flyout,
 #workbenchRoot.npc-portrait-viewer {
     -fx-background-color: -bs-surface;
@@ -64,16 +66,19 @@
 }
 
 #workbenchRoot.fill-empty-flyout,
+#workbenchRoot.npc-column-filter-popup,
 #workbenchRoot.npc-portrait-viewer {
     -fx-min-width: 300px;
 }
 
 #workbenchRoot.fill-empty-flyout .label,
+#workbenchRoot.npc-column-filter-popup .label,
 #workbenchRoot.npc-portrait-viewer .label {
     -fx-text-fill: -bs-text;
 }
 
 #workbenchRoot:workbench-high-contrast .npc-portrait-section,
+#workbenchRoot.npc-column-filter-popup:workbench-high-contrast,
 #workbenchRoot.fill-empty-flyout:workbench-high-contrast,
 #workbenchRoot.npc-portrait-viewer:workbench-high-contrast {
     -fx-border-color: -bs-text;
@@ -137,6 +142,28 @@
     -fx-border-width: 1px 1px 1px 4px;
 }
 
+#workbenchRoot .table-view,
+#workbenchRoot .table-view .column-header,
+#workbenchRoot .table-view .filler,
+#workbenchRoot .table-row-cell {
+    -fx-background-color: -bs-surface;
+    -fx-border-color: -bs-border;
+}
+
+#workbenchRoot .table-cell {
+    -fx-text-fill: -bs-text;
+}
+
+#workbenchRoot .table-row-cell:filled:selected {
+    -fx-background-color: -bs-selection;
+    -fx-border-color: -bs-accent;
+    -fx-border-width: 1px 1px 1px 4px;
+}
+
+#workbenchRoot .table-row-cell:filled:selected .table-cell {
+    -fx-text-fill: -bs-selection-text;
+}
+
 #workbenchRoot .info-bar {
     -fx-border-width: 1px 1px 1px 4px;
 }
@@ -175,6 +202,7 @@
 #workbenchRoot .toggle-button:focused,
 #workbenchRoot .combo-box:focused,
 #workbenchRoot .list-view:focused,
+#workbenchRoot .table-view:focused,
 #workbenchRoot .text-field:focused,
 #workbenchRoot .text-area:focused,
 #workbenchRoot .slider:focused,
@@ -219,6 +247,7 @@
 }
 
 #workbenchRoot:workbench-high-contrast .list-cell:filled:selected,
+#workbenchRoot:workbench-high-contrast .table-row-cell:filled:selected,
 #workbenchRoot:workbench-high-contrast .validation-text {
     -fx-border-width: 2px 2px 2px 4px;
 }

@@ -323,7 +323,7 @@ public final class JobCoordinator implements AutoCloseable {
         public boolean projectMutationsBlocked() {
             return shutdownRequested || attempt.stream().filter(Attempt::active)
                     .anyMatch(value -> value.operation().consistencyClass()
-                            != ConsistencyClass.SNAPSHOT_DERIVED);
+                            == ConsistencyClass.PROJECT_EXCLUSIVE);
         }
     }
 
@@ -828,7 +828,8 @@ public final class JobCoordinator implements AutoCloseable {
      */
     public enum ConsistencyClass {
         PROJECT_EXCLUSIVE,
-        SNAPSHOT_DERIVED
+        SNAPSHOT_DERIVED,
+        NPC_DATABASE
     }
 
     /**

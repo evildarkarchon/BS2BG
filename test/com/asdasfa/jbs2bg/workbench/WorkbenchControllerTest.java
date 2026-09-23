@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javafx.scene.shape.SVGPath;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import com.asdasfa.jbs2bg.Main;
+import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
@@ -75,6 +77,7 @@ import javafx.scene.control.Slider;
 import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TableView;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
@@ -94,6 +97,353 @@ class WorkbenchControllerTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    /** Imported NPC sources populate the independent catalog and its selection-following inspector. */
+    @Test
+    void npcDatabaseImportsSourcesAndInspectsSelectedCatalogRow() throws Exception {
+        Path source = temporaryDirectory.resolve("npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n"
+                + "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                assertEquals(List.of("Alpha", "Beta"), catalog.getItems().stream().map(NPC::getName).toList());
+                assertEquals(1, ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems().size());
+                catalog.getSelectionModel().selectFirst();
+                assertTrue(((Label) loader.getNamespace().get("npcInspectorName")).getText().contains("Alpha"));
+                assertTrue(((Label) loader.getNamespace().get("npcDatabasePortraitStatus")).getText()
+                        .contains("No portrait found"));
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** Column filters clear hidden selection, sorting changes order, and Clear freezes only visible identities. */
+    @Test
+    void npcDatabaseClearUsesFilteredVisibleScope() throws Exception {
+        Path source = temporaryDirectory.resolve("filter-npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n"
+                + "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                catalog.getSelectionModel().selectFirst();
+
+                ToggleButton raceFilter = (ToggleButton) loader.getNamespace().get("npcRaceFilterButton");
+                raceFilter.fire();
+                Popup cancelledFilter = (Popup) Window.getWindows().stream()
+                        .filter(window -> window instanceof Popup && window.isShowing()
+                                && window.getScene().getRoot().lookup("#npcColumnFilterChoices") != null)
+                        .findFirst().orElseThrow();
+                sendKey(cancelledFilter.getScene().getRoot(), KeyCode.ESCAPE);
+                assertFalse(cancelledFilter.isShowing());
+                assertEquals(2, catalog.getItems().size());
+                hideNpcColumnValue(loader, "Race", "NordRace");
+                assertEquals(List.of("Beta"), catalog.getItems().stream().map(NPC::getName).toList());
+                assertNull(catalog.getSelectionModel().getSelectedItem());
+                assertTrue(((ToggleButton) loader.getNamespace().get("npcRaceFilterButton"))
+                        .getAccessibleHelp().contains("active, collapsed"));
+
+                ((Button) loader.getNamespace().get("clearNpcFiltersButton")).fire();
+                @SuppressWarnings("unchecked")
+                ComboBox<String> sort = (ComboBox<String>) loader.getNamespace().get("npcSortChoice");
+                sort.getSelectionModel().select("Name descending");
+                assertEquals(List.of("Beta", "Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
+
+                hideNpcColumnValue(loader, "Name", "Beta");
+                assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
+                ((Button) loader.getNamespace().get("clearNpcDatabaseButton")).fire();
+                assertTrue(catalog.getItems().isEmpty());
+                ((Button) loader.getNamespace().get("clearNpcFiltersButton")).fire();
+                assertEquals(List.of("Beta"), catalog.getItems().stream().map(NPC::getName).toList());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** A malformed file publishes no rows from that file while earlier and later sources remain inspectable. */
+    @Test
+    void npcDatabaseMixedImportKeepsValidSourcesAndReportsRejectedLine() throws Exception {
+        Path first = temporaryDirectory.resolve("first-npcs.txt");
+        Path malformed = temporaryDirectory.resolve("malformed-npcs.txt");
+        Path last = temporaryDirectory.resolve("last-npcs.txt");
+        Files.writeString(first, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
+        Files.writeString(malformed, "Skyrim.esm | Ghost | Ghost01 | NordRace | 00012346\n"
+                + "not an NPC row\n");
+        Files.writeString(last, "Skyrim.esm | Gamma | Gamma01 | BretonRace | 00012347\n");
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(first, malformed, last)));
+        platform.respondNpcSourcesWith(Optional.of(List.of(malformed)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                Button importButton = (Button) loader.getNamespace().get("importNpcSourcesButton");
+                importButton.fire();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                assertEquals(List.of("Alpha", "Gamma"), catalog.getItems().stream().map(NPC::getName).toList());
+                assertEquals(2, ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems().size());
+                String diagnostics = ((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText();
+                assertTrue(diagnostics.contains("NPC_DATABASE_SOURCE_MALFORMED"));
+                assertTrue(diagnostics.contains("malformed-npcs.txt:2"));
+                assertTrue(flow.frame().snapshot().getNpcMorphAssignments().isEmpty());
+
+                Files.writeString(malformed, "Skyrim.esm | Ghost | Ghost01 | NordRace | 00012346\n");
+                importButton.fire();
+                assertEquals(List.of("Alpha", "Gamma", "Ghost"),
+                        catalog.getItems().stream().map(NPC::getName).toList());
+                assertEquals("No source diagnostics",
+                        ((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** A failed source keeps an earlier catalog and Activity Retry reads repaired bytes as a linked attempt. */
+    @Test
+    void npcDatabaseFailedImportCanRetryWithoutLosingCommittedSource() throws Exception {
+        Path good = temporaryDirectory.resolve("committed-npcs.txt");
+        Path missing = temporaryDirectory.resolve("missing-npcs.txt");
+        Files.writeString(good, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(good)));
+        platform.respondNpcSourcesWith(Optional.of(List.of(missing)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                Button importButton = (Button) loader.getNamespace().get("importNpcSourcesButton");
+                importButton.fire();
+                importButton.fire();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
+                assertTrue(((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText()
+                        .contains("NPC_DATABASE_SOURCE_READ_FAILED"));
+
+                Files.writeString(missing, "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
+                @SuppressWarnings("unchecked")
+                ListView<WorkbenchFeedback.ActivityRecord> activity =
+                        (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+                activity.getSelectionModel().selectLast();
+                Button retry = (Button) loader.getNamespace().get("retryActivityButton");
+                assertFalse(retry.isDisabled());
+                retry.fire();
+                assertEquals(List.of("Alpha", "Beta"), catalog.getItems().stream().map(NPC::getName).toList());
+                assertTrue(activity.getItems().getLast().jobDetails().orElseThrow().retryOf().isPresent());
+                assertEquals("No source diagnostics",
+                        ((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** Cancelling a queued import retains the prior session catalog and New clears selection, not sources. */
+    @Test
+    void npcDatabaseCancelRetainsEarlierSourcesAcrossNewProject() throws Exception {
+        Path first = temporaryDirectory.resolve("prior-npcs.txt");
+        Path cancelled = temporaryDirectory.resolve("cancelled-npcs.txt");
+        Files.writeString(first, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
+        Files.writeString(cancelled, "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-09-22T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The queued cancellation settles before prolonged status can matter.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(first)));
+        platform.respondNpcSourcesWith(Optional.of(List.of(cancelled)));
+        platform.respondWith(WorkbenchProjectFlow.Response.discard());
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                Button importButton = (Button) loader.getNamespace().get("importNpcSourcesButton");
+                importButton.fire();
+                worker.runNext();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
+                catalog.getSelectionModel().selectFirst();
+
+                importButton.fire();
+                assertTrue(importButton.isDisabled());
+                assertTrue(((ProgressBar) loader.getNamespace().get("operationProgress")).isVisible());
+                ((ToggleButton) loader.getNamespace().get("templatesAreaButton")).fire();
+                ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Edited during NPC import");
+                Button createPreset = (Button) loader.getNamespace().get("createSliderPresetButton");
+                assertFalse(createPreset.isDisabled());
+                createPreset.fire();
+                assertEquals(1, flow.frame().snapshot().getSliderPresets().size());
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) loader.getNamespace().get("cancelOperationButton")).fire();
+                assertEquals(JobCoordinator.Lifecycle.CANCELLED, jobs.frame().attempt().orElseThrow().lifecycle());
+                assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
+                ListView<?> sources = (ListView<?>) loader.getNamespace().get("npcSourceList");
+                assertEquals(1, sources.getItems().size());
+                sources.getSelectionModel().selectFirst();
+
+                ((MenuItem) loader.getNamespace().get("newProjectMenuItem")).fire();
+                assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
+                assertNull(catalog.getSelectionModel().getSelectedItem());
+                assertNull(sources.getSelectionModel().getSelectedItem());
+            } finally {
+                stage.close();
+                jobs.close();
+            }
+        });
+    }
+
+    /** Cancellation after source-one progress commits only that complete source, never source two. */
+    @Test
+    void npcDatabaseCancellationAtSourceBoundaryReportsOnlyPriorCommit() throws Exception {
+        Path first = temporaryDirectory.resolve("first-boundary.txt");
+        Path second = temporaryDirectory.resolve("second-boundary.txt");
+        Files.writeString(first, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
+        Files.writeString(second, "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
+        JobCoordinator jobs = new JobCoordinator(new InlineExecutorService(), Runnable::run,
+                Clock.fixed(Instant.parse("2026-09-22T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Inline work has no prolonged cancellation interval.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        AtomicBoolean cancelledAtBoundary = new AtomicBoolean();
+        JobCoordinator.Subscription cancellation = jobs.observe(frame -> frame.attempt().ifPresent(attempt -> {
+            if (attempt.operation().name().equals("Import NPC Database Sources")
+                    && attempt.progress().completedUnits().orElse(-1L) == 1L
+                    && cancelledAtBoundary.compareAndSet(false, true))
+                jobs.requestCancel();
+        }));
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(first, second)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                assertTrue(cancelledAtBoundary.get());
+                assertEquals(JobCoordinator.Lifecycle.CANCELLED, jobs.frame().attempt().orElseThrow().lifecycle());
+                assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
+                @SuppressWarnings("unchecked")
+                ListView<WorkbenchFeedback.ActivityRecord> activity =
+                        (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+                assertEquals(List.of("Imported " + first.toAbsolutePath().normalize()),
+                        activity.getItems().getLast().jobDetails().orElseThrow().effectsCommitted());
+            } finally {
+                stage.close();
+                cancellation.close();
+                jobs.close();
+            }
+        });
+    }
+
+    /** NPC table type-ahead cycles visible names and Ctrl+K reaches the named column-filter button. */
+    @Test
+    void npcDatabaseKeyboardSearchCyclesAndFocusesFiltering() throws Exception {
+        Path source = temporaryDirectory.resolve("keyboard-npcs.txt");
+        Files.writeString(source, "Master.esm | Amber | Amber01 | NordRace | 000001\n"
+                + "Master.esm | Azure | Azure01 | NordRace | 000002\n"
+                + "Master.esm | Beta | Beta01 | NordRace | 000003\n");
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300.0, 800.0);
+            stage.setScene(scene);
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                catalog.requestFocus();
+                for (int index = 0; index < 2; index++)
+                    catalog.fireEvent(new KeyEvent(KeyEvent.KEY_TYPED, "a", "a", KeyCode.UNDEFINED,
+                            false, false, false, false));
+                assertEquals("Azure", catalog.getSelectionModel().getSelectedItem().getName());
+                sendControlKey(root, KeyCode.K);
+                assertSame(loader.getNamespace().get("npcNameFilterButton"), scene.getFocusOwner());
+                sendKey(root, KeyCode.ESCAPE);
+                assertNull(catalog.getSelectionModel().getSelectedItem());
+            } finally {
+                stage.close();
+            }
+        });
+    }
 
     /** The Fill Empty flyout requires a chosen preset and cancellation preserves every NPC assignment. */
     @Test
@@ -1510,6 +1860,30 @@ class WorkbenchControllerTest {
                 false, false, false, false));
     }
 
+    /** Opens a named NPC column checklist, toggles one exact value with Space, and applies it with Enter. */
+    private static void hideNpcColumnValue(FXMLLoader loader, String column, String value) {
+        String buttonId = switch (column) {
+            case "Name" -> "npcNameFilterButton";
+            case "Race" -> "npcRaceFilterButton";
+            default -> throw new IllegalArgumentException("Unsupported test column: " + column);
+        };
+        ToggleButton launcher = (ToggleButton) loader.getNamespace().get(buttonId);
+        launcher.fire();
+        Popup popup = (Popup) Window.getWindows().stream()
+                .filter(window -> window instanceof Popup && window.isShowing()
+                        && window.getScene().getRoot().lookup("#npcColumnFilterChoices") != null)
+                .findFirst().orElseThrow();
+        assertTrue(launcher.getAccessibleHelp().contains("expanded"));
+        ListView<?> choices = (ListView<?>) popup.getScene().getRoot().lookup("#npcColumnFilterChoices");
+        int index = java.util.stream.IntStream.range(0, choices.getItems().size())
+                .filter(candidate -> choices.getItems().get(candidate).toString().equals(value))
+                .findFirst().orElseThrow();
+        choices.getSelectionModel().select(index);
+        sendKey(choices, KeyCode.SPACE);
+        sendKey(choices, KeyCode.ENTER);
+        assertFalse(popup.isShowing());
+    }
+
     /**
      * Open consumes a platform-selected path and renders recovery state and diagnostics from the returned frame.
      */
@@ -2740,6 +3114,16 @@ class WorkbenchControllerTest {
             root.resize(1200, 720);
             assertEquals(java.util.List.of(primaryPane, editorPane, inspectorPane), areaPanes.getChildren());
             assertFalse(listLauncher.isVisible());
+
+            ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+            root.resize(1199, 720);
+            listLauncher.fire();
+            assertSame(loader.getNamespace().get("npcSourceList"), scene.getFocusOwner());
+            sendKey(root, KeyCode.ESCAPE);
+            sendKey(root, KeyCode.F7);
+            assertSame(loader.getNamespace().get("npcInspectorName"), scene.getFocusOwner());
+            assertEquals("NPC Database catalog",
+                    ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getAccessibleText());
             stage.close();
         });
     }
@@ -2871,6 +3255,7 @@ class WorkbenchControllerTest {
         private final Deque<Runnable> failureHooks = new ArrayDeque<>();
         private final Deque<Optional<Path>> outputDirectoryResponses = new ArrayDeque<>();
         private final Deque<Optional<Path>> outputFileResponses = new ArrayDeque<>();
+        private final Deque<Optional<List<Path>>> npcSourceResponses = new ArrayDeque<>();
         private final List<String> clipboardTexts = new java.util.ArrayList<>();
         private int closeCount;
 
@@ -2902,6 +3287,17 @@ class WorkbenchControllerTest {
         /** Adds the next selected-BoS save-chooser result. */
         void respondOutputFileWith(Optional<Path> response) {
             outputFileResponses.addLast(response);
+        }
+
+        /** Adds the next NPC Database multi-file chooser result. */
+        void respondNpcSourcesWith(Optional<List<Path>> response) {
+            npcSourceResponses.addLast(response);
+        }
+
+        /** Returns the next scripted NPC Database source selection. */
+        @Override
+        public Optional<List<Path>> chooseNpcSources(Stage owner) {
+            return npcSourceResponses.removeFirst();
         }
 
         /**

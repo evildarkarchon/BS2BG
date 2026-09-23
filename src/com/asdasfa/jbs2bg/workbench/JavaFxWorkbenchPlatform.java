@@ -45,6 +45,17 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
         return selected == null ? Optional.empty() : Optional.of(selected.toPath());
     }
 
+    /** Shows the ordered multi-source NPC Database text chooser. */
+    @Override
+    public Optional<List<Path>> chooseNpcSources(Stage owner) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Import NPC Database Sources");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("NPC Database text (*.txt)", "*.txt"));
+        List<File> selected = chooser.showOpenMultipleDialog(Objects.requireNonNull(owner, "owner"));
+        return selected == null || selected.isEmpty() ? Optional.empty()
+                : Optional.of(selected.stream().map(File::toPath).toList());
+    }
+
     /**
      * Translates a native Project chooser result while completing Save As filenames with the canonical extension.
      *
