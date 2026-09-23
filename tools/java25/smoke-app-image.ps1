@@ -2386,9 +2386,9 @@ try {
 
         Send-UiaKeysToElement -Element $fillLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-FillEmptyFlyout | Out-Null
-        $outside = Find-OuterControl -ControlType 'Text' -Name 'Morphs editor: no selection'
+        $outside = Find-OuterControl -ControlType 'Text' -Name 'Morphs Area'
         Invoke-UiaPointerClick -Element $outside -RefreshRoot $script:mainWindow `
-            -RefreshCondition (New-UiaCondition -ControlType 'Text' -Name 'Morphs editor: no selection') | Out-Null
+            -RefreshCondition (New-UiaCondition -ControlType 'Text' -Name 'Morphs Area') | Out-Null
         Wait-FillEmptyFlyoutClosed
         $fillLauncher = Find-OuterControl -ControlType 'Button' -Name 'Fill Empty NPC Morph Assignments'
         Wait-UiaKeyboardFocus -Element $fillLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
