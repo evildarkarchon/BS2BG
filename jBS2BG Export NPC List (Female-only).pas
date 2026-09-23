@@ -39,6 +39,7 @@ Begin
 
 
   If Not ElementExists  (e, 'ACBS - Configuration\Flags\Is CharGen Face Preset')
+     And ElementExists(e, 'ACBS - Configuration\Flags\Female')
     Then
     Begin
       strMod := '' + GetFileName(GetFile(e));
