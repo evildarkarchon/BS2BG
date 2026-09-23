@@ -2065,8 +2065,9 @@ try {
 
         $originalLydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
             -EditorId 'HousecarlWhiterun' -Description 'original Lydia for relationship editing'
-        # Return the NPC catalog to the visible pane before its own real-pointer selection.
-        $npcScroll.SetScrollPercent(-1.0, 0.0)
+        # At 125% DPI the NPC catalog's lower row is partly below the outer ScrollPane when scrolled to 0%.
+        # A quarter-scroll centers the catalog while preserving a real pointer target at every accepted scale.
+        $npcScroll.SetScrollPercent(-1.0, 25.0)
         Wait-UiaCondition -Description 'NPC catalog row inside its scrolled pane' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {
             $paneBounds = $npcSurface.Current.BoundingRectangle

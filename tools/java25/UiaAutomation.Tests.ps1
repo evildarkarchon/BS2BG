@@ -142,6 +142,28 @@ Describe 'UI Automation native dialog process ownership' {
             Should -Invoke Get-UiaText -Times 1 -Exactly
         }
     }
+
+
+    It 'accepts the exact Shell address pane when fractional-DPI Edit readback differs' {
+        InModuleScope UiaAutomation {
+            $dialog = [pscustomobject]@{ Current = [pscustomobject]@{ ProcessId = 123; NativeWindowHandle = 456 } }
+            Mock Send-UiaKeys {}
+            Mock Get-UiaText { return 'Address: C:\chosen-folder' }
+            Mock Find-UiaElement { return [pscustomobject]@{ Current = [pscustomobject]@{ Name = 'C:\chosen-folder' } } }
+            Mock Wait-UiaCondition {
+                if ($Description -eq 'native Edit focus within the requested dialog') {
+                    return [pscustomobject]@{}
+                }
+                $result = & $Test
+                if (-not $result) { throw 'Exact address was not accepted.' }
+                return $result
+            }
+
+            Set-UiaNativeDialogText -Dialog $dialog -Value 'C:\chosen-folder' -Shortcut '^l' -TimeoutSeconds 1
+
+            Should -Invoke Find-UiaElement -Times 1 -Exactly
+        }
+    }
 }
 
 Describe 'UI Automation pointer provider retries' {

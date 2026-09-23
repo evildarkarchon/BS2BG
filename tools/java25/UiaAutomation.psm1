@@ -884,6 +884,12 @@ function Set-UiaNativeDialogText {
     Send-UiaKeys -ProcessId $processId -Keys ('^a' + $literalKeys) -TimeoutSeconds $TimeoutSeconds
     Wait-UiaCondition -Description 'exact native dialog text' -TimeoutSeconds $TimeoutSeconds -Test {
         if ((Get-UiaText -Element $field) -ceq $Value) { $true }
+        elseif ($Shortcut -ceq '^l' -and $null -ne (Find-UiaElement -Root $Dialog -Condition (
+                    New-UiaCondition -ControlType 'Pane' -Name $Value))) {
+            # At fractional DPI Windows Shell can publish the exact address on its pane while the focused Edit
+            # proxy omits or decorates the text. The caller still verifies the accepted breadcrumb after Enter.
+            $true
+        }
     } | Out-Null
 }
 
