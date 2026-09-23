@@ -38,7 +38,7 @@ Begin
      'RACE \ DATA - Data \ Flags \ Playable') Then exit;
 
 
-  If Not ElementExists  (e, 'ACBS - Configuration\Flags\Is CharGen Face Preset')
+  If Not ElementExists(e, 'ACBS - Configuration\Flags\Is CharGen Face Preset')
     Then
     Begin
       strMod := '' + GetFileName(GetFile(e));
