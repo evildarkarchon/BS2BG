@@ -1,0 +1,143 @@
+{
+  "schema": "bs2bg.dpi-matrix/1",
+  "recordedAtUtc": "2026-09-23T05:39:51.6030029+00:00",
+  "passed": true,
+  "archive": "D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip",
+  "archiveSha256": "eda011559fc64cb8c01bbb34e2032993c40e782f3d4ffc7daf500e67eaec3ded",
+  "originalDisplay": {
+    "deviceName": "\\\\.\\DISPLAY2",
+    "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+    "scalePercent": 100,
+    "dpi": 96,
+    "bounds": {
+      "left": 0,
+      "top": 0,
+      "width": 2560,
+      "height": 1440
+    },
+    "supportedScales": [
+      100,
+      125,
+      150,
+      175,
+      200,
+      225
+    ],
+    "settingsDisplayName": "Display 2"
+  },
+  "requestedScalePercents": [
+    100,
+    125,
+    150
+  ],
+  "recoveryPath": "D:\\repos\\BS2BG\\.bs2bg-dpi-matrix-recovery.json",
+  "runs": [
+    {
+      "scalePercent": 100,
+      "passed": true,
+      "archiveSha256": "eda011559fc64cb8c01bbb34e2032993c40e782f3d4ffc7daf500e67eaec3ded",
+      "evidencePath": "D:\\repos\\BS2BG\\target\\reproducibility\\dpi-matrix\\dpi-100\\windows-app-image-smoke.json",
+      "display": {
+        "deviceName": "\\\\.\\DISPLAY2",
+        "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+        "scalePercent": 100,
+        "dpi": 96,
+        "bounds": {
+          "left": 0,
+          "top": 0,
+          "width": 2560,
+          "height": 1440
+        },
+        "supportedScales": [
+          100,
+          125,
+          150,
+          175,
+          200,
+          225
+        ],
+        "settingsDisplayName": "Display 2"
+      },
+      "error": null
+    },
+    {
+      "scalePercent": 125,
+      "passed": true,
+      "archiveSha256": "eda011559fc64cb8c01bbb34e2032993c40e782f3d4ffc7daf500e67eaec3ded",
+      "evidencePath": "D:\\repos\\BS2BG\\target\\reproducibility\\dpi-matrix\\dpi-125\\windows-app-image-smoke.json",
+      "display": {
+        "deviceName": "\\\\.\\DISPLAY2",
+        "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+        "scalePercent": 125,
+        "dpi": 120,
+        "bounds": {
+          "left": 0,
+          "top": 0,
+          "width": 2560,
+          "height": 1440
+        },
+        "supportedScales": [
+          100,
+          125,
+          150,
+          175,
+          200,
+          225
+        ],
+        "settingsDisplayName": "Display 2"
+      },
+      "error": null
+    },
+    {
+      "scalePercent": 150,
+      "passed": true,
+      "archiveSha256": "eda011559fc64cb8c01bbb34e2032993c40e782f3d4ffc7daf500e67eaec3ded",
+      "evidencePath": "D:\\repos\\BS2BG\\target\\reproducibility\\dpi-matrix\\dpi-150\\windows-app-image-smoke.json",
+      "display": {
+        "deviceName": "\\\\.\\DISPLAY2",
+        "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+        "scalePercent": 150,
+        "dpi": 144,
+        "bounds": {
+          "left": 0,
+          "top": 0,
+          "width": 2560,
+          "height": 1440
+        },
+        "supportedScales": [
+          100,
+          125,
+          150,
+          175,
+          200,
+          225
+        ],
+        "settingsDisplayName": "Display 2"
+      },
+      "error": null
+    }
+  ],
+  "restoration": {
+    "deviceName": "\\\\.\\DISPLAY2",
+    "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+    "scalePercent": 100,
+    "dpi": 96,
+    "bounds": {
+      "left": 0,
+      "top": 0,
+      "width": 2560,
+      "height": 1440
+    },
+    "supportedScales": [
+      100,
+      125,
+      150,
+      175,
+      200,
+      225
+    ],
+    "settingsDisplayName": "Display 2"
+  },
+  "workflowError": null,
+  "restorationError": null
+}
