@@ -12,9 +12,7 @@ import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
-import com.asdasfa.jbs2bg.data.Data;
 import com.asdasfa.jbs2bg.data.Settings;
-import com.asdasfa.jbs2bg.presentation.ProjectPresentation;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.workbench.WorkbenchController;
@@ -45,25 +43,16 @@ public class Main extends Application {
      */
     public static final String APP_VERSION = "1.1.2";
 
-    public final double decorWidth = 30;
-    public final double decorHeight = 40;
-
     public final Image icon = new Image(getClass().getResourceAsStream("/res/icon.png"));
-    public final String style = getClass().getResource("dark.css").toExternalForm();
     public final String workbenchStyle = getClass().getResource("workbench.css").toExternalForm();
-    public final Data data = new Data();
-    public final ProjectPresentation projectPresentation;
     public final Settings.InitializationResult settingsInitialization;
     final WorkbenchProjectFlow workbenchProjectFlow;
     private final ExecutorService jobWorker;
     private final JobCoordinator jobCoordinator;
     public Stage primaryStage;
-    public MainController mainController;
-
     /**
      * Initializes the owned Settings pair, authoritative ProjectSession, application-wide job
-     * coordinator, and sole Workbench Project flow. The legacy read model remains unmounted for
-     * later feature cutovers.
+     * coordinator, and sole Workbench Project flow.
      */
     public Main() {
         settingsInitialization = Settings.initialize(Path.of("."));
@@ -75,7 +64,6 @@ public class Main extends Application {
                 failure -> Logger.getLogger(Main.class.getName()).log(Level.WARNING,
                         "A Workbench job callback failed", failure));
         workbenchProjectFlow = new WorkbenchProjectFlow(APPLICATION_NAME, projectSession, jobCoordinator);
-        projectPresentation = new ProjectPresentation(APPLICATION_NAME, workbenchProjectFlow.frame().snapshot());
     }
 
     /**

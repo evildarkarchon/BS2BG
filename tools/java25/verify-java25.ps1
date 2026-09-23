@@ -201,7 +201,6 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.LauncherTest',
     'com.asdasfa.jbs2bg.build.WindowsAppImageGateTest',
     'com.asdasfa.jbs2bg.fx.FilteredTableAdapterTest',
-    'com.asdasfa.jbs2bg.fx.DialogGraphicsTest',
     'com.asdasfa.jbs2bg.filtering.FilteredViewTest',
     'com.asdasfa.jbs2bg.filtering.VisibleScopeCommandsTest',
     'com.asdasfa.jbs2bg.project.ProjectSessionTest',
@@ -340,7 +339,7 @@ $evidence = [ordered]@{
             }
         } else { $null })
         structuralGate          = 'ProductionSourceGateTest (sources, resources, pom) and Java25ToolchainGuardTest (every emitted class file)'
-        fxmlHarness             = 'FxmlGraphLoadingTest (Workbench root, retained migration popups, and custom-root graphs on the pinned toolkit)'
+        fxmlHarness             = 'FxmlGraphLoadingTest (sole Workbench root graph on the pinned toolkit)'
         workbenchLifecycle      = 'JobCoordinatorTest + WorkbenchProjectFlowTest + WorkbenchControllerTest + TemplatesFeatureTest + MorphsFeatureTest + SettingsFeatureTest + OutputFeatureTest (central admission, imports, Templates and Morphs authoring, Settings persistence, captured generation, progress, cancellation, retry, stale refusal, shutdown, and JavaFX adapter)'
     }
     targetRelease           = [ordered]@{

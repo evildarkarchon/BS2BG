@@ -30,7 +30,7 @@ final class OutputRoutePolicyTest {
         }
     }
 
-    /** Legacy popup, generation, preview, copy, BoS, and export routes cannot coexist with OutputFeature. */
+    /** Legacy popup and root controller routes cannot coexist with OutputFeature. */
     @Test
     void removesEveryReplacedLegacyOutputRoute() throws IOException {
         assertFalse(Files.exists(Path.of("src/com/asdasfa/jbs2bg/PopupBosViewController.java")));
@@ -38,10 +38,7 @@ final class OutputRoutePolicyTest {
         assertFalse(Files.exists(Path.of("src/com/asdasfa/jbs2bg/PopupNoPresetNotifController.java")));
         assertFalse(Files.exists(Path.of("src/com/asdasfa/jbs2bg/popup_nopresetnotif.fxml")));
         assertFalse(Files.exists(Path.of("src/com/asdasfa/jbs2bg/presentation/BosArtifactPublisher.java")));
-        String legacyController = Files.readString(Path.of("src/com/asdasfa/jbs2bg/MainController.java"));
-        for (String route : List.of("generateTemplates", "generateMorphs", "copyTemplates", "copyMorphs",
-                "exportBosJson", "writeIniOutputs", "showPopupBosView", "updateTemplateText"))
-            assertFalse(legacyController.contains(route), () -> "Legacy Output route remains: " + route);
+        assertFalse(Files.exists(Path.of("src/com/asdasfa/jbs2bg/MainController.java")));
     }
 
     /** Reports whether one production source retains a forbidden Commons IO import. */

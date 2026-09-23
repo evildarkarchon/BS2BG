@@ -54,6 +54,32 @@
     -fx-padding: 10px;
 }
 
+#workbenchRoot .npc-portrait-section,
+#workbenchRoot.fill-empty-flyout,
+#workbenchRoot.npc-portrait-viewer {
+    -fx-background-color: -bs-surface;
+    -fx-border-color: -bs-border;
+    -fx-border-width: 1px;
+    -fx-padding: 10px;
+}
+
+#workbenchRoot.fill-empty-flyout,
+#workbenchRoot.npc-portrait-viewer {
+    -fx-min-width: 300px;
+}
+
+#workbenchRoot.fill-empty-flyout .label,
+#workbenchRoot.npc-portrait-viewer .label {
+    -fx-text-fill: -bs-text;
+}
+
+#workbenchRoot:workbench-high-contrast .npc-portrait-section,
+#workbenchRoot.fill-empty-flyout:workbench-high-contrast,
+#workbenchRoot.npc-portrait-viewer:workbench-high-contrast {
+    -fx-border-color: -bs-text;
+    -fx-border-width: 2px;
+}
+
 #workbenchRoot .slider-choice-preview {
     -fx-font-family: "Consolas";
     -fx-font-weight: bold;

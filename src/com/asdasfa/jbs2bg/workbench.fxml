@@ -18,6 +18,7 @@
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -325,6 +326,10 @@
                                                                                 accessibleText="Clear visible NPC Morph Assignments"
                                                                                 maxWidth="Infinity" mnemonicParsing="true"
                                                                                 text="C_lear visible NPC Morph Assignments" />
+                                                                        <Button fx:id="fillEmptyNpcMorphAssignmentsButton"
+                                                                                accessibleText="Fill Empty NPC Morph Assignments"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Fill Empty…" />
                                                                     </children>
                                                                 </VBox>
                                                             </content>
@@ -596,6 +601,24 @@
                                                                                 focusTraversable="true"
                                                                                 text="No Morphs selection"
                                                                                 wrapText="true" />
+                                                                        <VBox fx:id="npcPortraitSection" spacing="6.0"
+                                                                                styleClass="npc-portrait-section">
+                                                                            <children>
+                                                                                <Label styleClass="title" text="NPC portrait" />
+                                                                                <ImageView fx:id="npcPortraitImage"
+                                                                                        accessibleText="No NPC portrait selected"
+                                                                                        fitHeight="180.0" fitWidth="200.0"
+                                                                                        preserveRatio="true" smooth="true" />
+                                                                                <Label fx:id="npcPortraitStatus"
+                                                                                        accessibleText="NPC portrait status"
+                                                                                        text="No NPC portrait selected"
+                                                                                        wrapText="true" />
+                                                                                <Button fx:id="openNpcPortraitViewerButton"
+                                                                                        accessibleText="Open NPC portrait viewer"
+                                                                                        disable="true" maxWidth="Infinity" mnemonicParsing="true"
+                                                                                        text="_Open portrait viewer" />
+                                                                            </children>
+                                                                        </VBox>
                                                                         <Label fx:id="assignedMorphSliderPresetLabel"
                                                                                 labelFor="$assignedMorphSliderPresetList"
                                                                                 mnemonicParsing="true"

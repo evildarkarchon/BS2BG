@@ -246,7 +246,9 @@ class Java25ToolchainGuardTest {
                 resources.add(SOURCE_ROOT.relativize(file).toString().replace('\\', '/'));
         for (Path file : filesUnder(ASSETS_ROOT, ""))
             resources.add(ASSETS_ROOT.relativize(file).toString().replace('\\', '/'));
-        assertTrue(resources.size() >= 11, "expected the retained Workbench resource set, found " + resources);
+        assertTrue(resources.containsAll(List.of("com/asdasfa/jbs2bg/workbench.fxml",
+                        "com/asdasfa/jbs2bg/workbench.css", "res/icon.png")),
+                "expected the retained Workbench resource set, found " + resources);
         for (String resource : resources) {
             if (!Files.isRegularFile(classesRoot.resolve(resource)) || Main.class.getResource("/" + resource) == null)
                 missing.add(resource);

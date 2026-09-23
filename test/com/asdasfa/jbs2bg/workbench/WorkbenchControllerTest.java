@@ -70,11 +70,13 @@ import javafx.scene.control.Labeled;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
@@ -82,6 +84,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.stage.Popup;
+import javafx.stage.Window;
 import javafx.stage.WindowEvent;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -90,6 +94,120 @@ class WorkbenchControllerTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    /** The Fill Empty flyout requires a chosen preset and cancellation preserves every NPC assignment. */
+    @Test
+    void fillEmptyFlyoutCancelsAndAppliesOnlyChosenPresets() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, new RecordingPlatform());
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                stage.show();
+                Button launcher = (Button) loader.getNamespace().get("fillEmptyNpcMorphAssignmentsButton");
+                launcher.fire();
+                Popup first = (Popup) Window.getWindows().stream()
+                        .filter(window -> window instanceof Popup && window.isShowing())
+                        .findFirst().orElseThrow();
+                Button firstApply = (Button) first.getScene().getRoot().lookup("#fillEmptyApplyButton");
+                assertTrue(firstApply.isDisabled());
+                ((Button) first.getScene().getRoot().lookup("#fillEmptyCancelButton")).fire();
+                assertFalse(first.isShowing());
+                assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst()
+                        .getSliderPresetNames().isEmpty());
+
+                launcher.fire();
+                Popup second = (Popup) Window.getWindows().stream()
+                        .filter(window -> window instanceof Popup && window.isShowing())
+                        .findFirst().orElseThrow();
+                @SuppressWarnings("unchecked")
+                ListView<SliderPresetSnapshot> choices =
+                        (ListView<SliderPresetSnapshot>) second.getScene().getRoot()
+                                .lookup("#fillEmptySliderPresetList");
+                choices.getSelectionModel().selectFirst();
+                Button apply = (Button) second.getScene().getRoot().lookup("#fillEmptyApplyButton");
+                assertEquals("Fill 1 NPC from 1 preset", apply.getText());
+                apply.fire();
+                assertFalse(second.isShowing());
+                assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().getFirst()
+                        .getSliderPresetNames());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** The inspector portrait follows logical NPC selection and explains the missing-file fallback. */
+    @Test
+    void npcPortraitInspectorClearsWithSelectionAndDescribesMissingImage() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(NpcMorphAssignmentEdits.create("NoPortraitFixture", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, new RecordingPlatform());
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                ListView<NpcMorphAssignmentSnapshot> npcs = controller.npcMorphAssignmentListNode();
+                npcs.getSelectionModel().selectFirst();
+                ImageView portrait = (ImageView) loader.getNamespace().get("npcPortraitImage");
+                Label status = (Label) loader.getNamespace().get("npcPortraitStatus");
+                Button viewer = (Button) loader.getNamespace().get("openNpcPortraitViewerButton");
+                assertEquals("NPC portrait: NoPortraitFixture, plugin Skyrim.esm, editor ID HousecarlWhiterun",
+                        portrait.getAccessibleText());
+                assertTrue(status.getText().contains("NoPortraitFixture (HousecarlWhiterun).jpg"));
+                assertTrue(viewer.isDisabled());
+                ((TextField) loader.getNamespace().get("npcMorphAssignmentFilter")).setText("no match");
+                assertEquals("No NPC portrait selected", portrait.getAccessibleText());
+                assertNull(portrait.getImage());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** Opening the narrow NPC inspector reveals its portrait rather than retaining a prior relationship scroll. */
+    @Test
+    void narrowNpcInspectorOpensAtPortraitAfterEarlierRelationshipScroll() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 900.0, 700.0);
+            stage.setScene(scene);
+            try {
+                controller.attach(flow, stage, new RecordingPlatform());
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                controller.npcMorphAssignmentListNode().getSelectionModel().selectFirst();
+                stage.show();
+                root.resize(900.0, 700.0);
+                ScrollPane inspector = (ScrollPane) loader.getNamespace().get("morphsInspectorScroll");
+                inspector.setVvalue(1.0);
+
+                sendKey(root, KeyCode.F7);
+
+                assertEquals(0.0, inspector.getVvalue());
+            } finally {
+                stage.close();
+            }
+        });
+    }
 
     /** Short catalogs remain fully visible as pixel snapping changes, without redundant accessible scrollbars. */
     @ParameterizedTest

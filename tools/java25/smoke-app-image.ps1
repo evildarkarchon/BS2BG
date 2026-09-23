@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
     Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, Templates, and Morphs contracts
-    (issues #98-#107).
+    (issues #98-#109).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
@@ -13,7 +13,8 @@
     accessibility semantics, notifications, typed dialogs, startup, New, Open, Save, Save As, Project recovery,
     centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
     malformed/failed operation preservation, complete pointer-free Slider Preset choice editing and management,
-    keyboard and semantic-pointer Custom Morph Target authoring, coordinated dirty shutdown, and bounded exit.
+    keyboard and semantic-pointer Custom Morph Target authoring, visible-set Fill Empty actions, portrait inspection,
+    coordinated dirty shutdown, and bounded exit.
 #>
 [CmdletBinding()]
 param(
@@ -50,6 +51,8 @@ $retrySaveName = 'save-retry.jbs2bg'
 $shutdownProjectName = 'shutdown-recovery.jbs2bg'
 $templatesManagedName = 'templates-managed.jbs2bg'
 $morphsManagedName = 'morphs-managed.jbs2bg'
+$fillEmptyManagedName = 'fill-empty-managed.jbs2bg'
+$fillEmptyFixtureName = 'fill-empty-source.jbs2bg'
 $accessibilityState = Get-SystemAccessibilityPreferences
 
 $evidenceDir = Split-Path -Parent $EvidencePath
@@ -99,6 +102,71 @@ function New-CancellableProjectFixture {
 
 <#
 .SYNOPSIS
+    Creates a Project with visible empty, visible assigned, and hidden empty NPC Morph Assignments.
+.PARAMETER Source
+    Representative Project whose Slider Presets and existing Lydia assignment are retained.
+.PARAMETER Path
+    Destination for the independently opened packaged-test Project.
+.NOTES
+    Distinct plugin/editor identities let the UI smoke prove the captured filtered set after the filter is cleared.
+#>
+function New-FillEmptyProjectFixture {
+    param([Parameter(Mandatory)] [string]$Source, [Parameter(Mandatory)] [string]$Path)
+    $project = Get-Content -LiteralPath $Source -Raw | ConvertFrom-Json -AsHashtable
+    $project.MorphedNPCs['Fill Visible One'] = [ordered]@{
+        Mod = 'FillTest.esp'; EditorId = 'FillOne'; Race = 'NordRace'; FormId = '000A0101'
+        SliderPresets = @()
+    }
+    $project.MorphedNPCs['Fill Visible Two'] = [ordered]@{
+        Mod = 'FillTest.esp'; EditorId = 'FillTwo'; Race = 'NordRace'; FormId = '000A0102'
+        SliderPresets = @()
+    }
+    $project.MorphedNPCs['Fill Already Assigned'] = [ordered]@{
+        Mod = 'FillTest.esp'; EditorId = 'AlreadyAssigned'; Race = 'NordRace'; FormId = '000A0103'
+        SliderPresets = @('UUNP Athletic')
+    }
+    $project.MorphedNPCs['Fill Hidden Empty'] = [ordered]@{
+        Mod = 'Hidden.esp'; EditorId = 'OutsideFilter'; Race = 'NordRace'; FormId = '000A0104'
+        SliderPresets = @()
+    }
+    $project.MorphedNPCs['Portrait Fallback'] = [ordered]@{
+        Mod = 'Portrait.esp'; EditorId = 'Fallback'; Race = 'NordRace'; FormId = '000A0105'
+        SliderPresets = @('CBBE Curvy')
+    }
+    $project | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $Path -Encoding utf8
+}
+
+<#
+.SYNOPSIS
+    Writes a small, distinct local portrait using Windows' built-in bitmap encoder.
+.PARAMETER Path
+    Image filename, including the extension exercised by the packaged loader.
+.PARAMETER Color
+    Fill color that makes filename-priority screenshots visually inspectable.
+#>
+function New-PortraitFixture {
+    param([Parameter(Mandatory)] [string]$Path, [Parameter(Mandatory)] [string]$Color)
+    Add-Type -AssemblyName System.Drawing
+    $format = switch ([IO.Path]::GetExtension($Path).ToLowerInvariant()) {
+        '.jpeg' { [System.Drawing.Imaging.ImageFormat]::Jpeg; break }
+        '.jpg' { [System.Drawing.Imaging.ImageFormat]::Jpeg; break }
+        '.png' { [System.Drawing.Imaging.ImageFormat]::Png; break }
+        default { throw "Unsupported portrait fixture extension: $Path" }
+    }
+    $bitmap = [System.Drawing.Bitmap]::new(320, 320)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.Clear([System.Drawing.Color]::FromName($Color))
+        $bitmap.Save($Path, $format)
+    }
+    finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
+
+<#
+.SYNOPSIS
     Prints one indented smoke progress line.
 .PARAMETER Message
     User-facing progress text; this function does not mutate workflow state.
@@ -138,8 +206,11 @@ function Invoke-SmokeStep {
             passed = $false
             seconds = [math]::Round($stopwatch.Elapsed.TotalSeconds, 2)
             error = $_.Exception.Message
+            errorPosition = $_.InvocationInfo.PositionMessage
+            scriptStackTrace = $_.ScriptStackTrace
         })
         Write-Host "  [smoke]   FAILED: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [smoke]   at: $($_.InvocationInfo.PositionMessage)" -ForegroundColor Red
         Save-FailureDiagnostics -StepName $Name
         throw
     }
@@ -186,25 +257,27 @@ function Save-FailureDiagnostics {
     Saves the uncovered Workbench window in physical pixels, excluding unrelated desktop content.
 .PARAMETER Path
     PNG destination path.
+.PARAMETER Window
+    Packaged UIA window to capture; defaults to the primary Workbench window.
 .PARAMETER BestEffort
     Suppresses capture failures only when collecting diagnostics for an already failed workflow.
 .NOTES
     Required evidence fails closed if the window remains covered or capture fails.
 #>
 function Save-Screenshot {
-    param([string]$Path, [switch]$BestEffort)
+    param([string]$Path, $Window = $script:mainWindow, [switch]$BestEffort)
     try {
         Add-Type -AssemblyName System.Drawing
-        if ($null -eq $script:mainWindow) { throw 'No Workbench window is available for capture.' }
-        $metrics = Get-UiaWindowMetrics -Window $script:mainWindow
+        if ($null -eq $Window) { throw 'No packaged window is available for capture.' }
+        $metrics = Get-UiaWindowMetrics -Window $Window
         $center = [System.Windows.Point]::new($metrics.WindowLeft + $metrics.WindowWidth / 2.0,
             $metrics.WindowTop + $metrics.WindowHeight / 2.0)
         $captureWaitSeconds = if ($BestEffort) { 1 } else { $StepTimeoutSeconds }
         # Theme state can update before Windows removes its full-screen transition cover. Require the actual
         # app under the capture point so a saved "Please wait" image cannot count as accessibility evidence.
-        Wait-UiaPointOwner -Handle ([IntPtr]$script:mainWindow.Current.NativeWindowHandle) -Point $center `
+        Wait-UiaPointOwner -Handle ([IntPtr]$Window.Current.NativeWindowHandle) -Point $center `
             -TimeoutSeconds $captureWaitSeconds
-        $metrics = Get-UiaWindowMetrics -Window $script:mainWindow
+        $metrics = Get-UiaWindowMetrics -Window $Window
         $bounds = [System.Drawing.Rectangle]::new($metrics.WindowLeft, $metrics.WindowTop,
             $metrics.WindowWidth, $metrics.WindowHeight)
         $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
@@ -469,6 +542,117 @@ function Wait-NpcMorphAssignmentRow {
     Wait-UiaCondition -Description $Description -TimeoutSeconds $StepTimeoutSeconds -Test {
         Find-NpcMorphAssignmentRow -List $List -DisplayName $DisplayName -PluginName $PluginName -EditorId $EditorId
     }
+}
+
+<#
+.SYNOPSIS
+    Selects an NPC by complete identity and reads its assigned Slider Presets from the inspector.
+.PARAMETER List
+    Visible NPC Morph Assignments list containing the requested identity.
+.PARAMETER DisplayName
+    Display text used to locate the row without relying on its index.
+.PARAMETER PluginName
+    Plugin half of the stable Project identity.
+.PARAMETER EditorId
+    Editor ID half of the stable Project identity.
+.OUTPUTS
+    Zero or more assigned Slider Preset names in accessible order.
+#>
+function Get-NpcAssignedPresetNames {
+    param(
+        [Parameter(Mandatory)] $List,
+        [Parameter(Mandatory)] [string]$DisplayName,
+        [Parameter(Mandatory)] [string]$PluginName,
+        [Parameter(Mandatory)] [string]$EditorId
+    )
+    $row = Wait-NpcMorphAssignmentRow -List $List -DisplayName $DisplayName -PluginName $PluginName `
+        -EditorId $EditorId -Description "NPC assignment '$PluginName/$EditorId'"
+    Select-UiaElement -Element $row
+    Wait-UiaElement -Root $script:mainWindow -Condition (
+        New-UiaCondition -ControlType 'Text' -Name (
+            "Selected NPC Morph Assignment $DisplayName, plugin $PluginName, editor ID $EditorId")) `
+        -Description "inspector identity '$PluginName/$EditorId'" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+    $assignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+    return @(Find-UiaElements -Root $assignedList -Condition (New-UiaCondition -ControlType 'ListItem') |
+        ForEach-Object { $_.Current.Name })
+}
+
+<#
+.SYNOPSIS
+    Finds the application-owned Fill Empty popup regardless of how JavaFX exposes its top-level peer.
+.OUTPUTS
+    The JavaFX popup window containing the named preset list.
+.NOTES
+    JavaFX exposes Popup content directly below an unnamed top-level Window; the VBox's accessible name is not a Pane.
+#>
+function Wait-FillEmptyFlyout {
+    return Wait-UiaCondition -Description 'Fill Empty Slider Presets popup' -TimeoutSeconds $StepTimeoutSeconds `
+        -Test {
+        foreach ($window in @(Get-UiaProcessWindows -ProcessId $script:app.Id)) {
+            if ($null -ne (Find-UiaElement -Root $window -Condition (
+                    New-UiaCondition -ControlType 'List' -Name 'Fill Empty Slider Presets'))) {
+                return $window
+            }
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    Waits until the named Fill Empty popup leaves the UIA tree.
+#>
+function Wait-FillEmptyFlyoutClosed {
+    Wait-UiaCondition -Description 'Fill Empty popup dismissed' -TimeoutSeconds $StepTimeoutSeconds -Test {
+        $open = @()
+        foreach ($window in @(Get-UiaProcessWindows -ProcessId $script:app.Id)) {
+            if ($null -ne (Find-UiaElement -Root $window -Condition (
+                    New-UiaCondition -ControlType 'List' -Name 'Fill Empty Slider Presets'))) {
+                $open += $window
+            }
+        }
+        if ($open.Count -eq 0) { $true }
+    } | Out-Null
+}
+
+<#
+.SYNOPSIS
+    Waits for the inspector's named portrait status to describe a source or fallback state.
+.PARAMETER Expected
+    Filename or status phrase required in accessible status text or help.
+.OUTPUTS
+    The matching accessible status description.
+#>
+function Wait-PortraitStatusContains {
+    param([Parameter(Mandatory)] [string]$Expected)
+    $status = Find-OuterControl -ControlType 'Text' -Name 'NPC portrait status'
+    return Wait-UiaCondition -Description "NPC portrait status containing '$Expected'" `
+        -TimeoutSeconds $StepTimeoutSeconds -Test {
+        $parts = @($status.Current.HelpText, $status.Current.Name) + @(
+            Find-UiaElements -Root $status -Condition (New-UiaCondition -ControlType 'Text') |
+                ForEach-Object { $_.Current.Name })
+        $description = $parts -join ' '
+        if ($description.Contains($Expected, [StringComparison]::OrdinalIgnoreCase)) { $description }
+    }
+}
+
+<#
+.SYNOPSIS
+    Selects a theme through the current header ComboBox's accessible choice list.
+.PARAMETER Name
+    System, Light, or Dark choice to commit.
+.NOTES
+    A prior keyboard theme check covers key behavior; this keeps later portrait-theme assertions independent of a
+    ComboBox peer retained across Area navigation and selection changes.
+#>
+function Select-CurrentThemeChoice {
+    param([Parameter(Mandatory)] [string]$Name)
+    $choice = Get-FollowingControl -Element (
+        Find-OuterControl -ControlType 'Text' -Name 'Theme:') -ControlType 'ComboBox'
+    Expand-UiaElement -Element $choice
+    $option = Wait-UiaElement -Root ([System.Windows.Automation.AutomationElement]::RootElement) `
+        -Condition (New-UiaCondition -ControlType 'ListItem' -Name $Name -ProcessId $script:app.Id) `
+        -Description "theme choice '$Name'" -TimeoutSeconds $StepTimeoutSeconds
+    Select-UiaElement -Element $option
 }
 
 <#
@@ -742,10 +926,16 @@ try {
             throw "Launcher configuration does not stamp app version $ExpectedAppVersion."
         }
         Copy-Item -LiteralPath $FixtureProject -Destination (Join-Path $workDir $openedProjectName)
+        New-FillEmptyProjectFixture -Source $FixtureProject -Path (Join-Path $workDir $fillEmptyFixtureName)
         Copy-Item -LiteralPath $FixtureRecoveryProject -Destination (Join-Path $workDir $recoveryProjectName)
         Copy-Item -LiteralPath $FixtureMalformedProject -Destination (Join-Path $workDir $malformedProjectName)
         $cancellableProject = Join-Path $workDir $cancellableProjectName
         New-CancellableProjectFixture -Path $cancellableProject
+        $imagesDir = Join-Path $workDir 'images'
+        New-Item -ItemType Directory -Path $imagesDir -Force | Out-Null
+        New-PortraitFixture -Path (Join-Path $imagesDir 'Lydia (HousecarlWhiterun).jpeg') -Color 'Firebrick'
+        New-PortraitFixture -Path (Join-Path $imagesDir 'Lydia.jpg') -Color 'DodgerBlue'
+        New-PortraitFixture -Path (Join-Path $imagesDir 'Portrait Fallback.png') -Color 'ForestGreen'
         $settingsTransaction = Join-Path $workDir '.bs2bg-settings-stage-packaged-recovery'
         New-Item -ItemType Directory -Path $settingsTransaction -Force | Out-Null
         $repositorySettings = (Resolve-Path (Join-Path $PSScriptRoot '..\..\settings.json')).Path
@@ -759,7 +949,7 @@ try {
         $observations['archiveSha256'] = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
         $observations['workingDirectory'] = $workDir
         $observations['cancellableProjectBytes'] = (Get-Item -LiteralPath $cancellableProject).Length
-        "extracted archive, installed four Project fixtures, and staged interrupted Settings recovery in $workDir"
+        "extracted archive, installed five Project fixtures and three portraits, and staged interrupted Settings recovery in $workDir"
     }
 
     Invoke-SmokeStep -Name 'launch-workbench-without-system-java' -Action {
@@ -949,7 +1139,9 @@ try {
         Assert-ControlInsideClient -Element $minimumInspector -Metrics $minimumMetrics
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+        # Ctrl+4 was checked above; use the semantic Output launcher after the minimum-size overlay focus transition.
+        Send-UiaKeysToElement -Element (Get-AreaButton -Name 'Output') -Keys '{ENTER}' `
+            -TimeoutSeconds $StepTimeoutSeconds
         $minimumDrawer = Find-OuterControl -ControlType 'Slider' -Name 'Output drawer height'
         Assert-ControlInsideClient -Element $minimumDrawer -Metrics $minimumMetrics
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
@@ -2115,6 +2307,337 @@ try {
         'keyboard and pointer NPC authoring, identity, validation, relationships, Output, and reopen passed'
     }
 
+    Invoke-SmokeStep -Name 'fill-visible-empty-npc-morph-assignments' -Action {
+        $fixturePath = Join-Path $workDir $fillEmptyFixtureName
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path $fixturePath -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $fillEmptyFixtureName" | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        $filter = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'Filter NPC Morph Assignments:') -ControlType 'Edit'
+        Set-UiaValue -Element $filter -Value 'FillTest.esp'
+        foreach ($identity in @(
+                @('Fill Visible One', 'FillOne'), @('Fill Visible Two', 'FillTwo'),
+                @('Fill Already Assigned', 'AlreadyAssigned'))) {
+            Wait-NpcMorphAssignmentRow -List $npcList -DisplayName $identity[0] -PluginName 'FillTest.esp' `
+                -EditorId $identity[1] -Description "filtered $($identity[0])" | Out-Null
+        }
+        Wait-UiaCondition -Description 'filtered NPC catalog excludes hidden empty assignment' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            # JavaFX may replace a virtualized list peer as filtering settles; locate it afresh for this negative check.
+            $currentList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+            if ($null -eq (Find-NpcMorphAssignmentRow -List $currentList -DisplayName 'Fill Hidden Empty' `
+                    -PluginName 'Hidden.esp' -EditorId 'OutsideFilter')) { $true }
+        } | Out-Null
+        foreach ($identity in @(@('Fill Visible One', 'FillOne'), @('Fill Visible Two', 'FillTwo'))) {
+            $before = @(Get-NpcAssignedPresetNames -List $npcList -DisplayName $identity[0] `
+                -PluginName 'FillTest.esp' -EditorId $identity[1])
+            if ($before.Count -ne 0) { throw "$($identity[0]) was not empty before Fill Empty." }
+        }
+        $alreadyAssigned = @(Get-NpcAssignedPresetNames -List $npcList -DisplayName 'Fill Already Assigned' `
+            -PluginName 'FillTest.esp' -EditorId 'AlreadyAssigned')
+        if ($alreadyAssigned.Count -ne 1 -or $alreadyAssigned[0] -cne 'UUNP Athletic') {
+            throw 'The visible non-empty NPC did not retain its fixture assignment.'
+        }
+
+        $fillLauncher = Find-OuterControl -ControlType 'Button' -Name 'Fill Empty NPC Morph Assignments'
+        Set-UiaValue -Element $filter -Value 'AlreadyAssigned'
+        Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Fill Already Assigned' `
+            -PluginName 'FillTest.esp' -EditorId 'AlreadyAssigned' `
+            -Description 'only assigned NPC in filtered Fill Empty scope' | Out-Null
+        Send-UiaKeysToElement -Element $fillLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $morphsManagement = Find-OuterControl -ControlType 'Pane' -Name 'Morphs management'
+        Wait-UiaCondition -Description 'inline Fill Empty no-scope validation' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            @(Find-UiaElements -Root $morphsManagement -Condition (New-UiaCondition -ControlType 'Text') |
+                    Where-Object { $_.Current.Name.Contains('MORPHS_NO_EMPTY_VISIBLE') -and
+                        $_.Current.Name.Contains('No NPC in the table is empty!') } |
+                    Select-Object -First 1)[0]
+        } | Out-Null
+        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' -Name 'Dismiss Morphs validation')
+        Set-UiaValue -Element $filter -Value 'FillTest.esp'
+        Send-UiaKeysToElement -Element $fillLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $flyout = Wait-FillEmptyFlyout
+        $presetList = Wait-UiaElement -Root $flyout -Condition (
+            New-UiaCondition -ControlType 'List' -Name 'Fill Empty Slider Presets') `
+            -Description 'keyboard-reachable Fill Empty preset choices' -TimeoutSeconds $StepTimeoutSeconds
+        if (-not $presetList.Current.IsKeyboardFocusable) {
+            throw 'Fill Empty preset choices are not keyboard reachable.'
+        }
+        $emptyFill = Wait-UiaElement -Root $flyout -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Fill 2 NPCs from 0 presets') `
+            -Description 'disabled no-choice Fill Empty action' -TimeoutSeconds $StepTimeoutSeconds
+        if ($emptyFill.Current.IsEnabled) { throw 'Fill Empty accepted no chosen Slider Presets.' }
+        $choiceHelp = Wait-UiaCondition -Description 'accessible Fill Empty choice validation' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            @(Find-UiaElements -Root $flyout -Condition (New-UiaCondition -ControlType 'Text') |
+                Where-Object { $_.Current.Name -like '*Select at least one Slider Preset*' } |
+                Select-Object -First 1)[0]
+        }
+        $presetList.SetFocus()
+        Wait-UiaKeyboardFocus -Element $presetList -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FillEmptyFlyoutClosed
+        $fillLauncher = Find-OuterControl -ControlType 'Button' -Name 'Fill Empty NPC Morph Assignments'
+        Wait-UiaKeyboardFocus -Element $fillLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Send-UiaKeysToElement -Element $fillLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $flyout = Wait-FillEmptyFlyout
+        $selectAll = Wait-UiaElement -Root $flyout -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Select All Slider Presets') `
+            -Description 'Fill Empty Select All action' -TimeoutSeconds $StepTimeoutSeconds
+        Invoke-UiaElement -Element $selectAll
+        Wait-UiaElement -Root $flyout -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Fill 2 NPCs from 2 presets') `
+            -Description 'captured eligible Fill Empty choices before cancellation' `
+            -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $cancelFill = Wait-UiaElement -Root $flyout -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Cancel Fill Empty') `
+            -Description 'Fill Empty cancellation' -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeysToElement -Element $cancelFill -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FillEmptyFlyoutClosed
+        $fillLauncher = Find-OuterControl -ControlType 'Button' -Name 'Fill Empty NPC Morph Assignments'
+        Wait-UiaKeyboardFocus -Element $fillLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        foreach ($identity in @(@('Fill Visible One', 'FillOne'), @('Fill Visible Two', 'FillTwo'))) {
+            $afterCancel = @(Get-NpcAssignedPresetNames -List $npcList -DisplayName $identity[0] `
+                -PluginName 'FillTest.esp' -EditorId $identity[1])
+            if ($afterCancel.Count -ne 0) { throw 'Fill Empty cancellation changed the Project.' }
+        }
+
+        Send-UiaKeysToElement -Element $fillLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $flyout = Wait-FillEmptyFlyout
+        $selectAll = Wait-UiaElement -Root $flyout -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Select All Slider Presets') `
+            -Description 'Fill Empty Select All action for commit' -TimeoutSeconds $StepTimeoutSeconds
+        Invoke-UiaElement -Element $selectAll
+        $invert = Wait-UiaElement -Root $flyout -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Invert Slider Preset selection') `
+            -Description 'Fill Empty Invert action' -TimeoutSeconds $StepTimeoutSeconds
+        Invoke-UiaElement -Element $invert
+        Wait-UiaElement -Root $flyout -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Fill 2 NPCs from 0 presets') `
+            -Description 'inverted empty Fill Empty choice set' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Invoke-UiaElement -Element $selectAll
+        $fillTwo = Wait-UiaElement -Root $flyout -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Fill 2 NPCs from 2 presets') `
+            -Description 'two visible empty NPCs and two chosen presets' -TimeoutSeconds $StepTimeoutSeconds
+        if (-not $fillTwo.Current.IsEnabled) { throw 'A valid Fill Empty choice set was disabled.' }
+        Send-UiaKeysToElement -Element $fillTwo -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-FillEmptyFlyoutClosed
+        $fillLauncher = Find-OuterControl -ControlType 'Button' -Name 'Fill Empty NPC Morph Assignments'
+        Wait-UiaKeyboardFocus -Element $fillLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        Wait-UiaElement -Root $activity -Condition (
+            New-UiaCondition -ControlType 'ListItem' `
+                -Name 'Success — Fill Empty NPC Morph Assignments — Completed: Fill Empty NPC Morph Assignments completed.') `
+            -Description 'durable Fill Empty completion feedback' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        $eligible = @('CBBE Curvy', 'UUNP Athletic')
+        $filled = [ordered]@{}
+        foreach ($identity in @(@('Fill Visible One', 'FillOne'), @('Fill Visible Two', 'FillTwo'))) {
+            $assignment = @(Get-NpcAssignedPresetNames -List $npcList -DisplayName $identity[0] `
+                -PluginName 'FillTest.esp' -EditorId $identity[1])
+            if ($assignment.Count -ne 1 -or $eligible -cnotcontains $assignment[0]) {
+                throw "$($identity[0]) was not assigned exactly one eligible chosen Slider Preset."
+            }
+            $filled[$identity[1]] = $assignment[0]
+        }
+        $preservedAssigned = @(Get-NpcAssignedPresetNames -List $npcList -DisplayName 'Fill Already Assigned' `
+            -PluginName 'FillTest.esp' -EditorId 'AlreadyAssigned')
+        $preservedHidden = @(Get-NpcAssignedPresetNames -List $npcList -DisplayName 'Fill Hidden Empty' `
+            -PluginName 'Hidden.esp' -EditorId 'OutsideFilter')
+        if ($preservedAssigned.Count -ne 1 -or $preservedAssigned[0] -cne 'UUNP Athletic' `
+                -or $preservedHidden.Count -ne 0) {
+            throw 'Fill Empty changed an already assigned or filtered-out NPC Morph Assignment.'
+        }
+        $npcList.SetFocus()
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^g' -TimeoutSeconds $StepTimeoutSeconds
+        $outputRegion = Find-OuterControl -ControlType 'Tab' -Name 'Generated Output tabs'
+        $morphsTab = Wait-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') `
+            -Description 'Fill Empty Morphs Output tab' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $morphsTab
+        $generatedMorphs = (Get-SelectedOutputText -Region $outputRegion -TabName 'Morphs' `
+            -Description 'Morphs output after visible Fill Empty').Text
+        foreach ($expectedLine in @("FillTest.esp|A0101=$($filled['FillOne'])",
+                "FillTest.esp|A0102=$($filled['FillTwo'])", 'FillTest.esp|A0103=UUNP Athletic',
+                'Skyrim.esm|A2C94=UUNP Athletic', 'Portrait.esp|A0105=CBBE Curvy')) {
+            if (-not $generatedMorphs.Contains($expectedLine)) {
+                throw "Fill Empty Morphs output omitted '$expectedLine'."
+            }
+        }
+        # Output generation is global even when Fill Empty captures a filtered scope; the hidden NPC stays unassigned.
+        $hiddenLines = @($generatedMorphs -split '\r?\n' | Where-Object { $_.StartsWith('Hidden.esp|A0104=') })
+        if ($hiddenLines.Count -ne 1 -or $hiddenLines[0] -cne 'Hidden.esp|A0104=') {
+            throw 'Morphs output did not preserve the filtered-out NPC as an empty assignment.'
+        }
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+
+        $managedPath = Join-Path $workDir $fillEmptyManagedName
+        Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
+        Complete-FileDialog -Title $saveDialogTitle -Path $managedPath -ConfirmButton 'Save'
+        Wait-MainWindow -Title "$applicationTitle - $fillEmptyManagedName" | Out-Null
+        $saved = Get-Content -LiteralPath $managedPath -Raw | ConvertFrom-Json -AsHashtable
+        $savedOne = @($saved.MorphedNPCs['Fill Visible One'].SliderPresets)
+        $savedTwo = @($saved.MorphedNPCs['Fill Visible Two'].SliderPresets)
+        $savedHidden = @($saved.MorphedNPCs['Fill Hidden Empty'].SliderPresets)
+        if ($savedOne.Count -ne 1 -or $savedOne[0] -cne $filled['FillOne'] `
+                -or $savedTwo.Count -ne 1 -or $savedTwo[0] -cne $filled['FillTwo'] `
+                -or $savedHidden.Count -ne 0) {
+            throw 'Saved Project did not preserve the captured visible Fill Empty set.'
+        }
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path $managedPath -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $fillEmptyManagedName" | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        foreach ($identity in @(@('Fill Visible One', 'FillOne'), @('Fill Visible Two', 'FillTwo'))) {
+            $reopened = @(Get-NpcAssignedPresetNames -List $npcList -DisplayName $identity[0] `
+                -PluginName 'FillTest.esp' -EditorId $identity[1])
+            if ($reopened.Count -ne 1 -or $reopened[0] -cne $filled[$identity[1]]) {
+                throw "Reopened Project changed the Fill Empty choice for $($identity[0])."
+            }
+        }
+        $observations['fillEmpty'] = [ordered]@{
+            capturedVisibleEmpty = @('FillTest.esp/FillOne', 'FillTest.esp/FillTwo')
+            selectedEligibleSliderPresets = $eligible
+            independentlyCapturedChoices = $filled
+            alreadyAssignedPreserved = 'FillTest.esp/AlreadyAssigned'
+            filteredOutEmptyPreserved = 'Hidden.esp/OutsideFilter'
+            keyboardDismissal = $true
+            cancelledWithoutEffects = $true
+            savedAndReopened = $fillEmptyManagedName
+            generatedMorphs = $generatedMorphs
+        }
+        'visible empty set, eligible choices, keyboard dismissal, cancellation, Output, and reopen passed'
+    }
+
+    Invoke-SmokeStep -Name 'inspect-npc-portraits-and-open-accessible-viewer' -Action {
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        $lydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'NPC with editor-ID-specific jpeg portrait'
+        Select-UiaElement -Element $lydia
+        $lydiaPortraitName = 'NPC portrait: Lydia, plugin Skyrim.esm, editor ID HousecarlWhiterun'
+        $lydiaPortrait = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Image' -Name $lydiaPortraitName) `
+            -Description 'identity-stable Lydia portrait' -TimeoutSeconds $StepTimeoutSeconds
+        $jpegStatus = Wait-PortraitStatusContains -Expected 'Lydia (HousecarlWhiterun).jpeg'
+        if (-not $lydiaPortrait.Current.IsEnabled -or $lydiaPortrait.Current.IsOffscreen) {
+            throw 'The selected NPC portrait is not visible and enabled.'
+        }
+        $portraitScreenshot = Join-Path $diagnosticsDir 'workbench-portrait-jpeg-priority.png'
+        Save-Screenshot -Path $portraitScreenshot
+
+        $openViewer = Find-OuterControl -ControlType 'Button' -Name 'Open NPC portrait viewer'
+        if (-not $openViewer.Current.IsKeyboardFocusable -or -not $openViewer.Current.IsEnabled) {
+            throw 'The selected NPC portrait viewer is not keyboard reachable.'
+        }
+        Send-UiaKeysToElement -Element $openViewer -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $viewerTitle = 'NPC Portrait — Lydia'
+        $viewer = Wait-UiaOwnedWindow -ProcessId $script:app.Id -Title $viewerTitle `
+            -TimeoutSeconds $StepTimeoutSeconds
+        $viewerPortrait = Wait-UiaElement -Root $viewer -Condition (
+            New-UiaCondition -ControlType 'Image' -Name $lydiaPortraitName) `
+            -Description 'accessible dedicated Lydia portrait image' -TimeoutSeconds $StepTimeoutSeconds
+        if ($viewerPortrait.Current.IsOffscreen) { throw 'The dedicated portrait viewer did not show its image.' }
+        Wait-UiaElement -Root $viewer -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'NPC portrait dimensions: 320 × 320 pixels') `
+            -Description 'decoded accessible portrait dimensions' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $zoom = Wait-UiaElement -Root $viewer -Condition (
+            New-UiaCondition -ControlType 'Slider' -Name 'NPC portrait zoom') `
+            -Description 'keyboard-reachable portrait zoom' -TimeoutSeconds $StepTimeoutSeconds
+        $zoomBefore = Get-UiaRangeValue -Element $zoom
+        Send-UiaKeysToElement -Element $zoom -Keys '{RIGHT}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'portrait zoom changed by keyboard' -TimeoutSeconds $StepTimeoutSeconds `
+            -Test { if ((Get-UiaRangeValue -Element $zoom) -gt $zoomBefore) { $zoom } } | Out-Null
+        $viewerScreenshot = Join-Path $diagnosticsDir 'workbench-portrait-viewer.png'
+        Save-Screenshot -Path $viewerScreenshot -Window $viewer
+        $closeViewer = Wait-UiaElement -Root $viewer -Condition (
+            New-UiaCondition -ControlType 'Button' -Name 'Close NPC portrait viewer') `
+            -Description 'dedicated portrait viewer Close action' -TimeoutSeconds $StepTimeoutSeconds
+        if (-not $closeViewer.Current.IsKeyboardFocusable) {
+            throw 'The dedicated portrait viewer Close action is not keyboard reachable.'
+        }
+        Send-UiaKeysToElement -Element $closeViewer -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'dedicated portrait viewer closed' -TimeoutSeconds $StepTimeoutSeconds `
+            -Test {
+            if (@(Get-ProcessTopLevelWindows -ProcessId $script:app.Id | Where-Object {
+                    $_.visible -and $_.title -ceq $viewerTitle }).Count -eq 0) { $true }
+        } | Out-Null
+        $openViewer = Find-OuterControl -ControlType 'Button' -Name 'Open NPC portrait viewer'
+        Wait-UiaKeyboardFocus -Element $openViewer -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $fallback = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Portrait Fallback' `
+            -PluginName 'Portrait.esp' -EditorId 'Fallback' -Description 'NPC with name-only png portrait'
+        Select-UiaElement -Element $fallback
+        $fallbackPortraitName = 'NPC portrait: Portrait Fallback, plugin Portrait.esp, editor ID Fallback'
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Image' -Name $fallbackPortraitName) `
+            -Description 'identity-stable name-only fallback portrait' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $pngStatus = Wait-PortraitStatusContains -Expected 'Portrait Fallback.png'
+        $filter = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'Filter NPC Morph Assignments:') -ControlType 'Edit'
+        $filter.SetFocus()
+        Wait-UiaKeyboardFocus -Element $filter -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $noPortrait = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Fill Hidden Empty' `
+            -PluginName 'Hidden.esp' -EditorId 'OutsideFilter' -Description 'unassigned NPC without portrait'
+        Select-UiaElement -Element $noPortrait
+        $noImageStatus = Wait-PortraitStatusContains -Expected 'No portrait'
+        $openViewer = Find-OuterControl -ControlType 'Button' -Name 'Open NPC portrait viewer'
+        if ($openViewer.Current.IsEnabled) { throw 'The missing-portrait viewer action remained enabled.' }
+        foreach ($expected in @('0 assigned Slider Presets',
+                'Not in Morphs output — assign at least one Slider Preset.')) {
+            Wait-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Text' -Name $expected) `
+                -Description "no-preset portrait inspector state '$expected'" `
+                -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        }
+        $unassigned = @(Get-NpcAssignedPresetNames -List $npcList -DisplayName 'Fill Hidden Empty' `
+            -PluginName 'Hidden.esp' -EditorId 'OutsideFilter')
+        if ($unassigned.Count -ne 0) { throw 'No-preset NPC gained an assignment during portrait inspection.' }
+
+        $lydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'Lydia portrait after no-image state'
+        Select-UiaElement -Element $lydia
+        Wait-PortraitStatusContains -Expected 'Lydia (HousecarlWhiterun).jpeg' | Out-Null
+        $narrowMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
+        $lydiaPortrait = Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Image' -Name $lydiaPortraitName) `
+            -Description 'narrow-mode Lydia portrait' -TimeoutSeconds $StepTimeoutSeconds
+        Assert-ControlInsideClient -Element $lydiaPortrait -Metrics $narrowMetrics
+        $narrowOpenViewer = Find-OuterControl -ControlType 'Button' -Name 'Open NPC portrait viewer'
+        Assert-ControlInsideClient -Element $narrowOpenViewer -Metrics $narrowMetrics
+        $narrowScreenshot = Join-Path $diagnosticsDir 'workbench-portrait-narrow.png'
+        Save-Screenshot -Path $narrowScreenshot
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        $inspectorLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open Morphs inspector'
+        Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1300 -LogicalHeight 800 `
+            -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Get-UiaTree -Element $script:mainWindow |
+            Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-workbench-portraits.txt') -Encoding utf8
+        $observations['portraits'] = [ordered]@{
+            editorIdSpecificJpeg = $jpegStatus
+            nameOnlyFallbackPng = $pngStatus
+            noImageStatus = $noImageStatus
+            dedicatedViewerTitle = $viewerTitle
+            viewerKeyboardCloseAndFocusReturn = $true
+            narrowScalePercent = [math]::Round($narrowMetrics.Dpi * 100.0 / 96.0)
+        }
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        'portrait filename priority, selection, viewer accessibility, fallback, no-image state, and narrow mode passed'
+    }
+
     Invoke-SmokeStep -Name 'manage-settings-and-import-bodyslide-through-workbench' -Action {
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^5' -TimeoutSeconds $StepTimeoutSeconds
         Wait-AreaSelected -Name 'Settings' | Out-Null
@@ -2937,8 +3460,8 @@ try {
         # Windows creates transient cover windows while changing accessibility preferences. Keep every system
         # transition after pointer authoring and file workflows; load this verified fixture before toggling anything.
         Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
-        Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $templatesManagedName) -ConfirmButton 'Open'
-        Wait-MainWindow -Title "$applicationTitle - $templatesManagedName" | Out-Null
+        Complete-FileDialog -Title $openDialogTitle -Path (Join-Path $workDir $fillEmptyManagedName) -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $fillEmptyManagedName" | Out-Null
         Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1300 -LogicalHeight 800 `
             -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^1' -TimeoutSeconds $StepTimeoutSeconds
@@ -2969,6 +3492,25 @@ try {
         Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
             -Description 'explicit Dark theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        $lydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'portrait under explicit themes'
+        Select-UiaElement -Element $lydia
+        Wait-PortraitStatusContains -Expected 'Lydia (HousecarlWhiterun).jpeg' | Out-Null
+        $portraitDarkScreenshot = Join-Path $diagnosticsDir 'workbench-portrait-dark.png'
+        Save-Screenshot -Path $portraitDarkScreenshot
+        Select-CurrentThemeChoice -Name 'Light'
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Light theme') `
+            -Description 'portrait under explicit Light theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $portraitLightScreenshot = Join-Path $diagnosticsDir 'workbench-portrait-light.png'
+        Save-Screenshot -Path $portraitLightScreenshot
+        Select-CurrentThemeChoice -Name 'Dark'
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' -Name 'Effective theme: Dark theme') `
+            -Description 'portrait restored to explicit Dark theme' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
         Set-SystemHighContrast -Enabled:$true
         Wait-UiaElement -Root $script:mainWindow -Condition (
@@ -2981,7 +3523,10 @@ try {
         }
 
         $templatesHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-templates-high-contrast.png'
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^1' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Templates' | Out-Null
         Save-Screenshot -Path $templatesHighContrastScreenshot
+        $presetList = Find-OuterControl -ControlType 'List' -Name 'Slider Presets'
         Send-UiaKeysToElement -Element $presetList -Keys 'c' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'Slider' -Name 'Waist Minimum in Slider Preset CBBE Curvy') `
@@ -3002,6 +3547,13 @@ try {
             -Description 'populated Morphs High Contrast state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $morphsHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-morphs-high-contrast.png'
         Save-Screenshot -Path $morphsHighContrastScreenshot
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        $lydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'portrait in High Contrast'
+        Select-UiaElement -Element $lydia
+        Wait-PortraitStatusContains -Expected 'Lydia (HousecarlWhiterun).jpeg' | Out-Null
+        $portraitHighContrastScreenshot = Join-Path $diagnosticsDir 'workbench-portrait-high-contrast.png'
+        Save-Screenshot -Path $portraitHighContrastScreenshot
 
         Set-SystemHighContrast -Enabled:$false
         Wait-UiaElement -Root $script:mainWindow -Condition (
@@ -3023,7 +3575,7 @@ try {
         }
 
         Restore-SystemAccessibilityPreferences -State $accessibilityState
-        Send-UiaKeysToElement -Element $themeChoice -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
+        Select-CurrentThemeChoice -Name 'System'
         $systemTheme = Wait-UiaCondition -Description 'System theme resolved from restored Windows preferences' `
             -TimeoutSeconds $StepTimeoutSeconds -Test {
                 foreach ($name in @('Effective theme: Light theme', 'Effective theme: Dark theme',
@@ -3052,6 +3604,8 @@ try {
             restoredClientAreaAnimation = $accessibilityState.ClientAreaAnimation
             systemEffectiveTheme = $systemTheme.Current.Name
             iconImplementation = 'application-owned-bundled-vectors'
+            portraitScreenshots = @('workbench-portrait-light.png', 'workbench-portrait-dark.png',
+                'workbench-portrait-high-contrast.png')
         }
         'theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed'
     }
@@ -3128,7 +3682,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/17'
+        schema = 'bs2bg.windows-app-image-smoke/18'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion
@@ -3163,6 +3717,7 @@ finally {
             templatesWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-templates.txt'
             morphsWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-morphs.txt'
             npcMorphsWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-npc-morphs.txt'
+            portraitsWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-portraits.txt'
             templatesNarrowScreenshot = 'smoke-diagnostics/workbench-templates-narrow.png'
             npcMorphsNarrowScreenshot = 'smoke-diagnostics/workbench-npc-morphs-narrow.png'
             templatesHighContrastScreenshot = 'smoke-diagnostics/workbench-templates-high-contrast.png'
@@ -3170,6 +3725,12 @@ finally {
             morphsHighContrastScreenshot = 'smoke-diagnostics/workbench-morphs-high-contrast.png'
             highContrastScreenshot = 'smoke-diagnostics/workbench-high-contrast.png'
             reducedMotionScreenshot = 'smoke-diagnostics/workbench-reduced-motion.png'
+            portraitJpegPriorityScreenshot = 'smoke-diagnostics/workbench-portrait-jpeg-priority.png'
+            portraitViewerScreenshot = 'smoke-diagnostics/workbench-portrait-viewer.png'
+            portraitNarrowScreenshot = 'smoke-diagnostics/workbench-portrait-narrow.png'
+            portraitLightScreenshot = 'smoke-diagnostics/workbench-portrait-light.png'
+            portraitDarkScreenshot = 'smoke-diagnostics/workbench-portrait-dark.png'
+            portraitHighContrastScreenshot = 'smoke-diagnostics/workbench-portrait-high-contrast.png'
         }
         workRoot = $WorkRoot
         workRootKept = [bool]$KeepWorkRoot

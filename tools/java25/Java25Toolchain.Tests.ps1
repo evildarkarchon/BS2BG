@@ -288,7 +288,7 @@ Describe 'Assert-CompleteSourceScope' {
     It 'accepts the committed pom and lists every production source' {
         $scope = Assert-CompleteSourceScope -RepoRoot $script:RepoRoot
         $scope.CompleteApplicationGate | Should -BeTrue
-        $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/MainController.java'
+        $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/workbench/WorkbenchController.java'
         $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/project/Project.java'
         $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/fx/FilteredTableAdapter.java'
         $scope.ProductionSources | Should -Not -Contain 'com/asdasfa/jbs2bg/controlsfx/table/TableFilter.java'

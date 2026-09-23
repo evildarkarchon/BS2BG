@@ -3,12 +3,16 @@ package com.asdasfa.jbs2bg.workbench.morphs;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.random.RandomGenerator;
 
@@ -18,17 +22,22 @@ import com.asdasfa.jbs2bg.filtering.FilteredView;
 import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
 import com.asdasfa.jbs2bg.filtering.SortKey;
+import com.asdasfa.jbs2bg.filtering.VisibleScopeCommands;
+import com.asdasfa.jbs2bg.filtering.VisibleSet;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
+import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
+import com.asdasfa.jbs2bg.project.ProjectDiagnosticCodes;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.RejectedOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
+import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.UnchangedOutcome;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
@@ -73,6 +82,8 @@ public final class MorphsFeature {
     private long nextEffectToken = 1;
     private Frame frame;
     private Effect pendingEffect;
+    private FillEmptyOffer pendingFillEmpty;
+    private VisibleSet<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> pendingFillScope;
     private boolean publishing;
 
     /**
@@ -153,7 +164,7 @@ public final class MorphsFeature {
         Objects.requireNonNull(intent, "intent");
         if (publishing)
             throw new IllegalStateException("Morphs intents cannot be dispatched during frame publication");
-        if (pendingEffect != null)
+        if (pendingEffect != null || pendingFillEmpty != null)
             return new Update(false, frame, OutcomeKind.NONE);
         return switch (intent) {
             case Create create -> create(create.name());
@@ -176,6 +187,7 @@ public final class MorphsFeature {
             case RequestRemoveNpc ignored -> requestRemoveNpc();
             case RequestClearVisible ignored -> requestClearVisible();
             case RequestClearVisibleNpcs ignored -> requestClearVisibleNpcs();
+            case RequestFillEmpty ignored -> requestFillEmpty();
             case ClearSelection ignored -> clearSelection();
             case DismissDiagnostics ignored -> dismissDiagnostics();
         };
@@ -239,6 +251,9 @@ public final class MorphsFeature {
             view.clearSelection();
             npcView.clearSelection();
             assignedSelection = Optional.empty();
+            // A new or opened Project invalidates the frozen NPC and Slider Preset offer.
+            pendingFillEmpty = null;
+            pendingFillScope = null;
         }
         reconcile(projectFrame, OutcomeKind.NONE, diagnostics);
         return new Update(true, frame, OutcomeKind.NONE);
@@ -254,6 +269,57 @@ public final class MorphsFeature {
         if (switched || !previous.equals(view.getSelection()))
             assignedSelection = Optional.empty();
         publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
+        return new Update(true, frame, OutcomeKind.NONE);
+    }
+
+    /**
+     * Applies one accepted flyout choice to the frozen visible NPC set. Every empty NPC draws independently from the
+     * chosen eligible Slider Presets; ProjectSession validates and publishes the resulting edit atomically.
+     *
+     * @param token offer token returned by {@link RequestFillEmpty}
+     * @param selectedPresets selected Slider Preset identities from that offer
+     * @return the Project outcome or a local validation response; stale tokens leave state untouched
+     */
+    public Update respondFillEmpty(long token, List<NameIdentity> selectedPresets) {
+        Objects.requireNonNull(selectedPresets, "selectedPresets");
+        if (pendingFillEmpty == null || pendingFillEmpty.token() != token)
+            return new Update(false, frame, OutcomeKind.NONE);
+        FillEmptyOffer offer = pendingFillEmpty;
+        VisibleSet<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> scope = pendingFillScope;
+        pendingFillEmpty = null;
+        pendingFillScope = null;
+        if (selectedPresets.isEmpty())
+            return fillValidation(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                    "Select at least one Slider Preset to fill empty NPC Morph Assignments.");
+        List<String> canonicalNames = new ArrayList<>();
+        Set<NameIdentity> decided = new HashSet<>();
+        for (NameIdentity selected : selectedPresets) {
+            if (!decided.add(Objects.requireNonNull(selected, "selected preset")))
+                return fillValidation(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                        "Select each Slider Preset only once.");
+            SliderPresetSnapshot eligible = offer.eligiblePresets().stream()
+                    .filter(preset -> NameIdentity.of(preset.getName()).equals(selected))
+                    .findFirst().orElse(null);
+            if (eligible == null)
+                return fillValidation(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND,
+                        "The selected Slider Preset is no longer eligible for Fill Empty.");
+            canonicalNames.add(eligible.getName());
+        }
+        return reconcileOutcome(projectFlow.apply(VisibleScopeCommands.fillEmpty(
+                scope, canonicalNames, random::nextInt)));
+    }
+
+    /**
+     * Dismisses a matching Fill Empty offer without publishing a Project edit.
+     *
+     * @param token offer token returned by {@link RequestFillEmpty}
+     * @return accepted unchanged response, or a rejected stale-token response
+     */
+    public Update cancelFillEmpty(long token) {
+        if (pendingFillEmpty == null || pendingFillEmpty.token() != token)
+            return new Update(false, frame, OutcomeKind.NONE);
+        pendingFillEmpty = null;
+        pendingFillScope = null;
         return new Update(true, frame, OutcomeKind.NONE);
     }
 
@@ -418,6 +484,35 @@ public final class MorphsFeature {
                 "Clear NPC Morph Assignments", "Remove the visible NPC Morph Assignments from the Project?");
         publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
         return new Update(true, frame, Optional.of(pendingEffect), OutcomeKind.NONE);
+    }
+
+    /** Captures the visible empty NPC identities and eligible Project presets before the flyout opens. */
+    private Update requestFillEmpty() {
+        VisibleSet<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> scope = npcView.visibleSet();
+        List<NpcMorphAssignmentIdentity> emptyIdentities = new ArrayList<>();
+        for (int index = 0; index < scope.size(); index++) {
+            if (scope.getRows().get(index).getSliderPresetNames().isEmpty())
+                emptyIdentities.add(scope.getIdentities().get(index));
+        }
+        if (emptyIdentities.isEmpty())
+            return fillValidation("MORPHS_NO_EMPTY_VISIBLE", "No NPC in the table is empty!");
+        List<SliderPresetSnapshot> eligible = projectFlow.frame().snapshot().getSliderPresets();
+        if (eligible.isEmpty())
+            return fillValidation(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                    "Create a Slider Preset before filling empty NPC Morph Assignments.");
+        pendingFillScope = scope;
+        pendingFillEmpty = new FillEmptyOffer(nextEffectToken++, emptyIdentities, eligible);
+        publish(frame.projectSequence(), OutcomeKind.NONE, List.of());
+        return new Update(true, frame, Optional.empty(), Optional.of(pendingFillEmpty), OutcomeKind.NONE);
+    }
+
+    /** Reports a flyout precondition beside the Morphs controls without issuing a Project edit. */
+    private Update fillValidation(String code, String message) {
+        ProjectDiagnostic diagnostic = new ProjectDiagnostic(code, DiagnosticSeverity.ERROR,
+                new SourceLocation(Optional.empty(), Optional.of("npc-morph-assignment.fill-empty"),
+                        OptionalInt.empty(), OptionalInt.empty()), message);
+        publish(frame.projectSequence(), OutcomeKind.REJECTED, List.of(diagnostic));
+        return new Update(false, frame, OutcomeKind.REJECTED);
     }
 
     /** Freezes the selected NPC's complete identity before removal confirmation. */
@@ -838,7 +933,7 @@ public final class MorphsFeature {
             SelectAssignedSliderPreset, ClearAssignedSliderPresetSelection, RemoveAssignedSliderPreset,
             RequestClearAssignments, ChangeFilter, ChangeNpcFilter,
             ChangeSort, ChangeNpcSort, TypeAhead, NpcTypeAhead, RequestRemove, RequestRemoveNpc,
-            RequestClearVisible, RequestClearVisibleNpcs, ClearSelection, DismissDiagnostics {
+            RequestClearVisible, RequestClearVisibleNpcs, RequestFillEmpty, ClearSelection, DismissDiagnostics {
     }
 
     /** Requests one validated Custom Morph Target creation. */
@@ -949,6 +1044,10 @@ public final class MorphsFeature {
     public record RequestClearVisibleNpcs() implements Intent {
     }
 
+    /** Captures the visible empty NPC set and eligible presets for one light-dismiss flyout. */
+    public record RequestFillEmpty() implements Intent {
+    }
+
     /** Requests confirmation before deleting the selected Custom Morph Target. */
     public record RequestRemove() implements Intent {
     }
@@ -1052,6 +1151,18 @@ public final class MorphsFeature {
         }
     }
 
+    /** Immutable fill offer that binds the flyout to a visible NPC set and eligible Project presets. */
+    public record FillEmptyOffer(long token, List<NpcMorphAssignmentIdentity> emptyIdentities,
+                                 List<SliderPresetSnapshot> eligiblePresets) {
+        /** Owns the offered identity and preset lists independently of later Project publications. */
+        public FillEmptyOffer {
+            if (token <= 0)
+                throw new IllegalArgumentException("token must be positive");
+            emptyIdentities = List.copyOf(emptyIdentities);
+            eligiblePresets = List.copyOf(eligiblePresets);
+        }
+    }
+
     /** Immutable NPC metadata and Slider Preset relationship render input. */
     public record NpcEditorFrame(NpcMorphAssignmentSnapshot npc, List<SliderPresetSnapshot> assignedPresets,
                                  List<SliderPresetSnapshot> availablePresets,
@@ -1093,16 +1204,23 @@ public final class MorphsFeature {
     }
 
     /** Result of one serialized feature intent. */
-    public record Update(boolean accepted, Frame frame, Optional<Effect> effect, OutcomeKind outcomeKind) {
+    public record Update(boolean accepted, Frame frame, Optional<Effect> effect,
+                         Optional<FillEmptyOffer> fillEmptyOffer, OutcomeKind outcomeKind) {
         /** Creates an update without a platform effect. */
         public Update(boolean accepted, Frame frame, OutcomeKind outcomeKind) {
-            this(accepted, frame, Optional.empty(), outcomeKind);
+            this(accepted, frame, Optional.empty(), Optional.empty(), outcomeKind);
+        }
+
+        /** Creates an update with a destructive confirmation and no fill offer. */
+        public Update(boolean accepted, Frame frame, Optional<Effect> effect, OutcomeKind outcomeKind) {
+            this(accepted, frame, effect, Optional.empty(), outcomeKind);
         }
 
         /** Validates the immutable result payload. */
         public Update {
             Objects.requireNonNull(frame, "frame");
             effect = Objects.requireNonNull(effect, "effect");
+            fillEmptyOffer = Objects.requireNonNull(fillEmptyOffer, "fillEmptyOffer");
             Objects.requireNonNull(outcomeKind, "outcomeKind");
         }
     }

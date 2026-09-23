@@ -21,6 +21,7 @@ import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature;
+import com.asdasfa.jbs2bg.workbench.morphs.NpcPortraitFiles;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
@@ -30,8 +31,12 @@ import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.DoubleBinding;
 import javafx.fxml.FXML;
+import javafx.geometry.Bounds;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -40,6 +45,7 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
@@ -52,6 +58,8 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
@@ -59,6 +67,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
+import javafx.stage.Popup;
 import javafx.stage.WindowEvent;
 
 /**
@@ -283,6 +292,8 @@ public final class WorkbenchController {
     @FXML
     private Button clearNpcMorphAssignmentsButton;
     @FXML
+    private Button fillEmptyNpcMorphAssignmentsButton;
+    @FXML
     private VBox morphsEditorContent;
     @FXML
     private Label morphTargetEditorFocusTarget;
@@ -304,6 +315,14 @@ public final class WorkbenchController {
     private VBox morphsInspectorContent;
     @FXML
     private Label morphTargetSelectionText;
+    @FXML
+    private VBox npcPortraitSection;
+    @FXML
+    private ImageView npcPortraitImage;
+    @FXML
+    private Label npcPortraitStatus;
+    @FXML
+    private Button openNpcPortraitViewerButton;
     @FXML
     private Label assignedMorphSliderPresetLabel;
     @FXML
@@ -432,6 +451,14 @@ public final class WorkbenchController {
     private boolean assignedMorphSliderPresetListInitialized;
     private Optional<NameIdentity> renderedMorphTargetSelection = Optional.empty();
     private Optional<NpcMorphAssignmentIdentity> renderedNpcSelection = Optional.empty();
+    private NpcMorphAssignmentIdentity renderedPortraitIdentity;
+    private String renderedPortraitDisplayName;
+    private Path renderedPortraitPath;
+    private Image renderedPortraitImage;
+    private Popup fillEmptyPopup;
+    private Parent fillEmptyPopupRoot;
+    private Stage npcPortraitViewer;
+    private Parent npcPortraitViewerRoot;
     private final Map<String, SliderChoiceRow> sliderChoiceRowsByName = new LinkedHashMap<>();
 
     /**
@@ -653,6 +680,10 @@ public final class WorkbenchController {
         outputSubscription = outputFeature.observe(this::renderOutputUpdate);
         publishInitialSettingsEvidence();
         stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> {
+            if (fillEmptyPopup != null)
+                fillEmptyPopup.hide();
+            if (npcPortraitViewer != null)
+                npcPortraitViewer.close();
             appearanceAdapter.close();
             jobSubscription.close();
             outputSubscription.close();
@@ -761,7 +792,10 @@ public final class WorkbenchController {
         removeNpcMorphAssignmentButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.RequestRemoveNpc()));
         clearNpcMorphAssignmentsButton.setOnAction(event ->
                 dispatchMorphs(new MorphsFeature.RequestClearVisibleNpcs()));
+        fillEmptyNpcMorphAssignmentsButton.setOnAction(event ->
+                dispatchMorphs(new MorphsFeature.RequestFillEmpty()));
         dismissMorphsInfoBarButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.DismissDiagnostics()));
+        openNpcPortraitViewerButton.setOnAction(event -> showNpcPortraitViewer());
 
         configureAssignedMorphSliderPresetList();
         availableMorphSliderPreset.setCellFactory(list -> new SliderPresetDisplayCell());
@@ -779,6 +813,304 @@ public final class WorkbenchController {
                 dispatchMorphs(new MorphsFeature.RemoveAssignedSliderPreset()));
         clearMorphSliderPresetsButton.setOnAction(event ->
                 dispatchMorphs(new MorphsFeature.RequestClearAssignments()));
+    }
+
+    /**
+     * Opens a light-dismiss flyout for one frozen visible-empty NPC scope. Every dismissal path releases the token
+     * and restores the launcher or the area's first editable control before another Morphs command can start.
+     *
+     * @param offer immutable NPC identities and eligible Project Slider Presets captured by MorphsFeature
+     */
+    private void showFillEmptyFlyout(MorphsFeature.FillEmptyOffer offer) {
+        Popup popup = new Popup();
+        popup.setAutoHide(true);
+        popup.setHideOnEscape(true);
+        popup.setAutoFix(true);
+        // Popup's hideOnEscape does not intercept Escape from a focused ListView on the packaged JavaFX window.
+        popup.getScene().addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.ESCAPE) {
+                popup.hide();
+                event.consume();
+            }
+        });
+        VBox content = new VBox(8.0);
+        content.setId("workbenchRoot");
+        content.getStyleClass().add("fill-empty-flyout");
+        content.setAccessibleText("Fill Empty Slider Presets");
+        Label title = new Label("Fill Empty NPC Morph Assignments");
+        title.getStyleClass().add("title");
+        Label scope = new Label(offer.emptyIdentities().size() + " visible empty NPC Morph Assignments");
+        scope.setWrapText(true);
+        Label instruction = new Label("Select at least one Slider Preset. Each empty NPC gets an independent choice.");
+        instruction.setWrapText(true);
+        instruction.setAccessibleText("Select at least one Slider Preset");
+        ListView<SliderPresetSnapshot> choices = new ListView<>();
+        choices.setId("fillEmptySliderPresetList");
+        choices.setAccessibleText("Fill Empty Slider Presets");
+        choices.setAccessibleHelp("Use arrows to focus a preset and Space to toggle it.");
+        choices.setFocusTraversable(true);
+        choices.setPrefHeight(Math.min(offer.eligiblePresets().size(), 8) * SLIDER_PRESET_CELL_HEIGHT + 8.0);
+        choices.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        choices.getItems().setAll(offer.eligiblePresets());
+        choices.setCellFactory(list -> new SliderPresetDisplayCell());
+        choices.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() != KeyCode.SPACE)
+                return;
+            int index = choices.getFocusModel().getFocusedIndex();
+            if (index >= 0 && index < choices.getItems().size()) {
+                if (choices.getSelectionModel().isSelected(index))
+                    choices.getSelectionModel().clearSelection(index);
+                else
+                    choices.getSelectionModel().select(index);
+                choices.getFocusModel().focus(index);
+            }
+            event.consume();
+        });
+        Button selectAll = new Button("Select All");
+        selectAll.setAccessibleText("Select All Slider Presets");
+        selectAll.setOnAction(event -> choices.getSelectionModel().selectAll());
+        Button invert = new Button("Invert");
+        invert.setAccessibleText("Invert Slider Preset selection");
+        invert.setOnAction(event -> {
+            for (int index = 0; index < choices.getItems().size(); index++) {
+                if (choices.getSelectionModel().isSelected(index))
+                    choices.getSelectionModel().clearSelection(index);
+                else
+                    choices.getSelectionModel().select(index);
+            }
+        });
+        HBox selectionActions = new HBox(8.0, selectAll, invert);
+        Button apply = new Button();
+        apply.setId("fillEmptyApplyButton");
+        Button cancel = new Button("Cancel");
+        cancel.setId("fillEmptyCancelButton");
+        cancel.setAccessibleText("Cancel Fill Empty");
+        cancel.setOnAction(event -> popup.hide());
+        Runnable refreshPrimary = () -> {
+            int count = choices.getSelectionModel().getSelectedItems().size();
+            String label = "Fill " + offer.emptyIdentities().size()
+                    + (offer.emptyIdentities().size() == 1 ? " NPC" : " NPCs")
+                    + " from " + count + (count == 1 ? " preset" : " presets");
+            apply.setText(label);
+            apply.setAccessibleText(label);
+            apply.setDisable(count == 0);
+            apply.setAccessibleHelp(count == 0 ? "Select at least one Slider Preset." :
+                    "Fill only the captured visible empty NPC Morph Assignments without another confirmation.");
+        };
+        choices.getSelectionModel().getSelectedItems().addListener(
+                (javafx.collections.ListChangeListener<SliderPresetSnapshot>) change -> refreshPrimary.run());
+        refreshPrimary.run();
+        apply.setOnAction(event -> {
+            List<NameIdentity> selected = choices.getSelectionModel().getSelectedItems().stream()
+                    .map(preset -> NameIdentity.of(preset.getName())).toList();
+            MorphsFeature.Update response = morphsFeature.respondFillEmpty(offer.token(), selected);
+            renderMorphsUpdate(response);
+            publishMorphsOutcome(new MorphsFeature.RequestFillEmpty(), response);
+            popup.hide();
+        });
+        HBox commitActions = new HBox(8.0, apply, cancel);
+        content.getChildren().setAll(title, scope, instruction, choices, selectionActions, commitActions);
+        popup.getContent().setAll(content);
+        popup.getScene().getStylesheets().add(WorkbenchController.class
+                .getResource("/com/asdasfa/jbs2bg/workbench.css").toExternalForm());
+        fillEmptyPopup = popup;
+        fillEmptyPopupRoot = content;
+        applySatelliteAppearance(content);
+        popup.setOnHidden(event -> {
+            morphsFeature.cancelFillEmpty(offer.token());
+            fillEmptyPopup = null;
+            fillEmptyPopupRoot = null;
+            if (stage.isShowing())
+                Platform.runLater(this::restoreFillEmptyLauncherFocus);
+        });
+        Bounds anchor = fillEmptyNpcMorphAssignmentsButton.localToScreen(
+                fillEmptyNpcMorphAssignmentsButton.getBoundsInLocal());
+        popup.show(stage, anchor.getMinX(), anchor.getMaxY());
+        Platform.runLater(choices::requestFocus);
+    }
+
+    /** Restores focus by semantic role when a responsive transition has hidden the former flyout launcher. */
+    private void restoreFillEmptyLauncherFocus() {
+        if (canRestoreFocus(fillEmptyNpcMorphAssignmentsButton))
+            fillEmptyNpcMorphAssignmentsButton.requestFocus();
+        else
+            requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
+                    WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+    }
+
+    /** An overlay or Area change can hide an ancestor while leaving the launcher's own visible bit unchanged. */
+    private static boolean canRestoreFocus(Node node) {
+        if (node.getScene() == null || node.isDisabled())
+            return false;
+        for (Node current = node; current != null; current = current.getParent()) {
+            if (!current.isVisible())
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * Resolves the portrait for the stable selected NPC and starts decoding away from the JavaFX lane. Old load
+     * callbacks compare image identity before touching the inspector so rapid selection cannot show a stale portrait.
+     *
+     * @param npc selected immutable NPC Morph Assignment, or null when no NPC is selected
+     */
+    private void renderNpcPortrait(NpcMorphAssignmentSnapshot npc) {
+        NpcMorphAssignmentIdentity identity = npc == null ? null
+                : new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId());
+        String displayName = npc == null ? null : npc.getDisplayName();
+        if (Objects.equals(identity, renderedPortraitIdentity)
+                && Objects.equals(displayName, renderedPortraitDisplayName))
+            return;
+        renderedPortraitIdentity = identity;
+        renderedPortraitDisplayName = displayName;
+        renderedPortraitPath = null;
+        renderedPortraitImage = null;
+        npcPortraitImage.setImage(null);
+        openNpcPortraitViewerButton.setDisable(true);
+        if (npc == null) {
+            npcPortraitImage.setAccessibleText("No NPC portrait selected");
+            npcPortraitStatus.setText("No NPC portrait selected");
+            npcPortraitStatus.setAccessibleHelp("Select an NPC Morph Assignment to inspect its portrait.");
+            return;
+        }
+        String portraitName = "NPC portrait: " + npc.getDisplayName() + ", plugin " + npc.getPluginName()
+                + ", editor ID " + npc.getEditorId();
+        npcPortraitImage.setAccessibleText(portraitName);
+        Optional<Path> file = NpcPortraitFiles.find(Path.of("images"), npc);
+        if (file.isEmpty()) {
+            String expected = "images/" + npc.getDisplayName() + " (" + npc.getEditorId() + ").jpg";
+            String status = "No portrait found. Expected " + expected
+                    + " (or .jpeg, .png, .bmp), then a display-name-only image.";
+            npcPortraitStatus.setText(status);
+            npcPortraitStatus.setAccessibleHelp(status);
+            return;
+        }
+        renderedPortraitPath = file.orElseThrow();
+        String filename = renderedPortraitPath.getFileName().toString();
+        Image image = new Image(renderedPortraitPath.toUri().toString(), 200.0, 180.0,
+                true, true, true);
+        renderedPortraitImage = image;
+        npcPortraitImage.setImage(image);
+        String loading = "Loading portrait: " + filename;
+        npcPortraitStatus.setText(loading);
+        npcPortraitStatus.setAccessibleHelp(loading);
+        image.progressProperty().addListener((observable, previous, current) ->
+                finishNpcPortraitLoad(image, filename));
+        image.errorProperty().addListener((observable, previous, current) ->
+                finishNpcPortraitLoad(image, filename));
+        finishNpcPortraitLoad(image, filename);
+    }
+
+    /** Enables the viewer only after the current asynchronous thumbnail decoded successfully. */
+    private void finishNpcPortraitLoad(Image image, String filename) {
+        if (renderedPortraitImage != image)
+            return;
+        if (image.isError()) {
+            npcPortraitImage.setImage(null);
+            String status = "Could not load portrait: " + filename;
+            npcPortraitStatus.setText(status);
+            npcPortraitStatus.setAccessibleHelp(status);
+        } else if (image.getProgress() >= 1.0 && image.getWidth() > 0.0) {
+            String status = "Portrait file: " + filename;
+            npcPortraitStatus.setText(status);
+            npcPortraitStatus.setAccessibleHelp(status);
+            openNpcPortraitViewerButton.setDisable(false);
+        }
+    }
+
+    /**
+     * Opens the selected portrait in a keyboard-closeable, zoomable owned viewer while a full-resolution image loads
+     * in the background. The filename and dimensions remain available as text for assistive technology.
+     */
+    private void showNpcPortraitViewer() {
+        if (renderedPortraitPath == null || renderedPortraitIdentity == null || renderedPortraitImage == null
+                || renderedPortraitImage.isError() || renderedPortraitImage.getProgress() < 1.0)
+            return;
+        if (npcPortraitViewer != null && npcPortraitViewer.isShowing()) {
+            npcPortraitViewer.toFront();
+            npcPortraitViewer.requestFocus();
+            return;
+        }
+        Path file = renderedPortraitPath;
+        String displayName = renderedPortraitDisplayName;
+        VBox content = new VBox(10.0);
+        content.setId("workbenchRoot");
+        content.getStyleClass().add("npc-portrait-viewer");
+        content.setAccessibleText("NPC portrait viewer");
+        Label title = new Label("NPC portrait: " + displayName);
+        title.getStyleClass().add("title");
+        Label filename = new Label("File: " + file.getFileName());
+        filename.setWrapText(true);
+        Label dimensions = new Label("Loading image dimensions…");
+        dimensions.setAccessibleText("NPC portrait dimensions: loading");
+        ImageView fullView = new ImageView();
+        fullView.setAccessibleText(npcPortraitImage.getAccessibleText());
+        fullView.setPreserveRatio(true);
+        fullView.setSmooth(true);
+        Image fullImage = new Image(file.toUri().toString(), true);
+        fullView.setImage(fullImage);
+        Runnable updateDimensions = () -> {
+            if (fullImage.isError()) {
+                dimensions.setText("Could not load portrait dimensions.");
+                dimensions.setAccessibleText("NPC portrait dimensions unavailable");
+            } else if (fullImage.getProgress() >= 1.0) {
+                String size = (int) fullImage.getWidth() + " × " + (int) fullImage.getHeight() + " pixels";
+                dimensions.setText(size);
+                dimensions.setAccessibleText("NPC portrait dimensions: " + size);
+            }
+        };
+        fullImage.progressProperty().addListener((observable, previous, current) -> updateDimensions.run());
+        fullImage.errorProperty().addListener((observable, previous, current) -> updateDimensions.run());
+        updateDimensions.run();
+        ScrollPane imageScroll = new ScrollPane(fullView);
+        imageScroll.setAccessibleText("NPC portrait image scroll area");
+        imageScroll.setPannable(true);
+        VBox.setVgrow(imageScroll, javafx.scene.layout.Priority.ALWAYS);
+        Label zoomLabel = new Label("Zoom: 100%");
+        Slider zoom = new Slider(0.25, 4.0, 1.0);
+        zoom.setAccessibleText("NPC portrait zoom");
+        zoom.setBlockIncrement(0.25);
+        fullView.fitWidthProperty().bind(zoom.valueProperty().multiply(500.0));
+        zoom.valueProperty().addListener((observable, previous, current) ->
+                zoomLabel.setText("Zoom: " + Math.round(current.doubleValue() * 100.0) + "%"));
+        Button close = new Button("Close");
+        close.setAccessibleText("Close NPC portrait viewer");
+        content.getChildren().setAll(title, filename, dimensions, imageScroll, zoomLabel, zoom, close);
+        Stage viewer = new Stage();
+        viewer.initOwner(stage);
+        viewer.getIcons().setAll(stage.getIcons());
+        viewer.setTitle("NPC Portrait — " + displayName);
+        Scene scene = new Scene(content, 640.0, 560.0);
+        scene.getStylesheets().add(WorkbenchController.class
+                .getResource("/com/asdasfa/jbs2bg/workbench.css").toExternalForm());
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.ESCAPE) {
+                viewer.close();
+                event.consume();
+            }
+        });
+        viewer.setScene(scene);
+        viewer.setMinWidth(360.0);
+        viewer.setMinHeight(300.0);
+        close.setOnAction(event -> viewer.close());
+        npcPortraitViewer = viewer;
+        npcPortraitViewerRoot = content;
+        applySatelliteAppearance(content);
+        viewer.setOnHidden(event -> {
+            npcPortraitViewer = null;
+            npcPortraitViewerRoot = null;
+            if (stage.isShowing())
+                Platform.runLater(() -> {
+                    if (canRestoreFocus(openNpcPortraitViewerButton))
+                        openNpcPortraitViewerButton.requestFocus();
+                    else
+                        requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
+                                WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+                });
+        });
+        viewer.show();
+        Platform.runLater(close::requestFocus);
     }
 
     /** Configures the current assigned-relationship ListView, including identity selection dispatch. */
@@ -1019,6 +1351,8 @@ public final class WorkbenchController {
             // The confirmed edit owns diagnostics; reporting the request would hide a rejected or failed response.
             if (update.effect().isPresent())
                 update = completeMorphsEffect(update.effect().orElseThrow());
+            if (update.fillEmptyOffer().isPresent())
+                showFillEmptyFlyout(update.fillEmptyOffer().orElseThrow());
             publishMorphsOutcome(intent, update);
             if (intent instanceof MorphsFeature.Create && update.accepted()
                     && update.outcomeKind() == MorphsFeature.OutcomeKind.CHANGED)
@@ -1047,7 +1381,8 @@ public final class WorkbenchController {
                 || intent instanceof MorphsFeature.RequestRemove
                 || intent instanceof MorphsFeature.RequestClearVisible
                 || intent instanceof MorphsFeature.RequestRemoveNpc
-                || intent instanceof MorphsFeature.RequestClearVisibleNpcs;
+                || intent instanceof MorphsFeature.RequestClearVisibleNpcs
+                || intent instanceof MorphsFeature.RequestFillEmpty;
     }
 
     /** Renders one Morphs update and refreshes Project chrome without replaying lifecycle-only feedback. */
@@ -1122,10 +1457,13 @@ public final class WorkbenchController {
             case MorphsFeature.CreateNpc ignored -> "Create NPC Morph Assignment";
             case MorphsFeature.AssignSliderPreset ignored -> "Assign Slider Preset";
             case MorphsFeature.AssignAllSliderPresets ignored -> "Assign all Slider Presets";
+            case MorphsFeature.RequestFillEmpty ignored -> "Fill Empty NPC Morph Assignments";
             default -> null;
         };
-        if (operation != null)
-            publishMorphsMutation(operation, update, intent instanceof MorphsFeature.AssignAllSliderPresets);
+        if (operation != null && (update.outcomeKind() == MorphsFeature.OutcomeKind.CHANGED
+                || update.outcomeKind() == MorphsFeature.OutcomeKind.UNCHANGED))
+            publishMorphsMutation(operation, update, intent instanceof MorphsFeature.AssignAllSliderPresets
+                    || intent instanceof MorphsFeature.RequestFillEmpty);
     }
 
     /**
@@ -1980,6 +2318,11 @@ public final class WorkbenchController {
             createNpcMorphAssignmentButton.setDisable(morphsMutationsBlocked);
             removeNpcMorphAssignmentButton.setDisable(morphsMutationsBlocked || !npcSelected);
             clearNpcMorphAssignmentsButton.setDisable(morphsMutationsBlocked || frame.visibleNpcs().isEmpty());
+            fillEmptyNpcMorphAssignmentsButton.setDisable(morphsMutationsBlocked);
+            long visibleEmptyCount = frame.visibleNpcs().stream()
+                    .filter(npc -> npc.getSliderPresetNames().isEmpty()).count();
+            fillEmptyNpcMorphAssignmentsButton.setAccessibleHelp(visibleEmptyCount +
+                    " visible empty NPC Morph Assignments. Opens Slider Preset selection.");
             morphTargetConditionText.setManaged(!npcSelected);
             morphTargetConditionText.setVisible(!npcSelected);
             npcIdentityText.setManaged(npcSelected);
@@ -1991,6 +2334,7 @@ public final class WorkbenchController {
             List<SliderPresetSnapshot> assignedPresets = List.of();
             List<SliderPresetSnapshot> availablePresets = List.of();
             Optional<NameIdentity> assignedPresetSelection = Optional.empty();
+            NpcMorphAssignmentSnapshot portraitNpc = null;
             if (!selected && !npcSelected) {
                 morphTargetEditorFocusTarget.setText("No Morphs selection");
                 morphTargetEditorFocusTarget.setAccessibleText("Morphs editor: no selection");
@@ -2024,6 +2368,7 @@ public final class WorkbenchController {
             } else {
                 MorphsFeature.NpcEditorFrame editor = frame.npcEditor().orElseThrow();
                 NpcMorphAssignmentSnapshot npc = editor.npc();
+                portraitNpc = npc;
                 morphTargetEditorFocusTarget.setText(npc.getDisplayName());
                 morphTargetEditorFocusTarget.setAccessibleText(
                         "NPC Morph Assignment editor: " + npc.getDisplayName());
@@ -2037,6 +2382,7 @@ public final class WorkbenchController {
                 availablePresets = editor.availablePresets();
                 assignedPresetSelection = editor.assignedSelection();
             }
+            renderNpcPortrait(portraitNpc);
             if (selected || npcSelected) {
                 int count = assignedPresets.size();
                 String assignmentCount = count + (count == 1
@@ -2583,6 +2929,10 @@ public final class WorkbenchController {
      * Renders effective theme and reduced-motion state as explicit non-color text.
      */
     private void renderAppearance(WorkbenchAppearance.Frame frame) {
+        if (fillEmptyPopupRoot != null)
+            JavaFxWorkbenchAppearance.applyTo(fillEmptyPopupRoot, frame);
+        if (npcPortraitViewerRoot != null)
+            JavaFxWorkbenchAppearance.applyTo(npcPortraitViewerRoot, frame);
         String theme = switch (frame.effectiveTheme()) {
             case LIGHT -> "Light theme";
             case DARK -> "Dark theme";
@@ -2596,6 +2946,11 @@ public final class WorkbenchController {
         workbenchRoot.setAccessibleHelp("Ctrl+1 through Ctrl+5 navigate; Ctrl+4 or Ctrl+Backtick toggles Output; "
                 + "F6 cycles landmarks; F7 opens the inspector; Escape dismisses the innermost surface. "
                 + theme + "; " + motion + ".");
+    }
+
+    /** Applies the current theme to a separate scene opened after the last appearance publication. */
+    private void applySatelliteAppearance(Parent root) {
+        JavaFxWorkbenchAppearance.applyTo(root, appearanceAdapter.frame());
     }
 
     /**
@@ -2720,6 +3075,14 @@ public final class WorkbenchController {
     private void applyNavigation(WorkbenchNavigation.Transition transition) {
         navigationFrame = transition.frame();
         renderNavigation(navigationFrame);
+        if (navigationFrame.activeArea() == WorkbenchNavigation.Area.MORPHS
+                && navigationFrame.overlay() == WorkbenchNavigation.Overlay.INSPECTOR
+                && morphsFeature.frame().npcSelection().isPresent()) {
+            // A previous relationship edit may leave the ScrollPane at the bottom; opening the narrow inspector
+            // must reveal the selected NPC portrait and its viewer action before the relationships below it.
+            morphsInspectorScroll.setVvalue(0.0);
+            Platform.runLater(() -> morphsInspectorScroll.setVvalue(0.0));
+        }
         transition.focusTarget().ifPresent(this::requestFocus);
     }
 
@@ -2926,7 +3289,8 @@ public final class WorkbenchController {
             case INSPECTOR -> switch (target.area()) {
                 case TEMPLATES -> renameSliderPresetButton.isDisabled()
                         ? templateSelectionText : renameSliderPresetButton;
-                case MORPHS -> availableMorphSliderPreset.isDisabled()
+                case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
+                        ? morphTargetSelectionText : availableMorphSliderPreset.isDisabled()
                         ? morphTargetSelectionText : availableMorphSliderPreset;
                 case SETTINGS -> saveSettingsButton.isDisabled() ? settingsNoticeText : saveSettingsButton;
                 case NPC_DATABASE -> inspectorButton;

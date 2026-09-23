@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +26,97 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MorphsFeatureTest {
+
+    /** Fill Empty freezes visible empty identities and draws once per eligible NPC from only the chosen presets. */
+    @Test
+    void fillEmptyUsesCapturedVisibleEmptyNpcsAndIndependentChosenPresetDraws() {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        for (String name : List.of("Alpha", "Beta", "Gamma"))
+            flow.apply(SliderPresetEdits.create(name));
+        NpcMorphAssignmentIdentity first = new NpcMorphAssignmentIdentity("Visible.esp", "First");
+        NpcMorphAssignmentIdentity second = new NpcMorphAssignmentIdentity("Visible.esp", "Second");
+        NpcMorphAssignmentIdentity occupied = new NpcMorphAssignmentIdentity("Visible.esp", "Occupied");
+        NpcMorphAssignmentIdentity hidden = new NpcMorphAssignmentIdentity("Hidden.esp", "Hidden");
+        for (NpcMorphAssignmentIdentity identity : List.of(first, second, occupied, hidden))
+            flow.apply(NpcMorphAssignmentEdits.create(identity.getEditorId(), identity.getPluginName(),
+                    identity.getEditorId(), "NordRace", "000001"));
+        flow.apply(NpcMorphAssignmentEdits.addSliderPreset(occupied, "Gamma"));
+        AtomicInteger draws = new AtomicInteger();
+        Random alternating = new Random() {
+            @Override
+            public int nextInt(int bound) {
+                return draws.getAndIncrement() % bound;
+            }
+        };
+        MorphsFeature feature = new MorphsFeature(flow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC), alternating);
+        feature.dispatch(new MorphsFeature.ChangeNpcFilter("Visible.esp"));
+
+        MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RequestFillEmpty());
+        MorphsFeature.FillEmptyOffer offer = requested.fillEmptyOffer().orElseThrow();
+        MorphsFeature.Update filled = feature.respondFillEmpty(offer.token(),
+                List.of(NameIdentity.of("Alpha"), NameIdentity.of("Beta")));
+
+        assertEquals(List.of(first, second), offer.emptyIdentities());
+        assertEquals(3, offer.eligiblePresets().size());
+        assertEquals(MorphsFeature.OutcomeKind.CHANGED, filled.outcomeKind());
+        assertEquals(2, draws.get());
+        assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().stream()
+                .filter(npc -> npc.getEditorId().equals("First")).findFirst().orElseThrow()
+                .getSliderPresetNames());
+        assertEquals(List.of("Beta"), flow.frame().snapshot().getNpcMorphAssignments().stream()
+                .filter(npc -> npc.getEditorId().equals("Second")).findFirst().orElseThrow()
+                .getSliderPresetNames());
+        assertEquals(List.of("Gamma"), flow.frame().snapshot().getNpcMorphAssignments().stream()
+                .filter(npc -> npc.getEditorId().equals("Occupied")).findFirst().orElseThrow()
+                .getSliderPresetNames());
+        assertTrue(flow.frame().snapshot().getNpcMorphAssignments().stream()
+                .filter(npc -> npc.getEditorId().equals("Hidden")).findFirst().orElseThrow()
+                .getSliderPresetNames().isEmpty());
+    }
+
+    /** Cancel and an empty visible scope never mutate the Project. */
+    @Test
+    void fillEmptyCancellationAndEmptyScopeLeaveProjectUntouched() {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        MorphsFeature feature = new MorphsFeature(flow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        MorphsFeature.FillEmptyOffer offer = feature.dispatch(new MorphsFeature.RequestFillEmpty())
+                .fillEmptyOffer().orElseThrow();
+        feature.cancelFillEmpty(offer.token());
+        feature.dispatch(new MorphsFeature.ChangeNpcFilter("Nothing matches"));
+
+        MorphsFeature.Update empty = feature.dispatch(new MorphsFeature.RequestFillEmpty());
+
+        assertTrue(empty.fillEmptyOffer().isEmpty());
+        assertEquals("No NPC in the table is empty!", empty.frame().diagnostics().getFirst().getMessage());
+        assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst().getSliderPresetNames().isEmpty());
+    }
+
+    /** A missing Project preset catalog and a forged flyout choice fail inline without an edit. */
+    @Test
+    void fillEmptyRejectsNoPresetsAndChoicesOutsideTheCapturedOffer() {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        MorphsFeature feature = new MorphsFeature(flow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        MorphsFeature.Update withoutPresets = feature.dispatch(new MorphsFeature.RequestFillEmpty());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        feature.acceptProjectFrame(flow.frame(), false);
+        MorphsFeature.FillEmptyOffer offer = feature.dispatch(new MorphsFeature.RequestFillEmpty())
+                .fillEmptyOffer().orElseThrow();
+
+        MorphsFeature.Update rejected = feature.respondFillEmpty(offer.token(), List.of(NameIdentity.of("Beta")));
+
+        assertTrue(withoutPresets.fillEmptyOffer().isEmpty());
+        assertEquals(MorphsFeature.OutcomeKind.REJECTED, withoutPresets.outcomeKind());
+        assertEquals(MorphsFeature.OutcomeKind.REJECTED, rejected.outcomeKind());
+        assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst().getSliderPresetNames().isEmpty());
+    }
 
     /** NPC and Custom Morph Target selections have separate identities and exactly one active inspector. */
     @Test

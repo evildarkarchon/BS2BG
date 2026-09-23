@@ -126,6 +126,11 @@ final class JavaFxWorkbenchAppearance implements AutoCloseable {
         return frame;
     }
 
+    /** @return the most recently resolved appearance for a newly opened owned surface */
+    WorkbenchAppearance.Frame frame() {
+        return appearance.frame();
+    }
+
     /**
      * Removes live listeners when the owning Workbench window is no longer present.
      */
@@ -147,12 +152,22 @@ final class JavaFxWorkbenchAppearance implements AutoCloseable {
      * Applies pseudo-class state and looked-up colors together before notifying the controller renderer.
      */
     private void apply(WorkbenchAppearance.Frame frame) {
-        root.pseudoClassStateChanged(LIGHT, frame.effectiveTheme() == WorkbenchAppearance.EffectiveTheme.LIGHT);
-        root.pseudoClassStateChanged(DARK, frame.effectiveTheme() == WorkbenchAppearance.EffectiveTheme.DARK);
-        root.pseudoClassStateChanged(HIGH_CONTRAST_STYLE,
-                frame.effectiveTheme() == WorkbenchAppearance.EffectiveTheme.HIGH_CONTRAST);
-        root.pseudoClassStateChanged(REDUCED_MOTION, frame.reducedMotion());
-        root.setStyle(cssTokens(frame.palette()));
+        applyTo(root, frame);
         frameConsumer.accept(frame);
+    }
+
+    /**
+     * Applies the same live Workbench tokens to a flyout or owned viewer root in its separate JavaFX scene.
+     *
+     * @param surface surface root receiving the effective theme
+     * @param frame resolved theme and palette to project
+     */
+    static void applyTo(Parent surface, WorkbenchAppearance.Frame frame) {
+        surface.pseudoClassStateChanged(LIGHT, frame.effectiveTheme() == WorkbenchAppearance.EffectiveTheme.LIGHT);
+        surface.pseudoClassStateChanged(DARK, frame.effectiveTheme() == WorkbenchAppearance.EffectiveTheme.DARK);
+        surface.pseudoClassStateChanged(HIGH_CONTRAST_STYLE,
+                frame.effectiveTheme() == WorkbenchAppearance.EffectiveTheme.HIGH_CONTRAST);
+        surface.pseudoClassStateChanged(REDUCED_MOTION, frame.reducedMotion());
+        surface.setStyle(cssTokens(frame.palette()));
     }
 }
