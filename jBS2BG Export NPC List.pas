@@ -28,6 +28,8 @@ End;
 // Called for each selected record in the TES5Edit tree
 
 
+
+
 // If an entire plugin is selected then all records in the plugin will be processed
 Function Process(e : IInterface) : integer;
 
@@ -39,8 +41,8 @@ Begin
      'RACE \ DATA - Data \ Flags \ Playable') Then exit;
 
 
-  If ElementExists(e, 'ACBS - Configuration\Flags\Female') And Not ElementExists
-     (e, 'ACBS - Configuration\Flags\Is CharGen Face Preset') Then
+  If Not ElementExists  (e, 'ACBS - Configuration\Flags\Is CharGen Face Preset')
+    Then
     Begin
       strMod := '' + GetFileName(GetFile(e));
       strName := GetElementEditValues(e, 'FULL');
