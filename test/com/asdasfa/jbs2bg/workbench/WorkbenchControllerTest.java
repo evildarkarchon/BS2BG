@@ -33,6 +33,8 @@ import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectEdit;
 import com.asdasfa.jbs2bg.project.ProjectOperationContext;
@@ -354,6 +356,137 @@ class WorkbenchControllerTest {
                         .getSelectedItem()).getName());
                 assertEquals(1, flow.frame().snapshot().getCustomMorphTargets().size());
                 assertTrue(((ListView<?>) loader.getNamespace().get("activityList")).getItems().isEmpty());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /**
+     * The Morphs controls author an NPC through the Project flow and keep its selection separate from a Custom
+     * Morph Target while the shared editor exposes the NPC's complete output identity.
+     */
+    @Test
+    void morphsNpcControlsCreateInspectAndSelectWithoutRetargeting() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(CustomMorphTargetEdits.create("All|Female"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, new RecordingPlatform());
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                @SuppressWarnings("unchecked")
+                ListView<CustomMorphTargetSnapshot> targets =
+                        (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
+                @SuppressWarnings("unchecked")
+                ListView<NpcMorphAssignmentSnapshot> npcs =
+                        (ListView<NpcMorphAssignmentSnapshot>) loader.getNamespace().get("npcMorphAssignmentList");
+                targets.getSelectionModel().selectFirst();
+                @SuppressWarnings("unchecked")
+                ComboBox<SliderPresetSnapshot> available =
+                        (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
+                Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
+                available.setValue(available.getItems().getFirst());
+
+                ((TextField) loader.getNamespace().get("npcDisplayNameInput")).setText("Lyra");
+                ((TextField) loader.getNamespace().get("npcPluginNameInput")).setText("People.esp");
+                ((TextField) loader.getNamespace().get("npcEditorIdInput")).setText("Lyra01");
+                ((TextField) loader.getNamespace().get("npcRaceInput")).setText("NordRace");
+                ((TextField) loader.getNamespace().get("npcFormIdInput")).setText("000A12B3");
+                ((Button) loader.getNamespace().get("createNpcMorphAssignmentButton")).fire();
+
+                npcs = controller.npcMorphAssignmentListNode();
+                NpcMorphAssignmentSnapshot npc = npcs.getSelectionModel().getSelectedItem();
+                assertNotNull(npc);
+                assertNull(targets.getSelectionModel().getSelectedItem());
+                assertNull(available.getValue(), "a pending target preset must not carry to the selected NPC");
+                assertTrue(assign.isDisabled());
+                assertEquals("Lyra", npc.getDisplayName());
+                assertEquals("People.esp", npc.getPluginName());
+                assertEquals("Lyra01", npc.getEditorId());
+                assertEquals("NordRace", npc.getRace());
+                assertEquals("A12B3", npc.getFormId());
+                assertEquals("Lyra", ((Label) loader.getNamespace().get("morphTargetEditorFocusTarget")).getText());
+                assertEquals("Plugin: People.esp; Editor ID: Lyra01",
+                        ((Label) loader.getNamespace().get("npcIdentityText")).getText());
+                assertEquals("Race: NordRace", ((Label) loader.getNamespace().get("npcRaceText")).getText());
+                assertEquals("Form ID: A12B3", ((Label) loader.getNamespace().get("npcFormIdText")).getText());
+
+                available.setValue(available.getItems().getFirst());
+                targets.getSelectionModel().selectFirst();
+                assertNull(npcs.getSelectionModel().getSelectedItem());
+                assertNull(available.getValue(), "a pending NPC preset must not carry to the selected target");
+                assertTrue(assign.isDisabled());
+                assertEquals("BodyGen condition: All|Female",
+                        ((Label) loader.getNamespace().get("morphTargetConditionText")).getText());
+                npcs.getSelectionModel().selectFirst();
+                assertNull(targets.getSelectionModel().getSelectedItem());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** NPC filtering and sorting retain logical selection, and a confirmed clear removes only the frozen visible set. */
+    @Test
+    void morphsNpcControlsEditRelationshipsAndClearOnlyVisibleAssignments() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
+                "Lyra", "People.esp", "Lyra01", "NordRace", "A12B3", List.of())));
+        flow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
+                "Mira", "Other.esp", "Mira01", "BretonRace", "B45C6", List.of())));
+        RecordingPlatform platform = new RecordingPlatform();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform);
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                ListView<NpcMorphAssignmentSnapshot> npcs = controller.npcMorphAssignmentListNode();
+                npcs.getSelectionModel().select(npcs.getItems().stream()
+                        .filter(npc -> npc.getEditorId().equals("Mira01")).findFirst().orElseThrow());
+                @SuppressWarnings("unchecked")
+                ComboBox<SliderPresetSnapshot> available =
+                        (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
+                available.setValue(available.getItems().getFirst());
+                available.fireEvent(new ActionEvent());
+                ((Button) loader.getNamespace().get("assignMorphSliderPresetButton")).fire();
+                assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().stream()
+                        .filter(npc -> npc.getEditorId().equals("Mira01"))
+                        .findFirst().orElseThrow().getSliderPresetNames());
+
+                @SuppressWarnings("unchecked")
+                ComboBox<com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature.NpcSortOrder> sort =
+                        (ComboBox<com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature.NpcSortOrder>)
+                                loader.getNamespace().get("npcMorphAssignmentSort");
+                sort.setValue(com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature.NpcSortOrder.PLUGIN_DESCENDING);
+                sort.fireEvent(new ActionEvent());
+                assertEquals("Mira01", npcs.getSelectionModel().getSelectedItem().getEditorId());
+
+                TextField filter = (TextField) loader.getNamespace().get("npcMorphAssignmentFilter");
+                filter.setText("lyra");
+                assertNull(npcs.getSelectionModel().getSelectedItem());
+                assertEquals(List.of("Lyra"), npcs.getItems().stream()
+                        .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
+                platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
+                ((Button) loader.getNamespace().get("clearNpcMorphAssignmentsButton")).fire();
+                assertEquals(List.of("Mira"), flow.frame().snapshot().getNpcMorphAssignments().stream()
+                        .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
+                filter.clear();
+                assertEquals(List.of("Mira"), controller.npcMorphAssignmentListNode().getItems().stream()
+                        .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
+                assertNull(controller.npcMorphAssignmentListNode().getSelectionModel().getSelectedItem());
             } finally {
                 stage.close();
             }

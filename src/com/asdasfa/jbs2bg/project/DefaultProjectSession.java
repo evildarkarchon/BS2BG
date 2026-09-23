@@ -549,6 +549,8 @@ final class DefaultProjectSession implements ProjectSession {
                     || edit instanceof NpcMorphAssignmentEdits.NpcMorphAssignmentEdit)
                     && snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT)
                 return rejectedActiveProjectRequired();
+            if (edit instanceof NpcMorphAssignmentEdits.Create authoredNpc)
+                return createNpcMorphAssignment(authoredNpc);
             if (edit instanceof NpcMorphAssignmentEdits.AddNpc npc)
                 return addNpc(npc);
             if (edit instanceof NpcMorphAssignmentEdits.AddNpcs npcs)
@@ -641,6 +643,38 @@ final class DefaultProjectSession implements ProjectSession {
                     "Adding an NPC requires copied source values.");
         }
         return outcome(project.addNpcMorphAssignment(edit.getSource()));
+    }
+
+    /**
+     * Validates manual Workbench values separately from NPC Database promotion and
+     * applies the same Form ID normalization used when a Project is reopened.
+     *
+     * @param edit raw authoring fields
+     * @return changed or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome createNpcMorphAssignment(NpcMorphAssignmentEdits.Create edit) {
+        if (blank(edit.getPluginName()) || blank(edit.getEditorId()) || blank(edit.getRace())
+                || blank(edit.getFormId()))
+            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                    "Plugin name, editor ID, race, and Form ID are required to author an NPC Morph Assignment.");
+        String rawFormId = edit.getFormId().trim();
+        if (!rawFormId.matches("[0-9A-Fa-f]{1,8}"))
+            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID,
+                    "Form ID must contain one to eight hexadecimal digits.");
+        String pluginName = edit.getPluginName().trim();
+        String editorId = edit.getEditorId().trim();
+        String displayName = blank(edit.getDisplayName()) ? "Unnamed (" + editorId + ")"
+                : edit.getDisplayName().trim();
+        // Persist the load-order-independent ID now, so generation is identical before and after reopening.
+        String formId = NpcFormIds.normalize(rawFormId);
+        NpcMorphAssignmentSnapshot source = new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId,
+                edit.getRace().trim(), formId, Collections.emptyList());
+        return outcome(project.addNpcMorphAssignment(source));
+    }
+
+    /** @return whether a required Workbench authoring field is absent or whitespace only */
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 
     /**

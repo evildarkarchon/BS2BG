@@ -22,6 +22,9 @@ import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.RejectedOutcome;
@@ -30,11 +33,14 @@ import com.asdasfa.jbs2bg.project.UnchangedOutcome;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 /**
- * JavaFX-independent Morphs Area state machine. It renders immutable Custom Morph Target frames and submits
- * task-oriented intents only through the authoritative Workbench Project flow.
+ * JavaFX-independent Morphs Area state machine. It renders immutable Custom Morph Target and NPC Morph Assignment
+ * frames and submits task-oriented intents only through the authoritative Workbench Project flow.
  */
 public final class MorphsFeature {
     private static final String NAME_COLUMN = "name";
+    private static final String NPC_SEARCH_COLUMN = "search";
+    private static final String NPC_DISPLAY_NAME_COLUMN = "displayName";
+    private static final String NPC_PLUGIN_COLUMN = "plugin";
     private static final Duration TYPE_AHEAD_TIMEOUT = Duration.ofMillis(750);
 
     private final WorkbenchProjectFlow projectFlow;
@@ -45,12 +51,23 @@ public final class MorphsFeature {
     private final FilteredView<CustomMorphTargetSnapshot, NameIdentity> view = new FilteredView<>(
             List.of(FilterColumn.of(NAME_COLUMN, target -> target.getName().toLowerCase(Locale.ROOT))),
             ProjectIdentities::customMorphTarget);
+    private final FilteredView<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> npcView = new FilteredView<>(
+            List.of(FilterColumn.of(NPC_SEARCH_COLUMN, MorphsFeature::npcSearchText),
+                    FilterColumn.of(NPC_DISPLAY_NAME_COLUMN,
+                            npc -> npc.getDisplayName().toLowerCase(Locale.ROOT)),
+                    FilterColumn.of(NPC_PLUGIN_COLUMN, npc -> npc.getPluginName().toLowerCase(Locale.ROOT))),
+            ProjectIdentities::npcMorphAssignment);
     private List<CustomMorphTargetSnapshot> sourceTargets = List.of();
+    private List<NpcMorphAssignmentSnapshot> sourceNpcs = List.of();
     private String filterText = "";
+    private String npcFilterText = "";
     private SortOrder sortOrder = SortOrder.NAME_ASCENDING;
+    private NpcSortOrder npcSortOrder = NpcSortOrder.DISPLAY_NAME_ASCENDING;
     private Optional<NameIdentity> assignedSelection = Optional.empty();
     private String typeAheadPrefix = "";
     private Instant lastTypeAhead;
+    private String npcTypeAheadPrefix = "";
+    private Instant lastNpcTypeAhead;
     private long revision;
     private long nextObserverId = 1;
     private long nextEffectToken = 1;
@@ -140,7 +157,9 @@ public final class MorphsFeature {
             return new Update(false, frame, OutcomeKind.NONE);
         return switch (intent) {
             case Create create -> create(create.name());
+            case CreateNpc createNpc -> createNpc(createNpc);
             case Select select -> select(select.identity());
+            case SelectNpc selectNpc -> selectNpc(selectNpc.identity());
             case AssignSliderPreset assign -> assignSliderPreset(assign.identity());
             case AssignAllSliderPresets ignored -> assignAllSliderPresets();
             case SelectAssignedSliderPreset selectAssigned -> selectAssignedSliderPreset(selectAssigned.identity());
@@ -148,10 +167,15 @@ public final class MorphsFeature {
             case RemoveAssignedSliderPreset ignored -> requestRemoveAssignedSliderPreset();
             case RequestClearAssignments ignored -> requestClearAssignments();
             case ChangeFilter changeFilter -> changeFilter(changeFilter.text());
+            case ChangeNpcFilter changeNpcFilter -> changeNpcFilter(changeNpcFilter.text());
             case ChangeSort changeSort -> changeSort(changeSort.order());
+            case ChangeNpcSort changeNpcSort -> changeNpcSort(changeNpcSort.order());
             case TypeAhead typeAhead -> typeAhead(typeAhead.character());
+            case NpcTypeAhead npcTypeAhead -> npcTypeAhead(npcTypeAhead.character());
             case RequestRemove ignored -> requestRemove();
+            case RequestRemoveNpc ignored -> requestRemoveNpc();
             case RequestClearVisible ignored -> requestClearVisible();
+            case RequestClearVisibleNpcs ignored -> requestClearVisibleNpcs();
             case ClearSelection ignored -> clearSelection();
             case DismissDiagnostics ignored -> dismissDiagnostics();
         };
@@ -173,10 +197,15 @@ public final class MorphsFeature {
             return new Update(true, frame, OutcomeKind.NONE);
         return switch (effect.kind()) {
             case CONFIRM_CLEAR_VISIBLE -> clearVisible(effect.identities());
-            case CONFIRM_CLEAR_ASSIGNMENTS -> clearAssignments(effect.identities().getFirst());
+            case CONFIRM_CLEAR_VISIBLE_NPCS -> clearVisibleNpcs(effect.npcIdentities());
+            case CONFIRM_CLEAR_ASSIGNMENTS -> effect.npcIdentities().isEmpty()
+                    ? clearAssignments(effect.identities().getFirst())
+                    : clearNpcAssignments(effect.npcIdentities().getFirst());
             case CONFIRM_REMOVE -> remove(effect.identities().getFirst());
-            case CONFIRM_REMOVE_ASSIGNMENT -> removeAssignedSliderPreset(
-                    effect.identities().getFirst(), effect.identities().get(1));
+            case CONFIRM_REMOVE_NPC -> removeNpc(effect.npcIdentities().getFirst());
+            case CONFIRM_REMOVE_ASSIGNMENT -> effect.npcIdentities().isEmpty()
+                    ? removeAssignedSliderPreset(effect.identities().getFirst(), effect.identities().get(1))
+                    : removeNpcAssignedSliderPreset(effect.npcIdentities().getFirst(), effect.identities().getFirst());
         };
     }
 
@@ -208,6 +237,7 @@ public final class MorphsFeature {
             return new Update(true, frame, OutcomeKind.NONE);
         if (resetSelection) {
             view.clearSelection();
+            npcView.clearSelection();
             assignedSelection = Optional.empty();
         }
         reconcile(projectFrame, OutcomeKind.NONE, diagnostics);
@@ -219,7 +249,22 @@ public final class MorphsFeature {
         Optional<NameIdentity> previous = view.getSelection();
         if (!view.select(Objects.requireNonNull(identity, "identity")))
             return new Update(false, frame, OutcomeKind.NONE);
-        if (!previous.equals(view.getSelection()))
+        boolean switched = npcView.getSelection().isPresent();
+        npcView.clearSelection();
+        if (switched || !previous.equals(view.getSelection()))
+            assignedSelection = Optional.empty();
+        publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
+        return new Update(true, frame, OutcomeKind.NONE);
+    }
+
+    /** Selects one visible NPC by plugin/editor identity and clears the Custom Morph Target selection. */
+    private Update selectNpc(NpcMorphAssignmentIdentity identity) {
+        Optional<NpcMorphAssignmentIdentity> previous = npcView.getSelection();
+        if (!npcView.select(Objects.requireNonNull(identity, "identity")))
+            return new Update(false, frame, OutcomeKind.NONE);
+        boolean switched = view.getSelection().isPresent();
+        view.clearSelection();
+        if (switched || !previous.equals(npcView.getSelection()))
             assignedSelection = Optional.empty();
         publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
         return new Update(true, frame, OutcomeKind.NONE);
@@ -233,10 +278,26 @@ public final class MorphsFeature {
         return new Update(true, frame, OutcomeKind.NONE);
     }
 
+    /** Filters NPCs across the five visible identity and metadata fields, dropping hidden selection. */
+    private Update changeNpcFilter(String text) {
+        npcFilterText = Objects.requireNonNull(text, "text");
+        applyNpcFilter();
+        publish(frame.projectSequence(), OutcomeKind.NONE, List.of());
+        return new Update(true, frame, OutcomeKind.NONE);
+    }
+
     /** Changes presentation order without changing membership or logical selection. */
     private Update changeSort(SortOrder order) {
         sortOrder = Objects.requireNonNull(order, "order");
         applySort();
+        publish(frame.projectSequence(), OutcomeKind.NONE, List.of());
+        return new Update(true, frame, OutcomeKind.NONE);
+    }
+
+    /** Changes NPC presentation order while retaining membership and logical selection. */
+    private Update changeNpcSort(NpcSortOrder order) {
+        npcSortOrder = Objects.requireNonNull(order, "order");
+        applyNpcSort();
         publish(frame.projectSequence(), OutcomeKind.NONE, List.of());
         return new Update(true, frame, OutcomeKind.NONE);
     }
@@ -260,7 +321,9 @@ public final class MorphsFeature {
             if (candidate.getName().toLowerCase(Locale.ROOT).startsWith(typeAheadPrefix)) {
                 Optional<NameIdentity> previous = view.getSelection();
                 view.select(ProjectIdentities.customMorphTarget(candidate));
-                if (!previous.equals(view.getSelection()))
+                boolean switched = npcView.getSelection().isPresent();
+                npcView.clearSelection();
+                if (switched || !previous.equals(view.getSelection()))
                     assignedSelection = Optional.empty();
                 publish(frame.projectSequence(), OutcomeKind.NONE, List.of());
                 return new Update(true, frame, OutcomeKind.NONE);
@@ -281,13 +344,49 @@ public final class MorphsFeature {
         return -1;
     }
 
+    /** Selects an NPC by timed visible-order display-name prefix, cycling repeated characters. */
+    private Update npcTypeAhead(char character) {
+        if (Character.isISOControl(character))
+            return new Update(false, frame, OutcomeKind.NONE);
+        Instant now = clock.instant();
+        String typed = String.valueOf(character).toLowerCase(Locale.ROOT);
+        boolean expired = lastNpcTypeAhead == null || now.isBefore(lastNpcTypeAhead)
+                || Duration.between(lastNpcTypeAhead, now).compareTo(TYPE_AHEAD_TIMEOUT) > 0;
+        boolean repeated = !expired && npcTypeAheadPrefix.length() == 1 && npcTypeAheadPrefix.equals(typed);
+        npcTypeAheadPrefix = expired || repeated ? typed : npcTypeAheadPrefix + typed;
+        lastNpcTypeAhead = now;
+
+        List<NpcMorphAssignmentSnapshot> visible = npcView.visibleSet().getRows();
+        int start = repeated ? selectedNpcIndex(visible) + 1 : 0;
+        for (int offset = 0; offset < visible.size(); offset++) {
+            NpcMorphAssignmentSnapshot candidate = visible.get((start + offset) % visible.size());
+            if (candidate.getDisplayName().toLowerCase(Locale.ROOT).startsWith(npcTypeAheadPrefix)) {
+                selectNpc(ProjectIdentities.npcMorphAssignment(candidate));
+                return new Update(true, frame, OutcomeKind.NONE);
+            }
+        }
+        publish(frame.projectSequence(), OutcomeKind.NONE, List.of());
+        return new Update(false, frame, OutcomeKind.NONE);
+    }
+
+    /** Resolves current NPC selection in the visible order without retaining a row index. */
+    private int selectedNpcIndex(List<NpcMorphAssignmentSnapshot> visible) {
+        Optional<NpcMorphAssignmentIdentity> selected = npcView.getSelection();
+        if (selected.isEmpty())
+            return -1;
+        for (int index = 0; index < visible.size(); index++)
+            if (ProjectIdentities.npcMorphAssignment(visible.get(index)).equals(selected.orElseThrow()))
+                return index;
+        return -1;
+    }
+
     /** Captures the exact accepted visible identity set before requesting destructive confirmation. */
     private Update requestClearVisible() {
         List<NameIdentity> identities = view.visibleSet().getIdentities();
         if (identities.isEmpty())
             return new Update(false, frame, OutcomeKind.NONE);
         pendingEffect = new Effect(nextEffectToken++, EffectKind.CONFIRM_CLEAR_VISIBLE, identities,
-                "Clear Custom Morph Targets", "Remove the visible Custom Morph Targets from the Project?");
+                List.of(), "Clear Custom Morph Targets", "Remove the visible Custom Morph Targets from the Project?");
         publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
         return new Update(true, frame, Optional.of(pendingEffect), OutcomeKind.NONE);
     }
@@ -299,7 +398,7 @@ public final class MorphsFeature {
             return new Update(false, frame, OutcomeKind.NONE);
         NameIdentity identity = NameIdentity.of(target.getName());
         pendingEffect = new Effect(nextEffectToken++, EffectKind.CONFIRM_REMOVE, List.of(identity),
-                "Remove Custom Morph Target", "Remove " + target.getName() + " from the Project?");
+                List.of(), "Remove Custom Morph Target", "Remove " + target.getName() + " from the Project?");
         publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
         return new Update(true, frame, Optional.of(pendingEffect), OutcomeKind.NONE);
     }
@@ -310,9 +409,39 @@ public final class MorphsFeature {
         return reconcileOutcome(outcome);
     }
 
+    /** Freezes the visible NPC identity set before requesting destructive confirmation. */
+    private Update requestClearVisibleNpcs() {
+        List<NpcMorphAssignmentIdentity> identities = npcView.visibleSet().getIdentities();
+        if (identities.isEmpty())
+            return new Update(false, frame, OutcomeKind.NONE);
+        pendingEffect = new Effect(nextEffectToken++, EffectKind.CONFIRM_CLEAR_VISIBLE_NPCS, List.of(), identities,
+                "Clear NPC Morph Assignments", "Remove the visible NPC Morph Assignments from the Project?");
+        publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
+        return new Update(true, frame, Optional.of(pendingEffect), OutcomeKind.NONE);
+    }
+
+    /** Freezes the selected NPC's complete identity before removal confirmation. */
+    private Update requestRemoveNpc() {
+        NpcMorphAssignmentSnapshot npc = selectedNpc();
+        if (npc == null)
+            return new Update(false, frame, OutcomeKind.NONE);
+        NpcMorphAssignmentIdentity identity = ProjectIdentities.npcMorphAssignment(npc);
+        pendingEffect = new Effect(nextEffectToken++, EffectKind.CONFIRM_REMOVE_NPC, List.of(), List.of(identity),
+                "Remove NPC Morph Assignment", "Remove " + npc.getDisplayName() + " ("
+                        + npc.getPluginName() + "/" + npc.getEditorId() + ") from the Project?");
+        publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
+        return new Update(true, frame, Optional.of(pendingEffect), OutcomeKind.NONE);
+    }
+
+    /** Deletes the exact confirmed NPC identity without selecting another row. */
+    private Update removeNpc(NpcMorphAssignmentIdentity identity) {
+        return reconcileOutcome(projectFlow.apply(NpcMorphAssignmentEdits.removeNpc(identity)));
+    }
+
     /** Clears target and assigned-preset selection without writing Project state. */
     private Update clearSelection() {
         view.clearSelection();
+        npcView.clearSelection();
         assignedSelection = Optional.empty();
         publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
         return new Update(true, frame, OutcomeKind.NONE);
@@ -331,6 +460,11 @@ public final class MorphsFeature {
         return reconcileOutcome(outcome);
     }
 
+    /** Removes one frozen visible NPC identity set in a single atomic Project edit. */
+    private Update clearVisibleNpcs(List<NpcMorphAssignmentIdentity> identities) {
+        return reconcileOutcome(projectFlow.apply(NpcMorphAssignmentEdits.removeNpcs(identities)));
+    }
+
     /** Submits one raw condition-bearing name through ProjectSession validation. */
     private Update create(String name) {
         List<SliderPresetSnapshot> presets = projectFlow.frame().snapshot().getSliderPresets();
@@ -339,11 +473,15 @@ public final class MorphsFeature {
                 : List.of(presets.get(random.nextInt(presets.size())).getName());
         ProjectOutcome outcome = projectFlow.apply(CustomMorphTargetEdits.create(name, initialAssignments));
         sourceTargets = outcome.getSnapshot().getCustomMorphTargets();
+        sourceNpcs = outcome.getSnapshot().getNpcMorphAssignments();
         OutcomeKind kind = outcomeKind(outcome);
         if (kind == OutcomeKind.CHANGED || kind == OutcomeKind.UNCHANGED) {
             NameIdentity requested = NameIdentity.of(Objects.requireNonNull(name, "name").trim());
             view.setRows(sourceTargets);
+            npcView.setRows(sourceNpcs);
             applyFilter();
+            applyNpcFilter();
+            npcView.clearSelection();
             view.select(requested);
             assignedSelection = Optional.empty();
             applySort();
@@ -352,34 +490,66 @@ public final class MorphsFeature {
         return new Update(kind == OutcomeKind.CHANGED || kind == OutcomeKind.UNCHANGED, frame, kind);
     }
 
+    /** Submits raw NPC authoring fields to ProjectSession and selects only its accepted logical identity. */
+    private Update createNpc(CreateNpc create) {
+        ProjectOutcome outcome = projectFlow.apply(NpcMorphAssignmentEdits.create(create.displayName(),
+                create.pluginName(), create.editorId(), create.race(), create.formId()));
+        sourceTargets = outcome.getSnapshot().getCustomMorphTargets();
+        sourceNpcs = outcome.getSnapshot().getNpcMorphAssignments();
+        OutcomeKind kind = outcomeKind(outcome);
+        if (kind == OutcomeKind.CHANGED || kind == OutcomeKind.UNCHANGED) {
+            view.setRows(sourceTargets);
+            applyFilter();
+            applySort();
+            npcView.setRows(sourceNpcs);
+            applyNpcFilter();
+            applyNpcSort();
+            NpcMorphAssignmentIdentity requested = new NpcMorphAssignmentIdentity(create.pluginName().trim(),
+                    create.editorId().trim());
+            view.clearSelection();
+            npcView.select(requested);
+            assignedSelection = Optional.empty();
+        }
+        publish(projectFlow.frame().sequence(), kind, outcome.getDiagnostics());
+        return new Update(kind == OutcomeKind.CHANGED || kind == OutcomeKind.UNCHANGED, frame, kind);
+    }
+
     /** Adds one relationship by stable identities and renders only the value returned by ProjectSession. */
     private Update assignSliderPreset(NameIdentity presetIdentity) {
         CustomMorphTargetSnapshot target = selectedTarget();
-        if (target == null)
+        NpcMorphAssignmentSnapshot npc = selectedNpc();
+        if (target == null && npc == null)
             return new Update(false, frame, OutcomeKind.NONE);
-        ProjectOutcome outcome = projectFlow.apply(CustomMorphTargetEdits.addSliderPreset(
-                target.getName(), Objects.requireNonNull(presetIdentity, "presetIdentity").getName()));
+        String presetName = Objects.requireNonNull(presetIdentity, "presetIdentity").getName();
+        ProjectOutcome outcome = target != null
+                ? projectFlow.apply(CustomMorphTargetEdits.addSliderPreset(target.getName(), presetName))
+                : projectFlow.apply(NpcMorphAssignmentEdits.addSliderPreset(
+                        ProjectIdentities.npcMorphAssignment(npc), presetName));
         return reconcileOutcome(outcome);
     }
 
     /** Assigns every Project Slider Preset through one atomic relationship edit. */
     private Update assignAllSliderPresets() {
         CustomMorphTargetSnapshot target = selectedTarget();
-        if (target == null)
+        NpcMorphAssignmentSnapshot npc = selectedNpc();
+        if (target == null && npc == null)
             return new Update(false, frame, OutcomeKind.NONE);
         List<String> presetNames = projectFlow.frame().snapshot().getSliderPresets().stream()
                 .map(SliderPresetSnapshot::getName)
                 .toList();
-        ProjectOutcome outcome = projectFlow.apply(CustomMorphTargetEdits.addSliderPresets(
-                target.getName(), presetNames));
+        ProjectOutcome outcome = target != null
+                ? projectFlow.apply(CustomMorphTargetEdits.addSliderPresets(target.getName(), presetNames))
+                : projectFlow.apply(NpcMorphAssignmentEdits.addSliderPresets(
+                        ProjectIdentities.npcMorphAssignment(npc), presetNames));
         return reconcileOutcome(outcome);
     }
 
     /** Selects one relationship only when it remains assigned in the latest immutable frame. */
     private Update selectAssignedSliderPreset(NameIdentity identity) {
         NameIdentity requested = Objects.requireNonNull(identity, "identity");
-        Optional<EditorFrame> editor = editorFrame();
-        if (editor.isEmpty() || editor.orElseThrow().assignedPresets().stream()
+        List<SliderPresetSnapshot> assigned = editorFrame().map(EditorFrame::assignedPresets)
+                .orElseGet(() -> npcEditorFrame().map(NpcEditorFrame::assignedPresets).orElse(List.of()));
+        if (assigned.stream()
                 .map(preset -> NameIdentity.of(preset.getName()))
                 .noneMatch(requested::equals))
             return new Update(false, frame, OutcomeKind.NONE);
@@ -400,13 +570,19 @@ public final class MorphsFeature {
     /** Captures both relationship endpoints before requesting destructive removal confirmation. */
     private Update requestRemoveAssignedSliderPreset() {
         CustomMorphTargetSnapshot target = selectedTarget();
-        if (target == null || assignedSelection.isEmpty())
+        NpcMorphAssignmentSnapshot npc = selectedNpc();
+        if ((target == null && npc == null) || assignedSelection.isEmpty())
             return new Update(false, frame, OutcomeKind.NONE);
-        NameIdentity targetIdentity = NameIdentity.of(target.getName());
         NameIdentity presetIdentity = assignedSelection.orElseThrow();
+        List<NameIdentity> identities = target != null
+                ? List.of(NameIdentity.of(target.getName()), presetIdentity) : List.of(presetIdentity);
+        List<NpcMorphAssignmentIdentity> npcIdentities = npc == null ? List.of()
+                : List.of(ProjectIdentities.npcMorphAssignment(npc));
+        String owner = target != null ? target.getName() : npc.getDisplayName() + " ("
+                + npc.getPluginName() + "/" + npc.getEditorId() + ")";
         pendingEffect = new Effect(nextEffectToken++, EffectKind.CONFIRM_REMOVE_ASSIGNMENT,
-                List.of(targetIdentity, presetIdentity), "Remove Slider Preset relationship",
-                "Remove " + presetIdentity.getName() + " from " + target.getName() + "?");
+                identities, npcIdentities, "Remove Slider Preset relationship",
+                "Remove " + presetIdentity.getName() + " from " + owner + "?");
         publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
         return new Update(true, frame, Optional.of(pendingEffect), OutcomeKind.NONE);
     }
@@ -418,14 +594,29 @@ public final class MorphsFeature {
         return reconcileOutcome(outcome);
     }
 
+    /** Removes a confirmed NPC relationship by the captured plugin/editor and preset identities. */
+    private Update removeNpcAssignedSliderPreset(NpcMorphAssignmentIdentity npcIdentity,
+                                                 NameIdentity presetIdentity) {
+        return reconcileOutcome(projectFlow.apply(NpcMorphAssignmentEdits.removeSliderPreset(
+                npcIdentity, presetIdentity.getName())));
+    }
+
     /** Captures the selected target identity before requesting relationship-clear confirmation. */
     private Update requestClearAssignments() {
         CustomMorphTargetSnapshot target = selectedTarget();
-        if (target == null || target.getSliderPresetNames().isEmpty())
+        NpcMorphAssignmentSnapshot npc = selectedNpc();
+        if (target == null && npc == null)
             return new Update(false, frame, OutcomeKind.NONE);
-        NameIdentity identity = NameIdentity.of(target.getName());
-        pendingEffect = new Effect(nextEffectToken++, EffectKind.CONFIRM_CLEAR_ASSIGNMENTS, List.of(identity),
-                "Clear Slider Presets", "Remove every Slider Preset from " + target.getName() + "?");
+        List<String> names = target != null ? target.getSliderPresetNames() : npc.getSliderPresetNames();
+        if (names.isEmpty())
+            return new Update(false, frame, OutcomeKind.NONE);
+        List<NameIdentity> identities = target == null ? List.of() : List.of(NameIdentity.of(target.getName()));
+        List<NpcMorphAssignmentIdentity> npcIdentities = npc == null ? List.of()
+                : List.of(ProjectIdentities.npcMorphAssignment(npc));
+        String owner = target != null ? target.getName() : npc.getDisplayName() + " ("
+                + npc.getPluginName() + "/" + npc.getEditorId() + ")";
+        pendingEffect = new Effect(nextEffectToken++, EffectKind.CONFIRM_CLEAR_ASSIGNMENTS, identities, npcIdentities,
+                "Clear Slider Presets", "Remove every Slider Preset from " + owner + "?");
         publish(frame.projectSequence(), OutcomeKind.NONE, frame.diagnostics());
         return new Update(true, frame, Optional.of(pendingEffect), OutcomeKind.NONE);
     }
@@ -437,13 +628,22 @@ public final class MorphsFeature {
         return reconcileOutcome(outcome);
     }
 
+    /** Clears every relationship for the captured NPC identity after confirmation. */
+    private Update clearNpcAssignments(NpcMorphAssignmentIdentity npcIdentity) {
+        return reconcileOutcome(projectFlow.apply(NpcMorphAssignmentEdits.clearSliderPresets(npcIdentity)));
+    }
+
     /** Reconciles one Project outcome through the common immutable feature-publication path. */
     private Update reconcileOutcome(ProjectOutcome outcome) {
         Objects.requireNonNull(outcome, "outcome");
         sourceTargets = outcome.getSnapshot().getCustomMorphTargets();
+        sourceNpcs = outcome.getSnapshot().getNpcMorphAssignments();
         view.setRows(sourceTargets);
+        npcView.setRows(sourceNpcs);
         applyFilter();
+        applyNpcFilter();
         applySort();
+        applyNpcSort();
         OutcomeKind kind = outcomeKind(outcome);
         publish(projectFlow.frame().sequence(), kind, outcome.getDiagnostics());
         return new Update(kind == OutcomeKind.CHANGED || kind == OutcomeKind.UNCHANGED, frame, kind);
@@ -456,6 +656,16 @@ public final class MorphsFeature {
         NameIdentity selected = view.getSelection().orElseThrow();
         return sourceTargets.stream()
                 .filter(target -> NameIdentity.of(target.getName()).equals(selected))
+                .findFirst().orElse(null);
+    }
+
+    /** Resolves current NPC selection by complete identity in the latest immutable source. */
+    private NpcMorphAssignmentSnapshot selectedNpc() {
+        if (npcView.getSelection().isEmpty())
+            return null;
+        NpcMorphAssignmentIdentity selected = npcView.getSelection().orElseThrow();
+        return sourceNpcs.stream()
+                .filter(npc -> ProjectIdentities.npcMorphAssignment(npc).equals(selected))
                 .findFirst().orElse(null);
     }
 
@@ -476,13 +686,34 @@ public final class MorphsFeature {
         return Optional.of(new EditorFrame(target, assigned, available, assignedSelection));
     }
 
+    /** Builds NPC relationship choices from the same immutable Project snapshot as its selected value. */
+    private Optional<NpcEditorFrame> npcEditorFrame() {
+        NpcMorphAssignmentSnapshot npc = selectedNpc();
+        if (npc == null)
+            return Optional.empty();
+        List<SliderPresetSnapshot> presets = projectFlow.frame().snapshot().getSliderPresets();
+        List<SliderPresetSnapshot> assigned = presets.stream()
+                .filter(preset -> npc.getSliderPresetNames().stream()
+                        .anyMatch(name -> name.equalsIgnoreCase(preset.getName())))
+                .toList();
+        List<SliderPresetSnapshot> available = presets.stream()
+                .filter(preset -> npc.getSliderPresetNames().stream()
+                        .noneMatch(name -> name.equalsIgnoreCase(preset.getName())))
+                .toList();
+        return Optional.of(new NpcEditorFrame(npc, assigned, available, assignedSelection));
+    }
+
     /** Replaces rows from one coherent Project publication before exposing the next feature frame. */
     private void reconcile(WorkbenchProjectFlow.Frame projectFrame, OutcomeKind outcomeKind,
                            List<ProjectDiagnostic> diagnostics) {
         sourceTargets = Objects.requireNonNull(projectFrame, "projectFrame").snapshot().getCustomMorphTargets();
+        sourceNpcs = projectFrame.snapshot().getNpcMorphAssignments();
         view.setRows(sourceTargets);
+        npcView.setRows(sourceNpcs);
         applyFilter();
+        applyNpcFilter();
         applySort();
+        applyNpcSort();
         publish(projectFrame.sequence(), outcomeKind, diagnostics);
     }
 
@@ -501,6 +732,26 @@ public final class MorphsFeature {
         view.setCriterion(ColumnCriterion.hiding(NAME_COLUMN, hidden));
     }
 
+    /** Applies one case-insensitive query to all NPC identity and metadata fields. */
+    private void applyNpcFilter() {
+        String query = npcFilterText.toLowerCase(Locale.ROOT);
+        if (query.isEmpty()) {
+            npcView.clearCriterion(NPC_SEARCH_COLUMN);
+            return;
+        }
+        List<String> hidden = sourceNpcs.stream()
+                .map(MorphsFeature::npcSearchText)
+                .filter(value -> !value.contains(query))
+                .toList();
+        npcView.setCriterion(ColumnCriterion.hiding(NPC_SEARCH_COLUMN, hidden));
+    }
+
+    /** @return lower-cased searchable values for one NPC without relying on its display name for identity */
+    private static String npcSearchText(NpcMorphAssignmentSnapshot npc) {
+        return String.join(" ", npc.getDisplayName(), npc.getPluginName(), npc.getEditorId(), npc.getRace(),
+                npc.getFormId()).toLowerCase(Locale.ROOT);
+    }
+
     /** Applies the retained single-column order to the logical view. */
     private void applySort() {
         view.setSortOrder(List.of(sortOrder == SortOrder.NAME_ASCENDING
@@ -508,11 +759,22 @@ public final class MorphsFeature {
                 : SortKey.descending(NAME_COLUMN)));
     }
 
+    /** Applies the retained NPC display-name or plugin order to the logical view. */
+    private void applyNpcSort() {
+        npcView.setSortOrder(List.of(switch (npcSortOrder) {
+            case DISPLAY_NAME_ASCENDING -> SortKey.ascending(NPC_DISPLAY_NAME_COLUMN);
+            case DISPLAY_NAME_DESCENDING -> SortKey.descending(NPC_DISPLAY_NAME_COLUMN);
+            case PLUGIN_ASCENDING -> SortKey.ascending(NPC_PLUGIN_COLUMN);
+            case PLUGIN_DESCENDING -> SortKey.descending(NPC_PLUGIN_COLUMN);
+        }));
+    }
+
     /** Commits one defensively owned immutable feature frame. */
     private void publish(long projectSequence, OutcomeKind outcomeKind, List<ProjectDiagnostic> diagnostics) {
         reconcileAssignedSelection();
         frame = new Frame(++revision, projectSequence, view.visibleSet().getRows(), view.getSelection(), filterText,
-                sortOrder, editorFrame(), outcomeKind, diagnostics);
+                sortOrder, editorFrame(), outcomeKind, diagnostics, npcView.visibleSet().getRows(),
+                npcView.getSelection(), npcFilterText, npcSortOrder, npcEditorFrame());
         publishing = true;
         try {
             for (Consumer<Frame> observer : List.copyOf(observers.values())) {
@@ -541,8 +803,11 @@ public final class MorphsFeature {
         if (assignedSelection.isEmpty())
             return;
         CustomMorphTargetSnapshot target = selectedTarget();
+        NpcMorphAssignmentSnapshot npc = selectedNpc();
         NameIdentity selected = assignedSelection.orElseThrow();
-        if (target == null || target.getSliderPresetNames().stream()
+        List<String> names = target != null ? target.getSliderPresetNames()
+                : npc != null ? npc.getSliderPresetNames() : List.of();
+        if (names.stream()
                 .map(NameIdentity::of)
                 .noneMatch(selected::equals))
             assignedSelection = Optional.empty();
@@ -562,10 +827,12 @@ public final class MorphsFeature {
     }
 
     /** Closed family of task-oriented Morphs intents. */
-    public sealed interface Intent permits Create, Select, AssignSliderPreset, AssignAllSliderPresets,
+    public sealed interface Intent permits Create, CreateNpc, Select, SelectNpc,
+            AssignSliderPreset, AssignAllSliderPresets,
             SelectAssignedSliderPreset, ClearAssignedSliderPresetSelection, RemoveAssignedSliderPreset,
-            RequestClearAssignments, ChangeFilter,
-            ChangeSort, TypeAhead, RequestRemove, RequestClearVisible, ClearSelection, DismissDiagnostics {
+            RequestClearAssignments, ChangeFilter, ChangeNpcFilter,
+            ChangeSort, ChangeNpcSort, TypeAhead, NpcTypeAhead, RequestRemove, RequestRemoveNpc,
+            RequestClearVisible, RequestClearVisibleNpcs, ClearSelection, DismissDiagnostics {
     }
 
     /** Requests one validated Custom Morph Target creation. */
@@ -575,10 +842,23 @@ public final class MorphsFeature {
         }
     }
 
+    /** Requests validated manual NPC Morph Assignment creation. */
+    public record CreateNpc(String displayName, String pluginName, String editorId, String race,
+                            String formId) implements Intent {
+    }
+
     /** Selects one visible Custom Morph Target by stable logical identity. */
     public record Select(NameIdentity identity) implements Intent {
         /** Validates the immutable selection request. */
         public Select {
+            Objects.requireNonNull(identity, "identity");
+        }
+    }
+
+    /** Selects one visible NPC by its complete plugin/editor identity. */
+    public record SelectNpc(NpcMorphAssignmentIdentity identity) implements Intent {
+        /** Validates the immutable selection request. */
+        public SelectNpc {
             Objects.requireNonNull(identity, "identity");
         }
     }
@@ -623,6 +903,14 @@ public final class MorphsFeature {
         }
     }
 
+    /** Changes the case-insensitive NPC contains filter across identity and metadata. */
+    public record ChangeNpcFilter(String text) implements Intent {
+        /** Validates the immutable filter request. */
+        public ChangeNpcFilter {
+            Objects.requireNonNull(text, "text");
+        }
+    }
+
     /** Changes the Custom Morph Target presentation order. */
     public record ChangeSort(SortOrder order) implements Intent {
         /** Validates the immutable sort request. */
@@ -631,16 +919,36 @@ public final class MorphsFeature {
         }
     }
 
+    /** Changes the NPC catalog presentation order. */
+    public record ChangeNpcSort(NpcSortOrder order) implements Intent {
+        /** Validates the immutable sort request. */
+        public ChangeNpcSort {
+            Objects.requireNonNull(order, "order");
+        }
+    }
+
     /** Selects a Custom Morph Target by one type-ahead character. */
     public record TypeAhead(char character) implements Intent {
+    }
+
+    /** Selects an NPC by one visible-order display-name type-ahead character. */
+    public record NpcTypeAhead(char character) implements Intent {
     }
 
     /** Requests confirmation before deleting the exact currently visible target set. */
     public record RequestClearVisible() implements Intent {
     }
 
+    /** Requests confirmation before deleting the frozen visible NPC set. */
+    public record RequestClearVisibleNpcs() implements Intent {
+    }
+
     /** Requests confirmation before deleting the selected Custom Morph Target. */
     public record RequestRemove() implements Intent {
+    }
+
+    /** Requests confirmation before deleting the selected NPC Morph Assignment. */
+    public record RequestRemoveNpc() implements Intent {
     }
 
     /** Clears current target and relationship selection. */
@@ -669,6 +977,26 @@ public final class MorphsFeature {
         }
     }
 
+    /** Supported NPC catalog orders; ties retain canonical Project identity order. */
+    public enum NpcSortOrder {
+        DISPLAY_NAME_ASCENDING("Display name (A–Z)"),
+        DISPLAY_NAME_DESCENDING("Display name (Z–A)"),
+        PLUGIN_ASCENDING("Plugin (A–Z)"),
+        PLUGIN_DESCENDING("Plugin (Z–A)");
+
+        private final String displayName;
+
+        NpcSortOrder(String displayName) {
+            this.displayName = displayName;
+        }
+
+        /** @return localized-ready label used by the JavaFX adapter */
+        @Override
+        public String toString() {
+            return displayName;
+        }
+    }
+
     /** Observable classification of the most recent Project operation. */
     public enum OutcomeKind {
         NONE,
@@ -680,11 +1008,13 @@ public final class MorphsFeature {
     }
 
     /** Tokenized destructive confirmation requested by the feature after capturing its operand. */
-    public record Effect(long token, EffectKind kind, List<NameIdentity> identities, String title, String message) {
+    public record Effect(long token, EffectKind kind, List<NameIdentity> identities,
+                         List<NpcMorphAssignmentIdentity> npcIdentities, String title, String message) {
         /** Defensively owns all effect values before the platform adapter runs. */
         public Effect {
             kind = Objects.requireNonNull(kind, "kind");
             identities = List.copyOf(identities);
+            npcIdentities = List.copyOf(npcIdentities);
             title = Objects.requireNonNull(title, "title");
             message = Objects.requireNonNull(message, "message");
         }
@@ -693,8 +1023,10 @@ public final class MorphsFeature {
     /** Closed family of platform confirmations requested by Morphs. */
     public enum EffectKind {
         CONFIRM_CLEAR_VISIBLE,
+        CONFIRM_CLEAR_VISIBLE_NPCS,
         CONFIRM_CLEAR_ASSIGNMENTS,
         CONFIRM_REMOVE,
+        CONFIRM_REMOVE_NPC,
         CONFIRM_REMOVE_ASSIGNMENT
     }
 
@@ -711,11 +1043,27 @@ public final class MorphsFeature {
         }
     }
 
+    /** Immutable NPC metadata and Slider Preset relationship render input. */
+    public record NpcEditorFrame(NpcMorphAssignmentSnapshot npc, List<SliderPresetSnapshot> assignedPresets,
+                                 List<SliderPresetSnapshot> availablePresets,
+                                 Optional<NameIdentity> assignedSelection) {
+        /** Defensively owns every relationship list crossing the feature boundary. */
+        public NpcEditorFrame {
+            Objects.requireNonNull(npc, "npc");
+            assignedPresets = List.copyOf(assignedPresets);
+            availablePresets = List.copyOf(availablePresets);
+            assignedSelection = Objects.requireNonNull(assignedSelection, "assignedSelection");
+        }
+    }
+
     /** Immutable render input for the Morphs Area. */
     public record Frame(long revision, long projectSequence, List<CustomMorphTargetSnapshot> visibleTargets,
                         Optional<NameIdentity> selection, String filterText, SortOrder sortOrder,
                         Optional<EditorFrame> editor, OutcomeKind outcomeKind,
-                        List<ProjectDiagnostic> diagnostics) {
+                        List<ProjectDiagnostic> diagnostics,
+                        List<NpcMorphAssignmentSnapshot> visibleNpcs,
+                        Optional<NpcMorphAssignmentIdentity> npcSelection, String npcFilterText,
+                        NpcSortOrder npcSortOrder, Optional<NpcEditorFrame> npcEditor) {
         /** Defensively owns all collections and optional values crossing the feature boundary. */
         public Frame {
             visibleTargets = List.copyOf(visibleTargets);
@@ -725,6 +1073,13 @@ public final class MorphsFeature {
             editor = Objects.requireNonNull(editor, "editor");
             outcomeKind = Objects.requireNonNull(outcomeKind, "outcomeKind");
             diagnostics = List.copyOf(diagnostics);
+            visibleNpcs = List.copyOf(visibleNpcs);
+            npcSelection = Objects.requireNonNull(npcSelection, "npcSelection");
+            npcFilterText = Objects.requireNonNull(npcFilterText, "npcFilterText");
+            npcSortOrder = Objects.requireNonNull(npcSortOrder, "npcSortOrder");
+            npcEditor = Objects.requireNonNull(npcEditor, "npcEditor");
+            if (selection.isPresent() && npcSelection.isPresent())
+                throw new IllegalArgumentException("Morphs selections must be mutually exclusive");
         }
     }
 

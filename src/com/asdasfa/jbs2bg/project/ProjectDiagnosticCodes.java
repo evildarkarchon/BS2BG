@@ -147,6 +147,10 @@ public final class ProjectDiagnosticCodes {
      */
     public static final String NPC_MORPH_ASSIGNMENT_REQUIRED = "NPC_MORPH_ASSIGNMENT_REQUIRED";
     /**
+     * A manually authored NPC Morph Assignment has a malformed hexadecimal Form ID.
+     */
+    public static final String NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID = "NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID";
+    /**
      * An NPC-add edit duplicates an existing plugin-name/editor-ID identity.
      */
     public static final String NPC_MORPH_ASSIGNMENT_DUPLICATE = "NPC_MORPH_ASSIGNMENT_DUPLICATE";

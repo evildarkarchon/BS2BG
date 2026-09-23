@@ -459,7 +459,7 @@ final class ProjectJacksonAdapter {
                 case "Mod" -> pluginName = readString(reader, value, fieldPath);
                 case "EditorId" -> editorId = readString(reader, value, fieldPath);
                 case "Race" -> race = readString(reader, value, fieldPath);
-                case "FormId" -> formId = normalizeFormId(readString(reader, value, fieldPath));
+                case "FormId" -> formId = NpcFormIds.normalize(readString(reader, value, fieldPath));
                 case "SliderPresets" -> assignments = readAssignments(reader, value, fieldPath);
                 default -> throw new AssertionError("Validated NPC field was not dispatched: " + field);
             }
@@ -848,16 +848,6 @@ final class ProjectJacksonAdapter {
      */
     private static String child(String owner, String name) {
         return JacksonJson.memberPath(owner, name);
-    }
-
-    /**
-     * Applies the form-ID normalization historically used by Project loading.
-     */
-    private static String normalizeFormId(String value) {
-        String normalized = value.trim();
-        if (normalized.length() > 6)
-            normalized = normalized.substring(normalized.length() - 6);
-        return normalized.replaceFirst("^0+(?!$)", "");
     }
 
     /**

@@ -426,6 +426,53 @@ function Find-OuterControl {
 
 <#
 .SYNOPSIS
+    Finds an NPC Morph Assignment row by its complete Project identity.
+.PARAMETER List
+    Current NPC Morph Assignments UIA list.
+.PARAMETER DisplayName
+    Display text retained for the selected Project row.
+.PARAMETER PluginName
+    Plugin half of the logical identity.
+.PARAMETER EditorId
+    Editor-ID half of the logical identity.
+.NOTES
+    NPC list items include metadata and assignment status after the identity prefix. Matching both identity fields
+    prevents two NPCs with the same display name from silently targeting one another after a render.
+#>
+function Find-NpcMorphAssignmentRow {
+    param(
+        [Parameter(Mandatory)] $List,
+        [Parameter(Mandatory)] [string]$DisplayName,
+        [Parameter(Mandatory)] [string]$PluginName,
+        [Parameter(Mandatory)] [string]$EditorId
+    )
+    $prefix = "$DisplayName. Plugin: $PluginName. Editor ID: $EditorId."
+    $rows = @(Find-UiaElements -Root $List -Condition (New-UiaCondition -ControlType 'ListItem'))
+    foreach ($row in $rows) {
+        if ($row.Current.Name.StartsWith($prefix, [StringComparison]::Ordinal)) { return $row }
+    }
+    return $null
+}
+
+<#
+.SYNOPSIS
+    Waits for one NPC Morph Assignment row without relying on display-name uniqueness or a virtualized row index.
+#>
+function Wait-NpcMorphAssignmentRow {
+    param(
+        [Parameter(Mandatory)] $List,
+        [Parameter(Mandatory)] [string]$DisplayName,
+        [Parameter(Mandatory)] [string]$PluginName,
+        [Parameter(Mandatory)] [string]$EditorId,
+        [Parameter(Mandatory)] [string]$Description
+    )
+    Wait-UiaCondition -Description $Description -TimeoutSeconds $StepTimeoutSeconds -Test {
+        Find-NpcMorphAssignmentRow -List $List -DisplayName $DisplayName -PluginName $PluginName -EditorId $EditorId
+    }
+}
+
+<#
+.SYNOPSIS
     Returns the selected Output tab's keyboard-reachable read-only document text.
 .PARAMETER Region
     Named Generated Output tab region that owns the selected content.
@@ -1660,6 +1707,392 @@ try {
         'keyboard and pointer target authoring, relationships, validation, Output, accessibility, narrow mode, and reopen passed'
     }
 
+    Invoke-SmokeStep -Name 'author-npc-morph-assignments-with-keyboard-and-pointer' -Action {
+        $representativePath = Join-Path $workDir $openedProjectName
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path $representativePath -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $openedProjectName" | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        $lydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'fixture NPC Morph Assignment'
+        if (-not $lydia.Current.Name.Contains('Race: NordRace. Form ID: A2C94.')) {
+            throw 'The NPC catalog did not expose the accepted race and normalized Form ID.'
+        }
+
+        $displayName = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'NPC display name:') -ControlType 'Edit'
+        $pluginName = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'NPC plugin name:') -ControlType 'Edit'
+        $editorId = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'NPC editor ID:') -ControlType 'Edit'
+        $race = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'NPC race:') -ControlType 'Edit'
+        $formId = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'NPC Form ID:') -ControlType 'Edit'
+        $createNpc = Find-OuterControl -ControlType 'Button' -Name 'Create NPC Morph Assignment'
+        Send-UiaKeysToElement -Element $createNpc -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-ProjectDiagnostics -Description 'required NPC Morph Assignment validation' -Predicate {
+            param($value) $value.Contains('NPC_MORPH_ASSIGNMENT_REQUIRED')
+        } | Out-Null
+        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' -Name 'Dismiss Morphs validation')
+
+        Set-UiaValue -Element $displayName -Value 'Different Lydia'
+        Set-UiaValue -Element $pluginName -Value 'SKYRIM.ESM'
+        Set-UiaValue -Element $editorId -Value 'housecarlwhiterun'
+        Set-UiaValue -Element $race -Value 'BretonRace'
+        Set-UiaValue -Element $formId -Value '000B1234'
+        Send-UiaKeysToElement -Element $createNpc -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-ProjectDiagnostics -Description 'case-insensitive NPC identity validation' -Predicate {
+            param($value) $value.Contains('NPC_MORPH_ASSIGNMENT_DUPLICATE')
+        } | Out-Null
+        Invoke-UiaElement -Element (Find-OuterControl -ControlType 'Button' -Name 'Dismiss Morphs validation')
+        $lydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'unchanged NPC after rejected duplicate'
+        if (-not $lydia.Current.Name.Contains('Form ID: A2C94.')) {
+            throw 'Rejected NPC creation changed the existing Project identity.'
+        }
+
+        # Deliberately reuse Lydia's display name: catalog selection must resolve the plugin/editor identity.
+        Set-UiaValue -Element $displayName -Value 'Lydia'
+        Set-UiaValue -Element $pluginName -Value 'Test.esp'
+        Set-UiaValue -Element $editorId -Value 'TestEditor'
+        Set-UiaValue -Element $race -Value 'BretonRace'
+        Set-UiaValue -Element $formId -Value '000ABC12'
+        Send-UiaKeysToElement -Element $createNpc -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $keyboardNpc = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Test.esp' `
+            -EditorId 'TestEditor' -Description 'keyboard-created NPC Morph Assignment'
+        Wait-UiaCondition -Description 'keyboard-created NPC selected by identity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $current = Find-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' `
+                -PluginName 'Test.esp' -EditorId 'TestEditor'
+            if ($null -ne $current -and (Get-UiaSelectionState -Element $current)) { $current }
+        } | Out-Null
+        if (-not $keyboardNpc.Current.Name.Contains('Race: BretonRace. Form ID: ABC12.')) {
+            throw 'Keyboard-created NPC did not expose accepted race and normalized Form ID.'
+        }
+        $originalLydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'same-name original NPC Morph Assignment'
+        if (Get-UiaSelectionState -Element $originalLydia) {
+            throw 'Creating a same-name NPC silently selected the earlier Project identity.'
+        }
+
+        Set-UiaValue -Element $displayName -Value 'Pointer NPC'
+        Set-UiaValue -Element $pluginName -Value 'Patch.esp'
+        Set-UiaValue -Element $editorId -Value 'PointerEditor'
+        Set-UiaValue -Element $race -Value 'NordRace'
+        Set-UiaValue -Element $formId -Value '000ABC13'
+        $createNpc = Find-OuterControl -ControlType 'Button' -Name 'Create NPC Morph Assignment'
+        $createNpc.SetFocus()
+        Wait-UiaCondition -Description 'onscreen NPC create button' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (-not $createNpc.Current.IsOffscreen -and $createNpc.Current.IsEnabled) { $createNpc }
+        } | Out-Null
+        $createNpc = Find-OuterControl -ControlType 'Button' -Name 'Create NPC Morph Assignment'
+        $createPointer = Invoke-UiaPointerClick -Element $createNpc -RefreshRoot $script:mainWindow `
+            -RefreshCondition (New-UiaCondition -ControlType 'Button' -Name 'Create NPC Morph Assignment')
+        $observations['npcCreatePointer'] = $createPointer
+        $pointerNpc = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Pointer NPC' -PluginName 'Patch.esp' `
+            -EditorId 'PointerEditor' -Description 'pointer-created NPC Morph Assignment'
+        if (-not $pointerNpc.Current.Name.Contains('Race: NordRace. Form ID: ABC13.')) {
+            throw 'Pointer-created NPC did not retain its accepted race and Form ID.'
+        }
+
+        $customList = Find-OuterControl -ControlType 'List' -Name 'Custom Morph Targets'
+        $customTarget = Wait-UiaElement -Root $customList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'All|Female') `
+            -Description 'Custom Morph Target for exclusive-selection check' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $customTarget
+        $pointerNpc = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Pointer NPC' -PluginName 'Patch.esp' `
+            -EditorId 'PointerEditor' -Description 'NPC for exclusive-selection check'
+        if (Get-UiaSelectionState -Element $pointerNpc) {
+            throw 'Selecting a Custom Morph Target retained NPC selection.'
+        }
+        Select-UiaElement -Element $pointerNpc
+        $customTarget = Wait-UiaElement -Root $customList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'All|Female') `
+            -Description 'Custom Morph Target after NPC selection' -TimeoutSeconds $StepTimeoutSeconds
+        if (Get-UiaSelectionState -Element $customTarget) {
+            throw 'Selecting an NPC Morph Assignment retained Custom Morph Target selection.'
+        }
+
+        $sort = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'Sort NPC Morph Assignments:') -ControlType 'ComboBox'
+        $initialSort = Get-UiaText -Element $sort
+        Send-UiaKeysToElement -Element $sort -Keys '{END}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'NPC sort choice committed' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $current = Get-UiaText -Element $sort
+            if ($current -cne $initialSort -and $current.Contains('Plugin')) { $sort }
+        } | Out-Null
+        $originalLydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'NPC before type-ahead navigation'
+        Select-UiaElement -Element $originalLydia
+        Send-UiaKeysToElement -Element $npcList -Keys 'p' -TimeoutSeconds $StepTimeoutSeconds
+        $pointerNpc = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Pointer NPC' -PluginName 'Patch.esp' `
+            -EditorId 'PointerEditor' -Description 'sorted NPC type-ahead result'
+        Wait-UiaCondition -Description 'visible-order NPC type-ahead selected exact identity' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $current = Find-NpcMorphAssignmentRow -List $npcList -DisplayName 'Pointer NPC' `
+                -PluginName 'Patch.esp' -EditorId 'PointerEditor'
+            if ($null -ne $current -and (Get-UiaSelectionState -Element $current)) { $current }
+        } | Out-Null
+
+        $filter = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'Filter NPC Morph Assignments:') -ControlType 'Edit'
+        Set-UiaValue -Element $filter -Value 'test.esp'
+        $removeNpc = Find-OuterControl -ControlType 'Button' -Name 'Remove selected NPC Morph Assignment'
+        Wait-UiaCondition -Description 'filter-hidden NPC selection cleared' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (-not $removeNpc.Current.IsEnabled) { $true }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        foreach ($identity in @(
+                @{ Name = 'Lydia'; Plugin = 'Skyrim.esm'; Editor = 'HousecarlWhiterun' },
+                @{ Name = 'Lydia'; Plugin = 'Test.esp'; Editor = 'TestEditor' },
+                @{ Name = 'Pointer NPC'; Plugin = 'Patch.esp'; Editor = 'PointerEditor' })) {
+            $row = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName $identity.Name `
+                -PluginName $identity.Plugin -EditorId $identity.Editor `
+                -Description "revealed NPC $($identity.Plugin)/$($identity.Editor)"
+            if (Get-UiaSelectionState -Element $row) {
+                throw 'Clearing the filter silently restored an NPC Morph Assignment selection.'
+            }
+        }
+
+        $originalLydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'original Lydia for relationship editing'
+        $originalLydia.SetFocus()
+        $selectPointer = Invoke-UiaPointerClick -Element $originalLydia -RefreshRoot $npcList `
+            -RefreshCondition (New-UiaCondition -ControlType 'ListItem' -Name $originalLydia.Current.Name)
+        Wait-UiaCondition -Description 'pointer-selected original NPC identity' -TimeoutSeconds $StepTimeoutSeconds `
+            -Test {
+            $current = Find-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' `
+                -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+            if ($null -ne $current -and (Get-UiaSelectionState -Element $current)) { $current }
+        } | Out-Null
+        Wait-UiaElement -Root $script:mainWindow -Condition (
+            New-UiaCondition -ControlType 'Text' `
+                -Name 'Selected NPC Morph Assignment Lydia, plugin Skyrim.esm, editor ID HousecarlWhiterun') `
+            -Description 'accepted NPC inspector identity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        foreach ($metadata in @('Plugin: Skyrim.esm; Editor ID: HousecarlWhiterun',
+                'Race: NordRace', 'Form ID: A2C94')) {
+            Wait-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Text' -Name $metadata) `
+                -Description "accepted NPC editor metadata '$metadata'" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        }
+        $assignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+        Wait-UiaElement -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic') `
+            -Description 'fixture NPC Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $availablePreset = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'Available Slider Preset:') -ControlType 'ComboBox'
+        Send-UiaKeysToElement -Element $availablePreset -Keys '{F4}{HOME}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $assignOne = Find-OuterControl -ControlType 'Button' -Name 'Assign selected Slider Preset'
+        Wait-UiaCondition -Description 'individual NPC Slider Preset choice committed' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($assignOne.Current.IsEnabled -and (Get-UiaText -Element $availablePreset) -ceq 'CBBE Curvy') {
+                $assignOne
+            }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $assignOne -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $assignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+        Wait-UiaElement -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
+            -Description 'keyboard-assigned NPC Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $keyboardNpc = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Test.esp' `
+            -EditorId 'TestEditor' -Description 'same-name NPC for pointer relationship editing'
+        Select-UiaElement -Element $keyboardNpc
+        $availablePreset = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'Available Slider Preset:') -ControlType 'ComboBox'
+        Send-UiaKeysToElement -Element $availablePreset -Keys '{F4}{HOME}{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $assignOne = Find-OuterControl -ControlType 'Button' -Name 'Assign selected Slider Preset'
+        $assignOne.SetFocus()
+        Wait-UiaCondition -Description 'onscreen NPC assign button' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (-not $assignOne.Current.IsOffscreen -and $assignOne.Current.IsEnabled) { $assignOne }
+        } | Out-Null
+        $assignOne = Find-OuterControl -ControlType 'Button' -Name 'Assign selected Slider Preset'
+        $assignPointer = Invoke-UiaPointerClick -Element $assignOne -RefreshRoot $script:mainWindow `
+            -RefreshCondition (New-UiaCondition -ControlType 'Button' -Name 'Assign selected Slider Preset')
+        $assignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+        Wait-UiaElement -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
+            -Description 'pointer-assigned same-name NPC relationship' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+
+        $npcList.SetFocus()
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^g' -TimeoutSeconds $StepTimeoutSeconds
+        $outputRegion = Find-OuterControl -ControlType 'Tab' -Name 'Generated Output tabs'
+        $morphsTab = Wait-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') `
+            -Description 'NPC Morphs Output tab' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $morphsTab
+        $beforeRelationshipRemoval = (Get-SelectedOutputText -Region $outputRegion -TabName 'Morphs' `
+            -Description 'Morphs output with both Lydia identities').Text
+        if (-not $beforeRelationshipRemoval.Contains('Skyrim.esm|A2C94=CBBE Curvy|UUNP Athletic') `
+                -or -not $beforeRelationshipRemoval.Contains('Test.esp|ABC12=CBBE Curvy')) {
+            throw 'Generated Morphs output omitted an NPC relationship or conflated same-name identities.'
+        }
+
+        $originalLydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'NPC for pointer relationship removal'
+        Select-UiaElement -Element $originalLydia
+        $assignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+        $uunp = Wait-UiaElement -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic') `
+            -Description 'NPC relationship to remove' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $uunp
+        $removeRelationship = Find-OuterControl -ControlType 'Button' `
+            -Name 'Remove selected Slider Preset relationship'
+        $removeRelationship.SetFocus()
+        $removePointer = Invoke-UiaPointerClick -Element $removeRelationship -RefreshRoot $script:mainWindow `
+            -RefreshCondition (New-UiaCondition -ControlType 'Button' `
+                -Name 'Remove selected Slider Preset relationship')
+        Choose-Confirmation -ButtonName 'Remove'
+        Wait-UiaCondition -Description 'removed NPC Slider Preset relationship' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $currentAssignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+            if ($null -eq (Find-UiaElement -Root $currentAssignedList -Condition (
+                    New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic'))) { $true }
+        } | Out-Null
+        Wait-UiaCondition -Description 'NPC edit invalidates generated Output' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($outputRegion.Current.HelpText.Contains('Project changed—Generate again.')) { $outputRegion }
+        } | Out-Null
+        $npcList.SetFocus()
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^g' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-UiaCondition -Description 'regenerated NPC Morphs output' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $candidate = (Get-SelectedOutputText -Region $outputRegion -TabName 'Morphs' `
+                -Description 'regenerated NPC Morphs output text').Text
+            if ($candidate.Contains('Skyrim.esm|A2C94=CBBE Curvy') `
+                    -and -not $candidate.Contains('Skyrim.esm|A2C94=CBBE Curvy|UUNP Athletic') `
+                    -and $candidate.Contains('Test.esp|ABC12=CBBE Curvy')) { $candidate }
+        } | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+
+        $keyboardNpc = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Test.esp' `
+            -EditorId 'TestEditor' -Description 'same-name NPC for confirmed removal'
+        Select-UiaElement -Element $keyboardNpc
+        $removeNpc = Find-OuterControl -ControlType 'Button' -Name 'Remove selected NPC Morph Assignment'
+        Send-UiaKeysToElement -Element $removeNpc -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Cancel'
+        Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Test.esp' `
+            -EditorId 'TestEditor' -Description 'cancelled NPC removal' | Out-Null
+        Send-UiaKeysToElement -Element $removeNpc -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Remove'
+        Wait-UiaCondition -Description 'confirmed same-name NPC removal' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($null -eq (Find-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' `
+                    -PluginName 'Test.esp' -EditorId 'TestEditor')) { $true }
+        } | Out-Null
+        Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'original same-name NPC retained' | Out-Null
+
+        Set-UiaValue -Element $filter -Value 'patch.esp'
+        $clearNpcs = Find-OuterControl -ControlType 'Button' -Name 'Clear visible NPC Morph Assignments'
+        Send-UiaKeysToElement -Element $clearNpcs -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Cancel'
+        Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Pointer NPC' -PluginName 'Patch.esp' `
+            -EditorId 'PointerEditor' -Description 'cancelled filtered NPC clear' | Out-Null
+        Send-UiaKeysToElement -Element $clearNpcs -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Choose-Confirmation -ButtonName 'Clear'
+        Wait-UiaCondition -Description 'confirmed filtered NPC clear' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if ($null -eq (Find-NpcMorphAssignmentRow -List $npcList -DisplayName 'Pointer NPC' `
+                    -PluginName 'Patch.esp' -EditorId 'PointerEditor')) { $true }
+        } | Out-Null
+        Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'unfiltered retained NPC' | Out-Null
+
+        $npcList.SetFocus()
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^g' -TimeoutSeconds $StepTimeoutSeconds
+        $outputRegion = Find-OuterControl -ControlType 'Tab' -Name 'Generated Output tabs'
+        $morphsTab = Wait-UiaElement -Root $outputRegion -Condition (
+            New-UiaCondition -ControlType 'TabItem' -Name 'Morphs') `
+            -Description 'final NPC Morphs Output tab' -TimeoutSeconds $StepTimeoutSeconds
+        Select-UiaElement -Element $morphsTab
+        $afterCatalogRemoval = (Get-SelectedOutputText -Region $outputRegion -TabName 'Morphs' `
+            -Description 'Morphs output after NPC catalog changes').Text
+        if (-not $afterCatalogRemoval.Contains('Skyrim.esm|A2C94=CBBE Curvy') `
+                -or $afterCatalogRemoval.Contains('Test.esp|ABC12=') `
+                -or $afterCatalogRemoval.Contains('Patch.esp|ABC13=')) {
+            throw 'Regenerated Morphs output did not reflect NPC removal and filtered clearing.'
+        }
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
+
+        $npcManagedName = 'npc-managed.jbs2bg'
+        $npcManagedPath = Join-Path $workDir $npcManagedName
+        Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
+        Complete-FileDialog -Title $saveDialogTitle -Path $npcManagedPath -ConfirmButton 'Save'
+        Wait-MainWindow -Title "$applicationTitle - $npcManagedName" | Out-Null
+        $saved = Get-Content -LiteralPath $npcManagedPath -Raw | ConvertFrom-Json
+        if (@($saved.MorphedNPCs.PSObject.Properties).Count -ne 1 `
+                -or (@($saved.MorphedNPCs.Lydia.SliderPresets) -join '|') -cne 'CBBE Curvy' `
+                -or $saved.MorphedNPCs.Lydia.Mod -cne 'Skyrim.esm' `
+                -or $saved.MorphedNPCs.Lydia.EditorId -cne 'HousecarlWhiterun' `
+                -or $saved.MorphedNPCs.Lydia.Race -cne 'NordRace' `
+                -or $saved.MorphedNPCs.Lydia.FormId -cne 'A2C94') {
+            throw 'Saved NPC Morph Assignment did not preserve accepted identity, metadata, and relationship.'
+        }
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path $npcManagedPath -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $npcManagedName" | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        $lydia = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' -PluginName 'Skyrim.esm' `
+            -EditorId 'HousecarlWhiterun' -Description 'reopened NPC Morph Assignment'
+        Select-UiaElement -Element $lydia
+        $assignedList = Find-OuterControl -ControlType 'List' -Name 'Assigned Slider Presets'
+        Wait-UiaElement -Root $assignedList -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
+            -Description 'reopened NPC Slider Preset relationship' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        if ($null -ne (Find-UiaElement -Root $assignedList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic'))) {
+            throw 'Reopened NPC restored a removed Slider Preset relationship.'
+        }
+
+        $narrowMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
+            -TimeoutSeconds $StepTimeoutSeconds
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
+        $npcSurface = Find-OuterControl -ControlType 'Pane' -Name 'Custom Morph Target management'
+        Assert-ControlInsideClient -Element $npcSurface -Metrics $narrowMetrics
+        $filter = Get-FollowingControl -Element (
+            Find-OuterControl -ControlType 'Text' -Name 'Filter NPC Morph Assignments:') -ControlType 'Edit'
+        Wait-UiaKeyboardFocus -Element $filter -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Assert-ControlInsideClient -Element $filter -Metrics (Get-UiaWindowMetrics -Window $script:mainWindow)
+        $npcNarrowScreenshot = Join-Path $diagnosticsDir 'workbench-npc-morphs-narrow.png'
+        Save-Screenshot -Path $npcNarrowScreenshot
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
+        Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1300 -LogicalHeight 800 `
+            -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        Get-UiaTree -Element $script:mainWindow |
+            Set-Content -LiteralPath (Join-Path $diagnosticsDir 'uia-tree-workbench-npc-morphs.txt') -Encoding utf8
+        $observations['npcMorphManagement'] = [ordered]@{
+            validation = @('NPC_MORPH_ASSIGNMENT_REQUIRED', 'NPC_MORPH_ASSIGNMENT_DUPLICATE')
+            sameDisplayNameIdentities = @('Skyrim.esm/HousecarlWhiterun', 'Test.esp/TestEditor')
+            keyboardCreated = 'Test.esp/TestEditor'
+            pointerCreated = 'Patch.esp/PointerEditor'
+            pointerCoordinates = [ordered]@{
+                create = $createPointer
+                select = $selectPointer
+                assign = $assignPointer
+                removeRelationship = $removePointer
+            }
+            relationshipAdded = 'CBBE Curvy'
+            relationshipRemoved = 'UUNP Athletic'
+            removed = 'Test.esp/TestEditor'
+            clearVisibleRemoved = 'Patch.esp/PointerEditor'
+            generatedBeforeRemoval = $beforeRelationshipRemoval
+            generatedAfterCatalogRemoval = $afterCatalogRemoval
+            savedAndReopened = $npcManagedName
+            scalePercent = [math]::Round($narrowMetrics.Dpi * 100.0 / 96.0)
+        }
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        'keyboard and pointer NPC authoring, identity, validation, relationships, Output, and reopen passed'
+    }
+
     Invoke-SmokeStep -Name 'manage-settings-and-import-bodyslide-through-workbench' -Action {
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^5' -TimeoutSeconds $StepTimeoutSeconds
         Wait-AreaSelected -Name 'Settings' | Out-Null
@@ -2707,7 +3140,9 @@ finally {
             responsiveWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-responsive.txt'
             templatesWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-templates.txt'
             morphsWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-morphs.txt'
+            npcMorphsWorkbenchTree = 'smoke-diagnostics/uia-tree-workbench-npc-morphs.txt'
             templatesNarrowScreenshot = 'smoke-diagnostics/workbench-templates-narrow.png'
+            npcMorphsNarrowScreenshot = 'smoke-diagnostics/workbench-npc-morphs-narrow.png'
             templatesHighContrastScreenshot = 'smoke-diagnostics/workbench-templates-high-contrast.png'
             morphsNarrowScreenshot = 'smoke-diagnostics/workbench-morphs-narrow.png'
             morphsHighContrastScreenshot = 'smoke-diagnostics/workbench-morphs-high-contrast.png'

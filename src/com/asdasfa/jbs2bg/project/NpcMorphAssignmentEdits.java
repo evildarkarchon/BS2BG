@@ -14,6 +14,22 @@ public final class NpcMorphAssignmentEdits {
     }
 
     /**
+     * Requests manual NPC Morph Assignment authoring from Workbench field values.
+     * ProjectSession validates the fields and normalizes the persisted Form ID.
+     *
+     * @param displayName optional display name; blank uses the editor ID fallback
+     * @param pluginName  source plugin or mod name
+     * @param editorId    NPC editor ID
+     * @param race        NPC race
+     * @param formId      hexadecimal Form ID, with an optional load-order prefix
+     * @return an immutable authoring request
+     */
+    public static ProjectEdit create(String displayName, String pluginName, String editorId, String race,
+                                     String formId) {
+        return new Create(displayName, pluginName, editorId, race, formId);
+    }
+
+    /**
      * Requests promotion of copied NPC source values into the active Project.
      * Any supplied Slider Preset names are explicit caller-owned choices that the
      * session resolves and validates.
@@ -135,6 +151,49 @@ public final class NpcMorphAssignmentEdits {
      * Identifies the closed family of NPC Morph Assignment requests.
      */
     interface NpcMorphAssignmentEdit extends ProjectEdit {
+    }
+
+    /** Immutable raw Workbench values interpreted only by ProjectSession. */
+    static final class Create implements NpcMorphAssignmentEdit {
+        private final String displayName;
+        private final String pluginName;
+        private final String editorId;
+        private final String race;
+        private final String formId;
+
+        /** Captures raw values so ProjectSession remains the validation authority. */
+        Create(String displayName, String pluginName, String editorId, String race, String formId) {
+            this.displayName = displayName;
+            this.pluginName = pluginName;
+            this.editorId = editorId;
+            this.race = race;
+            this.formId = formId;
+        }
+
+        /** @return raw display name, or null when omitted */
+        String getDisplayName() {
+            return displayName;
+        }
+
+        /** @return raw plugin name, or null when omitted */
+        String getPluginName() {
+            return pluginName;
+        }
+
+        /** @return raw editor ID, or null when omitted */
+        String getEditorId() {
+            return editorId;
+        }
+
+        /** @return raw race, or null when omitted */
+        String getRace() {
+            return race;
+        }
+
+        /** @return raw Form ID, or null when omitted */
+        String getFormId() {
+            return formId;
+        }
     }
 
     /**

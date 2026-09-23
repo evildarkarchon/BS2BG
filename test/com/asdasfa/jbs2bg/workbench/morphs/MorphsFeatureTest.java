@@ -13,6 +13,8 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import com.asdasfa.jbs2bg.filtering.NameIdentity;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.ProjectDiagnosticCodes;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
@@ -23,6 +25,161 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MorphsFeatureTest {
+
+    /** NPC and Custom Morph Target selections have separate identities and exactly one active inspector. */
+    @Test
+    void createsNpcAndKeepsMorphSelectionsMutuallyExclusive() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(CustomMorphTargetEdits.create("Lydia"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.Select(NameIdentity.of("Lydia")));
+
+        MorphsFeature.Update created = feature.dispatch(new MorphsFeature.CreateNpc(
+                "Lydia", "Skyrim.esm", "HousecarlWhiterun", "NordRace", "000A2C94"));
+        NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity("SKYRIM.ESM", "housecarlwhiterun");
+        MorphsFeature.Update targetSelected = feature.dispatch(new MorphsFeature.Select(NameIdentity.of("Lydia")));
+        MorphsFeature.Update npcSelected = feature.dispatch(new MorphsFeature.SelectNpc(identity));
+
+        assertEquals(MorphsFeature.OutcomeKind.CHANGED, created.outcomeKind());
+        assertTrue(created.frame().selection().isEmpty());
+        assertEquals(identity, created.frame().npcSelection().orElseThrow());
+        assertEquals("Lydia", created.frame().npcEditor().orElseThrow().npc().getDisplayName());
+        assertEquals("A2C94", created.frame().npcEditor().orElseThrow().npc().getFormId());
+        assertTrue(targetSelected.frame().npcSelection().isEmpty());
+        assertEquals(NameIdentity.of("Lydia"), targetSelected.frame().selection().orElseThrow());
+        assertTrue(npcSelected.frame().selection().isEmpty());
+        assertEquals(identity, npcSelected.frame().npcSelection().orElseThrow());
+    }
+
+    /** NPC filtering and ordering preserve a visible plugin/editor identity even when display names repeat. */
+    @Test
+    void filtersAndSortsNpcsWithoutRetargetingSelection() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Companion.esp", "SecondLydia",
+                "BretonRace", "0000BEEF"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Aela", "Skyrim.esm", "AelaTheHuntress",
+                "NordRace", "0000A123"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        NpcMorphAssignmentIdentity selected = new NpcMorphAssignmentIdentity("Skyrim.esm", "HousecarlWhiterun");
+        feature.dispatch(new MorphsFeature.SelectNpc(selected));
+
+        MorphsFeature.Update sorted = feature.dispatch(new MorphsFeature.ChangeNpcSort(
+                MorphsFeature.NpcSortOrder.PLUGIN_ASCENDING));
+        MorphsFeature.Update hidden = feature.dispatch(new MorphsFeature.ChangeNpcFilter("BretonRace"));
+        MorphsFeature.Update revealed = feature.dispatch(new MorphsFeature.ChangeNpcFilter(""));
+        feature.dispatch(new MorphsFeature.SelectNpc(selected));
+        projectFlow.apply(NpcMorphAssignmentEdits.removeNpc(new NpcMorphAssignmentIdentity(
+                "Companion.esp", "SecondLydia")));
+        MorphsFeature.Update refreshed = feature.acceptProjectFrame(projectFlow.frame(), false);
+
+        assertEquals(List.of("Companion.esp/SecondLydia", "Skyrim.esm/AelaTheHuntress",
+                        "Skyrim.esm/HousecarlWhiterun"), sorted.frame().visibleNpcs().stream()
+                .map(npc -> npc.getPluginName() + "/" + npc.getEditorId()).toList());
+        assertEquals(selected, sorted.frame().npcSelection().orElseThrow());
+        assertEquals(List.of("Companion.esp/SecondLydia"), hidden.frame().visibleNpcs().stream()
+                .map(npc -> npc.getPluginName() + "/" + npc.getEditorId()).toList());
+        assertTrue(hidden.frame().npcSelection().isEmpty());
+        assertTrue(revealed.frame().npcSelection().isEmpty());
+        assertEquals(selected, refreshed.frame().npcSelection().orElseThrow());
+    }
+
+    /** NPC relationship edits stay on the selected identity and Project cascades survive rename and removal. */
+    @Test
+    void editsNpcRelationshipsThroughProjectAndDropsStalePresetSelection() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.create("Beta"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity("SKYRIM.ESM", "housecarlwhiterun");
+        feature.dispatch(new MorphsFeature.SelectNpc(identity));
+
+        MorphsFeature.Update assigned = feature.dispatch(new MorphsFeature.AssignSliderPreset(NameIdentity.of("alpha")));
+        MorphsFeature.Update rejected = feature.dispatch(new MorphsFeature.AssignSliderPreset(NameIdentity.of("Missing")));
+        feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Alpha")));
+        projectFlow.apply(SliderPresetEdits.rename("Alpha", "Gamma"));
+        MorphsFeature.Update renamed = feature.acceptProjectFrame(projectFlow.frame(), false);
+        projectFlow.apply(SliderPresetEdits.delete("Gamma"));
+        MorphsFeature.Update removed = feature.acceptProjectFrame(projectFlow.frame(), false);
+
+        assertEquals(List.of("Alpha"), assigned.frame().npcEditor().orElseThrow().assignedPresets().stream()
+                .map(preset -> preset.getName()).toList());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND,
+                rejected.frame().diagnostics().getFirst().getCode());
+        assertEquals(List.of("Alpha"), rejected.frame().npcEditor().orElseThrow().assignedPresets().stream()
+                .map(preset -> preset.getName()).toList());
+        assertEquals(identity, renamed.frame().npcSelection().orElseThrow());
+        assertEquals(List.of("Gamma"), renamed.frame().npcEditor().orElseThrow().assignedPresets().stream()
+                .map(preset -> preset.getName()).toList());
+        assertTrue(renamed.frame().npcEditor().orElseThrow().assignedSelection().isEmpty());
+        assertTrue(removed.frame().npcEditor().orElseThrow().assignedPresets().isEmpty());
+    }
+
+    /** A filtered clear captures plugin/editor identities and cannot remove a later matching NPC. */
+    @Test
+    void confirmedNpcClearRemovesOnlyCapturedVisibleIdentities() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Companion.esp", "SecondLydia",
+                "BretonRace", "0000BEEF"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.ChangeNpcFilter("Companion"));
+        feature.dispatch(new MorphsFeature.SelectNpc(new NpcMorphAssignmentIdentity("Companion.esp", "SecondLydia")));
+
+        MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RequestClearVisibleNpcs());
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Another", "Companion.esp", "ThirdNpc",
+                "NordRace", "0000C001"));
+        MorphsFeature.Update blocked = feature.dispatch(new MorphsFeature.ChangeNpcFilter(""));
+        MorphsFeature.Update confirmed = feature.respond(requested.effect().orElseThrow().token(), true);
+
+        assertEquals(MorphsFeature.EffectKind.CONFIRM_CLEAR_VISIBLE_NPCS,
+                requested.effect().orElseThrow().kind());
+        assertEquals(List.of(new NpcMorphAssignmentIdentity("Companion.esp", "SecondLydia")),
+                requested.effect().orElseThrow().npcIdentities());
+        assertTrue(!blocked.accepted());
+        assertEquals(List.of("Companion.esp/ThirdNpc", "Skyrim.esm/HousecarlWhiterun"),
+                projectFlow.frame().snapshot().getNpcMorphAssignments().stream()
+                        .map(npc -> npc.getPluginName() + "/" + npc.getEditorId()).toList());
+        assertTrue(confirmed.frame().npcSelection().isEmpty());
+    }
+
+    /** A confirmed relationship edit addresses its frozen NPC identity after external selection changes. */
+    @Test
+    void rejectedNpcRelationshipRemovalDoesNotRetargetAnotherNpc() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Companion.esp", "SecondLydia",
+                "BretonRace", "0000BEEF"));
+        NpcMorphAssignmentIdentity first = new NpcMorphAssignmentIdentity("Skyrim.esm", "HousecarlWhiterun");
+        NpcMorphAssignmentIdentity second = new NpcMorphAssignmentIdentity("Companion.esp", "SecondLydia");
+        projectFlow.apply(NpcMorphAssignmentEdits.addSliderPreset(first, "Alpha"));
+        projectFlow.apply(NpcMorphAssignmentEdits.addSliderPreset(second, "Alpha"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.SelectNpc(first));
+        feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Alpha")));
+        MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RemoveAssignedSliderPreset());
+        projectFlow.apply(NpcMorphAssignmentEdits.removeNpc(first));
+
+        MorphsFeature.Update rejected = feature.respond(requested.effect().orElseThrow().token(), true);
+
+        assertEquals(MorphsFeature.OutcomeKind.REJECTED, rejected.outcomeKind());
+        assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND,
+                rejected.frame().diagnostics().getFirst().getCode());
+        assertTrue(rejected.frame().npcSelection().isEmpty());
+        assertEquals(List.of("Alpha"), projectFlow.frame().snapshot().getNpcMorphAssignments().getFirst()
+                .getSliderPresetNames());
+    }
 
     /**
      * A condition-bearing name remains intact while creation publishes and selects only the immutable value accepted

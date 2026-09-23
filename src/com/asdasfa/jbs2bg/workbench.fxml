@@ -263,6 +263,68 @@
                                                                                 accessibleText="Clear visible Custom Morph Targets"
                                                                                 maxWidth="Infinity" mnemonicParsing="true"
                                                                                 text="C_lear visible Custom Morph Targets" />
+                                                                        <Label styleClass="title" text="NPC Morph Assignments" />
+                                                                        <Label labelFor="$npcMorphAssignmentFilter"
+                                                                                mnemonicParsing="true"
+                                                                                text="_Filter NPC Morph Assignments:" />
+                                                                        <TextField fx:id="npcMorphAssignmentFilter"
+                                                                                accessibleText="Filter NPC Morph Assignments"
+                                                                                promptText="Filter by name, plugin, ID, race, or Form ID" />
+                                                                        <Label labelFor="$npcMorphAssignmentSort"
+                                                                                mnemonicParsing="true"
+                                                                                text="_Sort NPC Morph Assignments:" />
+                                                                        <ComboBox fx:id="npcMorphAssignmentSort"
+                                                                                accessibleText="NPC Morph Assignment sort"
+                                                                                maxWidth="Infinity" />
+                                                                        <ListView fx:id="npcMorphAssignmentList"
+                                                                                accessibleText="NPC Morph Assignments"
+                                                                                fixedCellSize="28.0"
+                                                                                focusTraversable="true"
+                                                                                VBox.vgrow="ALWAYS" />
+                                                                        <Label labelFor="$npcDisplayNameInput"
+                                                                                mnemonicParsing="true"
+                                                                                text="NPC _display name:" />
+                                                                        <TextField fx:id="npcDisplayNameInput"
+                                                                                accessibleHelp="An empty display name uses Unnamed (editor ID)."
+                                                                                accessibleText="NPC display name"
+                                                                                promptText="Optional display name" />
+                                                                        <Label labelFor="$npcPluginNameInput"
+                                                                                mnemonicParsing="true"
+                                                                                text="NPC _plugin name:" />
+                                                                        <TextField fx:id="npcPluginNameInput"
+                                                                                accessibleText="NPC plugin name"
+                                                                                promptText="Example.esp" />
+                                                                        <Label labelFor="$npcEditorIdInput"
+                                                                                mnemonicParsing="true"
+                                                                                text="NPC _editor ID:" />
+                                                                        <TextField fx:id="npcEditorIdInput"
+                                                                                accessibleText="NPC editor ID"
+                                                                                promptText="ActorEditorID" />
+                                                                        <Label labelFor="$npcRaceInput"
+                                                                                mnemonicParsing="true"
+                                                                                text="NPC _race:" />
+                                                                        <TextField fx:id="npcRaceInput"
+                                                                                accessibleText="NPC race"
+                                                                                promptText="Race" />
+                                                                        <Label labelFor="$npcFormIdInput"
+                                                                                mnemonicParsing="true"
+                                                                                text="NPC _Form ID:" />
+                                                                        <TextField fx:id="npcFormIdInput"
+                                                                                accessibleHelp="Load order prefixes and leading zeroes normalize to the final Form ID."
+                                                                                accessibleText="NPC Form ID"
+                                                                                promptText="000ABC" />
+                                                                        <Button fx:id="createNpcMorphAssignmentButton"
+                                                                                accessibleText="Create NPC Morph Assignment"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Create NPC Morph Assignment" />
+                                                                        <Button fx:id="removeNpcMorphAssignmentButton"
+                                                                                accessibleText="Remove selected NPC Morph Assignment"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Remove NPC Morph Assignment" />
+                                                                        <Button fx:id="clearNpcMorphAssignmentsButton"
+                                                                                accessibleText="Clear visible NPC Morph Assignments"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="C_lear visible NPC Morph Assignments" />
                                                                     </children>
                                                                 </VBox>
                                                             </content>
@@ -353,6 +415,12 @@
                                                                 <Label fx:id="morphTargetConditionText"
                                                                         text="Select a Custom Morph Target to inspect its condition."
                                                                         wrapText="true" />
+                                                                <Label fx:id="npcIdentityText" managed="false"
+                                                                        text="" visible="false" wrapText="true" />
+                                                                <Label fx:id="npcRaceText" managed="false"
+                                                                        text="" visible="false" wrapText="true" />
+                                                                <Label fx:id="npcFormIdText" managed="false"
+                                                                        text="" visible="false" wrapText="true" />
                                                                 <Label fx:id="morphTargetAssignmentCountText"
                                                                         text="No Slider Presets assigned" wrapText="true" />
                                                                 <Label fx:id="morphTargetOutputStatusText"
