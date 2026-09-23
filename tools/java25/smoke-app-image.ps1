@@ -864,12 +864,12 @@ try {
         }
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F6}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Text' -Name 'Custom Morph Target editor' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs editor' | Out-Null
         $ctrlBackquote = '^' + [char]96
         Send-UiaKeys -ProcessId $script:app.Id -Keys $ctrlBackquote -TimeoutSeconds $StepTimeoutSeconds
         Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys $ctrlBackquote -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Text' -Name 'Custom Morph Target editor' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs editor' | Out-Null
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
         Wait-FocusedControl -ControlType 'Text' -Name 'Output generated text' | Out-Null
@@ -879,7 +879,7 @@ try {
         Wait-UiaKeyboardFocus -Element $morphsRail -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         $focusCycle = @(
             @{ Role = 'List'; Name = 'Custom Morph Targets' },
-            @{ Role = 'Text'; Name = 'Custom Morph Target editor' },
+            @{ Role = 'Text'; Name = 'Morphs editor' },
             @{ Role = 'Text'; Name = 'Morphs inspector: no selection' },
             @{ Role = 'Text'; Name = 'Output generated text' },
             @{ Role = 'List'; Name = 'Activity' },
@@ -891,7 +891,7 @@ try {
             Wait-FocusedControl -ControlType $target.Role -Name $target.Name | Out-Null
         }
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^4' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Text' -Name 'Custom Morph Target editor' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs editor' | Out-Null
         $observations['keyboardNavigation'] = [ordered]@{
             areas = $areaEvidence
             outputPreservedArea = 'Morphs'
@@ -934,7 +934,7 @@ try {
                 [math]::Abs($minimumMetrics.LogicalClientHeight - 600.0) -gt 2.0) {
             throw "Workbench minimum client geometry did not settle at 800x600: $($minimumMetrics.LogicalClientWidth)x$($minimumMetrics.LogicalClientHeight)."
         }
-        $editor = Find-OuterControl -ControlType 'Text' -Name 'Custom Morph Target editor'
+        $editor = Find-OuterControl -ControlType 'Text' -Name 'Morphs editor'
         Assert-ControlInsideClient -Element $editor -Metrics $minimumMetrics
         $listLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open Morphs list'
         Send-UiaKeysToElement -Element $listLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds

@@ -2220,7 +2220,7 @@ public final class WorkbenchController {
         npcMorphAssignmentListInitialized = true;
     }
 
-    /** Replaces an empty assigned-preset ListView when a later selected Target or NPC refills relationships. */
+    /** Replaces an empty assigned-preset ListView when a Custom Morph Target or NPC Morph Assignment refills it. */
     private void reconcileAssignedMorphSliderPresetItems(List<SliderPresetSnapshot> assignedPresets) {
         boolean refill = assignedMorphSliderPresetListInitialized
                 && assignedMorphSliderPresetList.getItems().isEmpty() && !assignedPresets.isEmpty();

@@ -514,7 +514,7 @@ public final class MorphsFeature {
         return new Update(kind == OutcomeKind.CHANGED || kind == OutcomeKind.UNCHANGED, frame, kind);
     }
 
-    /** Adds one relationship to the selected Target or NPC and renders only the ProjectSession result. */
+    /** Adds one relationship to the selected Custom Morph Target or NPC Morph Assignment. */
     private Update assignSliderPreset(NameIdentity presetIdentity) {
         CustomMorphTargetSnapshot target = selectedTarget();
         NpcMorphAssignmentSnapshot npc = selectedNpc();
@@ -528,7 +528,7 @@ public final class MorphsFeature {
         return reconcileOutcome(outcome);
     }
 
-    /** Assigns every Project Slider Preset to the selected Target or NPC in one atomic edit. */
+    /** Assigns every Project Slider Preset to the selected Custom Morph Target or NPC Morph Assignment atomically. */
     private Update assignAllSliderPresets() {
         CustomMorphTargetSnapshot target = selectedTarget();
         NpcMorphAssignmentSnapshot npc = selectedNpc();
@@ -558,7 +558,7 @@ public final class MorphsFeature {
         return new Update(true, frame, OutcomeKind.NONE);
     }
 
-    /** Clears only assigned-preset selection without changing the selected Target, NPC, or Project. */
+    /** Clears only preset selection without changing the selected Custom Morph Target, NPC Morph Assignment, or Project. */
     private Update clearAssignedSliderPresetSelection() {
         if (assignedSelection.isEmpty())
             return new Update(false, frame, OutcomeKind.NONE);
@@ -601,7 +601,7 @@ public final class MorphsFeature {
                 npcIdentity, presetIdentity.getName())));
     }
 
-    /** Captures the selected Target or NPC identity before requesting relationship-clear confirmation. */
+    /** Captures the selected Custom Morph Target or NPC Morph Assignment identity before confirmation. */
     private Update requestClearAssignments() {
         CustomMorphTargetSnapshot target = selectedTarget();
         NpcMorphAssignmentSnapshot npc = selectedNpc();
@@ -869,7 +869,7 @@ public final class MorphsFeature {
         }
     }
 
-    /** Assigns one existing Slider Preset to the selected Target or NPC. */
+    /** Assigns one existing Slider Preset to the selected Custom Morph Target or NPC Morph Assignment. */
     public record AssignSliderPreset(NameIdentity identity) implements Intent {
         /** Validates the immutable relationship endpoint. */
         public AssignSliderPreset {
@@ -877,7 +877,7 @@ public final class MorphsFeature {
         }
     }
 
-    /** Assigns every currently available Slider Preset to the selected Target or NPC atomically. */
+    /** Assigns every available Slider Preset to the selected Custom Morph Target or NPC Morph Assignment atomically. */
     public record AssignAllSliderPresets() implements Intent {
     }
 
@@ -889,7 +889,7 @@ public final class MorphsFeature {
         }
     }
 
-    /** Clears assigned Slider Preset selection while preserving the selected Target or NPC. */
+    /** Clears assigned Slider Preset selection while preserving the selected Custom Morph Target or NPC Morph Assignment. */
     public record ClearAssignedSliderPresetSelection() implements Intent {
     }
 
@@ -897,7 +897,7 @@ public final class MorphsFeature {
     public record RemoveAssignedSliderPreset() implements Intent {
     }
 
-    /** Requests confirmation before clearing every relationship from the selected Target or NPC. */
+    /** Requests confirmation before clearing relationships from the selected Custom Morph Target or NPC Morph Assignment. */
     public record RequestClearAssignments() implements Intent {
     }
 
