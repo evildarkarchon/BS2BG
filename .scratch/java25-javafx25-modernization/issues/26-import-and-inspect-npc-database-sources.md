@@ -1,6 +1,6 @@
 # Import and inspect NPC Database sources
 
-Status: ready-for-agent
+Status: resolved
 Source: [GitHub #110](https://github.com/evildarkarchon/BS2BG/issues/110)
 GitHub state at migration: open (no closure reason)
 Created: 2026-08-29T07:13:00Z
@@ -22,11 +22,11 @@ Import and inspect NPC Database sources.
 
 ## Acceptance criteria
 
-- [ ] The session-scoped NPC Database provides source management, catalog filtering and sorting, identity-stable selection, inspection, portraits, diagnostics, and clear behavior.
-- [ ] Each selected source parses transactionally with accepted trimming, field tolerance, fallback names, Form ID normalization, deduplication, import order, and deterministic UTF-8 fallback.
-- [ ] Imports use the central job path; cancellation publishes none of the current source while preserving prior committed sources truthfully.
-- [ ] Malformed sources, races, progress, retry, failure, cancellation, Activity, and shutdown produce accepted observable outcomes.
-- [ ] Packaged tests cover successful, malformed, mixed, failed, and cancelled imports plus keyboard, accessibility, theme, DPI, and responsive behavior.
+- [x] The session-scoped NPC Database provides source management, catalog filtering and sorting, identity-stable selection, inspection, portraits, diagnostics, and clear behavior.
+- [x] Each selected source parses transactionally with accepted trimming, field tolerance, fallback names, Form ID normalization, deduplication, import order, and deterministic UTF-8 fallback.
+- [x] Imports use the central job path; cancellation publishes none of the current source while preserving prior committed sources truthfully.
+- [x] Malformed sources, races, progress, retry, failure, cancellation, Activity, and shutdown produce accepted observable outcomes.
+- [x] Packaged tests cover successful, malformed, mixed, failed, and cancelled imports plus keyboard, accessibility, theme, DPI, and responsive behavior.
 
 ## Blocked by
 
@@ -35,3 +35,15 @@ Import and inspect NPC Database sources.
 ## Comments
 
 No comments at migration.
+
+### Completion — 2026-09-23
+
+Implemented the window-scoped NPC Database source catalog, transactional text reader, central-job importer, source
+management, per-column keyboard filtering, sorting, identity-stable inspection, and portrait viewer. A malformed row
+rejects its entire source; valid sources in the same batch may commit. Cancellation retains only complete prior
+sources, and Activity records source effects and diagnostics. The charset detector was upgraded to 2.5.0.
+
+The clean checkpoint from `1ed21f4bc5118cc6d76464895acb702d1d0fcc03` passed 502 Java tests with no skips,
+133 PowerShell tests, and all 26 packaged workflows at 100%, 125%, and 150% display scale. Each launcher exited with
+code 0, and the original 100% scale was restored. [Retained evidence](../../../docs/build/evidence/windows-app-image-2026-09-23-npc-database-dpi-matrix/README.md)
+includes the image and archive hashes, matrix reports, UIA trees, and screenshots.

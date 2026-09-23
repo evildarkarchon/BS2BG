@@ -1,0 +1,717 @@
+{
+  "schema": "bs2bg.windows-app-image-smoke/19",
+  "recordedAtUtc": "2026-09-23T07:43:36.0962135+00:00",
+  "passed": true,
+  "expectedAppVersion": "1.1.2",
+  "archive": "D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip",
+  "timeouts": {
+    "startupSeconds": 90,
+    "stepSeconds": 30,
+    "exitSeconds": 30,
+    "expectedDpiPercent": 125
+  },
+  "steps": [
+    {
+      "name": "extract-clean-image",
+      "passed": true,
+      "seconds": 9.57,
+      "detail": "extracted archive, installed five Project fixtures, seven NPC sources, and three portraits, and staged interrupted Settings recovery in C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work"
+    },
+    {
+      "name": "launch-workbench-without-system-java",
+      "passed": true,
+      "seconds": 4.05,
+      "detail": "launcher pid 27096 hosts image-local jvm.dll; Workbench appeared after 3.9 s"
+    },
+    {
+      "name": "verify-workbench-shell-and-first-run-settings",
+      "passed": true,
+      "seconds": 0.5,
+      "detail": "five typed navigation destinations and the canonical Settings pair are accessible"
+    },
+    {
+      "name": "verify-workbench-feedback-semantics",
+      "passed": true,
+      "seconds": 0.05,
+      "detail": "Activity keyboard reachability and idle Cancel state passed without changing Windows preferences"
+    },
+    {
+      "name": "verify-keyboard-navigation-focus-and-output-drawer",
+      "passed": true,
+      "seconds": 1.77,
+      "detail": "typed shortcuts, semantic focus return, drawer resize, alias, and F6 cycle passed through packaged UIA"
+    },
+    {
+      "name": "verify-responsive-layout-and-minimum-geometry",
+      "passed": true,
+      "seconds": 1.43,
+      "detail": "narrow overlays, semantic restoration, 800x600 minimum, breakpoint, and live-DPI geometry passed"
+    },
+    {
+      "name": "edit-and-manage-slider-presets-without-pointer",
+      "passed": true,
+      "seconds": 38.09,
+      "detail": "pointer-free Slider choice/profile/gang editing, browse, validation, management, and reopen passed"
+    },
+    {
+      "name": "author-custom-morph-targets-with-keyboard-and-pointer",
+      "passed": true,
+      "seconds": 45.83,
+      "detail": "keyboard and pointer target authoring, relationships, validation, Output, accessibility, narrow mode, and reopen passed"
+    },
+    {
+      "name": "author-npc-morph-assignments-with-keyboard-and-pointer",
+      "passed": true,
+      "seconds": 40.98,
+      "detail": "keyboard and pointer NPC authoring, identity, validation, relationships, Output, and reopen passed"
+    },
+    {
+      "name": "fill-visible-empty-npc-morph-assignments",
+      "passed": true,
+      "seconds": 26.6,
+      "detail": "visible empty set, eligible choices, keyboard dismissal, cancellation, Output, and reopen passed"
+    },
+    {
+      "name": "inspect-npc-portraits-and-open-accessible-viewer",
+      "passed": true,
+      "seconds": 2.56,
+      "detail": "portrait filename priority, selection, viewer accessibility, fallback, no-image state, and narrow mode passed"
+    },
+    {
+      "name": "import-inspect-and-manage-npc-database-sources",
+      "passed": true,
+      "seconds": 15.5,
+      "detail": "ordered source import, identity deduplication, row inspection, portrait, sorting, and filtering passed"
+    },
+    {
+      "name": "reject-mixed-failed-and-cancelled-npc-database-sources",
+      "passed": true,
+      "seconds": 34.43,
+      "detail": "malformed, mixed, locked-read, linked retry, and cancelled NPC source outcomes retained truthful catalog and Activity state"
+    },
+    {
+      "name": "remove-clear-reimport-and-resize-npc-database",
+      "passed": true,
+      "seconds": 9.72,
+      "detail": "source removal, duplicate reveal, clear/reimport, session scope, and narrow keyboard overlays passed"
+    },
+    {
+      "name": "manage-settings-and-import-bodyslide-through-workbench",
+      "passed": true,
+      "seconds": 49.75,
+      "detail": "paired Settings editing/recovery and successful, malformed, partial, failed, and cancelled imports passed"
+    },
+    {
+      "name": "generate-inspect-invalidate-cancel-and-stale-output",
+      "passed": true,
+      "seconds": 29.63,
+      "detail": "fresh, save-only, invalidated, cancelled, and stale Output contracts passed through packaged UIA"
+    },
+    {
+      "name": "save-as-new-project",
+      "passed": true,
+      "seconds": 6.27,
+      "detail": "saved clean untitled Project as new-project.jbs2bg"
+    },
+    {
+      "name": "open-recovered-project-with-complete-diagnostics",
+      "passed": true,
+      "seconds": 6.42,
+      "detail": "opened a dirty recovered Project with diagnostics, warning InfoBar, Activity, and status projection"
+    },
+    {
+      "name": "cancel-then-discard-dirty-new",
+      "passed": true,
+      "seconds": 1.32,
+      "detail": "Cancel preserved the dirty Project; Discard then established a clean New Project"
+    },
+    {
+      "name": "save-recovered-project-through-adopted-identity",
+      "passed": true,
+      "seconds": 6.78,
+      "detail": "Save used the adopted identity and published a clean file-backed Project"
+    },
+    {
+      "name": "malformed-open-preserves-active-project-and-linked-retry",
+      "passed": true,
+      "seconds": 6.79,
+      "detail": "malformed Open preserved active bytes; Retry re-read the repaired source as a linked successful attempt"
+    },
+    {
+      "name": "changed-source-open-rejects-stale-completion",
+      "passed": true,
+      "seconds": 12.26,
+      "detail": "changing the selected source during detached parsing produced stale Activity and committed no effect"
+    },
+    {
+      "name": "central-job-admission-progress-and-cancellation",
+      "passed": true,
+      "seconds": 7.02,
+      "detail": "one Open owned global admission, published truthful progress, accepted Cancel, and committed no effect"
+    },
+    {
+      "name": "failed-save-preserves-dirty-project-then-save-as-recovers",
+      "passed": true,
+      "seconds": 13.53,
+      "detail": "failed Save preserved dirty identity and diagnostics; Save As retry recovered to a clean identity"
+    },
+    {
+      "name": "verify-final-accessibility-themes-and-system-preferences",
+      "passed": true,
+      "seconds": 20.01,
+      "detail": "theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed"
+    },
+    {
+      "name": "active-job-shutdown-cancel-resume-then-discard",
+      "passed": true,
+      "seconds": 21.41,
+      "detail": "exit code 0 after 0.47 s"
+    }
+  ],
+  "observations": {
+    "extractedImage": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG",
+    "launcher": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG\\BS2BG.exe",
+    "launcherSha256": "cfee2ac2f9e825256f10cb6ca2975590499cea1c9253fca4c9a8e3658b0a2b0e",
+    "archiveSha256": "674028c48a90f3c7f3745c56d44ae8a7d77b7d3db24a1ecedd8dc714273f6970",
+    "workingDirectory": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work",
+    "cancellableProjectBytes": 27300106,
+    "cancellableNpcSourceBytes": 17500000,
+    "environment": {
+      "removedVariables": [
+        "JAVA_HOME"
+      ],
+      "removedPathEntries": [
+        "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath",
+        "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\java8path",
+        "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath",
+        "C:\\Program Files\\OpenJDK\\jdk-26.0.2.1\\bin"
+      ],
+      "keptPathEntryCount": 73
+    },
+    "observedProcessModel": "single-launcher-process",
+    "launch": {
+      "applicationPid": 27096,
+      "applicationExe": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG\\BS2BG.exe",
+      "startupSeconds": 3.86,
+      "runtimeModules": [
+        {
+          "module": "jli.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG\\runtime\\bin\\jli.dll"
+        },
+        {
+          "module": "jvm.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG\\runtime\\bin\\server\\jvm.dll"
+        },
+        {
+          "module": "jimage.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG\\runtime\\bin\\jimage.dll"
+        },
+        {
+          "module": "java.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG\\runtime\\bin\\java.dll"
+        },
+        {
+          "module": "prism_d3d.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG\\runtime\\bin\\javafx\\prism_d3d.dll"
+        },
+        {
+          "module": "glass.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG\\runtime\\bin\\javafx\\glass.dll"
+        },
+        {
+          "module": "javafx_font.dll",
+          "path": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\image\\BS2BG\\runtime\\bin\\javafx\\javafx_font.dll"
+        }
+      ]
+    },
+    "settingsRecoveryActivity": "Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.",
+    "workbenchAreas": [
+      "Templates",
+      "Morphs",
+      "NPC Database",
+      "Output",
+      "Settings"
+    ],
+    "keyboardNavigation": {
+      "areas": [
+        "Templates",
+        "Morphs",
+        "NPC Database",
+        "Settings"
+      ],
+      "outputPreservedArea": "Morphs",
+      "drawerRange": {
+        "before": 220.0,
+        "after": 240.0
+      },
+      "focusCycle": [
+        "Custom Morph Targets",
+        "Morphs editor: no selection",
+        "Morphs inspector: no selection",
+        "Output generated text",
+        "Activity",
+        "Workbench status",
+        "Morphs"
+      ]
+    },
+    "responsiveLayout": {
+      "expectedScalePercent": 125,
+      "initial": {
+        "dpi": 120,
+        "scalePercent": 125.0,
+        "windowPhysical": {
+          "left": 459,
+          "top": 131,
+          "width": 1643,
+          "height": 1047
+        },
+        "clientPhysical": {
+          "left": 468,
+          "top": 169,
+          "width": 1625,
+          "height": 1000
+        },
+        "clientLogical": {
+          "width": 1300.0,
+          "height": 800.0
+        }
+      },
+      "narrow": {
+        "dpi": 120,
+        "scalePercent": 125.0,
+        "windowPhysical": {
+          "left": 459,
+          "top": 131,
+          "width": 1517,
+          "height": 922
+        },
+        "clientPhysical": {
+          "left": 468,
+          "top": 169,
+          "width": 1499,
+          "height": 875
+        },
+        "clientLogical": {
+          "width": 1199.2,
+          "height": 700.0
+        }
+      },
+      "minimum": {
+        "dpi": 120,
+        "scalePercent": 125.0,
+        "windowPhysical": {
+          "left": 459,
+          "top": 131,
+          "width": 1019,
+          "height": 798
+        },
+        "clientPhysical": {
+          "left": 468,
+          "top": 169,
+          "width": 1001,
+          "height": 751
+        },
+        "clientLogical": {
+          "width": 800.8,
+          "height": 600.8
+        }
+      },
+      "wide": {
+        "dpi": 120,
+        "scalePercent": 125.0,
+        "windowPhysical": {
+          "left": 459,
+          "top": 131,
+          "width": 1518,
+          "height": 922
+        },
+        "clientPhysical": {
+          "left": 468,
+          "top": 169,
+          "width": 1500,
+          "height": 875
+        },
+        "clientLogical": {
+          "width": 1200.0,
+          "height": 700.0
+        }
+      }
+    },
+    "templatesManagement": {
+      "browsed": [
+        "CBBE Curvy",
+        "UUNP Athletic"
+      ],
+      "createdRejected": "SLIDER_PRESET_NAME_DUPLICATE",
+      "created": "Delta Created",
+      "duplicated": "Curvy Copy",
+      "renameCancelled": "Temporary Name",
+      "renamed": "Curvy Copy Renamed",
+      "removed": "UUNP Athletic",
+      "clearVisiblePreserved": "CBBE Curvy",
+      "savedAndReopened": "templates-managed.jbs2bg",
+      "profile": "Standard",
+      "editedChoice": "Waist@50:50",
+      "gangModes": [
+        "All-Min",
+        "All-Max"
+      ],
+      "rangeValidation": "reversed maximum clamped to minimum"
+    },
+    "morphsCreatePointer": {
+      "x": 796.5,
+      "y": 642.0,
+      "source": "descendant-text-center",
+      "windowActivated": true,
+      "clickablePointError": "Provider returned no clickable point."
+    },
+    "morphsManagement": {
+      "existing": "All|Female",
+      "validation": [
+        "CUSTOM_MORPH_TARGET_NAME_REQUIRED",
+        "CUSTOM_MORPH_TARGET_NAME_DUPLICATE"
+      ],
+      "pointerCreated": "ActorTypeNPC|Female",
+      "pointerCoordinates": {
+        "create": {
+          "x": 796.5,
+          "y": 642.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "select": {
+          "x": 733.0,
+          "y": 529.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "assignAll": {
+          "x": 1900.0,
+          "y": 977.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "removeRelationship": {
+          "x": 1899.5,
+          "y": 777.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "filteredCreate": {
+          "x": 796.5,
+          "y": 558.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        }
+      },
+      "relationshipAdded": "UUNP Athletic",
+      "relationshipRemoved": "UUNP Athletic",
+      "relationshipCleared": "ActorTypeNPC|Female",
+      "initialAssignment": "UUNP Athletic",
+      "individuallyAssigned": "CBBE Curvy",
+      "removed": "ActorTypeNPC|Female",
+      "clearVisibleRemoved": "Clear Me",
+      "generatedBeforeRemoval": "ActorTypeNPC|Female=UUNP Athletic\nAll|Female=CBBE Curvy|UUNP Athletic\nSkyrim.esm|A2C94=UUNP Athletic\n",
+      "savedAndReopened": "morphs-managed.jbs2bg",
+      "scalePercent": 125.0
+    },
+    "npcCreatePointer": {
+      "x": 796.0,
+      "y": 855.0,
+      "source": "descendant-text-center",
+      "windowActivated": true,
+      "clickablePointError": "Provider returned no clickable point."
+    },
+    "npcMorphManagement": {
+      "validation": [
+        "NPC_MORPH_ASSIGNMENT_REQUIRED",
+        "NPC_MORPH_ASSIGNMENT_DUPLICATE"
+      ],
+      "sameDisplayNameIdentities": [
+        "Skyrim.esm/HousecarlWhiterun",
+        "Test.esp/TestEditor"
+      ],
+      "keyboardCreated": "Test.esp/TestEditor",
+      "pointerCreated": "Patch.esp/PointerEditor",
+      "pointerCoordinates": {
+        "create": {
+          "x": 796.0,
+          "y": 855.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "select": {
+          "x": 837.5,
+          "y": 843.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "assign": {
+          "x": 1916.5,
+          "y": 939.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        },
+        "removeRelationship": {
+          "x": 1911.5,
+          "y": 798.0,
+          "source": "descendant-text-center",
+          "windowActivated": true,
+          "clickablePointError": "Provider returned no clickable point."
+        }
+      },
+      "relationshipAdded": "CBBE Curvy",
+      "relationshipRemoved": "UUNP Athletic",
+      "removed": "Test.esp/TestEditor",
+      "clearVisibleRemoved": "Patch.esp/PointerEditor",
+      "generatedBeforeRemoval": "All|Female=CBBE Curvy|UUNP Athletic\nPatch.esp|ABC13=\nSkyrim.esm|A2C94=CBBE Curvy|UUNP Athletic\nTest.esp|ABC12=CBBE Curvy\n",
+      "generatedAfterCatalogRemoval": "All|Female=CBBE Curvy|UUNP Athletic\nSkyrim.esm|A2C94=CBBE Curvy\n",
+      "savedAndReopened": "npc-managed.jbs2bg",
+      "scalePercent": 125.0
+    },
+    "fillEmpty": {
+      "capturedVisibleEmpty": [
+        "FillTest.esp/FillOne",
+        "FillTest.esp/FillTwo"
+      ],
+      "selectedEligibleSliderPresets": [
+        "CBBE Curvy",
+        "UUNP Athletic"
+      ],
+      "independentlyCapturedChoices": {
+        "FillOne": "CBBE Curvy",
+        "FillTwo": "CBBE Curvy"
+      },
+      "alreadyAssignedPreserved": "FillTest.esp/AlreadyAssigned",
+      "filteredOutEmptyPreserved": "Hidden.esp/OutsideFilter",
+      "keyboardDismissal": true,
+      "outsideDismissal": true,
+      "cancelledWithoutEffects": true,
+      "savedAndReopened": "fill-empty-managed.jbs2bg",
+      "generatedMorphs": "All|Female=CBBE Curvy|UUNP Athletic\nFillTest.esp|A0103=UUNP Athletic\nFillTest.esp|A0101=CBBE Curvy\nFillTest.esp|A0102=CBBE Curvy\nHidden.esp|A0104=\nPortrait.esp|A0105=CBBE Curvy\nSkyrim.esm|A2C94=UUNP Athletic\n"
+    },
+    "portraits": {
+      "editorIdSpecificJpeg": "Portrait file: Lydia (HousecarlWhiterun).jpeg NPC portrait status Portrait file: Lydia (HousecarlWhiterun).jpeg",
+      "nameOnlyFallbackPng": "Portrait file: Portrait Fallback.png NPC portrait status Portrait file: Portrait Fallback.png",
+      "noImageStatus": "No portrait found. Expected images/Fill Hidden Empty (OutsideFilter).jpg (or .jpeg, .png, .bmp), then a display-name-only image. NPC portrait status No portrait found. Expected images/Fill Hidden Empty (OutsideFilter).jpg (or .jpeg, .png, .bmp), then a display-name-only image.",
+      "dedicatedViewerTitle": "NPC Portrait — Lydia",
+      "viewerKeyboardCloseAndFocusReturn": true,
+      "narrowScalePercent": 125.0
+    },
+    "npcDatabaseCatalog": {
+      "sources": [
+        "npc-primary.txt",
+        "npc-secondary.txt"
+      ],
+      "visibleRows": [
+        "Lydia",
+        "Unnamed (FemaleNord)",
+        "Serana"
+      ],
+      "firstSourceWins": "Lydia",
+      "normalizedFormId": "A2C94",
+      "fallbackName": "Unnamed (FemaleNord)",
+      "sortedNames": [
+        "Lydia",
+        "Serana",
+        "Unnamed (FemaleNord)"
+      ],
+      "sortChoice": "Name ascending via keyboard",
+      "hiddenSelectionCleared": true,
+      "portrait": "Lydia (HousecarlWhiterun).jpeg",
+      "successActivity": "Timestamp: 2026-09-23T07:46:38.380514900Z. Attempt: 19. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-primary.txt, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-secondary.txt. Destinations: NPC Database. Effects committed: Imported C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-primary.txt, Imported C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-secondary.txt. Diagnostics: none. Retry available: false."
+    },
+    "npcDatabaseImportOutcomes": {
+      "malformed": "NPC_DATABASE_SOURCE_MALFORMED: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-malformed.txt:2 — Malformed NPC row: NPC row must contain plugin, name, editor ID, race, and form ID",
+      "mixed": "Timestamp: 2026-09-23T07:46:54.030739800Z. Attempt: 20. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-malformed.txt, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-mixed-valid.txt. Destinations: NPC Database. Effects committed: Imported C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-mixed-valid.txt. Diagnostics: NPC_DATABASE_SOURCE_MALFORMED. Retry available: true.",
+      "failed": "Timestamp: 2026-09-23T07:47:05.402150900Z. Attempt: 21. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-malformed.txt, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-failed-locked.txt. Destinations: NPC Database. Effects committed: none. Diagnostics: NPC_DATABASE_SOURCE_MALFORMED, NPC_DATABASE_SOURCE_READ_FAILED. Retry available: true.",
+      "retry": "Timestamp: 2026-09-23T07:47:05.914138500Z. Attempt: 22. Retry of attempt: 21. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-malformed.txt, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-failed-locked.txt. Destinations: NPC Database. Effects committed: Imported C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\npc-failed-locked.txt. Diagnostics: NPC_DATABASE_SOURCE_MALFORMED. Retry available: true.",
+      "cancelled": "Timestamp: 2026-09-23T07:47:17.404271500Z. Attempt: 23. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\a-npc-cancel-first.txt, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\z-npc-cancel-large.txt. Destinations: NPC Database. Effects committed: Imported C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\a-npc-cancel-first.txt. Diagnostics: none. Retry available: true.",
+      "progress": "Import NPC Database Sources, Reading NPC Database sources, 50%.",
+      "committedBeforeCancellation": "a-npc-cancel-first.txt",
+      "rejectedInProgressSource": "z-npc-cancel-large.txt"
+    },
+    "npcDatabaseManagement": {
+      "removalRevealed": "Shadow Lydia",
+      "missingPortrait": "No portrait found. Expected images/Shadow Lydia (housecarlwhiterun).jpg (or .jpeg, .png, .bmp), then a display-name-only image.",
+      "clearRetainedSources": [
+        "npc-secondary.txt",
+        "npc-mixed-valid.txt",
+        "npc-failed-locked.txt",
+        "a-npc-cancel-first.txt"
+      ],
+      "reimported": "npc-primary.txt",
+      "survivedProjectNew": true,
+      "narrowScalePercent": 125.0,
+      "minimumClient": {
+        "dpi": 120,
+        "scalePercent": 125.0,
+        "windowPhysical": {
+          "left": 459,
+          "top": 131,
+          "width": 1019,
+          "height": 798
+        },
+        "clientPhysical": {
+          "left": 468,
+          "top": 169,
+          "width": 1001,
+          "height": 751
+        },
+        "clientLogical": {
+          "width": 800.8,
+          "height": 600.8
+        }
+      }
+    },
+    "settingsAndBodySlideImport": {
+      "settings": [
+        "Standard Waist multiplier 2",
+        "UUNP Arms multiplier 3",
+        "Omit Redundant Sliders true"
+      ],
+      "success": "Settings Output",
+      "partial": "Timestamp: 2026-09-23T07:47:46.049572900Z. Attempt: 28. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\malformed.xml, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\partial-valid.xml. Destinations: none. Captured basis: Project content version 75@47303c00. Effects committed: Imported partial-valid.xml. Diagnostics: SLIDER_PRESET_XML_MALFORMED. Retry available: true.",
+      "failed": "Timestamp: 2026-09-23T07:48:04.266302800Z. Attempt: 30. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\a-failed-malformed.xml, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\z-failed-locked.xml. Destinations: none. Captured basis: Project content version 76@47303c00. Effects committed: none. Diagnostics: SLIDER_PRESET_XML_MALFORMED, SLIDER_PRESET_XML_READ_FAILED. Retry available: true.",
+      "cancelled": "Timestamp: 2026-09-23T07:48:16.166650600Z. Attempt: 32. Sources: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\a-cancel-first.xml, C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\z-cancel-large.xml. Destinations: none. Captured basis: Project content version 76@47303c00. Effects committed: Imported a-cancel-first.xml. Diagnostics: none. Retry available: true.",
+      "progress": "Save Project, Replacing Project file, indeterminate.",
+      "savedProject": "settings-import-results.jbs2bg"
+    },
+    "generatedOutput": {
+      "completed": "Timestamp: 2026-09-23T07:44:50.750505600Z. Attempt: 5. Sources: none. Destinations: none. Captured basis: Project content version 49@47303c00; Settings fe166285; omit redundant sliders: false. Effects committed: Generated Output published. Diagnostics: none. Retry available: false.",
+      "templatesCharacters": 213,
+      "morphsCharacters": 0,
+      "bosCharacters": 461,
+      "tabs": [
+        "Templates",
+        "Morphs",
+        "BoS JSON"
+      ],
+      "readOnly": true,
+      "clipboardExact": true,
+      "completeExport": "Timestamp: 2026-09-23T07:48:23.733966900Z. Attempt: 35. Sources: templates.ini, morphs.ini, Committed Before Cancel -> Committed Before Cancel.json, Partial Commit -> Partial Commit.json, Settings Output -> Settings Output.json. Destinations: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\accepted-output. Captured basis: Project content version 77@47303c00; Settings 9a09eab6; omit redundant sliders: true. Effects committed: Published 5 Output artifacts. Diagnostics: none. Retry available: false.",
+      "selectedExport": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\selected-output.JSON",
+      "atomicFailureAndRetry": "Timestamp: 2026-09-23T07:48:36.505396900Z. Attempt: 38. Retry of attempt: 37. Sources: templates.ini, morphs.ini, Committed Before Cancel -> Committed Before Cancel.json, Partial Commit -> Partial Commit.json, Settings Output -> Settings Output.json. Destinations: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\atomic-output-failure. Captured basis: Project content version 77@47303c00; Settings 9a09eab6; omit redundant sliders: true. Effects committed: Published 5 Output artifacts. Diagnostics: none. Retry available: false.",
+      "savePreserved": true,
+      "contentInvalidated": true,
+      "cancellation": "Timestamp: 2026-09-23T07:48:45.360778600Z. Attempt: 41. Sources: none. Destinations: none. Captured basis: Project content version 79@47303c00; Settings 9a09eab6; omit redundant sliders: true. Effects committed: none. Diagnostics: none. Retry available: true.",
+      "stale": "Timestamp: 2026-09-23T07:48:45.892448500Z. Attempt: 42. Sources: none. Destinations: none. Captured basis: Project content version 79@47303c00; Settings 9a09eab6; omit redundant sliders: true. Effects committed: none. Diagnostics: STALE_RESULT. Retry available: true.",
+      "focusPreserved": "Slider Preset list / name field"
+    },
+    "firstSaveAs": {
+      "file": "new-project.jbs2bg",
+      "sha256": "5b2aaa5ea4708a95beb7566441b6f831316f958ebcdd1b7e7266bf2acb99993d"
+    },
+    "recoveredProject": {
+      "title": "BS2BG Preview - *recovery-source.jbs2bg",
+      "diagnostics": "WARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /CustomMorphTargets/Target/SliderPresets/1 (line 7, column 43): Slider Preset assignment 'Missing Target' does not exist and was omitted.\nWARNING [SLIDER_PRESET_ASSIGNMENT_MISSING] recovery-source.jbs2bg /MorphedNPCs/NPC/SliderPresets/1 (line 15, column 33): Slider Preset assignment 'Missing NPC' does not exist and was omitted."
+    },
+    "malformedOpen": {
+      "preservedTitle": "BS2BG Preview - recovery-source.jbs2bg",
+      "diagnostics": "ERROR [PROJECT_JSON_MALFORMED] malformed-project.jbs2bg /SliderPresets (line 2, column 1): Unexpected end-of-input: expected close marker for Object (start marker at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); byte offset: #UNKNOWN])",
+      "retryLinked": true,
+      "retrySource": "malformed-project.jbs2bg"
+    },
+    "staleOpen": {
+      "preservedTitle": "BS2BG Preview - malformed-project.jbs2bg",
+      "changedInput": "cancellable-project.jbs2bg",
+      "diagnostic": "STALE_RESULT",
+      "effects": "none"
+    },
+    "centralJobCancellation": {
+      "progress": "Open Project, Reading Project, 27%.",
+      "preservedTitle": "BS2BG Preview - malformed-project.jbs2bg",
+      "effects": "none"
+    },
+    "saveFailureRecovery": {
+      "diagnostic": "ERROR [PROJECT_FILE_WRITE_FAILED] vanishing-recovery.jbs2bg: The Project file could not be written: C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335\\work\\vanishing\\.vanishing-recovery.jbs2bg-18198016353311127108.tmp",
+      "retry": "save-retry.jbs2bg"
+    },
+    "appearance": {
+      "phase": "after-authoring-before-shutdown",
+      "initialHighContrast": false,
+      "initialClientAreaAnimation": true,
+      "choices": [
+        "System",
+        "Light",
+        "Dark"
+      ],
+      "highContrastOverride": true,
+      "reducedMotionObserved": true,
+      "restoredHighContrast": false,
+      "restoredClientAreaAnimation": true,
+      "systemEffectiveTheme": "Effective theme: Dark theme",
+      "iconImplementation": "application-owned-bundled-vectors",
+      "portraitScreenshots": [
+        "workbench-portrait-light.png",
+        "workbench-portrait-dark.png",
+        "workbench-portrait-high-contrast.png"
+      ],
+      "npcDatabaseScreenshots": [
+        "workbench-npc-database-light.png",
+        "workbench-npc-database-dark.png",
+        "workbench-npc-database-high-contrast.png"
+      ]
+    },
+    "activeJobShutdown": {
+      "cancellationSettledBeforePrompt": true,
+      "cancelResumedAdmission": true,
+      "secondCloseDiscarded": true
+    },
+    "exit": {
+      "exitCode": 0,
+      "exitWaitSeconds": 0.47,
+      "boundedBySeconds": 30
+    }
+  },
+  "process": {
+    "expectedModel": "single-launcher-process",
+    "model": "single-launcher-process",
+    "applicationPid": 27096,
+    "exitCode": 0,
+    "exitWaitSeconds": 0.47,
+    "killed": []
+  },
+  "diagnostics": {
+    "directory": "smoke-diagnostics/",
+    "stderrLines": 0,
+    "stderrExcerpt": [],
+    "nativeAccessWarnings": [],
+    "workbenchTree": "smoke-diagnostics/uia-tree-workbench.txt",
+    "responsiveWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-responsive.txt",
+    "templatesWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-templates.txt",
+    "morphsWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-morphs.txt",
+    "npcMorphsWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-npc-morphs.txt",
+    "npcDatabaseWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-npc-database.txt",
+    "portraitsWorkbenchTree": "smoke-diagnostics/uia-tree-workbench-portraits.txt",
+    "templatesNarrowScreenshot": "smoke-diagnostics/workbench-templates-narrow.png",
+    "npcMorphsNarrowScreenshot": "smoke-diagnostics/workbench-npc-morphs-narrow.png",
+    "templatesHighContrastScreenshot": "smoke-diagnostics/workbench-templates-high-contrast.png",
+    "morphsNarrowScreenshot": "smoke-diagnostics/workbench-morphs-narrow.png",
+    "morphsHighContrastScreenshot": "smoke-diagnostics/workbench-morphs-high-contrast.png",
+    "highContrastScreenshot": "smoke-diagnostics/workbench-high-contrast.png",
+    "reducedMotionScreenshot": "smoke-diagnostics/workbench-reduced-motion.png",
+    "portraitJpegPriorityScreenshot": "smoke-diagnostics/workbench-portrait-jpeg-priority.png",
+    "portraitViewerScreenshot": "smoke-diagnostics/workbench-portrait-viewer.png",
+    "portraitNarrowScreenshot": "smoke-diagnostics/workbench-portrait-narrow.png",
+    "portraitLightScreenshot": "smoke-diagnostics/workbench-portrait-light.png",
+    "portraitDarkScreenshot": "smoke-diagnostics/workbench-portrait-dark.png",
+    "portraitHighContrastScreenshot": "smoke-diagnostics/workbench-portrait-high-contrast.png",
+    "npcDatabaseScreenshot": "smoke-diagnostics/workbench-npc-database.png",
+    "npcDatabaseNarrowScreenshot": "smoke-diagnostics/workbench-npc-database-narrow.png",
+    "npcDatabaseMinimumScreenshot": "smoke-diagnostics/workbench-npc-database-minimum.png",
+    "npcDatabaseLightScreenshot": "smoke-diagnostics/workbench-npc-database-light.png",
+    "npcDatabaseDarkScreenshot": "smoke-diagnostics/workbench-npc-database-dark.png",
+    "npcDatabaseHighContrastScreenshot": "smoke-diagnostics/workbench-npc-database-high-contrast.png"
+  },
+  "workRoot": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-workbench-smoke-20260923-074335",
+  "workRootKept": false
+}

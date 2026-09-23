@@ -1,0 +1,289 @@
+Window 'BS2BG Preview - fill-empty-managed.jbs2bg' [Window,Transform]
+  MenuBar ''
+    MenuItem 'File' [Invoke,ExpandCollapse]
+      Text 'File'
+        Text 'File'
+  Button 'Templates' [Toggle]
+    Text 'Templates'
+  Button 'Morphs' [Toggle]
+    Text 'Morphs'
+  Button 'NPC Database' [Toggle]
+    Text 'NPC Database'
+  Button 'Output' [Toggle]
+    Text 'Output'
+  Button 'Settings' [Toggle]
+    Text 'Settings'
+  Text 'Theme:'
+    Text 'Theme:'
+  ComboBox '' [Value,ExpandCollapse]
+    List '' [Selection,Scroll]
+    Text 'System'
+  Text 'Effective theme: Dark theme'
+    Text 'Dark theme'
+  Text 'Motion preference: Standard motion'
+    Text 'Standard motion'
+  Text 'Morphs Area'
+    Text 'Morphs'
+  Button 'Generate Project output' [Invoke]
+    Text 'Generate'
+  Text 'Project status'
+    Text 'Saved Project'
+  Text 'Success'
+    Text 'Success'
+  Text 'Project opened.'
+    Text 'Project opened.'
+  Button 'Dismiss' [Invoke]
+    Text 'Dismiss'
+  Pane 'Morphs management' [Scroll]
+    Text 'Filter Custom Morph Targets:'
+      Text 'Filter Custom Morph Targets:'
+    Edit '' [Value,Text]
+      Text 'Filter by condition or name'
+      Text ''
+    Text 'Sort Custom Morph Targets:'
+      Text 'Sort Custom Morph Targets:'
+    ComboBox '' [Value,ExpandCollapse]
+      List '' [Selection,Scroll]
+      Text 'Name (Z–A)'
+    List 'Custom Morph Targets' [Selection,Scroll]
+      ListItem 'All|Female' [SelectionItem,ScrollItem]
+        Text 'All|Female'
+    Text 'Custom Morph Target name:'
+      Text 'Custom Morph Target name:'
+    Edit '' [Value,Text]
+      Text 'All|Female'
+      Text ''
+    Button 'Create Custom Morph Target' [Invoke]
+      Text 'Create Custom Morph Tar...'
+    Button 'Remove selected Custom Morph Target' [Invoke]
+      Text 'Remove Custom Morph T...'
+    Button 'Clear visible Custom Morph Targets' [Invoke]
+      Text 'Clear visible Custom Mor...'
+    Text 'NPC Morph Assignments'
+      Text 'NPC Morph Assign...'
+    Text 'Filter NPC Morph Assignments:'
+      Text 'Filter NPC Morph Assignmen...'
+    Edit '' [Value,Text]
+      Text 'Filter by name, plugin, ID, race, or Form ID'
+      Text ''
+    Text 'Sort NPC Morph Assignments:'
+      Text 'Sort NPC Morph Assignments:'
+    ComboBox '' [Value,ExpandCollapse]
+      Text 'Plugin (Z–A)'
+    List 'NPC Morph Assignments' [Selection,Scroll]
+      ListItem 'Lydia. Plugin: Skyrim.esm. Editor ID: HousecarlWhiterun. Race: NordRace. Form ID: A2C94.' [SelectionItem,ScrollItem]
+        Text 'Lydia (Skyrim.esm | HousecarlWhiterun)'
+      ListItem 'Portrait Fallback. Plugin: Portrait.esp. Editor ID: Fallback. Race: NordRace. Form ID: A0105.' [SelectionItem,ScrollItem]
+        Text 'Portrait Fallback (Portrait.esp | Fallback)'
+      ListItem 'Fill Hidden Empty. Plugin: Hidden.esp. Editor ID: OutsideFilter. Race: NordRace. Form ID: A0104.' [SelectionItem,ScrollItem]
+        Text 'Fill Hidden Empty (Hidden.esp | OutsideFilter)'
+      ListItem 'Fill Already Assigned. Plugin: FillTest.esp. Editor ID: AlreadyAssigned. Race: NordRace. Form ID: A0103.' [SelectionItem,ScrollItem]
+        Text 'Fill Already Assigned (FillTest.esp | AlreadyAssigned)'
+      ListItem 'Fill Visible One. Plugin: FillTest.esp. Editor ID: FillOne. Race: NordRace. Form ID: A0101.' [SelectionItem,ScrollItem]
+        Text 'Fill Visible One (FillTest.esp | FillOne)'
+      ListItem 'Fill Visible Two. Plugin: FillTest.esp. Editor ID: FillTwo. Race: NordRace. Form ID: A0102.' [SelectionItem,ScrollItem]
+        Text 'Fill Visible Two (FillTest.esp | FillTwo)'
+      ScrollBar '' [RangeValue]
+        Button 'increment' [Invoke]
+        Button 'decrement' [Invoke]
+        Thumb ''
+      ScrollBar '' [RangeValue]
+        Button 'increment' [Invoke]
+        Button 'decrement' [Invoke]
+        Thumb ''
+    Text 'NPC display name:'
+      Text 'NPC display name:'
+    Edit '' [Value,Text]
+      Text 'Optional display name'
+      Text ''
+    Text 'NPC plugin name:'
+      Text 'NPC plugin name:'
+    Edit '' [Value,Text]
+      Text 'Example.esp'
+      Text ''
+    Text 'NPC editor ID:'
+      Text 'NPC editor ID:'
+    Edit '' [Value,Text]
+      Text 'ActorEditorID'
+      Text ''
+    Text 'NPC race:'
+      Text 'NPC race:'
+    Edit '' [Value,Text]
+      Text 'Race'
+      Text ''
+    Text 'NPC Form ID:'
+      Text 'NPC Form ID:'
+    Edit '' [Value,Text]
+      Text '000ABC'
+      Text ''
+    Button 'Create NPC Morph Assignment' [Invoke]
+      Text 'Create NPC Morph Assign...'
+    Button 'Remove selected NPC Morph Assignment' [Invoke]
+      Text 'Remove NPC Morph Assi...'
+    Button 'Clear visible NPC Morph Assignments' [Invoke]
+      Text 'Clear visible NPC Morph ...'
+    Button 'Fill Empty NPC Morph Assignments' [Invoke]
+      Text 'Fill Empty…'
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Text 'NPC Morph Assignment editor: Lydia'
+    Text 'Lydia'
+  Text 'Plugin: Skyrim.esm; Editor ID: HousecarlWhiterun'
+    Text 'Plugin: Skyrim.esm; Editor ID: HousecarlWhiterun'
+  Text 'Race: NordRace'
+    Text 'Race: NordRace'
+  Text 'Form ID: A2C94'
+    Text 'Form ID: A2C94'
+  Text '1 assigned Slider Preset'
+    Text '1 assigned Slider Preset'
+  Text 'Included in Morphs output.'
+    Text 'Included in Morphs output.'
+  Text 'Use the inspector to manage Slider Preset relationships.'
+    Text 'Use the inspector to manage Slider Preset relationships.'
+  Pane 'Slider Preset relationship editor' [Scroll]
+    Text 'Slider Preset relationships'
+      Text 'Slider Preset relations...'
+    Text 'Selected NPC Morph Assignment Lydia, plugin Skyrim.esm, editor ID HousecarlWhiterun'
+      Text 'Selected NPC: Lydia'
+    Text 'NPC portrait'
+      Text 'NPC portrait'
+    Text 'NPC portrait status'
+      Text 'Portrait file: Lydia (HousecarlWhiterun).jpeg'
+    Button 'Open NPC portrait viewer' [Invoke]
+      Text 'Open portrait viewer'
+    Text 'Assigned Slider Presets:'
+      Text 'Assigned Slider Presets:'
+    List 'Assigned Slider Presets' [Selection,Scroll]
+      ListItem 'UUNP Athletic' [SelectionItem,ScrollItem]
+        Text 'UUNP Athletic'
+    Button 'Remove selected Slider Preset relationship' [Invoke]
+      Text 'Remove assigned Slider Preset'
+    Button 'Clear assigned Slider Presets' [Invoke]
+      Text 'Clear assigned Slider Presets'
+    Text 'Available Slider Preset:'
+      Text 'Available Slider Preset:'
+    ComboBox '' [Value,ExpandCollapse]
+      Text ''
+    Button 'Assign selected Slider Preset' [Invoke]
+      Text 'Assign Slider Preset'
+    Button 'Assign all Slider Presets' [Invoke]
+      Text 'Assign All Slider Presets'
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Text 'Project diagnostics'
+    Text 'Project diagnostics'
+  Edit '' [Value,Text]
+    Pane '' [Scroll]
+      Text ''
+  Text 'Activity'
+    Text 'Activity'
+  List 'Activity' [Selection,Scroll]
+    ListItem 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.' [SelectionItem,ScrollItem]
+      Text 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.' [SelectionItem,ScrollItem]
+      Text 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.'
+    ListItem 'Success — Create Slider Preset — Completed: Create Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Create Slider Preset — Completed: Create Slider Preset completed.'
+    ListItem 'Success — Edit Slider choices — Completed: Edit Slider choices changed.' [SelectionItem,ScrollItem]
+      Text 'Success — Edit Slider choices — Completed: Edit Slider choices changed.'
+    ListItem 'Information — Edit Slider choices — Completed: No Slider choice values changed.' [SelectionItem,ScrollItem]
+      Text 'Information — Edit Slider choices — Completed: No Slider choice values changed.'
+    ListItem 'Success — Edit Slider choices — Completed: Edit Slider choices changed.' [SelectionItem,ScrollItem]
+      Text 'Success — Edit Slider choices — Completed: Edit Slider choices changed.'
+    ListItem 'Success — Edit Slider choices — Completed: Edit Slider choices changed.' [SelectionItem,ScrollItem]
+      Text 'Success — Edit Slider choices — Completed: Edit Slider choices changed.'
+    ListItem 'Success — Duplicate Slider Preset — Completed: Duplicate Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Duplicate Slider Preset — Completed: Duplicate Slider Preset completed.'
+    ListItem 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.' [SelectionItem,ScrollItem]
+      Text 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.'
+    ListItem 'Success — Rename Slider Preset — Completed: Rename Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Rename Slider Preset — Completed: Rename Slider Preset completed.'
+    ListItem 'Success — Remove Slider Preset — Completed: Remove Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset — Completed: Remove Slider Preset completed.'
+    ListItem 'Success — Clear visible Slider Presets — Completed: Clear visible Slider Presets completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear visible Slider Presets — Completed: Clear visible Slider Presets completed.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.'
+    ListItem 'Success — Assign all Slider Presets — Completed: Assign all Slider Presets completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Assign all Slider Presets — Completed: Assign all Slider Presets completed.'
+    ListItem 'Success — Generate Output — Completed: Output generated.' [SelectionItem,ScrollItem]
+      Text 'Success — Generate Output — Completed: Output generated.'
+    ListItem 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.'
+    ListItem 'Success — Generate Output — Completed: Output generated.' [SelectionItem,ScrollItem]
+      Text 'Success — Generate Output — Completed: Output generated.'
+    ListItem 'Success — Clear Slider Preset assignments — Completed: Clear Slider Preset assignments completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear Slider Preset assignments — Completed: Clear Slider Preset assignments completed.'
+    ListItem 'Success — Remove Custom Morph Target — Completed: Remove Custom Morph Target completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Custom Morph Target — Completed: Remove Custom Morph Target completed.'
+    ListItem 'Success — Clear visible Custom Morph Targets — Completed: Clear visible Custom Morph Targets completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear visible Custom Morph Targets — Completed: Clear visible Custom Morph Targets completed.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.' [SelectionItem,ScrollItem]
+      Text 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.'
+    ListItem 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.'
+    ListItem 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.' [SelectionItem,ScrollItem]
+      Text 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.'
+    ListItem 'Success — Remove NPC Morph Assignment — Completed: Remove NPC Morph Assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove NPC Morph Assignment — Completed: Remove NPC Morph Assignment completed.'
+    ListItem 'Success — Clear visible NPC Morph Assignments — Completed: Clear visible NPC Morph Assignments completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear visible NPC Morph Assignments — Completed: Clear visible NPC Morph Assignments completed.'
+    ListItem 'Success — Generate Output — Completed: Output generated.' [SelectionItem,ScrollItem]
+      Text 'Success — Generate Output — Completed: Output generated.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — Fill Empty NPC Morph Assignments — Completed: Fill Empty NPC Morph Assignments completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Fill Empty NPC Morph Assignments — Completed: Fill Empty NPC Morph Assignments completed.'
+    ListItem 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.' [SelectionItem,ScrollItem]
+      Text 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ScrollBar '' [RangeValue]
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Button 'Retry selected activity' [Invoke]
+    Text 'Retry'
+  Text 'Workbench status'
+    Text 'Success — Completed — Project opened.'
+  Button 'Cancel current operation' [Invoke]
+    Text 'Cancel'
