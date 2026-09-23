@@ -57,4 +57,21 @@ class NpcMorphAssignmentAuthoringTest {
         assertSame(unchanged, malformed.getSnapshot());
         assertEquals(List.of(), session.getSnapshot().getNpcMorphAssignments());
     }
+
+    /** An authored plugin name cannot inject target syntax or a second line into generated Morphs output. */
+    @Test
+    void rejectsPluginNamesThatWouldBreakMorphsOutput() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        ProjectSnapshot unchanged = session.getSnapshot();
+
+        for (String pluginName : List.of("A|B.esp", "A=B.esp", "A\nB.esp")) {
+            ProjectOutcome rejected = session.apply(NpcMorphAssignmentEdits.create(
+                    "Lydia", pluginName, "HousecarlWhiterun", "NordRace", "000A2C94"));
+            assertInstanceOf(RejectedOutcome.class, rejected);
+            assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID,
+                    rejected.getDiagnostics().getFirst().getCode());
+            assertSame(unchanged, rejected.getSnapshot());
+        }
+    }
 }

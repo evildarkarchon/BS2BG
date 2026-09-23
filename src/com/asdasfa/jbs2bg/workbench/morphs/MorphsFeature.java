@@ -213,7 +213,7 @@ public final class MorphsFeature {
      * Reconciles a later Project publication while retaining explicit filter and sort choices.
      *
      * @param projectFrame   latest coherent Project frame
-     * @param resetSelection whether lifecycle navigation clears target and relationship selections
+     * @param resetSelection whether lifecycle navigation clears both Morphs catalogs and relationship selection
      * @return accepted immutable update, or the current frame when the sequence was already reconciled
      */
     public Update acceptProjectFrame(WorkbenchProjectFlow.Frame projectFrame, boolean resetSelection) {
@@ -225,7 +225,7 @@ public final class MorphsFeature {
      * Reconciles Project content while preserving kernel-selected ownership of operation diagnostics.
      *
      * @param projectFrame   latest coherent Project frame
-     * @param resetSelection whether lifecycle navigation clears target and relationship selections
+     * @param resetSelection whether lifecycle navigation clears both Morphs catalogs and relationship selection
      * @param diagnostics    structured diagnostics owned by Morphs for this publication
      * @return accepted immutable update, or the current frame when the sequence was already reconciled
      */
@@ -438,7 +438,7 @@ public final class MorphsFeature {
         return reconcileOutcome(projectFlow.apply(NpcMorphAssignmentEdits.removeNpc(identity)));
     }
 
-    /** Clears target and assigned-preset selection without writing Project state. */
+    /** Clears both Morphs catalog selections and the assigned-preset selection without writing Project state. */
     private Update clearSelection() {
         view.clearSelection();
         npcView.clearSelection();
@@ -514,7 +514,7 @@ public final class MorphsFeature {
         return new Update(kind == OutcomeKind.CHANGED || kind == OutcomeKind.UNCHANGED, frame, kind);
     }
 
-    /** Adds one relationship by stable identities and renders only the value returned by ProjectSession. */
+    /** Adds one relationship to the selected Target or NPC and renders only the ProjectSession result. */
     private Update assignSliderPreset(NameIdentity presetIdentity) {
         CustomMorphTargetSnapshot target = selectedTarget();
         NpcMorphAssignmentSnapshot npc = selectedNpc();
@@ -528,7 +528,7 @@ public final class MorphsFeature {
         return reconcileOutcome(outcome);
     }
 
-    /** Assigns every Project Slider Preset through one atomic relationship edit. */
+    /** Assigns every Project Slider Preset to the selected Target or NPC in one atomic edit. */
     private Update assignAllSliderPresets() {
         CustomMorphTargetSnapshot target = selectedTarget();
         NpcMorphAssignmentSnapshot npc = selectedNpc();
@@ -558,7 +558,7 @@ public final class MorphsFeature {
         return new Update(true, frame, OutcomeKind.NONE);
     }
 
-    /** Clears only assigned-preset selection without changing the selected target or Project. */
+    /** Clears only assigned-preset selection without changing the selected Target, NPC, or Project. */
     private Update clearAssignedSliderPresetSelection() {
         if (assignedSelection.isEmpty())
             return new Update(false, frame, OutcomeKind.NONE);
@@ -601,7 +601,7 @@ public final class MorphsFeature {
                 npcIdentity, presetIdentity.getName())));
     }
 
-    /** Captures the selected target identity before requesting relationship-clear confirmation. */
+    /** Captures the selected Target or NPC identity before requesting relationship-clear confirmation. */
     private Update requestClearAssignments() {
         CustomMorphTargetSnapshot target = selectedTarget();
         NpcMorphAssignmentSnapshot npc = selectedNpc();
@@ -669,38 +669,44 @@ public final class MorphsFeature {
                 .findFirst().orElse(null);
     }
 
-    /** Builds relationship choices from the same immutable Project snapshot as the selected target. */
+    /** Builds Custom Morph Target relationship choices from the latest coherent Project snapshot. */
     private Optional<EditorFrame> editorFrame() {
         CustomMorphTargetSnapshot target = selectedTarget();
         if (target == null)
             return Optional.empty();
-        List<SliderPresetSnapshot> presets = projectFlow.frame().snapshot().getSliderPresets();
-        List<SliderPresetSnapshot> assigned = presets.stream()
-                .filter(preset -> target.getSliderPresetNames().stream()
-                        .anyMatch(name -> name.equalsIgnoreCase(preset.getName())))
-                .toList();
-        List<SliderPresetSnapshot> available = presets.stream()
-                .filter(preset -> target.getSliderPresetNames().stream()
-                        .noneMatch(name -> name.equalsIgnoreCase(preset.getName())))
-                .toList();
-        return Optional.of(new EditorFrame(target, assigned, available, assignedSelection));
+        RelationshipPresets presets = relationshipPresets(target.getSliderPresetNames());
+        return Optional.of(new EditorFrame(target, presets.assigned(), presets.available(), assignedSelection));
     }
 
-    /** Builds NPC relationship choices from the same immutable Project snapshot as its selected value. */
+    /** Builds NPC relationship choices from the latest coherent Project snapshot. */
     private Optional<NpcEditorFrame> npcEditorFrame() {
         NpcMorphAssignmentSnapshot npc = selectedNpc();
         if (npc == null)
             return Optional.empty();
+        RelationshipPresets presets = relationshipPresets(npc.getSliderPresetNames());
+        return Optional.of(new NpcEditorFrame(npc, presets.assigned(), presets.available(), assignedSelection));
+    }
+
+    /**
+     * Partitions one owner's assignment names against the current Project catalog.
+     * The shared partition keeps Target and NPC editors consistent after a preset rename or removal.
+     */
+    private RelationshipPresets relationshipPresets(List<String> assignedNames) {
         List<SliderPresetSnapshot> presets = projectFlow.frame().snapshot().getSliderPresets();
         List<SliderPresetSnapshot> assigned = presets.stream()
-                .filter(preset -> npc.getSliderPresetNames().stream()
+                .filter(preset -> assignedNames.stream()
                         .anyMatch(name -> name.equalsIgnoreCase(preset.getName())))
                 .toList();
         List<SliderPresetSnapshot> available = presets.stream()
-                .filter(preset -> npc.getSliderPresetNames().stream()
+                .filter(preset -> assignedNames.stream()
                         .noneMatch(name -> name.equalsIgnoreCase(preset.getName())))
                 .toList();
-        return Optional.of(new NpcEditorFrame(npc, assigned, available, assignedSelection));
+        return new RelationshipPresets(assigned, available);
+    }
+
+    /** Assigned and available Slider Presets from one coherent Project catalog. */
+    private record RelationshipPresets(List<SliderPresetSnapshot> assigned,
+                                       List<SliderPresetSnapshot> available) {
     }
 
     /** Replaces rows from one coherent Project publication before exposing the next feature frame. */
@@ -798,7 +804,7 @@ public final class MorphsFeature {
         }
     }
 
-    /** Permanently drops an assigned-preset selection when its target or relationship is no longer visible. */
+    /** Permanently drops an assigned-preset selection when its owner or relationship is no longer visible. */
     private void reconcileAssignedSelection() {
         if (assignedSelection.isEmpty())
             return;
@@ -863,7 +869,7 @@ public final class MorphsFeature {
         }
     }
 
-    /** Assigns one existing Slider Preset to the selected Custom Morph Target. */
+    /** Assigns one existing Slider Preset to the selected Target or NPC. */
     public record AssignSliderPreset(NameIdentity identity) implements Intent {
         /** Validates the immutable relationship endpoint. */
         public AssignSliderPreset {
@@ -871,7 +877,7 @@ public final class MorphsFeature {
         }
     }
 
-    /** Assigns every currently available Slider Preset to the selected target atomically. */
+    /** Assigns every currently available Slider Preset to the selected Target or NPC atomically. */
     public record AssignAllSliderPresets() implements Intent {
     }
 
@@ -883,7 +889,7 @@ public final class MorphsFeature {
         }
     }
 
-    /** Clears assigned Slider Preset selection while preserving the selected target. */
+    /** Clears assigned Slider Preset selection while preserving the selected Target or NPC. */
     public record ClearAssignedSliderPresetSelection() implements Intent {
     }
 
@@ -891,7 +897,7 @@ public final class MorphsFeature {
     public record RemoveAssignedSliderPreset() implements Intent {
     }
 
-    /** Requests confirmation before clearing every relationship from the selected target. */
+    /** Requests confirmation before clearing every relationship from the selected Target or NPC. */
     public record RequestClearAssignments() implements Intent {
     }
 
@@ -951,7 +957,7 @@ public final class MorphsFeature {
     public record RequestRemoveNpc() implements Intent {
     }
 
-    /** Clears current target and relationship selection. */
+    /** Clears both Morphs catalog selections and their relationship selection. */
     public record ClearSelection() implements Intent {
     }
 
@@ -1007,7 +1013,10 @@ public final class MorphsFeature {
         CANCELLED
     }
 
-    /** Tokenized destructive confirmation requested by the feature after capturing its operand. */
+    /**
+     * Tokenized destructive confirmation with frozen logical operands. For shared relationship kinds, an empty
+     * npcIdentities list means the owner is a Custom Morph Target; an NPC removal keeps its preset in identities.
+     */
     public record Effect(long token, EffectKind kind, List<NameIdentity> identities,
                          List<NpcMorphAssignmentIdentity> npcIdentities, String title, String message) {
         /** Defensively owns all effect values before the platform adapter runs. */

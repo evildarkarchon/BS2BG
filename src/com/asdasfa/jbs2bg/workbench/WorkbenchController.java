@@ -1992,19 +1992,19 @@ public final class WorkbenchController {
             List<SliderPresetSnapshot> availablePresets = List.of();
             Optional<NameIdentity> assignedPresetSelection = Optional.empty();
             if (!selected && !npcSelected) {
-                morphTargetEditorFocusTarget.setText("No Custom Morph Target selected");
+                morphTargetEditorFocusTarget.setText("No Morphs selection");
                 morphTargetEditorFocusTarget.setAccessibleText("Morphs editor: no selection");
-                morphTargetConditionText.setText("Select a Custom Morph Target to inspect its condition.");
+                morphTargetConditionText.setText("Select a Custom Morph Target or NPC Morph Assignment to inspect it.");
                 morphTargetConditionText.setAccessibleText(
-                        "Select a Custom Morph Target to inspect its BodyGen condition.");
+                        "Select a Custom Morph Target or NPC Morph Assignment to inspect it.");
                 morphTargetAssignmentCountText.setText("No Slider Presets assigned");
                 morphTargetAssignmentCountText.setAccessibleText("No Slider Presets assigned");
                 morphTargetOutputStatusText.setText(
-                        "A target needs at least one Slider Preset to appear in Morphs output.");
+                        "A Morphs entry needs at least one Slider Preset to appear in output.");
                 morphTargetOutputStatusText.setAccessibleText(
-                        "No selected Custom Morph Target is eligible for Morphs output.");
-                morphTargetSelectionText.setText("No Custom Morph Target selected");
-                morphTargetSelectionText.setAccessibleText("Custom Morph Target inspector: no selection");
+                        "No selected Morphs entry is eligible for output.");
+                morphTargetSelectionText.setText("No Morphs selection");
+                morphTargetSelectionText.setAccessibleText("Morphs inspector: no selection");
                 npcIdentityText.setText("");
                 npcRaceText.setText("");
                 npcFormIdText.setText("");
@@ -2220,7 +2220,7 @@ public final class WorkbenchController {
         npcMorphAssignmentListInitialized = true;
     }
 
-    /** Replaces an empty assigned-preset ListView when a later selected target refills its relationships. */
+    /** Replaces an empty assigned-preset ListView when a later selected Target or NPC refills relationships. */
     private void reconcileAssignedMorphSliderPresetItems(List<SliderPresetSnapshot> assignedPresets) {
         boolean refill = assignedMorphSliderPresetListInitialized
                 && assignedMorphSliderPresetList.getItems().isEmpty() && !assignedPresets.isEmpty();

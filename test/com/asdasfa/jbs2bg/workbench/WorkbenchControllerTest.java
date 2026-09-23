@@ -232,8 +232,8 @@ class WorkbenchControllerTest {
             filter.setText("all");
             assertNull(targets.getSelectionModel().getSelectedItem());
             assertTrue(assigned.getItems().isEmpty());
-            assertEquals("Custom Morph Target inspector: no selection", selection.getAccessibleText());
-            assertEquals("Select a Custom Morph Target to inspect its BodyGen condition.",
+            assertEquals("Morphs inspector: no selection", selection.getAccessibleText());
+            assertEquals("Select a Custom Morph Target or NPC Morph Assignment to inspect it.",
                     condition.getAccessibleText());
             stage.close();
         });

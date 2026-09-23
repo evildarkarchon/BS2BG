@@ -195,7 +195,7 @@
                                                             </content>
                                                         </ScrollPane>
                                                         <ScrollPane fx:id="morphsPrimaryScroll"
-                                                                accessibleText="Custom Morph Target management"
+                                                                accessibleText="Morphs management"
                                                                 fitToWidth="true" focusTraversable="false"
                                                                 hbarPolicy="NEVER" managed="false" visible="false"
                                                                 VBox.vgrow="ALWAYS">
@@ -409,11 +409,11 @@
                                                                 managed="false" spacing="8.0" visible="false">
                                                             <children>
                                                                 <Label fx:id="morphTargetEditorFocusTarget"
-                                                                        accessibleText="Custom Morph Target editor"
+                                                                        accessibleText="Morphs editor"
                                                                         focusTraversable="true" styleClass="title"
-                                                                        text="No Custom Morph Target selected" />
+                                                                        text="No Morphs selection" />
                                                                 <Label fx:id="morphTargetConditionText"
-                                                                        text="Select a Custom Morph Target to inspect its condition."
+                                                                        text="Select a Custom Morph Target or NPC Morph Assignment to inspect it."
                                                                         wrapText="true" />
                                                                 <Label fx:id="npcIdentityText" managed="false"
                                                                         text="" visible="false" wrapText="true" />
@@ -425,7 +425,7 @@
                                                                         text="No Slider Presets assigned" wrapText="true" />
                                                                 <Label fx:id="morphTargetOutputStatusText"
                                                                         styleClass="validation-message"
-                                                                        text="A target needs at least one Slider Preset to appear in Morphs output."
+                                                                        text="A Morphs entry needs at least one Slider Preset to appear in output."
                                                                         wrapText="true" />
                                                                 <Region VBox.vgrow="ALWAYS" />
                                                                 <Label text="Use the inspector to manage Slider Preset relationships."
@@ -583,7 +583,7 @@
                                                             </content>
                                                         </ScrollPane>
                                                         <ScrollPane fx:id="morphsInspectorScroll"
-                                                                accessibleText="Custom Morph Target relationship editor"
+                                                                accessibleText="Slider Preset relationship editor"
                                                                 fitToWidth="true" focusTraversable="false"
                                                                 hbarPolicy="NEVER" managed="false" visible="false"
                                                                 VBox.vgrow="ALWAYS">
@@ -592,9 +592,9 @@
                                                                     <children>
                                                                         <Label styleClass="title" text="Slider Preset relationships" />
                                                                         <Label fx:id="morphTargetSelectionText"
-                                                                                accessibleText="Custom Morph Target inspector: no selection"
+                                                                                accessibleText="Morphs inspector: no selection"
                                                                                 focusTraversable="true"
-                                                                                text="No Custom Morph Target selected"
+                                                                                text="No Morphs selection"
                                                                                 wrapText="true" />
                                                                         <Label fx:id="assignedMorphSliderPresetLabel"
                                                                                 labelFor="$assignedMorphSliderPresetList"

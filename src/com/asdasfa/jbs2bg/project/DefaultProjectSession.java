@@ -657,11 +657,16 @@ final class DefaultProjectSession implements ProjectSession {
                 || blank(edit.getFormId()))
             return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
                     "Plugin name, editor ID, race, and Form ID are required to author an NPC Morph Assignment.");
+        String pluginName = edit.getPluginName().trim();
+        // Morphs output uses plugin|FormId=relationships, so these characters would create a different target.
+        if (pluginName.codePoints().anyMatch(character -> character == '|' || character == '='
+                || Character.isISOControl(character)))
+            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID,
+                    "Plugin name cannot contain Morphs target delimiters or control characters.");
         String rawFormId = edit.getFormId().trim();
         if (!rawFormId.matches("[0-9A-Fa-f]{1,8}"))
             return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID,
                     "Form ID must contain one to eight hexadecimal digits.");
-        String pluginName = edit.getPluginName().trim();
         String editorId = edit.getEditorId().trim();
         String displayName = blank(edit.getDisplayName()) ? "Unnamed (" + editorId + ")"
                 : edit.getDisplayName().trim();

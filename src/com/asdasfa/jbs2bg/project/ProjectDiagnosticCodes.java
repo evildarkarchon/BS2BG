@@ -143,9 +143,13 @@ public final class ProjectDiagnosticCodes {
      */
     public static final String CUSTOM_MORPH_TARGET_NOT_FOUND = "CUSTOM_MORPH_TARGET_NOT_FOUND";
     /**
-     * An NPC-add edit omitted the copied source value required for promotion.
+     * An NPC-add edit omitted copied source values, or manual authoring omitted required fields.
      */
     public static final String NPC_MORPH_ASSIGNMENT_REQUIRED = "NPC_MORPH_ASSIGNMENT_REQUIRED";
+    /**
+     * A manually authored plugin name contains Morphs target delimiters or control characters.
+     */
+    public static final String NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID = "NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID";
     /**
      * A manually authored NPC Morph Assignment has a malformed hexadecimal Form ID.
      */

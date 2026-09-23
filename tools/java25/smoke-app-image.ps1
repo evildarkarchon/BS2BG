@@ -880,7 +880,7 @@ try {
         $focusCycle = @(
             @{ Role = 'List'; Name = 'Custom Morph Targets' },
             @{ Role = 'Text'; Name = 'Custom Morph Target editor' },
-            @{ Role = 'Text'; Name = 'Custom Morph Target inspector: no selection' },
+            @{ Role = 'Text'; Name = 'Morphs inspector: no selection' },
             @{ Role = 'Text'; Name = 'Output generated text' },
             @{ Role = 'List'; Name = 'Activity' },
             @{ Role = 'Text'; Name = 'Workbench status' },
@@ -919,7 +919,7 @@ try {
         Assert-ControlInsideClient -Element $inspectorLauncher -Metrics $narrowMetrics
 
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{F7}' -TimeoutSeconds $StepTimeoutSeconds
-        Wait-FocusedControl -ControlType 'Text' -Name 'Custom Morph Target inspector: no selection' | Out-Null
+        Wait-FocusedControl -ControlType 'Text' -Name 'Morphs inspector: no selection' | Out-Null
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
@@ -945,7 +945,7 @@ try {
         $inspectorLauncher = Find-OuterControl -ControlType 'Button' -Name 'Open Morphs inspector'
         Send-UiaKeysToElement -Element $inspectorLauncher -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         $minimumInspector = Wait-FocusedControl -ControlType 'Text' `
-            -Name 'Custom Morph Target inspector: no selection'
+            -Name 'Morphs inspector: no selection'
         Assert-ControlInsideClient -Element $minimumInspector -Metrics $minimumMetrics
         Send-UiaKeys -ProcessId $script:app.Id -Keys '{ESC}' -TimeoutSeconds $StepTimeoutSeconds
         Wait-UiaKeyboardFocus -Element $inspectorLauncher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
@@ -1454,11 +1454,11 @@ try {
             if (-not $removeTarget.Current.IsEnabled) { $true }
         } | Out-Null
         Wait-UiaElement -Root $script:mainWindow -Condition (
-            New-UiaCondition -ControlType 'Text' -Name 'Custom Morph Target inspector: no selection') `
+            New-UiaCondition -ControlType 'Text' -Name 'Morphs inspector: no selection') `
             -Description 'cleared accessible target selection state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'Text' `
-                -Name 'Select a Custom Morph Target to inspect its BodyGen condition.') `
+                -Name 'Select a Custom Morph Target or NPC Morph Assignment to inspect it.') `
             -Description 'cleared accessible BodyGen condition state' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
         Send-UiaKeysToElement -Element $filter -Keys '^a{BACKSPACE}' -TimeoutSeconds $StepTimeoutSeconds
         foreach ($identityName in @('All|Female', 'ActorTypeNPC|Female')) {
@@ -1664,7 +1664,7 @@ try {
         $filterLabel = Find-OuterControl -ControlType 'Text' -Name 'Filter Custom Morph Targets:'
         $filter = Get-FollowingControl -Element $filterLabel -ControlType 'Edit'
         Wait-UiaKeyboardFocus -Element $filter -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        $morphsSurface = Find-OuterControl -ControlType 'Pane' -Name 'Custom Morph Target management'
+        $morphsSurface = Find-OuterControl -ControlType 'Pane' -Name 'Morphs management'
         Assert-ControlInsideClient -Element $morphsSurface -Metrics $narrowMetrics
         $morphsNarrowScreenshot = Join-Path $diagnosticsDir 'workbench-morphs-narrow.png'
         Save-Screenshot -Path $morphsNarrowScreenshot
@@ -2055,7 +2055,7 @@ try {
         $narrowMetrics = Resize-UiaClient -Window $script:mainWindow -LogicalWidth 1199 -LogicalHeight 700 `
             -TimeoutSeconds $StepTimeoutSeconds
         Send-UiaKeys -ProcessId $script:app.Id -Keys '^k' -TimeoutSeconds $StepTimeoutSeconds
-        $npcSurface = Find-OuterControl -ControlType 'Pane' -Name 'Custom Morph Target management'
+        $npcSurface = Find-OuterControl -ControlType 'Pane' -Name 'Morphs management'
         Assert-ControlInsideClient -Element $npcSurface -Metrics $narrowMetrics
         $filter = Get-FollowingControl -Element (
             Find-OuterControl -ControlType 'Text' -Name 'Filter NPC Morph Assignments:') -ControlType 'Edit'
