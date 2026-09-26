@@ -21,6 +21,7 @@ public final class WorkbenchNavigation {
     private boolean narrowMode;
     private Overlay overlay = Overlay.NONE;
     private FocusTarget overlayReturnTarget;
+    private FocusTarget npcDatabaseReturnTarget;
 
     /**
      * A logical focus destination that can be resolved by the current JavaFX adapter.
@@ -78,6 +79,18 @@ public final class WorkbenchNavigation {
             outputReturnTarget = currentFocus;
             return transition(new FocusTarget(activeArea, Landmark.OUTPUT));
         }
+        if (destination == Destination.NPC_DATABASE) {
+            if (activeArea != Area.NPC_DATABASE) {
+                // A Morphs-origin visit remembers its semantic focus; visits from other Areas have no return target.
+                npcDatabaseReturnTarget = activeArea == Area.MORPHS && currentFocus.area() == Area.MORPHS
+                        ? currentFocus : null;
+            }
+        } else {
+            npcDatabaseReturnTarget = null;
+        }
+        boolean fromMorphsLauncher = destination == Destination.NPC_DATABASE
+                && currentFocus.area() == Area.MORPHS
+                && currentFocus.landmark() == Landmark.NPC_DATABASE_LAUNCHER;
         activeArea = switch (destination) {
             case TEMPLATES -> Area.TEMPLATES;
             case MORPHS -> Area.MORPHS;
@@ -91,13 +104,43 @@ public final class WorkbenchNavigation {
                     narrowMode ? Landmark.EDITOR : Landmark.PRIMARY_CONTENT);
         }
         if (narrowMode) {
-            overlay = Overlay.PRIMARY_CONTENT;
-            overlayReturnTarget = new FocusTarget(activeArea, Landmark.RAIL);
+            // The Morphs launcher opens the catalog editor directly; its table must not sit behind a side overlay.
+            overlay = fromMorphsLauncher ? Overlay.NONE : Overlay.PRIMARY_CONTENT;
+            overlayReturnTarget = fromMorphsLauncher ? null : new FocusTarget(activeArea, Landmark.RAIL);
         } else {
             overlay = Overlay.NONE;
             overlayReturnTarget = null;
         }
-        return transition(new FocusTarget(activeArea, Landmark.PRIMARY_CONTENT));
+        return transition(new FocusTarget(activeArea,
+                fromMorphsLauncher ? Landmark.EDITOR : Landmark.PRIMARY_CONTENT));
+    }
+
+    /**
+     * Returns from the NPC Database to its Morphs-origin semantic focus, or to Morphs primary content when the
+     * visit began in another Area. Narrow mode reveals the pane holding that target before requesting focus.
+     *
+     * @return committed Morphs frame and one semantic focus request
+     */
+    public Transition backToMorphs() {
+        FocusTarget target = npcDatabaseReturnTarget == null
+                ? new FocusTarget(Area.MORPHS, Landmark.PRIMARY_CONTENT) : npcDatabaseReturnTarget;
+        navigate(Destination.MORPHS, new FocusTarget(activeArea, Landmark.RAIL));
+        if (narrowMode) {
+            if (target.landmark() == Landmark.INSPECTOR) {
+                overlay = Overlay.INSPECTOR;
+                overlayReturnTarget = new FocusTarget(Area.MORPHS, Landmark.INSPECTOR_LAUNCHER);
+            } else if (target.landmark() != Landmark.PRIMARY_CONTENT
+                    && target.landmark() != Landmark.NPC_DATABASE_LAUNCHER) {
+                overlay = Overlay.NONE;
+                overlayReturnTarget = null;
+            }
+        }
+        return transition(target);
+    }
+
+    /** Drops a previous Project's Morphs launcher context without changing the current Area or focus. */
+    public void clearNpcDatabaseReturn() {
+        npcDatabaseReturnTarget = null;
     }
 
     /**
@@ -268,6 +311,7 @@ public final class WorkbenchNavigation {
         RAIL,
         PRIMARY_LAUNCHER,
         PRIMARY_CONTENT,
+        NPC_DATABASE_LAUNCHER,
         EDITOR,
         INSPECTOR_LAUNCHER,
         INSPECTOR,

@@ -135,6 +135,161 @@ class WorkbenchControllerTest {
         });
     }
 
+    /** The Morphs launcher returns to its focus and newly promoted identity after a selected Add. */
+    @Test
+    void npcDatabaseAddReturnsToMorphsLauncherAndPromotedAssignment() throws Exception {
+        Path source = temporaryDirectory.resolve("promote-npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        ProjectSession session = ProjectSessions.create();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        flow.apply(SliderPresetEdits.create("Shape"));
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300.0, 800.0);
+            stage.setScene(scene);
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                Button launcher = (Button) loader.getNamespace().get("addNpcsFromDatabaseButton");
+                launcher.requestFocus();
+                launcher.fire();
+                assertTrue(((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).isSelected());
+                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                catalog.getSelectionModel().selectFirst();
+                ((CheckBox) loader.getNamespace().get("assignRandomNpcPresetCheck")).fire();
+
+                ((Button) loader.getNamespace().get("addNpcToProjectButton")).fire();
+
+                assertEquals("Amber", catalog.getSelectionModel().getSelectedItem().getName());
+                assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
+                assertEquals(List.of("Shape"), session.getSnapshot().getNpcMorphAssignments().getFirst()
+                        .getSliderPresetNames());
+                ((Button) loader.getNamespace().get("addNpcToProjectButton")).fire();
+                assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
+                @SuppressWarnings("unchecked")
+                ListView<NpcMorphAssignmentSnapshot> assignments = (ListView<NpcMorphAssignmentSnapshot>)
+                        root.lookup("#npcMorphAssignmentList");
+                assertEquals(1, assignments.getItems().size());
+                ((Button) loader.getNamespace().get("backToMorphsButton")).fire();
+                assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
+                assertSame(launcher, scene.getFocusOwner());
+                assertEquals("Amber", assignments.getSelectionModel().getSelectedItem().getDisplayName());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** Filtered Add All keeps catalog selection and exposes every duplicate and validation refusal. */
+    @Test
+    void npcDatabaseAddAllReportsFilteredDuplicatesAndRejections() throws Exception {
+        Path source = temporaryDirectory.resolve("mixed-promotion.txt");
+        Files.writeString(source, "Skyrim.esm | Existing | Existing01 | NordRace | 00000A\n"
+                + "Skyrim.esm | Good | Good01 | NordRace | 00000B\n"
+                + "Skyrim.esm | Invalid | Invalid01 | NordRace | XYZ\n"
+                + "Skyrim.esm | Hidden | Hidden01 | NordRace | 00000C\n");
+        ProjectSession session = ProjectSessions.create();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        flow.apply(NpcMorphAssignmentEdits.create("Existing", "Skyrim.esm", "Existing01", "NordRace", "A"));
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                catalog.getSelectionModel().selectFirst();
+                hideNpcColumnValue(loader, "Name", "Hidden");
+
+                ((Button) loader.getNamespace().get("addAllNpcsToProjectButton")).fire();
+
+                assertEquals(2, session.getSnapshot().getNpcMorphAssignments().size());
+                assertEquals("Existing", catalog.getSelectionModel().getSelectedItem().getName());
+                assertEquals(3, catalog.getItems().size());
+                String summary = ((Label) loader.getNamespace().get("npcPromotionInfoBarMessage")).getText();
+                assertTrue(summary.contains("Added 1"));
+                assertTrue(summary.contains("1 already"));
+                assertTrue(summary.contains("1 rejected"));
+                String details = ((TextArea) loader.getNamespace().get("npcPromotionDetails")).getText();
+                assertTrue(details.contains("Existing01"));
+                assertTrue(details.contains("Invalid01"));
+                assertFalse(details.contains("Hidden01"));
+                WorkbenchFeedback.ActivityRecord activity = (WorkbenchFeedback.ActivityRecord)
+                        ((ListView<?>) loader.getNamespace().get("activityList")).getItems().getLast();
+                assertEquals("Add All NPCs to Project", activity.operation());
+                assertTrue(activity.details().orElseThrow().contains("Existing01"));
+                assertTrue(activity.details().orElseThrow().contains("Invalid01"));
+                catalog.requestFocus();
+                sendKey(catalog, KeyCode.ENTER);
+                assertEquals(2, session.getSnapshot().getNpcMorphAssignments().size());
+                assertTrue(((Label) loader.getNamespace().get("npcPromotionInfoBarMessage")).getText()
+                        .contains("Already in the Project"));
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** A later direct visit cannot reuse an earlier visit's promoted return selection or inline result. */
+    @Test
+    void npcDatabaseRailExitDiscardsEarlierPromotionReturnContext() throws Exception {
+        Path source = temporaryDirectory.resolve("return-context.txt");
+        Files.writeString(source, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        ProjectSession session = ProjectSessions.create();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform);
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                catalog.getSelectionModel().selectFirst();
+                Button add = (Button) loader.getNamespace().get("addNpcToProjectButton");
+                add.fire();
+                add.fire();
+                assertTrue(((HBox) loader.getNamespace().get("npcPromotionInfoBar")).isVisible());
+
+                ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                assertFalse(((HBox) loader.getNamespace().get("npcPromotionInfoBar")).isVisible());
+                ((Button) loader.getNamespace().get("backToMorphsButton")).fire();
+
+                @SuppressWarnings("unchecked")
+                ListView<NpcMorphAssignmentSnapshot> assignments = (ListView<NpcMorphAssignmentSnapshot>)
+                        root.lookup("#npcMorphAssignmentList");
+                assertEquals(1, assignments.getItems().size());
+                assertNull(assignments.getSelectionModel().getSelectedItem());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
     /** Column filters clear hidden selection, sorting changes order, and Clear freezes only visible identities. */
     @Test
     void npcDatabaseClearUsesFilteredVisibleScope() throws Exception {

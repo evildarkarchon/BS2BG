@@ -773,6 +773,66 @@ class ProjectSessionTest {
         assertEquals("A2C94", duplicate.getSnapshot().getNpcMorphAssignments().getFirst().getFormId());
     }
 
+    /** Invalid promoted source fields obey manual authoring rules without changing the Project. */
+    @Test
+    void addingNpcRejectsInvalidSourceFieldsWithoutPublishing() {
+        ProjectSession session = ProjectSessions.create();
+        ProjectSnapshot clean = session.newProject().getSnapshot();
+        List<NpcMorphAssignmentSnapshot> invalid = List.of(
+                new NpcMorphAssignmentSnapshot("Lydia", " ", "HousecarlWhiterun", "NordRace", "000A2C94", List.of()),
+                new NpcMorphAssignmentSnapshot("Lydia", "Skyrim.esm", " ", "NordRace", "000A2C94", List.of()),
+                new NpcMorphAssignmentSnapshot("Lydia", "Skyrim.esm", "HousecarlWhiterun", " ", "000A2C94", List.of()),
+                new NpcMorphAssignmentSnapshot("Lydia", "Skyrim.esm", "HousecarlWhiterun", "NordRace", " ", List.of()),
+                new NpcMorphAssignmentSnapshot("Lydia", "A|B.esp", "HousecarlWhiterun", "NordRace", "000A2C94", List.of()),
+                new NpcMorphAssignmentSnapshot("Lydia", "A=B.esp", "HousecarlWhiterun", "NordRace", "000A2C94", List.of()),
+                new NpcMorphAssignmentSnapshot("Lydia", "A\nB.esp", "HousecarlWhiterun", "NordRace", "000A2C94", List.of()),
+                new NpcMorphAssignmentSnapshot("Lydia", "Skyrim.esm", "HousecarlWhiterun", "NordRace", "not-hex", List.of()),
+                new NpcMorphAssignmentSnapshot("Lydia", "Skyrim.esm", "HousecarlWhiterun", "NordRace", "00000A2C94", List.of()));
+        List<String> codes = List.of(
+                ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID,
+                ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID,
+                ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID,
+                ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID,
+                ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID);
+
+        for (int index = 0; index < invalid.size(); index++) {
+            ProjectOutcome rejected = session.apply(NpcMorphAssignmentEdits.addNpc(invalid.get(index)));
+            assertInstanceOf(RejectedOutcome.class, rejected);
+            assertSame(clean, rejected.getSnapshot());
+            assertEquals(codes.get(index), rejected.getDiagnostics().getFirst().getCode());
+            assertEquals("npc-morph-assignment.identity",
+                    rejected.getDiagnostics().getFirst().getSourceLocation().getElement().orElseThrow());
+            assertSame(clean, session.getSnapshot());
+        }
+        assertTrue(clean.getNpcMorphAssignments().isEmpty());
+    }
+
+    /** Promotion normalizes copied source fields and retains resolved Slider Preset relationships. */
+    @Test
+    void addingNpcNormalizesSourceFieldsAndRetainsPresetRelationships() {
+        ProjectSession session = ProjectSessions.create();
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        NpcMorphAssignmentSnapshot source = new NpcMorphAssignmentSnapshot(" Lydia ", " Skyrim.esm ",
+                " HousecarlWhiterun ", " NordRace ", "000A2C94", List.of("alpha"));
+
+        ProjectOutcome added = session.apply(NpcMorphAssignmentEdits.addNpc(source));
+
+        assertInstanceOf(ChangedOutcome.class, added);
+        NpcMorphAssignmentSnapshot promoted = added.getSnapshot().getNpcMorphAssignments().getFirst();
+        assertNotSame(source, promoted);
+        assertEquals("Lydia", promoted.getDisplayName());
+        assertEquals("Skyrim.esm", promoted.getPluginName());
+        assertEquals("HousecarlWhiterun", promoted.getEditorId());
+        assertEquals("NordRace", promoted.getRace());
+        assertEquals("A2C94", promoted.getFormId());
+        assertEquals(List.of("Alpha"), promoted.getSliderPresetNames());
+    }
+
     /**
      * Verifies that case-insensitive NPC identity equality remains safe for caller
      * hash collections even for Unicode characters with asymmetric lowercase forms.

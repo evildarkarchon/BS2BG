@@ -12,6 +12,7 @@ public final class NPC {
     private final String name;
     private final String editorId;
     private final String race;
+    private final String sourceFormId;
     private final String formId;
 
     /**
@@ -37,7 +38,8 @@ public final class NPC {
         if (raceParts.length == 0)
             throw new IllegalArgumentException("NPC race contains no value before the quote");
         race = raceParts[0].trim();
-        formId = normalizeFormId(values[4]);
+        sourceFormId = values[4];
+        formId = normalizeFormId(sourceFormId);
     }
 
     /**
@@ -83,5 +85,15 @@ public final class NPC {
      */
     public String getFormId() {
         return formId;
+    }
+
+    /**
+     * Returns the unnormalized source field so Project promotion can validate every original character.
+     * The catalog still displays the legacy shortened Form ID from {@link #getFormId()}.
+     *
+     * @return trimmed source Form ID before load-order prefix removal
+     */
+    public String getSourceFormId() {
+        return sourceFormId;
     }
 }

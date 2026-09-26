@@ -221,4 +221,103 @@ class WorkbenchNavigationTest {
                 WorkbenchNavigation.Area.NPC_DATABASE,
                 WorkbenchNavigation.Landmark.RAIL), dismissed.focusTarget().orElseThrow());
     }
+
+    /** Back restores the Morphs control that launched the NPC Database rather than its general list. */
+    @Test
+    void backToMorphsRestoresTheNpcDatabaseLauncher() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        WorkbenchNavigation.FocusTarget launcher = new WorkbenchNavigation.FocusTarget(
+                WorkbenchNavigation.Area.MORPHS,
+                WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER);
+        navigation.navigate(WorkbenchNavigation.Destination.MORPHS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.TEMPLATES,
+                        WorkbenchNavigation.Landmark.RAIL));
+
+        WorkbenchNavigation.Transition opened = navigation.navigate(
+                WorkbenchNavigation.Destination.NPC_DATABASE, launcher);
+        assertEquals(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.NPC_DATABASE,
+                WorkbenchNavigation.Landmark.EDITOR), opened.focusTarget().orElseThrow());
+        WorkbenchNavigation.Transition returned = navigation.backToMorphs();
+
+        assertEquals(WorkbenchNavigation.Area.MORPHS, returned.frame().activeArea());
+        assertEquals(launcher, returned.focusTarget().orElseThrow());
+    }
+
+    /** Direct rail entry has no Morphs launcher to restore, so Back focuses the first Morphs control. */
+    @Test
+    void backToMorphsFromAnotherAreaFocusesMorphsPrimaryContent() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        navigation.navigate(WorkbenchNavigation.Destination.NPC_DATABASE,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.TEMPLATES,
+                        WorkbenchNavigation.Landmark.RAIL));
+
+        WorkbenchNavigation.Transition returned = navigation.backToMorphs();
+
+        assertEquals(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                WorkbenchNavigation.Landmark.PRIMARY_CONTENT), returned.focusTarget().orElseThrow());
+    }
+
+    /** Narrow Back reopens the launcher-bearing primary pane before requesting its focus. */
+    @Test
+    void narrowBackToMorphsRevealsTheLauncher() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        WorkbenchNavigation.FocusTarget editor = new WorkbenchNavigation.FocusTarget(
+                WorkbenchNavigation.Area.MORPHS, WorkbenchNavigation.Landmark.EDITOR);
+        WorkbenchNavigation.FocusTarget launcher = new WorkbenchNavigation.FocusTarget(
+                WorkbenchNavigation.Area.MORPHS, WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER);
+        navigation.navigate(WorkbenchNavigation.Destination.MORPHS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.TEMPLATES,
+                        WorkbenchNavigation.Landmark.RAIL));
+        navigation.resize(1199, editor);
+        WorkbenchNavigation.Transition opened = navigation.navigate(
+                WorkbenchNavigation.Destination.NPC_DATABASE, launcher);
+        assertEquals(WorkbenchNavigation.Overlay.NONE, opened.frame().overlay());
+
+        WorkbenchNavigation.Transition returned = navigation.backToMorphs();
+
+        assertEquals(WorkbenchNavigation.Overlay.PRIMARY_CONTENT, returned.frame().overlay());
+        assertEquals(launcher, returned.focusTarget().orElseThrow());
+    }
+
+    /** A later visit entered from another Area must not revive a stale Morphs launcher. */
+    @Test
+    void leavingNpcDatabaseDiscardsItsEarlierMorphsReturnTarget() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        navigation.navigate(WorkbenchNavigation.Destination.MORPHS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.TEMPLATES,
+                        WorkbenchNavigation.Landmark.RAIL));
+        navigation.navigate(WorkbenchNavigation.Destination.NPC_DATABASE,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                        WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER));
+        navigation.navigate(WorkbenchNavigation.Destination.SETTINGS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.NPC_DATABASE,
+                        WorkbenchNavigation.Landmark.EDITOR));
+        navigation.navigate(WorkbenchNavigation.Destination.NPC_DATABASE,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.SETTINGS,
+                        WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+
+        WorkbenchNavigation.Transition returned = navigation.backToMorphs();
+
+        assertEquals(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                WorkbenchNavigation.Landmark.PRIMARY_CONTENT), returned.focusTarget().orElseThrow());
+    }
+
+    /** New or Open drops the previous Project's launcher context without leaving the database Area. */
+    @Test
+    void clearingNpcDatabaseReturnKeepsTheAreaAndUsesMorphsFallback() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        navigation.navigate(WorkbenchNavigation.Destination.MORPHS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.TEMPLATES,
+                        WorkbenchNavigation.Landmark.RAIL));
+        navigation.navigate(WorkbenchNavigation.Destination.NPC_DATABASE,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                        WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER));
+
+        navigation.clearNpcDatabaseReturn();
+
+        assertEquals(WorkbenchNavigation.Area.NPC_DATABASE, navigation.currentFrame().activeArea());
+        assertEquals(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                WorkbenchNavigation.Landmark.PRIMARY_CONTENT),
+                navigation.backToMorphs().focusTarget().orElseThrow());
+    }
 }
