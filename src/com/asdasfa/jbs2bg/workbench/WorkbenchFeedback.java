@@ -294,6 +294,18 @@ public final class WorkbenchFeedback {
     }
 
     /**
+     * Records detailed Activity and status for a pane-owned outcome without a workbench-wide InfoBar.
+     *
+     * @param notification user-facing operation summary
+     * @param details complete details retained for Activity inspection
+     * @return the newly committed feedback frame
+     */
+    public Frame publishActivityDetailed(Notification notification, String details) {
+        return publish(notification, Optional.empty(), false,
+                Optional.of(requireText(details, "details")));
+    }
+
+    /**
      * Updates only the concise status projection for a per-gesture feature edit. Existing InfoBar, Activity, and
      * pending-dialog state remain untouched, preventing high-frequency row changes from flooding durable history.
      *

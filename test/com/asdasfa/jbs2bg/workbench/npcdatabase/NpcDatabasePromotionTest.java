@@ -98,6 +98,33 @@ class NpcDatabasePromotionTest {
         assertEquals(4, feature.frame().visibleRows().size());
     }
 
+    /** Add All publishes one Project frame while retaining ordered outcomes for every visible row. */
+    @Test
+    void addAllPublishesOnceForMultipleAddsAndRejections() throws Exception {
+        Path source = temporaryDirectory.resolve("many.txt");
+        Files.writeString(source, "Master.esm | Alpha | Alpha01 | NordRace | 00000A\n"
+                + "Master.esm | Broken | Broken01 | NordRace | XYZ\n"
+                + "Master.esm | Beta | Beta01 | NordRace | 00000B\n"
+                + "Master.esm | Gamma | Gamma01 | NordRace | 00000C\n");
+        ProjectSession session = ProjectSessions.create();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        NpcDatabaseFeature feature = new NpcDatabaseFeature();
+        feature.commitSource(NpcDatabaseSourceReader.read(source));
+        long beforeSequence = flow.frame().sequence();
+
+        NpcDatabaseFeature.PromotionReport report = feature.promoteVisible(flow);
+
+        assertEquals(beforeSequence + 1, flow.frame().sequence());
+        assertEquals(List.of(NpcDatabaseFeature.PromotionStatus.ADDED,
+                        NpcDatabaseFeature.PromotionStatus.REJECTED,
+                        NpcDatabaseFeature.PromotionStatus.ADDED,
+                        NpcDatabaseFeature.PromotionStatus.ADDED),
+                report.entries().stream().map(NpcDatabaseFeature.PromotionEntry::status).toList());
+        assertEquals(3, session.getSnapshot().getNpcMorphAssignments().size());
+        assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID,
+                flow.frame().diagnostics().getFirst().getCode());
+    }
+
     /** Assign random copies one Project Slider Preset name into the new assignment when enabled. */
     @Test
     void addSelectedCanAssignOneProjectSliderPreset() throws Exception {

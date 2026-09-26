@@ -25,6 +25,7 @@ import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
+import com.asdasfa.jbs2bg.project.NpcPromotionOutcome;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectDiagnosticCodes;
 import com.asdasfa.jbs2bg.project.ProjectEdit;
@@ -667,6 +668,15 @@ class TemplatesFeatureTest {
                     Optional.of("slider-preset.slider-choice"), OptionalInt.empty(), OptionalInt.empty()),
                     "The test Slider choice could not be edited.");
             return new FailedOutcome(delegate.getSnapshot(), List.of(diagnostic));
+        }
+
+        /** Applies the same deterministic failure to bulk NPC edits when armed. */
+        @Override
+        public NpcPromotionOutcome promoteNpcs(List<NpcMorphAssignmentSnapshot> sources) {
+            if (!failEdits)
+                return delegate.promoteNpcs(sources);
+            ProjectOutcome failure = apply(NpcMorphAssignmentEdits.addNpcs(sources));
+            return new NpcPromotionOutcome(failure, java.util.Collections.nCopies(sources.size(), failure));
         }
     }
 }

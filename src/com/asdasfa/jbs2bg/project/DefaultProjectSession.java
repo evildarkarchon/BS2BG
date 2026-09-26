@@ -614,6 +614,55 @@ final class DefaultProjectSession implements ProjectSession {
         }
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public NpcPromotionOutcome promoteNpcs(List<NpcMorphAssignmentSnapshot> sources) {
+        List<NpcMorphAssignmentSnapshot> selected = ImmutableValues.copyOf(sources, "sources");
+        synchronized (operationLock) {
+            if (snapshot.getLifecycleStatus() == ProjectLifecycleStatus.NO_PROJECT) {
+                RejectedOutcome rejection = rejectedActiveProjectRequired();
+                return new NpcPromotionOutcome(rejection, Collections.nCopies(selected.size(), rejection));
+            }
+
+            ProjectDiagnostic[] rowDiagnostics = new ProjectDiagnostic[selected.size()];
+            List<NpcMorphAssignmentSnapshot> validSources = new ArrayList<>(selected.size());
+            List<Integer> validIndices = new ArrayList<>(selected.size());
+            for (int index = 0; index < selected.size(); index++) {
+                NpcMorphAssignmentSnapshot source = selected.get(index);
+                NpcValidation validation = validateNpc(source.getDisplayName(), source.getPluginName(),
+                        source.getEditorId(), source.getRace(), source.getFormId(),
+                        source.getSliderPresetNames());
+                if (validation.rejection() != null) {
+                    rowDiagnostics[index] = validation.rejection().getDiagnostics().getFirst();
+                } else {
+                    validSources.add(validation.source());
+                    validIndices.add(index);
+                }
+            }
+
+            Project.NpcPromotion promotion = project.promoteNpcMorphAssignments(validSources);
+            for (int index = 0; index < validIndices.size(); index++)
+                rowDiagnostics[validIndices.get(index)] = promotion.diagnostics().get(index).orElse(null);
+            List<ProjectDiagnostic> diagnostics = new ArrayList<>();
+            for (ProjectDiagnostic diagnostic : rowDiagnostics) {
+                if (diagnostic != null)
+                    diagnostics.add(diagnostic);
+            }
+
+            boolean changed = promotion.project() != project;
+            ProjectOutcome aggregate = publish(promotion.project(), snapshot.getFileIdentity(),
+                    snapshot.isDirty() || changed, snapshot.getLifecycleStatus(), changed, diagnostics);
+            if (!changed && !diagnostics.isEmpty())
+                aggregate = new RejectedOutcome(snapshot, diagnostics);
+            List<ProjectOutcome> rowOutcomes = new ArrayList<>(selected.size());
+            for (ProjectDiagnostic diagnostic : rowDiagnostics) {
+                rowOutcomes.add(diagnostic == null ? new ChangedOutcome(snapshot)
+                        : new RejectedOutcome(snapshot, Collections.singletonList(diagnostic)));
+            }
+            return new NpcPromotionOutcome(aggregate, rowOutcomes);
+        }
+    }
+
     /**
      * Rejects a known edit until a lifecycle operation establishes active state.
      *
@@ -670,26 +719,50 @@ final class DefaultProjectSession implements ProjectSession {
      */
     private ProjectOutcome addValidatedNpc(String displayName, String pluginName, String editorId, String race,
                                            String rawFormId, List<String> sliderPresetNames) {
+        NpcValidation validation = validateNpc(displayName, pluginName, editorId, race, rawFormId,
+                sliderPresetNames);
+        return validation.rejection() != null ? validation.rejection()
+                : outcome(project.addNpcMorphAssignment(validation.source()));
+    }
+
+    /**
+     * Applies single-add field rules without publishing, so bulk promotion can
+     * classify every row before the aggregate builds one final NPC list.
+     *
+     * @param displayName optional display name
+     * @param pluginName required source plugin name
+     * @param editorId required NPC editor ID
+     * @param race required race
+     * @param rawFormId source Form ID before normalization
+     * @param sliderPresetNames requested relationships
+     * @return a normalized source or its field rejection
+     */
+    private NpcValidation validateNpc(String displayName, String pluginName, String editorId, String race,
+                                      String rawFormId, List<String> sliderPresetNames) {
         if (blank(pluginName) || blank(editorId) || blank(race) || blank(rawFormId))
-            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
-                    "Plugin name, editor ID, race, and Form ID are required to author an NPC Morph Assignment.");
+            return new NpcValidation(null, rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
+                    "Plugin name, editor ID, race, and Form ID are required to author an NPC Morph Assignment."));
         pluginName = pluginName.trim();
         // Morphs output uses plugin|FormId=relationships, so these characters would create a different target.
         if (pluginName.codePoints().anyMatch(character -> character == '|' || character == '='
                 || Character.isISOControl(character)))
-            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID,
-                    "Plugin name cannot contain Morphs target delimiters or control characters.");
+            return new NpcValidation(null, rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID,
+                    "Plugin name cannot contain Morphs target delimiters or control characters."));
         rawFormId = rawFormId.trim();
         if (!rawFormId.matches("[0-9A-Fa-f]{1,8}"))
-            return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID,
-                    "Form ID must contain one to eight hexadecimal digits.");
+            return new NpcValidation(null, rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID,
+                    "Form ID must contain one to eight hexadecimal digits."));
         editorId = editorId.trim();
         displayName = blank(displayName) ? "Unnamed (" + editorId + ")" : displayName.trim();
         // Persist the load-order-independent ID now, so generation is identical before and after reopening.
         String formId = NpcFormIds.normalize(rawFormId);
         NpcMorphAssignmentSnapshot source = new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId,
                 race.trim(), formId, sliderPresetNames);
-        return outcome(project.addNpcMorphAssignment(source));
+        return new NpcValidation(source, null);
+    }
+
+    /** Exactly one of normalized source and field rejection is present. */
+    private record NpcValidation(NpcMorphAssignmentSnapshot source, RejectedOutcome rejection) {
     }
 
     /** @return whether a required Workbench authoring field is absent or whitespace only */

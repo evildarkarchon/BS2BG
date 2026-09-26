@@ -179,7 +179,11 @@ public final class WorkbenchNavigation {
             landmarks.add(Landmark.OUTPUT);
         landmarks.add(Landmark.ACTIVITY);
         landmarks.add(Landmark.STATUS);
-        int currentIndex = landmarks.indexOf(currentFocus.landmark());
+        // A live Morphs launcher occupies primary content in the F6 cycle; its distinct token remains for Back.
+        Landmark currentLandmark = activeArea == Area.MORPHS && currentFocus.area() == Area.MORPHS
+                && currentFocus.landmark() == Landmark.NPC_DATABASE_LAUNCHER
+                ? Landmark.PRIMARY_CONTENT : currentFocus.landmark();
+        int currentIndex = landmarks.indexOf(currentLandmark);
         int nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % landmarks.size();
         return transition(new FocusTarget(activeArea, landmarks.get(nextIndex)));
     }

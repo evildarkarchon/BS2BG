@@ -115,6 +115,23 @@ class WorkbenchFeedbackTest {
                 frame.activities().getLast().details());
     }
 
+    /** A pane-owned bulk report records complete Activity evidence without adding a global notification. */
+    @Test
+    void detailedActivityOnlyPublicationKeepsEvidenceWithoutInfoBar() {
+        WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.fixed(FIXED_TIME, ZoneOffset.UTC));
+        WorkbenchFeedback.Notification notification = new WorkbenchFeedback.Notification(
+                "Add All NPCs to Project", WorkbenchFeedback.Severity.WARNING,
+                "Added 1 NPC; 2 rejected.", WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES);
+
+        WorkbenchFeedback.Frame frame = feedback.publishActivityDetailed(notification,
+                "Master.esm / First — duplicate\nMaster.esm / Second — invalid Form ID");
+
+        assertEquals(true, frame.infoBar().isEmpty());
+        assertEquals(notification.message(), frame.status().message());
+        assertEquals(Optional.of("Master.esm / First — duplicate\nMaster.esm / Second — invalid Form ID"),
+                frame.activities().getLast().details());
+    }
+
     /**
      * High-frequency feature gestures may update truthful terminal status without creating an InfoBar or durable
      * Activity entry for every individual row edit.

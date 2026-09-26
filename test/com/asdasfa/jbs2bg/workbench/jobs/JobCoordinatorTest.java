@@ -510,7 +510,13 @@ class JobCoordinatorTest {
         coordinator.submit(new JobCoordinator.Submission<>(new JobCoordinator.Operation(
                 "Open Project", List.of("slow.jbs2bg"), List.of(), Optional.empty()), context -> {
             entered.countDown();
-            release.await();
+            while (release.getCount() > 0) {
+                try {
+                    release.await();
+                } catch (InterruptedException ignored) {
+                    // Shutdown interrupts the worker, but this fixture acknowledges it only after release.
+                }
+            }
             context.checkCancellation();
             return JobCoordinator.Result.completed("opened", "Project opened",
                     List.of("Project published"), List.of());

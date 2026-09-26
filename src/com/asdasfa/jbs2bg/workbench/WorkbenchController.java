@@ -1559,7 +1559,7 @@ public final class WorkbenchController {
         applyNavigation(navigation.backToMorphs());
     }
 
-    /** Applies each captured NPC through ProjectSession, then reports the complete operation at its UI tier. */
+    /** Promotes captured NPCs through ProjectSession, then reports the complete operation at its UI tier. */
     private void promoteNpcDatabase(boolean bulk) {
         if (projectFlow.jobs().frame().active() || projectFlow.jobs().frame().shutdownRequested())
             return;
@@ -1567,12 +1567,15 @@ public final class WorkbenchController {
                 ? npcDatabaseFeature.promoteVisible(projectFlow)
                 : npcDatabaseFeature.promoteSelected(projectFlow);
         // NPC Database owns these diagnostics and task wording. Suppress the generic lifecycle feedback while
-        // Project chrome and other Areas reconcile the final snapshot after all per-row edits have published.
+        // Project chrome and other Areas reconcile the final snapshot after promotion has published.
         templatesOwnProjectDiagnostics = true;
         morphsOwnProjectDiagnostics = true;
         try {
-            renderedProjectSequence = projectFlow.frame().sequence();
-            render(projectFlow.frame());
+            WorkbenchProjectFlow.Frame projectFrame = projectFlow.frame();
+            renderedProjectSequence = projectFrame.sequence();
+            // The bulk report presents every row diagnostic locally; projecting the Project frame here would
+            // expose either a final row's diagnostic or the same aggregate on an unrelated global surface.
+            render(projectFrame, bulk ? List.of() : projectFrame.diagnostics());
         } finally {
             templatesOwnProjectDiagnostics = false;
             morphsOwnProjectDiagnostics = false;
@@ -1589,8 +1592,8 @@ public final class WorkbenchController {
                 promotionSummary(report), disposition);
         if (bulk) {
             String details = promotionDetails(report);
-            renderFeedback(details.isEmpty() ? feedback.publish(notification)
-                    : feedback.publishDetailed(notification, details));
+            renderFeedback(details.isEmpty() ? feedback.publishActivity(notification)
+                    : feedback.publishActivityDetailed(notification, details));
         } else {
             renderFeedback(feedback.publishStatus(notification));
         }
@@ -4300,9 +4303,14 @@ public final class WorkbenchController {
      * Renders title, lifecycle summary, and complete structured diagnostics from one immutable Project frame.
      */
     private void render(WorkbenchProjectFlow.Frame frame) {
+        render(frame, frame.diagnostics());
+    }
+
+    /** Renders the Project snapshot with diagnostics chosen by the operation that owns the current report. */
+    private void render(WorkbenchProjectFlow.Frame frame, List<ProjectDiagnostic> diagnostics) {
         stage.setTitle(frame.title());
         projectStatusText.setText(projectStatus(frame));
-        diagnosticsText.setText(ProjectDiagnosticFormatter.format(frame.diagnostics()));
+        diagnosticsText.setText(ProjectDiagnosticFormatter.format(diagnostics));
         boolean lifecyclePublication = frame.sequence() != renderedProjectSequence;
         boolean lifecycleReset = lifecyclePublication
                 && (activeOperation == WorkbenchProjectFlow.Intent.NEW

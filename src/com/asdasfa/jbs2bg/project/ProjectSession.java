@@ -123,4 +123,14 @@ public interface ProjectSession {
      * @throws NullPointerException when edit is null
      */
     ProjectOutcome apply(ProjectEdit edit);
+
+    /**
+     * Validates an ordered NPC source batch independently per row, then commits
+     * every accepted assignment through one atomic Project publication.
+     *
+     * @param sources immutable source values in requested order
+     * @return the aggregate outcome and one typed result per source
+     * @throws NullPointerException when sources or a contained source is null
+     */
+    NpcPromotionOutcome promoteNpcs(List<NpcMorphAssignmentSnapshot> sources);
 }

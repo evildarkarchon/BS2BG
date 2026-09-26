@@ -167,6 +167,41 @@ class WorkbenchNavigationTest {
         }
     }
 
+    /** F6 advances from the Morphs NPC launcher to the editor, as it does from other primary content. */
+    @Test
+    void f6FromMorphsNpcLauncherAdvancesToEditor() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        navigation.navigate(WorkbenchNavigation.Destination.MORPHS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.TEMPLATES,
+                        WorkbenchNavigation.Landmark.RAIL));
+
+        WorkbenchNavigation.Transition cycled = navigation.cycleFocus(
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                        WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER));
+
+        assertEquals(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                WorkbenchNavigation.Landmark.EDITOR), cycled.focusTarget().orElseThrow());
+    }
+
+    /** A launcher focus target from a previous Area cannot skip the rail in the current F6 cycle. */
+    @Test
+    void f6FromStaleMorphsNpcLauncherStartsAtRail() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        navigation.navigate(WorkbenchNavigation.Destination.MORPHS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.TEMPLATES,
+                        WorkbenchNavigation.Landmark.RAIL));
+        navigation.navigate(WorkbenchNavigation.Destination.SETTINGS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                        WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+
+        WorkbenchNavigation.Transition cycled = navigation.cycleFocus(
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                        WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER));
+
+        assertEquals(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.SETTINGS,
+                WorkbenchNavigation.Landmark.RAIL), cycled.focusTarget().orElseThrow());
+    }
+
     /**
      * Below 1200 logical pixels side content becomes dismissible overlays over the still-inline editor.
      */

@@ -38,6 +38,7 @@ import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
+import com.asdasfa.jbs2bg.project.NpcPromotionOutcome;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectEdit;
 import com.asdasfa.jbs2bg.project.ProjectOperationContext;
@@ -230,6 +231,9 @@ class WorkbenchControllerTest {
                 assertTrue(details.contains("Existing01"));
                 assertTrue(details.contains("Invalid01"));
                 assertFalse(details.contains("Hidden01"));
+                assertEquals("", ((TextArea) loader.getNamespace().get("diagnosticsText")).getText());
+                assertTrue(((HBox) loader.getNamespace().get("npcPromotionInfoBar")).isVisible());
+                assertFalse(((HBox) loader.getNamespace().get("infoBar")).isVisible());
                 WorkbenchFeedback.ActivityRecord activity = (WorkbenchFeedback.ActivityRecord)
                         ((ListView<?>) loader.getNamespace().get("activityList")).getItems().getLast();
                 assertEquals("Add All NPCs to Project", activity.operation());
@@ -3746,6 +3750,15 @@ class WorkbenchControllerTest {
                     OptionalInt.empty(), OptionalInt.empty()), "The target could not be removed."));
             return failed ? new FailedOutcome(delegate.getSnapshot(), diagnostics)
                     : new RejectedOutcome(delegate.getSnapshot(), diagnostics);
+        }
+
+        /** Preserves the armed refusal for bulk NPC edits as well as single edits. */
+        @Override
+        public NpcPromotionOutcome promoteNpcs(List<NpcMorphAssignmentSnapshot> sources) {
+            if (!refuse)
+                return delegate.promoteNpcs(sources);
+            ProjectOutcome refusal = apply(NpcMorphAssignmentEdits.addNpcs(sources));
+            return new NpcPromotionOutcome(refusal, java.util.Collections.nCopies(sources.size(), refusal));
         }
     }
 
