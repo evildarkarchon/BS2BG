@@ -17,6 +17,8 @@ import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
 import com.asdasfa.jbs2bg.project.CancelledOutcome;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
+import com.asdasfa.jbs2bg.project.NpcPromotionOutcome;
 import com.asdasfa.jbs2bg.project.ProjectContentVersion;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectEdit;
@@ -383,6 +385,21 @@ public final class WorkbenchProjectFlow {
         requireImmediateOperation();
         ProjectOutcome outcome = projectSession.apply(Objects.requireNonNull(edit, "edit"));
         publish(outcome);
+        return outcome;
+    }
+
+    /**
+     * Promotes an ordered NPC batch through ProjectSession and publishes its one
+     * final outcome as the next Workbench frame.
+     *
+     * @param sources copied NPC source values in visible order
+     * @return aggregate and per-row Project outcomes at the final snapshot
+     * @throws IllegalStateException when immediate Project operations are blocked
+     */
+    public NpcPromotionOutcome promoteNpcs(List<NpcMorphAssignmentSnapshot> sources) {
+        requireImmediateOperation();
+        NpcPromotionOutcome outcome = projectSession.promoteNpcs(Objects.requireNonNull(sources, "sources"));
+        publish(outcome.getProjectOutcome());
         return outcome;
     }
 

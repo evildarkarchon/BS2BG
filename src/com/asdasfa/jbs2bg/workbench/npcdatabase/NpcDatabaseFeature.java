@@ -24,6 +24,7 @@ import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
+import com.asdasfa.jbs2bg.project.NpcPromotionOutcome;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectDiagnosticCodes;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
@@ -239,10 +240,16 @@ public final class NpcDatabaseFeature {
         Objects.requireNonNull(projectFlow, "projectFlow");
         List<NPC> captured = List.copyOf(visibleSet().getRows());
         List<PromotionEntry> entries = new ArrayList<>(captured.size());
-        // The atomic Project batch reports only its first rejection and silently skips existing identities.
-        // Individual edits retain Project validation while accounting for every captured database identity.
-        for (NPC row : captured)
-            entries.add(promote(row, projectFlow));
+        if (!captured.isEmpty()) {
+            List<NpcMorphAssignmentSnapshot> sources = new ArrayList<>(captured.size());
+            for (NPC row : captured)
+                sources.add(sourceFor(row, projectFlow));
+            // ProjectSession classifies every row before one sorted aggregate commit, retaining
+            // row diagnostics without publishing a Project snapshot for each visible identity.
+            NpcPromotionOutcome outcome = projectFlow.promoteNpcs(sources);
+            for (int index = 0; index < captured.size(); index++)
+                entries.add(promotionEntry(captured.get(index), outcome.getRowOutcomes().get(index)));
+        }
         PromotionReport report = new PromotionReport(true, entries);
         promotionReport = Optional.of(report);
         report.lastAddedIdentity().ifPresent(identity -> returnAssignment = Optional.of(identity));
@@ -252,15 +259,27 @@ public final class NpcDatabaseFeature {
 
     /** Copies one source row into a Project edit so the catalog never owns the resulting assignment. */
     private PromotionEntry promote(NPC row, WorkbenchProjectFlow projectFlow) {
+        ProjectOutcome outcome = projectFlow.apply(NpcMorphAssignmentEdits.addNpc(sourceFor(row, projectFlow)));
+        return promotionEntry(row, outcome);
+    }
+
+    /**
+     * Captures source values and the caller's optional random preset choice before
+     * Project validation, including for rows that will later be rejected.
+     */
+    private NpcMorphAssignmentSnapshot sourceFor(NPC row, WorkbenchProjectFlow projectFlow) {
         List<String> presets = List.of();
         if (assignRandom) {
             var available = projectFlow.frame().snapshot().getSliderPresets();
             if (!available.isEmpty())
                 presets = List.of(available.get(random.nextInt(available.size())).getName());
         }
-        NpcMorphAssignmentSnapshot source = new NpcMorphAssignmentSnapshot(row.getName(), row.getMod(),
+        return new NpcMorphAssignmentSnapshot(row.getName(), row.getMod(),
                 row.getEditorId(), row.getRace(), row.getSourceFormId(), presets);
-        ProjectOutcome outcome = projectFlow.apply(NpcMorphAssignmentEdits.addNpc(source));
+    }
+
+    /** Maps one Project-owned row outcome back to the captured database identity. */
+    private static PromotionEntry promotionEntry(NPC row, ProjectOutcome outcome) {
         PromotionStatus status;
         if (outcome instanceof ChangedOutcome)
             status = PromotionStatus.ADDED;

@@ -1,7 +1,7 @@
 ---
-status: accepted; superseded by ADR-0003 wherever it conflicts with the Java 25 baseline (today: the "preserving Java 8" clause)
+status: accepted; superseded by ADR-0003 for the Java 25 baseline and ADR-0006 for partial-success NPC Database promotion
 date: 2026-08-26
-amended: 2026-08-28
+amended: 2026-09-26
 ---
 
 # Deepen Project state behind ProjectSession
@@ -12,9 +12,11 @@ amended: 2026-08-28
 > Today the only such conflict is the "preserving Java 8" clause below; no other sentence here names a Java or
 > JavaFX version, a toolchain, or a delivery format, and the rejected options and consequences (JavaFX kept out of
 > the `ProjectSession` interface, a Maven and JUnit 5 foundation) point the same way as the Java 25 work. Every
-> other decision — the `ProjectSession` interface, immutable snapshots, `.jbs2bg` semantic compatibility, and the
-> rejected options — remains accepted. [ADR-0002](0002-project-aggregate-internal-seam.md) builds on this decision
+> other decision — immutable snapshots, `.jbs2bg` semantic compatibility, and the rejected options — remains
+> accepted. [ADR-0002](0002-project-aggregate-internal-seam.md) builds on this decision
 > by placing the immutable `Project` aggregate behind the same seam; it does not replace it.
+> [ADR-0006](0006-partial-success-npc-database-promotion.md) adds one narrow batch entry for ordered partial-success
+> NPC Database promotion; ordinary atomic edits continue through `apply(ProjectEdit)`.
 
 BS2BG will replace the shallow, publicly mutable `Data` state and controller-owned lifecycle rules with one JavaFX-independent `ProjectSession` module. Its small interface exposes immutable snapshots, explicit lifecycle operations, and one `apply(ProjectEdit)` entry; typed outcomes distinguish changed, unchanged, rejected, and failed operations and carry structured diagnostics. The implementation owns Project mutations, referential-integrity cascades, dirty and file identity transitions, atomic new/open/save behavior, BodySlide XML imports, canonical ordering, and atomic bulk edits, preserving Java 8 and semantic compatibility with existing `.jbs2bg` files.
 

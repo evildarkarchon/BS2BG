@@ -6,10 +6,12 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -39,8 +41,9 @@ import java.util.function.Function;
  *
  * <p>Relationship operations (assign, unassign, clear) are written once over a
  * {@link ReferrerKey}, which names either referencing kind, so the two kinds
- * cannot drift apart. NPC Morph Assignment promotion and fill-empty build on
- * them rather than resolving Slider Preset names a second time.
+ * cannot drift apart. Single NPC Morph Assignment promotion and fill-empty
+ * build on them; bulk promotion resolves the same catalog names before its
+ * one immutable commit.
  */
 final class Project {
 
@@ -704,6 +707,69 @@ final class Project {
             next = step.getProject();
         }
         return Result.of(next);
+    }
+
+    /**
+     * Classifies normalized NPCs against the current identities and Slider Preset
+     * catalog, then builds one sorted immutable aggregate from every accepted row.
+     * Rejected rows do not reserve an identity, so a later valid row can use it.
+     *
+     * @param sources field-validated NPC values in request order
+     * @return one result per source and the aggregate after accepted rows
+     */
+    NpcPromotion promoteNpcMorphAssignments(List<NpcMorphAssignmentSnapshot> sources) {
+        Objects.requireNonNull(sources, "sources");
+        Set<NpcMorphAssignmentIdentity> identities = new HashSet<>();
+        for (NpcMorphAssignmentSnapshot existing : npcMorphAssignments)
+            identities.add(identityOf(existing));
+        Map<String, String> canonicalPresets = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (SliderPresetSnapshot preset : sliderPresets)
+            canonicalPresets.put(preset.getName(), preset.getName());
+
+        List<NpcMorphAssignmentSnapshot> accepted = new ArrayList<>();
+        List<Optional<ProjectDiagnostic>> diagnostics = new ArrayList<>(sources.size());
+        for (NpcMorphAssignmentSnapshot source : sources) {
+            NpcMorphAssignmentIdentity identity = identityOf(source);
+            if (identities.contains(identity)) {
+                diagnostics.add(Optional.of(duplicateNpcMorphAssignmentIdentity(
+                        "An NPC Morph Assignment with this plugin name and editor ID already exists.")));
+                continue;
+            }
+            Set<String> assigned = new TreeSet<>(ASSIGNMENT_NAME_ORDER);
+            ProjectDiagnostic rejection = null;
+            for (String requested : source.getSliderPresetNames()) {
+                String canonical = canonicalPresets.get(requested.trim());
+                if (canonical == null) {
+                    rejection = sliderPresetNotFound();
+                    break;
+                }
+                assigned.add(canonical);
+            }
+            if (rejection != null) {
+                diagnostics.add(Optional.of(rejection));
+                continue;
+            }
+            // Copy only accepted values; no intermediate Project or sorted NPC list escapes this batch.
+            accepted.add(NPC_MORPH_ASSIGNMENT_REFERRER.copyWithNames(source, List.copyOf(assigned)));
+            identities.add(identity);
+            diagnostics.add(Optional.empty());
+        }
+        if (accepted.isEmpty())
+            return new NpcPromotion(this, diagnostics);
+        List<NpcMorphAssignmentSnapshot> combined = new ArrayList<>(npcMorphAssignments.size() + accepted.size());
+        combined.addAll(npcMorphAssignments);
+        combined.addAll(accepted);
+        return new NpcPromotion(new Project(sliderPresets, customMorphTargets,
+                sorted(combined, NPC_MORPH_ASSIGNMENT_IDENTITY_ORDER)), diagnostics);
+    }
+
+    /** Immutable aggregate and per-row rejection details of one NPC promotion. */
+    record NpcPromotion(Project project, List<Optional<ProjectDiagnostic>> diagnostics) {
+        /** Defensively owns diagnostics while the aggregate remains immutable. */
+        NpcPromotion {
+            Objects.requireNonNull(project, "project");
+            diagnostics = List.copyOf(diagnostics);
+        }
     }
 
     /**

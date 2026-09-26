@@ -1466,6 +1466,8 @@ class ProjectSessionTest {
         assertOutcomeMethod("save");
         assertOutcomeMethod("saveAs", Path.class);
         assertOutcomeMethod("apply", ProjectEdit.class);
+        assertEquals(NpcPromotionOutcome.class,
+                ProjectSession.class.getMethod("promoteNpcs", List.class).getReturnType());
         assertEquals(SliderPresetImportOutcome.class,
                 ProjectSession.class.getMethod("importSliderPresets", List.class).getReturnType());
         assertEquals(ProjectOutcome.class, Arrays.stream(ProjectSession.class.getDeclaredMethods())
@@ -1481,7 +1483,7 @@ class ProjectSessionTest {
                 assertExternalType(parameterType);
         }
         assertEquals(new HashSet<>(Arrays.asList("getSnapshot", "newProject", "open", "save", "saveAs",
-                "importSliderPresets", "refreshSettings", "apply")), methodNames);
+                "importSliderPresets", "refreshSettings", "apply", "promoteNpcs")), methodNames);
 
         Class<?> implementation = ProjectSessions.create().getClass();
         assertFalse(Modifier.isPublic(implementation.getModifiers()),
