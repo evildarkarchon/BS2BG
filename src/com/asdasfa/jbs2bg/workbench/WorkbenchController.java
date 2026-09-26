@@ -219,7 +219,19 @@ public final class WorkbenchController {
     @FXML
     private Button clearNpcDatabaseButton;
     @FXML
+    private Button addNpcsFromDatabaseButton;
+    @FXML
     private VBox npcDatabaseEditorContent;
+    @FXML
+    private Button backToMorphsButton;
+    @FXML
+    private HBox npcPromotionInfoBar;
+    @FXML
+    private Label npcPromotionInfoBarCue;
+    @FXML
+    private Label npcPromotionInfoBarMessage;
+    @FXML
+    private Button dismissNpcPromotionInfoBarButton;
     @FXML
     private Label npcCatalogSummary;
     @FXML
@@ -238,6 +250,10 @@ public final class WorkbenchController {
     private Button clearNpcFiltersButton;
     @FXML
     private TableView<NPC> npcCatalogTable;
+    @FXML
+    private Button addAllNpcsToProjectButton;
+    @FXML
+    private TextArea npcPromotionDetails;
     @FXML
     private TableColumn<NPC, String> npcNameColumn;
     @FXML
@@ -262,6 +278,10 @@ public final class WorkbenchController {
     private Label npcInspectorRace;
     @FXML
     private Label npcInspectorFormId;
+    @FXML
+    private Button addNpcToProjectButton;
+    @FXML
+    private javafx.scene.control.CheckBox assignRandomNpcPresetCheck;
     @FXML
     private ImageView npcDatabasePortraitImage;
     @FXML
@@ -620,14 +640,14 @@ public final class WorkbenchController {
                 + activity.disposition().displayText() + ": " + activity.message();
     }
 
-    /**
-     * Formats durable attempt linkage, captured inputs, effects, and diagnostics for assistive inspection.
-     */
+    /** Formats durable operation details and any attempt linkage for assistive inspection. */
     private static String activityHelp(WorkbenchFeedback.ActivityRecord activity) {
+        String detailsText = activity.details().map(value -> ". Details: " + value).orElse("");
         if (activity.jobDetails().isEmpty())
-            return "Timestamp: " + activity.occurredAt();
+            return "Timestamp: " + activity.occurredAt() + detailsText;
         WorkbenchFeedback.JobDetails details = activity.jobDetails().orElseThrow();
         return "Timestamp: " + activity.occurredAt()
+                + detailsText
                 + ". Attempt: " + details.attemptId()
                 + details.retryOf().map(value -> ". Retry of attempt: " + value).orElse("")
                 + ". Sources: " + (details.sources().isEmpty() ? "none" : String.join(", ", details.sources()))
@@ -898,6 +918,7 @@ public final class WorkbenchController {
                 dispatchMorphs(new MorphsFeature.RequestClearVisibleNpcs()));
         fillEmptyNpcMorphAssignmentsButton.setOnAction(event ->
                 dispatchMorphs(new MorphsFeature.RequestFillEmpty()));
+        addNpcsFromDatabaseButton.setOnAction(event -> openNpcDatabaseFromMorphs());
         dismissMorphsInfoBarButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.DismissDiagnostics()));
         openNpcPortraitViewerButton.setOnAction(event -> showNpcPortraitViewer());
 
@@ -1468,6 +1489,12 @@ public final class WorkbenchController {
                 event.consume();
             }
         });
+        npcCatalogTable.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                promoteNpcDatabase(false);
+                event.consume();
+            }
+        });
         npcSortChoices.put("Source order", List.of());
         for (FilterColumn<NPC> column : NpcTableColumns.npcDatabase()) {
             npcSortChoices.put(column.getId() + " ascending", List.of(SortKey.ascending(column.getId())));
@@ -1495,8 +1522,122 @@ public final class WorkbenchController {
         importNpcSourcesButton.setOnAction(event -> chooseNpcSources());
         removeNpcSourceButton.setOnAction(event -> removeSelectedNpcSource());
         clearNpcDatabaseButton.setOnAction(event -> clearVisibleNpcDatabaseEntries());
+        addNpcToProjectButton.setOnAction(event -> promoteNpcDatabase(false));
+        addAllNpcsToProjectButton.setOnAction(event -> promoteNpcDatabase(true));
+        backToMorphsButton.setOnAction(event -> backToMorphs());
+        dismissNpcPromotionInfoBarButton.setOnAction(event -> {
+            npcDatabaseFeature.dismissPromotionReport();
+            renderNpcDatabase(npcDatabaseFeature.frame());
+        });
+        assignRandomNpcPresetCheck.setOnAction(event -> {
+            if (!renderingNpcDatabase) {
+                npcDatabaseFeature.setAssignRandom(assignRandomNpcPresetCheck.isSelected());
+                renderNpcDatabase(npcDatabaseFeature.frame());
+            }
+        });
         openNpcDatabasePortraitViewerButton.setOnAction(event -> showNpcDatabasePortraitViewer());
         renderNpcDatabase(npcDatabaseFeature.frame());
+    }
+
+    /** Opens the catalog from its Morphs launcher with a semantic return target. */
+    private void openNpcDatabaseFromMorphs() {
+        applyNavigation(navigation.navigate(WorkbenchNavigation.Destination.NPC_DATABASE,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                        WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER)));
+    }
+
+    /**
+     * Returns to the Morphs launcher and selects the last added identity when it is still visible.
+     * Project and feature frames are already committed before navigation realizes the focus effect.
+     */
+    private void backToMorphs() {
+        npcDatabaseFeature.consumeReturnAssignment().ifPresent(identity -> renderMorphsUpdate(
+                morphsFeature.dispatch(new MorphsFeature.SelectNpc(identity))));
+        NpcMorphAssignmentSnapshot selected = npcMorphAssignmentList.getSelectionModel().getSelectedItem();
+        if (selected != null)
+            npcMorphAssignmentList.scrollTo(selected);
+        applyNavigation(navigation.backToMorphs());
+    }
+
+    /** Applies each captured NPC through ProjectSession, then reports the complete operation at its UI tier. */
+    private void promoteNpcDatabase(boolean bulk) {
+        if (projectFlow.jobs().frame().active() || projectFlow.jobs().frame().shutdownRequested())
+            return;
+        NpcDatabaseFeature.PromotionReport report = bulk
+                ? npcDatabaseFeature.promoteVisible(projectFlow)
+                : npcDatabaseFeature.promoteSelected(projectFlow);
+        // NPC Database owns these diagnostics and task wording. Suppress the generic lifecycle feedback while
+        // Project chrome and other Areas reconcile the final snapshot after all per-row edits have published.
+        templatesOwnProjectDiagnostics = true;
+        morphsOwnProjectDiagnostics = true;
+        try {
+            renderedProjectSequence = projectFlow.frame().sequence();
+            render(projectFlow.frame());
+        } finally {
+            templatesOwnProjectDiagnostics = false;
+            morphsOwnProjectDiagnostics = false;
+        }
+        renderNpcDatabase(npcDatabaseFeature.frame());
+        boolean issues = report.rejectedCount() > 0 || report.duplicateCount() > 0
+                || report.entries().isEmpty();
+        WorkbenchFeedback.Severity severity = promotionSeverity(report);
+        WorkbenchFeedback.Disposition disposition = issues
+                ? WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES
+                : WorkbenchFeedback.Disposition.COMPLETED;
+        WorkbenchFeedback.Notification notification = new WorkbenchFeedback.Notification(
+                bulk ? "Add All NPCs to Project" : "Add NPC to Project", severity,
+                promotionSummary(report), disposition);
+        if (bulk) {
+            String details = promotionDetails(report);
+            renderFeedback(details.isEmpty() ? feedback.publish(notification)
+                    : feedback.publishDetailed(notification, details));
+        } else {
+            renderFeedback(feedback.publishStatus(notification));
+        }
+    }
+
+    /** Builds a concise outcome summary; the inline details retain every duplicate and rejection. */
+    private static String promotionSummary(NpcDatabaseFeature.PromotionReport report) {
+        if (report.entries().isEmpty())
+            return report.bulk() ? "No visible NPC Database entries to add."
+                    : "Select an NPC Database entry to add.";
+        if (!report.bulk()) {
+            NpcDatabaseFeature.PromotionEntry entry = report.entries().getFirst();
+            return switch (entry.status()) {
+                case ADDED -> "Added " + entry.displayName() + " to the Project.";
+                case DUPLICATE -> "Already in the Project: " + entry.displayName() + ".";
+                case REJECTED, FAILED -> "Could not add " + entry.displayName() + ": "
+                        + ProjectDiagnosticFormatter.format(entry.diagnostics());
+                case UNCHANGED -> "No Project change for " + entry.displayName() + ".";
+            };
+        }
+        return "Added " + report.addedCount() + " NPC Morph Assignments; " + report.duplicateCount()
+                + " already in the Project; " + report.rejectedCount() + " rejected.";
+    }
+
+    /** Keeps pane, status, and Activity cues aligned for the same promotion outcome. */
+    private static WorkbenchFeedback.Severity promotionSeverity(NpcDatabaseFeature.PromotionReport report) {
+        if (report.entries().stream().anyMatch(entry ->
+                entry.status() == NpcDatabaseFeature.PromotionStatus.FAILED))
+            return WorkbenchFeedback.Severity.FAILURE;
+        if (report.rejectedCount() > 0)
+            return WorkbenchFeedback.Severity.WARNING;
+        return report.duplicateCount() > 0 || report.entries().isEmpty()
+                ? WorkbenchFeedback.Severity.VALIDATION : WorkbenchFeedback.Severity.SUCCESS;
+    }
+
+    /** Formats every non-added identity with its Project diagnostic for the scrollable inline report. */
+    private static String promotionDetails(NpcDatabaseFeature.PromotionReport report) {
+        List<String> details = new ArrayList<>();
+        for (NpcDatabaseFeature.PromotionEntry entry : report.entries()) {
+            if (entry.status() == NpcDatabaseFeature.PromotionStatus.ADDED)
+                continue;
+            String identity = entry.identity().getPluginName() + " / " + entry.identity().getEditorId();
+            String diagnostic = entry.diagnostics().isEmpty() ? entry.status().name()
+                    : ProjectDiagnosticFormatter.format(entry.diagnostics());
+            details.add(identity + " — " + diagnostic);
+        }
+        return String.join(System.lineSeparator(), details);
     }
 
     /** Opens a keyboard checklist for one named column; its choices come from all catalog rows. */
@@ -1697,9 +1838,13 @@ public final class WorkbenchController {
             renderNpcDatabaseLabel(npcCatalogSummary, summary);
             npcCatalogTable.setAccessibleHelp(summary + " Select a row to inspect its details.");
             boolean blocked = projectFlow.jobs().frame().active() || projectFlow.jobs().frame().shutdownRequested();
+            assignRandomNpcPresetCheck.setSelected(frame.assignRandom());
             importNpcSourcesButton.setDisable(blocked);
             removeNpcSourceButton.setDisable(blocked || frame.selectedSource().isEmpty());
             clearNpcDatabaseButton.setDisable(blocked || frame.visibleRows().isEmpty());
+            addNpcToProjectButton.setDisable(blocked || frame.selectedRow().isEmpty());
+            addAllNpcsToProjectButton.setDisable(blocked || frame.visibleRows().isEmpty());
+            assignRandomNpcPresetCheck.setDisable(blocked);
             clearNpcFiltersButton.setDisable(frame.criteria().isEmpty());
             renderNpcFilterButtons(frame);
             NPC selected = frame.selectedRow().orElse(null);
@@ -1718,6 +1863,24 @@ public final class WorkbenchController {
                     .map(diagnostic -> diagnostic.code() + ": " + diagnostic.source()
                             + (diagnostic.line().isPresent() ? ":" + diagnostic.line().orElseThrow() : "")
                             + " — " + diagnostic.message()).toList()));
+            NpcDatabaseFeature.PromotionReport promotion = frame.promotionReport().orElse(null);
+            boolean showPromotion = promotion != null && (promotion.bulk() || promotion.entries().isEmpty()
+                    || promotion.addedCount() != 1);
+            npcPromotionInfoBar.setManaged(showPromotion);
+            npcPromotionInfoBar.setVisible(showPromotion);
+            if (showPromotion) {
+                WorkbenchFeedback.Severity severity = promotionSeverity(promotion);
+                String message = promotionSummary(promotion);
+                npcPromotionInfoBarCue.setText(severity.cue());
+                npcPromotionInfoBarMessage.setText(message);
+                npcPromotionInfoBar.setAccessibleHelp(severity.cue() + ": " + message);
+                setSeverityStyle(npcPromotionInfoBar, severity);
+            }
+            String details = promotion == null ? "" : promotionDetails(promotion);
+            npcPromotionDetails.setText(details);
+            npcPromotionDetails.setAccessibleHelp(details);
+            npcPromotionDetails.setManaged(!details.isEmpty());
+            npcPromotionDetails.setVisible(!details.isEmpty());
         } finally {
             renderingNpcDatabase = false;
         }
@@ -3743,7 +3906,14 @@ public final class WorkbenchController {
      * Commits one navigation frame before realizing its optional tokenized focus effect.
      */
     private void applyNavigation(WorkbenchNavigation.Transition transition) {
+        boolean leavingNpcDatabase = navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
+                && transition.frame().activeArea() != WorkbenchNavigation.Area.NPC_DATABASE;
         navigationFrame = transition.frame();
+        if (leavingNpcDatabase) {
+            // Promotion feedback and return selection are visit-scoped; rail navigation must not revive them later.
+            npcDatabaseFeature.leaveArea();
+            renderNpcDatabase(npcDatabaseFeature.frame());
+        }
         if (navigationFrame.activeArea() != WorkbenchNavigation.Area.NPC_DATABASE && npcFilterPopup != null)
             npcFilterPopup.hide();
         renderNavigation(navigationFrame);
@@ -3868,7 +4038,9 @@ public final class WorkbenchController {
     private WorkbenchNavigation.FocusTarget currentSemanticFocus() {
         Node focusOwner = stage != null && stage.getScene() != null ? stage.getScene().getFocusOwner() : null;
         WorkbenchNavigation.Landmark landmark;
-        if (focusOwner == sliderPresetFilter || focusOwner == sliderPresetList
+        if (focusOwner == addNpcsFromDatabaseButton) {
+            landmark = WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER;
+        } else if (focusOwner == sliderPresetFilter || focusOwner == sliderPresetList
                 || focusOwner == sliderPresetNameInput || focusOwner == importBodySlideButton
                 || focusOwner == customMorphTargetFilter || focusOwner == customMorphTargetSort
                 || focusOwner == customMorphTargetList || focusOwner == customMorphTargetNameInput
@@ -3888,6 +4060,8 @@ public final class WorkbenchController {
         } else if (focusOwner == templateEditorFocusTarget || focusOwner == sliderPresetProfile
                 || focusOwner == morphTargetEditorFocusTarget
                 || focusOwner == npcCatalogTable || focusOwner == npcSortChoice
+                || focusOwner == backToMorphsButton || focusOwner == addAllNpcsToProjectButton
+                || focusOwner == npcPromotionDetails
                 || npcFilterButtons.containsValue(focusOwner)
                 || focusOwner == clearNpcFiltersButton
                 || sliderChoiceRowsByName.values().stream().anyMatch(row -> row.contains(focusOwner))
@@ -3900,6 +4074,7 @@ public final class WorkbenchController {
                 || focusOwner == morphTargetSelectionText || focusOwner == assignedMorphSliderPresetList
                 || focusOwner == npcInspectorName || focusOwner == npcInspectorSource
                 || focusOwner == openNpcDatabasePortraitViewerButton
+                || focusOwner == addNpcToProjectButton || focusOwner == assignRandomNpcPresetCheck
                 || focusOwner == availableMorphSliderPreset || focusOwner == assignMorphSliderPresetButton
                 || focusOwner == assignAllMorphSliderPresetsButton || focusOwner == removeMorphSliderPresetButton
                 || focusOwner == clearMorphSliderPresetsButton
@@ -3962,6 +4137,7 @@ public final class WorkbenchController {
     private Node resolveFocusNode(WorkbenchNavigation.FocusTarget target) {
         return switch (target.landmark()) {
             case RAIL -> areaButton(target.area());
+            case NPC_DATABASE_LAUNCHER -> addNpcsFromDatabaseButton;
             case PRIMARY_LAUNCHER -> showPrimaryOverlayButton;
             case PRIMARY_CONTENT -> switch (target.area()) {
                 case TEMPLATES -> sliderPresetList;
@@ -4135,6 +4311,7 @@ public final class WorkbenchController {
         boolean resetMorphs = resetMorphsOnNextProjectFrame || lifecycleReset;
         boolean resetOutput = resetTemplatesOnNextProjectFrame || resetMorphsOnNextProjectFrame || lifecycleReset;
         if (lifecycleReset && npcDatabaseFeature != null) {
+            navigation.clearNpcDatabaseReturn();
             npcDatabaseFeature.clearAllSelections();
             renderNpcDatabase(npcDatabaseFeature.frame());
         }
@@ -4208,6 +4385,7 @@ public final class WorkbenchController {
             if (terminal.operation().name().equals("Open Project")
                     && (terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED
                     || terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES)) {
+                navigation.clearNpcDatabaseReturn();
                 npcDatabaseFeature.clearAllSelections();
                 renderNpcDatabase(npcDatabaseFeature.frame());
             }

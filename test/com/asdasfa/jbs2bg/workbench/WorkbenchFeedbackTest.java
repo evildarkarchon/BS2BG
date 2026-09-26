@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -95,6 +96,23 @@ class WorkbenchFeedbackTest {
         assertEquals(true, frame.infoBar().isEmpty());
         assertEquals("Rename Slider Preset", frame.activities().getLast().operation());
         assertEquals("Rename Slider Preset completed.", frame.status().message());
+    }
+
+    /** Bulk outcomes keep concise status and InfoBar text while Activity retains every diagnostic detail. */
+    @Test
+    void detailedActivityKeepsFullEvidenceWithoutExpandingTheInfoBar() {
+        WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.fixed(FIXED_TIME, ZoneOffset.UTC));
+        WorkbenchFeedback.Notification notification = new WorkbenchFeedback.Notification(
+                "Add All NPCs to Project", WorkbenchFeedback.Severity.WARNING,
+                "Added 1 NPC; 2 rejected.", WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES);
+
+        WorkbenchFeedback.Frame frame = feedback.publishDetailed(notification,
+                "Master.esm / First — duplicate\nMaster.esm / Second — invalid Form ID");
+
+        assertEquals(notification.message(), frame.infoBar().orElseThrow().message());
+        assertEquals(notification.message(), frame.status().message());
+        assertEquals(Optional.of("Master.esm / First — duplicate\nMaster.esm / Second — invalid Form ID"),
+                frame.activities().getLast().details());
     }
 
     /**

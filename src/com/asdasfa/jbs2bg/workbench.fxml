@@ -267,6 +267,10 @@
                                                                                 maxWidth="Infinity" mnemonicParsing="true"
                                                                                 text="C_lear visible Custom Morph Targets" />
                                                                         <Label styleClass="title" text="NPC Morph Assignments" />
+                                                                        <Button fx:id="addNpcsFromDatabaseButton"
+                                                                                accessibleText="Add NPCs from NPC Database"
+                                                                                maxWidth="Infinity" mnemonicParsing="true"
+                                                                                text="_Add NPCs…" />
                                                                         <Label labelFor="$npcMorphAssignmentFilter"
                                                                                 mnemonicParsing="true"
                                                                                 text="_Filter NPC Morph Assignments:" />
@@ -513,6 +517,34 @@
                                                         <VBox fx:id="npcDatabaseEditorContent" managed="false"
                                                                 spacing="8.0" visible="false">
                                                             <children>
+                                                                <Button fx:id="backToMorphsButton"
+                                                                        accessibleText="Back to Morphs"
+                                                                        maxWidth="Infinity" mnemonicParsing="true"
+                                                                        text="← _Back to Morphs" />
+                                                                <HBox fx:id="npcPromotionInfoBar"
+                                                                        accessibleText="NPC Database promotion notification"
+                                                                        alignment="CENTER_LEFT" focusTraversable="false"
+                                                                        managed="false" spacing="6.0"
+                                                                        styleClass="info-bar npc-promotion-info-bar"
+                                                                        visible="false">
+                                                                    <padding>
+                                                                        <Insets bottom="6.0" left="8.0" right="8.0" top="6.0" />
+                                                                    </padding>
+                                                                    <children>
+                                                                        <VBox spacing="2.0" HBox.hgrow="ALWAYS">
+                                                                            <children>
+                                                                                <Label fx:id="npcPromotionInfoBarCue"
+                                                                                        styleClass="feedback-cue"
+                                                                                        text="Validation" />
+                                                                                <Label fx:id="npcPromotionInfoBarMessage"
+                                                                                        text="Promotion message" wrapText="true" />
+                                                                            </children>
+                                                                        </VBox>
+                                                                        <Button fx:id="dismissNpcPromotionInfoBarButton"
+                                                                                accessibleText="Dismiss NPC Database promotion notification"
+                                                                                mnemonicParsing="true" text="_Dismiss" />
+                                                                    </children>
+                                                                </HBox>
                                                                 <Label styleClass="title" text="NPC catalog" />
                                                                 <Label fx:id="npcCatalogSummary"
                                                                         accessibleText="NPC Database catalog summary"
@@ -554,6 +586,15 @@
                                                                         <TableColumn fx:id="npcFormIdColumn" prefWidth="105.0" text="FormID" />
                                                                     </columns>
                                                                 </TableView>
+                                                                <Button fx:id="addAllNpcsToProjectButton"
+                                                                        accessibleText="Add all visible NPCs to Project"
+                                                                        maxWidth="Infinity" mnemonicParsing="true"
+                                                                        text="Add _all visible NPCs to Project" />
+                                                                <TextArea fx:id="npcPromotionDetails"
+                                                                        accessibleText="NPC Database promotion details"
+                                                                        editable="false" focusTraversable="true"
+                                                                        managed="false" prefRowCount="3"
+                                                                        visible="false" wrapText="true" />
                                                             </children>
                                                         </VBox>
                                                         <Button fx:id="editorButton" accessibleText="Templates editor"
@@ -802,6 +843,15 @@
                                                                                         text="_Open portrait viewer" />
                                                                             </children>
                                                                         </VBox>
+                                                                        <Button fx:id="addNpcToProjectButton"
+                                                                                accessibleText="Add selected NPC to Project"
+                                                                                disable="true" maxWidth="Infinity"
+                                                                                mnemonicParsing="true"
+                                                                                text="_Add to Project" />
+                                                                        <CheckBox fx:id="assignRandomNpcPresetCheck"
+                                                                                accessibleText="Assign random Slider Preset to promoted NPCs"
+                                                                                mnemonicParsing="true"
+                                                                                text="Assign _random Slider Preset" />
                                                                         <Label fx:id="npcDatabaseDiagnostics"
                                                                                 accessibleText="NPC Database diagnostics"
                                                                                 text="No source diagnostics" wrapText="true" />

@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
     Drives the packaged BS2BG Preview Workbench through its lifecycle, platform, Templates, Morphs, and NPC Database
-    contracts (issues #98-#110).
+    contracts (issues #98-#111).
 
 .DESCRIPTION
     Extracts the app-image archive to a clean temporary root, launches the real BS2BG.exe without any host Java
@@ -14,8 +14,8 @@
     centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
     malformed/failed operation preservation, complete pointer-free Slider Preset choice editing and management,
     keyboard and semantic-pointer Custom Morph Target authoring, visible-set Fill Empty actions, portrait inspection,
-    transactional NPC Database import, source management, catalog inspection, filtering, sorting, and accessibility,
-    coordinated dirty shutdown, and bounded exit.
+    transactional NPC Database import, source management, catalog inspection, filtering, sorting, Project promotion,
+    lifecycle independence, accessibility, coordinated dirty shutdown, and bounded exit.
 #>
 [CmdletBinding()]
 param(
@@ -2827,7 +2827,7 @@ try {
         $openViewer = Find-OuterControl -ControlType 'Button' -Name 'Open NPC portrait viewer'
         if ($openViewer.Current.IsEnabled) { throw 'The missing-portrait viewer action remained enabled.' }
         foreach ($expected in @('0 assigned Slider Presets',
-                'Not in Morphs output — assign at least one Slider Preset.')) {
+                'Included in Morphs output without Slider Preset assignments.')) {
             Wait-UiaElement -Root $script:mainWindow -Condition (
                 New-UiaCondition -ControlType 'Text' -Name $expected) `
                 -Description "no-preset portrait inspector state '$expected'" `
@@ -3074,6 +3074,211 @@ try {
             successActivity = $successEvidence
         }
         'ordered source import, identity deduplication, row inspection, portrait, sorting, and filtering passed'
+    }
+
+    Invoke-SmokeStep -Name 'promote-npc-database-entries-through-morphs' -Action {
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        if (@(Find-UiaElements -Root $npcList -Condition (New-UiaCondition -ControlType 'ListItem')).Count -ne 0) {
+            throw 'The clean Project already contains NPC Morph Assignments before catalog promotion.'
+        }
+        $launcher = Find-OuterControl -ControlType 'Button' -Name 'Add NPCs from NPC Database'
+        if (-not $launcher.Current.IsEnabled -or -not $launcher.Current.IsKeyboardFocusable) {
+            throw 'The Morphs NPC Database launcher is not keyboard accessible.'
+        }
+        # The launcher can sit below Custom Morph Target controls; Invoke reaches it without relying on viewport geometry.
+        $scrollItem = $null
+        if ($launcher.TryGetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern,
+                [ref]$scrollItem)) { $scrollItem.ScrollIntoView() }
+        Invoke-UiaElement -Element $launcher
+        Wait-AreaSelected -Name 'NPC Database' | Out-Null
+        $catalog = Wait-FocusedControl -ControlType 'Table' -Name 'NPC Database catalog'
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        $lydia = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+        Select-UiaElement -Element $lydia
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'Lydia' | Out-Null
+        $addSelected = Find-OuterControl -ControlType 'Button' -Name 'Add selected NPC to Project'
+        Send-UiaKeysToElement -Element $addSelected -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $selectedStatus = Wait-UiaCondition -Description 'selected NPC promotion status' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $status = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Text' -Name 'Workbench status')
+            if ($null -ne $status -and $status.Current.HelpText.Contains('Added Lydia to the Project.')) {
+                $status.Current.HelpText
+            }
+        }
+        $lydia = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+        if (-not (Get-UiaSelectionState -Element $lydia)) {
+            throw 'Selected Add changed the NPC Database catalog selection.'
+        }
+        $back = Find-OuterControl -ControlType 'Button' -Name 'Back to Morphs'
+        Send-UiaKeysToElement -Element $back -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+        $launcher = Find-OuterControl -ControlType 'Button' -Name 'Add NPCs from NPC Database'
+        Wait-UiaKeyboardFocus -Element $launcher -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        $lydiaAssignment = Wait-NpcMorphAssignmentRow -List $npcList -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun' `
+            -Description 'selected promoted Lydia NPC Morph Assignment'
+        if (-not (Get-UiaSelectionState -Element $lydiaAssignment)) {
+            throw 'Back to Morphs did not select the promoted Lydia assignment.'
+        }
+        if (@(Find-UiaElements -Root $npcList -Condition (New-UiaCondition -ControlType 'ListItem')).Count -ne 1) {
+            throw 'Selected Add did not create exactly one NPC Morph Assignment.'
+        }
+
+        Invoke-UiaElement -Element $launcher
+        Wait-AreaSelected -Name 'NPC Database' | Out-Null
+        $catalog = Wait-FocusedControl -ControlType 'Table' -Name 'NPC Database catalog'
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'Lydia' | Out-Null
+        $addSelected = Find-OuterControl -ControlType 'Button' -Name 'Add selected NPC to Project'
+        Send-UiaKeysToElement -Element $addSelected -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        # JavaFX UIA omits the HBox/TextArea accessible names here; visible text plus its Dismiss action identifies the pane.
+        $duplicateValidation = Wait-UiaCondition -Description 'inline duplicate NPC promotion validation' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $dismiss = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Button' -Name 'Dismiss NPC Database promotion notification')
+            $message = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Text' -Name 'Already in the Project: Lydia.')
+            if ($null -ne $dismiss -and $null -ne $message) { $message.Current.Name }
+        }
+        $duplicateDetails = Wait-UiaCondition -Description 'inline duplicate NPC identity diagnostic' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            foreach ($detail in @(Find-UiaElements -Root $script:mainWindow -Condition (
+                    New-UiaCondition -ControlType 'Text'))) {
+                if ($detail.Current.Name.Contains('Skyrim.esm / HousecarlWhiterun') `
+                        -and $detail.Current.Name.Contains('NPC_MORPH_ASSIGNMENT_DUPLICATE')) {
+                    return $detail.Current.Name
+                }
+            }
+        }
+        $lydia = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+        if (-not (Get-UiaSelectionState -Element $lydia)) {
+            throw 'Duplicate Add changed the NPC Database catalog selection.'
+        }
+
+        $addAll = Find-OuterControl -ControlType 'Button' -Name 'Add all visible NPCs to Project'
+        Send-UiaKeysToElement -Element $addAll -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $bulkSummary = 'Added 2 NPC Morph Assignments; 1 already in the Project; 0 rejected.'
+        $bulkValidation = Wait-UiaCondition -Description 'Add All inline NPC promotion report' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $dismiss = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Button' -Name 'Dismiss NPC Database promotion notification')
+            $message = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Text' -Name $bulkSummary)
+            if ($null -ne $dismiss -and $null -ne $message) { $message.Current.Name }
+        }
+        $bulkStatus = Wait-UiaCondition -Description 'Add All NPC promotion status' `
+            -TimeoutSeconds $StepTimeoutSeconds -Test {
+            $status = Find-UiaElement -Root $script:mainWindow -Condition (
+                New-UiaCondition -ControlType 'Text' -Name 'Workbench status')
+            if ($null -ne $status -and $status.Current.HelpText.Contains($bulkSummary)) {
+                $status.Current.HelpText
+            }
+        }
+        $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
+        $bulkActivityName = "Validation — Add All NPCs to Project — Completed with issues: $bulkSummary"
+        $bulkActivity = Wait-UiaElement -Root $activity -Condition (
+            New-UiaCondition -ControlType 'ListItem' -Name $bulkActivityName) `
+            -Description 'durable Add All NPC promotion Activity' -TimeoutSeconds $StepTimeoutSeconds
+        $bulkActivityEvidence = $bulkActivity.Current.HelpText
+        foreach ($expected in @('Details:', 'Skyrim.esm / HousecarlWhiterun',
+                'NPC_MORPH_ASSIGNMENT_DUPLICATE')) {
+            if (-not $bulkActivityEvidence.Contains($expected)) {
+                throw "Add All Activity omitted duplicate evidence '$expected'."
+            }
+        }
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        $lydia = Wait-NpcDatabaseRow -Table $catalog -DisplayName 'Lydia' `
+            -PluginName 'Skyrim.esm' -EditorId 'HousecarlWhiterun'
+        if (-not (Get-UiaSelectionState -Element $lydia)) {
+            throw 'Add All changed the NPC Database catalog selection.'
+        }
+        $promotionScreenshot = Join-Path $diagnosticsDir 'workbench-npc-database-promotion.png'
+        Save-Screenshot -Path $promotionScreenshot
+
+        $promotedName = 'npc-database-promoted.jbs2bg'
+        $promotedPath = Join-Path $workDir $promotedName
+        Send-FileCommand -Item 'Save As…' -DialogTitle $saveDialogTitle
+        Complete-FileDialog -Title $saveDialogTitle -Path $promotedPath -ConfirmButton 'Save'
+        Wait-MainWindow -Title "$applicationTitle - $promotedName" | Out-Null
+        $saved = Get-Content -LiteralPath $promotedPath -Raw | ConvertFrom-Json
+        if (@($saved.MorphedNPCs.PSObject.Properties).Count -ne 3) {
+            throw 'Save As did not persist exactly three NPC Morph Assignments.'
+        }
+        $expectedAssignments = @(
+            [ordered]@{ name = 'Lydia'; plugin = 'Skyrim.esm'; editorId = 'HousecarlWhiterun'; formId = 'A2C94' }
+            [ordered]@{ name = 'Serana'; plugin = 'Dawnguard.esm'; editorId = 'SeranaEditor'; formId = 'B' }
+            [ordered]@{ name = 'Unnamed (FemaleNord)'; plugin = 'Other.esm'; editorId = 'FemaleNord'; formId = '1A696' }
+        )
+        foreach ($expected in $expectedAssignments) {
+            $savedNpc = $saved.MorphedNPCs.PSObject.Properties[$expected.name]
+            if ($null -eq $savedNpc -or $savedNpc.Value.Mod -cne $expected.plugin `
+                    -or $savedNpc.Value.EditorId -cne $expected.editorId `
+                    -or $savedNpc.Value.FormId -cne $expected.formId) {
+                throw "Saved promoted NPC '$($expected.name)' lost its copied identity or normalized Form ID."
+            }
+        }
+
+        Send-FileCommand -Item 'New'
+        Wait-MainWindow -Title $applicationTitle | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^3' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'NPC Database' | Out-Null
+        # Project lifecycle changes clear catalog selection, while session-scoped imported rows stay available.
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'No NPC selected' | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        if (@(Find-UiaElements -Root $npcList -Condition (New-UiaCondition -ControlType 'ListItem')).Count -ne 0) {
+            throw 'New Project retained promoted NPC Morph Assignments.'
+        }
+        Send-FileCommand -Item 'Open…' -DialogTitle $openDialogTitle
+        Complete-FileDialog -Title $openDialogTitle -Path $promotedPath -ConfirmButton 'Open'
+        Wait-MainWindow -Title "$applicationTitle - $promotedName" | Out-Null
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^2' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'Morphs' | Out-Null
+        $npcList = Find-OuterControl -ControlType 'List' -Name 'NPC Morph Assignments'
+        foreach ($expected in $expectedAssignments) {
+            Wait-NpcMorphAssignmentRow -List $npcList -DisplayName $expected.name `
+                -PluginName $expected.plugin -EditorId $expected.editorId `
+                -Description "reopened promoted NPC '$($expected.name)'" | Out-Null
+        }
+        if (@(Find-UiaElements -Root $npcList -Condition (New-UiaCondition -ControlType 'ListItem')).Count -ne 3) {
+            throw 'Open did not restore exactly three promoted NPC Morph Assignments.'
+        }
+        Send-UiaKeys -ProcessId $script:app.Id -Keys '^3' -TimeoutSeconds $StepTimeoutSeconds
+        Wait-AreaSelected -Name 'NPC Database' | Out-Null
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        Wait-NpcDatabaseText -Name 'Selected NPC Database entry' -Expected 'No NPC selected' | Out-Null
+        $sourceList = Find-OuterControl -ControlType 'List' -Name 'NPC Database sources'
+        foreach ($sourceName in @("$npcPrimaryName, 2 rows", "$npcSecondaryName, 2 rows")) {
+            Wait-UiaElement -Root $sourceList -Condition (
+                New-UiaCondition -ControlType 'ListItem' -Name $sourceName) `
+                -Description "retained NPC Database source $sourceName" -TimeoutSeconds $StepTimeoutSeconds | Out-Null
+        }
+        $observations['npcDatabasePromotion'] = [ordered]@{
+            selectedStatus = $selectedStatus
+            duplicateValidation = $duplicateValidation
+            duplicateDetails = $duplicateDetails
+            addAllValidation = $bulkValidation
+            addAllStatus = $bulkStatus
+            addAllActivity = $bulkActivity.Current.Name
+            addAllActivityEvidence = $bulkActivityEvidence
+            savedProject = $promotedName
+            persistedAssignments = @($expectedAssignments | ForEach-Object { $_.name })
+            catalogRowsSurvivedNewAndOpen = 3
+            screenshot = 'workbench-npc-database-promotion.png'
+        }
+        'selected Add, Back focus, inline duplicate, Add All, Activity, Save As, New, and Open passed'
     }
 
     Invoke-SmokeStep -Name 'reject-mixed-failed-and-cancelled-npc-database-sources' -Action {
@@ -3979,7 +4184,7 @@ try {
         }
         foreach ($evidence in @('Attempt:', 'Sources:', $recoveryProjectName, 'Captured basis: Project content version',
                 'Effects committed: Project published', 'Diagnostics: SLIDER_PRESET_ASSIGNMENT_MISSING',
-                'Retry available: true')) {
+                'Retry offered at completion: true')) {
             if (-not $activityRecord.Current.HelpText.Contains($evidence)) {
                 throw "Recovered Open Activity omitted '$evidence': '$($activityRecord.Current.HelpText)'"
             }
@@ -4039,7 +4244,7 @@ try {
                 -Name 'Failure — Open Project — Failed: Open Project failed with 1 diagnostic.') `
             -Description 'durable failed Open Activity record' -TimeoutSeconds $StepTimeoutSeconds
         foreach ($evidence in @('Attempt:', 'Effects committed: none', 'Diagnostics: PROJECT_JSON_MALFORMED',
-                'Retry available: true')) {
+                'Retry offered at completion: true')) {
             if (-not $failedActivity.Current.HelpText.Contains($evidence)) {
                 throw "Failed Open Activity omitted '$evidence': '$($failedActivity.Current.HelpText)'"
             }
@@ -4496,6 +4701,7 @@ finally {
             portraitDarkScreenshot = 'smoke-diagnostics/workbench-portrait-dark.png'
             portraitHighContrastScreenshot = 'smoke-diagnostics/workbench-portrait-high-contrast.png'
             npcDatabaseScreenshot = 'smoke-diagnostics/workbench-npc-database.png'
+            npcDatabasePromotionScreenshot = 'smoke-diagnostics/workbench-npc-database-promotion.png'
             npcDatabaseNarrowScreenshot = 'smoke-diagnostics/workbench-npc-database-narrow.png'
             npcDatabaseMinimumScreenshot = 'smoke-diagnostics/workbench-npc-database-minimum.png'
             npcDatabaseLightScreenshot = 'smoke-diagnostics/workbench-npc-database-light.png'

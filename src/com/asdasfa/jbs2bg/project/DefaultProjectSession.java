@@ -627,53 +627,68 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Promotes one copied NPC source value into the Project. The request-shape
-     * rule (a source must be supplied) stays here; identity uniqueness and Slider
-     * Preset resolution are the aggregate's and are reported by
-     * {@link Project#addNpcMorphAssignment}.
+     * Promotes one copied NPC source value through the same field rules as manual
+     * authoring. Identity uniqueness and Slider Preset resolution remain the
+     * aggregate's responsibility and are reported by {@link Project#addNpcMorphAssignment}.
      *
      * @param edit immutable NPC-add request
      * @return changed or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome addNpc(NpcMorphAssignmentEdits.AddNpc edit) {
-        if (edit.getSource() == null) {
+        NpcMorphAssignmentSnapshot source = edit.getSource();
+        if (source == null) {
             SourceLocation location = new SourceLocation(Optional.empty(), Optional.of("npc-morph-assignment"),
                     OptionalInt.empty(), OptionalInt.empty());
             return rejected(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED, location,
                     "Adding an NPC requires copied source values.");
         }
-        return outcome(project.addNpcMorphAssignment(edit.getSource()));
+        return addValidatedNpc(source.getDisplayName(), source.getPluginName(), source.getEditorId(),
+                source.getRace(), source.getFormId(), source.getSliderPresetNames());
     }
 
     /**
-     * Validates manual Workbench values separately from NPC Database promotion and
-     * applies the same Form ID normalization used when a Project is reopened.
+     * Applies the shared NPC field rules to manual Workbench authoring values.
      *
      * @param edit raw authoring fields
      * @return changed or rejected outcome at the pinned snapshot
      */
     private ProjectOutcome createNpcMorphAssignment(NpcMorphAssignmentEdits.Create edit) {
-        if (blank(edit.getPluginName()) || blank(edit.getEditorId()) || blank(edit.getRace())
-                || blank(edit.getFormId()))
+        return addValidatedNpc(edit.getDisplayName(), edit.getPluginName(), edit.getEditorId(),
+                edit.getRace(), edit.getFormId(), Collections.emptyList());
+    }
+
+    /**
+     * Validates and normalizes one NPC before the aggregate checks identity and relationships.
+     *
+     * @param displayName optional display name
+     * @param pluginName required plugin name without Morphs target delimiters
+     * @param editorId required editor ID
+     * @param race required race
+     * @param rawFormId one to eight hexadecimal digits, including an optional load-order prefix
+     * @param sliderPresetNames copied relationships resolved by the aggregate
+     * @return changed or rejected outcome at the pinned snapshot
+     */
+    private ProjectOutcome addValidatedNpc(String displayName, String pluginName, String editorId, String race,
+                                           String rawFormId, List<String> sliderPresetNames) {
+        if (blank(pluginName) || blank(editorId) || blank(race) || blank(rawFormId))
             return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_REQUIRED,
                     "Plugin name, editor ID, race, and Form ID are required to author an NPC Morph Assignment.");
-        String pluginName = edit.getPluginName().trim();
+        pluginName = pluginName.trim();
         // Morphs output uses plugin|FormId=relationships, so these characters would create a different target.
         if (pluginName.codePoints().anyMatch(character -> character == '|' || character == '='
                 || Character.isISOControl(character)))
             return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_PLUGIN_INVALID,
                     "Plugin name cannot contain Morphs target delimiters or control characters.");
-        String rawFormId = edit.getFormId().trim();
+        rawFormId = rawFormId.trim();
         if (!rawFormId.matches("[0-9A-Fa-f]{1,8}"))
             return rejectedNpc(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_FORM_ID_INVALID,
                     "Form ID must contain one to eight hexadecimal digits.");
-        String editorId = edit.getEditorId().trim();
-        String displayName = blank(edit.getDisplayName()) ? "Unnamed (" + editorId + ")"
-                : edit.getDisplayName().trim();
+        editorId = editorId.trim();
+        displayName = blank(displayName) ? "Unnamed (" + editorId + ")" : displayName.trim();
         // Persist the load-order-independent ID now, so generation is identical before and after reopening.
         String formId = NpcFormIds.normalize(rawFormId);
         NpcMorphAssignmentSnapshot source = new NpcMorphAssignmentSnapshot(displayName, pluginName, editorId,
-                edit.getRace().trim(), formId, Collections.emptyList());
+                race.trim(), formId, sliderPresetNames);
         return outcome(project.addNpcMorphAssignment(source));
     }
 

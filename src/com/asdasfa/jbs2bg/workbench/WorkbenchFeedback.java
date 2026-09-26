@@ -198,7 +198,7 @@ public final class WorkbenchFeedback {
      */
     public record ActivityRecord(long id, String operation, Severity severity, String cue,
                                  SemanticIcons.IconKey icon, String message, Disposition disposition, Instant occurredAt,
-                                 Optional<JobDetails> jobDetails) {
+                                 Optional<JobDetails> jobDetails, Optional<String> details) {
         /** Rejects incomplete or non-positive Activity identities. */
         public ActivityRecord {
             if (id <= 0)
@@ -211,6 +211,7 @@ public final class WorkbenchFeedback {
             Objects.requireNonNull(disposition, "disposition");
             Objects.requireNonNull(occurredAt, "occurredAt");
             Objects.requireNonNull(jobDetails, "jobDetails");
+            details = Objects.requireNonNull(details, "details").map(value -> requireText(value, "details"));
         }
     }
 
@@ -271,6 +272,18 @@ public final class WorkbenchFeedback {
     }
 
     /**
+     * Keeps a concise InfoBar and status while retaining complete per-entry details in durable Activity.
+     *
+     * @param notification user-facing operation summary
+     * @param details complete details for assistive Activity inspection
+     * @return the newly committed feedback frame
+     */
+    public Frame publishDetailed(Notification notification, String details) {
+        return publish(notification, Optional.empty(), true,
+                Optional.of(requireText(details, "details")));
+    }
+
+    /**
      * Records Activity and status for a feature-owned pane outcome without creating a workbench-wide InfoBar.
      *
      * @param notification completely described operation outcome
@@ -299,12 +312,19 @@ public final class WorkbenchFeedback {
      * Projects one notification consistently while allowing a deep feature to retain ownership of its pane InfoBar.
      */
     private Frame publish(Notification notification, Optional<JobDetails> jobDetails, boolean showInfoBar) {
+        return publish(notification, jobDetails, showInfoBar, Optional.empty());
+    }
+
+    /** Projects one summary and optional Activity-only detail without expanding the visible InfoBar. */
+    private Frame publish(Notification notification, Optional<JobDetails> jobDetails, boolean showInfoBar,
+                          Optional<String> activityDetails) {
         Notification value = Objects.requireNonNull(notification, "notification");
         Optional<JobDetails> details = Objects.requireNonNull(jobDetails, "jobDetails");
+        Optional<String> retainedDetails = Objects.requireNonNull(activityDetails, "activityDetails");
         String cue = value.severity().cue();
         SemanticIcons.IconKey icon = value.severity().icon();
         activities.add(new ActivityRecord(nextActivityId++, value.operation(), value.severity(), cue, icon,
-                value.message(), value.disposition(), clock.instant(), details));
+                value.message(), value.disposition(), clock.instant(), details, retainedDetails));
         StatusProjection status = new StatusProjection(value.severity(), value.message(),
                 value.disposition().displayText());
         Optional<InfoBar> infoBar = showInfoBar

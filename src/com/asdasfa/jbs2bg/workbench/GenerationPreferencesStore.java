@@ -10,8 +10,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 import java.util.prefs.Preferences;
 
-import com.asdasfa.jbs2bg.data.Data;
-
 /**
  * Persists Workbench generation preferences in the isolated application profile and migrates the legacy Java
  * Preferences value once when the profile-local file is absent.
@@ -19,6 +17,9 @@ import com.asdasfa.jbs2bg.data.Data;
 public final class GenerationPreferencesStore {
     static final String FILE_NAME = "workbench-generation.properties";
     private static final String OMIT_PREFIX = "omitRedundantSliders=";
+    // Java Preferences used the retired Data class name as its node path; changing either literal loses migration.
+    private static final String LEGACY_PREFERENCES_NODE = "com.asdasfa.jbs2bg.data.Data";
+    private static final String LEGACY_OMIT_REDUNDANT_SLIDERS_KEY = "Omit redundant sliders";
     // A single boolean needs only a few bytes; the bound also limits work during JavaFX attachment.
     private static final int MAXIMUM_PREFERENCE_BYTES = 128;
 
@@ -91,8 +92,8 @@ public final class GenerationPreferencesStore {
 
     /** Reads the retained packaged Java Preferences key used before the Workbench cutover. */
     private static boolean legacyValue() {
-        return Preferences.userRoot().node(Data.class.getName())
-                .getBoolean(Data.LEGACY_OMIT_REDUNDANT_SLIDERS, false);
+        return Preferences.userRoot().node(LEGACY_PREFERENCES_NODE)
+                .getBoolean(LEGACY_OMIT_REDUNDANT_SLIDERS_KEY, false);
     }
 
     /**

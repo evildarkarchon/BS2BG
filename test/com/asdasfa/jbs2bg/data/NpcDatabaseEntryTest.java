@@ -12,7 +12,7 @@ import java.lang.reflect.Modifier;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies that retained Data state is limited to immutable NPC Database source rows.
+ * Verifies that NPC Database source rows remain immutable and independent of Project assignments.
  */
 class NpcDatabaseEntryTest {
 
