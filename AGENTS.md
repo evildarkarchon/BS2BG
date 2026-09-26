@@ -27,11 +27,11 @@ Write short imperative subjects. Recent history favors `feat:`, `fix:`, and `tes
 
 ### Issue tracker
 
-Issues and specs are tracked as local Markdown files under `.scratch/<feature>/`. Before creating, reading, or updating tickets, read `docs/agents/issue-tracker.md`.
+Issues and specs are tracked in GitHub Issues for `evildarkarchon/BS2BG`. Before creating, reading, or updating tickets, read `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Triage uses the canonical `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` values in each ticket's `Status:` line. See `docs/agents/triage-labels.md`.
+Triage uses the GitHub labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

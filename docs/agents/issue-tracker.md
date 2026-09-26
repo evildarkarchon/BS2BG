@@ -1,40 +1,41 @@
-# Issue tracker: Local Markdown
+# Issue tracker: GitHub
 
-Issues and specs for this repo live as Markdown files in `.scratch/`.
+GitHub Issues in `evildarkarchon/BS2BG` are the source of truth for specs, tickets, status, and comments. Run every `gh` command outside the sandbox and use `--repo evildarkarchon/BS2BG` to identify the target.
 
 ## Conventions
 
-- One feature per directory: `.scratch/<feature-slug>/`.
-- The spec is `.scratch/<feature-slug>/spec.md`.
-- Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`. Allocate the next unused number within the feature; preserve existing numbers and files.
-- Record triage state as a `Status:` line near the top of each issue file, using the role strings in `triage-labels.md`. New untriaged issues start with `Status: needs-triage`.
-- Append comments and conversation history at the bottom of the file under a `## Comments` heading.
-- Complete a ticket by recording the result and setting `Status: resolved`. Retain the file as history. Use `Status: wontfix` for work that will not be actioned.
-- Reference tickets by repository-relative path, since numbers are local to each feature.
+- Create a spec or implementation ticket with `gh issue create --repo evildarkarchon/BS2BG --title "..." --body-file <path>`. Use one issue per ticket and link related issues.
+- Read an issue and its discussion with `gh issue view <number> --repo evildarkarchon/BS2BG --comments`.
+- List issues with `gh issue list --repo evildarkarchon/BS2BG --state open --json number,title,body,labels`; add `--label` or change `--state` as needed.
+- Update a body with `gh issue edit <number> --repo evildarkarchon/BS2BG --body-file <path>`; add discussion with `gh issue comment <number> --repo evildarkarchon/BS2BG --body-file <path>`.
+- Apply triage labels from `triage-labels.md` with `gh issue edit <number> --repo evildarkarchon/BS2BG --add-label <label>`; remove an old role with `--remove-label <label>`.
+- Close a completed issue with `gh issue close <number> --repo evildarkarchon/BS2BG --comment "..."`.
+
+A bare `#<number>` can identify an issue or a pull request because GitHub shares their number space. Resolve the type before acting.
+
+## Pull requests as a triage surface
+
+**PRs as a request surface: no.** Set this to `yes` only if external pull requests should enter the triage queue.
 
 ## When a skill says "publish to the issue tracker"
 
-Create the spec or individual issue files at the paths above, creating directories as needed. Return the paths to the created files.
+Create a GitHub issue and return its URL.
 
 ## When a skill says "fetch the relevant ticket"
 
-Read the file at the referenced path, including its comments. Resolve a bare ticket number within the named feature; if multiple features match and the context does not identify one, ask which feature the user means.
+Read the GitHub issue, including its labels and comments.
 
-## Existing GitHub references
+## Local archive
 
-Existing GitHub issues remain historical references. Resolve migrated issue numbers through the mappings below and use their local files for current status and updates. For an unmigrated issue or an explicit request for GitHub history, use `gh issue view <number> --repo evildarkarchon/BS2BG --comments`, running `gh` outside the sandbox. New tracker work uses local Markdown. External pull requests are not a triage request surface.
-
-### Migrated issues
-
-- **#80, #81–#93, and #98–#112**: Java 25 and JavaFX 25 modernization. The spec is `.scratch/java25-javafx25-modernization/spec.md`; the GitHub-to-local ticket mapping is `.scratch/java25-javafx25-modernization/README.md`. GitHub source issues were left unchanged during migration.
+The [Java 25 modernization ticket index](../../.scratch/java25-javafx25-modernization/README.md) maps the former local tickets to GitHub issues and retains their history. Use GitHub for current status and updates; consult the local files for migration and completion evidence.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
+Used by `/wayfinder`. A **map** is one GitHub issue with **child** issues as tickets.
 
-- **Map**: `.scratch/<effort>/map.md` (the Notes / Decisions-so-far / Fog body).
-- **Child ticket**: `.scratch/<effort>/issues/<NN>-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records `research`, `prototype`, `grilling`, or `task`. Wayfinding tickets use `Status: open`, `Status: claimed`, or `Status: resolved` for execution state; these are separate from the triage roles.
-- **Blocking**: a `Blocked by: NN, NN` line near the top refers to tickets in the same effort. A ticket is unblocked when every referenced ticket is `resolved`; a missing blocker remains unresolved.
-- **Frontier**: scan the effort's `issues/` directory for tickets with `Status: open` and no unresolved blockers; select the lowest number.
-- **Claim**: set `Status: claimed` and save before any work.
-- **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + relative link) to Decisions-so-far in `map.md`.
+- **Map**: create one issue labelled `wayfinder:map` with Notes, Decisions-so-far, and Fog in its body.
+- **Child ticket**: link an issue as a GitHub sub-issue. If sub-issues are unavailable, add it to a task list in the map and put `Part of #<map>` in the child body. Label the child `wayfinder:<type>` (`research`, `prototype`, `grilling`, or `task`).
+- **Blocking**: use GitHub's native issue dependencies. The `blocked_by` API takes the blocker's database `id`, not its issue number. If dependencies are unavailable, use a `Blocked by: #<n>, #<n>` line in the child body.
+- **Frontier**: inspect open children in map order; choose the first unassigned child with no open blockers.
+- **Claim**: assign the selected child to yourself before starting work.
+- **Resolve**: comment with the answer, close the child, then add a short context pointer and link to Decisions-so-far in the map.

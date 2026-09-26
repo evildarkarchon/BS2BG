@@ -32,9 +32,9 @@ Track the ordered, independently revertible implementation checkpoints that mode
 
 This meta-issue is complete when every native sub-issue is closed and the exact verified 2.0 app-image ZIP bytes have been published.
 
-## Local tracking
+## Tracking history
 
-Use the [ticket index](README.md) for the GitHub-to-local mapping and dependency order. This spec remains open until all required checkpoints are resolved and the verified 2.0 release is published. The imported completion wording refers to the original GitHub workflow; progress is now recorded in these local files.
+Use the [ticket index](README.md) for the GitHub-to-local mapping and historical notes. [GitHub issue #80](https://github.com/evildarkarchon/BS2BG/issues/80) and its subissues now record current progress, status, and discussion. The parent issue remains open until all required checkpoints are resolved and the verified 2.0 release is published.
 
 ## Comments
 

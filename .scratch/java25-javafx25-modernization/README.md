@@ -1,10 +1,10 @@
 # Java 25 and JavaFX 25 modernization
 
-Local tracker migrated from GitHub issue #80 and all 28 native subissues on 2026-09-10. Start with the [spec](spec.md). Original descriptions, acceptance checkboxes, comments, timestamps, labels, assignees, and native blockers are preserved; issue references link locally where available.
+Local tracker migrated from GitHub issue #80 and all 28 native subissues on 2026-09-10. This directory now preserves the local tracking history; [GitHub issue #80](https://github.com/evildarkarchon/BS2BG/issues/80) and its subissues are the current tracker. Original descriptions, acceptance checkboxes, comments, timestamps, labels, assignees, and native blockers are preserved here; issue references link locally where available.
 
-GitHub source issues were left unchanged. Source plans #62 and #76 remain external references. Local numbers preserve native subissue order; execute in dependency order, not filename order. A `resolved` status records GitHub closure, including superseded tickets; it does not assert that unchecked acceptance criteria were implemented.
+GitHub source issues were left unchanged at migration. Source plans #62 and #76 remain external references. Local numbers preserve native subissue order. Local `Status:` lines and the table below record historical states; use GitHub issue state, labels, comments, and dependencies for current work. A `resolved` status may record GitHub closure, including superseded tickets, or later local completion; it does not by itself assert that unchecked acceptance criteria were implemented.
 
-The next open, unblocked implementation ticket is [24 — Author NPC Morph Assignments in Morphs](issues/24-author-npc-morph-assignments-in-morphs.md). [Ticket 23](issues/23-author-custom-morph-targets-in-morphs.md) was resolved locally on 2026-09-19 with retained verification evidence. The table below preserves migration-time statuses; each ticket's `Status:` line is authoritative for current work. The release ticket [#93](issues/13-close-parity-and-produce-the-verified-2-0-release-candidate.md) follows [#112](issues/28-remove-migration-scaffolding-and-prove-complete-workbench-parity.md).
+The table below preserves migration-time statuses and the GitHub-to-local mapping. The release ticket [#93](https://github.com/evildarkarchon/BS2BG/issues/93) follows [#112](https://github.com/evildarkarchon/BS2BG/issues/112).
 
 | Local ticket | GitHub | Status at migration | Native blockers (local) |
 | --- | --- | --- | --- |
