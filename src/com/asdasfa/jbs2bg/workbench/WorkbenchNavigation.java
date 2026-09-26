@@ -85,6 +85,11 @@ public final class WorkbenchNavigation {
             case SETTINGS -> Area.SETTINGS;
             case OUTPUT -> activeArea;
         };
+        if (outputDrawerVisible) {
+            // The original launcher may be hidden after Area navigation; narrow primary content also closes first.
+            outputReturnTarget = new FocusTarget(activeArea,
+                    narrowMode ? Landmark.EDITOR : Landmark.PRIMARY_CONTENT);
+        }
         if (narrowMode) {
             overlay = Overlay.PRIMARY_CONTENT;
             overlayReturnTarget = new FocusTarget(activeArea, Landmark.RAIL);

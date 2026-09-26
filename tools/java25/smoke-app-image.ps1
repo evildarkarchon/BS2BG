@@ -1158,6 +1158,8 @@ try {
         New-CancellableNpcSourceFixture -Path (Join-Path $workDir $npcCancelLargeName)
         $settingsTransaction = Join-Path $workDir '.bs2bg-settings-stage-packaged-recovery'
         New-Item -ItemType Directory -Path $settingsTransaction -Force | Out-Null
+        # Recovery must identify this staged journal as publisher-owned before reading its backup markers.
+        [IO.File]::WriteAllText((Join-Path $settingsTransaction 'owner'), "BS2BG Settings transaction v1`n", $utf8)
         $repositorySettings = (Resolve-Path (Join-Path $PSScriptRoot '..\..\settings.json')).Path
         $repositoryUunpSettings = (Resolve-Path (Join-Path $PSScriptRoot '..\..\settings_UUNP.json')).Path
         Copy-Item -LiteralPath $repositorySettings -Destination (Join-Path $settingsTransaction 'standard.backup')

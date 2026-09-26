@@ -1,17 +1,23 @@
 package com.asdasfa.jbs2bg.data;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 
 /**
@@ -19,6 +25,9 @@ import java.util.stream.Stream;
  */
 final class SettingsPairPublisher {
     private static final String STAGING_PREFIX = ".bs2bg-settings-stage-";
+    private static final String OWNERSHIP_MARKER = "owner";
+    private static final byte[] OWNERSHIP_BYTES = "BS2BG Settings transaction v1\n"
+            .getBytes(StandardCharsets.US_ASCII);
     private static final String COMMITTED_MARKER = "committed";
     private static final String COMMITTED_STAGED_MARKER = "committed.staged";
 
@@ -26,8 +35,8 @@ final class SettingsPairPublisher {
     }
 
     /**
-     * Restores an interrupted Settings transaction before either source is parsed. A committed transaction or an
-     * empty residue with no durable prior-state markers is cleaned without reporting a rollback.
+     * Restores an owned interrupted Settings transaction before either source is parsed. Unowned prefix entries are
+     * left untouched; a committed transaction or owned residue without prior-state markers is cleanup-only.
      *
      * @param directory      working directory that owns the production Settings filenames
      * @param standardTarget Standard Settings destination
@@ -36,11 +45,35 @@ final class SettingsPairPublisher {
      * @throws IOException when recovery state is ambiguous or cannot restore a coherent pair
      */
     static boolean recover(Path directory, Path standardTarget, Path uunpTarget) throws IOException {
+        return recover(directory, standardTarget, uunpTarget, () -> true);
+    }
+
+    /**
+     * Recovers an owned journal after the caller wins its non-cancellable commit boundary. Clean directories do not
+     * invoke the callback, so their Settings pair can still be read before commit admission.
+     *
+     * @param directory working directory containing the Settings pair
+     * @param standardTarget Standard Settings destination
+     * @param uunpTarget UUNP Settings destination
+     * @param beginCommit callback that must accept recovery before any journal cleanup or rollback
+     * @return whether prior-state records required rollback
+     * @throws IOException when owned recovery cannot complete safely
+     * @throws CancellationException when cancellation wins before recovery begins
+     */
+    static boolean recover(Path directory, Path standardTarget, Path uunpTarget,
+                           BooleanSupplier beginCommit) throws IOException {
         Path owner = Objects.requireNonNull(directory, "directory").toAbsolutePath().normalize();
-        List<Path> transactions;
+        Objects.requireNonNull(beginCommit, "beginCommit");
+        List<Path> candidates;
         try (Stream<Path> entries = Files.list(owner)) {
-            transactions = entries.filter(path -> path.getFileName().toString().startsWith(STAGING_PREFIX))
+            candidates = entries.filter(path -> path.getFileName().toString().startsWith(STAGING_PREFIX))
                     .toList();
+        }
+        List<Path> transactions = new ArrayList<>();
+        for (Path candidate : candidates) {
+            if (Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)
+                    && !Files.isSymbolicLink(candidate) && hasOwnershipMarker(candidate))
+                transactions.add(candidate);
         }
         if (transactions.isEmpty())
             return false;
@@ -48,10 +81,10 @@ final class SettingsPairPublisher {
             throw new IOException("Settings recovery found more than one interrupted transaction.");
 
         Path transaction = transactions.getFirst();
-        if (!Files.isDirectory(transaction, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(transaction))
-            throw new IOException("Settings recovery state is not a transaction directory: " + transaction);
         Path standard = normalizeTarget(standardTarget);
         Path uunp = normalizeTarget(uunpTarget);
+        if (!beginCommit.getAsBoolean())
+            throw new CancellationException("Settings recovery cancelled before publication.");
         if (hasCommittedMarker(transaction)) {
             if (!Files.isRegularFile(standard, LinkOption.NOFOLLOW_LINKS)
                     || !Files.isRegularFile(uunp, LinkOption.NOFOLLOW_LINKS)) {
@@ -73,6 +106,20 @@ final class SettingsPairPublisher {
         } catch (IOException exception) {
             throw new IOException("Settings recovery could not restore the complete prior pair.", exception);
         }
+    }
+
+    /** Checks the exact forced marker written before any Settings transaction member is staged. */
+    private static boolean hasOwnershipMarker(Path transaction) throws IOException {
+        Path marker = transaction.resolve(OWNERSHIP_MARKER);
+        if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(marker) || Files.size(marker) != OWNERSHIP_BYTES.length)
+            return false;
+        byte[] actual;
+        try (InputStream input = Files.newInputStream(marker, LinkOption.NOFOLLOW_LINKS)) {
+            // A bounded read also rejects marker replacement or growth after the metadata check.
+            actual = input.readNBytes(OWNERSHIP_BYTES.length + 1);
+        }
+        return Arrays.equals(actual, OWNERSHIP_BYTES);
     }
 
     /** Returns whether an uncommitted journal contains durable evidence of prior member state to restore. */
@@ -167,6 +214,8 @@ final class SettingsPairPublisher {
         IOException publicationFailure = null;
         boolean preserveRecoveryDirectory = false;
         try {
+            // Recovery may only touch directories that committed this marker before any member state exists.
+            writeAndFlush(stagingDirectory.resolve(OWNERSHIP_MARKER), OWNERSHIP_BYTES);
             markPriorAbsence(standardPublication);
             markPriorAbsence(uunpPublication);
             writeAndFlush(standardPublication.staged, pair.standardUtf8());

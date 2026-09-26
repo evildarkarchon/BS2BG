@@ -342,6 +342,34 @@ class JobCoordinatorTest {
         assertTrue(coordinator.retry(id).admitted());
     }
 
+    /** Old failed attempts release their captured retry factories while recent failures remain retryable. */
+    @Test
+    void failedRetryHistoryIsBounded() {
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator coordinator = coordinator(worker);
+        List<JobCoordinator.AttemptId> attempts = new ArrayList<>();
+        for (int index = 0; index < 65; index++) {
+            JobCoordinator.Operation operation = new JobCoordinator.Operation("Export Output",
+                    List.of(), List.of("output-" + index), Optional.empty());
+            JobCoordinator.Submission<String> submission = new JobCoordinator.Submission<>(operation,
+                    context -> JobCoordinator.Result.failed("Export failed", List.of()),
+                    (attempt, result) -> {
+                        // The bounded retry behavior is observed through admission after all jobs settle.
+                    }, Optional.of(() -> new JobCoordinator.Submission<>(operation,
+                    context -> JobCoordinator.Result.completed("retried", "Export completed", List.of(), List.of()),
+                    (attempt, result) -> {
+                        // This callback is irrelevant to retry admission.
+                    }, Optional.empty())));
+            attempts.add(coordinator.submit(submission).attempt().orElseThrow());
+            worker.runNext();
+        }
+
+        assertFalse(coordinator.isRetryAvailable(attempts.getFirst()));
+        assertTrue(coordinator.isRetryAvailable(attempts.getLast()));
+        assertFalse(coordinator.retry(attempts.getFirst()).admitted());
+        assertTrue(coordinator.retry(attempts.getLast()).admitted());
+    }
+
     /**
      * Retry rechecks dynamic availability after recapture so a state change in that window prevents admission.
      */

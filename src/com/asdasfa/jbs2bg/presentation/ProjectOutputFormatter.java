@@ -267,6 +267,7 @@ public final class ProjectOutputFormatter {
      * @param uunp   whether the containing Slider Preset uses the UUNP Settings profile
      * @return exact BodyGen choice text without the containing preset name
      * @throws NullPointerException when choice is null
+     * @throws SliderChoicePreviewException when the current Settings multiplier makes the preview non-finite
      */
     public static String formatSliderChoicePreview(SliderChoiceSnapshot choice, boolean uunp) {
         return formatSliderChoicePreview(choice, uunp, Settings.snapshot());
@@ -286,8 +287,12 @@ public final class ProjectOutputFormatter {
         float minimum = small + difference * (choice.getPercentageMinimum() * 0.01f);
         float maximum = small + difference * (choice.getPercentageMaximum() * 0.01f);
         float multiplier = multiplier(choice.getName(), uunp, settings);
-        minimum = roundLegacy(minimum * multiplier);
-        maximum = roundLegacy(maximum * multiplier);
+        minimum *= multiplier;
+        maximum *= multiplier;
+        if (!Float.isFinite(minimum) || !Float.isFinite(maximum))
+            throw new SliderChoicePreviewException();
+        minimum = roundLegacy(minimum);
+        maximum = roundLegacy(maximum);
         return choice.getName() + "@" + (minimum != maximum ? minimum + ":" + maximum : Float.toString(maximum));
     }
 
@@ -431,6 +436,19 @@ public final class ProjectOutputFormatter {
          */
         BosValueException(String message) {
             super(message);
+        }
+    }
+
+    /** Signals that a Slider choice cannot have a finite Templates preview under the current Settings. */
+    public static final class SliderChoicePreviewException extends IllegalArgumentException {
+        private static final long serialVersionUID = 1L;
+
+        /** Stable diagnostic code for a non-finite Templates preview. */
+        public static final String CODE = "TEMPLATE_PREVIEW_NON_FINITE";
+
+        /** Creates the typed failure before legacy decimal rounding can throw a NumberFormatException. */
+        private SliderChoicePreviewException() {
+            super("Current Settings calculate a non-finite Slider choice preview.");
         }
     }
 }

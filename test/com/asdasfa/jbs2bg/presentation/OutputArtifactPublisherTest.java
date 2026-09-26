@@ -133,6 +133,37 @@ final class OutputArtifactPublisherTest {
         assertEquals(0, moves.get());
     }
 
+    /** A similarly named user folder is not publisher-owned and must survive the next export. */
+    @Test
+    void preservesUnownedStagingPrefixDirectory(@TempDir Path targetDirectory) throws Exception {
+        Path userDirectory = Files.createDirectory(targetDirectory.resolve(".bs2bg-output-stage-user-files"));
+        Path userFile = userDirectory.resolve("notes.txt");
+        Files.writeString(userFile, "keep this");
+
+        OutputArtifactPublisher.publishAll(targetDirectory,
+                List.of(new TestArtifact("templates.ini", "published")));
+
+        assertEquals("keep this", Files.readString(userFile));
+        assertEquals("published", Files.readString(targetDirectory.resolve("templates.ini")));
+    }
+
+    /** A lock-close error after commit does not turn a fully installed batch into a failed export. */
+    @Test
+    void postCommitLockCloseFailureRetainsSuccessfulPublication(@TempDir Path targetDirectory) throws Exception {
+        OutputArtifactPublisher.publishAll(targetDirectory,
+                List.of(new TestArtifact("templates.ini", "published")),
+                OutputArtifactPublisher.PublicationContext.nonCancellable(),
+                (source, target) -> Files.move(source, target, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING),
+                lock -> {
+                    lock.close();
+                    throw new IOException("injected lock-close failure");
+                });
+
+        assertEquals("published", Files.readString(targetDirectory.resolve("templates.ini")));
+        assertNoTransactionDirectory(targetDirectory);
+    }
+
     /** Accepted cancellation after complete staging preserves prior destinations and removes staged bytes. */
     @Test
     void cancellationBeforeCommitPreservesEveryDestination(@TempDir Path targetDirectory) throws Exception {
@@ -375,6 +406,8 @@ final class OutputArtifactPublisherTest {
                 new TestArtifact("morphs.ini", "committed-morphs"));
         OutputArtifactPublisher.publishAll(targetDirectory, committedBatch);
         Path transaction = Files.createTempDirectory(targetDirectory, ".bs2bg-output-stage-");
+        Files.writeString(transaction.resolve("owner"),
+                "BS2BG Output transaction: " + transaction.getFileName());
         for (int index = 0; index < committedBatch.size(); index++) {
             String member = Integer.toString(index);
             String fileName = committedBatch.get(index).getFileName();

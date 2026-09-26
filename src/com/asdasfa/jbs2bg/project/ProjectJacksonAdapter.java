@@ -361,6 +361,19 @@ final class ProjectJacksonAdapter {
         }
         requireSeen(smallSeen, reader, child(path, "valueSmall"), "valueSmall");
         requireSeen(bigSeen, reader, child(path, "valueBig"), "valueBig");
+        // A saved Project must obey the same interpolation range accepted by ProjectSession edits.
+        if (minimum.intValue() < 0 || minimum.intValue() > 100) {
+            throw reader.failure(ProjectDiagnosticCodes.SLIDER_CHOICE_PERCENTAGE_INVALID,
+                    child(path, "pctMin"), "Slider-choice minimum percentage must be between 0 and 100.");
+        }
+        if (maximum.intValue() < 0 || maximum.intValue() > 100) {
+            throw reader.failure(ProjectDiagnosticCodes.SLIDER_CHOICE_PERCENTAGE_INVALID,
+                    child(path, "pctMax"), "Slider-choice maximum percentage must be between 0 and 100.");
+        }
+        if (minimum.intValue() > maximum.intValue()) {
+            throw reader.failure(ProjectDiagnosticCodes.SLIDER_CHOICE_PERCENTAGE_INVALID,
+                    child(path, "pctMin"), "Slider-choice minimum percentage must not exceed its maximum.");
+        }
         return new RawChoice(name, enabled.booleanValue(), small, big, minimum.intValue(), maximum.intValue());
     }
 

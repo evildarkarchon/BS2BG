@@ -1,6 +1,8 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,6 +19,8 @@ import com.asdasfa.jbs2bg.data.Data;
 public final class GenerationPreferencesStore {
     static final String FILE_NAME = "workbench-generation.properties";
     private static final String OMIT_PREFIX = "omitRedundantSliders=";
+    // A single boolean needs only a few bytes; the bound also limits work during JavaFX attachment.
+    private static final int MAXIMUM_PREFERENCE_BYTES = 128;
 
     private final Path directory;
     private final Path file;
@@ -63,9 +67,23 @@ public final class GenerationPreferencesStore {
         return Files.exists(file) ? loadProfileValue() : legacyValue();
     }
 
-    /** Parses the small profile-local preference document. */
+    /**
+     * Parses the profile-local preference without reading more than the single-value format can require.
+     *
+     * @return the stored omission choice, or false for an unrecognized value
+     * @throws IOException when the file cannot be read or exceeds the preference size limit
+     */
     private boolean loadProfileValue() throws IOException {
-        String content = Files.readString(file).trim();
+        if (Files.size(file) > MAXIMUM_PREFERENCE_BYTES)
+            throw new IOException("Generation preference exceeds the size limit.");
+        byte[] bytes;
+        try (InputStream input = Files.newInputStream(file)) {
+            // The extra byte catches replacement or growth after the metadata check without reading the tail.
+            bytes = input.readNBytes(MAXIMUM_PREFERENCE_BYTES + 1);
+        }
+        if (bytes.length > MAXIMUM_PREFERENCE_BYTES)
+            throw new IOException("Generation preference exceeds the size limit.");
+        String content = new String(bytes, StandardCharsets.UTF_8).trim();
         if (!content.startsWith(OMIT_PREFIX))
             return false;
         return Boolean.parseBoolean(content.substring(OMIT_PREFIX.length()).trim());

@@ -39,6 +39,55 @@ final class SettingsPairPublisherTest {
         }
     }
 
+    /** An unrelated prefix-matching folder must be ignored with its contents intact. */
+    @Test
+    void recoveryIgnoresUnownedStagingDirectoryWithoutDeletingIt(@TempDir Path directory) throws IOException {
+        Path standard = directory.resolve("settings.json");
+        Path uunp = directory.resolve("settings_UUNP.json");
+        Path unrelated = Files.createDirectory(directory.resolve(".bs2bg-settings-stage-not-a-transaction"));
+        Path sentinel = Files.writeString(unrelated.resolve("keep.txt"), "unrelated content");
+
+        assertFalse(SettingsPairPublisher.recover(directory, standard, uunp));
+
+        assertEquals("unrelated content", Files.readString(sentinel));
+        assertTrue(Files.isDirectory(unrelated));
+    }
+
+    /** A matching marker filename with unknown content does not authorize transaction cleanup. */
+    @Test
+    void recoveryIgnoresUnknownOwnershipMarker(@TempDir Path directory) throws IOException {
+        Path standard = directory.resolve("settings.json");
+        Path uunp = directory.resolve("settings_UUNP.json");
+        Path unrelated = Files.createDirectory(directory.resolve(".bs2bg-settings-stage-other-app"));
+        Path marker = Files.writeString(unrelated.resolve("owner"), "another application's marker");
+
+        assertFalse(SettingsPairPublisher.recover(directory, standard, uunp));
+
+        assertEquals("another application's marker", Files.readString(marker));
+        assertTrue(Files.isDirectory(unrelated));
+    }
+
+    /** An unrelated folder does not prevent cleanup of a separate authenticated committed transaction. */
+    @Test
+    void recoveryProcessesOwnedTransactionBesideUnrelatedStagingFolder(@TempDir Path directory)
+            throws IOException {
+        Path standard = Files.writeString(directory.resolve("settings.json"), "prior-standard");
+        Path uunp = Files.writeString(directory.resolve("settings_UUNP.json"), "prior-uunp");
+        Path unrelated = Files.createDirectory(directory.resolve(".bs2bg-settings-stage-other-app"));
+        Path sentinel = Files.writeString(unrelated.resolve("keep.txt"), "unrelated content");
+        SettingsJacksonAdapter.SettingsPairBytes replacement = replacementPair();
+        SettingsPairPublisher.publish(standard, uunp, replacement,
+                (source, target) -> Files.move(source, target, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING),
+                transaction -> { throw new IOException("injected post-commit cleanup failure"); });
+
+        assertFalse(SettingsPairPublisher.recover(directory, standard, uunp));
+
+        assertArrayEquals(replacement.standardUtf8(), Files.readAllBytes(standard));
+        assertArrayEquals(replacement.uunpUtf8(), Files.readAllBytes(uunp));
+        assertEquals("unrelated content", Files.readString(sentinel));
+    }
+
     /**
      * Injects a failure while installing the later member and requires both prior destination bytes to return.
      *
@@ -203,7 +252,7 @@ final class SettingsPairPublisherTest {
         assertNoTransactions(directory);
     }
 
-    /** An empty transaction left after committed child cleanup is cleanup-only, not a reported rollback. */
+    /** An empty residue after committed child cleanup must not block startup or report a rollback. */
     @Test
     void emptyPostCommitCleanupResidueDoesNotReportRollback(@TempDir Path directory) throws IOException {
         Path standard = directory.resolve("settings.json");
@@ -223,10 +272,16 @@ final class SettingsPairPublisherTest {
                     throw new IOException("injected final directory cleanup failure");
                 });
 
+        Path transaction;
+        try (var entries = Files.list(directory)) {
+            transaction = entries.filter(path -> path.getFileName().toString()
+                    .startsWith(".bs2bg-settings-stage-")).findFirst().orElseThrow();
+        }
+
         assertFalse(SettingsPairPublisher.recover(directory, standard, uunp));
         assertArrayEquals(replacement.standardUtf8(), Files.readAllBytes(standard));
         assertArrayEquals(replacement.uunpUtf8(), Files.readAllBytes(uunp));
-        assertNoTransactions(directory);
+        assertTrue(Files.isDirectory(transaction));
     }
 
     /**

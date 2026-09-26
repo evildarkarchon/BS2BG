@@ -3,12 +3,14 @@ package com.asdasfa.jbs2bg.workbench.templates;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
@@ -20,6 +22,7 @@ import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
 import com.asdasfa.jbs2bg.filtering.SortKey;
 import com.asdasfa.jbs2bg.project.CancelledOutcome;
 import com.asdasfa.jbs2bg.project.ChangedOutcome;
+import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.ProjectOutcome;
@@ -27,6 +30,7 @@ import com.asdasfa.jbs2bg.project.RejectedOutcome;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
+import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.UnchangedOutcome;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
@@ -253,7 +257,7 @@ public final class TemplatesFeature {
         for (int offset = 0; offset < visible.size(); offset++) {
             SliderPresetSnapshot candidate = visible.get((start + offset) % visible.size());
             if (candidate.getName().toLowerCase(Locale.ROOT).startsWith(typeAheadPrefix)) {
-                view.select(ProjectIdentities.sliderPreset(candidate));
+                selectPreset(ProjectIdentities.sliderPreset(candidate));
                 publish(frame.projectSequence(), List.of());
                 return new Update(true, frame);
             }
@@ -279,13 +283,27 @@ public final class TemplatesFeature {
      * Selects only an identity that is present in the accepted visible frame.
      */
     private Update select(NameIdentity identity) {
-        Optional<NameIdentity> previous = view.getSelection();
-        if (!view.select(Objects.requireNonNull(identity, "identity")))
+        if (!selectPreset(Objects.requireNonNull(identity, "identity")))
             return new Update(false, frame);
-        if (!previous.equals(view.getSelection()))
-            gang = GangFrame.inactive();
         publish(frame.projectSequence(), frame.diagnostics());
         return new Update(true, frame);
+    }
+
+    /**
+     * Selects a visible preset and abandons inspector state owned by a different selected identity.
+     *
+     * @return whether the requested preset was visible and selected
+     */
+    private boolean selectPreset(NameIdentity identity) {
+        Optional<NameIdentity> previous = view.getSelection();
+        if (!view.select(Objects.requireNonNull(identity, "identity")))
+            return false;
+        if (!previous.equals(view.getSelection())) {
+            // A gang lock or rename draft must never follow selection to another Slider Preset.
+            gang = GangFrame.inactive();
+            rename = null;
+        }
+        return true;
     }
 
     /**
@@ -297,7 +315,7 @@ public final class TemplatesFeature {
         reconcileOutcome(outcome);
         if (accepted) {
             String requestedIdentity = Objects.requireNonNull(name, "name").trim();
-            view.select(NameIdentity.of(requestedIdentity));
+            selectPreset(NameIdentity.of(requestedIdentity));
             publish(projectFlow.frame().sequence(), outcome.getDiagnostics());
         }
         return outcomeUpdate(outcome);
@@ -315,7 +333,7 @@ public final class TemplatesFeature {
         boolean accepted = accepted(outcome);
         reconcileOutcome(outcome);
         if (accepted) {
-            view.select(NameIdentity.of(Objects.requireNonNull(name, "name").trim()));
+            selectPreset(NameIdentity.of(Objects.requireNonNull(name, "name").trim()));
             publish(projectFlow.frame().sequence(), outcome.getDiagnostics());
         }
         return outcomeUpdate(outcome);
@@ -650,8 +668,13 @@ public final class TemplatesFeature {
      * Commits frame state before any caller can realize later focus or dialog effects.
      */
     private void publish(long projectSequence, List<ProjectDiagnostic> diagnostics) {
+        List<ProjectDiagnostic> visibleDiagnostics = new ArrayList<>(diagnostics);
+        // Preview failures derive from current Settings and must be replaced when those Settings change.
+        visibleDiagnostics.removeIf(diagnostic -> ProjectOutputFormatter.SliderChoicePreviewException.CODE
+                .equals(diagnostic.getCode()));
+        Optional<EditorFrame> editor = editorFrame(visibleDiagnostics);
         frame = new Frame(++revision, projectSequence, view.visibleSet().getRows(), view.getSelection(), filterText,
-                sortOrder, Optional.ofNullable(rename), editorFrame(), lastOutcomeKind, diagnostics);
+                sortOrder, Optional.ofNullable(rename), editor, lastOutcomeKind, visibleDiagnostics);
         publishing = true;
         try {
             for (Consumer<Frame> observer : List.copyOf(observers.values())) {
@@ -669,8 +692,10 @@ public final class TemplatesFeature {
     /**
      * Projects the selected immutable Slider Preset into the in-place editor without retaining row indexes or mutable
      * control state inside the feature.
+     *
+     * @param diagnostics receives preview failures alongside Project operation diagnostics
      */
-    private Optional<EditorFrame> editorFrame() {
+    private Optional<EditorFrame> editorFrame(List<ProjectDiagnostic> diagnostics) {
         Optional<NameIdentity> selected = view.getSelection();
         if (selected.isEmpty())
             return Optional.empty();
@@ -679,16 +704,30 @@ public final class TemplatesFeature {
                 .findFirst()
                 .map(preset -> new EditorFrame(ProjectIdentities.sliderPreset(preset),
                         preset.isUunp() ? Profile.UUNP : Profile.STANDARD,
-                        preset.getSliderChoices().stream().map(choice -> choiceFrame(choice, preset.isUunp()))
+                        preset.getSliderChoices().stream().map(choice -> choiceFrame(choice, preset.isUunp(),
+                                diagnostics))
                                 .toList(), gang));
     }
 
     /**
-     * Projects one immutable Slider choice through the shared exact-output formatter.
+     * Projects one immutable Slider choice through the shared exact-output formatter, reporting unavailable previews.
+     *
+     * @param diagnostics receives a structured diagnostic when the current Settings overflow the preview
      */
-    private static ChoiceFrame choiceFrame(SliderChoiceSnapshot choice, boolean uunp) {
+    private static ChoiceFrame choiceFrame(SliderChoiceSnapshot choice, boolean uunp,
+                                           List<ProjectDiagnostic> diagnostics) {
+        String preview;
+        try {
+            preview = ProjectOutputFormatter.formatSliderChoicePreview(choice, uunp);
+        } catch (ProjectOutputFormatter.SliderChoicePreviewException exception) {
+            preview = "Preview unavailable";
+            diagnostics.add(new ProjectDiagnostic(ProjectOutputFormatter.SliderChoicePreviewException.CODE,
+                    DiagnosticSeverity.ERROR, new SourceLocation(Optional.empty(),
+                    Optional.of("Slider choice " + choice.getName()), OptionalInt.empty(), OptionalInt.empty()),
+                    exception.getMessage()));
+        }
         return new ChoiceFrame(choice.getName(), choice.isEnabled(), choice.getPercentageMinimum(),
-                choice.getPercentageMaximum(), ProjectOutputFormatter.formatSliderChoicePreview(choice, uunp),
+                choice.getPercentageMaximum(), preview,
                 choice.isMissingDefault(), choice.isMissingDefault() && choice.isEnabled()
                 && choice.getPercentageMinimum() == 100 && choice.getPercentageMaximum() == 100,
                 choice.isEnabled() && ProjectOutputFormatter.isSliderChoiceRedundant(choice, uunp), choice);

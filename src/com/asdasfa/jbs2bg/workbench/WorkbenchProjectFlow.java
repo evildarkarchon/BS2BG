@@ -571,15 +571,16 @@ public final class WorkbenchProjectFlow {
     }
 
     /**
-     * Captures one Open attempt and its retry factory without retaining mutable chooser or Project state.
+     * Captures an Open source and Project basis without retaining mutable chooser state. Source attributes are read
+     * on the worker immediately before parsing so a slow filesystem cannot block the JavaFX response path.
      */
     private JobCoordinator.Submission<ProjectOutcome> openSubmission(Path source) {
         Path capturedSource = Objects.requireNonNull(source, "source").toAbsolutePath().normalize();
         ProjectContentVersion capturedBasis = projectSession.getSnapshot().getContentVersion();
-        OpenSourceStamp capturedSourceStamp = OpenSourceStamp.capture(capturedSource);
         JobCoordinator.Operation operation = new JobCoordinator.Operation("Open Project",
                 List.of(capturedSource.toString()), List.of(), Optional.of(capturedBasis.toString()));
         return new JobCoordinator.Submission<>(operation, context -> {
+            OpenSourceStamp capturedSourceStamp = OpenSourceStamp.capture(capturedSource);
             OpenOperationContext projectContext = new OpenOperationContext(context, capturedBasis,
                     capturedSource, capturedSourceStamp);
             ProjectOutcome outcome = projectSession.open(capturedSource, projectContext);
@@ -649,26 +650,25 @@ public final class WorkbenchProjectFlow {
                         markClosed();
                 });
             }
-        }, Optional.of(() -> retrySaveSubmission(capturedTarget, adoptedIdentity, closeOnSuccess)));
+        }, Optional.of(() -> retrySaveSubmission(capturedTarget, adoptedIdentity)));
     }
 
     /**
-     * Recaptures the current adopted identity for Save retry while preserving an explicitly selected Save As target.
+     * Recaptures the current adopted identity for Save retry while preserving an explicit Save As target. A retained
+     * Activity retry saves only; a new Close request must recheck any Settings drafts created after the failure.
      *
      * @param capturedTarget  original target retained only for Save As
      * @param adoptedIdentity whether the retried operation uses the session's current identity
-     * @param closeOnSuccess  whether successful retry completes a pending close
      * @return freshly captured retry submission
      * @throws IllegalStateException when adopted-identity Save no longer has an identity to retry
      */
     private JobCoordinator.Submission<ProjectOutcome> retrySaveSubmission(Path capturedTarget,
-                                                                          boolean adoptedIdentity,
-                                                                          boolean closeOnSuccess) {
+                                                                          boolean adoptedIdentity) {
         Path retryTarget = adoptedIdentity
                 ? projectSession.getSnapshot().getFileIdentity().orElseThrow(() ->
                 new IllegalStateException("Cannot retry Save without an adopted Project identity"))
                 : capturedTarget;
-        return saveSubmission(retryTarget, adoptedIdentity, closeOnSuccess);
+        return saveSubmission(retryTarget, adoptedIdentity, false);
     }
 
     /**

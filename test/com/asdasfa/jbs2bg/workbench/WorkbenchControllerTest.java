@@ -29,6 +29,7 @@ import com.asdasfa.jbs2bg.Main;
 import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
+import com.asdasfa.jbs2bg.data.SettingsLockHolderProbe;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
@@ -49,6 +50,7 @@ import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
@@ -831,6 +833,39 @@ class WorkbenchControllerTest {
         });
     }
 
+    /** Empty target and NPC entries are emitted as Morphs lines even without Slider Preset assignments. */
+    @Test
+    void unassignedMorphEntriesDescribeTheirEmittedOutput() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(CustomMorphTargetEdits.create("Unassigned"));
+        flow.apply(NpcMorphAssignmentEdits.create("Guard", "Skyrim.esm", "Guard01", "NordRace", "000123"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            try {
+                controller.attach(flow, stage, new RecordingPlatform());
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                @SuppressWarnings("unchecked")
+                ListView<CustomMorphTargetSnapshot> targets =
+                        (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
+                @SuppressWarnings("unchecked")
+                ListView<NpcMorphAssignmentSnapshot> npcs =
+                        (ListView<NpcMorphAssignmentSnapshot>) loader.getNamespace().get("npcMorphAssignmentList");
+                Label status = (Label) loader.getNamespace().get("morphTargetOutputStatusText");
+
+                targets.getSelectionModel().selectFirst();
+                assertEquals("Included in Morphs output without Slider Preset assignments.", status.getText());
+                npcs.getSelectionModel().selectFirst();
+                assertEquals("Included in Morphs output without Slider Preset assignments.", status.getText());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
     /**
      * The Morphs controls author an NPC through the Project flow and keep its selection separate from a Custom
      * Morph Target while the shared editor exposes the NPC's complete output identity.
@@ -1239,6 +1274,104 @@ class WorkbenchControllerTest {
         });
     }
 
+    /** Reload cancellation while another process owns the lock keeps the Settings draft and feedback unchanged. */
+    @Test
+    void settingsReloadCanBeCancelledWhileWaitingForTheDirectoryLock() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        byte[] standardBefore = Files.readAllBytes(temporaryDirectory.resolve("settings.json"));
+        byte[] uunpBefore = Files.readAllBytes(temporaryDirectory.resolve("settings_UUNP.json"));
+        Path ready = temporaryDirectory.resolve("holder.ready");
+        Path release = temporaryDirectory.resolve("holder.release");
+        String javaName = System.getProperty("os.name", "").startsWith("Windows") ? "java.exe" : "java";
+        String javaExecutable = Path.of(System.getProperty("java.home"), "bin", javaName).toString();
+        String testClassPath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
+        Process holder = new ProcessBuilder(javaExecutable, "-cp", testClassPath,
+                SettingsLockHolderProbe.class.getName(), temporaryDirectory.toString(),
+                ready.toString(), release.toString()).redirectErrorStream(true).start();
+        Thread reloadWorker = null;
+        try {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (!Files.exists(ready) && System.nanoTime() < deadline)
+                Thread.sleep(10);
+            assertTrue(Files.exists(ready), "child process did not acquire the Settings lock");
+            ManualExecutor worker = new ManualExecutor();
+            JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                    Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                    (delay, action) -> () -> {
+                        // The test observes prompt cancellation before prolonged feedback is relevant.
+                    }, failure -> { throw new AssertionError("Unexpected callback failure", failure); });
+            SettingsFeature feature = new SettingsFeature(temporaryDirectory, Settings.publishedState());
+            assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
+                    "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
+            SettingsFeature.ReloadConfirmationEffect confirmation = assertInstanceOf(
+                    SettingsFeature.ReloadConfirmationEffect.class,
+                    feature.dispatch(new SettingsFeature.Reload()).effect().orElseThrow());
+            SettingsFeature.ReloadEffect effect = assertInstanceOf(SettingsFeature.ReloadEffect.class,
+                    feature.respondReload(confirmation.token(), SettingsFeature.ReloadDecision.DISCARD)
+                            .effect().orElseThrow());
+            AtomicReference<SettingsFeature.Frame> settledFrame = new AtomicReference<>();
+            JobCoordinator.Operation operation = new JobCoordinator.Operation("Reload Settings",
+                    List.of(temporaryDirectory.toString()), List.of(), Optional.empty());
+            assertTrue(jobs.submit(new JobCoordinator.Submission<>(operation,
+                    context -> WorkbenchController.runSettingsEffect(effect, context),
+                    (attempt, result) -> settledFrame.set(
+                            WorkbenchController.applySettingsCompletion(feature, effect, result).frame()),
+                    Optional.empty())).admitted());
+            reloadWorker = worker.runNextAsync();
+            long workerDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            boolean waitingForLock = false;
+            while (!waitingForLock && reloadWorker.isAlive() && System.nanoTime() < workerDeadline) {
+                for (StackTraceElement frame : reloadWorker.getStackTrace()) {
+                    if (frame.getClassName().equals("com.asdasfa.jbs2bg.data.SettingsDirectoryLock")
+                            && frame.getMethodName().equals("acquire")) {
+                        waitingForLock = true;
+                        break;
+                    }
+                }
+                if (!waitingForLock)
+                    Thread.sleep(10);
+            }
+            assertTrue(waitingForLock, "Reload worker did not reach the blocking directory lock");
+
+            AtomicReference<JobCoordinator.CancelResponse> cancelResponse = new AtomicReference<>();
+            Thread canceller = new Thread(() -> cancelResponse.set(jobs.requestCancel()),
+                    "settings-reload-canceller");
+            canceller.start();
+            canceller.join(TimeUnit.SECONDS.toMillis(2));
+            boolean promptCancellation = !canceller.isAlive();
+            if (!promptCancellation) {
+                // Release the child lock so an interrupted Windows file-lock call cannot strand the test process.
+                Files.writeString(release, "release");
+                canceller.join(TimeUnit.SECONDS.toMillis(5));
+            }
+            assertTrue(promptCancellation, "requestCancel blocked while another process held the Settings lock");
+            assertEquals(JobCoordinator.CancelResponse.ACCEPTED, cancelResponse.get());
+            reloadWorker.join(TimeUnit.SECONDS.toMillis(5));
+            assertFalse(reloadWorker.isAlive(), "cancelled Reload remained blocked on the directory lock");
+            assertTrue(holder.isAlive(), "Reload only cancelled after the other process released its lock");
+            assertEquals(JobCoordinator.Lifecycle.CANCELLED,
+                    jobs.frame().attempt().orElseThrow().lifecycle());
+            SettingsFeature.Frame frame = settledFrame.get();
+            assertNotNull(frame);
+            assertTrue(frame.dirty());
+            assertEquals("2.0", frame.editor().orElseThrow().multiplier());
+            assertTrue(frame.notices().stream().noneMatch(notice ->
+                    notice.code().equals("SETTINGS_LOCK_FAILED")));
+            assertArrayEquals(standardBefore, Files.readAllBytes(temporaryDirectory.resolve("settings.json")));
+            assertArrayEquals(uunpBefore, Files.readAllBytes(temporaryDirectory.resolve("settings_UUNP.json")));
+        } finally {
+            if (reloadWorker != null && reloadWorker.isAlive()) {
+                reloadWorker.interrupt();
+                reloadWorker.join(TimeUnit.SECONDS.toMillis(5));
+            }
+            Files.writeString(release, "release");
+            if (!holder.waitFor(10, TimeUnit.SECONDS)) {
+                holder.destroyForcibly();
+                holder.waitFor(10, TimeUnit.SECONDS);
+            }
+        }
+    }
+
     /** Dirty Reload cancellation retains the draft, while Save persists it before the original Reload continues. */
     @Test
     void dirtySettingsReloadConfirmsAndSavesBeforeReloading() throws Exception {
@@ -1516,7 +1649,7 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** A blocking startup Settings diagnostic becomes durable Activity and prevents imports from consuming empties. */
+    /** Startup Settings failure stays visible and blocks import and generation from consuming fallback values. */
     @Test
     void invalidStartupSettingsAreVisibleAndBlockBodySlideImport() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -1534,11 +1667,14 @@ class WorkbenchControllerTest {
             controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, rejected);
 
             assertTrue(((Button) loader.getNamespace().get("importBodySlideButton")).isDisabled());
+            assertTrue(((Button) loader.getNamespace().get("generateOutputButton")).isDisabled());
             @SuppressWarnings("unchecked")
             ListView<WorkbenchFeedback.ActivityRecord> activity =
                     (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
             assertEquals(1, activity.getItems().size());
             assertTrue(activity.getItems().getFirst().message().contains("SETTINGS_JSON_MALFORMED"));
+            sendControlKey(root, KeyCode.G);
+            assertEquals(1, activity.getItems().size());
             stage.close();
         });
     }
@@ -2594,6 +2730,96 @@ class WorkbenchControllerTest {
         });
     }
 
+    /** A persistent preview diagnostic must not turn a successful Duplicate into failed Activity validation. */
+    @Test
+    void templatesDuplicateWithUnavailablePreviewRecordsTheMutation() throws Exception {
+        SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());
+        try {
+            WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+            flow.apply(SliderPresetEdits.create("Alpha"));
+            flow.apply(SliderPresetEdits.setSliderChoice("Alpha", new SliderChoiceSnapshot(
+                    "Overflow", false, Integer.valueOf(10), Integer.valueOf(200),
+                    10, 200, 100, 100, false)));
+
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+                loader.load();
+                WorkbenchController controller = loader.getController();
+                Stage stage = new Stage();
+                try {
+                    controller.attach(flow, stage, new RecordingPlatform());
+                    controller.sliderPresetListNode().getSelectionModel().selectFirst();
+                    ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Beta");
+                    ((Button) loader.getNamespace().get("duplicateSliderPresetButton")).fire();
+
+                    assertEquals(List.of("Alpha", "Beta"), flow.frame().snapshot().getSliderPresets().stream()
+                            .map(SliderPresetSnapshot::getName).toList());
+                    assertEquals("TEMPLATE_PREVIEW_NON_FINITE",
+                            controller.templatesFrame().diagnostics().getFirst().getCode());
+                    @SuppressWarnings("unchecked")
+                    ListView<WorkbenchFeedback.ActivityRecord> activity =
+                            (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+                    assertEquals(1, activity.getItems().size(), activity.getItems().stream()
+                            .map(item -> item.operation() + ": " + item.message()).toList().toString());
+                    assertEquals("Duplicate Slider Preset", activity.getItems().getFirst().operation());
+                    assertEquals(WorkbenchFeedback.Disposition.COMPLETED,
+                            activity.getItems().getFirst().disposition());
+                } finally {
+                    stage.close();
+                }
+            });
+        } finally {
+            SettingsTestSupport.restoreRepositorySettings();
+        }
+    }
+
+    /** A failure during a pending Close cannot offer Retry while coordinator admission remains shut down. */
+    @Test
+    void pendingShutdownFailureDialogDoesNotOfferUnadmittableRetry() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The synthetic commit settles before prolonged-cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            try {
+                controller.attach(flow, stage, platform);
+                AtomicReference<JobCoordinator.Submission<String>> retryable = new AtomicReference<>();
+                JobCoordinator.Submission<String> failing = new JobCoordinator.Submission<>(
+                        new JobCoordinator.Operation("Synthetic export", List.of(), List.of(), Optional.empty()),
+                        context -> {
+                            assertTrue(context.beginCommit("Installing export"));
+                            WindowEvent closeRequest = new WindowEvent(stage, WindowEvent.WINDOW_CLOSE_REQUEST);
+                            stage.getOnCloseRequest().handle(closeRequest);
+                            assertTrue(closeRequest.isConsumed());
+                            return JobCoordinator.Result.failed("Export failed.", List.of());
+                        }, (attempt, result) -> {
+                            // This job has no domain publication; only failure feedback is under test.
+                        }, Optional.of(retryable::get));
+                retryable.set(failing);
+                assertTrue(jobs.submit(failing).admitted());
+
+                worker.runNext();
+
+                assertNotNull(platform.failureSpec);
+                assertFalse(platform.failureSpec.actions().contains(WorkbenchFeedback.DialogAction.RETRY));
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
     /**
      * Malformed Open keeps the ProjectSession code, source path, JSON element, line, and column visible.
      */
@@ -2661,6 +2887,74 @@ class WorkbenchControllerTest {
             assertEquals(java.util.List.of("Project published"),
                     retried.jobDetails().orElseThrow().effectsCommitted());
             stage.close();
+        });
+    }
+
+    /** Activity's historical retry flag cannot enable Retry or imply current availability after factory eviction. */
+    @Test
+    void evictedActivityRetryIsDisabled() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Each deterministic failure settles before prolonged-cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, new RecordingPlatform());
+                stage.show();
+                AtomicReference<JobCoordinator.Submission<String>> retryable = new AtomicReference<>();
+                JobCoordinator.Submission<String> failing = new JobCoordinator.Submission<>(
+                        new JobCoordinator.Operation("Retry history probe", List.of(), List.of(), Optional.empty()),
+                        context -> JobCoordinator.Result.failed("Probe failed.", List.of()),
+                        (attempt, result) -> {
+                            // This probe has no domain publication; only retained retry history is under test.
+                        }, Optional.of(retryable::get));
+                retryable.set(failing);
+                JobCoordinator.AttemptId oldest = null;
+                int attempts = 0;
+                do {
+                    assertTrue(jobs.submit(failing).admitted());
+                    worker.runNext();
+                    if (oldest == null)
+                        oldest = jobs.frame().attempt().orElseThrow().id();
+                    attempts++;
+                    assertTrue(attempts <= 64, "retry history did not release its oldest factory");
+                } while (jobs.isRetryAvailable(oldest));
+
+                @SuppressWarnings("unchecked")
+                ListView<WorkbenchFeedback.ActivityRecord> activity =
+                        (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
+                long oldestAttemptId = oldest.value();
+                WorkbenchFeedback.ActivityRecord original = activity.getItems().stream()
+                        .filter(item -> item.jobDetails().stream()
+                                .anyMatch(details -> details.attemptId() == oldestAttemptId))
+                        .findFirst().orElseThrow();
+                assertTrue(original.jobDetails().orElseThrow().retryAvailable());
+                activity.getSelectionModel().select(original);
+                assertTrue(((Button) loader.getNamespace().get("retryActivityButton")).isDisabled());
+                activity.scrollTo(original);
+                root.applyCss();
+                root.layout();
+                javafx.scene.control.ListCell<?> cell = activity.lookupAll(".list-cell").stream()
+                        .filter(node -> node instanceof javafx.scene.control.ListCell<?> item
+                                && item.getItem() == original)
+                        .map(node -> (javafx.scene.control.ListCell<?>) node)
+                        .findFirst().orElseThrow();
+                assertTrue(cell.getAccessibleHelp().contains("Retry offered at completion: true"));
+            } finally {
+                stage.close();
+            }
         });
     }
 
@@ -3063,6 +3357,61 @@ class WorkbenchControllerTest {
         });
     }
 
+    /** Theme selection updates the live appearance before its profile write runs on the application worker. */
+    @Test
+    void themePersistenceRunsAfterVisualSelectionOnTheWorker() throws Exception {
+        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        assertTrue(initialized.isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        ManualExecutor publication = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, publication,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The controlled theme save settles before prolonged cancellation is relevant.
+                }, failure -> { throw new AssertionError("Unexpected callback failure", failure); });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        AtomicReference<Boolean> savedOnFxThread = new AtomicReference<>();
+        AtomicReference<WorkbenchAppearance.ThemeChoice> savedChoice = new AtomicReference<>();
+        AtomicReference<Stage> stageReference = new AtomicReference<>();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), WorkbenchAppearance.ThemeChoice.SYSTEM,
+                    choice -> {
+                        savedChoice.set(choice);
+                        savedOnFxThread.set(Platform.isFxApplicationThread());
+                    }, temporaryDirectory, initialized,
+                    GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
+            publication.runNext();
+            stageReference.set(stage);
+            @SuppressWarnings("unchecked")
+            ComboBox<WorkbenchAppearance.ThemeChoice> choice =
+                    (ComboBox<WorkbenchAppearance.ThemeChoice>) loader.getNamespace().get("themeChoice");
+            choice.setValue(WorkbenchAppearance.ThemeChoice.LIGHT);
+            choice.fireEvent(new ActionEvent());
+
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-light")));
+            assertEquals("Light theme", ((Label) loader.getNamespace().get("appearanceStateText")).getText());
+            assertTrue(jobs.frame().active());
+            assertNull(savedChoice.get());
+        });
+
+        Thread themeWorker = worker.runNextAsync();
+        themeWorker.join();
+        assertEquals(WorkbenchAppearance.ThemeChoice.LIGHT, savedChoice.get());
+        assertEquals(Boolean.FALSE, savedOnFxThread.get());
+        FxTestToolkit.runOnFxThread(() -> {
+            for (int index = 0; index < 6 && jobs.frame().active(); index++)
+                publication.runNext();
+            assertFalse(jobs.frame().active());
+            stageReference.get().close();
+        });
+    }
+
     /**
      * At the accepted breakpoint, real side panes move into overlays and Esc returns focus to each launcher.
      */
@@ -3257,6 +3606,7 @@ class WorkbenchControllerTest {
         private final Deque<Optional<Path>> outputFileResponses = new ArrayDeque<>();
         private final Deque<Optional<List<Path>>> npcSourceResponses = new ArrayDeque<>();
         private final List<String> clipboardTexts = new java.util.ArrayList<>();
+        private WorkbenchFeedback.DialogSpec failureSpec;
         private int closeCount;
 
         /**
@@ -3316,9 +3666,10 @@ class WorkbenchControllerTest {
             return confirmationResponses.removeFirst();
         }
 
-        /** Runs the scripted boundary hook before returning the next failure action. */
+        /** Records the offered failure actions and runs the scripted hook before returning a response. */
         @Override
         public WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
+            failureSpec = spec;
             if (failureResponses.isEmpty())
                 return WorkbenchFeedback.DialogAction.CLOSE;
             failureHooks.removeFirst().run();

@@ -2,6 +2,8 @@ package com.asdasfa.jbs2bg.workbench.settings;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Optional;
 
 import org.junit.jupiter.api.AfterEach;
@@ -170,6 +172,89 @@ final class SettingsFeatureTest {
         assertEquals(1f, Settings.getMultiplier("Waist"));
     }
 
+    /** Removing one exact case variant retains inversion for the other visible Settings row. */
+    @Test
+    void removingCaseDistinctEntryRetainsInversionForRemainingEntry(@TempDir Path directory) {
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        Settings.Snapshot loaded = Settings.snapshot();
+        LinkedHashMap<String, Float> multipliers = new LinkedHashMap<>(loaded.standard().multipliers());
+        multipliers.put("Foo", 2f);
+        multipliers.put("foo", 3f);
+        ArrayList<String> inverted = new ArrayList<>(loaded.standard().inverted());
+        inverted.add("Foo");
+        Settings.Snapshot prepared = new Settings.Snapshot(new Settings.Profile(
+                loaded.standard().defaults(), multipliers, inverted), loaded.uunp());
+        assertTrue(Settings.persist(directory, prepared).isSuccessful());
+        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+
+        SettingsFeature.Update removed = feature.dispatch(new SettingsFeature.RemoveEntry("Foo"));
+
+        assertTrue(removed.accepted());
+        assertTrue(removed.frame().entries().stream().noneMatch(entry -> entry.name().equals("Foo")));
+        SettingsFeature.EntryFrame remaining = removed.frame().entries().stream()
+                .filter(entry -> entry.name().equals("foo")).findFirst().orElseThrow();
+        assertEquals(3f, remaining.multiplier().orElseThrow());
+        assertTrue(remaining.inverted());
+        SettingsFeature.SaveEffect save = assertInstanceOf(SettingsFeature.SaveEffect.class,
+                feature.dispatch(new SettingsFeature.Save()).effect().orElseThrow());
+        assertTrue(save.replacement().standard().inverted().contains("foo"));
+        assertFalse(save.replacement().standard().inverted().contains("Foo"));
+    }
+
+    /** Editing Inverted off clears the shared case-insensitive family even when another exact row remains. */
+    @Test
+    void editingCaseDistinctEntryCanClearSharedInversion(@TempDir Path directory) {
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        Settings.Snapshot loaded = Settings.snapshot();
+        LinkedHashMap<String, Float> multipliers = new LinkedHashMap<>(loaded.standard().multipliers());
+        multipliers.put("Foo", 2f);
+        multipliers.put("foo", 3f);
+        ArrayList<String> inverted = new ArrayList<>(loaded.standard().inverted());
+        inverted.add("Foo");
+        assertTrue(Settings.persist(directory, new Settings.Snapshot(new Settings.Profile(
+                loaded.standard().defaults(), multipliers, inverted), loaded.uunp())).isSuccessful());
+        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+
+        SettingsFeature.Update edited = feature.dispatch(new SettingsFeature.EditEntry(
+                "Foo", "Foo", Optional.empty(), Optional.empty(), Optional.of("2"), false));
+
+        assertTrue(edited.accepted());
+        assertFalse(edited.frame().entries().stream().filter(entry -> entry.name().equals("Foo"))
+                .findFirst().orElseThrow().inverted());
+        assertFalse(edited.frame().entries().stream().filter(entry -> entry.name().equals("foo"))
+                .findFirst().orElseThrow().inverted());
+        SettingsFeature.SaveEffect save = assertInstanceOf(SettingsFeature.SaveEffect.class,
+                feature.dispatch(new SettingsFeature.Save()).effect().orElseThrow());
+        assertTrue(save.replacement().standard().inverted().stream()
+                .noneMatch(name -> name.equalsIgnoreCase("Foo")));
+    }
+
+    /** Removing an exact row preserves a different exact inversion-only row in the same lookup family. */
+    @Test
+    void removingCaseDistinctEntryPreservesDifferentInversionToken(@TempDir Path directory) {
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        Settings.Snapshot loaded = Settings.snapshot();
+        LinkedHashMap<String, Float> multipliers = new LinkedHashMap<>(loaded.standard().multipliers());
+        multipliers.put("Foo", 2f);
+        multipliers.put("foo", 3f);
+        ArrayList<String> inverted = new ArrayList<>(loaded.standard().inverted());
+        inverted.add("FOO");
+        assertTrue(Settings.persist(directory, new Settings.Snapshot(new Settings.Profile(
+                loaded.standard().defaults(), multipliers, inverted), loaded.uunp())).isSuccessful());
+        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+
+        SettingsFeature.Update removed = feature.dispatch(new SettingsFeature.RemoveEntry("Foo"));
+
+        assertTrue(removed.accepted());
+        assertTrue(removed.frame().entries().stream().noneMatch(entry -> entry.name().equals("Foo")));
+        assertTrue(removed.frame().entries().stream().anyMatch(entry -> entry.name().equals("FOO")));
+        assertTrue(removed.frame().entries().stream().filter(entry -> entry.name().equals("foo"))
+                .findFirst().orElseThrow().inverted());
+        SettingsFeature.SaveEffect save = assertInstanceOf(SettingsFeature.SaveEffect.class,
+                feature.dispatch(new SettingsFeature.Save()).effect().orElseThrow());
+        assertTrue(save.replacement().standard().inverted().contains("FOO"));
+    }
+
     /** Discarding dirty Reload confirmation admits disk reload and replaces the draft only after success. */
     @Test
     void dirtyReloadDiscardReplacesTheDraftAfterCompletion(@TempDir Path directory) {
@@ -195,9 +280,10 @@ final class SettingsFeatureTest {
         assertEquals("", reloaded.frame().editor().orElseThrow().multiplier());
     }
 
-    /** A failed confirmed Reload retry retains the prior discard decision instead of prompting over the draft again. */
+    /** A failed Reload cannot reuse its old discard decision after the Settings draft changes again. */
     @Test
-    void failedConfirmedReloadRetryRecapturesTheWorkerEffect(@TempDir Path directory) throws Exception {
+    void failedConfirmedReloadRetryRequiresFreshConfirmationForNewDrafts(@TempDir Path directory)
+            throws Exception {
         assertTrue(Settings.initialize(directory).isSuccessful());
         SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
@@ -212,11 +298,17 @@ final class SettingsFeatureTest {
 
         SettingsFeature.Update failed = feature.complete(new SettingsFeature.ReloadCompletion(
                 reload.token(), Settings.initialize(reload.directory())));
+        assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
+                "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("3"), false)).accepted());
         SettingsFeature.Update retried = feature.retry(reload);
 
         assertFalse(failed.accepted());
-        assertTrue(failed.frame().dirty());
-        assertInstanceOf(SettingsFeature.ReloadEffect.class, retried.effect().orElseThrow());
+        assertFalse(retried.accepted());
+        assertTrue(retried.effect().isEmpty());
+        assertTrue(retried.frame().dirty());
+        assertEquals("3.0", retried.frame().editor().orElseThrow().multiplier());
+        assertInstanceOf(SettingsFeature.ReloadConfirmationEffect.class,
+                feature.dispatch(new SettingsFeature.Reload()).effect().orElseThrow());
     }
 
     /** Saving dirty Reload confirmation persists the draft before continuing the original Reload intent. */
@@ -390,6 +482,8 @@ final class SettingsFeatureTest {
         byte[] priorStandard = Files.readAllBytes(standard);
         byte[] priorUunp = Files.readAllBytes(uunp);
         Path transaction = Files.createDirectory(directory.resolve(".bs2bg-settings-stage-workbench"));
+        Files.writeString(transaction.resolve("owner"), "BS2BG Settings transaction v1\n",
+                java.nio.charset.StandardCharsets.US_ASCII);
         Files.move(standard, transaction.resolve("standard.backup"));
         Files.move(uunp, transaction.resolve("uunp.backup"));
         Files.copy(fixtures.resolve("standard.canonical.json"), standard);
@@ -450,5 +544,19 @@ final class SettingsFeatureTest {
 
         assertTrue(Files.isRegularFile(directory.resolve("workbench-generation.properties")));
         assertEquals(migrated, store.loadOrMigrate());
+    }
+
+    /** An oversized preference is rejected during attach and reports the existing profile failure notice. */
+    @Test
+    void oversizedGenerationPreferenceFallsBackWithNotice(@TempDir Path directory) throws Exception {
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        Files.writeString(directory.resolve("workbench-generation.properties"),
+                "omitRedundantSliders=true" + " ".repeat(4096));
+
+        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+
+        assertFalse(feature.frame().omitRedundantSliders());
+        assertTrue(feature.frame().notices().stream()
+                .anyMatch(notice -> notice.code().equals("GENERATION_PREFERENCES_IO_FAILED")));
     }
 }

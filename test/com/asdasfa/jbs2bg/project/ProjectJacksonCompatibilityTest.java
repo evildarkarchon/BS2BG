@@ -454,6 +454,27 @@ final class ProjectJacksonCompatibilityTest {
         assertNull(exception.getCause());
     }
 
+    /** Persisted slider ranges must obey the same bounds enforced for Project edits. */
+    @Test
+    void rejectsPersistedSliderPercentagesOutsideBoundsOrReversed() throws Exception {
+        String valid = Files.readString(FIXTURE_ROOT.resolve("semantic-equivalence.jbs2bg"));
+        List<String[]> invalid = List.of(
+                new String[]{"\"pctMin\": 10", "\"pctMin\": -1", "/pctMin"},
+                new String[]{"\"pctMax\": 90", "\"pctMax\": 101", "/pctMax"},
+                new String[]{"\"pctMin\": 10", "\"pctMin\": 91", "/pctMin"});
+        for (int index = 0; index < invalid.size(); index++) {
+            String[] sample = invalid.get(index);
+            Path source = temporaryDirectory.resolve("invalid-percentage-" + index + ".jbs2bg");
+            Files.writeString(source, valid.replace(sample[0], sample[1]));
+
+            ProjectJacksonAdapter.ProjectFormatException failure = assertThrows(
+                    ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source));
+
+            assertEquals(ProjectDiagnosticCodes.SLIDER_CHOICE_PERCENTAGE_INVALID, failure.code());
+            assertEquals("/SliderPresets/CBBE.Curvy/SetSliders/0" + sample[2], failure.path());
+        }
+    }
+
     /**
      * Project integer tokens retain exact Integer.parseInt syntax and signed bounds.
      */

@@ -22,6 +22,7 @@ import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
 import com.asdasfa.jbs2bg.filtering.SortKey;
 import com.asdasfa.jbs2bg.filtering.SortDirection;
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
+import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
@@ -637,7 +638,7 @@ public final class WorkbenchController {
                 + (details.effectsCommitted().isEmpty() ? "none" : String.join(", ", details.effectsCommitted()))
                 + ". Diagnostics: "
                 + (details.diagnosticCodes().isEmpty() ? "none" : String.join(", ", details.diagnosticCodes()))
-                + ". Retry available: " + details.retryAvailable() + ".";
+                + ". Retry offered at completion: " + details.retryAvailable() + ".";
     }
 
     /**
@@ -743,7 +744,7 @@ public final class WorkbenchController {
      * @throws NullPointerException  when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
-    private void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
+    void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
                         WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver,
                         Path settingsDirectory, Settings.InitializationResult settingsStartup,
                         GenerationPreferencesStore.MigrationPolicy migrationPolicy) {
@@ -1328,7 +1329,7 @@ public final class WorkbenchController {
                 setAccessibleText(target.getName());
                 setAccessibleHelp(count + (count == 1
                         ? " assigned Slider Preset" : " assigned Slider Presets")
-                        + (count == 0 ? ". Not included in Morphs output." : ". Included in Morphs output."));
+                        + ". " + morphOutputStatus(count));
             }
         });
         customMorphTargetList.getSelectionModel().selectedItemProperty().addListener(
@@ -1345,6 +1346,13 @@ public final class WorkbenchController {
                 event.consume();
             }
         });
+    }
+
+    /** Describes the Morphs line emitted even when a target or NPC has no Slider Preset assignments. */
+    private static String morphOutputStatus(int assignmentCount) {
+        return assignmentCount == 0
+                ? "Included in Morphs output without Slider Preset assignments."
+                : "Included in Morphs output.";
     }
 
     /** Configures the NPC catalog with identity-stable selection and keyboard type-ahead. */
@@ -1368,7 +1376,7 @@ public final class WorkbenchController {
                         + ". Form ID: " + npc.getFormId() + ".");
                 setAccessibleHelp(count + (count == 1
                         ? " assigned Slider Preset" : " assigned Slider Presets")
-                        + (count == 0 ? ". Not included in Morphs output." : ". Included in Morphs output."));
+                        + ". " + morphOutputStatus(count));
             }
         });
         npcMorphAssignmentList.getSelectionModel().selectedItemProperty().addListener(
@@ -1849,6 +1857,10 @@ public final class WorkbenchController {
 
     /** Dispatches one Output task and renders synchronous selection updates; Generate completes via observation. */
     private void dispatchOutput(OutputFeature.Intent intent) {
+        if (intent instanceof OutputFeature.Generate && !settingsFeature.frame().liveAvailable()) {
+            // Keyboard generation bypasses the disabled button, so enforce the same Settings prerequisite here.
+            return;
+        }
         OutputFeature.Update update = outputFeature.dispatch(Objects.requireNonNull(intent, "intent"));
         renderOutput(update.frame());
         update.effect().ifPresent(this::applyOutputEffect);
@@ -2203,11 +2215,14 @@ public final class WorkbenchController {
                 return recaptureSettingsSubmission(previous);
             }
 
-            /** Save needs a still-dirty valid draft; Reload always remains meaningful. */
+            /** Save needs a valid draft; dirty Reload must use the ordinary confirmation path. */
             @Override
             public Optional<String> unavailableReason() {
-                return previous instanceof SettingsFeature.SaveEffect
-                        ? settingsFeature.saveRetryUnavailableReason() : Optional.empty();
+                if (previous instanceof SettingsFeature.SaveEffect)
+                    return settingsFeature.saveRetryUnavailableReason();
+                if (previous instanceof SettingsFeature.ReloadEffect)
+                    return settingsFeature.reloadRetryUnavailableReason();
+                return Optional.empty();
             }
         };
     }
@@ -2223,8 +2238,11 @@ public final class WorkbenchController {
         return settingsSubmission(replacement);
     }
 
-    /** Executes only blocking Settings I/O on the worker and returns a detached tokenized result. */
-    private static JobCoordinator.Result<SettingsFeature.Completion> runSettingsEffect(
+    /**
+     * Executes blocking Settings I/O on the worker. Reload stays cancellable through lock acquisition and ordinary
+     * pair reads; the Settings seam enters commit immediately before recovery or publication can mutate state.
+     */
+    static JobCoordinator.Result<SettingsFeature.Completion> runSettingsEffect(
             SettingsFeature.Effect effect, JobCoordinator.Context context) {
         context.checkCancellation();
         String commitPhase = switch (effect) {
@@ -2234,7 +2252,8 @@ public final class WorkbenchController {
             case SettingsFeature.ReloadConfirmationEffect ignored -> throw new IllegalArgumentException(
                     "Reload confirmation cannot execute on the worker");
         };
-        if (!context.beginCommit(commitPhase))
+        boolean reloadEffect = effect instanceof SettingsFeature.ReloadEffect;
+        if (!reloadEffect && !context.beginCommit(commitPhase))
             return JobCoordinator.Result.cancelled("Settings operation cancelled.", List.of(), List.of());
         SettingsFeature.Completion completion;
         boolean successful;
@@ -2251,7 +2270,8 @@ public final class WorkbenchController {
                 failureSummary = "Settings could not be saved.";
             }
             case SettingsFeature.ReloadEffect reload -> {
-                Settings.InitializationResult result = Settings.initialize(reload.directory());
+                Settings.InitializationResult result = Settings.initialize(reload.directory(),
+                        () -> context.beginCommit(commitPhase));
                 completion = new SettingsFeature.ReloadCompletion(reload.token(), result);
                 successful = result.isSuccessful();
                 diagnostics = settingsDiagnostics(result);
@@ -2325,8 +2345,7 @@ public final class WorkbenchController {
     /** Applies one terminal worker result and continues a confirmed Close or Reload only after Save succeeds. */
     private void completeSettingsEffect(SettingsFeature.Effect effect,
                                         JobCoordinator.Result<SettingsFeature.Completion> result) {
-        SettingsFeature.Update update = result.value().isPresent()
-                ? settingsFeature.complete(result.value().orElseThrow()) : settingsFeature.cancel(effect.token());
+        SettingsFeature.Update update = applySettingsCompletion(settingsFeature, effect, result);
         renderSettings(update.frame());
         boolean published = update.accepted() && (update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED
                 || update.frame().outcome() == SettingsFeature.OutcomeKind.RELOADED
@@ -2352,6 +2371,25 @@ public final class WorkbenchController {
                 dispatchProject(WorkbenchProjectFlow.Intent.CLOSE);
             }
         }
+    }
+
+    /**
+     * Applies a Settings worker value only when its coordinator lifecycle accepted it. A cancellation won before
+     * commit may still carry a failed I/O value, which must not replace the retained draft with failure feedback.
+     *
+     * @param feature Settings draft state awaiting the effect
+     * @param effect tokenized worker effect being settled
+     * @param result authoritative coordinator result after cancellation classification
+     * @return the completed feature frame, or the unchanged frame after cancellation
+     */
+    static SettingsFeature.Update applySettingsCompletion(SettingsFeature feature, SettingsFeature.Effect effect,
+                                                          JobCoordinator.Result<SettingsFeature.Completion> result) {
+        Objects.requireNonNull(feature, "feature");
+        Objects.requireNonNull(effect, "effect");
+        Objects.requireNonNull(result, "result");
+        if (result.lifecycle() == JobCoordinator.Lifecycle.CANCELLED || result.value().isEmpty())
+            return feature.cancel(effect.token());
+        return feature.complete(result.value().orElseThrow());
     }
 
     /** Reprojects every Settings-dependent feature after the live pair is published. */
@@ -2664,8 +2702,13 @@ public final class WorkbenchController {
             publishSliderChoiceOutcome(intent, update);
             return;
         }
-        if (!update.frame().diagnostics().isEmpty()) {
-            String message = ProjectDiagnosticFormatter.format(update.frame().diagnostics());
+        // A retained preview failure describes current Settings, not validation of this Templates intent.
+        List<ProjectDiagnostic> operationDiagnostics = update.frame().diagnostics().stream()
+                .filter(diagnostic -> !ProjectOutputFormatter.SliderChoicePreviewException.CODE
+                        .equals(diagnostic.getCode()))
+                .toList();
+        if (!operationDiagnostics.isEmpty()) {
+            String message = ProjectDiagnosticFormatter.format(operationDiagnostics);
             renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
                     "Templates validation", WorkbenchFeedback.Severity.VALIDATION, message,
                     WorkbenchFeedback.Disposition.FAILED)));
@@ -2977,9 +3020,7 @@ public final class WorkbenchController {
                         ? " assigned Slider Preset" : " assigned Slider Presets");
                 morphTargetAssignmentCountText.setText(assignmentCount);
                 morphTargetAssignmentCountText.setAccessibleText(assignmentCount);
-                String outputStatus = count == 0
-                        ? "Not in Morphs output — assign at least one Slider Preset."
-                        : "Included in Morphs output.";
+                String outputStatus = morphOutputStatus(count);
                 morphTargetOutputStatusText.setText(outputStatus);
                 morphTargetOutputStatusText.setAccessibleText(outputStatus);
             }
@@ -3443,12 +3484,11 @@ public final class WorkbenchController {
         operationProgress.setVisible(false);
     }
 
-    /**
-     * Enables Activity Retry only for one selected retryable terminal attempt while admission is open.
-     */
+    /** Enables Activity Retry only while its factory is still retained and coordinator admission is open. */
     private void updateActivityRetry(WorkbenchFeedback.ActivityRecord selected) {
         boolean available = selected != null
-                && selected.jobDetails().stream().anyMatch(WorkbenchFeedback.JobDetails::retryAvailable)
+                && selected.jobDetails().stream().anyMatch(details -> projectFlow.jobs().isRetryAvailable(
+                        new JobCoordinator.AttemptId(details.attemptId())))
                 && !projectFlow.jobs().frame().active()
                 && !projectFlow.jobs().frame().shutdownRequested();
         retryActivityButton.setDisable(!available);
@@ -3474,9 +3514,7 @@ public final class WorkbenchController {
         }
     }
 
-    /**
-     * Connects System/Light/Dark selection to the live public-JavaFX appearance adapter and profile store.
-     */
+    /** Applies System/Light/Dark immediately while submitting its profile write to the application worker. */
     private void configureAppearance(WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver saver) {
         Objects.requireNonNull(saver, "saver");
         WorkbenchAppearance appearance = new WorkbenchAppearance(
@@ -3490,16 +3528,45 @@ public final class WorkbenchController {
             if (selected == null)
                 return;
             appearanceAdapter.selectTheme(selected);
-            try {
-                saver.save(selected);
-            } catch (IOException exception) {
-                renderFeedback(feedback.publish(new WorkbenchFeedback.Notification(
+            JobCoordinator.Admission admission = projectFlow.jobs().submit(themeSubmission(selected, saver));
+            if (!admission.admitted())
+                renderFeedback(feedback.publishStatus(new WorkbenchFeedback.Notification(
                         "Theme preference", WorkbenchFeedback.Severity.WARNING,
-                        "The selected theme could not be saved.",
+                        "The selected theme is active but could not be queued for saving.",
                         WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES)));
-            }
         });
         appearanceAdapter.start();
+    }
+
+    /**
+     * Captures one theme choice and profile writer for a worker-owned save. The coordinator publishes completion
+     * through Activity; a failed optional preference write leaves the already applied appearance active.
+     *
+     * @param selected immutable System, Light, or Dark choice selected on the JavaFX thread
+     * @param saver profile persistence action invoked only by the worker
+     * @return captured job submission with the selected choice as its completion value
+     */
+    private JobCoordinator.Submission<WorkbenchAppearance.ThemeChoice> themeSubmission(
+            WorkbenchAppearance.ThemeChoice selected, ThemeChoiceSaver saver) {
+        JobCoordinator.Operation operation = new JobCoordinator.Operation("Save Theme Preference", List.of(),
+                List.of(), Optional.of(selected.name()), JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED);
+        return new JobCoordinator.Submission<>(operation, context -> {
+            context.checkCancellation();
+            if (!context.beginCommit("Saving theme preference"))
+                return JobCoordinator.Result.cancelled("Theme preference save cancelled.", List.of(), List.of());
+            try {
+                saver.save(selected);
+                return JobCoordinator.Result.completed(selected, "Theme preference saved.",
+                        List.of("Theme preference saved"), List.of());
+            } catch (IOException exception) {
+                return JobCoordinator.Result.completedWithIssues(selected,
+                        "The selected theme could not be saved.", List.of(), List.of(
+                                new JobCoordinator.Diagnostic("THEME_PREFERENCE_SAVE_FAILED",
+                                        "The selected theme could not be saved.", Optional.empty())));
+            }
+        }, (attempt, result) -> {
+            // The coordinator publishes the worker outcome through the ordinary Activity path.
+        }, Optional.empty());
     }
 
     /**
@@ -4100,12 +4167,13 @@ public final class WorkbenchController {
         newProjectMenuItem.setDisable(blocked);
         openProjectMenuItem.setDisable(blocked);
         saveProjectMenuItem.setDisable(blocked);
+        themeChoice.setDisable(blocked);
         saveAsProjectMenuItem.setDisable(blocked);
         importBodySlideButton.setDisable(blocked);
         importNpcSourcesButton.setDisable(blocked);
         removeNpcSourceButton.setDisable(blocked || npcDatabaseFeature.frame().selectedSource().isEmpty());
         clearNpcDatabaseButton.setDisable(blocked || npcDatabaseFeature.frame().visibleRows().isEmpty());
-        generateOutputButton.setDisable(blocked);
+        generateOutputButton.setDisable(blocked || !settingsFeature.frame().liveAvailable());
         renderTemplates(templatesFeature.frame());
         renderMorphs(morphsFeature.frame());
         renderNpcDatabase(npcDatabaseFeature.frame());
@@ -4264,15 +4332,17 @@ public final class WorkbenchController {
                 .map(diagnostic -> diagnostic.code() + ": " + diagnostic.message()
                         + diagnostic.details().map(value -> System.lineSeparator() + value).orElse(""))
                 .toList());
+        boolean retryable = attempt.retryAvailable() && projectFlow.jobs().isRetryAvailable(attempt.id())
+                && !projectFlow.jobs().frame().shutdownRequested();
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
-                attempt.operation().name() + " failed", attempt.summary(), details, attempt.retryAvailable());
+                attempt.operation().name() + " failed", attempt.summary(), details, retryable);
         WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
         WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
         renderFeedback(pendingFrame);
         WorkbenchFeedback.DialogAction action = platform.completeFailure(spec, stage);
         renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
                 pending.token(), action)).frame());
-        if (action == WorkbenchFeedback.DialogAction.RETRY)
+        if (action == WorkbenchFeedback.DialogAction.RETRY && retryable)
             projectFlow.jobs().retry(attempt.id());
     }
 
@@ -4400,7 +4470,7 @@ public final class WorkbenchController {
      * Profile persistence function whose checked failure becomes nonmodal feedback.
      */
     @FunctionalInterface
-    private interface ThemeChoiceSaver {
+    interface ThemeChoiceSaver {
         /**
          * Persists one selected theme inside the active application profile.
          */

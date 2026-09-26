@@ -24,6 +24,8 @@ import java.util.function.Consumer;
 public final class JobCoordinator implements AutoCloseable {
 
     private static final Duration PROLONGED_CANCELLATION_DELAY = Duration.ofSeconds(5);
+    // Retry factories can retain complete captured output payloads, so only recent attempts remain replayable.
+    private static final int MAX_RETAINED_RETRY_FACTORIES = 16;
     private final Object lock = new Object();
     private final ExecutorService workerExecutor;
     private final Executor publicationExecutor;
@@ -391,6 +393,19 @@ public final class JobCoordinator implements AutoCloseable {
     }
 
     /**
+     * Reports whether a terminal attempt still has a retained retry factory. Activity records outlive this bounded
+     * history, so their original retry flag alone cannot determine whether Retry should be offered.
+     *
+     * @param attempt terminal attempt selected from Activity
+     * @return whether its retry factory is still retained
+     */
+    public boolean isRetryAvailable(AttemptId attempt) {
+        synchronized (lock) {
+            return completedRetryFactories.containsKey(Objects.requireNonNull(attempt, "attempt"));
+        }
+    }
+
+    /**
      * Captures a wildcard retry factory through a private generic bridge.
      */
     private <T> Admission recaptureRetry(AttemptId failedAttempt, RetryFactory<T> retryFactory) {
@@ -580,6 +595,7 @@ public final class JobCoordinator implements AutoCloseable {
             workerExecutor.shutdown();
             closed = true;
             observers.clear();
+            completedRetryFactories.clear();
         }
     }
 
@@ -659,8 +675,13 @@ public final class JobCoordinator implements AutoCloseable {
             current.finish(result, clock.instant());
             current.cancelTimer();
             if (result.lifecycle().retryEligible()) {
-                current.submission().retryFactory().ifPresent(factory ->
-                        completedRetryFactories.put(current.id(), factory));
+                current.submission().retryFactory().ifPresent(factory -> {
+                    completedRetryFactories.put(current.id(), factory);
+                    while (completedRetryFactories.size() > MAX_RETAINED_RETRY_FACTORIES) {
+                        AttemptId oldest = completedRetryFactories.keySet().iterator().next();
+                        completedRetryFactories.remove(oldest);
+                    }
+                });
             }
             active = null;
             published = commitFrame(current.attempt(), shutdownRequested);

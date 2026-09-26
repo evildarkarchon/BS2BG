@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 /**
  * Owns the one validated Standard/UUNP Settings value consumed by the application.
@@ -28,49 +31,103 @@ public final class Settings {
      * @return success with ordered warnings, or one stable failure without partial live-state mutation
      */
     public static synchronized InitializationResult initialize(Path workingDirectory) {
+        return initialize(workingDirectory, () -> true);
+    }
+
+    /**
+     * Initializes Settings with a worker-owned commit callback. The callback runs after lock acquisition and normal
+     * existing-pair reads, but before recovery, first-run publication, or live publication can change state.
+     *
+     * @param workingDirectory directory containing the paired Settings files
+     * @param commitAdmission callback invoked at most once to enter a non-cancellable commit phase
+     * @return initialized Settings and warnings, or a classified failure with the prior live pair retained
+     * @throws CancellationException when commit admission rejects an accepted cancellation
+     */
+    public static synchronized InitializationResult initialize(Path workingDirectory,
+                                                               BooleanSupplier commitAdmission) {
+        return initialize(workingDirectory, commitAdmission, SettingsDirectoryLock::close);
+    }
+
+    /**
+     * Runs the same initialization through an injected lock release for deterministic post-commit fault coverage.
+     *
+     * @param workingDirectory Settings pair directory
+     * @param commitAdmission one-time callback guarding recovery and publication
+     * @param lockClose release action for the acquired directory lock
+     * @return initialized Settings or a classified failure
+     */
+    static synchronized InitializationResult initialize(Path workingDirectory, BooleanSupplier commitAdmission,
+                                                        LockClose lockClose) {
         Objects.requireNonNull(workingDirectory, "workingDirectory");
+        Objects.requireNonNull(commitAdmission, "commitAdmission");
+        Objects.requireNonNull(lockClose, "lockClose");
         Path directory = workingDirectory.toAbsolutePath().normalize();
         Path standardSource = directory.resolve("settings.json");
         Path uunpSource = directory.resolve("settings_UUNP.json");
-        boolean recovered;
-        SettingsJacksonAdapter.SettingsCandidate candidate;
+        AtomicBoolean commitStarted = new AtomicBoolean();
+        BooleanSupplier beginCommitOnce = () -> {
+            if (commitStarted.get())
+                return true;
+            if (!commitAdmission.getAsBoolean())
+                throw new CancellationException("Settings initialization cancelled before publication.");
+            commitStarted.set(true);
+            return true;
+        };
+        boolean recovered = false;
+        SettingsJacksonAdapter.SettingsCandidate candidate = null;
         SettingsDirectoryLock directoryLock;
         try {
             directoryLock = SettingsDirectoryLock.acquire(directory);
         } catch (IOException exception) {
             return InitializationResult.failure(Failure.fromIo("SETTINGS_LOCK_FAILED", directory, exception));
         }
-        try (directoryLock) {
+        Failure loadFailure = null;
+        IOException closeFailure = null;
+        try {
             try {
-                recovered = SettingsPairPublisher.recover(directory, standardSource, uunpSource);
+                recovered = SettingsPairPublisher.recover(directory, standardSource, uunpSource, beginCommitOnce);
             } catch (IOException exception) {
-                return InitializationResult.failure(
-                        Failure.fromIo("SETTINGS_RECOVERY_FAILED", directory, exception));
+                loadFailure = Failure.fromIo("SETTINGS_RECOVERY_FAILED", directory, exception);
             }
+            if (loadFailure == null) {
+                try {
+                    candidate = loadCandidate(standardSource, uunpSource, beginCommitOnce);
+                    beginCommitOnce.getAsBoolean();
+                } catch (SettingsJacksonAdapter.SettingsFormatException exception) {
+                    loadFailure = Failure.fromAdapter(exception);
+                } catch (IOException exception) {
+                    loadFailure = Failure.fromIo("SETTINGS_PUBLISH_FAILED", directory, exception);
+                }
+            }
+        } finally {
             try {
-                candidate = loadCandidate(standardSource, uunpSource);
-            } catch (SettingsJacksonAdapter.SettingsFormatException exception) {
-                return InitializationResult.failure(Failure.fromAdapter(exception));
+                lockClose.close(directoryLock);
             } catch (IOException exception) {
-                return InitializationResult.failure(
-                        Failure.fromIo("SETTINGS_PUBLISH_FAILED", directory, exception));
+                closeFailure = exception;
             }
-        } catch (IOException exception) {
-            return InitializationResult.failure(Failure.fromIo("SETTINGS_LOCK_FAILED", directory, exception));
         }
+        if (loadFailure != null)
+            return InitializationResult.failure(loadFailure);
+        if (closeFailure != null && !commitStarted.get())
+            return InitializationResult.failure(Failure.fromIo("SETTINGS_LOCK_FAILED", directory, closeFailure));
 
+        // Once recovery or publication crossed the commit boundary, live Settings must follow the committed files.
         publish(candidate);
         List<Diagnostic> diagnostics = new ArrayList<>();
         if (recovered)
             diagnostics.add(Diagnostic.recovered(directory));
         diagnostics.addAll(candidate.diagnostics().stream().map(Diagnostic::fromAdapter).toList());
+        if (closeFailure != null)
+            diagnostics.add(Diagnostic.lockReleaseFailed(directory));
         return InitializationResult.success(diagnostics);
     }
 
     /**
-     * Loads existing sources and transactionally creates a canonical pair when either legacy file is absent.
+     * Reads an existing pair while cancellation is still possible, or enters commit before creating a missing pair.
+     * The caller owns the directory lock throughout this method.
      */
-    private static SettingsJacksonAdapter.SettingsCandidate loadCandidate(Path standardSource, Path uunpSource)
+    private static SettingsJacksonAdapter.SettingsCandidate loadCandidate(Path standardSource, Path uunpSource,
+                                                                          BooleanSupplier beginCommit)
             throws IOException {
         boolean standardExists = Files.exists(standardSource);
         boolean uunpExists = Files.exists(uunpSource);
@@ -85,7 +142,10 @@ public final class Settings {
                 ? SettingsJacksonAdapter.read(uunpSource, diagnostics) : defaults.uunp();
         SettingsJacksonAdapter.SettingsCandidate candidate = new SettingsJacksonAdapter.SettingsCandidate(
                 standard, uunp, diagnostics);
-        SettingsPairPublisher.publish(standardSource, uunpSource, SettingsJacksonAdapter.writePair(candidate));
+        SettingsJacksonAdapter.SettingsPairBytes encoded = SettingsJacksonAdapter.writePair(candidate);
+        if (!beginCommit.getAsBoolean())
+            throw new CancellationException("Settings initialization cancelled before first-run publication.");
+        SettingsPairPublisher.publish(standardSource, uunpSource, encoded);
         return candidate;
     }
 
@@ -156,11 +216,24 @@ public final class Settings {
      *
      * @param workingDirectory directory containing {@code settings.json} and {@code settings_UUNP.json}
      * @param replacement      complete immutable replacement pair
-     * @return success with recovery diagnostics, or one stable failure with the prior live pair retained
+     * @return success with non-blocking diagnostics, or a failure before the replacement pair was committed
      */
     public static synchronized PersistenceResult persist(Path workingDirectory, Snapshot replacement) {
+        return persist(workingDirectory, replacement, SettingsDirectoryLock::close);
+    }
+
+    /**
+     * Persists through an injected lock-release seam so a post-commit release failure can be verified with real files.
+     *
+     * @param workingDirectory Settings pair directory
+     * @param replacement      complete immutable replacement pair
+     * @param lockClose        release action for the acquired directory lock
+     * @return success with non-blocking diagnostics, or a classified pre-commit failure
+     */
+    static synchronized PersistenceResult persist(Path workingDirectory, Snapshot replacement, LockClose lockClose) {
         Objects.requireNonNull(workingDirectory, "workingDirectory");
         Objects.requireNonNull(replacement, "replacement");
+        Objects.requireNonNull(lockClose, "lockClose");
         Path directory = workingDirectory.toAbsolutePath().normalize();
         Path standardSource = directory.resolve("settings.json");
         Path uunpSource = directory.resolve("settings_UUNP.json");
@@ -178,28 +251,47 @@ public final class Settings {
         } catch (IOException exception) {
             return PersistenceResult.failure(Failure.fromIo("SETTINGS_LOCK_FAILED", directory, exception));
         }
-        boolean recovered;
-        try (directoryLock) {
+        boolean recovered = false;
+        Failure publicationFailure = null;
+        IOException closeFailure = null;
+        try {
             try {
                 recovered = SettingsPairPublisher.recover(directory, standardSource, uunpSource);
             } catch (IOException exception) {
-                return PersistenceResult.failure(
-                        Failure.fromIo("SETTINGS_RECOVERY_FAILED", directory, exception));
+                publicationFailure = Failure.fromIo("SETTINGS_RECOVERY_FAILED", directory, exception);
             }
+            if (publicationFailure == null) {
+                try {
+                    SettingsPairPublisher.publish(standardSource, uunpSource, encoded);
+                } catch (IOException exception) {
+                    publicationFailure = Failure.fromIo("SETTINGS_PUBLISH_FAILED", directory, exception);
+                }
+            }
+        } finally {
             try {
-                SettingsPairPublisher.publish(standardSource, uunpSource, encoded);
+                lockClose.close(directoryLock);
             } catch (IOException exception) {
-                return PersistenceResult.failure(
-                        Failure.fromIo("SETTINGS_PUBLISH_FAILED", directory, exception));
+                closeFailure = exception;
             }
-        } catch (IOException exception) {
-            return PersistenceResult.failure(Failure.fromIo("SETTINGS_LOCK_FAILED", directory, exception));
         }
+        if (publicationFailure != null)
+            return PersistenceResult.failure(publicationFailure);
 
+        // A committed disk pair must become live even if releasing its lock reports a later cleanup failure.
         publish(candidate);
-        List<Diagnostic> diagnostics = recovered
-                ? List.of(Diagnostic.recovered(directory)) : List.of();
+        List<Diagnostic> diagnostics = new ArrayList<>();
+        if (recovered)
+            diagnostics.add(Diagnostic.recovered(directory));
+        if (closeFailure != null)
+            diagnostics.add(Diagnostic.lockReleaseFailed(directory));
         return PersistenceResult.success(diagnostics);
+    }
+
+    /** Narrow lock-release fault seam for deterministic committed-write tests. */
+    @FunctionalInterface
+    interface LockClose {
+        /** Releases one already-acquired Settings directory lock. */
+        void close(SettingsDirectoryLock lock) throws IOException;
     }
 
     /**
@@ -399,6 +491,12 @@ public final class Settings {
                     "An interrupted Settings publication was rolled back before loading.");
         }
 
+        /** Warns that a committed replacement is live even though its lock could not be released cleanly. */
+        private static Diagnostic lockReleaseFailed(Path directory) {
+            return new Diagnostic("SETTINGS_LOCK_RELEASE_FAILED", directory.toString(), "/",
+                    "The Settings pair was committed, but its directory lock could not be released cleanly.");
+        }
+
         /**
          * @return stable machine-readable warning code
          */
@@ -583,7 +681,7 @@ public final class Settings {
             this.failure = failure;
         }
 
-        /** Returns one successful result carrying ordered recovery warnings. */
+        /** Returns one successful result carrying ordered non-blocking warnings. */
         private static PersistenceResult success(List<Diagnostic> diagnostics) {
             return new PersistenceResult(diagnostics, null);
         }
@@ -598,7 +696,7 @@ public final class Settings {
             return failure == null;
         }
 
-        /** @return ordered recovery warnings emitted before the replacement was installed */
+        /** @return ordered recovery and lock-release warnings */
         public List<Diagnostic> getDiagnostics() {
             return diagnostics;
         }

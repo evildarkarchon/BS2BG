@@ -72,6 +72,46 @@ class WorkbenchNavigationTest {
         assertEquals(outputLauncher, closed.focusTarget().orElseThrow());
     }
 
+    /** Area navigation replaces an Output return target from content that becomes hidden. */
+    @Test
+    void areaNavigationRebasesOpenOutputFocusReturn() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        WorkbenchNavigation.FocusTarget templatesEditor = new WorkbenchNavigation.FocusTarget(
+                WorkbenchNavigation.Area.TEMPLATES, WorkbenchNavigation.Landmark.EDITOR);
+        navigation.navigate(WorkbenchNavigation.Destination.OUTPUT, templatesEditor);
+        navigation.navigate(WorkbenchNavigation.Destination.MORPHS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.TEMPLATES,
+                        WorkbenchNavigation.Landmark.OUTPUT));
+
+        WorkbenchNavigation.Transition closed = navigation.dismiss();
+
+        assertEquals(WorkbenchNavigation.Area.MORPHS, closed.frame().activeArea());
+        assertFalse(closed.frame().outputDrawerVisible());
+        assertEquals(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                WorkbenchNavigation.Landmark.PRIMARY_CONTENT), closed.focusTarget().orElseThrow());
+    }
+
+    /** Narrow Area navigation returns from Output to content that remains visible after its overlay closes. */
+    @Test
+    void narrowAreaNavigationRebasesOpenOutputFocusReturnToTheEditor() {
+        WorkbenchNavigation navigation = new WorkbenchNavigation();
+        WorkbenchNavigation.FocusTarget templatesEditor = new WorkbenchNavigation.FocusTarget(
+                WorkbenchNavigation.Area.TEMPLATES, WorkbenchNavigation.Landmark.EDITOR);
+        navigation.resize(1199, templatesEditor);
+        navigation.navigate(WorkbenchNavigation.Destination.OUTPUT, templatesEditor);
+        navigation.navigate(WorkbenchNavigation.Destination.MORPHS,
+                new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.TEMPLATES,
+                        WorkbenchNavigation.Landmark.OUTPUT));
+        navigation.dismiss();
+
+        WorkbenchNavigation.Transition closed = navigation.dismiss();
+
+        assertEquals(WorkbenchNavigation.Overlay.NONE, closed.frame().overlay());
+        assertFalse(closed.frame().outputDrawerVisible());
+        assertEquals(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
+                WorkbenchNavigation.Landmark.EDITOR), closed.focusTarget().orElseThrow());
+    }
+
     /**
      * Automatic completion reveal makes Output visible without changing Area or stealing keyboard focus.
      */

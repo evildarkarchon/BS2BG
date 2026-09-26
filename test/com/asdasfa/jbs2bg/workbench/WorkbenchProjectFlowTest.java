@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -349,9 +350,7 @@ class WorkbenchProjectFlowTest {
                 .anyMatch(preset -> preset.getName().equals("Newer content")));
     }
 
-    /**
-     * A source changed after admission is stale even when its replacement remains a valid Project document.
-     */
+    /** A source changed after worker stamp capture is stale even when its replacement is a valid Project. */
     @Test
     void changedOpenSourceCannotPublishAsTheCapturedInput() throws Exception {
         assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
@@ -359,17 +358,29 @@ class WorkbenchProjectFlowTest {
         Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
+        AtomicBoolean replacedAfterRead = new AtomicBoolean();
+        jobs.observe(job -> {
+            if (!job.active() || job.attempt().isEmpty()
+                    || !job.attempt().orElseThrow().progress().phase().equals("Parsing Project")
+                    || !replacedAfterRead.compareAndSet(false, true))
+                return;
+            try {
+                Files.copy(Path.of("test-resources", "projects", "legacy-project-all-defaults.jbs2bg"), source,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.io.IOException exception) {
+                throw new AssertionError("Could not change the source after the worker read it", exception);
+            }
+        });
         ProjectSession session = ProjectSessions.create();
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session, jobs);
         WorkbenchProjectFlow.Frame before = flow.frame();
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
         flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selected(source));
-        Files.copy(Path.of("test-resources", "projects", "legacy-project-all-defaults.jbs2bg"), source,
-                StandardCopyOption.REPLACE_EXISTING);
 
         worker.runNext();
 
+        assertTrue(replacedAfterRead.get());
         JobCoordinator.Attempt terminal = jobs.frame().attempt().orElseThrow();
         assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, terminal.lifecycle());
         assertTrue(terminal.effectsCommitted().isEmpty());
@@ -378,6 +389,33 @@ class WorkbenchProjectFlowTest {
                         && diagnostic.message().contains("source changed")));
         assertEquals(before.snapshot(), session.getSnapshot());
         assertEquals(before, flow.frame());
+    }
+
+    /** The initial source stamp is taken on the worker, after chooser response has returned. */
+    @Test
+    void openCapturesInitialSourceStampWhenWorkerStarts() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path source = temporaryDirectory.resolve("worker-stamp-source.jbs2bg");
+        Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source);
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
+                "BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
+                .effect().orElseThrow();
+
+        WorkbenchProjectFlow.Update admitted = flow.respond(chooser.token(),
+                WorkbenchProjectFlow.Response.selected(source));
+        Files.copy(Path.of("test-resources", "projects", "legacy-project-all-defaults.jbs2bg"), source,
+                StandardCopyOption.REPLACE_EXISTING);
+        worker.runNext();
+
+        assertTrue(admitted.accepted());
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED,
+                jobs.frame().attempt().orElseThrow().lifecycle());
+        assertEquals(List.of("Project published"), jobs.frame().attempt().orElseThrow().effectsCommitted());
+        assertEquals(source.toAbsolutePath().normalize(),
+                flow.frame().snapshot().getFileIdentity().orElseThrow());
     }
 
     /**
@@ -690,6 +728,48 @@ class WorkbenchProjectFlowTest {
         assertEquals(ProjectDiagnosticCodes.PROJECT_FILE_WRITE_FAILED,
                 failed.frame().diagnostics().getFirst().getCode());
         assertTrue(failed.effect().isEmpty());
+    }
+
+    /** A later Activity retry saves the Project but leaves Close to recheck current Settings drafts. */
+    @Test
+    void retriedFailedCloseSaveDoesNotRetainOldCloseIntent() throws Exception {
+        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Path parent = Files.createDirectory(temporaryDirectory.resolve("retry-close-parent"));
+        Path source = parent.resolve("recovery-source.jbs2bg");
+        Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
+                source);
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = coordinator(worker);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow.Effect openChooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
+                .effect().orElseThrow();
+        flow.respond(openChooser.token(), WorkbenchProjectFlow.Response.selected(source));
+        worker.runNext();
+        assertTrue(flow.frame().snapshot().isDirty());
+        Files.delete(source);
+        Files.delete(parent);
+
+        WorkbenchProjectFlow.Effect confirmation = flow.request(WorkbenchProjectFlow.Intent.CLOSE)
+                .effect().orElseThrow();
+        flow.respond(confirmation.token(), WorkbenchProjectFlow.Response.save());
+        worker.runNext();
+        JobCoordinator.Attempt failed = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.FAILED, failed.lifecycle());
+        assertFalse(flow.frame().closed());
+
+        Files.createDirectory(parent);
+        assertTrue(jobs.retry(failed.id()).admitted());
+        worker.runNext();
+
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED,
+                jobs.frame().attempt().orElseThrow().lifecycle());
+        assertFalse(flow.frame().snapshot().isDirty());
+        assertFalse(flow.frame().closed());
+        assertTrue(Files.isRegularFile(source));
+        WorkbenchProjectFlow.Update freshClose = flow.request(WorkbenchProjectFlow.Intent.CLOSE);
+        assertTrue(freshClose.frame().closed());
+        assertEquals(WorkbenchProjectFlow.EffectKind.CLOSE_WINDOW,
+                freshClose.effect().orElseThrow().kind());
     }
 
     /**

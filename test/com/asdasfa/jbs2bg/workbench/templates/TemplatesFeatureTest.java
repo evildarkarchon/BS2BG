@@ -37,6 +37,7 @@ import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.project.SourceLocation;
+import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -152,6 +153,32 @@ class TemplatesFeatureTest {
         assertEquals(NameIdentity.of("Alpha"), rejected.frame().selection().orElseThrow());
     }
 
+    /** A disabled choice with an overflowing finite multiplier still renders a typed preview diagnostic. */
+    @Test
+    void disabledChoiceWithOverflowingMultiplierDoesNotBreakTemplatesRender() {
+        SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.setSliderChoice("Alpha", new SliderChoiceSnapshot(
+                "Overflow", false, Integer.valueOf(10), Integer.valueOf(200),
+                10, 200, 100, 100, false)));
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+
+        TemplatesFeature.Update selected = feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+
+        assertTrue(selected.accepted());
+        assertEquals("Preview unavailable", choiceNamed(selected.frame(), "Overflow").previewText());
+        assertEquals("TEMPLATE_PREVIEW_NON_FINITE", selected.frame().diagnostics().getFirst().getCode());
+        assertEquals("Alpha=", ProjectOutputFormatter.generate(projectFlow.frame().snapshot(), false)
+                .getTemplatesText());
+
+        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        TemplatesFeature.Update refreshed = feature.refreshSettings();
+        assertEquals("Overflow@2.0", choiceNamed(refreshed.frame(), "Overflow").previewText());
+        assertTrue(refreshed.frame().diagnostics().isEmpty());
+    }
+
     /**
      * All-Min edits every enabled row in one Project publication, leaves omitted rows untouched, and mutually
      * exclusive gang modes lock the rows without allowing the legacy All-Min/All-Max overlap.
@@ -246,6 +273,24 @@ class TemplatesFeatureTest {
         assertEquals(projectFlow.frame().sequence(), created.frame().projectSequence());
     }
 
+    /** Creating and selecting a preset releases state owned by the previous preset. */
+    @Test
+    void createSelectionClearsThePreviousPresetGangAndRename() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+        feature.dispatch(new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.ALL, true));
+        feature.dispatch(new TemplatesFeature.BeginRename());
+
+        TemplatesFeature.Update created = feature.dispatch(new TemplatesFeature.Create("Beta"));
+
+        assertEquals(NameIdentity.of("Beta"), created.frame().selection().orElseThrow());
+        assertTrue(created.frame().rename().isEmpty());
+        assertTrue(created.frame().editor().orElseThrow().gang().activeMode().isEmpty());
+    }
+
     /**
      * Filtering a selected identity out clears it permanently instead of retaining a hidden selection or restoring it
      * when the filter is removed.
@@ -300,6 +345,24 @@ class TemplatesFeatureTest {
                 .frame().selection().orElseThrow());
     }
 
+    /** A type-ahead selection must release the previous preset's inspector-owned gang lock. */
+    @Test
+    void typeAheadSelectionClearsThePreviousPresetGangMode() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.create("Beta"));
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+        feature.dispatch(new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.ALL, true));
+
+        TemplatesFeature.Update selected = feature.dispatch(new TemplatesFeature.TypeAhead('b'));
+
+        assertEquals(NameIdentity.of("Beta"), selected.frame().selection().orElseThrow());
+        assertTrue(selected.frame().editor().orElseThrow().gang().activeMode().isEmpty());
+        assertFalse(selected.frame().editor().orElseThrow().gang().rowsLocked());
+    }
+
     /**
      * Duplicate targets the selected logical identity, copies its immutable value through ProjectSession, and selects
      * the returned canonical copy.
@@ -319,6 +382,24 @@ class TemplatesFeatureTest {
         assertEquals(List.of("Alpha", "Beta"), names(duplicated.frame().visiblePresets()));
         assertEquals(NameIdentity.of("Beta"), duplicated.frame().selection().orElseThrow());
         assertTrue(duplicated.frame().visiblePresets().get(1).isUunp());
+    }
+
+    /** Duplicating and selecting a copy releases state owned by the source preset. */
+    @Test
+    void duplicateSelectionClearsTheSourcePresetGangAndRename() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+        feature.dispatch(new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.ALL, true));
+        feature.dispatch(new TemplatesFeature.BeginRename());
+
+        TemplatesFeature.Update duplicated = feature.dispatch(new TemplatesFeature.Duplicate("Beta"));
+
+        assertEquals(NameIdentity.of("Beta"), duplicated.frame().selection().orElseThrow());
+        assertTrue(duplicated.frame().rename().isEmpty());
+        assertTrue(duplicated.frame().editor().orElseThrow().gang().activeMode().isEmpty());
     }
 
     /**
@@ -357,6 +438,26 @@ class TemplatesFeatureTest {
                 .getSliderPresetNames());
         assertEquals(List.of("Gamma"), projectFlow.frame().snapshot().getNpcMorphAssignments().getFirst()
                 .getSliderPresetNames());
+    }
+
+    /** Selecting another preset abandons a rename draft owned by the previous selection. */
+    @Test
+    void selectingAnotherPresetCancelsThePreviousInlineRename() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.create("Beta"));
+        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
+        feature.dispatch(new TemplatesFeature.BeginRename());
+        feature.dispatch(new TemplatesFeature.ChangeRename("Gamma"));
+
+        TemplatesFeature.Update selected = feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Beta")));
+
+        assertEquals(NameIdentity.of("Beta"), selected.frame().selection().orElseThrow());
+        assertTrue(selected.frame().rename().isEmpty());
+        assertFalse(feature.dispatch(new TemplatesFeature.CommitRename()).accepted());
+        assertEquals(List.of("Alpha", "Beta"), names(feature.frame().visiblePresets()));
     }
 
     /**

@@ -123,14 +123,23 @@ final class SliderChoiceRow extends VBox {
     }
 
     /**
-     * Updates row-local percentage and exact BodyGen text during a pointer drag without publishing Project state.
+     * Updates row-local percentages and preview during a pointer drag without publishing Project state.
+     * Non-finite drafts remain visible as unavailable until the completed gesture publishes feature diagnostics.
      */
     private void renderDraft(int lower, int upper) {
         minimumValue.setText(lower + "%");
         maximumValue.setText(upper + "%");
-        preview.setText(ProjectOutputFormatter.formatSliderChoicePreview(
-                choice.snapshot().withPercentageRange(lower, upper),
-                editor.profile() == TemplatesFeature.Profile.UUNP));
+        String previewText;
+        try {
+            previewText = ProjectOutputFormatter.formatSliderChoicePreview(
+                    choice.snapshot().withPercentageRange(lower, upper),
+                    editor.profile() == TemplatesFeature.Profile.UUNP);
+        } catch (ProjectOutputFormatter.SliderChoicePreviewException exception) {
+            // A pointer draft has no committed feature frame for diagnostics; the completed range intent supplies it.
+            previewText = "Preview unavailable";
+        }
+        preview.setText(previewText);
+        preview.setAccessibleHelp("Preview: " + previewText);
     }
 
     /**
@@ -177,7 +186,7 @@ final class SliderChoiceRow extends VBox {
             else
                 persistence = " Explicit Project choice.";
             defaultState.setText(omission + persistence);
-            preview.setAccessibleHelp(omission + " Exact preview if enabled: " + choice.previewText());
+            preview.setAccessibleHelp(omission + " Preview: " + choice.previewText());
             minimum.setAccessibleText(choice.name() + " Minimum in Slider Preset " + presetName);
             maximum.setAccessibleText(choice.name() + " Maximum in Slider Preset " + presetName);
             minimum.setAccessibleHelp("Minimum " + choice.minimum() + " percent. Range 0 through 100.");

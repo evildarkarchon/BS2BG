@@ -3,6 +3,7 @@ package com.asdasfa.jbs2bg.data;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.channels.FileLockInterruptionException;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -29,7 +30,8 @@ final class SettingsDirectoryLock implements AutoCloseable {
 
     /**
      * Acquires the exclusive Settings lock for one existing working directory.
-     * The blocking lock deliberately spans recovery, candidate construction, and any paired file publication.
+     * The lock spans recovery, candidate construction, and any paired file publication. Waiting remains interruptible
+     * so a cancelled Reload does not block the cancelling JavaFX caller behind another process's lock.
      *
      * @param directory working directory that owns the Settings pair
      * @return an acquired lock whose close releases the operating-system resource
@@ -64,7 +66,7 @@ final class SettingsDirectoryLock implements AutoCloseable {
         FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
                 LinkOption.NOFOLLOW_LINKS);
         try {
-            FileLock acquired = immediate ? channel.tryLock() : channel.lock();
+            FileLock acquired = immediate ? channel.tryLock() : waitForLock(channel);
             if (acquired == null)
                 throw new IOException("Settings lock is already held by another process.");
             return new SettingsDirectoryLock(channel, acquired);
@@ -77,6 +79,31 @@ final class SettingsDirectoryLock implements AutoCloseable {
             if (exception instanceof IOException ioException)
                 throw ioException;
             throw new IOException("Settings lock is already held by this process.", exception);
+        }
+    }
+
+    /**
+     * Polls a held cross-process lock while the caller retains ownership of the open channel. Short waits let a
+     * cancelled worker stop without blocking the JavaFX thread that requests interruption.
+     *
+     * @param channel open Settings lock channel owned by the caller
+     * @return the acquired exclusive lock on that channel
+     * @throws IOException when acquisition fails or the waiting worker is interrupted
+     */
+    private static FileLock waitForLock(FileChannel channel) throws IOException {
+        while (true) {
+            if (Thread.currentThread().isInterrupted())
+                throw new FileLockInterruptionException();
+            FileLock acquired = channel.tryLock();
+            if (acquired != null)
+                return acquired;
+            try {
+                // Interrupting FileChannel.lock() can itself block on Windows until another process releases it.
+                Thread.sleep(50);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new FileLockInterruptionException();
+            }
         }
     }
 

@@ -100,6 +100,13 @@ public final class SettingsFeature {
         return Optional.empty();
     }
 
+    /** Requires a fresh Reload request to confirm any Settings drafts edited since a failed attempt. */
+    public Optional<String> reloadRetryUnavailableReason() {
+        return frame.dirty()
+                ? Optional.of("Reload retry is unavailable with unsaved Settings; use Reload Settings to confirm them.")
+                : Optional.empty();
+    }
+
     /**
      * Applies one task-oriented Settings intent on the serialized presentation lane.
      *
@@ -186,12 +193,16 @@ public final class SettingsFeature {
         Optional<Float> small = optionalFloat(draft.small());
         Optional<Float> big = optionalFloat(draft.big());
         Optional<Float> multiplier = optionalFloat(draft.multiplier());
+        if (!draft.inverted())
+            profile.clearInversionFamily(original);
         profile.remove(original);
         if (small.isPresent())
             profile.defaults.put(name, new DefaultSliderValue(small.orElseThrow(), big.orElseThrow()));
         multiplier.ifPresent(value -> profile.multipliers.put(name, value));
         if (draft.inverted())
             profile.inverted.add(name);
+        else
+            profile.clearInversionFamily(name);
         setSelectedName(name);
         clearTransientState();
         outcome = draftSnapshot().equals(baseline) ? OutcomeKind.UNCHANGED : OutcomeKind.CHANGED;
@@ -305,10 +316,11 @@ public final class SettingsFeature {
     }
 
     /**
-     * Recaptures current worker input for one failed Settings operation without repeating an already-answered dialog.
+     * Recaptures current worker input for one failed Settings operation. A dirty Reload must be requested again so
+     * the current drafts receive a fresh Save/Discard/Cancel decision.
      *
      * @param previous failed Save or Reload effect whose operation identity must be retained
-     * @return a fresh tokenized worker effect, or the unchanged frame when recapture is unavailable
+     * @return a fresh tokenized worker effect, or a rejected update when recapture is unavailable
      */
     public Update retry(Effect previous) {
         Objects.requireNonNull(previous, "previous");
@@ -316,7 +328,7 @@ public final class SettingsFeature {
             return new Update(false, frame);
         return switch (previous) {
             case SaveEffect saveEffect -> retrySave(saveEffect);
-            case ReloadEffect ignored -> captureReload();
+            case ReloadEffect ignored -> frame.dirty() ? new Update(false, frame) : captureReload();
             case PreferenceEffect preferenceEffect -> capturePreference(preferenceEffect.selected());
             case ReloadConfirmationEffect ignored -> new Update(false, frame);
         };
@@ -648,10 +660,20 @@ public final class SettingsFeature {
                     isInverted(name)));
         }
 
-        /** Removes all categories owned by one logical exact row, including case-insensitive inversion identity. */
+        /** Removes one exact row, preserving other exact inversion tokens and shared case-variant behavior. */
         private void remove(String name) {
+            Optional<String> remainingVariant = names().stream()
+                    .filter(other -> !other.equals(name) && other.equalsIgnoreCase(name)).findFirst();
+            boolean removedInversion = inverted.removeIf(value -> value.equals(name));
             defaults.remove(name);
             multipliers.remove(name);
+            // Transfer only a removed exact token; another exact token already keeps the family inverted.
+            if (removedInversion && !isInverted(name))
+                remainingVariant.ifPresent(inverted::add);
+        }
+
+        /** Clears one case-insensitive inversion family when an edit explicitly turns Inverted off. */
+        private void clearInversionFamily(String name) {
             inverted.removeIf(value -> value.equalsIgnoreCase(name));
         }
 

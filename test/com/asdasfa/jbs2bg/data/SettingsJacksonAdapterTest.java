@@ -12,6 +12,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -199,6 +201,8 @@ final class SettingsJacksonAdapterTest {
         byte[] priorStandard = Files.readAllBytes(standard);
         byte[] priorUunp = Files.readAllBytes(uunp);
         Path transaction = Files.createDirectory(directory.resolve(".bs2bg-settings-stage-interrupted"));
+        Files.writeString(transaction.resolve("owner"), "BS2BG Settings transaction v1\n",
+                StandardCharsets.US_ASCII);
         Files.move(standard, transaction.resolve("standard.backup"));
         Files.move(uunp, transaction.resolve("uunp.backup"));
         Files.copy(fixture("standard.canonical.json"), standard);
@@ -321,6 +325,132 @@ final class SettingsJacksonAdapterTest {
         assertEquals("CBBE Curvy=Waist@1.48:0.52, Ångström/形@0.0",
                 ProjectOutputFormatter.generate(opened.getSnapshot(), false)
                         .getTemplateLinesByPresetName().get("CBBE Curvy"));
+    }
+
+    /** A failed lock release after disk commit still makes the replacement pair live and reports cleanup trouble. */
+    @Test
+    void postCommitLockReleaseFailureKeepsCommittedSettingsLive(@TempDir Path directory) throws IOException {
+        Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
+        Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        Settings.Snapshot loaded = Settings.snapshot();
+        LinkedHashMap<String, Float> multipliers = new LinkedHashMap<>(loaded.standard().multipliers());
+        multipliers.put("Waist", 7f);
+        Settings.Snapshot replacement = new Settings.Snapshot(new Settings.Profile(
+                loaded.standard().defaults(), multipliers, loaded.standard().inverted()), loaded.uunp());
+
+        Settings.PersistenceResult result = Settings.persist(directory, replacement, lock -> {
+            lock.close();
+            throw new IOException("injected post-commit lock release failure");
+        });
+
+        assertTrue(result.isSuccessful());
+        assertEquals("SETTINGS_LOCK_RELEASE_FAILED", result.getDiagnostics().getLast().getCode());
+        assertEquals(7f, Settings.getMultiplier("Waist"));
+        assertEquals(7f, SettingsJacksonAdapter.readPair(directory.resolve("settings.json"),
+                directory.resolve("settings_UUNP.json")).standard().multipliers().get("Waist"));
+    }
+
+    /** Cancellation of a clean paired read reaches the commit callback once without changing live or disk state. */
+    @Test
+    void cancelledExistingPairInitializationLeavesPriorSettingsLive(@TempDir Path directory) throws IOException {
+        Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
+        Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        Settings.Snapshot before = Settings.snapshot();
+        byte[] standardBefore = Files.readAllBytes(directory.resolve("settings.json"));
+        byte[] uunpBefore = Files.readAllBytes(directory.resolve("settings_UUNP.json"));
+        AtomicInteger admissions = new AtomicInteger();
+
+        assertThrows(CancellationException.class, () -> Settings.initialize(directory, () -> {
+            admissions.incrementAndGet();
+            return false;
+        }));
+
+        assertEquals(1, admissions.get());
+        assertEquals(before, Settings.snapshot());
+        assertArrayEquals(standardBefore, Files.readAllBytes(directory.resolve("settings.json")));
+        assertArrayEquals(uunpBefore, Files.readAllBytes(directory.resolve("settings_UUNP.json")));
+    }
+
+    /** Cancellation before first-run pair creation leaves both production Settings files absent. */
+    @Test
+    void cancelledFirstRunInitializationDoesNotCreateSettingsPair(@TempDir Path directory) {
+        Settings.Snapshot before = Settings.snapshot();
+        AtomicInteger admissions = new AtomicInteger();
+
+        assertThrows(CancellationException.class, () -> Settings.initialize(directory, () -> {
+            admissions.incrementAndGet();
+            return false;
+        }));
+
+        assertEquals(1, admissions.get());
+        assertEquals(before, Settings.snapshot());
+        assertFalse(Files.exists(directory.resolve("settings.json")));
+        assertFalse(Files.exists(directory.resolve("settings_UUNP.json")));
+    }
+
+    /** Cancellation before owned recovery leaves its interrupted journal and partial files untouched. */
+    @Test
+    void cancelledRecoveryDoesNotRollbackOrDeleteTheJournal(@TempDir Path directory) throws IOException {
+        Path standard = directory.resolve("settings.json");
+        Path uunp = directory.resolve("settings_UUNP.json");
+        Files.copy(fixture("standard.json"), standard);
+        Files.copy(fixture("uunp.json"), uunp);
+        assertTrue(Settings.initialize(directory).isSuccessful());
+        Settings.Snapshot before = Settings.snapshot();
+        Path transaction = Files.createDirectory(directory.resolve(".bs2bg-settings-stage-interrupted"));
+        Files.writeString(transaction.resolve("owner"), "BS2BG Settings transaction v1\n",
+                StandardCharsets.US_ASCII);
+        Files.move(standard, transaction.resolve("standard.backup"));
+        Files.move(uunp, transaction.resolve("uunp.backup"));
+        Files.copy(fixture("standard.canonical.json"), standard);
+        byte[] partialStandard = Files.readAllBytes(standard);
+        AtomicInteger admissions = new AtomicInteger();
+
+        assertThrows(CancellationException.class, () -> Settings.initialize(directory, () -> {
+            admissions.incrementAndGet();
+            return false;
+        }));
+
+        assertEquals(1, admissions.get());
+        assertEquals(before, Settings.snapshot());
+        assertArrayEquals(partialStandard, Files.readAllBytes(standard));
+        assertFalse(Files.exists(uunp));
+        assertTrue(Files.isRegularFile(transaction.resolve("standard.backup")));
+        assertTrue(Files.isRegularFile(transaction.resolve("uunp.backup")));
+    }
+
+    /** First-run disk commit remains successful and live when releasing its lock reports a later failure. */
+    @Test
+    void firstRunInitializationPublishesAfterPostCommitLockReleaseFailure(@TempDir Path directory) {
+        Settings.InitializationResult result = Settings.initialize(directory, () -> true, lock -> {
+            lock.close();
+            throw new IOException("injected post-commit lock release failure");
+        });
+
+        assertTrue(result.isSuccessful());
+        assertEquals("SETTINGS_LOCK_RELEASE_FAILED", result.getDiagnostics().getLast().getCode());
+        assertTrue(Files.isRegularFile(directory.resolve("settings.json")));
+        assertTrue(Files.isRegularFile(directory.resolve("settings_UUNP.json")));
+        assertEquals(20, Settings.getDefaultValueSmall("Breasts"));
+    }
+
+    /** A failed pair read followed by lock-close trouble cannot replace the prior live Settings value. */
+    @Test
+    void preCommitInitializationFailureRetainsPriorLiveSettings(@TempDir Path directory) throws IOException {
+        Files.writeString(directory.resolve("settings.json"), "{");
+        Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
+        Settings.Snapshot before = Settings.snapshot();
+
+        Settings.InitializationResult result = Settings.initialize(directory, () -> true, lock -> {
+            lock.close();
+            throw new IOException("injected pre-commit lock release failure");
+        });
+
+        assertFalse(result.isSuccessful());
+        assertEquals(before, Settings.snapshot());
+        assertEquals("{", Files.readString(directory.resolve("settings.json")));
     }
 
     /** A Workbench save fails immediately when another writer owns the pair lock and retains the live snapshot. */

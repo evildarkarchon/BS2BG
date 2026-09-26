@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg.presentation;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -13,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +30,7 @@ import java.util.stream.Stream;
  */
 public final class OutputArtifactPublisher {
     private static final String STAGING_PREFIX = ".bs2bg-output-stage-";
+    private static final String OWNER_MARKER = "owner";
     private static final String PREPARED_MARKER = "prepared";
     private static final String PREPARED_STAGED_MARKER = "prepared.staged";
     private static final String COMMITTED_MARKER = "committed";
@@ -80,16 +83,41 @@ public final class OutputArtifactPublisher {
      */
     static void publishAll(Path targetDirectory, List<? extends OutputArtifact> artifacts,
                            PublicationContext context, AtomicMove atomicMove) throws IOException {
+        publishAll(targetDirectory, artifacts, context, atomicMove, OutputDirectoryLock::close);
+    }
+
+    /**
+     * Publishes with an injectable lock close so a post-commit close failure can be verified without relying on
+     * provider-specific filesystem faults. The closer must release the acquired lock even when it reports failure.
+     *
+     * @param targetDirectory existing destination directory
+     * @param artifacts       complete accepted artifact set
+     * @param context         cancellation, progress, and commit-linearization receiver
+     * @param atomicMove      same-filesystem atomic replacement used for install and rollback
+     * @param lockCloser      releases the acquired destination lock
+     * @throws IOException when publication fails before its complete batch has committed
+     */
+    static void publishAll(Path targetDirectory, List<? extends OutputArtifact> artifacts,
+                           PublicationContext context, AtomicMove atomicMove, LockCloser lockCloser)
+            throws IOException {
         Objects.requireNonNull(context, "context");
         Objects.requireNonNull(atomicMove, "atomicMove");
+        Objects.requireNonNull(lockCloser, "lockCloser");
         Path directory = normalizeDirectory(targetDirectory);
         OutputDirectoryLock directoryLock = OutputDirectoryLock.acquire(directory);
-        try (directoryLock) {
+        Closeable ownedLock = () -> lockCloser.close(directoryLock);
+        boolean published = false;
+        try (ownedLock) {
             context.checkCancellation();
             // Once admitted, prior-transaction housekeeping must finish without leaving another mixed batch.
             recover(directory);
             List<Publication> publications = preflight(directory, artifacts, context);
             publishSet(directory, publications, context, atomicMove);
+            published = true;
+        } catch (IOException failure) {
+            if (!published)
+                throw failure;
+            // The batch is already committed; lock cleanup cannot turn installed bytes into a failed export.
         }
     }
 
@@ -102,10 +130,17 @@ public final class OutputArtifactPublisher {
      * @throws IOException when recovery state is ambiguous, malformed, or cannot restore the complete prior batch
      */
     private static void recover(Path directory) throws IOException {
-        List<Path> transactions;
+        List<Path> candidates;
         try (Stream<Path> entries = Files.list(directory)) {
-            transactions = entries.filter(path -> path.getFileName().toString().startsWith(STAGING_PREFIX))
+            candidates = entries.filter(path -> path.getFileName().toString().startsWith(STAGING_PREFIX))
                     .toList();
+        }
+        List<Path> transactions = new ArrayList<>();
+        for (Path candidate : candidates) {
+            if (!Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(candidate))
+                throw new IOException("Output recovery state is not a transaction directory: " + candidate);
+            if (hasOwnerMarker(candidate))
+                transactions.add(candidate);
         }
         if (transactions.isEmpty())
             return;
@@ -135,6 +170,26 @@ public final class OutputArtifactPublisher {
         if (recoveryFailure != null)
             throw new IOException("Output recovery could not restore the complete prior batch.", recoveryFailure);
         deleteTree(transaction);
+    }
+
+    /**
+     * Identifies a publisher-owned transaction before recovery may delete its tree. An unmarked directory can only
+     * be a user directory or a crash residue from before any live replacement was possible.
+     */
+    private static boolean hasOwnerMarker(Path transaction) throws IOException {
+        Path marker = transaction.resolve(OWNER_MARKER);
+        if (!Files.exists(marker, LinkOption.NOFOLLOW_LINKS))
+            return false;
+        byte[] expected = ownerMarkerBytes(transaction);
+        if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(marker)
+                || Files.size(marker) != expected.length || !Arrays.equals(Files.readAllBytes(marker), expected))
+            throw new IOException("Output recovery owner marker is malformed: " + marker);
+        return true;
+    }
+
+    /** Binds the forced transaction marker to its randomly named staging directory. */
+    private static byte[] ownerMarkerBytes(Path transaction) {
+        return ("BS2BG Output transaction: " + transaction.getFileName()).getBytes(StandardCharsets.UTF_8);
     }
 
     /** Returns the prepared artifact count, or empty only when no live replacement could have started. */
@@ -340,6 +395,8 @@ public final class OutputArtifactPublisher {
         boolean preserveRecoveryDirectory = false;
         Throwable publicationFailure = null;
         try {
+            // Recovery must recognize ownership before any journal or live destination can be written.
+            writeAndFlush(stagingDirectory.resolve(OWNER_MARKER), ownerMarkerBytes(stagingDirectory));
             context.beginStaging(publications.size());
             stageArtifacts(stagingDirectory, publications, context);
             context.checkCancellation();
@@ -591,6 +648,18 @@ public final class OutputArtifactPublisher {
          * @throws IOException when the move cannot complete atomically
          */
         void move(Path source, Path target) throws IOException;
+    }
+
+    /** Destination lock close injected only for deterministic post-commit fault tests. */
+    @FunctionalInterface
+    interface LockCloser {
+        /**
+         * Releases the lock, then reports any close failure.
+         *
+         * @param lock acquired lock owned by this publication
+         * @throws IOException when releasing the lock fails
+         */
+        void close(OutputDirectoryLock lock) throws IOException;
     }
 
     /** Mutable command-local transaction state that never crosses the publisher interface. */
