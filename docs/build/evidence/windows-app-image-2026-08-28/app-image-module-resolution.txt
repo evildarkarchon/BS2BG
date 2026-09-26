@@ -1,0 +1,37 @@
+java --module-path D:\repos\BS2BG\target\app-image-measure\javafx.base\classes;D:\repos\BS2BG\target\app-image-measure\javafx.graphics\classes;D:\repos\BS2BG\target\app-image-measure\javafx.controls\classes;D:\repos\BS2BG\target\app-image-measure\javafx.fxml\classes --add-modules java.base,java.datatransfer,java.xml,java.prefs,java.desktop,java.logging,java.scripting,javafx.base,jdk.unsupported,javafx.graphics,javafx.controls,javafx.fxml,jdk.charsets --limit-modules java.base,java.datatransfer,java.xml,java.prefs,java.desktop,java.logging,java.scripting,javafx.base,jdk.unsupported,javafx.graphics,javafx.controls,javafx.fxml,jdk.charsets --show-module-resolution --version
+
+root jdk.charsets jrt:/jdk.charsets
+root java.logging jrt:/java.logging
+root java.xml jrt:/java.xml
+root jdk.unsupported jrt:/jdk.unsupported
+root java.datatransfer jrt:/java.datatransfer
+root javafx.base file:///D:/repos/BS2BG/target/app-image-measure/javafx.base/classes/
+root java.desktop jrt:/java.desktop
+root javafx.graphics file:///D:/repos/BS2BG/target/app-image-measure/javafx.graphics/classes/
+root javafx.controls file:///D:/repos/BS2BG/target/app-image-measure/javafx.controls/classes/
+root java.scripting jrt:/java.scripting
+root javafx.fxml file:///D:/repos/BS2BG/target/app-image-measure/javafx.fxml/classes/
+root java.prefs jrt:/java.prefs
+root java.base jrt:/java.base
+java.prefs requires java.xml jrt:/java.xml
+javafx.fxml requires java.scripting jrt:/java.scripting
+javafx.fxml requires javafx.base file:///D:/repos/BS2BG/target/app-image-measure/javafx.base/classes/
+javafx.fxml requires java.xml jrt:/java.xml
+javafx.fxml requires javafx.graphics file:///D:/repos/BS2BG/target/app-image-measure/javafx.graphics/classes/
+javafx.controls requires javafx.base file:///D:/repos/BS2BG/target/app-image-measure/javafx.base/classes/
+javafx.controls requires javafx.graphics file:///D:/repos/BS2BG/target/app-image-measure/javafx.graphics/classes/
+javafx.graphics requires jdk.unsupported jrt:/jdk.unsupported
+javafx.graphics requires javafx.base file:///D:/repos/BS2BG/target/app-image-measure/javafx.base/classes/
+javafx.graphics requires java.xml jrt:/java.xml
+javafx.graphics requires java.desktop jrt:/java.desktop
+java.desktop requires java.datatransfer jrt:/java.datatransfer
+java.desktop requires java.xml jrt:/java.xml
+java.desktop requires java.prefs jrt:/java.prefs
+javafx.base requires java.desktop jrt:/java.desktop
+java.datatransfer binds java.desktop jrt:/java.desktop
+java.base binds java.desktop jrt:/java.desktop
+java.base binds jdk.charsets jrt:/jdk.charsets
+java.base binds java.logging jrt:/java.logging
+openjdk 25.0.4.1 2026-08-18 LTS
+OpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS)
+OpenJDK 64-Bit Server VM Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS, mixed mode)

@@ -1,0 +1,417 @@
+{
+  "schema": "bs2bg.windows-app-image/3",
+  "recordedAtUtc": "2026-09-19T09:47:34.1322577+00:00",
+  "gitCommit": "f4281ac6fcb916f5f72eca5eb7498b8522ed4125",
+  "checkpointResult": true,
+  "sourceCheckout": {
+    "required": true,
+    "clean": true,
+    "commit": "f4281ac6fcb916f5f72eca5eb7498b8522ed4125"
+  },
+  "application": {
+    "name": "BS2BG",
+    "version": "1.1.2",
+    "mainClass": "com.asdasfa.jbs2bg.Launcher",
+    "mainJar": "jbs2bg-1.0-SNAPSHOT.jar",
+    "description": "jBS2BG: BodySlide Slider Presets to BodyGen and BodyTypes of Skyrim outputs",
+    "vendor": "asdasfa"
+  },
+  "gate": {
+    "source": "verify-java25.ps1 (this run)",
+    "evidence": "target/reproducibility/java25-verification.json",
+    "completeApplicationGate": true,
+    "tests": 464,
+    "mavenVersion": "3.9.16",
+    "mavenVersionOutput": [
+      "Apache Maven 3.9.16 (2bdd9fddda4b155ebf8000e807eb73fd829a51d5)",
+      "Maven home: C:\\Users\\evild\\.m2\\wrapper\\dists\\apache-maven-3.9.16\\0daed3be3ebd1c706f0e69e8b07c6b73f5cc4ea3dfce72a8d0ec2e849ca2ddb0",
+      "Java version: 25.0.4.1, vendor: Eclipse Adoptium, runtime: C:\\Users\\evild\\AppData\\Local\\BS2BG\\build-toolchains\\temurin-25.0.4.1+1-windows-x64",
+      "Default locale: en_US, platform encoding: UTF-8",
+      "OS name: \"windows 11\", version: \"10.0\", arch: \"amd64\", family: \"windows\""
+    ]
+  },
+  "toolchain": {
+    "jdkId": "temurin-25.0.4.1+1-windows-x64",
+    "implementor": "Eclipse Adoptium",
+    "implementorVersion": "Temurin-25.0.4.1+1",
+    "javaVersion": "25.0.4.1",
+    "javaRuntimeVersion": "25.0.4.1+1-LTS",
+    "jdkArchiveSha256": "00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283",
+    "javafxId": "openjfx-25.0.4-windows-x64-jmods",
+    "javafxVersion": "25.0.4",
+    "javafxArchiveSha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
+    "architecture": {
+      "processorArchitecture": "AMD64",
+      "jdkReleaseOsArch": "x86_64",
+      "javaOsArch": "amd64"
+    },
+    "packagingTools": {
+      "jdeps": "25.0.4.1",
+      "jimage": "25.0.4.1",
+      "jlink": "25.0.4.1",
+      "jpackage": "25.0.4.1"
+    }
+  },
+  "payload": {
+    "stagingDir": "target/app-image-input",
+    "artifacts": [
+      {
+        "path": "jbs2bg-1.0-SNAPSHOT.jar",
+        "sha256": "381e46eb8982125492580fa856c4a662518c40e7881e98a88d22d409b3e31001",
+        "size": 782970
+      },
+      {
+        "path": "lib/jackson-core-3.1.5.jar",
+        "sha256": "9431b7fa2673bbb618c11d865fe15e13222fd182a214ff998cb7e56afd8f35d2",
+        "size": 598605
+      },
+      {
+        "path": "lib/juniversalchardet-2.1.0.jar",
+        "sha256": "988d74471cea29f6c64d4066c9f31a0d0f10a8241f79868ec1a04da42c6a8bed",
+        "size": 222853
+      }
+    ],
+    "dependencyTree": "target/reproducibility/dependency-tree.txt",
+    "javafxOnClasspath": false,
+    "jsonCodec": {
+      "coordinate": "tools.jackson.core:jackson-core:3.1.5",
+      "jar": "jackson-core-3.1.5.jar",
+      "onlyProductionCodec": true,
+      "inspection": "embedded Maven coordinates and class-entry paths across the application and every library jar",
+      "shadedFallbacks": false
+    }
+  },
+  "runtime": {
+    "measuredModules": [
+      "java.base",
+      "java.logging",
+      "java.prefs",
+      "java.xml",
+      "javafx.controls",
+      "javafx.fxml"
+    ],
+    "explicitModules": {
+      "jdk.charsets": "CharsetProvider for extended charsets that Charset.forName resolves at runtime from juniversalchardet detections"
+    },
+    "requestedModules": [
+      "java.base",
+      "java.logging",
+      "java.prefs",
+      "java.xml",
+      "javafx.controls",
+      "javafx.fxml",
+      "jdk.charsets"
+    ],
+    "imageModules": [
+      "java.base",
+      "java.datatransfer",
+      "java.xml",
+      "java.prefs",
+      "java.desktop",
+      "java.logging",
+      "java.scripting",
+      "javafx.base",
+      "jdk.unsupported",
+      "javafx.graphics",
+      "javafx.controls",
+      "javafx.fxml",
+      "jdk.charsets"
+    ],
+    "serviceBindings": [
+      "java.datatransfer binds java.desktop jrt:/java.desktop",
+      "java.base binds java.desktop jrt:/java.desktop",
+      "java.base binds java.logging jrt:/java.logging",
+      "java.base binds jdk.charsets jrt:/jdk.charsets"
+    ],
+    "moduleResolutionFile": "target/reproducibility/app-image-module-resolution.txt",
+    "jdepsOutputFile": "target/reproducibility/app-image-jdeps-output.txt",
+    "jlinkOptions": [
+      "--compress",
+      "zip-6",
+      "--strip-debug",
+      "--no-header-files",
+      "--no-man-pages",
+      "--strip-native-commands"
+    ],
+    "jlinkOutputFile": "target/reproducibility/app-image-jlink-output.txt",
+    "compression": {
+      "algorithm": "zip-6",
+      "resources": 21360,
+      "compressedResources": 21360,
+      "uncompressedBytes": 69458223,
+      "storedBytes": 31274305,
+      "savingsBytes": 38183918,
+      "savingsPercent": 54.97,
+      "verification": "jimage list --verbose on the runtime copied into the final jpackage app-image"
+    },
+    "release": {
+      "MODULES": "java.base java.datatransfer java.xml java.prefs java.desktop java.logging java.scripting javafx.base jdk.unsupported javafx.graphics javafx.controls javafx.fxml jdk.charsets",
+      "JAVA_VERSION": "25.0.4.1"
+    },
+    "nativeCommandsStripped": true
+  },
+  "image": {
+    "directory": "target/app-image/BS2BG",
+    "fileCount": 235,
+    "totalBytes": 64512124,
+    "sha256": "8a53497faf438a5ee59892018bbec06a1dc1c482bfdee8006a3804671738d5bb",
+    "fileHashesFile": "target/reproducibility/app-image-sha256.txt",
+    "archive": "BS2BG-1.1.2-windows-x64.zip",
+    "archiveSha256": "c73d9414a15b133ea37a2b06841d004b8641cd1c73d95353732567554e513ef7",
+    "launcherConfig": {
+      "Application": {
+        "win.norestart": [
+          "true"
+        ],
+        "app.classpath": [
+          "$APPDIR\\jbs2bg-1.0-SNAPSHOT.jar",
+          "$APPDIR\\lib\\jackson-core-3.1.5.jar",
+          "$APPDIR\\lib\\juniversalchardet-2.1.0.jar"
+        ],
+        "app.mainclass": [
+          "com.asdasfa.jbs2bg.Launcher"
+        ]
+      },
+      "JavaOptions": {
+        "java-options": [
+          "-Djpackage.app-version=1.1.2",
+          "--enable-native-access=javafx.graphics"
+        ]
+      }
+    },
+    "jpackageState": {
+      "toolVersion": "25.0.4.1",
+      "platform": "windows"
+    },
+    "javaOptions": [
+      "--enable-native-access=javafx.graphics"
+    ],
+    "notices": {
+      "file": "THIRD-PARTY-NOTICES.txt",
+      "componentManifest": "THIRD-PARTY-COMPONENTS.json",
+      "correspondingSource": "CORRESPONDING-SOURCE.txt",
+      "components": [
+        {
+          "jar": "jackson-core-3.1.5.jar",
+          "coordinates": "tools.jackson.core:jackson-core:3.1.5",
+          "sha256": "9431b7fa2673bbb618c11d865fe15e13222fd182a214ff998cb7e56afd8f35d2",
+          "size": 598605,
+          "sourceUrl": "https://repo.maven.apache.org/maven2/tools/jackson/core/jackson-core/3.1.5/jackson-core-3.1.5-sources.jar",
+          "licenses": [
+            "The Apache Software License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0.txt)"
+          ],
+          "extractedFiles": [
+            "notices/jackson-core-3.1.5/LICENSE",
+            "notices/jackson-core-3.1.5/NOTICE"
+          ]
+        },
+        {
+          "jar": "juniversalchardet-2.1.0.jar",
+          "coordinates": "com.github.albfernandez:juniversalchardet:2.1.0",
+          "sha256": "988d74471cea29f6c64d4066c9f31a0d0f10a8241f79868ec1a04da42c6a8bed",
+          "size": 222853,
+          "sourceUrl": "https://repo.maven.apache.org/maven2/com/github/albfernandez/juniversalchardet/2.1.0/juniversalchardet-2.1.0-sources.jar",
+          "licenses": [
+            "Mozilla Public License Version 1.1 (https://www.mozilla.org/en-US/MPL/1.1/)",
+            "GENERAL PUBLIC LICENSE, version 3 (GPL-3.0) (http://www.gnu.org/licenses/gpl.txt)",
+            "GNU LESSER GENERAL PUBLIC LICENSE, version 3 (LGPL-3.0) (http://www.gnu.org/licenses/lgpl.txt)"
+          ],
+          "extractedFiles": []
+        }
+      ],
+      "runtimeComponents": [
+        {
+          "id": "temurin-25.0.4.1+1-windows-x64",
+          "name": "Eclipse Adoptium Temurin-25.0.4.1+1 (Eclipse Temurin JDK, jlink'd runtime)",
+          "version": "25.0.4.1+1-LTS",
+          "binaryUrl": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_x64_windows_hotspot_25.0.4.1_1.zip",
+          "binarySha256": "00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283",
+          "sourceUrl": "https://github.com/openjdk/jdk25u/archive/refs/tags/jdk-25.0.4.1-ga.zip",
+          "sourceRevision": "598c9b864328adc4ce1049ea70b2e4b14cc5a051",
+          "modules": [
+            "java.base",
+            "java.datatransfer",
+            "java.xml",
+            "java.prefs",
+            "java.desktop",
+            "java.logging",
+            "java.scripting",
+            "javafx.base",
+            "jdk.unsupported",
+            "javafx.graphics",
+            "javafx.controls",
+            "javafx.fxml",
+            "jdk.charsets"
+          ],
+          "license": "GNU General Public License v2.0 with the Classpath Exception",
+          "noticesPath": "runtime/legal/<module>/ (LICENSE, ASSEMBLY_EXCEPTION, ADDITIONAL_LICENSE_INFO and third-party .md files per JDK module)"
+        },
+        {
+          "id": "openjfx-25.0.4-windows-x64-jmods",
+          "name": "OpenJFX (Gluon JavaFX Windows x64 JMODs)",
+          "version": "25.0.4",
+          "binaryUrl": "https://download2.gluonhq.com/openjfx/25.0.4/openjfx-25.0.4_windows-x64_bin-jmods.zip",
+          "binarySha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
+          "sourceUrl": "https://github.com/openjdk/jfx25u/archive/refs/tags/25.0.4%2B3.zip",
+          "sourceRevision": "96aaf07f6404c4d7ccad1aa75498ec7d2196047a",
+          "modules": [
+            "javafx.base",
+            "javafx.graphics",
+            "javafx.controls",
+            "javafx.fxml"
+          ],
+          "license": "GNU General Public License v2.0 with the Classpath Exception",
+          "noticesPath": "runtime/legal/{javafx.base,javafx.graphics,javafx.controls,javafx.fxml}/"
+        }
+      ]
+    },
+    "jpackageOutputFile": "target/reproducibility/app-image-jpackage-output.txt"
+  },
+  "smoke": {
+    "mode": "dpi-matrix",
+    "evidenceFile": "target/reproducibility/dpi-matrix/windows-app-image-dpi-matrix.json"
+  },
+  "dpiMatrix": {
+    "schema": "bs2bg.dpi-matrix/1",
+    "recordedAtUtc": "2026-09-19T09:48:06.1819615+00:00",
+    "passed": true,
+    "archive": "D:\\repos\\BS2BG\\target\\BS2BG-1.1.2-windows-x64.zip",
+    "archiveSha256": "c73d9414a15b133ea37a2b06841d004b8641cd1c73d95353732567554e513ef7",
+    "originalDisplay": {
+      "deviceName": "\\\\.\\DISPLAY2",
+      "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+      "scalePercent": 100,
+      "dpi": 96,
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "width": 2560,
+        "height": 1440
+      },
+      "supportedScales": [
+        100,
+        125,
+        150,
+        175,
+        200,
+        225
+      ],
+      "settingsDisplayName": "Display 2"
+    },
+    "requestedScalePercents": [
+      150,
+      100,
+      125
+    ],
+    "recoveryPath": "D:\\repos\\BS2BG\\.bs2bg-dpi-matrix-recovery.json",
+    "runs": [
+      {
+        "scalePercent": 150,
+        "passed": true,
+        "archiveSha256": "c73d9414a15b133ea37a2b06841d004b8641cd1c73d95353732567554e513ef7",
+        "evidencePath": "D:\\repos\\BS2BG\\target\\reproducibility\\dpi-matrix\\dpi-150\\windows-app-image-smoke.json",
+        "display": {
+          "deviceName": "\\\\.\\DISPLAY2",
+          "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+          "scalePercent": 150,
+          "dpi": 144,
+          "bounds": {
+            "left": 0,
+            "top": 0,
+            "width": 2560,
+            "height": 1440
+          },
+          "supportedScales": [
+            100,
+            125,
+            150,
+            175,
+            200,
+            225
+          ],
+          "settingsDisplayName": "Display 2"
+        },
+        "error": null
+      },
+      {
+        "scalePercent": 100,
+        "passed": true,
+        "archiveSha256": "c73d9414a15b133ea37a2b06841d004b8641cd1c73d95353732567554e513ef7",
+        "evidencePath": "D:\\repos\\BS2BG\\target\\reproducibility\\dpi-matrix\\dpi-100\\windows-app-image-smoke.json",
+        "display": {
+          "deviceName": "\\\\.\\DISPLAY2",
+          "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+          "scalePercent": 100,
+          "dpi": 96,
+          "bounds": {
+            "left": 0,
+            "top": 0,
+            "width": 2560,
+            "height": 1440
+          },
+          "supportedScales": [
+            100,
+            125,
+            150,
+            175,
+            200,
+            225
+          ],
+          "settingsDisplayName": "Display 2"
+        },
+        "error": null
+      },
+      {
+        "scalePercent": 125,
+        "passed": true,
+        "archiveSha256": "c73d9414a15b133ea37a2b06841d004b8641cd1c73d95353732567554e513ef7",
+        "evidencePath": "D:\\repos\\BS2BG\\target\\reproducibility\\dpi-matrix\\dpi-125\\windows-app-image-smoke.json",
+        "display": {
+          "deviceName": "\\\\.\\DISPLAY2",
+          "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+          "scalePercent": 125,
+          "dpi": 120,
+          "bounds": {
+            "left": 0,
+            "top": 0,
+            "width": 2560,
+            "height": 1440
+          },
+          "supportedScales": [
+            100,
+            125,
+            150,
+            175,
+            200,
+            225
+          ],
+          "settingsDisplayName": "Display 2"
+        },
+        "error": null
+      }
+    ],
+    "restoration": {
+      "deviceName": "\\\\.\\DISPLAY2",
+      "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+      "scalePercent": 100,
+      "dpi": 96,
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "width": 2560,
+        "height": 1440
+      },
+      "supportedScales": [
+        100,
+        125,
+        150,
+        175,
+        200,
+        225
+      ],
+      "settingsDisplayName": "Display 2"
+    },
+    "workflowError": null,
+    "restorationError": null
+  }
+}

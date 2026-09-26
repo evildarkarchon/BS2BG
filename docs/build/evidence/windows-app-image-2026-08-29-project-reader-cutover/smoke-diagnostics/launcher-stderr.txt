@@ -1,0 +1,64 @@
+Aug 29, 2026 1:55:27 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Opening jBS2BG file...
+Aug 29, 2026 1:55:28 AM com.asdasfa.jbs2bg.MainController lambda$openFromFile$0
+INFO: Opening jBS2BG file done.
+Aug 29, 2026 1:55:28 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Saving jBS2BG file...
+Aug 29, 2026 1:55:28 AM com.asdasfa.jbs2bg.MainController lambda$scheduleSave$0
+INFO: Saving jBS2BG file done.
+Aug 29, 2026 1:55:29 AM com.asdasfa.jbs2bg.MainController onPostInit
+WARNING: SETTINGS_MEMBER_UNKNOWN: C:\Users\evild\AppData\Local\Temp\BS2BG-smoke-20260829-085524\work\settings.json /Defaults/Waist/FutureDefault
+Unknown Settings member 'FutureDefault' was ignored.
+Aug 29, 2026 1:55:29 AM com.asdasfa.jbs2bg.MainController onPostInit
+WARNING: SETTINGS_MEMBER_UNKNOWN: C:\Users\evild\AppData\Local\Temp\BS2BG-smoke-20260829-085524\work\settings.json /Future
+Unknown Settings member 'Future' was ignored.
+Aug 29, 2026 1:55:31 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Opening jBS2BG file...
+Aug 29, 2026 1:55:31 AM com.asdasfa.jbs2bg.MainController lambda$openFromFile$0
+INFO: Opening jBS2BG file done.
+Aug 29, 2026 1:55:33 AM com.asdasfa.jbs2bg.PopupBosViewController exportBosJson
+INFO: Exporting BoS JSON file...
+Aug 29, 2026 1:55:33 AM com.asdasfa.jbs2bg.PopupBosViewController lambda$exportBosJson$0
+INFO: Exporting BoS JSON file done.
+Aug 29, 2026 1:55:33 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Generating Templates...
+Aug 29, 2026 1:55:33 AM com.asdasfa.jbs2bg.MainController lambda$generateTemplates$0
+INFO: Generating Templates done.
+Aug 29, 2026 1:55:36 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Opening jBS2BG file...
+Aug 29, 2026 1:55:36 AM com.asdasfa.jbs2bg.MainController lambda$openFromFile$0
+INFO: Opening jBS2BG file rejected or failed.
+Aug 29, 2026 1:55:36 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Generating Morphs...
+Aug 29, 2026 1:55:36 AM com.asdasfa.jbs2bg.MainController lambda$generateMorphs$0
+INFO: Generating Morphs done.
+Aug 29, 2026 1:55:38 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Saving jBS2BG file...
+Aug 29, 2026 1:55:38 AM com.asdasfa.jbs2bg.MainController lambda$scheduleSave$0
+INFO: Saving jBS2BG file done.
+Aug 29, 2026 1:55:38 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Saving jBS2BG file...
+Aug 29, 2026 1:55:38 AM com.asdasfa.jbs2bg.MainController lambda$scheduleSave$0
+INFO: Saving jBS2BG file rejected or failed.
+Aug 29, 2026 1:55:39 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Saving jBS2BG file...
+Aug 29, 2026 1:55:39 AM com.asdasfa.jbs2bg.MainController lambda$scheduleSave$0
+INFO: Saving jBS2BG file done.
+Aug 29, 2026 1:55:41 AM com.asdasfa.jbs2bg.MainController onPostInit
+WARNING: SETTINGS_PUBLICATION_RECOVERED: C:\Users\evild\AppData\Local\Temp\BS2BG-smoke-20260829-085524\work /
+An interrupted Settings publication was rolled back before loading.
+Aug 29, 2026 1:55:41 AM com.asdasfa.jbs2bg.MainController onPostInit
+WARNING: SETTINGS_MEMBER_UNKNOWN: C:\Users\evild\AppData\Local\Temp\BS2BG-smoke-20260829-085524\work\settings.json /Defaults/Waist/FutureDefault
+Unknown Settings member 'FutureDefault' was ignored.
+Aug 29, 2026 1:55:41 AM com.asdasfa.jbs2bg.MainController onPostInit
+WARNING: SETTINGS_MEMBER_UNKNOWN: C:\Users\evild\AppData\Local\Temp\BS2BG-smoke-20260829-085524\work\settings.json /Future
+Unknown Settings member 'Future' was ignored.
+Aug 29, 2026 1:55:42 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Opening jBS2BG file...
+Aug 29, 2026 1:55:42 AM com.asdasfa.jbs2bg.MainController lambda$openFromFile$0
+INFO: Opening jBS2BG file done.
+Aug 29, 2026 1:55:43 AM com.asdasfa.jbs2bg.MainController scheduleBackgroundTask
+INFO: Generating Templates...
+Aug 29, 2026 1:55:43 AM com.asdasfa.jbs2bg.MainController lambda$generateTemplates$0
+INFO: Generating Templates done.
+

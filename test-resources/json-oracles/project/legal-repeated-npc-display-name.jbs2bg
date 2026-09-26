@@ -1,0 +1,20 @@
+{
+  "SliderPresets": {},
+  "CustomMorphTargets": {},
+  "MorphedNPCs": {
+    "Guard": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "GuardA",
+      "Race": "NordRace",
+      "FormId": "A2C94",
+      "SliderPresets": []
+    },
+    "Guard": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "GuardB",
+      "Race": "NordRace",
+      "FormId": "A2C95",
+      "SliderPresets": []
+    }
+  }
+}

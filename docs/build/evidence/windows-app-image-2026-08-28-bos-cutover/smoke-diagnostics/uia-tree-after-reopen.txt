@@ -1,0 +1,220 @@
+Window 'jBS2BG - smoke-output.jbs2bg' [Window,Transform]
+  TitleBar 'jBS2BG - smoke-output.jbs2bg'
+    MenuBar 'System Menu Bar'
+      MenuItem 'System' [ExpandCollapse]
+    Button 'Minimize' [Invoke]
+    Button 'Maximize' [Invoke]
+    Button 'Close' [Invoke]
+  MenuBar ''
+    MenuItem 'File' [Invoke,ExpandCollapse]
+      Text 'File'
+        Text 'File'
+    MenuItem 'Help' [Invoke,ExpandCollapse]
+      Text 'Help'
+        Text 'Help'
+  Tab '' [Selection]
+    List 'Custom Morph Targets' [Selection,Scroll]
+      ListItem 'All|Female' [SelectionItem,ScrollItem]
+        Text 'All|Female'
+      ListItem 'All|Female|NordRace' [SelectionItem,ScrollItem]
+        Text 'All|Female|NordRace'
+    Text 'Custom Target:'
+      Text 'Custom Target:'
+    Edit '' [Value,Text]
+      Text 'All|Female|NordRace'
+    Button 'Add' [Invoke]
+      Text 'Add'
+    Button 'Remove' [Invoke]
+      Text 'Remove'
+    Button 'Clear' [Invoke]
+      Text 'Clear'
+    Text 'Individual NPCs:'
+      Text 'Individual NPCs:'
+    Text '(1)'
+      Text '(1)'
+    Button 'Fill Empty' [Invoke]
+      Text 'Fill Empty'
+    Button 'Clear Assignments' [Invoke]
+      Text 'Clear Assignments'
+    Table 'NPC Morph Assignments' [Selection,Scroll,Grid,Table]
+      Custom 'Name'
+        Text 'Name'
+          Text 'Name'
+      Custom 'Master'
+        Text 'Master'
+          Text 'Master'
+      Custom 'Race'
+        Text 'Race'
+          Text 'Race'
+      Custom 'EditorID'
+        Text 'EditorID'
+          Text 'EditorID'
+      Custom 'FormID'
+        Text 'FormID'
+          Text 'FormID'
+      Custom 'Slider Presets'
+        Text 'Slider Presets'
+          Text 'Slider Presets'
+      Custom ''
+        DataItem 'Lydia' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text 'Lydia'
+        DataItem 'Skyrim.esm' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text 'Skyrim.esm'
+        DataItem 'NordRace' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text 'NordRace'
+        DataItem 'HousecarlWhiterun' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text 'HousecarlWhiterun'
+        DataItem 'A2C94' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text 'A2C94'
+        DataItem 'UUNP Athletic' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text 'UUNP Athletic'
+      Custom ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+      Custom ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+      Custom ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+      Custom ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+      Custom ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+      Custom ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+      Custom ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+      Custom ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+        DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+          Text ''
+      ScrollBar '' [RangeValue]
+        Button 'increment' [Invoke]
+        Button 'decrement' [Invoke]
+        Thumb ''
+    Button 'Add NPCs' [Invoke]
+      Text 'Add NPCs'
+    Button 'View Image' [Invoke]
+      Text 'View Image'
+    Button 'Remove' [Invoke]
+      Text 'Remove'
+    Button 'Clear' [Invoke]
+      Text 'Clear'
+    List 'Target Slider Presets' [Selection,Scroll]
+      ListItem 'CBBE Curvy' [SelectionItem,ScrollItem]
+        Text 'CBBE Curvy'
+      ListItem 'UUNP Athletic' [SelectionItem,ScrollItem]
+        Text 'UUNP Athletic'
+    Text 'Slider presets for:'
+      Text 'Slider presets for:'
+    Text 'All|Female|NordRace'
+      Text 'All|Female|NordRace'
+    Text 'Count:'
+      Text 'Count:'
+    Text '2'
+      Text '2'
+    Button 'Add' [Invoke]
+      Text 'Add'
+    Button 'Remove' [Invoke]
+      Text 'Remove'
+    Button 'Add All' [Invoke]
+      Text 'Add All'
+    Button 'Clear' [Invoke]
+      Text 'Clear'
+    Edit '' [Value,Text]
+      Pane '' [Scroll]
+        Text ''
+    Button 'Copy' [Invoke]
+      Text 'Copy'
+    Button 'Generate Morphs' [Invoke]
+      Text 'Generate Morphs'
+    TabItem 'Templates' [SelectionItem]
+      Text 'Templates'
+        Text 'Templates'
+    TabItem 'Morphs' [SelectionItem]
+      Text 'Morphs'
+        Text 'Morphs'

@@ -1,0 +1,43 @@
+{
+  "SliderPresets": {
+    "CBBE.Curvy": {
+      "isUUNP": false,
+      "SetSliders": [
+        {
+          "name": "Waist",
+          "enabled": true,
+          "valueSmall": 20,
+          "valueBig": 80,
+          "pctMin": 10,
+          "pctMax": 90
+        },
+        {
+          "name": "Explicit Nulls",
+          "enabled": true,
+          "valueSmall": null,
+          "valueBig": null,
+          "pctMin": 100,
+          "pctMax": 100
+        }
+      ]
+    },
+    "UUNP Athletic": {
+      "isUUNP": true,
+      "SetSliders": []
+    }
+  },
+  "CustomMorphTargets": {
+    "All|Female": {
+      "SliderPresets": ["uunp athletic", "CBBE Curvy"]
+    }
+  },
+  "MorphedNPCs": {
+    "Lydia": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "HousecarlWhiterun",
+      "Race": "NordRace",
+      "FormId": "000A2C94",
+      "SliderPresets": ["UUNP Athletic"]
+    }
+  }
+}

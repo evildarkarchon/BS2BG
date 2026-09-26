@@ -1,0 +1,231 @@
+{
+  "schema": "bs2bg.java25-verification/1",
+  "recordedAtUtc": "2026-08-29T23:13:52.2592445+00:00",
+  "gitCommit": "fe50691f4a9625fdd5d187ba6e04e8705afe4d90",
+  "applicationGate": {
+    "completeApplicationGate": true,
+    "cleanLifecycle": true,
+    "productionSourceCount": 97,
+    "compilerArgs": [
+      "-Xlint:all",
+      "-Werror"
+    ],
+    "requiredSuites": {
+      "com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest": 10,
+      "com.asdasfa.jbs2bg.build.ProductionSourceGateTest": 7,
+      "com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest": 5,
+      "com.asdasfa.jbs2bg.build.LauncherTest": 3,
+      "com.asdasfa.jbs2bg.build.WindowsAppImageGateTest": 3,
+      "com.asdasfa.jbs2bg.fx.FilteredTableAdapterTest": 6,
+      "com.asdasfa.jbs2bg.fx.DialogGraphicsTest": 1,
+      "com.asdasfa.jbs2bg.filtering.FilteredViewTest": 11,
+      "com.asdasfa.jbs2bg.filtering.VisibleScopeCommandsTest": 7,
+      "com.asdasfa.jbs2bg.project.ProjectSessionTest": 35,
+      "com.asdasfa.jbs2bg.project.ProjectSessionOpenTest": 21,
+      "com.asdasfa.jbs2bg.project.ProjectSessionSaveTest": 11,
+      "com.asdasfa.jbs2bg.project.ProjectSessionImportTest": 9,
+      "com.asdasfa.jbs2bg.project.ProjectSessionSliderChoiceTest": 8,
+      "com.asdasfa.jbs2bg.project.ProjectJacksonCompatibilityTest": 25,
+      "com.asdasfa.jbs2bg.project.ProjectTest": 4,
+      "com.asdasfa.jbs2bg.data.ProjectPersistenceCompatibilityTest": 10,
+      "com.asdasfa.jbs2bg.json.JacksonJsonTest": 8,
+      "com.asdasfa.jbs2bg.json.JacksonDependencyPolicyTest": 7,
+      "com.asdasfa.jbs2bg.data.SettingsJacksonAdapterTest": 14,
+      "com.asdasfa.jbs2bg.data.SettingsPairPublisherTest": 6,
+      "com.asdasfa.jbs2bg.presentation.ProjectOutputFormatterTest": 10,
+      "com.asdasfa.jbs2bg.presentation.BosJacksonWriterTest": 6,
+      "com.asdasfa.jbs2bg.presentation.BosArtifactPublisherTest": 4,
+      "com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlowTest": 10,
+      "com.asdasfa.jbs2bg.workbench.WorkbenchControllerTest": 8
+    },
+    "artifact": {
+      "jar": "jbs2bg-1.0-SNAPSHOT.jar",
+      "classCount": 97,
+      "resourceCount": 16,
+      "resources": [
+        "com/asdasfa/jbs2bg/custom_confirm.fxml",
+        "com/asdasfa/jbs2bg/custom_notif.fxml",
+        "com/asdasfa/jbs2bg/dark.css",
+        "com/asdasfa/jbs2bg/popup_about.fxml",
+        "com/asdasfa/jbs2bg/popup_bosview.fxml",
+        "com/asdasfa/jbs2bg/popup_imageview.fxml",
+        "com/asdasfa/jbs2bg/popup_nopresetnotif.fxml",
+        "com/asdasfa/jbs2bg/popup_npcdatabase.fxml",
+        "com/asdasfa/jbs2bg/popup_rename.fxml",
+        "com/asdasfa/jbs2bg/popup_setsliders.fxml",
+        "com/asdasfa/jbs2bg/popup_sliderpresets.fxml",
+        "com/asdasfa/jbs2bg/popup_sliderpresetsfill.fxml",
+        "com/asdasfa/jbs2bg/setslider_control.fxml",
+        "com/asdasfa/jbs2bg/workbench.css",
+        "com/asdasfa/jbs2bg/workbench.fxml",
+        "res/icon.png"
+      ]
+    },
+    "structuralGate": "ProductionSourceGateTest (sources, resources, pom) and Java25ToolchainGuardTest (every emitted class file)",
+    "fxmlHarness": "FxmlGraphLoadingTest (Workbench root, retained migration popups, and custom-root graphs on the pinned toolkit)",
+    "workbenchLifecycle": "WorkbenchProjectFlowTest + WorkbenchControllerTest (authoritative Project flow, effects, shutdown, and JavaFX adapter)"
+  },
+  "targetRelease": {
+    "pinned": 25,
+    "pomProperty": "25",
+    "witnessedBy": "Java25ToolchainGuardTest.everyProductionClassIsCompiledForRelease25WithoutPreview (every class file: major 69, minor 0)"
+  },
+  "previewFeaturesEnabled": false,
+  "javafxIncubatorModules": "disabled (enforcer bans org.openjfx:javafx-incubator-*; guard test scans the classpath and boot layer)",
+  "tests": {
+    "suites": 36,
+    "tests": 285,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "observedJavaVendor": [
+      "Eclipse Adoptium"
+    ],
+    "observedJavaRuntimeVersion": [
+      "25.0.4.1+1-LTS"
+    ],
+    "reports": "target/surefire-reports/"
+  },
+  "architecture": {
+    "processorArchitecture": "AMD64",
+    "javaOsArch": "amd64",
+    "jdkReleaseOsArch": "x86_64"
+  },
+  "maven": {
+    "version": "3.9.16",
+    "distributionSha256": "5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce",
+    "wrapperVersion": "3.3.4",
+    "versionOutput": [
+      "Apache Maven 3.9.16 (2bdd9fddda4b155ebf8000e807eb73fd829a51d5)",
+      "Maven home: C:\\Users\\evild\\.m2\\wrapper\\dists\\apache-maven-3.9.16\\0daed3be3ebd1c706f0e69e8b07c6b73f5cc4ea3dfce72a8d0ec2e849ca2ddb0",
+      "Java version: 25.0.4.1, vendor: Eclipse Adoptium, runtime: C:\\Users\\evild\\AppData\\Local\\BS2BG\\build-toolchains\\temurin-25.0.4.1+1-windows-x64",
+      "Default locale: en_US, platform encoding: UTF-8",
+      "OS name: \"windows 11\", version: \"10.0\", arch: \"amd64\", family: \"windows\""
+    ],
+    "goals": [
+      "clean",
+      "verify"
+    ],
+    "exitCode": 0,
+    "hostJavaHome": "C:\\Users\\evild\\AppData\\Local\\BS2BG\\build-toolchains\\temurin-25.0.4.1+1-windows-x64",
+    "hostJavaHomeSource": "provisioned toolchain",
+    "hostJavaVersion": [
+      "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+      "OpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS)",
+      "OpenJDK 64-Bit Server VM Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS, mixed mode, sharing)"
+    ]
+  },
+  "jdk": {
+    "id": "temurin-25.0.4.1+1-windows-x64",
+    "home": "C:\\Users\\evild\\AppData\\Local\\BS2BG\\build-toolchains\\temurin-25.0.4.1+1-windows-x64",
+    "archiveSha256": "00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283",
+    "implementor": "Eclipse Adoptium",
+    "implementorVersion": "Temurin-25.0.4.1+1",
+    "javaVersion": "25.0.4.1",
+    "javaRuntimeVersion": "25.0.4.1+1-LTS",
+    "javaVersionOutput": [
+      "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+      "OpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS)",
+      "OpenJDK 64-Bit Server VM Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS, mixed mode, sharing)"
+    ],
+    "javacVersionOutput": "javac 25.0.4.1"
+  },
+  "javafx": {
+    "id": "openjfx-25.0.4-windows-x64-jmods",
+    "version": "25.0.4",
+    "jmods": "C:\\Users\\evild\\AppData\\Local\\BS2BG\\build-toolchains\\openjfx-25.0.4-windows-x64-jmods",
+    "archiveSha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
+    "verifiedModules": [
+      "javafx.base",
+      "javafx.graphics",
+      "javafx.controls",
+      "javafx.fxml"
+    ],
+    "mavenArtifacts": "org.openjfx:javafx-controls / javafx-fxml (see dependency-tree.txt for the resolved win classifier)"
+  },
+  "dependencyGraph": {
+    "convergence": "Maven Enforcer dependencyConvergence passed before compilation",
+    "retiredCodecBan": "Maven Enforcer bans com.eclipsesource.minimal-json:* transitively",
+    "dependencyTreeFile": "target/reproducibility/dependency-tree.txt",
+    "testClasspathFile": "target/reproducibility/test-classpath.txt",
+    "testClasspathSha256File": "target/reproducibility/test-classpath-sha256.txt",
+    "resolvedArtifacts": [
+      {
+        "artifact": "jackson-core-3.1.5.jar",
+        "sha256": "9431b7fa2673bbb618c11d865fe15e13222fd182a214ff998cb7e56afd8f35d2"
+      },
+      {
+        "artifact": "commons-io-2.6.jar",
+        "sha256": "f877d304660ac2a142f3865badfc971dec7ed73c747c7f8d5d2f5139ca736513"
+      },
+      {
+        "artifact": "juniversalchardet-2.1.0.jar",
+        "sha256": "988d74471cea29f6c64d4066c9f31a0d0f10a8241f79868ec1a04da42c6a8bed"
+      },
+      {
+        "artifact": "javafx-controls-25.0.4.jar",
+        "sha256": "c79517e7a9b4f072e477da3b4e93fa4b0b9128b308da1b46e9d559cbc5477631"
+      },
+      {
+        "artifact": "javafx-controls-25.0.4-win.jar",
+        "sha256": "7977f8620a2ad1ae2809250fcfbe4d2fc7aa96ca8cf8df7ec3fd27f57b24fc35"
+      },
+      {
+        "artifact": "javafx-graphics-25.0.4.jar",
+        "sha256": "dbf3d0252cebd96fbd816026871cd56417826d04b685358e007524059a1b12ec"
+      },
+      {
+        "artifact": "javafx-graphics-25.0.4-win.jar",
+        "sha256": "5217595f079a498404b73e69bde98df0b0d033b7c4f4cf81d093054b666b6b18"
+      },
+      {
+        "artifact": "javafx-base-25.0.4.jar",
+        "sha256": "61653f87da5dc42ccc74aaf39fdf7a9d2e24aee4b56821f835f7d81434d5bc40"
+      },
+      {
+        "artifact": "javafx-base-25.0.4-win.jar",
+        "sha256": "d264278d999899d3204a5236bb013b1e0e294a74567e868a031338e199f249fc"
+      },
+      {
+        "artifact": "javafx-fxml-25.0.4.jar",
+        "sha256": "3b34b6414b4d4a0e98cf9ccd8ecc66f8159d48925aef5794e2a91aa5e15ed3ed"
+      },
+      {
+        "artifact": "javafx-fxml-25.0.4-win.jar",
+        "sha256": "0612c78be66b70e4fdc1067f9c908edc47bf82ec4420cdf4e29f64769fe63125"
+      },
+      {
+        "artifact": "junit-jupiter-5.11.4.jar",
+        "sha256": "aa880e4afba87d447357e4c1fc098c5cb1d200cb9403496c00d3b35a5bd0e8db"
+      },
+      {
+        "artifact": "junit-jupiter-api-5.11.4.jar",
+        "sha256": "ab83ef9e51ac4597d59d26b4b58812129550e2f579a404c8af7d09f5ce5b4293"
+      },
+      {
+        "artifact": "opentest4j-1.3.0.jar",
+        "sha256": "48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b"
+      },
+      {
+        "artifact": "junit-platform-commons-1.11.4.jar",
+        "sha256": "9edd969b0d0670c54105bc91ae79bd1c6f503e12115faba82073b84c86bbc334"
+      },
+      {
+        "artifact": "apiguardian-api-1.1.2.jar",
+        "sha256": "b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38"
+      },
+      {
+        "artifact": "junit-jupiter-params-5.11.4.jar",
+        "sha256": "02a6e015de7ce94ac7f256e7fa05b8091dea861fe79a555a7993313d0f6c7d96"
+      },
+      {
+        "artifact": "junit-jupiter-engine-5.11.4.jar",
+        "sha256": "cdf8ac59f3fad774ca738ad03890950eeb91833ef0e8908753177edd26f1581c"
+      },
+      {
+        "artifact": "junit-platform-engine-1.11.4.jar",
+        "sha256": "b1dd998f64f9acadc15966d9cd3d08074662677b3e390f0a38fcbf0bb4c72330"
+      }
+    ]
+  }
+}

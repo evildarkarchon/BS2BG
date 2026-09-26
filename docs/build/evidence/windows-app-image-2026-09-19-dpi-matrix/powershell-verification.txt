@@ -1,0 +1,355 @@
+Pester v6.2.0
+
+Running tests from 6 files.
+
+Running tests from 'D:\repos\BS2BG\tools\java25\DpiMatrix.Tests.ps1'
+Describing Packaged display-scale matrix lifecycle
+  [+] tests the same archive once at every required scale and restores the original scale
+ 406ms
+  [+] restores a pending interrupted run once and leaves completed recovery records harmless
+ 123ms
+  [+] stops after a failed smoke and restores before reporting failure
+ 127ms
+  [+] retains both workflow and restoration failures and preserves pending recovery
+ 44ms
+  [+] refuses an unresolved recovery record without overwriting it or touching the display
+ 25ms
+  [+] rejects a changed package and restores the display
+ 38ms
+  [+] rejects successful smoke evidence whose actual window DPI differs
+ 37ms
+  [+] refuses recovery of a live owner or a record belonging to another machine
+ 94ms
+  [+] rejects concurrent ownership before accessing display settings
+ 22ms
+  [+] fails the matrix when only final display restoration fails
+ 72ms
+  [+] checks required scale support before creating recovery state or changing the display
+ 29ms
+  [+] retains pending recovery if explicit recovery cannot restore the original monitor
+ 58ms
+  [+] runs requested supported scales and restores an original scale outside the default matrix
+ 63ms
+  [+] rejects empty or repeated scale cases before accessing the display
+ 18ms
+  [+] prevents another process from controlling the same desktop through a different recovery path
+ 1.01s
+  [+] rejects a provider that reports another selected scale before starting smoke
+ 30ms
+  [+] rejects smoke evidence whose requested scale differs even when actual DPI matches
+ 37ms
+
+Running tests from 'D:\repos\BS2BG\tools\java25\DpiMatrixCli.Tests.ps1'
+Describing Display-scale packaging command validation
+  [+] rejects incompatible matrix options before running the build
+ 387ms
+  [+] rejects incompatible matrix options before running the build
+ 365ms
+  [+] rejects incompatible matrix options before running the build
+ 372ms
+  [+] rejects pending recovery before clean-checkout validation or any build work
+ 880ms
+  [+] accepts recovery mode without requiring archive or fixture arguments
+ 693ms
+
+Running tests from 'D:\repos\BS2BG\tools\java25\Java25Toolchain.Tests.ps1'
+Describing Get-ToolchainLock
+  [+] loads the committed lock and exposes every pinned input
+ 30ms
+  [+] fails closed when a required section is missing
+ 8ms
+  [+] fails closed when a checksum is not a 64-hex SHA-256
+ 11ms
+  [+] fails closed when an exact runtime source pin is missing
+ 11ms
+
+Describing Assert-FileSha256
+  [+] returns the lowercase hash when it matches, regardless of the expected value casing
+ 6ms
+  [+] throws a fail-closed error that names the input and both hashes on mismatch
+ 7ms
+
+Describing Clear-ReadOnlyBuildOutputs
+  [+] clears read-only attributes left by jpackage beneath the selected build-output root
+ 14ms
+  [+] is a no-op when no previous build-output tree exists
+ 2ms
+
+Describing Read-JdkReleaseFile
+  [+] parses quoted KEY="value" pairs and ignores blank lines
+ 8ms
+
+Describing Assert-JdkRelease
+  [+] accepts a release file whose pinned keys all match (extra keys are ignored)
+ 6ms
+  [+] reports every mismatching or missing key in one fail-closed error
+ 8ms
+  [+] rejects a different vendor even when the version strings match
+ 4ms
+
+Describing Assert-JmodDescribeOutput
+  [+] accepts the pinned module@version header
+ 8ms
+  [+] rejects a different patch version
+ 3ms
+  [+] rejects a different module name
+ 3ms
+  [+] skips blank lines before the header (jmod describe emits one)
+ 3ms
+  [+] rejects empty output
+ 3ms
+
+Describing Assert-MavenWrapperPinned
+  [+] accepts the committed wrapper properties against the committed lock
+ 7ms
+  [+] rejects a wrapper without a distribution checksum
+ 4ms
+  [+] rejects a wrapper whose distribution version differs from the lock
+ 4ms
+  [+] rejects a wrapper whose checksum differs from the lock
+ 4ms
+  [+] rejects a wrapper that is not the only-script distribution type
+ 4ms
+
+Describing Expand-LockedArchive
+  [+] extracts the expected root directory into the destination and records the checksum marker
+ 68ms
+  [+] does not treat a destination as provisioned when the marker records a different checksum
+ 16ms
+  [+] does not treat a destination without a marker as provisioned
+ 2ms
+  [+] fails closed when the archive root directory is not the expected one
+ 14ms
+  [+] replaces a stale destination instead of merging into it
+ 20ms
+
+Describing Assert-CompleteSourceScope
+  [+] accepts the committed pom and lists every production source
+ 40ms
+  [+] accepts a minimal pom with full lint and no filter
+ 9ms
+  [+] rejects a compiler include list
+ 9ms
+  [+] rejects an exclude list and an implicit setting
+ 12ms
+  [+] rejects an include list hidden in an execution or pluginManagement configuration
+ 12ms
+  [+] rejects a sourcepath override
+ 7ms
+  [+] rejects missing or narrowed lint enforcement
+ 21ms
+
+Describing Assert-JarContainsProductionResources
+  [+] accepts a jar holding every class and resource
+ 65ms
+  [+] fails closed when a resource is missing from the jar
+ 31ms
+  [+] fails closed when a source has no class in the jar
+ 32ms
+  [+] fails closed when the jar does not exist
+ 4ms
+
+Describing Assert-RequiredSurefireSuites
+  [+] returns the test count of every required suite that ran green
+ 9ms
+  [+] fails closed when a required suite has no report
+ 4ms
+  [+] fails closed when a required suite ran zero tests or was not green
+ 6ms
+
+Describing Get-PomProperty
+  [+] reads a property from the committed pom.xml
+ 4ms
+  [+] returns the pinned toolchain runtime version that Surefire forwards to the guard test
+ 4ms
+  [+] fails closed when the property is absent
+ 4ms
+
+Describing Get-SurefireSummary
+  [+] sums tests, failures, errors, and skips across every TEST-*.xml report
+ 16ms
+  [+] reports the JVM vendor and runtime version the forked test JVM actually observed
+ 7ms
+  [+] fails closed when no reports exist
+ 3ms
+
+Running tests from 'D:\repos\BS2BG\tools\java25\UiaAutomation.Tests.ps1'
+Describing System accessibility preference helpers
+  [+] exports reversible High Contrast and client-area animation controls
+ 8ms
+  [+] captures the current state without changing it
+ 15ms
+
+Describing UI Automation selection helpers
+  [+] exports stable logical-selection inspection for packaged list tests
+ 3ms
+  [+] exports provider-located pointer activation for packaged pointer tests
+ 2ms
+
+Describing UI Automation generated-text helpers
+  [+] exports read-only state inspection for packaged Output tests
+ 3ms
+
+Describing UI Automation native filename helpers
+  [+] uses the available ValuePattern and verifies the exact filename text
+ 89ms
+  [+] rejects a write whose readback differs instead of submitting the wrong filename
+ 1.07s
+
+Describing UI Automation empty read-only documents
+  [+] returns a present empty text document instead of its accessible label
+ 21ms
+  [+] retains the pattern fallback when no document text descendant exists
+ 10ms
+
+Describing UI Automation native dialog process ownership
+  [+] uses the supplied dialog process for standalone address typing despite a different caller variable
+ 44ms
+
+Describing UI Automation pointer provider retries
+  [+] uses the refreshed provider bounds when the control moves during retries
+ 141ms
+  [+] refuses pointer input when the latest provider candidate disappears or becomes unavailable
+ 198ms
+
+Running tests from 'D:\repos\BS2BG\tools\java25\WindowsAppImage.Tests.ps1'
+Describing Get-StagedApplication
+  [+] returns the single application jar and every lib/ dependency
+ 32ms
+  [+] fails closed when the staging directory holds no or several top-level jars
+ 16ms
+  [+] fails closed when a JavaFX jar has been staged onto the classpath
+ 9ms
+
+Describing Assert-StagedJsonCodec
+  [+] requires exactly the pinned Jackson Core coordinate
+ 49ms
+  [+] rejects a staged payload that also contains the retired codec
+ 30ms
+  [+] rejects any second production JSON codec
+ 31ms
+  [+] rejects a shaded fallback codec even when no Maven coordinate reveals it
+ 23ms
+
+Describing Assert-CleanGitCheckout
+  [+] returns the pinned commit for a clean checkout and rejects source changes
+ 426ms
+
+Describing ConvertFrom-JdepsModuleDeps
+  [+] parses the comma-separated module line into a sorted unique list
+ 8ms
+  [+] ignores jdeps warnings and blank lines around the module line
+ 2ms
+  [+] fails closed on jdeps errors or output without a module line
+ 6ms
+
+Describing Resolve-RuntimeModules
+  [+] unions the measured closure with the documented explicit additions, sorted
+ 8ms
+  [+] fails closed when the measurement saw no JavaFX module at all
+ 3ms
+  [+] fails closed when the application needs a JavaFX module the lock does not pin
+ 3ms
+
+Describing Read-LauncherConfig and Assert-LauncherConfig
+  [+] reads repeated keys as lists within their sections
+ 3ms
+  [+] accepts a launcher configuration that names the launcher, the jar, every lib jar, and the stamped version
+ 7ms
+  [+] recognizes the accepted single-process launcher configuration
+ 2ms
+  [+] fails closed unless one true no-restart setting pins the launcher to a single process
+ 9ms
+  [+] fails closed unless one true no-restart setting pins the launcher to a single process
+ 7ms
+  [+] fails closed unless one true no-restart setting pins the launcher to a single process
+ 8ms
+  [+] enables single-process mode in a generated launcher configuration exactly once
+ 27ms
+  [+] fails without changing a generated configuration whose no-restart setting is false
+ 15ms
+  [+] fails without changing a generated configuration whose no-restart setting is repeated
+ 4ms
+  [+] fails without changing a configuration whose Application section is missing
+ 6ms
+  [+] fails without changing a configuration whose Application section is repeated
+ 3ms
+  [+] fails closed when the main class is not the launcher
+ 3ms
+  [+] fails closed when the main jar or a staged lib jar is missing from the classpath
+ 5ms
+  [+] fails closed when the stamped version differs or a required java option is absent
+ 8ms
+  [+] fails closed when the classpath or runtime reaches outside the image
+ 13ms
+  [+] fails closed when a JavaFX jar sits on the launcher classpath
+ 8ms
+
+Describing Assert-JpackageState
+  [+] returns the packaging tool version and platform when the stamped identity matches
+ 6ms
+  [+] fails closed when the version, launcher, or main class differ
+ 8ms
+
+Describing Assert-AppImageLayout
+  [+] accepts a complete image and returns its inventory
+ 24ms
+  [+] fails closed when the launcher, a payload jar, the runtime, the notices, or the legal directory is missing
+ 127ms
+  [+] fails closed when an unexpected jar is part of the payload
+ 31ms
+
+Describing Get-TreeDigest
+  [+] is deterministic, path-ordered, and sensitive to a single byte
+ 69ms
+
+Describing Assert-RuntimeRelease
+  [+] returns the module list when the Java version and every expected module match
+ 22ms
+  [+] fails closed on a different Java version or a missing module
+ 6ms
+
+Describing Assert-JimageCompression
+  [+] summarizes compressed resources from verbose jimage metadata
+ 12ms
+  [+] fails closed when jimage reports no compressed resources
+ 3ms
+
+Describing Get-ScrubbedEnvironment
+  [+] removes every JDK discovery variable and every Java directory from PATH
+ 10ms
+
+Describing New-ThirdPartyNotices
+  [+] writes the notices file and extracts each library license and notice file
+ 6ms
+  [+] records a library without embedded license metadata explicitly instead of omitting it
+ 5ms
+  [+] writes exact component and corresponding-source manifests
+ 7ms
+  [+] fails checkpoint generation when a component has no corresponding-source location
+ 11ms
+
+Running tests from 'D:\repos\BS2BG\tools\java25\WindowsDisplayScale.Tests.ps1'
+Describing Primary display capture
+  [+] captures native DPI and Settings choices together and releases the Settings lease
+ 25ms
+  [+] rejects a Settings/native disagreement and still releases the lease
+ 12ms
+
+Describing Primary display scale admission
+  [+] rejects a percentage absent from the captured standard choices before desktop mutation
+ 4ms
+  [+] refuses a replaced primary monitor before opening Settings
+ 9ms
+
+Describing Verified primary scale changes
+  [+] returns the changed native DPI only after the Settings selection agrees
+ 31ms
+  [+] does not write Settings when a discovered non-default scale is already applied
+ 17ms
+Tests completed in 10.17s
+Tests Passed: 132, 
+Failed: 0, 
+Skipped: 0, 
+Inconclusive: 0, 
+NotRun: 0

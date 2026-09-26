@@ -1,0 +1,16 @@
+{
+  "string": {
+    "bodyname": "Controls\b\f\n\r\t\"\\/\u0001\u001f\u2028\u2029 é😀",
+    "slidername1": "A/β",
+    "slidername2": "B"
+  },
+  "int": {
+    "slidersnumber": 2
+  },
+  "float": {
+    "highvalue1": 1.0,
+    "highvalue2": 1E7,
+    "lowvalue1": -0,
+    "lowvalue2": 0.005
+  }
+}

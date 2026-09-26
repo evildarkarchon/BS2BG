@@ -1,0 +1,396 @@
+Window 'BS2BG Preview' [Window,Transform]
+  MenuBar ''
+    MenuItem 'File' [Invoke,ExpandCollapse]
+      Text 'File'
+        Text 'File'
+  Button 'Templates' [Toggle]
+    Text 'Templates'
+  Button 'Morphs' [Toggle]
+    Text 'Morphs'
+  Button 'NPC Database' [Toggle]
+    Text 'NPC Datab...'
+  Button 'Output' [Toggle]
+    Text 'Output'
+  Button 'Settings' [Toggle]
+    Text 'Settings'
+  Text 'Theme:'
+    Text 'Theme:'
+  ComboBox '' [Value,ExpandCollapse]
+    List '' [Selection,Scroll]
+    Text 'System'
+  Text 'Effective theme: Dark theme'
+    Text 'Dark theme'
+  Text 'Motion preference: Standard motion'
+    Text 'Standard motion'
+  Text 'NPC Database Area'
+    Text 'NPC Database'
+  Button 'Generate Project output' [Invoke]
+    Text 'Generate'
+  Text 'Project status'
+    Text 'Untitled Project'
+  Text 'Success'
+    Text 'Success'
+  Text 'New Project created.'
+    Text 'New Project created.'
+  Button 'Dismiss' [Invoke]
+    Text 'Dismiss'
+  Pane 'NPC Database source management' [Scroll]
+    Text 'Sources'
+      Text 'Sources'
+    Text 'NPC Database source count'
+      Text '5 sources loaded'
+    List 'NPC Database sources' [Selection,Scroll]
+      ListItem 'npc-secondary.txt, 0 rows' [SelectionItem,ScrollItem]
+        Text 'npc-secondary.txt — 0 rows'
+      ListItem 'npc-mixed-valid.txt, 0 rows' [SelectionItem,ScrollItem]
+        Text 'npc-mixed-valid.txt — 0 rows'
+      ListItem 'npc-failed-locked.txt, 0 rows' [SelectionItem,ScrollItem]
+        Text 'npc-failed-locked.txt — 0 rows'
+      ListItem 'a-npc-cancel-first.txt, 0 rows' [SelectionItem,ScrollItem]
+        Text 'a-npc-cancel-first.txt — 0 rows'
+      ListItem 'npc-primary.txt, 2 rows' [SelectionItem,ScrollItem]
+        Text 'npc-primary.txt — 2 rows'
+      ScrollBar '' [RangeValue]
+        Button 'increment' [Invoke]
+        Button 'decrement' [Invoke]
+        Thumb ''
+    Button 'Import NPC Database sources' [Invoke]
+      Text 'Import sources…'
+    Button 'Remove selected NPC Database source' [Invoke]
+      Text 'Remove source'
+    Button 'Clear visible NPC Database entries' [Invoke]
+      Text 'Clear visible entries'
+  Text 'NPC catalog'
+    Text 'NPC catalog'
+  Text 'NPC Database catalog summary'
+    Text '2 of 2 NPC Database entries visible; 0 filtered columns.'
+  Text 'Sort NPC catalog:'
+    Text 'Sort NPC catalog:'
+  ComboBox '' [Value,ExpandCollapse]
+    Text 'Name ascending'
+  Button 'Filter Name column' [Toggle]
+    Text 'Name'
+  Button 'Filter Master column' [Toggle]
+    Text 'Master'
+  Button 'Filter Race column' [Toggle]
+    Text 'Race'
+  Button 'Filter EditorID column' [Toggle]
+    Text 'EditorID'
+  Button 'Filter FormID column' [Toggle]
+    Text 'FormID'
+  Button 'Clear NPC Database filters' [Invoke]
+    Text 'Reset filters'
+  Table 'NPC Database catalog' [Selection,Scroll,Grid,Table]
+    Custom 'Name'
+      Text 'Name'
+        Text 'Name'
+    Custom 'Master'
+      Text 'Master'
+        Text 'Master'
+    Custom 'Race'
+      Text 'Race'
+        Text 'Race'
+    Custom 'EditorID'
+      Text 'EditorID'
+        Text 'EditorID'
+    Custom 'FormID'
+      Text 'FormID'
+        Text 'FormID'
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    Custom 'Unnamed (FemaleNord). Plugin: Other.esm. Editor ID: FemaleNord. Race: NordRace. Form ID: 1A696.'
+      DataItem 'Unnamed (FemaleNord)' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text 'Unnamed (FemaleNord)'
+      DataItem 'Other.esm' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text 'Other.esm'
+      DataItem 'NordRace' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text 'NordRace'
+      DataItem 'FemaleNord' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text 'FemaleNord'
+      DataItem '1A696' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text '1A696'
+    Custom 'Lydia. Plugin: Skyrim.esm. Editor ID: HousecarlWhiterun. Race: NordRace. Form ID: A2C94.'
+      DataItem 'Lydia' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text 'Lydia'
+      DataItem 'Skyrim.esm' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text 'Skyrim.esm'
+      DataItem 'NordRace' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text 'NordRace'
+      DataItem 'HousecarlWhiterun' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text 'HousecarlWhiterun'
+      DataItem 'A2C94' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text 'A2C94'
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    Custom ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+      DataItem '' [GridItem,SelectionItem,TableItem,ScrollItem]
+        Text ''
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Pane 'NPC Database inspector controls' [Scroll]
+    Text 'NPC inspector'
+      Text 'NPC inspector'
+    Text 'Selected NPC Database entry'
+      Text 'No NPC selected'
+    Text 'NPC Database source'
+      Text 'Source: none'
+    Text 'NPC plugin'
+      Text 'Plugin: none'
+    Text 'NPC editor ID'
+      Text 'Editor ID: none'
+    Text 'NPC race'
+      Text 'Race: none'
+    Text 'NPC Form ID'
+      Text 'Form ID: none'
+    Text 'NPC portrait'
+      Text 'NPC portrait'
+    Text 'NPC Database portrait status'
+      Text 'No NPC portrait selected'
+    Button 'Open NPC Database portrait viewer' [Invoke]
+      Text 'Open portrait viewer'
+    Text 'NPC Database diagnostics'
+      Text 'No source diagnostics'
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Text 'Project diagnostics'
+    Text 'Project diagnostics'
+  Edit '' [Value,Text]
+    Pane '' [Scroll]
+      Text ''
+  Text 'Activity'
+    Text 'Activity'
+  List 'Activity' [Selection,Scroll]
+    ListItem 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.' [SelectionItem,ScrollItem]
+      Text 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.' [SelectionItem,ScrollItem]
+      Text 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.'
+    ListItem 'Success — Create Slider Preset — Completed: Create Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Create Slider Preset — Completed: Create Slider Preset completed.'
+    ListItem 'Success — Edit Slider choices — Completed: Edit Slider choices changed.' [SelectionItem,ScrollItem]
+      Text 'Success — Edit Slider choices — Completed: Edit Slider choices changed.'
+    ListItem 'Information — Edit Slider choices — Completed: No Slider choice values changed.' [SelectionItem,ScrollItem]
+      Text 'Information — Edit Slider choices — Completed: No Slider choice values changed.'
+    ListItem 'Success — Edit Slider choices — Completed: Edit Slider choices changed.' [SelectionItem,ScrollItem]
+      Text 'Success — Edit Slider choices — Completed: Edit Slider choices changed.'
+    ListItem 'Success — Edit Slider choices — Completed: Edit Slider choices changed.' [SelectionItem,ScrollItem]
+      Text 'Success — Edit Slider choices — Completed: Edit Slider choices changed.'
+    ListItem 'Success — Duplicate Slider Preset — Completed: Duplicate Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Duplicate Slider Preset — Completed: Duplicate Slider Preset completed.'
+    ListItem 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.' [SelectionItem,ScrollItem]
+      Text 'Validation — Templates validation — Failed: ERROR [SLIDER_PRESET_NAME_DUPLICATE] slider-preset.name: A Slider Preset with this name already exists.'
+    ListItem 'Success — Rename Slider Preset — Completed: Rename Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Rename Slider Preset — Completed: Rename Slider Preset completed.'
+    ListItem 'Success — Remove Slider Preset — Completed: Remove Slider Preset completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset — Completed: Remove Slider Preset completed.'
+    ListItem 'Success — Clear visible Slider Presets — Completed: Clear visible Slider Presets completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear visible Slider Presets — Completed: Clear visible Slider Presets completed.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.'
+    ListItem 'Success — Assign all Slider Presets — Completed: Assign all Slider Presets completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Assign all Slider Presets — Completed: Assign all Slider Presets completed.'
+    ListItem 'Success — Generate Output — Completed: Output generated.' [SelectionItem,ScrollItem]
+      Text 'Success — Generate Output — Completed: Output generated.'
+    ListItem 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.'
+    ListItem 'Success — Generate Output — Completed: Output generated.' [SelectionItem,ScrollItem]
+      Text 'Success — Generate Output — Completed: Output generated.'
+    ListItem 'Success — Clear Slider Preset assignments — Completed: Clear Slider Preset assignments completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear Slider Preset assignments — Completed: Clear Slider Preset assignments completed.'
+    ListItem 'Success — Remove Custom Morph Target — Completed: Remove Custom Morph Target completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Custom Morph Target — Completed: Remove Custom Morph Target completed.'
+    ListItem 'Success — Clear visible Custom Morph Targets — Completed: Clear visible Custom Morph Targets completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear visible Custom Morph Targets — Completed: Clear visible Custom Morph Targets completed.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.' [SelectionItem,ScrollItem]
+      Text 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.'
+    ListItem 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove Slider Preset assignment — Completed: Remove Slider Preset assignment completed.'
+    ListItem 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.' [SelectionItem,ScrollItem]
+      Text 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.'
+    ListItem 'Success — Remove NPC Morph Assignment — Completed: Remove NPC Morph Assignment completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove NPC Morph Assignment — Completed: Remove NPC Morph Assignment completed.'
+    ListItem 'Success — Clear visible NPC Morph Assignments — Completed: Clear visible NPC Morph Assignments completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear visible NPC Morph Assignments — Completed: Clear visible NPC Morph Assignments completed.'
+    ListItem 'Success — Generate Output — Completed: Output generated.' [SelectionItem,ScrollItem]
+      Text 'Success — Generate Output — Completed: Output generated.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — Fill Empty NPC Morph Assignments — Completed: Fill Empty NPC Morph Assignments completed.' [SelectionItem,ScrollItem]
+      Text 'Success — Fill Empty NPC Morph Assignments — Completed: Fill Empty NPC Morph Assignments completed.'
+    ListItem 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.' [SelectionItem,ScrollItem]
+      Text 'Warning — Generate Output — Completed with issues: Output generated with 1 unassigned target.'
+    ListItem 'Success — Save Project — Completed: Project saved.' [SelectionItem,ScrollItem]
+      Text 'Success — Save Project — Completed: Project saved.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Open Project — Completed: Project opened.' [SelectionItem,ScrollItem]
+      Text 'Success — Open Project — Completed: Project opened.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ListItem 'Success — Import NPC Database Sources — Completed: NPC Database imported 2 sources.' [SelectionItem,ScrollItem]
+      Text 'Success — Import NPC Database Sources — Completed: NPC Database imported 2 sources.'
+    ListItem 'Warning — Import NPC Database Sources — Completed with issues: NPC Database imported 1 sources with 1 source diagnostics.' [SelectionItem,ScrollItem]
+      Text 'Warning — Import NPC Database Sources — Completed with issues: NPC Database imported 1 sources with 1 source diagnostics.'
+    ListItem 'Failure — Import NPC Database Sources — Failed: No NPC Database source could be imported.' [SelectionItem,ScrollItem]
+      Text 'Failure — Import NPC Database Sources — Failed: No NPC Database source could be imported.'
+    ListItem 'Warning — Import NPC Database Sources — Completed with issues: NPC Database imported 1 sources with 1 source diagnostics.' [SelectionItem,ScrollItem]
+      Text 'Warning — Import NPC Database Sources — Completed with issues: NPC Database imported 1 sources with 1 source diagnostics.'
+    ListItem 'Information — Import NPC Database Sources — Cancelled: Cancellation completed.' [SelectionItem,ScrollItem]
+      Text 'Information — Import NPC Database Sources — Cancelled: Cancellation completed.'
+    ListItem 'Success — Remove NPC Database Source — Completed: Removed source npc-primary.txt.' [SelectionItem,ScrollItem]
+      Text 'Success — Remove NPC Database Source — Completed: Removed source npc-primary.txt.'
+    ListItem 'Success — Clear visible NPC Database entries — Completed: Cleared 5 visible entries.' [SelectionItem,ScrollItem]
+      Text 'Success — Clear visible NPC Database entries — Completed: Cleared 5 visible entries.'
+    ListItem 'Success — Import NPC Database Sources — Completed: NPC Database imported 1 sources.' [SelectionItem,ScrollItem]
+      Text 'Success — Import NPC Database Sources — Completed: NPC Database imported 1 sources.'
+    ListItem 'Success — New Project — Completed: New Project created.' [SelectionItem,ScrollItem]
+      Text 'Success — New Project — Completed: New Project created.'
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Button 'Retry selected activity' [Invoke]
+    Text 'Retry'
+  Text 'Workbench status'
+    Text 'Success — Completed — New Project created.'
+  Button 'Cancel current operation' [Invoke]
+    Text 'Cancel'

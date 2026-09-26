@@ -1,0 +1,18 @@
+{
+  "SliderPresets": {
+    "Alpha": {"isUUNP": false, "SetSliders": []},
+    "Beta": {"isUUNP": false, "SetSliders": []}
+  },
+  "CustomMorphTargets": {
+    "Target": {"SliderPresets": ["alpha", "Missing Target", "BETA"]}
+  },
+  "MorphedNPCs": {
+    "NPC": {
+      "Mod": "Skyrim.esm",
+      "EditorId": "NpcEditor",
+      "Race": "NordRace",
+      "FormId": "00012345",
+      "SliderPresets": ["beta", "Missing NPC"]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "SliderPresets": {
+    "Legacy": {
+      "SetSliders": [
+        {"name":"Waist","valueSmall":25,"valueBig":75}
+      ]
+    }
+  },
+  "CustomMorphTargets": {},
+  "MorphedNPCs": {}
+}

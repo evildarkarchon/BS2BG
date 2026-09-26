@@ -1,0 +1,104 @@
+Window 'BS2BG Preview' [Window,Transform]
+  MenuBar ''
+    MenuItem 'File' [Invoke,ExpandCollapse]
+      Text 'File'
+        Text 'File'
+  Button 'Templates' [Toggle]
+    Text 'Templates'
+  Button 'Morphs' [Toggle]
+    Text 'Morphs'
+  Button 'NPC Database' [Toggle]
+    Text 'NPC Database'
+  Button 'Output' [Toggle]
+    Text 'Output'
+  Button 'Settings' [Toggle]
+    Text 'Settings'
+  Text 'Theme:'
+    Text 'Theme:'
+  ComboBox '' [Value,ExpandCollapse]
+    List '' [Selection,Scroll]
+    Text 'System'
+  Text 'Effective theme: Dark theme'
+    Text 'Dark theme'
+  Text 'Motion preference: Standard motion'
+    Text 'Standard motion'
+  Text 'Morphs Area'
+    Text 'Morphs'
+  Button 'Generate Project output' [Invoke]
+    Text 'Generate'
+  Text 'Project status'
+    Text 'Untitled Project'
+  Pane 'Custom Morph Target management' [Scroll]
+    Text 'Filter Custom Morph Targets:'
+      Text 'Filter Custom Morph Targets:'
+    Edit '' [Value,Text]
+      Text 'Filter by condition or name'
+      Text ''
+    Text 'Sort Custom Morph Targets:'
+      Text 'Sort Custom Morph Targets:'
+    ComboBox '' [Value,ExpandCollapse]
+      List '' [Selection,Scroll]
+      Text 'Name (A–Z)'
+    List 'Custom Morph Targets' [Selection,Scroll]
+    Text 'Custom Morph Target name:'
+      Text 'Custom Morph Target name:'
+    Edit '' [Value,Text]
+      Text 'All|Female'
+      Text ''
+    Button 'Create Custom Morph Target' [Invoke]
+      Text 'Create Custom Morph Target'
+    Button 'Remove selected Custom Morph Target' [Invoke]
+      Text 'Remove Custom Morph Tar...'
+    Button 'Clear visible Custom Morph Targets' [Invoke]
+      Text 'Clear visible Custom Morph ...'
+  Text 'Custom Morph Target editor'
+    Text 'No Custom Morph Target selected'
+  Text 'Select a Custom Morph Target to inspect its BodyGen condition.'
+    Text 'Select a Custom Morph Target to inspect its condition.'
+  Text 'No Slider Presets assigned'
+    Text 'No Slider Presets assigned'
+  Text 'No selected Custom Morph Target is eligible for Morphs output.'
+    Text 'A target needs at least one Slider Preset to appear in Morphs output.'
+  Text 'Use the inspector to manage Slider Preset relationships.'
+    Text 'Use the inspector to manage Slider Preset relationships.'
+  Pane 'Custom Morph Target relationship editor' [Scroll]
+    Text 'Slider Preset relationships'
+      Text 'Slider Preset relationsh...'
+    Text 'Custom Morph Target inspector: no selection'
+      Text 'No Custom Morph Target selected'
+    Text 'Assigned Slider Presets:'
+      Text 'Assigned Slider Presets:'
+    List 'Assigned Slider Presets' [Selection,Scroll]
+    Button 'Remove selected Slider Preset relationship' [Invoke]
+      Text 'Remove assigned Slider Preset'
+    Button 'Clear assigned Slider Presets' [Invoke]
+      Text 'Clear assigned Slider Presets'
+    Text 'Available Slider Preset:'
+      Text 'Available Slider Preset:'
+    ComboBox '' [Value,ExpandCollapse]
+      List '' [Selection,Scroll]
+      Text ''
+    Button 'Assign selected Slider Preset' [Invoke]
+      Text 'Assign Slider Preset'
+    Button 'Assign all Slider Presets' [Invoke]
+      Text 'Assign All Slider Presets'
+  Text 'Project diagnostics'
+    Text 'Project diagnostics'
+  Edit '' [Value,Text]
+    Pane '' [Scroll]
+      Text ''
+  Text 'Activity'
+    Text 'Activity'
+  List 'Activity' [Selection,Scroll]
+    ListItem 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.' [SelectionItem,ScrollItem]
+      Text 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.'
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Button 'Retry selected activity' [Invoke]
+    Text 'Retry'
+  Text 'Workbench status'
+    Text 'Warning — Completed with issues — SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.'
+  Button 'Cancel current operation' [Invoke]
+    Text 'Cancel'

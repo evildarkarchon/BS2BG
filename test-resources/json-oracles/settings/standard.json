@@ -1,0 +1,15 @@
+{
+  "Defaults": {
+    "Waist": {
+      "FutureDefault": {"ignored": true}
+    },
+    "Ångström/形": {"valueSmall": 5e-1}
+  },
+  "Multipliers": {
+    "SignedZero": -0e0,
+    "Exponent": 2e0,
+    "Underflow": 1e-50
+  },
+  "Inverted": ["Waist", "waist", "Ångström/形"],
+  "Future": true
+}

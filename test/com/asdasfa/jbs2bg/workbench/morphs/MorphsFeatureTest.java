@@ -1,0 +1,573 @@
+package com.asdasfa.jbs2bg.workbench.morphs;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.jupiter.api.Test;
+
+import com.asdasfa.jbs2bg.filtering.NameIdentity;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
+import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
+import com.asdasfa.jbs2bg.project.ProjectDiagnosticCodes;
+import com.asdasfa.jbs2bg.project.ProjectSessions;
+import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class MorphsFeatureTest {
+
+    /** Fill Empty freezes visible empty identities and draws once per eligible NPC from only the chosen presets. */
+    @Test
+    void fillEmptyUsesCapturedVisibleEmptyNpcsAndIndependentChosenPresetDraws() {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        for (String name : List.of("Alpha", "Beta", "Gamma"))
+            flow.apply(SliderPresetEdits.create(name));
+        NpcMorphAssignmentIdentity first = new NpcMorphAssignmentIdentity("Visible.esp", "First");
+        NpcMorphAssignmentIdentity second = new NpcMorphAssignmentIdentity("Visible.esp", "Second");
+        NpcMorphAssignmentIdentity occupied = new NpcMorphAssignmentIdentity("Visible.esp", "Occupied");
+        NpcMorphAssignmentIdentity hidden = new NpcMorphAssignmentIdentity("Hidden.esp", "Hidden");
+        for (NpcMorphAssignmentIdentity identity : List.of(first, second, occupied, hidden))
+            flow.apply(NpcMorphAssignmentEdits.create(identity.getEditorId(), identity.getPluginName(),
+                    identity.getEditorId(), "NordRace", "000001"));
+        flow.apply(NpcMorphAssignmentEdits.addSliderPreset(occupied, "Gamma"));
+        AtomicInteger draws = new AtomicInteger();
+        Random alternating = new Random() {
+            @Override
+            public int nextInt(int bound) {
+                return draws.getAndIncrement() % bound;
+            }
+        };
+        MorphsFeature feature = new MorphsFeature(flow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC), alternating);
+        feature.dispatch(new MorphsFeature.ChangeNpcFilter("Visible.esp"));
+
+        MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RequestFillEmpty());
+        MorphsFeature.FillEmptyOffer offer = requested.fillEmptyOffer().orElseThrow();
+        MorphsFeature.Update filled = feature.respondFillEmpty(offer.token(),
+                List.of(NameIdentity.of("Alpha"), NameIdentity.of("Beta")));
+
+        assertEquals(List.of(first, second), offer.emptyIdentities());
+        assertEquals(3, offer.eligiblePresets().size());
+        assertEquals(MorphsFeature.OutcomeKind.CHANGED, filled.outcomeKind());
+        assertEquals(2, draws.get());
+        assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().stream()
+                .filter(npc -> npc.getEditorId().equals("First")).findFirst().orElseThrow()
+                .getSliderPresetNames());
+        assertEquals(List.of("Beta"), flow.frame().snapshot().getNpcMorphAssignments().stream()
+                .filter(npc -> npc.getEditorId().equals("Second")).findFirst().orElseThrow()
+                .getSliderPresetNames());
+        assertEquals(List.of("Gamma"), flow.frame().snapshot().getNpcMorphAssignments().stream()
+                .filter(npc -> npc.getEditorId().equals("Occupied")).findFirst().orElseThrow()
+                .getSliderPresetNames());
+        assertTrue(flow.frame().snapshot().getNpcMorphAssignments().stream()
+                .filter(npc -> npc.getEditorId().equals("Hidden")).findFirst().orElseThrow()
+                .getSliderPresetNames().isEmpty());
+    }
+
+    /** Cancel and an empty visible scope never mutate the Project. */
+    @Test
+    void fillEmptyCancellationAndEmptyScopeLeaveProjectUntouched() {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        MorphsFeature feature = new MorphsFeature(flow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        MorphsFeature.FillEmptyOffer offer = feature.dispatch(new MorphsFeature.RequestFillEmpty())
+                .fillEmptyOffer().orElseThrow();
+        feature.cancelFillEmpty(offer.token());
+        feature.dispatch(new MorphsFeature.ChangeNpcFilter("Nothing matches"));
+
+        MorphsFeature.Update empty = feature.dispatch(new MorphsFeature.RequestFillEmpty());
+
+        assertTrue(empty.fillEmptyOffer().isEmpty());
+        assertEquals("No NPC in the table is empty!", empty.frame().diagnostics().getFirst().getMessage());
+        assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst().getSliderPresetNames().isEmpty());
+    }
+
+    /** A missing Project preset catalog and a forged flyout choice fail inline without an edit. */
+    @Test
+    void fillEmptyRejectsNoPresetsAndChoicesOutsideTheCapturedOffer() {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        MorphsFeature feature = new MorphsFeature(flow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        MorphsFeature.Update withoutPresets = feature.dispatch(new MorphsFeature.RequestFillEmpty());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        feature.acceptProjectFrame(flow.frame(), false);
+        MorphsFeature.FillEmptyOffer offer = feature.dispatch(new MorphsFeature.RequestFillEmpty())
+                .fillEmptyOffer().orElseThrow();
+
+        MorphsFeature.Update rejected = feature.respondFillEmpty(offer.token(), List.of(NameIdentity.of("Beta")));
+
+        assertTrue(withoutPresets.fillEmptyOffer().isEmpty());
+        assertEquals(MorphsFeature.OutcomeKind.REJECTED, withoutPresets.outcomeKind());
+        assertEquals(MorphsFeature.OutcomeKind.REJECTED, rejected.outcomeKind());
+        assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst().getSliderPresetNames().isEmpty());
+    }
+
+    /** NPC and Custom Morph Target selections have separate identities and exactly one active inspector. */
+    @Test
+    void createsNpcAndKeepsMorphSelectionsMutuallyExclusive() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(CustomMorphTargetEdits.create("Lydia"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.Select(NameIdentity.of("Lydia")));
+
+        MorphsFeature.Update created = feature.dispatch(new MorphsFeature.CreateNpc(
+                "Lydia", "Skyrim.esm", "HousecarlWhiterun", "NordRace", "000A2C94"));
+        NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity("SKYRIM.ESM", "housecarlwhiterun");
+        MorphsFeature.Update targetSelected = feature.dispatch(new MorphsFeature.Select(NameIdentity.of("Lydia")));
+        MorphsFeature.Update npcSelected = feature.dispatch(new MorphsFeature.SelectNpc(identity));
+
+        assertEquals(MorphsFeature.OutcomeKind.CHANGED, created.outcomeKind());
+        assertTrue(created.frame().selection().isEmpty());
+        assertEquals(identity, created.frame().npcSelection().orElseThrow());
+        assertEquals("Lydia", created.frame().npcEditor().orElseThrow().npc().getDisplayName());
+        assertEquals("A2C94", created.frame().npcEditor().orElseThrow().npc().getFormId());
+        assertTrue(targetSelected.frame().npcSelection().isEmpty());
+        assertEquals(NameIdentity.of("Lydia"), targetSelected.frame().selection().orElseThrow());
+        assertTrue(npcSelected.frame().selection().isEmpty());
+        assertEquals(identity, npcSelected.frame().npcSelection().orElseThrow());
+    }
+
+    /** NPC filtering and ordering preserve a visible plugin/editor identity even when display names repeat. */
+    @Test
+    void filtersAndSortsNpcsWithoutRetargetingSelection() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Companion.esp", "SecondLydia",
+                "BretonRace", "0000BEEF"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Aela", "Skyrim.esm", "AelaTheHuntress",
+                "NordRace", "0000A123"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        NpcMorphAssignmentIdentity selected = new NpcMorphAssignmentIdentity("Skyrim.esm", "HousecarlWhiterun");
+        feature.dispatch(new MorphsFeature.SelectNpc(selected));
+
+        MorphsFeature.Update sorted = feature.dispatch(new MorphsFeature.ChangeNpcSort(
+                MorphsFeature.NpcSortOrder.PLUGIN_ASCENDING));
+        MorphsFeature.Update hidden = feature.dispatch(new MorphsFeature.ChangeNpcFilter("BretonRace"));
+        MorphsFeature.Update revealed = feature.dispatch(new MorphsFeature.ChangeNpcFilter(""));
+        feature.dispatch(new MorphsFeature.SelectNpc(selected));
+        projectFlow.apply(NpcMorphAssignmentEdits.removeNpc(new NpcMorphAssignmentIdentity(
+                "Companion.esp", "SecondLydia")));
+        MorphsFeature.Update refreshed = feature.acceptProjectFrame(projectFlow.frame(), false);
+
+        assertEquals(List.of("Companion.esp/SecondLydia", "Skyrim.esm/AelaTheHuntress",
+                        "Skyrim.esm/HousecarlWhiterun"), sorted.frame().visibleNpcs().stream()
+                .map(npc -> npc.getPluginName() + "/" + npc.getEditorId()).toList());
+        assertEquals(selected, sorted.frame().npcSelection().orElseThrow());
+        assertEquals(List.of("Companion.esp/SecondLydia"), hidden.frame().visibleNpcs().stream()
+                .map(npc -> npc.getPluginName() + "/" + npc.getEditorId()).toList());
+        assertTrue(hidden.frame().npcSelection().isEmpty());
+        assertTrue(revealed.frame().npcSelection().isEmpty());
+        assertEquals(selected, refreshed.frame().npcSelection().orElseThrow());
+    }
+
+    /** NPC relationship edits stay on the selected identity and Project cascades survive rename and removal. */
+    @Test
+    void editsNpcRelationshipsThroughProjectAndDropsStalePresetSelection() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.create("Beta"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity("SKYRIM.ESM", "housecarlwhiterun");
+        feature.dispatch(new MorphsFeature.SelectNpc(identity));
+
+        MorphsFeature.Update assigned = feature.dispatch(new MorphsFeature.AssignSliderPreset(NameIdentity.of("alpha")));
+        MorphsFeature.Update rejected = feature.dispatch(new MorphsFeature.AssignSliderPreset(NameIdentity.of("Missing")));
+        feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Alpha")));
+        projectFlow.apply(SliderPresetEdits.rename("Alpha", "Gamma"));
+        MorphsFeature.Update renamed = feature.acceptProjectFrame(projectFlow.frame(), false);
+        projectFlow.apply(SliderPresetEdits.delete("Gamma"));
+        MorphsFeature.Update removed = feature.acceptProjectFrame(projectFlow.frame(), false);
+
+        assertEquals(List.of("Alpha"), assigned.frame().npcEditor().orElseThrow().assignedPresets().stream()
+                .map(preset -> preset.getName()).toList());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND,
+                rejected.frame().diagnostics().getFirst().getCode());
+        assertEquals(List.of("Alpha"), rejected.frame().npcEditor().orElseThrow().assignedPresets().stream()
+                .map(preset -> preset.getName()).toList());
+        assertEquals(identity, renamed.frame().npcSelection().orElseThrow());
+        assertEquals(List.of("Gamma"), renamed.frame().npcEditor().orElseThrow().assignedPresets().stream()
+                .map(preset -> preset.getName()).toList());
+        assertTrue(renamed.frame().npcEditor().orElseThrow().assignedSelection().isEmpty());
+        assertTrue(removed.frame().npcEditor().orElseThrow().assignedPresets().isEmpty());
+    }
+
+    /** A filtered clear captures plugin/editor identities and cannot remove a later matching NPC. */
+    @Test
+    void confirmedNpcClearRemovesOnlyCapturedVisibleIdentities() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Companion.esp", "SecondLydia",
+                "BretonRace", "0000BEEF"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.ChangeNpcFilter("Companion"));
+        feature.dispatch(new MorphsFeature.SelectNpc(new NpcMorphAssignmentIdentity("Companion.esp", "SecondLydia")));
+
+        MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RequestClearVisibleNpcs());
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Another", "Companion.esp", "ThirdNpc",
+                "NordRace", "0000C001"));
+        MorphsFeature.Update blocked = feature.dispatch(new MorphsFeature.ChangeNpcFilter(""));
+        MorphsFeature.Update confirmed = feature.respond(requested.effect().orElseThrow().token(), true);
+
+        assertEquals(MorphsFeature.EffectKind.CONFIRM_CLEAR_VISIBLE_NPCS,
+                requested.effect().orElseThrow().kind());
+        assertEquals(List.of(new NpcMorphAssignmentIdentity("Companion.esp", "SecondLydia")),
+                requested.effect().orElseThrow().npcIdentities());
+        assertTrue(!blocked.accepted());
+        assertEquals(List.of("Companion.esp/ThirdNpc", "Skyrim.esm/HousecarlWhiterun"),
+                projectFlow.frame().snapshot().getNpcMorphAssignments().stream()
+                        .map(npc -> npc.getPluginName() + "/" + npc.getEditorId()).toList());
+        assertTrue(confirmed.frame().npcSelection().isEmpty());
+    }
+
+    /** A confirmed relationship edit addresses its frozen NPC identity after external selection changes. */
+    @Test
+    void rejectedNpcRelationshipRemovalDoesNotRetargetAnotherNpc() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Companion.esp", "SecondLydia",
+                "BretonRace", "0000BEEF"));
+        NpcMorphAssignmentIdentity first = new NpcMorphAssignmentIdentity("Skyrim.esm", "HousecarlWhiterun");
+        NpcMorphAssignmentIdentity second = new NpcMorphAssignmentIdentity("Companion.esp", "SecondLydia");
+        projectFlow.apply(NpcMorphAssignmentEdits.addSliderPreset(first, "Alpha"));
+        projectFlow.apply(NpcMorphAssignmentEdits.addSliderPreset(second, "Alpha"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.SelectNpc(first));
+        feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Alpha")));
+        MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RemoveAssignedSliderPreset());
+        projectFlow.apply(NpcMorphAssignmentEdits.removeNpc(first));
+
+        MorphsFeature.Update rejected = feature.respond(requested.effect().orElseThrow().token(), true);
+
+        assertEquals(MorphsFeature.OutcomeKind.REJECTED, rejected.outcomeKind());
+        assertEquals(ProjectDiagnosticCodes.NPC_MORPH_ASSIGNMENT_NOT_FOUND,
+                rejected.frame().diagnostics().getFirst().getCode());
+        assertTrue(rejected.frame().npcSelection().isEmpty());
+        assertEquals(List.of("Alpha"), projectFlow.frame().snapshot().getNpcMorphAssignments().getFirst()
+                .getSliderPresetNames());
+    }
+
+    /**
+     * A condition-bearing name remains intact while creation publishes and selects only the immutable value accepted
+     * by the authoritative Project flow.
+     */
+    @Test
+    void createsBodyGenConditionTargetThroughProjectFlowAndSelectsIt() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+
+        MorphsFeature.Update update = feature.dispatch(new MorphsFeature.Create("  All|Female  "));
+
+        assertTrue(update.accepted());
+        assertEquals(MorphsFeature.OutcomeKind.CHANGED, update.outcomeKind());
+        assertEquals(List.of("All|Female"), update.frame().visibleTargets().stream()
+                .map(target -> target.getName()).toList());
+        assertEquals(NameIdentity.of("All|Female"), update.frame().selection().orElseThrow());
+        assertEquals(List.of("All|Female"), projectFlow.frame().snapshot().getCustomMorphTargets().stream()
+                .map(target -> target.getName()).toList());
+    }
+
+    /**
+     * Creation captures exactly one independently random relationship from the eligible Project catalog without
+     * making a seed, sequence, or distribution part of compatibility.
+     */
+    @Test
+    void creationAutomaticallyAssignsOneEligibleSliderPreset() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.create("Beta"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC), new Random(107L));
+
+        MorphsFeature.Update created = feature.dispatch(new MorphsFeature.Create("All|Female"));
+        List<String> assignments = created.frame().editor().orElseThrow().target().getSliderPresetNames();
+
+        assertEquals(1, assignments.size());
+        assertTrue(Set.of("Alpha", "Beta").contains(assignments.getFirst()));
+    }
+
+    /**
+     * Relationship intents resolve case-insensitive identities through ProjectSession and retain the accepted
+     * assignment when a later request names a missing Slider Preset.
+     */
+    @Test
+    void editsSliderPresetRelationshipsWithoutBypassingProjectIntegrity() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.create("Beta"));
+        projectFlow.apply(CustomMorphTargetEdits.create("All|Female"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.Select(NameIdentity.of("all|female")));
+
+        MorphsFeature.Update assigned = feature.dispatch(
+                new MorphsFeature.AssignSliderPreset(NameIdentity.of("ALPHA")));
+        MorphsFeature.Update rejected = feature.dispatch(
+                new MorphsFeature.AssignSliderPreset(NameIdentity.of("Missing")));
+
+        assertEquals(MorphsFeature.OutcomeKind.CHANGED, assigned.outcomeKind());
+        assertEquals(List.of("Alpha"), assigned.frame().editor().orElseThrow().assignedPresets().stream()
+                .map(preset -> preset.getName()).toList());
+        assertEquals(List.of("Beta"), assigned.frame().editor().orElseThrow().availablePresets().stream()
+                .map(preset -> preset.getName()).toList());
+        assertEquals(MorphsFeature.OutcomeKind.REJECTED, rejected.outcomeKind());
+        assertEquals(ProjectDiagnosticCodes.SLIDER_PRESET_NOT_FOUND,
+                rejected.frame().diagnostics().getFirst().getCode());
+        assertEquals(List.of("Alpha"), rejected.frame().editor().orElseThrow().assignedPresets().stream()
+                .map(preset -> preset.getName()).toList());
+    }
+
+    /**
+     * Sorting and Project row replacement retain a visible logical identity, while filtering or deletion clears it
+     * permanently instead of restoring or retargeting the selection.
+     */
+    @Test
+    void reconcilesSelectionByIdentityAcrossFilteringSortingAndProjectRefresh() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(CustomMorphTargetEdits.create("Alpha"));
+        projectFlow.apply(CustomMorphTargetEdits.create("Beta"));
+        projectFlow.apply(CustomMorphTargetEdits.create("Gamma"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.Select(NameIdentity.of("Beta")));
+
+        MorphsFeature.Update sorted = feature.dispatch(
+                new MorphsFeature.ChangeSort(MorphsFeature.SortOrder.NAME_DESCENDING));
+        MorphsFeature.Update hidden = feature.dispatch(new MorphsFeature.ChangeFilter("alp"));
+        MorphsFeature.Update revealed = feature.dispatch(new MorphsFeature.ChangeFilter(""));
+        feature.dispatch(new MorphsFeature.Select(NameIdentity.of("Beta")));
+        projectFlow.apply(CustomMorphTargetEdits.create("Delta"));
+        MorphsFeature.Update refreshed = feature.acceptProjectFrame(projectFlow.frame(), false);
+        projectFlow.apply(CustomMorphTargetEdits.delete("beta"));
+        MorphsFeature.Update removed = feature.acceptProjectFrame(projectFlow.frame(), false);
+
+        assertEquals(List.of("Gamma", "Beta", "Alpha"), sorted.frame().visibleTargets().stream()
+                .map(target -> target.getName()).toList());
+        assertEquals(NameIdentity.of("Beta"), sorted.frame().selection().orElseThrow());
+        assertEquals(List.of("Alpha"), hidden.frame().visibleTargets().stream()
+                .map(target -> target.getName()).toList());
+        assertTrue(hidden.frame().selection().isEmpty());
+        assertTrue(revealed.frame().selection().isEmpty());
+        assertEquals(NameIdentity.of("Beta"), refreshed.frame().selection().orElseThrow());
+        assertTrue(removed.frame().selection().isEmpty());
+    }
+
+    /**
+     * Clear-visible confirmation captures one immutable identity set and prevents later control gestures from
+     * changing the operand while the destructive decision is pending.
+     */
+    @Test
+    void confirmedClearDeletesOnlyTheCapturedVisibleTargets() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(CustomMorphTargetEdits.create("Alpha"));
+        projectFlow.apply(CustomMorphTargetEdits.create("Beta"));
+        projectFlow.apply(CustomMorphTargetEdits.create("Gamma"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.ChangeFilter("alp"));
+
+        MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RequestClearVisible());
+        MorphsFeature.Effect effect = requested.effect().orElseThrow();
+        MorphsFeature.Update blocked = feature.dispatch(new MorphsFeature.ChangeFilter(""));
+        MorphsFeature.Update confirmed = feature.respond(effect.token(), true);
+
+        assertEquals(MorphsFeature.EffectKind.CONFIRM_CLEAR_VISIBLE, effect.kind());
+        assertEquals(List.of(NameIdentity.of("Alpha")), effect.identities());
+        assertTrue(requested.accepted());
+        assertTrue(!blocked.accepted());
+        assertEquals(MorphsFeature.OutcomeKind.CHANGED, confirmed.outcomeKind());
+        assertEquals(List.of("Beta", "Gamma"), projectFlow.frame().snapshot().getCustomMorphTargets().stream()
+                .map(target -> target.getName()).toList());
+    }
+
+    /**
+     * Relationship bulk-add, selection, rename reconciliation, removal, and confirmed clear all operate on stable
+     * Slider Preset identities and always render the accepted Project snapshot.
+     */
+    @Test
+    void managesAllRelationshipsWithoutSilentlyRetargetingAssignedSelection() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(SliderPresetEdits.create("Alpha"));
+        projectFlow.apply(SliderPresetEdits.create("Beta"));
+        projectFlow.apply(SliderPresetEdits.create("Gamma"));
+        projectFlow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.Select(NameIdentity.of("All|Female")));
+
+        MorphsFeature.Update assignedAll = feature.dispatch(new MorphsFeature.AssignAllSliderPresets());
+        feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Beta")));
+        MorphsFeature.Update clearedSelection = feature.dispatch(
+                new MorphsFeature.ClearAssignedSliderPresetSelection());
+        feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Beta")));
+        projectFlow.apply(SliderPresetEdits.rename("Beta", "Delta"));
+        MorphsFeature.Update renamed = feature.acceptProjectFrame(projectFlow.frame(), false);
+        feature.dispatch(new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Delta")));
+        MorphsFeature.Update requestedRemoval = feature.dispatch(new MorphsFeature.RemoveAssignedSliderPreset());
+        MorphsFeature.Update cancelledRemoval = feature.respond(
+                requestedRemoval.effect().orElseThrow().token(), false);
+        MorphsFeature.Update requestedAgain = feature.dispatch(new MorphsFeature.RemoveAssignedSliderPreset());
+        MorphsFeature.Update removed = feature.respond(requestedAgain.effect().orElseThrow().token(), true);
+        MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RequestClearAssignments());
+        MorphsFeature.Update cleared = feature.respond(requested.effect().orElseThrow().token(), true);
+
+        assertEquals(List.of("Alpha", "Beta", "Gamma"), assignedAll.frame().editor().orElseThrow()
+                .assignedPresets().stream().map(preset -> preset.getName()).toList());
+        assertTrue(clearedSelection.frame().editor().orElseThrow().assignedSelection().isEmpty());
+        assertEquals(NameIdentity.of("All|Female"), renamed.frame().selection().orElseThrow());
+        assertTrue(renamed.frame().editor().orElseThrow().assignedSelection().isEmpty());
+        assertEquals(MorphsFeature.EffectKind.CONFIRM_REMOVE_ASSIGNMENT,
+                requestedRemoval.effect().orElseThrow().kind());
+        assertEquals(List.of("Alpha", "Delta", "Gamma"), cancelledRemoval.frame().editor().orElseThrow()
+                .assignedPresets().stream().map(preset -> preset.getName()).toList());
+        assertEquals(NameIdentity.of("Delta"), cancelledRemoval.frame().editor().orElseThrow()
+                .assignedSelection().orElseThrow());
+        assertEquals(List.of("Alpha", "Gamma"), removed.frame().editor().orElseThrow().assignedPresets().stream()
+                .map(preset -> preset.getName()).toList());
+        assertEquals(MorphsFeature.EffectKind.CONFIRM_CLEAR_ASSIGNMENTS,
+                requested.effect().orElseThrow().kind());
+        assertTrue(cleared.frame().editor().orElseThrow().assignedPresets().isEmpty());
+    }
+
+    /**
+     * Type-ahead follows the visible sorted order, cycles repeated characters, and resets after the accepted timeout.
+     */
+    @Test
+    void typeAheadCyclesVisibleMatchesAndResetsAfterTimeout() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(CustomMorphTargetEdits.create("Alpha"));
+        projectFlow.apply(CustomMorphTargetEdits.create("Amber"));
+        projectFlow.apply(CustomMorphTargetEdits.create("Beta"));
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-02T12:00:00Z"));
+        MorphsFeature feature = new MorphsFeature(projectFlow, clock);
+
+        feature.dispatch(new MorphsFeature.TypeAhead('a'));
+        NameIdentity first = feature.frame().selection().orElseThrow();
+        feature.dispatch(new MorphsFeature.TypeAhead('a'));
+        NameIdentity cycled = feature.frame().selection().orElseThrow();
+        clock.advance(Duration.ofMillis(751));
+        feature.dispatch(new MorphsFeature.TypeAhead('b'));
+
+        assertEquals(NameIdentity.of("Alpha"), first);
+        assertEquals(NameIdentity.of("Amber"), cycled);
+        assertEquals(NameIdentity.of("Beta"), feature.frame().selection().orElseThrow());
+    }
+
+    /**
+     * Validation is durable feature state, committed frames reach healthy observers, and one broken renderer cannot
+     * stall publication or outlive a closed subscription.
+     */
+    @Test
+    void publishesValidationFramesWhileIsolatingObserverFailures() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        List<Throwable> failures = new ArrayList<>();
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC), failures::add);
+        List<MorphsFeature.Frame> observed = new ArrayList<>();
+        MorphsFeature.Subscription subscription = feature.observe(observed::add);
+        feature.observe(frame -> {
+            throw new IllegalStateException("broken Morphs renderer");
+        });
+
+        MorphsFeature.Update rejected = feature.dispatch(new MorphsFeature.Create("   "));
+        MorphsFeature.Update dismissed = feature.dispatch(new MorphsFeature.DismissDiagnostics());
+        int beforeClose = observed.size();
+        subscription.close();
+        feature.dispatch(new MorphsFeature.ChangeSort(MorphsFeature.SortOrder.NAME_DESCENDING));
+
+        assertEquals(MorphsFeature.OutcomeKind.REJECTED, rejected.outcomeKind());
+        assertEquals(ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_REQUIRED,
+                rejected.frame().diagnostics().getFirst().getCode());
+        assertTrue(dismissed.frame().diagnostics().isEmpty());
+        assertEquals(List.of("broken Morphs renderer", "broken Morphs renderer", "broken Morphs renderer"),
+                failures.stream().map(Throwable::getMessage).toList());
+        assertEquals(beforeClose, observed.size());
+    }
+
+    /**
+     * Remove confirmation captures the selected target; cancelling preserves it, while confirming removes it and
+     * leaves no selection instead of silently moving to a neighboring row.
+     */
+    @Test
+    void removeConfirmationNeverRetargetsSelection() {
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        projectFlow.apply(CustomMorphTargetEdits.create("Alpha"));
+        projectFlow.apply(CustomMorphTargetEdits.create("Beta"));
+        MorphsFeature feature = new MorphsFeature(projectFlow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        feature.dispatch(new MorphsFeature.Select(NameIdentity.of("Beta")));
+
+        MorphsFeature.Update requested = feature.dispatch(new MorphsFeature.RequestRemove());
+        MorphsFeature.Update cancelled = feature.respond(requested.effect().orElseThrow().token(), false);
+        MorphsFeature.Update requestedAgain = feature.dispatch(new MorphsFeature.RequestRemove());
+        MorphsFeature.Update removed = feature.respond(requestedAgain.effect().orElseThrow().token(), true);
+
+        assertEquals(MorphsFeature.EffectKind.CONFIRM_REMOVE, requested.effect().orElseThrow().kind());
+        assertEquals(List.of(NameIdentity.of("Beta")), requested.effect().orElseThrow().identities());
+        assertEquals(NameIdentity.of("Beta"), cancelled.frame().selection().orElseThrow());
+        assertEquals(List.of("Alpha"), removed.frame().visibleTargets().stream()
+                .map(target -> target.getName()).toList());
+        assertTrue(removed.frame().selection().isEmpty());
+        assertTrue(feature.dispatch(new MorphsFeature.ClearSelection()).accepted());
+    }
+
+    /** Minimal deterministic clock used to cross the type-ahead timeout without sleeping. */
+    private static final class MutableClock extends Clock {
+        private Instant now;
+
+        /** Creates the clock at one stable instant. */
+        private MutableClock(Instant now) {
+            this.now = now;
+        }
+
+        /** Advances the instant monotonically for one interaction step. */
+        private void advance(Duration duration) {
+            now = now.plus(duration);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public Instant instant() {
+            return now;
+        }
+    }
+}

@@ -1,0 +1,12 @@
+{
+  "SliderPresets": {
+    "Alpha": {
+      "isUUNP": false,
+      "SetSliders": [
+        {"name":"Waist","enabled":true,"valueBig":null,"pctMin":100,"pctMax":100}
+      ]
+    }
+  },
+  "CustomMorphTargets": {},
+  "MorphedNPCs": {}
+}

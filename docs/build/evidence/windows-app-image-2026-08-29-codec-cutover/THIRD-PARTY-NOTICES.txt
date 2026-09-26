@@ -1,0 +1,28 @@
+BS2BG 1.1.2 - third-party notices
+
+This self-contained Windows x64 application image bundles the following components.
+Their license texts are shipped inside the image at the paths named below.
+
+Bundled runtime
+---------------
+Eclipse Adoptium Temurin-25.0.4.1+1 (Eclipse Temurin JDK, jlink'd runtime) 25.0.4.1+1-LTS
+  License: GNU General Public License v2.0 with the Classpath Exception
+  Notices: runtime/legal/<module>/ (LICENSE, ASSEMBLY_EXCEPTION, ADDITIONAL_LICENSE_INFO and third-party .md files per JDK module)
+OpenJFX (Gluon JavaFX Windows x64 JMODs) 25.0.4
+  License: GNU General Public License v2.0 with the Classpath Exception
+  Notices: runtime/legal/{javafx.base,javafx.graphics,javafx.controls,javafx.fxml}/
+
+Application libraries (app/lib)
+-------------------------------
+commons-io-2.6.jar (commons-io:commons-io:2.6)
+  Notices: notices/commons-io-2.6/LICENSE.txt
+  Notices: notices/commons-io-2.6/NOTICE.txt
+jackson-core-3.1.5.jar (tools.jackson.core:jackson-core:3.1.5)
+  License: The Apache Software License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0.txt)
+  Notices: notices/jackson-core-3.1.5/LICENSE
+  Notices: notices/jackson-core-3.1.5/NOTICE
+juniversalchardet-2.1.0.jar (com.github.albfernandez:juniversalchardet:2.1.0)
+  License: Mozilla Public License Version 1.1 (https://www.mozilla.org/en-US/MPL/1.1/)
+  License: GENERAL PUBLIC LICENSE, version 3 (GPL-3.0) (http://www.gnu.org/licenses/gpl.txt)
+  License: GNU LESSER GENERAL PUBLIC LICENSE, version 3 (LGPL-3.0) (http://www.gnu.org/licenses/lgpl.txt)
+

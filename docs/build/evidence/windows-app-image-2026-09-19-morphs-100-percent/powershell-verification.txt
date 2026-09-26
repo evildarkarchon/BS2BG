@@ -1,0 +1,286 @@
+Pester v6.2.0
+
+Running tests from 3 files.
+
+Running tests from 'D:\repos\BS2BG\tools\java25\Java25Toolchain.Tests.ps1'
+Describing Get-ToolchainLock
+  [+] loads the committed lock and exposes every pinned input
+ 87ms
+  [+] fails closed when a required section is missing
+ 28ms
+  [+] fails closed when a checksum is not a 64-hex SHA-256
+ 10ms
+  [+] fails closed when an exact runtime source pin is missing
+ 7ms
+
+Describing Assert-FileSha256
+  [+] returns the lowercase hash when it matches, regardless of the expected value casing
+ 5ms
+  [+] throws a fail-closed error that names the input and both hashes on mismatch
+ 7ms
+
+Describing Clear-ReadOnlyBuildOutputs
+  [+] clears read-only attributes left by jpackage beneath the selected build-output root
+ 16ms
+  [+] is a no-op when no previous build-output tree exists
+ 2ms
+
+Describing Read-JdkReleaseFile
+  [+] parses quoted KEY="value" pairs and ignores blank lines
+ 8ms
+
+Describing Assert-JdkRelease
+  [+] accepts a release file whose pinned keys all match (extra keys are ignored)
+ 22ms
+  [+] reports every mismatching or missing key in one fail-closed error
+ 7ms
+  [+] rejects a different vendor even when the version strings match
+ 4ms
+
+Describing Assert-JmodDescribeOutput
+  [+] accepts the pinned module@version header
+ 9ms
+  [+] rejects a different patch version
+ 3ms
+  [+] rejects a different module name
+ 3ms
+  [+] skips blank lines before the header (jmod describe emits one)
+ 3ms
+  [+] rejects empty output
+ 3ms
+
+Describing Assert-MavenWrapperPinned
+  [+] accepts the committed wrapper properties against the committed lock
+ 6ms
+  [+] rejects a wrapper without a distribution checksum
+ 3ms
+  [+] rejects a wrapper whose distribution version differs from the lock
+ 3ms
+  [+] rejects a wrapper whose checksum differs from the lock
+ 3ms
+  [+] rejects a wrapper that is not the only-script distribution type
+ 3ms
+
+Describing Expand-LockedArchive
+  [+] extracts the expected root directory into the destination and records the checksum marker
+ 65ms
+  [+] does not treat a destination as provisioned when the marker records a different checksum
+ 16ms
+  [+] does not treat a destination without a marker as provisioned
+ 2ms
+  [+] fails closed when the archive root directory is not the expected one
+ 14ms
+  [+] replaces a stale destination instead of merging into it
+ 19ms
+
+Describing Assert-CompleteSourceScope
+  [+] accepts the committed pom and lists every production source
+ 69ms
+  [+] accepts a minimal pom with full lint and no filter
+ 10ms
+  [+] rejects a compiler include list
+ 10ms
+  [+] rejects an exclude list and an implicit setting
+ 13ms
+  [+] rejects an include list hidden in an execution or pluginManagement configuration
+ 11ms
+  [+] rejects a sourcepath override
+ 7ms
+  [+] rejects missing or narrowed lint enforcement
+ 24ms
+
+Describing Assert-JarContainsProductionResources
+  [+] accepts a jar holding every class and resource
+ 49ms
+  [+] fails closed when a resource is missing from the jar
+ 31ms
+  [+] fails closed when a source has no class in the jar
+ 28ms
+  [+] fails closed when the jar does not exist
+ 3ms
+
+Describing Assert-RequiredSurefireSuites
+  [+] returns the test count of every required suite that ran green
+ 8ms
+  [+] fails closed when a required suite has no report
+ 5ms
+  [+] fails closed when a required suite ran zero tests or was not green
+ 6ms
+
+Describing Get-PomProperty
+  [+] reads a property from the committed pom.xml
+ 4ms
+  [+] returns the pinned toolchain runtime version that Surefire forwards to the guard test
+ 4ms
+  [+] fails closed when the property is absent
+ 4ms
+
+Describing Get-SurefireSummary
+  [+] sums tests, failures, errors, and skips across every TEST-*.xml report
+ 14ms
+  [+] reports the JVM vendor and runtime version the forked test JVM actually observed
+ 7ms
+  [+] fails closed when no reports exist
+ 3ms
+
+Running tests from 'D:\repos\BS2BG\tools\java25\UiaAutomation.Tests.ps1'
+Describing System accessibility preference helpers
+  [+] exports reversible High Contrast and client-area animation controls
+ 11ms
+  [+] captures the current state without changing it
+ 13ms
+
+Describing UI Automation selection helpers
+  [+] exports stable logical-selection inspection for packaged list tests
+ 3ms
+  [+] exports provider-located pointer activation for packaged pointer tests
+ 2ms
+
+Describing UI Automation generated-text helpers
+  [+] exports read-only state inspection for packaged Output tests
+ 3ms
+
+Describing UI Automation native filename helpers
+  [+] uses the available ValuePattern and verifies the exact filename text
+ 236ms
+  [+] rejects a write whose readback differs instead of submitting the wrong filename
+ 1.06s
+
+Describing UI Automation empty read-only documents
+  [+] returns a present empty text document instead of its accessible label
+ 27ms
+  [+] retains the pattern fallback when no document text descendant exists
+ 13ms
+
+Describing UI Automation native dialog process ownership
+  [+] uses the supplied dialog process for standalone address typing despite a different caller variable
+ 82ms
+
+Describing UI Automation pointer provider retries
+  [+] uses the refreshed provider bounds when the control moves during retries
+ 215ms
+  [+] refuses pointer input when the latest provider candidate disappears or becomes unavailable
+ 303ms
+
+Running tests from 'D:\repos\BS2BG\tools\java25\WindowsAppImage.Tests.ps1'
+Describing Get-StagedApplication
+  [+] returns the single application jar and every lib/ dependency
+ 26ms
+  [+] fails closed when the staging directory holds no or several top-level jars
+ 18ms
+  [+] fails closed when a JavaFX jar has been staged onto the classpath
+ 9ms
+
+Describing Assert-StagedJsonCodec
+  [+] requires exactly the pinned Jackson Core coordinate
+ 48ms
+  [+] rejects a staged payload that also contains the retired codec
+ 28ms
+  [+] rejects any second production JSON codec
+ 43ms
+  [+] rejects a shaded fallback codec even when no Maven coordinate reveals it
+ 24ms
+
+Describing Assert-CleanGitCheckout
+  [+] returns the pinned commit for a clean checkout and rejects source changes
+ 388ms
+
+Describing ConvertFrom-JdepsModuleDeps
+  [+] parses the comma-separated module line into a sorted unique list
+ 9ms
+  [+] ignores jdeps warnings and blank lines around the module line
+ 2ms
+  [+] fails closed on jdeps errors or output without a module line
+ 7ms
+
+Describing Resolve-RuntimeModules
+  [+] unions the measured closure with the documented explicit additions, sorted
+ 9ms
+  [+] fails closed when the measurement saw no JavaFX module at all
+ 3ms
+  [+] fails closed when the application needs a JavaFX module the lock does not pin
+ 3ms
+
+Describing Read-LauncherConfig and Assert-LauncherConfig
+  [+] reads repeated keys as lists within their sections
+ 4ms
+  [+] accepts a launcher configuration that names the launcher, the jar, every lib jar, and the stamped version
+ 9ms
+  [+] recognizes the accepted single-process launcher configuration
+ 3ms
+  [+] fails closed unless one true no-restart setting pins the launcher to a single process
+ 7ms
+  [+] fails closed unless one true no-restart setting pins the launcher to a single process
+ 9ms
+  [+] fails closed unless one true no-restart setting pins the launcher to a single process
+ 5ms
+  [+] enables single-process mode in a generated launcher configuration exactly once
+ 12ms
+  [+] fails without changing a generated configuration whose no-restart setting is false
+ 17ms
+  [+] fails without changing a generated configuration whose no-restart setting is repeated
+ 5ms
+  [+] fails without changing a configuration whose Application section is missing
+ 8ms
+  [+] fails without changing a configuration whose Application section is repeated
+ 5ms
+  [+] fails closed when the main class is not the launcher
+ 4ms
+  [+] fails closed when the main jar or a staged lib jar is missing from the classpath
+ 6ms
+  [+] fails closed when the stamped version differs or a required java option is absent
+ 8ms
+  [+] fails closed when the classpath or runtime reaches outside the image
+ 10ms
+  [+] fails closed when a JavaFX jar sits on the launcher classpath
+ 9ms
+
+Describing Assert-JpackageState
+  [+] returns the packaging tool version and platform when the stamped identity matches
+ 8ms
+  [+] fails closed when the version, launcher, or main class differ
+ 9ms
+
+Describing Assert-AppImageLayout
+  [+] accepts a complete image and returns its inventory
+ 26ms
+  [+] fails closed when the launcher, a payload jar, the runtime, the notices, or the legal directory is missing
+ 116ms
+  [+] fails closed when an unexpected jar is part of the payload
+ 27ms
+
+Describing Get-TreeDigest
+  [+] is deterministic, path-ordered, and sensitive to a single byte
+ 34ms
+
+Describing Assert-RuntimeRelease
+  [+] returns the module list when the Java version and every expected module match
+ 9ms
+  [+] fails closed on a different Java version or a missing module
+ 6ms
+
+Describing Assert-JimageCompression
+  [+] summarizes compressed resources from verbose jimage metadata
+ 13ms
+  [+] fails closed when jimage reports no compressed resources
+ 3ms
+
+Describing Get-ScrubbedEnvironment
+  [+] removes every JDK discovery variable and every Java directory from PATH
+ 13ms
+
+Describing New-ThirdPartyNotices
+  [+] writes the notices file and extracts each library license and notice file
+ 8ms
+  [+] records a library without embedded license metadata explicitly instead of omitting it
+ 6ms
+  [+] writes exact component and corresponding-source manifests
+ 8ms
+  [+] fails checkpoint generation when a component has no corresponding-source location
+ 11ms
+Tests completed in 5.19s
+Tests Passed: 104, 
+Failed: 0, 
+Skipped: 0, 
+Inconclusive: 0, 
+NotRun: 0

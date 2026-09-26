@@ -450,3 +450,15 @@ replay_pid*
 /.cocoindex_code/
 jBS2BG.code-workspace
 warnings.txt
+graphify-out/
+/target/
+.claude/settings.json
+.codex/hooks.json
+.playwright-mcp/
+BS2BG.code-workspace
+.bs2bg-settings.lock
+# Durable display recovery must survive Maven clean without becoming source changes.
+/.bs2bg-dpi-matrix-recovery.json*
+GPATH
+GRTAGS
+GTAGS

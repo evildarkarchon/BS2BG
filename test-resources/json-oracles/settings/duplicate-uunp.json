@@ -1,0 +1,7 @@
+{
+  "Defaults": {
+    "Arms": {"valueSmall": 0, "valueSmall": 1, "valueBig": 1}
+  },
+  "Multipliers": {},
+  "Inverted": []
+}

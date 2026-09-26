@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Repository-owned toolchain definition for the Java 25 application build.
+
+    BS2BG_JDK25_HOME is exported by tools/java25/verify-java25.ps1 after it checksum-provisions and verifies the
+    pinned Eclipse Temurin 25 JDK. The vendor/version pair here must match the <toolchains> requirement in pom.xml;
+    if the variable is unset, the path does not resolve and maven-toolchains-plugin fails the build (fail closed).
+    Do not point this at an arbitrary installed JDK: the provisioning script is the only path that verifies the
+    vendor, full build number, and architecture recorded in tools/java25/toolchain-lock.json.
+-->
+<toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/TOOLCHAINS/1.1.0 https://maven.apache.org/xsd/toolchains-1.1.0.xsd">
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>25</version>
+      <vendor>temurin</vendor>
+    </provides>
+    <configuration>
+      <jdkHome>${env.BS2BG_JDK25_HOME}</jdkHome>
+    </configuration>
+  </toolchain>
+</toolchains>
