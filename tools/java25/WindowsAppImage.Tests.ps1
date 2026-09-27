@@ -531,4 +531,40 @@ Describe 'New-ThirdPartyNotices' {
                     }
                 ) } | Should -Throw -ExpectedMessage '*lib-b-3.0.jar*'
     }
+
+    It 'rejects a versioned library with license metadata but no bundled license text' {
+        $staging = Join-Path $TestDrive 'notices\missing-license'
+        New-TreeFile 'notices\missing-license\app-1.0.jar' | Out-Null
+        New-TestJar -Path (Join-Path $staging 'lib\lib-c-1.0.jar') -Entries @{
+            'META-INF/maven/org.example/lib-c/pom.properties' = "groupId=org.example`nartifactId=lib-c`nversion=1.0`n"
+            'META-INF/maven/org.example/lib-c/pom.xml' = '<project><licenses><license><name>MIT License</name></license></licenses></project>'
+        } | Out-Null
+
+        { New-ThirdPartyNotices -StagedApplication (Get-StagedApplication -StagingDir $staging) `
+                -OutputDir (Join-Path $TestDrive 'notices\missing-license-output') -ApplicationName 'BS2BG' `
+                -ApplicationVersion '1.1.2' -RequireCompleteSource -RuntimeComponents @() } |
+            Should -Throw -ExpectedMessage '*lib-c-1.0.jar*license text*'
+    }
+
+    It 'ships the pinned juniversalchardet license text omitted from its binary jar' {
+        $staging = Join-Path $TestDrive 'notices\juniversalchardet'
+        New-TreeFile 'notices\juniversalchardet\app-1.0.jar' | Out-Null
+        New-TestJar -Path (Join-Path $staging 'lib\juniversalchardet-2.5.0.jar') -Entries @{
+            'META-INF/maven/com.github.albfernandez/juniversalchardet/pom.properties' = "groupId=com.github.albfernandez`nartifactId=juniversalchardet`nversion=2.5.0`n"
+            'META-INF/maven/com.github.albfernandez/juniversalchardet/pom.xml' = '<project><licenses><license><name>Mozilla Public License Version 1.1</name></license></licenses></project>'
+        } | Out-Null
+        $output = Join-Path $TestDrive 'notices\juniversalchardet-output'
+
+        $result = New-ThirdPartyNotices -StagedApplication (Get-StagedApplication -StagingDir $staging) `
+            -OutputDir $output -ApplicationName 'BS2BG' -ApplicationVersion '1.1.2' `
+            -RequireCompleteSource -RuntimeComponents @()
+
+        $licensePath = Join-Path $output 'notices\juniversalchardet-2.5.0\LICENSE.MPL-1.1'
+        (Get-Item -LiteralPath $licensePath).Length | Should -BeGreaterThan 10000
+        (Get-FileHash -LiteralPath $licensePath -Algorithm SHA256).Hash.ToLowerInvariant() |
+            Should -Be '53692a2ed6c6a2c6ec9b32dd0b820dfae91e0a1fcdf625ca9ed0bdf8705fcc4f'
+        $result.Components[0].extractedFiles | Should -Contain 'notices/juniversalchardet-2.5.0/LICENSE.MPL-1.1'
+        (Get-Content -LiteralPath (Join-Path $output 'THIRD-PARTY-NOTICES.txt') -Raw) |
+            Should -BeLike '*notices/juniversalchardet-2.5.0/LICENSE.MPL-1.1*'
+    }
 }

@@ -1,12 +1,15 @@
 # Windows app-image packaging checkpoint
 
-Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#110 and inherited gates). A green run proves
+Status: Workbench packaging checkpoint on top of the complete application gate (issues #98-#112 and inherited gates). A green run proves
 that the complete Java 25 build packages into a self-contained, non-modular Windows x64 application image that
 starts from a clean extracted location without any system Java, exercises typed navigation, semantic focus, Output,
 responsive/minimum geometry, live themes, High Contrast, reduced motion, feedback, typed dialogs, Project lifecycle,
 failure preservation, pointer-free Slider Preset choice editing and catalog management, keyboard and pointer Custom Morph
-Target authoring, NPC Database source import and inspection, and dirty shutdown, and exits cleanly.
+Target and NPC Morph Assignment authoring, NPC Database import and Project promotion, Preview profile isolation,
+and dirty shutdown, and exits cleanly.
 ADR-0003 records the Java 25 baseline this checkpoint ships.
+The [2026-09-27 Workbench parity checkpoint](evidence/windows-app-image-2026-09-27-workbench-parity/README.md)
+retains the exact tested Preview ZIP, complete 100/125/150 packaged reports, and six mixed-monitor landings.
 
 ## One command
 
@@ -57,6 +60,34 @@ is a no-op, so repeating the command cannot undo a later intentional user change
 and `-RecoveryPath` on the standalone command select a different durable path, which must also be outside `target/`.
 New matrices refuse unresolved records; they do not replace the original setting with a partially changed one.
 
+### Mixed-monitor move audit
+
+After the packaged matrix finishes and the desktop is idle, use the same verified app-image ZIP for a separate
+mixed-monitor move audit. Connect exactly two displays, leave the secondary at 100%, and make sure the primary offers
+125% and 150%. The command captures the primary's actual starting percentage; it does not assume 150%. It runs one
+fresh packaged process at 150% and another at 125%, moving each process's same Workbench window from the primary to
+the 100% secondary and back. Both runs use one unchanged archive and an isolated Preview profile.
+
+```powershell
+$archive = 'target\BS2BG-<version>-windows-x64.zip' # Replace with the exact verified archive path.
+.\tools\java25\smoke-mixed-monitor-dpi.ps1 -ArchivePath $archive `
+    -EvidencePath 'target\reproducibility\mixed-monitor\mixed-monitor.json'
+```
+
+Every landing checks the monitor's native effective DPI against the packaged window, full physical containment,
+800×600 logical minimum client, the 1200-logical-pixel responsive breakpoint, and UI Automation focus and control
+bounds. At the minimum size, the audit also requires the Project diagnostics, Activity, Retry, status, and Cancel
+controls to remain inside the client. Window-only PNGs at the minimum and restored wide size, UIA trees, and
+launcher output are retained in sibling `mixed-150/` and `mixed-125/`
+directories. The aggregate `bs2bg.mixed-monitor-dpi/1` JSON records the archive SHA-256, stable monitor identities,
+three landings per scale, exit status, and the original-scale restoration result. The audit does not change the
+secondary scale or test hot-plug behavior.
+
+The audit shares the matrix's session mutex and durable `.bs2bg-dpi-matrix-recovery.json` record outside `target/`.
+It restores the captured primary percentage even after a failed move. If interrupted before restoration, run
+`.\tools\java25\smoke-mixed-monitor-dpi.ps1 -RestoreOnly` before another scale operation. A pending record blocks
+new runs; a restored record is a no-op for recovery.
+
 For a manually configured single-scale session, `-ExpectedDpiPercent 125` (or another percentage) still validates
 the current scale without changing it. It cannot be combined with `-DpiMatrix`. `-SkipSmoke` cannot be combined
 with the matrix; `-SkipVerify` remains a developer run, not a clean checkpoint.
@@ -94,9 +125,10 @@ The script:
    pinned inputs.
 5. Assembles `THIRD-PARTY-NOTICES.txt`, `THIRD-PARTY-COMPONENTS.json`, `CORRESPONDING-SOURCE.txt`, and
    `notices/<jar>/` from the staged jars' own metadata (`META-INF`
-   license and notice files, the embedded Maven pom `<licenses>`), listing a jar without metadata explicitly
-   rather than omitting it. Checkpoint generation fails unless every staged library has an exact Maven coordinate
-   and versioned sources artifact URL and both runtime inputs have pinned source URLs/revisions. The component
+   license and notice files, the embedded Maven pom `<licenses>`), using a hash-pinned upstream MPL 1.1 LICENSE
+   for juniversalchardet, whose jar omits its license text. Checkpoint generation fails unless every staged library
+   has bundled license text, an exact Maven coordinate, and a versioned sources artifact URL; both runtime inputs
+   must also have pinned source URLs/revisions. The component
    manifest records library hashes and the exact JDK/JavaFX binary, source, license, notice, and module metadata;
    the notices point at `runtime/legal/<module>/` for the GPLv2 with Classpath Exception texts.
 6. Runs `jpackage --type app-image` with `--runtime-image`, `--main-jar`, `--main-class com.asdasfa.jbs2bg.Launcher`,
@@ -135,18 +167,21 @@ application cannot disagree.
 ## Current Workbench packaged smoke run
 
 `smoke-app-image.ps1` extracts the archive to a fresh temporary location and starts `BS2BG\BS2BG.exe` from an
-empty working directory with every host-Java discovery path removed. The original launcher must remain the only
+empty working directory with every host-Java discovery path removed. It redirects only that launcher process's
+`LOCALAPPDATA` to a disposable root, stages recovery under `BS2BG Preview`, and leaves a separate stable `BS2BG`
+profile untouched. The original launcher must remain the only
 image process, host `jvm.dll` and JavaFX native libraries from the extracted runtime, and exit with code 0 inside
 the configured bound.
 
 Windows UI Automation locates controls by accessible role/name and native ownership; pointer checks use only the
 provider-supplied clickable point, or visible descendant-content bounds when JavaFX omits that optional point, of a
-semantically located element. The current issue #110
-workflow records these steps:
+semantically located element. The current issue #112 run groups its 28 recorded steps into the workflows below.
+Dedicated steps also cover NPC Morph Assignment authoring and visible Fill Empty, portrait viewing, and NPC Database
+Add/Add All promotion with duplicate reporting, Project save/reopen, and semantic return to Morphs:
 
 1. Extract the clean image, verify launcher configuration/version, install representative, recovery, malformed,
    and high-token-count cancellable Project fixtures, seven NPC Database text sources, and portraits, then stage an
-   interrupted paired Settings publication.
+   interrupted paired Settings publication in the isolated Preview profile.
 2. Launch `BS2BG Preview` without system Java and verify the bundled single-process runtime.
 3. Verify Templates, Morphs, NPC Database, Output, and Settings typed destinations plus paired Settings recovery and
    its durable Activity evidence.
@@ -206,7 +241,9 @@ workflow records these steps:
     capture the populated Templates/editor, Morphs, and NPC Database surfaces, verify reduced motion, and restore the captured
     Windows preferences. Keeping system theme transitions here prevents their temporary cover windows from
     disrupting earlier pointer input.
-23. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
+23. Require the Preview profile to own both Settings files, the generation preference, and the persisted theme;
+    prove that neither the working directory nor the stable profile received application-owned state.
+24. Request shutdown while Open is active, require cancellation to settle before the dirty prompt, Cancel that
     prompt and prove admission resumes, then repeat and Discard to require bounded exit 0 with no image process.
 
 Every wait is bounded. The first failure records all visible process windows, their UIA trees, a best-effort
@@ -214,7 +251,7 @@ Workbench screenshot, and launcher stdout/stderr. Required screenshots wait unti
 after system transitions, capture only its physical window bounds, and fail the run if capture is unavailable.
 Because real accelerators and focus are used, the desktop must not be touched during the run.
 
-The smoke evidence schema is `bs2bg.windows-app-image-smoke/19`; its durable artifacts include the Workbench,
+The smoke evidence schema is `bs2bg.windows-app-image-smoke/20`; its durable artifacts include the Workbench,
 responsive, Templates-management, Morphs-management, and NPC Database UIA trees plus `workbench-high-contrast.png` and
 `workbench-reduced-motion.png`, the populated Templates High Contrast screenshot
 `workbench-templates-high-contrast.png`, the selected Slider editor High Contrast screenshot

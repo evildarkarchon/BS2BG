@@ -175,8 +175,6 @@ public final class WorkbenchController {
     @FXML
     private StackPane overlayLayer;
     @FXML
-    private Button primaryContentButton;
-    @FXML
     private ScrollPane templatesPrimaryScroll;
     @FXML
     private VBox templatesPrimaryContent;
@@ -483,10 +481,6 @@ public final class WorkbenchController {
     @FXML
     private Button reloadSettingsButton;
     @FXML
-    private Button editorButton;
-    @FXML
-    private Button inspectorButton;
-    @FXML
     private Button showPrimaryOverlayButton;
     @FXML
     private Button showInspectorOverlayButton;
@@ -678,30 +672,19 @@ public final class WorkbenchController {
     }
 
     /**
-     * Attaches the loaded JavaFX graph to the sole Project flow and renders its current frame.
-     *
-     * @param flow       authoritative Workbench Project flow
-     * @param ownerStage application window that receives Project titles
-     * @throws IllegalStateException when this controller is attached more than once
-     */
-    public void attach(WorkbenchProjectFlow flow, Stage ownerStage) {
-        attach(flow, ownerStage, Path.of("."), Settings.publishedState());
-    }
-
-    /**
      * Attaches the loaded JavaFX graph with the exact Settings startup result so recovery and failures become visible
      * Workbench evidence rather than being stranded in the composition root.
      *
      * @param flow               authoritative Workbench Project flow
      * @param ownerStage         application window that owns effects and focus
-     * @param settingsDirectory  directory owning the paired Settings files
+     * @param settingsDirectory  profile directory owning Settings and appearance preferences
      * @param settingsStartup    original paired Settings startup result
      * @throws NullPointerException when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
     public void attach(WorkbenchProjectFlow flow, Stage ownerStage, Path settingsDirectory,
                        Settings.InitializationResult settingsStartup) {
-        WorkbenchAppearanceStore store = new WorkbenchAppearanceStore(Path.of("."));
+        WorkbenchAppearanceStore store = new WorkbenchAppearanceStore(settingsDirectory);
         WorkbenchAppearance.ThemeChoice initialChoice;
         try {
             initialChoice = store.load();
@@ -3975,24 +3958,11 @@ public final class WorkbenchController {
         settingsEditorContent.setVisible(settingsActive);
         settingsInspectorContent.setManaged(settingsActive);
         settingsInspectorContent.setVisible(settingsActive);
-        boolean placeholderActive = !templatesActive && !morphsActive && !npcDatabaseActive && !settingsActive;
-        primaryContentButton.setManaged(placeholderActive);
-        primaryContentButton.setVisible(placeholderActive);
-        editorButton.setManaged(placeholderActive);
-        editorButton.setVisible(placeholderActive);
-        inspectorButton.setManaged(placeholderActive);
-        inspectorButton.setVisible(placeholderActive);
         areaTitle.setText(area);
         areaTitle.setAccessibleText(area + " Area");
         primaryPane.setAccessibleText(area + " primary content");
-        primaryContentButton.setAccessibleText(area + " primary content");
-        primaryContentButton.setText("Focus " + area + " list");
         editorPane.setAccessibleText(area + " editor");
-        editorButton.setAccessibleText(area + " editor");
-        editorButton.setText(area + " Area — Workbench placeholder");
         inspectorPane.setAccessibleText(area + " inspector");
-        inspectorButton.setAccessibleText(area + " inspector");
-        inspectorButton.setText("Focus " + area + " inspector");
         showPrimaryOverlayButton.setAccessibleText("Open " + area + " list");
         showInspectorOverlayButton.setAccessibleText("Open " + area + " inspector");
         showPrimaryOverlayButton.setManaged(frame.narrowMode());
@@ -4086,12 +4056,6 @@ public final class WorkbenchController {
                         && entry.getValue() == focusOwner)
                 || focusOwner == settingsNoticeText || focusOwner == saveSettingsButton
                 || focusOwner == reloadSettingsButton || focusOwner == omitRedundantSlidersCheck) {
-            landmark = WorkbenchNavigation.Landmark.INSPECTOR;
-        } else if (focusOwner == primaryContentButton) {
-            landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
-        } else if (focusOwner == editorButton) {
-            landmark = WorkbenchNavigation.Landmark.EDITOR;
-        } else if (focusOwner == inspectorButton) {
             landmark = WorkbenchNavigation.Landmark.INSPECTOR;
         } else if (focusOwner == showPrimaryOverlayButton) {
             landmark = WorkbenchNavigation.Landmark.PRIMARY_LAUNCHER;

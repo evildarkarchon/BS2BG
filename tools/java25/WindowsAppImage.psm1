@@ -772,14 +772,16 @@ function Get-ScrubbedEnvironment {
 .PARAMETER RuntimeComponents
     Objects with name, version, license, and noticesPath describing the bundled runtime inputs (JDK, JavaFX).
 .PARAMETER RequireCompleteSource
-    Fails when any runtime or application-library component lacks an exact corresponding-source URL.
+    Fails when any runtime or application-library component lacks an exact corresponding-source URL, or when an
+    application library lacks bundled license text.
 .OUTPUTS
     PSCustomObject with notice, component-manifest, corresponding-source paths and one record per staged lib jar.
 .NOTES
     License metadata is taken from the jars themselves: META-INF/LICENSE*, META-INF/NOTICE*, and the embedded
     Maven pom's <licenses>. A jar without any of them is listed explicitly as having no embedded metadata rather
-    than omitted, so the notices file can never silently under-report the payload. Throws when a staged jar
-    cannot be inspected or strict source mode finds a library/runtime component without exact source metadata.
+    than omitted, so the notices file can never silently under-report the payload. The pinned juniversalchardet
+    license is supplied from its upstream release because the binary jar omits the text. Throws when a staged jar
+    cannot be inspected or strict mode finds incomplete source or license closure.
 #>
 function New-ThirdPartyNotices {
     [CmdletBinding()]
@@ -835,6 +837,26 @@ function New-ThirdPartyNotices {
         finally {
             $zip.Dispose()
         }
+
+        if ($coordinates -ceq 'com.github.albfernandez:juniversalchardet:2.5.0' -and
+                @($extracted | Where-Object { $_ -match '/LICENSE[^/]*$' }).Count -eq 0) {
+            # The upstream v2.5.0 binary carries license names but omits its LICENSE file; pin the official tag's
+            # complete MPL 1.1 text so package generation cannot silently ship a missing or altered substitute.
+            $licenseSource = Join-Path $PSScriptRoot 'licenses\com.github.albfernandez\juniversalchardet\2.5.0\LICENSE.MPL-1.1'
+            $expectedLicenseSha256 = '53692a2ed6c6a2c6ec9b32dd0b820dfae91e0a1fcdf625ca9ed0bdf8705fcc4f'
+            if (-not (Test-Path -LiteralPath $licenseSource -PathType Leaf)) {
+                throw "Pinned license text for $jarName is missing: $licenseSource"
+            }
+            $licenseSha256 = (Get-FileHash -LiteralPath $licenseSource -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($licenseSha256 -cne $expectedLicenseSha256) {
+                throw "Pinned license text for $jarName differs from the upstream v2.5.0 LICENSE file."
+            }
+            $licenseRelative = "notices/$baseName/LICENSE.MPL-1.1"
+            $licenseTarget = Join-Path (Join-Path $OutputDir "notices\$baseName") 'LICENSE.MPL-1.1'
+            New-Item -ItemType Directory -Path (Split-Path -Parent $licenseTarget) -Force | Out-Null
+            Copy-Item -LiteralPath $licenseSource -Destination $licenseTarget
+            $extracted += $licenseRelative
+        }
         $sourceUrl = $null
         if ($coordinates) {
             $parts = $coordinates.Split(':')
@@ -866,6 +888,12 @@ function New-ThirdPartyNotices {
         })
         if ($missingRuntime.Count -gt 0) {
             throw "Runtime components lack exact corresponding-source metadata: $(($missingRuntime | ForEach-Object { $_.name }) -join ', ')."
+        }
+        $missingLicenseTexts = @($components | Where-Object {
+            @($_.extractedFiles | Where-Object { $_ -match '/LICENSE[^/]*$' }).Count -eq 0
+        })
+        if ($missingLicenseTexts.Count -gt 0) {
+            throw "Application libraries $(($missingLicenseTexts | ForEach-Object { $_.jar }) -join ', ') have no bundled license text."
         }
     }
 

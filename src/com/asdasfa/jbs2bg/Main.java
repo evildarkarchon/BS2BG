@@ -47,15 +47,17 @@ public class Main extends Application {
     public final String workbenchStyle = getClass().getResource("workbench.css").toExternalForm();
     public final Settings.InitializationResult settingsInitialization;
     final WorkbenchProjectFlow workbenchProjectFlow;
+    private final Path profileDirectory;
     private final ExecutorService jobWorker;
     private final JobCoordinator jobCoordinator;
     public Stage primaryStage;
     /**
-     * Initializes the owned Settings pair, authoritative ProjectSession, application-wide job
-     * coordinator, and sole Workbench Project flow.
+     * Initializes the Preview profile's Settings pair, authoritative ProjectSession,
+     * application-wide job coordinator, and sole Workbench Project flow.
      */
     public Main() {
-        settingsInitialization = Settings.initialize(Path.of("."));
+        profileDirectory = previewProfileDirectory(System.getenv("LOCALAPPDATA"));
+        settingsInitialization = Settings.initialize(profileDirectory);
         ProjectSession projectSession = ProjectSessions.create();
         jobWorker = Executors.newSingleThreadExecutor(
                 Thread.ofPlatform().name("bs2bg-job-worker").factory());
@@ -64,6 +66,22 @@ public class Main extends Application {
                 failure -> Logger.getLogger(Main.class.getName()).log(Level.WARNING,
                         "A Workbench job callback failed", failure));
         workbenchProjectFlow = new WorkbenchProjectFlow(APPLICATION_NAME, projectSession, jobCoordinator);
+    }
+
+    /**
+     * Resolves application-owned Preview state beneath the user's local Windows profile.
+     *
+     * @param localAppData absolute LOCALAPPDATA path supplied by Windows
+     * @return normalized Preview directory, separate from the stable BS2BG profile
+     * @throws IllegalArgumentException when LOCALAPPDATA is missing or relative
+     */
+    static Path previewProfileDirectory(String localAppData) {
+        if (localAppData == null || localAppData.isBlank())
+            throw new IllegalArgumentException("LOCALAPPDATA is required for the BS2BG Preview profile.");
+        Path root = Path.of(localAppData);
+        if (!root.isAbsolute())
+            throw new IllegalArgumentException("LOCALAPPDATA must be an absolute path.");
+        return root.resolve(APPLICATION_NAME).normalize();
     }
 
     /**
@@ -112,6 +130,19 @@ public class Main extends Application {
         stage.setMinHeight(WorkbenchGeometry.minimumWindowHeight(stage.getHeight(), scene.getHeight()));
     }
 
+    /**
+     * Reapplies the logical client minimum after JavaFX adopts a monitor with a different physical scale.
+     * Windows Glass retains the previous native tracking size when the JavaFX minimum property's value is unchanged.
+     *
+     * @param stage moved Workbench window on the JavaFX Application Thread
+     * @param scene current client scene used to measure decoration insets
+     */
+    private static void reapplyMeasuredClientMinimum(Stage stage, Scene scene) {
+        stage.setMinWidth(0.0);
+        stage.setMinHeight(0.0);
+        applyMeasuredClientMinimum(stage, scene);
+    }
+
     public static void main(String[] args) {
         launch(args);
     }
@@ -142,9 +173,12 @@ public class Main extends Application {
             primaryStage.setScene(scene);
             primaryStage.setResizable(true);
             WorkbenchController controller = loader.getController();
-            controller.attach(workbenchProjectFlow, primaryStage, Path.of("."), settingsInitialization);
+            controller.attach(workbenchProjectFlow, primaryStage, profileDirectory, settingsInitialization);
             primaryStage.show();
             applyMeasuredClientMinimum(primaryStage, scene);
+            // Windows monitor scaling is uniform on both axes; one callback avoids two competing native resets.
+            primaryStage.outputScaleXProperty().addListener((observable, previous, current) ->
+                    Platform.runLater(() -> reapplyMeasuredClientMinimum(primaryStage, scene)));
         } catch (java.io.IOException exception) {
             throw new IllegalStateException("Could not load the Workbench root graph", exception);
         }

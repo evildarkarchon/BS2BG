@@ -1,0 +1,722 @@
+{
+  "schema": "bs2bg.mixed-monitor-dpi/1",
+  "recordedAtUtc": "2026-09-27T13:08:01.2444384+00:00",
+  "passed": true,
+  "archive": "C:\\Users\\evild\\.t3\\worktrees\\BS2BG\\t3code-6d07ad8d\\target\\BS2BG-1.1.2-windows-x64.zip",
+  "archiveSha256": "7039add51156da6e3a775327824e564dc6c09e979a39bd3fee8a741b315066c0",
+  "originalDisplay": {
+    "deviceName": "\\\\.\\DISPLAY2",
+    "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+    "scalePercent": 100,
+    "dpi": 96,
+    "bounds": {
+      "left": 0,
+      "top": 0,
+      "width": 2560,
+      "height": 1440
+    },
+    "supportedScales": [
+      100,
+      125,
+      150,
+      175,
+      200,
+      225
+    ],
+    "settingsDisplayName": "Display 2"
+  },
+  "originalTopology": {
+    "primary": {
+      "deviceName": "\\\\.\\DISPLAY2",
+      "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+      "primary": true,
+      "dpi": 96,
+      "scalePercent": 100,
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "width": 2560,
+        "height": 1440
+      }
+    },
+    "secondary": {
+      "deviceName": "\\\\.\\DISPLAY1",
+      "monitorDevicePath": "\\\\?\\DISPLAY#MSI8CC2#5&2a0784bc&0&UID4353#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+      "primary": false,
+      "dpi": 96,
+      "scalePercent": 100,
+      "bounds": {
+        "left": 2560,
+        "top": 0,
+        "width": 2560,
+        "height": 1440
+      }
+    }
+  },
+  "requestedPrimaryScales": [
+    150,
+    125
+  ],
+  "secondaryScalePercent": 100,
+  "recoveryPath": "C:\\Users\\evild\\.t3\\worktrees\\BS2BG\\t3code-6d07ad8d\\.bs2bg-dpi-matrix-recovery.json",
+  "runs": [
+    {
+      "scalePercent": 150,
+      "archiveSha256": "7039add51156da6e3a775327824e564dc6c09e979a39bd3fee8a741b315066c0",
+      "passed": true,
+      "case": {
+        "archiveSha256": "7039add51156da6e3a775327824e564dc6c09e979a39bd3fee8a741b315066c0",
+        "primaryScalePercent": 150,
+        "applicationPid": 15144,
+        "processId": 15144,
+        "exitCode": 0,
+        "imageDirectory": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-mixed-monitor-e8389e8ad5884bd088bcc7699e960158\\image\\BS2BG",
+        "launcherSha256": "cfee2ac2f9e825256f10cb6ca2975590499cea1c9253fca4c9a8e3658b0a2b0e",
+        "removedJavaVariables": [
+          "JAVA_HOME"
+        ],
+        "landings": [
+          {
+            "display": "primary",
+            "deviceName": "\\\\.\\DISPLAY2",
+            "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            "expectedDpi": 144,
+            "dpi": 144,
+            "wide": {
+              "dpi": 144,
+              "scalePercent": 150.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1822,
+                "height": 1106
+              },
+              "clientPhysical": {
+                "left": 91,
+                "top": 95,
+                "width": 1800,
+                "height": 1050
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "narrow": {
+              "dpi": 144,
+              "scalePercent": 150.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1820,
+                "height": 1106
+              },
+              "clientPhysical": {
+                "left": 91,
+                "top": 95,
+                "width": 1798,
+                "height": 1050
+              },
+              "clientLogical": {
+                "width": 1198.67,
+                "height": 700.0
+              }
+            },
+            "minimum": {
+              "dpi": 144,
+              "scalePercent": 150.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1223,
+                "height": 957
+              },
+              "clientPhysical": {
+                "left": 91,
+                "top": 95,
+                "width": 1201,
+                "height": 901
+              },
+              "clientLogical": {
+                "width": 800.67,
+                "height": 600.67
+              }
+            },
+            "minimumBottomControls": [
+              "Project diagnostics",
+              "Activity",
+              "Retry selected activity",
+              "Workbench status",
+              "Cancel current operation"
+            ],
+            "minimumScreenshot": "landing-1-primary-minimum.png",
+            "minimumUiaTree": "landing-1-primary-minimum-uia.txt",
+            "final": {
+              "dpi": 144,
+              "scalePercent": 150.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1822,
+                "height": 1106
+              },
+              "clientPhysical": {
+                "left": 91,
+                "top": 95,
+                "width": 1800,
+                "height": 1050
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "focusedControl": "Morphs",
+            "screenshot": "landing-1-primary.png",
+            "uiaTree": "landing-1-primary-uia.txt"
+          },
+          {
+            "display": "secondary",
+            "deviceName": "\\\\.\\DISPLAY1",
+            "monitorDevicePath": "\\\\?\\DISPLAY#MSI8CC2#5&2a0784bc&0&UID4353#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            "expectedDpi": 96,
+            "dpi": 96,
+            "wide": {
+              "dpi": 96,
+              "scalePercent": 100.0,
+              "windowPhysical": {
+                "left": 2640,
+                "top": 50,
+                "width": 1216,
+                "height": 739
+              },
+              "clientPhysical": {
+                "left": 2648,
+                "top": 81,
+                "width": 1200,
+                "height": 700
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "narrow": {
+              "dpi": 96,
+              "scalePercent": 100.0,
+              "windowPhysical": {
+                "left": 2640,
+                "top": 50,
+                "width": 1215,
+                "height": 739
+              },
+              "clientPhysical": {
+                "left": 2648,
+                "top": 81,
+                "width": 1199,
+                "height": 700
+              },
+              "clientLogical": {
+                "width": 1199.0,
+                "height": 700.0
+              }
+            },
+            "minimum": {
+              "dpi": 96,
+              "scalePercent": 100.0,
+              "windowPhysical": {
+                "left": 2640,
+                "top": 50,
+                "width": 815,
+                "height": 638
+              },
+              "clientPhysical": {
+                "left": 2648,
+                "top": 81,
+                "width": 799,
+                "height": 599
+              },
+              "clientLogical": {
+                "width": 799.0,
+                "height": 599.0
+              }
+            },
+            "minimumBottomControls": [
+              "Project diagnostics",
+              "Activity",
+              "Retry selected activity",
+              "Workbench status",
+              "Cancel current operation"
+            ],
+            "minimumScreenshot": "landing-2-secondary-minimum.png",
+            "minimumUiaTree": "landing-2-secondary-minimum-uia.txt",
+            "final": {
+              "dpi": 96,
+              "scalePercent": 100.0,
+              "windowPhysical": {
+                "left": 2640,
+                "top": 50,
+                "width": 1216,
+                "height": 739
+              },
+              "clientPhysical": {
+                "left": 2648,
+                "top": 81,
+                "width": 1200,
+                "height": 700
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "focusedControl": "Morphs",
+            "screenshot": "landing-2-secondary.png",
+            "uiaTree": "landing-2-secondary-uia.txt"
+          },
+          {
+            "display": "primary",
+            "deviceName": "\\\\.\\DISPLAY2",
+            "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            "expectedDpi": 144,
+            "dpi": 144,
+            "wide": {
+              "dpi": 144,
+              "scalePercent": 150.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1822,
+                "height": 1106
+              },
+              "clientPhysical": {
+                "left": 91,
+                "top": 95,
+                "width": 1800,
+                "height": 1050
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "narrow": {
+              "dpi": 144,
+              "scalePercent": 150.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1820,
+                "height": 1106
+              },
+              "clientPhysical": {
+                "left": 91,
+                "top": 95,
+                "width": 1798,
+                "height": 1050
+              },
+              "clientLogical": {
+                "width": 1198.67,
+                "height": 700.0
+              }
+            },
+            "minimum": {
+              "dpi": 144,
+              "scalePercent": 150.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1224,
+                "height": 959
+              },
+              "clientPhysical": {
+                "left": 91,
+                "top": 95,
+                "width": 1202,
+                "height": 903
+              },
+              "clientLogical": {
+                "width": 801.33,
+                "height": 602.0
+              }
+            },
+            "minimumBottomControls": [
+              "Project diagnostics",
+              "Activity",
+              "Retry selected activity",
+              "Workbench status",
+              "Cancel current operation"
+            ],
+            "minimumScreenshot": "landing-3-primary-minimum.png",
+            "minimumUiaTree": "landing-3-primary-minimum-uia.txt",
+            "final": {
+              "dpi": 144,
+              "scalePercent": 150.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1822,
+                "height": 1106
+              },
+              "clientPhysical": {
+                "left": 91,
+                "top": 95,
+                "width": 1800,
+                "height": 1050
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "focusedControl": "Morphs",
+            "screenshot": "landing-3-primary.png",
+            "uiaTree": "landing-3-primary-uia.txt"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "scalePercent": 125,
+      "archiveSha256": "7039add51156da6e3a775327824e564dc6c09e979a39bd3fee8a741b315066c0",
+      "passed": true,
+      "case": {
+        "archiveSha256": "7039add51156da6e3a775327824e564dc6c09e979a39bd3fee8a741b315066c0",
+        "primaryScalePercent": 125,
+        "applicationPid": 29184,
+        "processId": 29184,
+        "exitCode": 0,
+        "imageDirectory": "C:\\Users\\evild\\AppData\\Local\\Temp\\BS2BG-mixed-monitor-e8389e8ad5884bd088bcc7699e960158\\image\\BS2BG",
+        "launcherSha256": "cfee2ac2f9e825256f10cb6ca2975590499cea1c9253fca4c9a8e3658b0a2b0e",
+        "removedJavaVariables": [
+          "JAVA_HOME"
+        ],
+        "landings": [
+          {
+            "display": "primary",
+            "deviceName": "\\\\.\\DISPLAY2",
+            "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            "expectedDpi": 120,
+            "dpi": 120,
+            "wide": {
+              "dpi": 120,
+              "scalePercent": 125.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1518,
+                "height": 922
+              },
+              "clientPhysical": {
+                "left": 89,
+                "top": 88,
+                "width": 1500,
+                "height": 875
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "narrow": {
+              "dpi": 120,
+              "scalePercent": 125.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1517,
+                "height": 922
+              },
+              "clientPhysical": {
+                "left": 89,
+                "top": 88,
+                "width": 1499,
+                "height": 875
+              },
+              "clientLogical": {
+                "width": 1199.2,
+                "height": 700.0
+              }
+            },
+            "minimum": {
+              "dpi": 120,
+              "scalePercent": 125.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1019,
+                "height": 798
+              },
+              "clientPhysical": {
+                "left": 89,
+                "top": 88,
+                "width": 1001,
+                "height": 751
+              },
+              "clientLogical": {
+                "width": 800.8,
+                "height": 600.8
+              }
+            },
+            "minimumBottomControls": [
+              "Project diagnostics",
+              "Activity",
+              "Retry selected activity",
+              "Workbench status",
+              "Cancel current operation"
+            ],
+            "minimumScreenshot": "landing-1-primary-minimum.png",
+            "minimumUiaTree": "landing-1-primary-minimum-uia.txt",
+            "final": {
+              "dpi": 120,
+              "scalePercent": 125.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1518,
+                "height": 922
+              },
+              "clientPhysical": {
+                "left": 89,
+                "top": 88,
+                "width": 1500,
+                "height": 875
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "focusedControl": "Morphs",
+            "screenshot": "landing-1-primary.png",
+            "uiaTree": "landing-1-primary-uia.txt"
+          },
+          {
+            "display": "secondary",
+            "deviceName": "\\\\.\\DISPLAY1",
+            "monitorDevicePath": "\\\\?\\DISPLAY#MSI8CC2#5&2a0784bc&0&UID4353#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            "expectedDpi": 96,
+            "dpi": 96,
+            "wide": {
+              "dpi": 96,
+              "scalePercent": 100.0,
+              "windowPhysical": {
+                "left": 2640,
+                "top": 50,
+                "width": 1216,
+                "height": 739
+              },
+              "clientPhysical": {
+                "left": 2648,
+                "top": 81,
+                "width": 1200,
+                "height": 700
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "narrow": {
+              "dpi": 96,
+              "scalePercent": 100.0,
+              "windowPhysical": {
+                "left": 2640,
+                "top": 50,
+                "width": 1215,
+                "height": 739
+              },
+              "clientPhysical": {
+                "left": 2648,
+                "top": 81,
+                "width": 1199,
+                "height": 700
+              },
+              "clientLogical": {
+                "width": 1199.0,
+                "height": 700.0
+              }
+            },
+            "minimum": {
+              "dpi": 96,
+              "scalePercent": 100.0,
+              "windowPhysical": {
+                "left": 2640,
+                "top": 50,
+                "width": 815,
+                "height": 638
+              },
+              "clientPhysical": {
+                "left": 2648,
+                "top": 81,
+                "width": 799,
+                "height": 599
+              },
+              "clientLogical": {
+                "width": 799.0,
+                "height": 599.0
+              }
+            },
+            "minimumBottomControls": [
+              "Project diagnostics",
+              "Activity",
+              "Retry selected activity",
+              "Workbench status",
+              "Cancel current operation"
+            ],
+            "minimumScreenshot": "landing-2-secondary-minimum.png",
+            "minimumUiaTree": "landing-2-secondary-minimum-uia.txt",
+            "final": {
+              "dpi": 96,
+              "scalePercent": 100.0,
+              "windowPhysical": {
+                "left": 2640,
+                "top": 50,
+                "width": 1216,
+                "height": 739
+              },
+              "clientPhysical": {
+                "left": 2648,
+                "top": 81,
+                "width": 1200,
+                "height": 700
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "focusedControl": "Morphs",
+            "screenshot": "landing-2-secondary.png",
+            "uiaTree": "landing-2-secondary-uia.txt"
+          },
+          {
+            "display": "primary",
+            "deviceName": "\\\\.\\DISPLAY2",
+            "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            "expectedDpi": 120,
+            "dpi": 120,
+            "wide": {
+              "dpi": 120,
+              "scalePercent": 125.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1518,
+                "height": 922
+              },
+              "clientPhysical": {
+                "left": 89,
+                "top": 88,
+                "width": 1500,
+                "height": 875
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "narrow": {
+              "dpi": 120,
+              "scalePercent": 125.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1517,
+                "height": 922
+              },
+              "clientPhysical": {
+                "left": 89,
+                "top": 88,
+                "width": 1499,
+                "height": 875
+              },
+              "clientLogical": {
+                "width": 1199.2,
+                "height": 700.0
+              }
+            },
+            "minimum": {
+              "dpi": 120,
+              "scalePercent": 125.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1020,
+                "height": 799
+              },
+              "clientPhysical": {
+                "left": 89,
+                "top": 88,
+                "width": 1002,
+                "height": 752
+              },
+              "clientLogical": {
+                "width": 801.6,
+                "height": 601.6
+              }
+            },
+            "minimumBottomControls": [
+              "Project diagnostics",
+              "Activity",
+              "Retry selected activity",
+              "Workbench status",
+              "Cancel current operation"
+            ],
+            "minimumScreenshot": "landing-3-primary-minimum.png",
+            "minimumUiaTree": "landing-3-primary-minimum-uia.txt",
+            "final": {
+              "dpi": 120,
+              "scalePercent": 125.0,
+              "windowPhysical": {
+                "left": 80,
+                "top": 50,
+                "width": 1518,
+                "height": 922
+              },
+              "clientPhysical": {
+                "left": 89,
+                "top": 88,
+                "width": 1500,
+                "height": 875
+              },
+              "clientLogical": {
+                "width": 1200.0,
+                "height": 700.0
+              }
+            },
+            "focusedControl": "Morphs",
+            "screenshot": "landing-3-primary.png",
+            "uiaTree": "landing-3-primary-uia.txt"
+          }
+        ]
+      },
+      "error": null
+    }
+  ],
+  "restoration": {
+    "deviceName": "\\\\.\\DISPLAY2",
+    "monitorDevicePath": "\\\\?\\DISPLAY#MSI4CD8#5&2a0784bc&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+    "scalePercent": 100,
+    "dpi": 96,
+    "bounds": {
+      "left": 0,
+      "top": 0,
+      "width": 2560,
+      "height": 1440
+    },
+    "supportedScales": [
+      100,
+      125,
+      150,
+      175,
+      200,
+      225
+    ],
+    "settingsDisplayName": "Display 2"
+  },
+  "workflowError": null,
+  "restorationError": null,
+  "cleanupError": null
+}

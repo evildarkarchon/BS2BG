@@ -290,7 +290,6 @@ Describe 'Assert-CompleteSourceScope' {
         $scope.CompleteApplicationGate | Should -BeTrue
         $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/workbench/WorkbenchController.java'
         $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/project/Project.java'
-        $scope.ProductionSources | Should -Contain 'com/asdasfa/jbs2bg/fx/FilteredTableAdapter.java'
         $scope.ProductionSources | Should -Not -Contain 'com/asdasfa/jbs2bg/controlsfx/table/TableFilter.java'
         $scope.ProductionSources.Count | Should -BeGreaterThan 40
         $scope.CompilerArgs | Should -Contain '-Xlint:all'

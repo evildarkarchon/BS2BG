@@ -1,0 +1,142 @@
+Window 'BS2BG Preview' [Window,Transform]
+  MenuBar ''
+    MenuItem 'File' [Invoke,ExpandCollapse]
+      Text 'File'
+        Text 'File'
+  Button 'Templates' [Toggle]
+    Text 'Templates'
+  Button 'Morphs' [Toggle]
+    Text 'Morphs'
+  Button 'NPC Database' [Toggle]
+    Text 'NPC Database'
+  Button 'Output' [Toggle]
+    Text 'Output'
+  Button 'Settings' [Toggle]
+    Text 'Settings'
+  Text 'Theme:'
+    Text 'Theme:'
+  ComboBox '' [Value,ExpandCollapse]
+    List '' [Selection,Scroll]
+    Text 'System'
+  Text 'Effective theme: Dark theme'
+    Text 'Dark theme'
+  Text 'Motion preference: Standard motion'
+    Text 'Standard motion'
+  Text 'Templates Area'
+    Text 'Templates'
+  Button 'Generate Project output' [Invoke]
+    Text 'Generate'
+  Text 'Project status'
+    Text 'Untitled Project'
+  Pane 'Slider Preset management' [Scroll]
+    Text 'Filter Slider Presets:'
+      Text 'Filter Slider Presets:'
+    Edit '' [Value,Text]
+      Text 'Filter by name'
+      Text ''
+    Text 'Sort Slider Presets:'
+      Text 'Sort Slider Presets:'
+    ComboBox '' [Value,ExpandCollapse]
+      List '' [Selection,Scroll]
+      Text 'Name (A to Z)'
+    List 'Slider Presets' [Selection,Scroll]
+    Text 'Slider Preset name:'
+      Text 'Slider Preset name:'
+    Edit '' [Value,Text]
+      Text 'New or duplicate name'
+      Text ''
+    Button 'Create Slider Preset' [Invoke]
+      Text 'Create Slider Preset'
+    Button 'Duplicate Slider Preset' [Invoke]
+      Text 'Duplicate Slider Preset'
+    Button 'Remove Slider Preset' [Invoke]
+      Text 'Remove Slider Preset'
+    Button 'Clear visible Slider Presets' [Invoke]
+      Text 'Clear visible Slider Presets'
+    Button 'Import BodySlide Presets' [Invoke]
+      Text 'Import BodySlide Presets…'
+  Text 'Templates editor'
+    Text 'No Slider Preset selected'
+  Text 'Slider Preset profile'
+    Text 'Select a Slider Preset to browse its profile.'
+  Text 'Slider choice count'
+    Text 'No slider choices'
+  Text 'Profile:'
+    Text 'Profile:'
+  ComboBox '' [Value,ExpandCollapse]
+    List '' [Selection,Scroll]
+    Text ''
+  Pane 'Set Sliders editor' [Scroll]
+  Pane 'Templates inspector controls' [Scroll]
+    Text 'Slider Preset inspector'
+      Text 'Slider Preset inspector'
+    Text 'Selected Slider Preset'
+      Text 'No Slider Preset selected'
+    Button 'Go to Set Sliders' [Invoke]
+      Text 'Go to Set Sliders'
+    Button 'Rename selected Slider Preset' [Invoke]
+      Text 'Rename Slider Preset (F2)'
+    Text 'Gang controls'
+      Text 'Gang controls'
+    Text 'Set every enabled Slider choice atomically.'
+      Text 'Set every enabled Slider choice atomically.'
+    Button 'Set all Slider choice values to 0 percent' [Invoke]
+      Text '0 All'
+    Button 'Set all Slider choice values to 50 percent' [Invoke]
+      Text '50 All'
+    Button 'Set all Slider choice values to 100 percent' [Invoke]
+      Text '100 All'
+    Button 'Set all Slider choice minimum values toward 0 percent without crossing each maximum' [Invoke]
+      Text '0 All...'
+    Button 'Set all Slider choice minimum values toward 50 percent without crossing each maximum' [Invoke]
+      Text '50 All...'
+    Button 'Set all Slider choice minimum values toward 100 percent without crossing each maximum' [Invoke]
+      Text '100 All...'
+    Button 'Set all Slider choice maximum values toward 0 percent without crossing each minimum' [Invoke]
+      Text '0 All...'
+    Button 'Set all Slider choice maximum values toward 50 percent without crossing each minimum' [Invoke]
+      Text '50 All...'
+    Button 'Set all Slider choice maximum values toward 100 percent without crossing each minimum' [Invoke]
+      Text '100 All...'
+    CheckBox 'Gang all Slider choice values' [Toggle]
+      Text 'Gang All'
+    Slider 'Gang all Slider choice value' [RangeValue]
+      Thumb ''
+    Text '100%'
+      Text '100%'
+    CheckBox 'Gang all minimum Slider choice values' [Toggle]
+      Text 'Gang All Minimum'
+    Slider 'Gang all minimum Slider choice value' [RangeValue]
+      Thumb ''
+    Text '100%'
+      Text '100%'
+    CheckBox 'Gang all maximum Slider choice values' [Toggle]
+      Text 'Gang All Maximum'
+    Slider 'Gang all maximum Slider choice value' [RangeValue]
+      Thumb ''
+    Text '100%'
+      Text '100%'
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Text 'Project diagnostics'
+    Text 'Project diagnostics'
+  Edit '' [Value,Text]
+    Pane '' [Scroll]
+      Text ''
+  Text 'Activity'
+    Text 'Activity'
+  List 'Activity' [Selection,Scroll]
+    ListItem 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.' [SelectionItem,ScrollItem]
+      Text 'Warning — Load Settings — Completed with issues: SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.'
+    ScrollBar '' [RangeValue]
+      Button 'increment' [Invoke]
+      Button 'decrement' [Invoke]
+      Thumb ''
+  Button 'Retry selected activity' [Invoke]
+    Text 'Retry'
+  Text 'Workbench status'
+    Text 'Warning — Completed with issues — SETTINGS_PUBLICATION_RECOVERED /: An interrupted Settings publication was rolled back before loading.'
+  Button 'Cancel current operation' [Invoke]
+    Text 'Cancel'

@@ -48,15 +48,15 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | JavaFX incubator modules disabled | enforcer `bannedDependencies org.openjfx:javafx-incubator-*`; guard test scans the classpath and boot layer; source gate rejects `jfx.incubator` |
 | One converged production JSON codec | Enforcer `dependencyConvergence` and `bannedDependencies com.eclipsesource.minimal-json:*`; `JacksonDependencyPolicyTest` pins Jackson Core 3.1.5, scans production/test imports, and requires the temporary comparison reader to remain deleted |
 | Every production resource in the artifact | `Java25ToolchainGuardTest.everyProductionResourceIsInTheBuildOutput` (`target/classes` and classpath) and `Assert-JarContainsProductionResources` on the packaged jar |
-| Representative FXML/controller graphs load | `FxmlGraphLoadingTest`: `workbench.fxml` (sole root), every retained migration `popup_*.fxml`, and the custom-root graphs on the pinned toolkit; it also rejects the removed `main.fxml` resource |
+| The sole FXML/controller graph loads | `FxmlGraphLoadingTest` loads `workbench.fxml` with `WorkbenchController` on the pinned toolkit and asserts that no other FXML graph ships |
+| Preview profile isolation | `MainTest` requires an absolute `%LOCALAPPDATA%` root and resolves a distinct `BS2BG Preview` profile; the packaged smoke verifies the active Settings, generation, and theme files stay there without changing the stable profile or working directory |
 | Workbench Project lifecycle and centralized jobs | `JobCoordinatorTest` covers single admission, truthful progress, cancel/commit races, serialized result freshness, retry linkage, observer isolation, stale callbacks, and shutdown; `ProjectSessionOpenTest` proves detached Open parsing does not hold the publication lock; `WorkbenchProjectFlowTest` covers captured asynchronous Open, content-version and selected-source freshness, coherent lifecycle frames, and stale-effect rejection; `TemplatesFeatureTest`, `SettingsFeatureTest`, and `OutputFeatureTest` cover their immutable frame/intent seams; `WorkbenchControllerTest` covers real JavaFX admission/progress/cancel/Activity/Retry and captured Output rendering with platform effects substituted at the native chooser/dialog seam |
-| Logical visible-set behavior preserved | `FilteredViewTest`, `VisibleScopeCommandsTest` (seam), `FilteredTableAdapterTest` (public-JavaFX adapter: AND filtering, sort through `TableView.sortOrder`, identity-stable selection, frozen bulk scope, detach) |
+| Logical visible-set behavior preserved | `FilteredViewTest` and `VisibleScopeCommandsTest` cover the filtering seam; `WorkbenchControllerTest` exercises the active Workbench controls and their feature-backed visible state |
 | Project, Settings, and generated Output contracts | `ProjectSession*Test`, `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`, `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, and `OutputRoutePolicyTest` required by the script; `JacksonJsonTest` and `JacksonDependencyPolicyTest` witness the shared JSON policy |
 
 The required suites the script asserts (report present, at least one test, zero failures/errors):
 `Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxmlGraphLoadingTest`, `LauncherTest`,
-`WindowsAppImageGateTest`, `FilteredTableAdapterTest`,
-`DialogGraphicsTest`, `FilteredViewTest`, `VisibleScopeCommandsTest`, `ProjectSessionTest`,
+`WindowsAppImageGateTest`, `MainTest`, `FilteredViewTest`, `VisibleScopeCommandsTest`, `ProjectSessionTest`,
 `ProjectSessionOpenTest`, `ProjectSessionSaveTest`, `ProjectSessionImportTest`, `ProjectSessionSliderChoiceTest`,
 `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `JacksonJsonTest`,
 `JacksonDependencyPolicyTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`,
@@ -66,17 +66,15 @@ The required suites the script asserts (report present, at least one test, zero 
 
 ## Public-JavaFX replacements made for this gate
 
-- The vendored ControlsFX `TableFilter` (which reached into `TableViewSkin`) is deleted. The three filterable
-  tables (NPC Morph Assignment, no-preset warning, NPC Database) use `com.asdasfa.jbs2bg.fx.FilteredTableAdapter`,
-  which renders `filtering.FilteredView` into `TableView.getItems()`, maps `TableView.sortOrder` onto `SortKey`s
-  through a custom `sortPolicy`, syncs the table selection with the view's identity selection, and installs a
-  `ColumnFilterMenu` checklist as each column's `contextMenu` (JavaFX opens it on a header right-click). Bulk
-  commands freeze `adapter.visibleSet()` and hand it to `VisibleScopeCommands`.
+- The vendored ControlsFX `TableFilter` (which reached into `TableViewSkin`) is deleted. Workbench feature
+  modules own `FilteredView` state and expose immutable visible rows to their JavaFX controls. The NPC Database
+  column-filter popup applies `ColumnCriterion` through the feature, and Morphs bulk commands pass a frozen
+  visible set to `VisibleScopeCommands`.
 - Type-ahead and selection reveal call `scrollTo` directly. JavaFX 25's `VirtualFlow.scrollTo` performs the
   minimal scroll and is a no-op when the row is already visible, so the JavaFX 8 `isIndexVisible` skin probe
   had no remaining purpose.
-- Information, error, warning, and confirmation graphics come from `fx.DialogGraphics`, drawn with public shapes
-  and rasterized through `Node.snapshot`; no `com/sun/javafx/scene/control/skin/modena/*.png` path remains.
+- Information, error, warning, and confirmation graphics come from Workbench `SemanticIcons`, drawn with public
+  JavaFX `SVGPath` nodes; no private Modena resource path remains.
 
 ## What is pinned, and where
 
