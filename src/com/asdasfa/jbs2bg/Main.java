@@ -130,6 +130,19 @@ public class Main extends Application {
         stage.setMinHeight(WorkbenchGeometry.minimumWindowHeight(stage.getHeight(), scene.getHeight()));
     }
 
+    /**
+     * Reapplies the logical client minimum after JavaFX adopts a monitor with a different physical scale.
+     * Windows Glass retains the previous native tracking size when the JavaFX minimum property's value is unchanged.
+     *
+     * @param stage moved Workbench window on the JavaFX Application Thread
+     * @param scene current client scene used to measure decoration insets
+     */
+    private static void reapplyMeasuredClientMinimum(Stage stage, Scene scene) {
+        stage.setMinWidth(0.0);
+        stage.setMinHeight(0.0);
+        applyMeasuredClientMinimum(stage, scene);
+    }
+
     public static void main(String[] args) {
         launch(args);
     }
@@ -163,6 +176,9 @@ public class Main extends Application {
             controller.attach(workbenchProjectFlow, primaryStage, profileDirectory, settingsInitialization);
             primaryStage.show();
             applyMeasuredClientMinimum(primaryStage, scene);
+            // Windows monitor scaling is uniform on both axes; one callback avoids two competing native resets.
+            primaryStage.outputScaleXProperty().addListener((observable, previous, current) ->
+                    Platform.runLater(() -> reapplyMeasuredClientMinimum(primaryStage, scene)));
         } catch (java.io.IOException exception) {
             throw new IllegalStateException("Could not load the Workbench root graph", exception);
         }

@@ -672,17 +672,6 @@ public final class WorkbenchController {
     }
 
     /**
-     * Attaches the loaded JavaFX graph to the sole Project flow and renders its current frame.
-     *
-     * @param flow       authoritative Workbench Project flow
-     * @param ownerStage application window that receives Project titles
-     * @throws IllegalStateException when this controller is attached more than once
-     */
-    public void attach(WorkbenchProjectFlow flow, Stage ownerStage) {
-        attach(flow, ownerStage, Path.of("."), Settings.publishedState());
-    }
-
-    /**
      * Attaches the loaded JavaFX graph with the exact Settings startup result so recovery and failures become visible
      * Workbench evidence rather than being stranded in the composition root.
      *

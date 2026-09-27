@@ -425,8 +425,9 @@
                                                                         text="No slider choices" />
                                                                 <HBox alignment="CENTER_LEFT" spacing="8.0">
                                                                     <children>
+                                                                        <!-- Keep the mnemonic legible when the ComboBox absorbs editor width. -->
                                                                         <Label labelFor="$sliderPresetProfile"
-                                                                                mnemonicParsing="true"
+                                                                                minWidth="72.0" mnemonicParsing="true"
                                                                                 text="_Profile:" />
                                                                         <ComboBox fx:id="sliderPresetProfile"
                                                                                 accessibleText="Slider Preset profile"

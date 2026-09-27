@@ -58,6 +58,32 @@ is a no-op, so repeating the command cannot undo a later intentional user change
 and `-RecoveryPath` on the standalone command select a different durable path, which must also be outside `target/`.
 New matrices refuse unresolved records; they do not replace the original setting with a partially changed one.
 
+### Mixed-monitor move audit
+
+After the packaged matrix finishes and the desktop is idle, use the same verified app-image ZIP for a separate
+mixed-monitor move audit. Connect exactly two displays, leave the secondary at 100%, and make sure the primary offers
+125% and 150%. The command captures the primary's actual starting percentage; it does not assume 150%. It runs one
+fresh packaged process at 150% and another at 125%, moving each process's same Workbench window from the primary to
+the 100% secondary and back. Both runs use one unchanged archive and an isolated Preview profile.
+
+```powershell
+$archive = 'target\BS2BG-<version>-windows-x64.zip' # Replace with the exact verified archive path.
+.\tools\java25\smoke-mixed-monitor-dpi.ps1 -ArchivePath $archive `
+    -EvidencePath 'target\reproducibility\mixed-monitor\mixed-monitor.json'
+```
+
+Every landing checks the monitor's native effective DPI against the packaged window, full physical containment,
+800×600 logical minimum client, the 1200-logical-pixel responsive breakpoint, and UI Automation focus and control
+bounds. Window-only PNGs, UIA trees, and launcher output are retained in sibling `mixed-150/` and `mixed-125/`
+directories. The aggregate `bs2bg.mixed-monitor-dpi/1` JSON records the archive SHA-256, stable monitor identities,
+three landings per scale, exit status, and the original-scale restoration result. The audit does not change the
+secondary scale or test hot-plug behavior.
+
+The audit shares the matrix's session mutex and durable `.bs2bg-dpi-matrix-recovery.json` record outside `target/`.
+It restores the captured primary percentage even after a failed move. If interrupted before restoration, run
+`.\tools\java25\smoke-mixed-monitor-dpi.ps1 -RestoreOnly` before another scale operation. A pending record blocks
+new runs; a restored record is a no-op for recovery.
+
 For a manually configured single-scale session, `-ExpectedDpiPercent 125` (or another percentage) still validates
 the current scale without changing it. It cannot be combined with `-DpiMatrix`. `-SkipSmoke` cannot be combined
 with the matrix; `-SkipVerify` remains a developer run, not a clean checkpoint.
