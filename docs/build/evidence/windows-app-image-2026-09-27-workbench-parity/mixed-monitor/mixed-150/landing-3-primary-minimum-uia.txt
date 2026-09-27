@@ -1,0 +1,64 @@
+Window 'BS2BG Preview' [Window,Transform]
+  TitleBar 'BS2BG Preview'
+    MenuBar 'System Menu Bar'
+      MenuItem 'System' [ExpandCollapse]
+    Button 'Minimize' [Invoke]
+    Button 'Maximize' [Invoke]
+    Button 'Close' [Invoke]
+  MenuBar ''
+    MenuItem 'File' [Invoke,ExpandCollapse]
+      Text 'File'
+        Text 'File'
+  Button 'Templates' [Toggle]
+    Text 'Templates'
+  Button 'Morphs' [Toggle]
+    Text 'Morphs'
+  Button 'NPC Database' [Toggle]
+    Text 'NPC Database'
+  Button 'Output' [Toggle]
+    Text 'Output'
+  Button 'Settings' [Toggle]
+    Text 'Settings'
+  Text 'Theme:'
+    Text 'Theme:'
+  ComboBox '' [Value,ExpandCollapse]
+    List '' [Selection,Scroll]
+    Text 'System'
+  Text 'Effective theme: Dark theme'
+    Text 'Dark theme'
+  Text 'Motion preference: Standard motion'
+    Text 'Standard motion'
+  Text 'Morphs Area'
+    Text 'Morphs'
+  Button 'Open Morphs list' [Invoke]
+    Text 'List'
+  Button 'Open Morphs inspector' [Invoke]
+    Text 'Inspector'
+  Button 'Generate Project output' [Invoke]
+    Text 'Generate'
+  Text 'Project status'
+    Text 'Untitled Project'
+  Text 'Morphs editor: no selection'
+    Text 'No Morphs selection'
+  Text 'Select a Custom Morph Target or NPC Morph Assignment to inspect it.'
+    Text 'Select a Custom Morph Target or NPC Morph Assignment to inspect it.'
+  Text 'No Slider Presets assigned'
+    Text 'No Slider Presets assigned'
+  Text 'No selected Morphs entry is eligible for output.'
+    Text 'A Morphs entry needs at least one Slider Preset to appear in output.'
+  Text 'Use the inspector to manage Slider Preset relationships.'
+    Text 'Use the inspector to manage Slider Preset relationships.'
+  Text 'Project diagnostics'
+    Text 'Project diagnostics'
+  Edit '' [Value,Text]
+    Pane '' [Scroll]
+      Text ''
+  Text 'Activity'
+    Text 'Activity'
+  List 'Activity' [Selection,Scroll]
+  Button 'Retry selected activity' [Invoke]
+    Text 'Retry'
+  Text 'Workbench status'
+    Text 'Ready'
+  Button 'Cancel current operation' [Invoke]
+    Text 'Cancel'

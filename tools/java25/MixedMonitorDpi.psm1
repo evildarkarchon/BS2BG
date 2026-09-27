@@ -68,7 +68,7 @@ namespace BS2BG {
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
 
-        /// <summary>Measures and resizes the moved JavaFX window in physical pixels on this thread.</summary>
+        /// <summary>Switches this thread to physical per-monitor coordinates for window measurement and resize.</summary>
         /// <returns>The prior DPI awareness context, which the caller must restore.</returns>
         public static IntPtr EnterPerMonitorAwareness() {
             IntPtr previous = SetThreadDpiAwarenessContext(new IntPtr(-4));
@@ -429,6 +429,25 @@ function Inspect-MixedMonitorLanding {
     $minimumLauncher = Wait-UiaElement -Root $Window -Condition $launcherCondition `
         -Description 'minimum-size Morphs list launcher' -TimeoutSeconds $TimeoutSeconds
     Assert-MixedMonitorBounds -Metrics $minimum -Monitor $Monitor -Control $minimumLauncher
+    $minimumStem = "landing-$Index-$Role-minimum"
+    $minimumScreenshot = Join-Path $EvidenceDirectory "$minimumStem.png"
+    $minimumTree = Join-Path $EvidenceDirectory "$minimumStem-uia.txt"
+    Save-MixedMonitorScreenshot -Window $Window -Path $minimumScreenshot -TimeoutSeconds $TimeoutSeconds
+    Get-UiaTree -Element $Window | Set-Content -LiteralPath $minimumTree -Encoding utf8
+    # The bottom controls were clipped by a mixed-DPI minimum-size regression even while the launcher stayed visible.
+    $bottomControls = @(
+        @{ type = 'Text'; name = 'Project diagnostics' },
+        @{ type = 'List'; name = 'Activity' },
+        @{ type = 'Button'; name = 'Retry selected activity' },
+        @{ type = 'Text'; name = 'Workbench status' },
+        @{ type = 'Button'; name = 'Cancel current operation' }
+    )
+    foreach ($control in $bottomControls) {
+        $element = Wait-UiaElement -Root $Window -Condition (
+            New-UiaCondition -ControlType $control.type -Name $control.name) `
+            -Description "minimum-size $($control.name)" -TimeoutSeconds $TimeoutSeconds
+        Assert-MixedMonitorBounds -Metrics $minimum -Monitor $Monitor -Control $element
+    }
     $final = Resize-UiaClient -Window $Window -LogicalWidth 1200 -LogicalHeight 700 -TimeoutSeconds $TimeoutSeconds
     $morphs = Wait-UiaElement -Root $Window -Condition (New-UiaCondition -ControlType 'Button' -Name 'Morphs') `
         -Description 'Morphs navigation after responsive resize' -TimeoutSeconds $TimeoutSeconds
@@ -447,6 +466,9 @@ function Inspect-MixedMonitorLanding {
         wide = ConvertTo-MixedMonitorMetricsEvidence -Metrics $wide
         narrow = ConvertTo-MixedMonitorMetricsEvidence -Metrics $narrow
         minimum = ConvertTo-MixedMonitorMetricsEvidence -Metrics $minimum
+        minimumBottomControls = @($bottomControls | ForEach-Object { $_.name })
+        minimumScreenshot = [IO.Path]::GetFileName($minimumScreenshot)
+        minimumUiaTree = [IO.Path]::GetFileName($minimumTree)
         final = ConvertTo-MixedMonitorMetricsEvidence -Metrics $final
         focusedControl = $morphs.Current.Name
         screenshot = [IO.Path]::GetFileName($screenshot)
@@ -459,7 +481,7 @@ function Inspect-MixedMonitorLanding {
     Launches one fresh process from the unchanged app image and moves that same window primary→secondary→primary.
 .NOTES
     The child uses an isolated Preview profile and an environment with host-Java discovery paths removed. The
-    process is closed or killed before return so a later primary-scale change cannot race a still-running app.
+    process must exit before the next primary-scale case; a failed forced stop fails the audit.
 #>
 function Invoke-MixedMonitorCase {
     param([string]$ArchivePath, [string]$ArchiveSha256, [int]$ScalePercent,
@@ -550,25 +572,36 @@ function Invoke-MixedMonitorCase {
         }
     }
     finally {
+        $stopFailure = $null
         if ($null -ne $app -and -not $app.HasExited) {
-            try { $app.Kill(); $app.WaitForExit($ExitTimeoutSeconds * 1000) | Out-Null }
+            try {
+                $app.Kill()
+                if (-not $app.WaitForExit($ExitTimeoutSeconds * 1000)) {
+                    throw "Packaged launcher did not exit within $ExitTimeoutSeconds seconds after forced stop."
+                }
+            }
             catch {
-                # A process may exit between the liveness check and forced cleanup; preserve the original failure.
+                # Exiting between the liveness check and Kill is harmless; a still-running process is not.
+                if (-not $app.HasExited) { $stopFailure = $_.Exception.Message }
             }
         }
-        if ($null -ne $stdoutTask) {
+        $exited = $null -eq $app -or $app.HasExited
+        if ($exited -and $null -ne $stdoutTask) {
             try { $stdoutTask.Result | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'launcher-stdout.txt') -Encoding utf8 }
             catch {
                 # Forced termination can tear down a redirected pipe; retain the original audit result.
             }
         }
-        if ($null -ne $stderrTask) {
+        if ($exited -and $null -ne $stderrTask) {
             try { $stderrTask.Result | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'launcher-stderr.txt') -Encoding utf8 }
             catch {
                 # Forced termination can tear down a redirected pipe; retain the original audit result.
             }
         }
         if ($null -ne $app) { $app.Dispose() }
+        if (-not $exited) {
+            throw "Could not prove packaged launcher exit before display restoration: $stopFailure"
+        }
     }
 }
 

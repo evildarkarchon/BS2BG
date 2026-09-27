@@ -8,6 +8,8 @@ failure preservation, pointer-free Slider Preset choice editing and catalog mana
 Target and NPC Morph Assignment authoring, NPC Database import and Project promotion, Preview profile isolation,
 and dirty shutdown, and exits cleanly.
 ADR-0003 records the Java 25 baseline this checkpoint ships.
+The [2026-09-27 Workbench parity checkpoint](evidence/windows-app-image-2026-09-27-workbench-parity/README.md)
+retains the exact tested Preview ZIP, complete 100/125/150 packaged reports, and six mixed-monitor landings.
 
 ## One command
 
@@ -74,7 +76,9 @@ $archive = 'target\BS2BG-<version>-windows-x64.zip' # Replace with the exact ver
 
 Every landing checks the monitor's native effective DPI against the packaged window, full physical containment,
 800×600 logical minimum client, the 1200-logical-pixel responsive breakpoint, and UI Automation focus and control
-bounds. Window-only PNGs, UIA trees, and launcher output are retained in sibling `mixed-150/` and `mixed-125/`
+bounds. At the minimum size, the audit also requires the Project diagnostics, Activity, Retry, status, and Cancel
+controls to remain inside the client. Window-only PNGs at the minimum and restored wide size, UIA trees, and
+launcher output are retained in sibling `mixed-150/` and `mixed-125/`
 directories. The aggregate `bs2bg.mixed-monitor-dpi/1` JSON records the archive SHA-256, stable monitor identities,
 three landings per scale, exit status, and the original-scale restoration result. The audit does not change the
 secondary scale or test hot-plug behavior.
