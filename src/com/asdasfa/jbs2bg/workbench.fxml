@@ -115,7 +115,7 @@
                                             <children>
                                                 <VBox fx:id="primaryPane" accessibleText="Templates primary content"
                                                         minWidth="160.0" prefWidth="220.0" spacing="8.0"
-                                                        styleClass="placeholder-pane">
+                                                        styleClass="area-pane">
                                                     <children>
                                                         <ScrollPane fx:id="templatesPrimaryScroll"
                                                                 accessibleText="Slider Preset management"
@@ -405,13 +405,10 @@
                                                                 </VBox>
                                                             </content>
                                                         </ScrollPane>
-                                                        <Button fx:id="primaryContentButton" accessibleText="Templates primary content"
-                                                                managed="false" maxWidth="Infinity"
-                                                                text="Focus Templates list" visible="false" />
                                                     </children>
                                                 </VBox>
                                                 <StackPane fx:id="editorPane" accessibleText="Templates editor"
-                                                        styleClass="placeholder-pane" HBox.hgrow="ALWAYS">
+                                                        styleClass="area-pane" HBox.hgrow="ALWAYS">
                                                     <children>
                                                         <VBox fx:id="templatesEditorContent" alignment="TOP_LEFT"
                                                                 spacing="8.0">
@@ -597,14 +594,11 @@
                                                                         visible="false" wrapText="true" />
                                                             </children>
                                                         </VBox>
-                                                        <Button fx:id="editorButton" accessibleText="Templates editor"
-                                                                managed="false" text="Templates Area — Workbench placeholder"
-                                                                visible="false" />
                                                     </children>
                                                 </StackPane>
                                                 <VBox fx:id="inspectorPane" accessibleText="Templates inspector"
                                                         minWidth="180.0" prefWidth="240.0" spacing="8.0"
-                                                        styleClass="placeholder-pane">
+                                                        styleClass="area-pane">
                                                     <children>
                                                         <ScrollPane fx:id="templatesInspectorScroll"
                                                                 accessibleText="Templates inspector controls"
@@ -859,9 +853,6 @@
                                                                 </VBox>
                                                             </content>
                                                         </ScrollPane>
-                                                        <Button fx:id="inspectorButton" accessibleText="Templates inspector"
-                                                                managed="false" maxWidth="Infinity"
-                                                                text="Focus Templates inspector" visible="false" />
                                                     </children>
                                                 </VBox>
                                             </children>

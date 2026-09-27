@@ -191,8 +191,8 @@ $requiredSuiteCounts = $null
 $artifact = $null
 
 # Suites whose presence and green result the gate requires, beyond the Surefire totals: the toolchain witness,
-# the structural source/pom gate, the FXML/controller harness, the packaged-launcher and app-image staging
-# contracts (#97), the public-JavaFX table adapter, and the ProjectSession, Project, filtering-seam, and
+# the structural source/pom gate, the FXML/controller harness, the Preview profile contract,
+# the packaged-launcher and app-image staging contracts (#97), and the ProjectSession, Project, filtering-seam, and
 # persistence-compatibility contracts, plus the centralized job coordinator race and shutdown contract.
 $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest',
@@ -200,7 +200,7 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest',
     'com.asdasfa.jbs2bg.build.LauncherTest',
     'com.asdasfa.jbs2bg.build.WindowsAppImageGateTest',
-    'com.asdasfa.jbs2bg.fx.FilteredTableAdapterTest',
+    'com.asdasfa.jbs2bg.MainTest',
     'com.asdasfa.jbs2bg.filtering.FilteredViewTest',
     'com.asdasfa.jbs2bg.filtering.VisibleScopeCommandsTest',
     'com.asdasfa.jbs2bg.project.ProjectSessionTest',

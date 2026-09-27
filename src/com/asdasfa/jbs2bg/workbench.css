@@ -25,7 +25,7 @@
 #workbenchRoot .navigation-rail,
 #workbenchRoot .status-bar,
 #workbenchRoot .output-drawer,
-#workbenchRoot .placeholder-pane,
+#workbenchRoot .area-pane,
 #workbenchRoot .info-bar {
     -fx-background-color: -bs-surface;
     -fx-border-color: -bs-border;
@@ -44,7 +44,7 @@
     -fx-border-width: 1px 0 0 0;
 }
 
-#workbenchRoot .placeholder-pane {
+#workbenchRoot .area-pane {
     -fx-padding: 12px;
 }
 
@@ -215,7 +215,7 @@
 #workbenchRoot:workbench-high-contrast .navigation-rail,
 #workbenchRoot:workbench-high-contrast .status-bar,
 #workbenchRoot:workbench-high-contrast .output-drawer,
-#workbenchRoot:workbench-high-contrast .placeholder-pane,
+#workbenchRoot:workbench-high-contrast .area-pane,
 #workbenchRoot:workbench-high-contrast .info-bar {
     -fx-border-width: 2px;
 }

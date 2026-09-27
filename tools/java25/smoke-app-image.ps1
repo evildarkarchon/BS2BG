@@ -77,6 +77,9 @@ $script:stdoutTask = $null
 $script:stderrTask = $null
 $imageRoot = Join-Path $WorkRoot 'image'
 $workDir = Join-Path $WorkRoot 'work'
+$localAppData = Join-Path $WorkRoot 'local-app-data'
+$profileDir = Join-Path $localAppData 'BS2BG Preview'
+$stableProfileDir = Join-Path $localAppData 'BS2BG'
 
 <#
 .SYNOPSIS
@@ -1049,6 +1052,8 @@ function Start-PackagedApplication {
     foreach ($name in $scrubbed.Variables.Keys) {
         $startInfo.Environment[$name] = "$($scrubbed.Variables[$name])"
     }
+    # Redirect only this child process's profile root so packaged state cannot touch the user's real profiles.
+    $startInfo.Environment['LOCALAPPDATA'] = $localAppData
     $script:app = [System.Diagnostics.Process]::Start($startInfo)
     $script:stdoutTask = $script:app.StandardOutput.ReadToEndAsync()
     $script:stderrTask = $script:app.StandardError.ReadToEndAsync()
@@ -1112,6 +1117,10 @@ try {
         if (Test-Path -LiteralPath $WorkRoot) { Remove-Item -LiteralPath $WorkRoot -Recurse -Force }
         New-Item -ItemType Directory -Path $imageRoot -Force | Out-Null
         New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $stableProfileDir -Force | Out-Null
+        $stableMarker = Join-Path $stableProfileDir 'stable-profile-marker.txt'
+        [IO.File]::WriteAllText($stableMarker, 'stable profile must remain untouched')
         Expand-Archive -LiteralPath $ArchivePath -DestinationPath $imageRoot -Force
         $launcherPath = Join-Path (Join-Path $imageRoot $LauncherName) "$LauncherName.exe"
         if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {
@@ -1156,7 +1165,7 @@ try {
         [IO.File]::WriteAllLines((Join-Path $workDir $npcCancelFirstName), @(
             'Cancel.esm | Retained After Cancel | PriorEditor | NordRace | 00000014'), $utf8)
         New-CancellableNpcSourceFixture -Path (Join-Path $workDir $npcCancelLargeName)
-        $settingsTransaction = Join-Path $workDir '.bs2bg-settings-stage-packaged-recovery'
+        $settingsTransaction = Join-Path $profileDir '.bs2bg-settings-stage-packaged-recovery'
         New-Item -ItemType Directory -Path $settingsTransaction -Force | Out-Null
         # Recovery must identify this staged journal as publisher-owned before reading its backup markers.
         [IO.File]::WriteAllText((Join-Path $settingsTransaction 'owner'), "BS2BG Settings transaction v1`n", $utf8)
@@ -1164,16 +1173,18 @@ try {
         $repositoryUunpSettings = (Resolve-Path (Join-Path $PSScriptRoot '..\..\settings_UUNP.json')).Path
         Copy-Item -LiteralPath $repositorySettings -Destination (Join-Path $settingsTransaction 'standard.backup')
         Copy-Item -LiteralPath $repositoryUunpSettings -Destination (Join-Path $settingsTransaction 'uunp.backup')
-        Copy-Item -LiteralPath $repositorySettings -Destination (Join-Path $workDir 'settings.json')
+        Copy-Item -LiteralPath $repositorySettings -Destination (Join-Path $profileDir 'settings.json')
         $observations['extractedImage'] = Join-Path $imageRoot $LauncherName
         $observations['launcher'] = $launcherPath
         $observations['launcherSha256'] = (Get-FileHash -LiteralPath $launcherPath -Algorithm SHA256).Hash.ToLowerInvariant()
         $observations['archiveSha256'] = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
         $observations['workingDirectory'] = $workDir
+        $observations['previewProfileDirectory'] = $profileDir
+        $observations['stableProfileDirectory'] = $stableProfileDir
         $observations['cancellableProjectBytes'] = (Get-Item -LiteralPath $cancellableProject).Length
         $observations['cancellableNpcSourceBytes'] = (Get-Item -LiteralPath (
             Join-Path $workDir $npcCancelLargeName)).Length
-        "extracted archive, installed five Project fixtures, seven NPC sources, and three portraits, and staged interrupted Settings recovery in $workDir"
+        "extracted archive, installed five Project fixtures, seven NPC sources, and three portraits, and staged interrupted Settings recovery in the isolated Preview profile"
     }
 
     Invoke-SmokeStep -Name 'launch-workbench-without-system-java' -Action {
@@ -1188,12 +1199,20 @@ try {
             }
         }
         foreach ($settingsName in @('settings.json', 'settings_UUNP.json')) {
-            if (-not (Test-Path -LiteralPath (Join-Path $workDir $settingsName) -PathType Leaf)) {
-                throw "Workbench startup did not create $settingsName."
+            if (-not (Test-Path -LiteralPath (Join-Path $profileDir $settingsName) -PathType Leaf)) {
+                throw "Workbench startup did not create $settingsName in the Preview profile."
+            }
+            if (Test-Path -LiteralPath (Join-Path $workDir $settingsName)) {
+                throw "Workbench startup wrote $settingsName in its working directory."
             }
         }
-        if (Test-Path -LiteralPath (Join-Path $workDir '.bs2bg-settings-stage-packaged-recovery')) {
+        if (Test-Path -LiteralPath (Join-Path $profileDir '.bs2bg-settings-stage-packaged-recovery')) {
             throw 'Workbench startup did not remove the recovered Settings transaction.'
+        }
+        if (@(Get-ChildItem -LiteralPath $stableProfileDir -File -Recurse).Count -ne 1 `
+                -or (Get-Content -LiteralPath (Join-Path $stableProfileDir 'stable-profile-marker.txt') -Raw) `
+                -cne 'stable profile must remain untouched') {
+            throw 'Workbench startup changed the stable BS2BG profile.'
         }
         $activity = Find-OuterControl -ControlType 'List' -Name 'Activity'
         $settingsRecovery = Wait-UiaCondition -Description 'durable packaged Settings recovery Activity' `
@@ -3598,16 +3617,16 @@ try {
             New-UiaCondition -ControlType 'ListItem' `
                 -Name 'Success — Save Settings — Completed: Settings saved.') `
             -Description 'durable packaged Settings save Activity' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
-        $savedStandard = Get-Content -LiteralPath (Join-Path $workDir 'settings.json') -Raw | ConvertFrom-Json
-        $savedUunp = Get-Content -LiteralPath (Join-Path $workDir 'settings_UUNP.json') -Raw | ConvertFrom-Json
+        $savedStandard = Get-Content -LiteralPath (Join-Path $profileDir 'settings.json') -Raw | ConvertFrom-Json
+        $savedUunp = Get-Content -LiteralPath (Join-Path $profileDir 'settings_UUNP.json') -Raw | ConvertFrom-Json
         if ($savedStandard.Multipliers.Waist -ne 2 -or $savedUunp.Multipliers.Arms -ne 3) {
             throw 'Workbench Settings edits did not persist both output-affecting profiles.'
         }
-        if ((Get-Content -LiteralPath (Join-Path $workDir 'workbench-generation.properties') -Raw) `
+        if ((Get-Content -LiteralPath (Join-Path $profileDir 'workbench-generation.properties') -Raw) `
                 -notmatch 'omitRedundantSliders=true') {
             throw 'Workbench did not migrate and persist Omit Redundant Sliders in the isolated profile.'
         }
-        if (@(Get-ChildItem -LiteralPath $workDir -Filter '.bs2bg-settings-stage-*' -Force).Count -ne 0) {
+        if (@(Get-ChildItem -LiteralPath $profileDir -Filter '.bs2bg-settings-stage-*' -Force).Count -ne 0) {
             throw 'Settings save left a paired-publication transaction behind.'
         }
 
@@ -4578,6 +4597,43 @@ try {
         'theme choices, High Contrast precedence/restoration, reduced motion, Activity, and Cancel state passed'
     }
 
+    Invoke-SmokeStep -Name 'verify-preview-profile-isolation' -Action {
+        $appearancePath = Join-Path $profileDir 'workbench-appearance.properties'
+        Wait-UiaCondition -Description 'persisted Preview theme choice' -TimeoutSeconds $StepTimeoutSeconds -Test {
+            if (Test-Path -LiteralPath $appearancePath -PathType Leaf) {
+                $content = Get-Content -LiteralPath $appearancePath -Raw
+                if ($content -match '^theme=SYSTEM\s*$') { return $content }
+            }
+        } | Out-Null
+        foreach ($name in @('settings.json', 'settings_UUNP.json',
+                'workbench-generation.properties', 'workbench-appearance.properties')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $profileDir $name) -PathType Leaf)) {
+                throw "The Preview profile is missing $name."
+            }
+            if (Test-Path -LiteralPath (Join-Path $workDir $name)) {
+                throw "Application-owned $name leaked into the working directory."
+            }
+            if (Test-Path -LiteralPath (Join-Path $stableProfileDir $name)) {
+                throw "Application-owned $name leaked into the stable profile."
+            }
+        }
+        $stableFiles = @(Get-ChildItem -LiteralPath $stableProfileDir -File -Recurse)
+        if ($stableFiles.Count -ne 1 -or $stableFiles[0].Name -cne 'stable-profile-marker.txt' `
+                -or (Get-Content -LiteralPath $stableFiles[0].FullName -Raw) `
+                -cne 'stable profile must remain untouched') {
+            throw 'The Preview launcher modified the stable BS2BG profile.'
+        }
+        $observations['profileIsolation'] = [ordered]@{
+            localAppData = $localAppData
+            previewProfile = $profileDir
+            stableProfile = $stableProfileDir
+            stableProfileUnchanged = $true
+            workingDirectoryContainsNoApplicationState = $true
+            previewOwnsSettingsAndPreferences = $true
+        }
+        'Settings, generation choice, and theme belong only to the Preview profile'
+    }
+
     Invoke-SmokeStep -Name 'active-job-shutdown-cancel-resume-then-discard' -Action {
         $shutdownProject = Join-Path $workDir $shutdownProjectName
         Copy-Item -LiteralPath $FixtureRecoveryProject -Destination $shutdownProject
@@ -4650,7 +4706,7 @@ finally {
             $_ -match 'restricted method|native access|--enable-native-access'
         })
     $evidence = [ordered]@{
-        schema = 'bs2bg.windows-app-image-smoke/19'
+        schema = 'bs2bg.windows-app-image-smoke/20'
         recordedAtUtc = $startedAt.ToString('o')
         passed = $passed
         expectedAppVersion = $ExpectedAppVersion
