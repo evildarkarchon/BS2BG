@@ -69,16 +69,29 @@ final class PreviewProfile {
             // An established profile is authoritative unless our own unfinished transfer needs recovery.
             boolean profileSettingsPresent = Files.exists(profile.resolve(STANDARD), LinkOption.NOFOLLOW_LINKS)
                     || Files.exists(profile.resolve(UUNP), LinkOption.NOFOLLOW_LINKS);
-            if (pending || !profileSettingsPresent)
-                migrateSettingsUnderLegacyLock(profile, legacy);
-            if (completed) {
-                requireValidCompletion(complete);
+            if (pending || !profileSettingsPresent) {
+                migrateSettingsUnderLegacyLock(profile, legacy, complete, completed);
                 return;
             }
-            copyPreferenceIfAbsent(profile, legacy, GENERATION);
-            copyPreferenceIfAbsent(profile, legacy, APPEARANCE);
-            writeMarker(profile, complete, COMPLETE_CONTENT);
+            finishMigration(profile, legacy, complete, completed);
         }
+    }
+
+    /**
+     * Completes the preference transfer or validates an already durable completion marker.
+     *
+     * @param completed whether the marker existed when the profile migration lock was acquired
+     * @throws IOException when a preference cannot be copied or the completion marker is invalid
+     */
+    private static void finishMigration(Path profile, Path legacy, Path complete, boolean completed)
+            throws IOException {
+        if (completed) {
+            requireValidCompletion(complete);
+            return;
+        }
+        copyPreferenceIfAbsent(profile, legacy, GENERATION);
+        copyPreferenceIfAbsent(profile, legacy, APPEARANCE);
+        writeMarker(profile, complete, COMPLETE_CONTENT);
     }
 
     /** Accepts only this version's durable completion marker before suppressing future legacy reads. */
@@ -89,14 +102,14 @@ final class PreviewProfile {
     }
 
     /**
-     * Holds the former Settings writer lock while checking its journal and sampling both legacy documents.
-     * Fresh launches without legacy Settings state avoid creating a lock file in an unrelated working directory.
+     * Holds the former Settings writer lock through the state check and completion marker publication.
+     * Even an empty directory must participate because the old writer can publish its pair after an unlocked scan.
+     *
+     * @param completed whether the completion marker existed under the profile migration lock
+     * @throws IOException when the legacy lock is busy or migration cannot finish safely
      */
-    private static void migrateSettingsUnderLegacyLock(Path profile, Path legacy) throws IOException {
-        if (!hasLegacySettingsState(legacy)) {
-            migrateSettings(profile, legacy);
-            return;
-        }
+    private static void migrateSettingsUnderLegacyLock(Path profile, Path legacy, Path complete,
+                                                       boolean completed) throws IOException {
         Path lockPath = legacy.resolve(".bs2bg-settings.lock");
         if (Files.exists(lockPath, LinkOption.NOFOLLOW_LINKS)
                 && !Files.isRegularFile(lockPath, LinkOption.NOFOLLOW_LINKS))
@@ -108,18 +121,9 @@ final class PreviewProfile {
                 throw new IOException("Legacy Preview Settings lock is held by another process: " + lockPath);
             cleanUpSafeLegacyTransactions(legacy);
             migrateSettings(profile, legacy);
+            finishMigration(profile, legacy, complete, completed);
         } catch (OverlappingFileLockException exception) {
             throw new IOException("Legacy Preview Settings lock is held by this process: " + lockPath, exception);
-        }
-    }
-
-    /** Checks whether the previous working directory contains Settings files or a transaction candidate. */
-    private static boolean hasLegacySettingsState(Path legacy) throws IOException {
-        if (Files.exists(legacy.resolve(STANDARD), LinkOption.NOFOLLOW_LINKS)
-                || Files.exists(legacy.resolve(UUNP), LinkOption.NOFOLLOW_LINKS))
-            return true;
-        try (Stream<Path> entries = Files.list(legacy)) {
-            return entries.anyMatch(path -> path.getFileName().toString().startsWith(LEGACY_STAGE_PREFIX));
         }
     }
 

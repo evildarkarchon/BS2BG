@@ -1,8 +1,11 @@
 package com.asdasfa.jbs2bg;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -10,6 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PreviewProfileTest {
     @TempDir
@@ -60,6 +64,33 @@ class PreviewProfileTest {
         assertEquals("legacy-standard", Files.readString(profile.resolve("settings.json")));
         assertEquals("legacy-uunp", Files.readString(profile.resolve("settings_UUNP.json")));
         assertFalse(Files.exists(journal));
+    }
+
+    /**
+     * An initially empty legacy directory must still defer migration while its Settings writer owns the lock.
+     * The retry must adopt the complete pair the writer publishes before releasing it.
+     *
+     * @throws IOException when fixture setup or migration inspection fails
+     */
+    @Test
+    void emptyLegacyDirectoryWithBusySettingsLockDefersMigration() throws IOException {
+        Path legacy = Files.createDirectory(temporaryDirectory.resolve("legacy"));
+        Path profile = temporaryDirectory.resolve("BS2BG Preview");
+        Path lockPath = legacy.resolve(".bs2bg-settings.lock");
+        try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE);
+             FileLock held = channel.lock()) {
+            assertTrue(held.isValid());
+            assertThrows(IOException.class, () -> PreviewProfile.prepare(profile, legacy));
+            assertFalse(Files.exists(profile.resolve(".bs2bg-preview-migration-complete")));
+            Files.writeString(legacy.resolve("settings.json"), "legacy-standard");
+            Files.writeString(legacy.resolve("settings_UUNP.json"), "legacy-uunp");
+        }
+
+        PreviewProfile.prepare(profile, legacy);
+
+        assertEquals("legacy-standard", Files.readString(profile.resolve("settings.json")));
+        assertEquals("legacy-uunp", Files.readString(profile.resolve("settings_UUNP.json")));
     }
 
     /**

@@ -268,9 +268,14 @@ function Remove-MixedMonitorWorkRoot {
 .NOTES
     WorkRoot may not exist yet, so every existing ancestor is checked for a junction or other reparse point.
     DOS 8.3 components are refused because lexical comparisons cannot establish their long-path identity.
+    Extended-length and device path prefixes are refused because GetFullPath preserves their alternate spelling.
 #>
 function Assert-MixedMonitorPathHasNoAlias {
     param([string]$Path, [string]$Parameter)
+    # GetFullPath preserves device prefixes, so containment would miss the same directory's ordinary spelling.
+    if ($Path -match '^[\\/]{2}[?.][\\/]') {
+        throw "$Parameter contains an extended-length or device path alias that cannot be checked safely against WorkRoot: $Path"
+    }
     $ancestor = [IO.Path]::GetFullPath($Path)
     while ($ancestor) {
         $trimmed = [IO.Path]::TrimEndingDirectorySeparator($ancestor)
