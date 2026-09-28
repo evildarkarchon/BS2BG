@@ -614,6 +614,10 @@ function Invoke-MixedMonitorCase {
     -RestoreOnly. The secondary display must already be at 100%; it is never changed by this audit.
 .PARAMETER WorkRoot
     New temporary directory for the extracted image and isolated Preview profile; an existing directory is refused.
+.PARAMETER EvidencePath
+    Aggregate report path. It and its per-case artifact directories must be outside WorkRoot when cleanup is enabled.
+.PARAMETER RecoveryPath
+    Display recovery record path. It must be outside WorkRoot when cleanup is enabled.
 .OUTPUTS
     Aggregate evidence object on success. Failure evidence is written before throwing.
 #>
@@ -631,6 +635,25 @@ function Invoke-MixedMonitorDpiAudit {
         [int]$ExitTimeoutSeconds = 30,
         [switch]$KeepWorkRoot
     )
+    if (-not $KeepWorkRoot) {
+        $workRootPath = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($WorkRoot))
+        $evidenceFilePath = [IO.Path]::GetFullPath($EvidencePath)
+        $evidenceDirectory = [IO.Path]::GetDirectoryName($evidenceFilePath)
+        $protectedPaths = @(
+            @{ Parameter = 'EvidencePath'; FullPath = $evidenceFilePath }
+            @{ Parameter = 'EvidencePath'; FullPath = [IO.Path]::Combine($evidenceDirectory, 'mixed-150') }
+            @{ Parameter = 'EvidencePath'; FullPath = [IO.Path]::Combine($evidenceDirectory, 'mixed-125') }
+            @{ Parameter = 'RecoveryPath'; FullPath = [IO.Path]::GetFullPath($RecoveryPath) }
+        )
+        # Each landing writes artifacts beside the report; cleanup must not remove those or the recovery record.
+        foreach ($protected in $protectedPaths) {
+            if ($protected.FullPath.Equals($workRootPath, [StringComparison]::OrdinalIgnoreCase) -or
+                $protected.FullPath.StartsWith($workRootPath + [IO.Path]::DirectorySeparatorChar,
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                throw "$($protected.Parameter) must be outside WorkRoot unless KeepWorkRoot is set."
+            }
+        }
+    }
     $lock = & $script:dpiMatrixModule { param($Path)
         Open-DpiMatrixLock -RecoveryPath $Path
     } $RecoveryPath
