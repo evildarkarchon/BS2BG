@@ -6,6 +6,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -30,6 +31,7 @@ final class PreviewProfile {
     private static final String COMPLETE_CONTENT = "BS2BG Preview migration complete v1\n";
     private static final String STAGED_STANDARD = ".bs2bg-preview-standard.staged";
     private static final String STAGED_UUNP = ".bs2bg-preview-uunp.staged";
+    private static final String LEGACY_LOCK = ".bs2bg-settings.lock";
     private static final String LEGACY_STAGE_PREFIX = ".bs2bg-settings-stage-";
     // SettingsPairPublisher uses this exact marker before a journal may change either live Settings file.
     private static final byte[] LEGACY_STAGE_OWNER = "BS2BG Settings transaction v1\n"
@@ -102,21 +104,31 @@ final class PreviewProfile {
     }
 
     /**
-     * Holds the former Settings writer lock through the state check and completion marker publication.
-     * Even an empty directory must participate because the old writer can publish its pair after an unlocked scan.
+     * Holds the former Settings writer lock through migration when the lock can be opened.
+     * A denied lock create may proceed only when a directory scan finds no former writer or Settings state.
      *
      * @param completed whether the completion marker existed under the profile migration lock
      * @throws IOException when the legacy lock is busy or migration cannot finish safely
      */
     private static void migrateSettingsUnderLegacyLock(Path profile, Path legacy, Path complete,
                                                        boolean completed) throws IOException {
-        Path lockPath = legacy.resolve(".bs2bg-settings.lock");
+        Path lockPath = legacy.resolve(LEGACY_LOCK);
         if (Files.exists(lockPath, LinkOption.NOFOLLOW_LINKS)
                 && !Files.isRegularFile(lockPath, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Legacy Preview Settings lock path is not a file: " + lockPath);
-        try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE,
-                StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
-             FileLock lock = channel.tryLock()) {
+        FileChannel channel;
+        try {
+            channel = FileChannel.open(lockPath, StandardOpenOption.CREATE,
+                    StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+        } catch (AccessDeniedException exception) {
+            if (hasLegacyLockOrSettingsState(legacy))
+                throw exception;
+            // The former writer cannot create a lock or publish a Settings transaction in this directory.
+            migrateSettings(profile, legacy);
+            finishMigration(profile, legacy, complete, completed);
+            return;
+        }
+        try (channel; FileLock lock = channel.tryLock()) {
             if (lock == null || !lock.isValid())
                 throw new IOException("Legacy Preview Settings lock is held by another process: " + lockPath);
             cleanUpSafeLegacyTransactions(legacy);
@@ -124,6 +136,15 @@ final class PreviewProfile {
             finishMigration(profile, legacy, complete, completed);
         } catch (OverlappingFileLockException exception) {
             throw new IOException("Legacy Preview Settings lock is held by this process: " + lockPath, exception);
+        }
+    }
+
+    /** Checks entry names after a denied lock create, including a lock an active former writer may already hold. */
+    private static boolean hasLegacyLockOrSettingsState(Path legacy) throws IOException {
+        try (Stream<Path> entries = Files.list(legacy)) {
+            return entries.map(path -> path.getFileName().toString())
+                    .anyMatch(name -> name.equals(LEGACY_LOCK) || name.equals(STANDARD)
+                            || name.equals(UUNP) || name.startsWith(LEGACY_STAGE_PREFIX));
         }
     }
 

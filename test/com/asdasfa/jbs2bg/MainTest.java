@@ -7,7 +7,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -16,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -95,6 +102,41 @@ class MainTest {
 
         assertTrue(Files.isRegularFile(profile.resolve("settings.json")));
         assertTrue(Files.isRegularFile(profile.resolve("settings_UUNP.json")));
+    }
+
+    /**
+     * A fresh launch must initialize the writable Preview profile when the empty working directory denies file creation.
+     *
+     * @throws Exception when Windows ACL setup or isolated process inspection fails
+     */
+    @Test
+    void firstLaunchFromReadOnlyWorkingDirectoryPublishesSettingsInPreviewProfile() throws Exception {
+        Path localAppData = temporaryDirectory.resolve("LocalAppData");
+        Path legacy = Files.createDirectory(temporaryDirectory.resolve("legacy"));
+        Path profile = localAppData.resolve("BS2BG Preview");
+        AclFileAttributeView acl = Files.getFileAttributeView(legacy, AclFileAttributeView.class);
+        assertNotNull(acl, "The Windows Preview test requires directory ACL support");
+        List<AclEntry> original = acl.getAcl();
+        AclEntry denyCreate = AclEntry.newBuilder()
+                .setType(AclEntryType.DENY)
+                .setPrincipal(Files.getOwner(legacy))
+                .setPermissions(AclEntryPermission.ADD_FILE)
+                .build();
+        List<AclEntry> restricted = new ArrayList<>(original.size() + 1);
+        restricted.add(denyCreate);
+        restricted.addAll(original);
+        try {
+            acl.setAcl(restricted);
+            assertThrows(IOException.class, () -> Files.createFile(legacy.resolve("creation-probe")));
+            runPreview(localAppData, legacy);
+
+            assertTrue(Files.isRegularFile(profile.resolve("settings.json")));
+            assertTrue(Files.isRegularFile(profile.resolve("settings_UUNP.json")));
+            assertTrue(Files.isRegularFile(profile.resolve(".bs2bg-preview-migration-complete")));
+            assertFalse(Files.exists(legacy.resolve(".bs2bg-settings.lock")));
+        } finally {
+            acl.setAcl(original);
+        }
     }
 
     /**
