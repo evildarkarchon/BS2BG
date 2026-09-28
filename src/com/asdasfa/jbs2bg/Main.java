@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -52,11 +53,18 @@ public class Main extends Application {
     private final JobCoordinator jobCoordinator;
     public Stage primaryStage;
     /**
-     * Initializes the Preview profile's Settings pair, authoritative ProjectSession,
+     * Creates and migrates the Preview profile before initializing its Settings pair, authoritative ProjectSession,
      * application-wide job coordinator, and sole Workbench Project flow.
+     *
+     * @throws IllegalStateException when the profile cannot be prepared without losing legacy state
      */
     public Main() {
         profileDirectory = previewProfileDirectory(System.getenv("LOCALAPPDATA"));
+        try {
+            PreviewProfile.prepare(profileDirectory, Path.of("."));
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not prepare the BS2BG Preview profile", exception);
+        }
         settingsInitialization = Settings.initialize(profileDirectory);
         ProjectSession projectSession = ProjectSessions.create();
         jobWorker = Executors.newSingleThreadExecutor(
