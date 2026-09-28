@@ -250,6 +250,7 @@ function Assert-MixedMonitorTopologyStable {
 function Remove-MixedMonitorWorkRoot {
     param([string]$WorkRoot)
     if (-not (Test-Path -LiteralPath $WorkRoot)) { return }
+    Assert-MixedMonitorPathHasNoAlias -Path $WorkRoot -Parameter 'WorkRoot'
     $expected = [IO.Path]::GetFullPath($WorkRoot).TrimEnd('\', '/')
     $item = Get-Item -LiteralPath $WorkRoot -Force
     $actual = [IO.Path]::GetFullPath($item.FullName).TrimEnd('\', '/')
@@ -259,6 +260,33 @@ function Remove-MixedMonitorWorkRoot {
         throw "Refusing recursive cleanup outside the created work root: $WorkRoot"
     }
     Remove-Item -LiteralPath $actual -Recurse -Force
+}
+
+<#
+.SYNOPSIS
+    Rejects paths whose existing ancestors could hide a different physical location during work-root cleanup.
+.NOTES
+    WorkRoot may not exist yet, so every existing ancestor is checked for a junction or other reparse point.
+    DOS 8.3 components are refused because lexical comparisons cannot establish their long-path identity.
+#>
+function Assert-MixedMonitorPathHasNoAlias {
+    param([string]$Path, [string]$Parameter)
+    $ancestor = [IO.Path]::GetFullPath($Path)
+    while ($ancestor) {
+        $trimmed = [IO.Path]::TrimEndingDirectorySeparator($ancestor)
+        if ([IO.Path]::GetFileName($trimmed) -match '~[0-9]+(\.|$)') {
+            throw "$Parameter contains a DOS path alias that cannot be checked safely against WorkRoot: $Path"
+        }
+        if (Test-Path -LiteralPath $ancestor) {
+            $item = Get-Item -LiteralPath $ancestor -Force
+            if ($item.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
+                throw "$Parameter contains a reparse-point ancestor that cannot be checked safely against WorkRoot: $Path"
+            }
+        }
+        $parent = [IO.Path]::GetDirectoryName($trimmed)
+        if (-not $parent -or $parent -eq $ancestor) { break }
+        $ancestor = $parent
+    }
 }
 
 <#
@@ -636,6 +664,7 @@ function Invoke-MixedMonitorDpiAudit {
         [switch]$KeepWorkRoot
     )
     if (-not $KeepWorkRoot) {
+        Assert-MixedMonitorPathHasNoAlias -Path $WorkRoot -Parameter 'WorkRoot'
         $workRootPath = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($WorkRoot))
         $evidenceFilePath = [IO.Path]::GetFullPath($EvidencePath)
         $evidenceDirectory = [IO.Path]::GetDirectoryName($evidenceFilePath)
@@ -647,6 +676,7 @@ function Invoke-MixedMonitorDpiAudit {
         )
         # Each landing writes artifacts beside the report; cleanup must not remove those or the recovery record.
         foreach ($protected in $protectedPaths) {
+            Assert-MixedMonitorPathHasNoAlias -Path $protected.FullPath -Parameter $protected.Parameter
             if ($protected.FullPath.Equals($workRootPath, [StringComparison]::OrdinalIgnoreCase) -or
                 $protected.FullPath.StartsWith($workRootPath + [IO.Path]::DirectorySeparatorChar,
                     [StringComparison]::OrdinalIgnoreCase)) {

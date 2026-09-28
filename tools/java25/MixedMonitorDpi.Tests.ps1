@@ -91,6 +91,32 @@ Describe 'Packaged mixed-monitor DPI audit' {
         }
     }
 
+    It 'rejects evidence beneath a work root reached through a junction' {
+        $physical = Join-Path $caseRoot 'physical'
+        New-Item -ItemType Directory -Path $physical | Out-Null
+        $alias = Join-Path $caseRoot 'alias'
+        New-Item -ItemType Junction -Path $alias -Target $physical | Out-Null
+        $arguments.WorkRoot = Join-Path $alias 'work'
+        $arguments.EvidencePath = Join-Path $physical 'work/artifacts/mixed-monitor.json'
+
+        { Invoke-MixedMonitorDpiAudit @arguments } | Should -Throw '*WorkRoot*'
+        Test-Path $arguments.RecoveryPath | Should -BeFalse
+        InModuleScope MixedMonitorDpi { Should -Invoke Set-PrimaryDisplayScale -Times 0 -Exactly }
+    }
+
+    It 'rejects an evidence path reached through a junction into the work root' {
+        $physical = Join-Path $caseRoot 'physical'
+        New-Item -ItemType Directory -Path $physical | Out-Null
+        $alias = Join-Path $caseRoot 'alias'
+        New-Item -ItemType Junction -Path $alias -Target $physical | Out-Null
+        $arguments.WorkRoot = Join-Path $physical 'work'
+        $arguments.EvidencePath = Join-Path $alias 'work/artifacts/mixed-monitor.json'
+
+        { Invoke-MixedMonitorDpiAudit @arguments } | Should -Throw '*EvidencePath*WorkRoot*'
+        Test-Path $arguments.RecoveryPath | Should -BeFalse
+        InModuleScope MixedMonitorDpi { Should -Invoke Set-PrimaryDisplayScale -Times 0 -Exactly }
+    }
+
     It 'rejects a work root that would remove one per-case evidence directory' {
         $arguments.WorkRoot = Join-Path (Split-Path -Parent $arguments.EvidencePath) 'mixed-150'
 

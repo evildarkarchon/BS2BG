@@ -11,7 +11,10 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
@@ -52,7 +55,7 @@ final class PreviewProfile {
             throw new IOException("Preview profile is not an owned directory: " + profile);
         // The migration lock prevents two simultaneous Preview launches from adopting different legacy snapshots.
         try (FileChannel channel = FileChannel.open(profile.resolve(".bs2bg-preview-migration.lock"),
-                StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
              FileLock lock = channel.lock()) {
             if (!lock.isValid())
                 throw new IOException("Could not lock the Preview profile migration: " + profile);
@@ -103,7 +106,7 @@ final class PreviewProfile {
              FileLock lock = channel.tryLock()) {
             if (lock == null || !lock.isValid())
                 throw new IOException("Legacy Preview Settings lock is held by another process: " + lockPath);
-            requireNoOwnedLegacyTransaction(legacy);
+            cleanUpSafeLegacyTransactions(legacy);
             migrateSettings(profile, legacy);
         } catch (OverlappingFileLockException exception) {
             throw new IOException("Legacy Preview Settings lock is held by this process: " + lockPath, exception);
@@ -120,16 +123,52 @@ final class PreviewProfile {
         }
     }
 
-    /** Refuses an owned legacy journal because only SettingsPairPublisher can recover its effective pair. */
-    private static void requireNoOwnedLegacyTransaction(Path legacy) throws IOException {
+    /**
+     * Removes only owned cleanup-only Settings journals while holding the former publisher's writer lock.
+     * Journals with prior-state markers still require the publisher's rollback before their live pair is sampled.
+     */
+    private static void cleanUpSafeLegacyTransactions(Path legacy) throws IOException {
+        List<Path> transactions = new ArrayList<>();
         try (Stream<Path> entries = Files.list(legacy)) {
             for (Path candidate : entries.filter(path -> path.getFileName().toString()
                     .startsWith(LEGACY_STAGE_PREFIX)).toList()) {
                 if (Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS) && isOwnedLegacyTransaction(candidate))
-                    throw new IOException("Legacy Preview Settings transaction requires recovery before migration: "
-                            + candidate);
+                    transactions.add(candidate);
             }
         }
+        if (transactions.size() > 1)
+            throw new IOException("Legacy Preview Settings has more than one owned transaction.");
+        if (transactions.isEmpty())
+            return;
+
+        Path transaction = transactions.getFirst();
+        Path committed = transaction.resolve("committed");
+        if (Files.exists(committed, LinkOption.NOFOLLOW_LINKS)) {
+            if (!Files.isRegularFile(committed, LinkOption.NOFOLLOW_LINKS) || Files.size(committed) != 1L)
+                throw new IOException("Legacy Preview Settings commit marker is invalid: " + committed);
+            if (!Files.isRegularFile(legacy.resolve(STANDARD), LinkOption.NOFOLLOW_LINKS)
+                    || !Files.isRegularFile(legacy.resolve(UUNP), LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Legacy Preview Settings committed transaction lacks its published pair: "
+                        + transaction);
+        } else if (hasLegacyPriorStateMarkers(transaction)) {
+            throw new IOException("Legacy Preview Settings transaction requires recovery before migration: "
+                    + transaction);
+        }
+        // Files.walk does not follow links; cleanup must never leave this authenticated journal directory.
+        try (Stream<Path> paths = Files.walk(transaction)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList())
+                Files.deleteIfExists(path);
+        }
+    }
+
+    /** Prior-state markers mean publication could have changed a live side and Preview cannot infer the old pair. */
+    private static boolean hasLegacyPriorStateMarkers(Path transaction) {
+        for (String member : List.of("standard", "uunp")) {
+            if (Files.exists(transaction.resolve(member + ".backup"), LinkOption.NOFOLLOW_LINKS)
+                    || Files.exists(transaction.resolve(member + ".absent"), LinkOption.NOFOLLOW_LINKS))
+                return true;
+        }
+        return false;
     }
 
     /** Matches the bounded ownership marker recognized by the legacy Settings transaction recovery. */
@@ -207,11 +246,12 @@ final class PreviewProfile {
         Files.delete(marker);
     }
 
-    /** Atomically records migration progress or completion without allowing a torn marker to be trusted. */
+    /** Forces marker contents before an atomic move makes migration progress or completion visible. */
     private static void writeMarker(Path profile, Path marker, String content) throws IOException {
         Path temporary = Files.createTempFile(profile, ".bs2bg-preview-marker-", ".tmp");
         try {
             Files.writeString(temporary, content);
+            forceExisting(temporary);
             Files.move(temporary, marker, StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING);
         } finally {
@@ -247,7 +287,7 @@ final class PreviewProfile {
         if (!mayCopyLegacy)
             throw new IOException("Preview Settings migration stage is unavailable: " + staged);
         Path source = legacy.resolve(name);
-        if (!Files.isRegularFile(source))
+        if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Legacy Preview Settings source is unavailable: " + source);
         copyAtomically(profile, source, staged);
     }
@@ -271,19 +311,28 @@ final class PreviewProfile {
         Path source = legacy.resolve(name);
         if (!Files.exists(source, LinkOption.NOFOLLOW_LINKS))
             return;
-        if (!Files.isRegularFile(source))
+        if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS))
             throw new IOException("Legacy Preview preference source is not a file: " + source);
         copyAtomically(profile, source, target);
     }
 
-    /** Stages a complete source beside its destination so interruption cannot leave a partial live file. */
+    /** Stages and forces a complete source beside its destination before publishing its final filename. */
     private static void copyAtomically(Path profile, Path source, Path target) throws IOException {
         Path temporary = Files.createTempFile(profile, ".bs2bg-preview-copy-", ".tmp");
         try {
-            Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
+            // A source replaced by a link after validation must not import data outside the legacy profile.
+            Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING, LinkOption.NOFOLLOW_LINKS);
+            forceExisting(temporary);
             Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
         } finally {
             Files.deleteIfExists(temporary);
+        }
+    }
+
+    /** Forces a staged file before its rename can make a later completion marker authoritative. */
+    private static void forceExisting(Path path) throws IOException {
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+            channel.force(true);
         }
     }
 }
