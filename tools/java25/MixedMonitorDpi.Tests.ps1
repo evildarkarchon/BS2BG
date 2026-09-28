@@ -80,6 +80,60 @@ Describe 'Packaged mixed-monitor DPI audit' {
         }
     }
 
+    It 'rejects evidence inside the work root before persisting recovery or changing a display' {
+        $arguments.EvidencePath = Join-Path $arguments.WorkRoot 'artifacts/../artifacts/mixed-monitor.json'
+
+        { Invoke-MixedMonitorDpiAudit @arguments } | Should -Throw '*EvidencePath*WorkRoot*'
+        Test-Path $arguments.RecoveryPath | Should -BeFalse
+        InModuleScope MixedMonitorDpi {
+            Should -Invoke Set-PrimaryDisplayScale -Times 0 -Exactly
+            Should -Invoke Invoke-MixedMonitorCase -Times 0 -Exactly
+        }
+    }
+
+    It 'rejects a work root that would remove one per-case evidence directory' {
+        $arguments.WorkRoot = Join-Path (Split-Path -Parent $arguments.EvidencePath) 'mixed-150'
+
+        { Invoke-MixedMonitorDpiAudit @arguments } | Should -Throw '*EvidencePath*WorkRoot*'
+        Test-Path $arguments.RecoveryPath | Should -BeFalse
+        InModuleScope MixedMonitorDpi { Should -Invoke Set-PrimaryDisplayScale -Times 0 -Exactly }
+    }
+
+    It 'rejects a recovery record beneath the work root before creating its lock directory' {
+        $arguments.RecoveryPath = Join-Path $arguments.WorkRoot 'display-recovery.json'
+
+        { Invoke-MixedMonitorDpiAudit @arguments } | Should -Throw '*RecoveryPath*WorkRoot*'
+        Test-Path $arguments.WorkRoot | Should -BeFalse
+        InModuleScope MixedMonitorDpi { Should -Invoke Set-PrimaryDisplayScale -Times 0 -Exactly }
+    }
+
+    It 'rejects a recovery record at the work root path' {
+        $arguments.RecoveryPath = $arguments.WorkRoot
+
+        { Invoke-MixedMonitorDpiAudit @arguments } | Should -Throw '*RecoveryPath*WorkRoot*'
+        Test-Path $arguments.RecoveryPath | Should -BeFalse
+        InModuleScope MixedMonitorDpi { Should -Invoke Set-PrimaryDisplayScale -Times 0 -Exactly }
+    }
+
+    It 'allows evidence in a sibling directory with the same name prefix as the work root' {
+        $arguments.EvidencePath = Join-Path (Split-Path -Parent $arguments.WorkRoot) 'work-report/mixed-monitor.json'
+
+        $result = Invoke-MixedMonitorDpiAudit @arguments
+
+        $result.passed | Should -BeTrue
+        Test-Path $arguments.EvidencePath | Should -BeTrue
+    }
+
+    It 'keeps evidence inside the work root when work-root cleanup is disabled' {
+        $arguments.EvidencePath = Join-Path $arguments.WorkRoot 'artifacts/mixed-monitor.json'
+        $arguments.KeepWorkRoot = $true
+
+        $result = Invoke-MixedMonitorDpiAudit @arguments
+
+        $result.passed | Should -BeTrue
+        Test-Path $arguments.EvidencePath | Should -BeTrue
+    }
+
     It 'rejects a non-100-percent secondary before persisting recovery or changing a display' {
         InModuleScope MixedMonitorDpi {
             Mock Read-MixedMonitorTopology {
