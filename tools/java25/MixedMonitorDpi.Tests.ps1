@@ -91,6 +91,36 @@ Describe 'Packaged mixed-monitor DPI audit' {
         }
     }
 
+    It 'rejects an extended-length work root that aliases the evidence directory before recovery or display changes' {
+        $arguments.EvidencePath = Join-Path $arguments.WorkRoot 'artifacts/mixed-monitor.json'
+        $arguments.WorkRoot = '\\?\' + [IO.Path]::GetFullPath($arguments.WorkRoot)
+
+        { Invoke-MixedMonitorDpiAudit @arguments } | Should -Throw '*WorkRoot*extended-length*'
+        Test-Path $arguments.RecoveryPath | Should -BeFalse
+        InModuleScope MixedMonitorDpi {
+            Should -Invoke Set-PrimaryDisplayScale -Times 0 -Exactly
+            Should -Invoke Invoke-MixedMonitorCase -Times 0 -Exactly
+        }
+    }
+
+    It 'rejects an extended-length evidence path inside the ordinary work root' {
+        $insideWorkRoot = Join-Path $arguments.WorkRoot 'artifacts/mixed-monitor.json'
+        $arguments.EvidencePath = '\\?\' + [IO.Path]::GetFullPath($insideWorkRoot)
+
+        { Invoke-MixedMonitorDpiAudit @arguments } | Should -Throw '*EvidencePath*extended-length*'
+        Test-Path $arguments.RecoveryPath | Should -BeFalse
+        InModuleScope MixedMonitorDpi { Should -Invoke Set-PrimaryDisplayScale -Times 0 -Exactly }
+    }
+
+    It 'rejects a device-prefixed recovery path inside the ordinary work root' {
+        $insideWorkRoot = Join-Path $arguments.WorkRoot 'display-recovery.json'
+        $arguments.RecoveryPath = '\\.\' + [IO.Path]::GetFullPath($insideWorkRoot)
+
+        { Invoke-MixedMonitorDpiAudit @arguments } | Should -Throw '*RecoveryPath*device*'
+        Test-Path $arguments.WorkRoot | Should -BeFalse
+        InModuleScope MixedMonitorDpi { Should -Invoke Set-PrimaryDisplayScale -Times 0 -Exactly }
+    }
+
     It 'rejects evidence beneath a work root reached through a junction' {
         $physical = Join-Path $caseRoot 'physical'
         New-Item -ItemType Directory -Path $physical | Out-Null
