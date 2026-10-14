@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
@@ -32,7 +31,6 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-import javafx.stage.Window;
 
 /**
  * The shared NPC portrait viewer, driven without the Workbench: one inspector (thumbnail, status, launcher) in a
@@ -96,13 +94,14 @@ class NpcPortraitViewerTest {
         return shown;
     }
 
-    /** @return every showing portrait viewer the inspector's owner has. Must run on the FX thread. */
-    private static List<Stage> viewers(Inspector inspector) {
-        return Window.getWindows().stream()
-                .filter(window -> window instanceof Stage stage && stage.getOwner() == inspector.owner()
-                        && window.isShowing())
-                .map(Stage.class::cast)
-                .toList();
+    /**
+     * Waits until a viewer's full-resolution image has loaded and reports its dimensions. Tests wait for this before
+     * closing a viewer, because the background load holds the portrait file open and Windows would then refuse to
+     * delete the {@code @TempDir}.
+     */
+    private static void awaitFullImage(Stage viewer) throws Exception {
+        awaitOnFx("the full image to load", () -> viewer.getScene().getRoot().lookupAll(".label").stream()
+                .anyMatch(node -> "NPC portrait dimensions: 512 × 512 pixels".equals(node.getAccessibleText())));
     }
 
     /** Polls an FX-thread condition from the test thread, failing after the harness timeout. */
@@ -228,8 +227,7 @@ class NpcPortraitViewerTest {
                 assertTrue(focusOwner instanceof Button button && button.getText().equals("Close"),
                         () -> "viewer focus owner: " + focusOwner);
             });
-            awaitOnFx("the full image to load", () -> viewer.get().getScene().getRoot().lookupAll(".label").stream()
-                    .anyMatch(node -> "NPC portrait dimensions: 512 × 512 pixels".equals(node.getAccessibleText())));
+            awaitFullImage(viewer.get());
         } finally {
             close(shown);
         }
@@ -241,14 +239,18 @@ class NpcPortraitViewerTest {
         AtomicReference<Inspector> shown = inspectorWithLydiaLoaded(
                 images("Lydia (HousecarlWhiterun).png", "Faendal (Faendal).png"));
         AtomicReference<Stage> first = new AtomicReference<>();
+        AtomicReference<Stage> replacement = new AtomicReference<>();
         try {
             FxTestToolkit.runOnFxThread(() -> {
                 shown.get().launcher().fire();
                 first.set(FxTestToolkit.showingOwnedStage(shown.get().owner(), ".npc-portrait-viewer"));
-
+            });
+            awaitFullImage(first.get());
+            FxTestToolkit.runOnFxThread(() -> {
                 shown.get().launcher().fire();
 
-                assertEquals(List.of(first.get()), viewers(shown.get()));
+                // showingOwnedStage requires exactly one viewer, so the raise opened no second window.
+                assertSame(first.get(), FxTestToolkit.showingOwnedStage(shown.get().owner(), ".npc-portrait-viewer"));
                 assertEquals(1, shown.get().satellites().size());
                 shown.get().thumbnail().show(new NpcMorphAssignmentIdentity("Skyrim.esm", "Faendal"), "Faendal");
             });
@@ -257,10 +259,11 @@ class NpcPortraitViewerTest {
                 shown.get().launcher().fire();
 
                 assertFalse(first.get().isShowing());
-                Stage replacement = FxTestToolkit.showingOwnedStage(shown.get().owner(), ".npc-portrait-viewer");
-                assertEquals("NPC Portrait — Faendal", replacement.getTitle());
+                replacement.set(FxTestToolkit.showingOwnedStage(shown.get().owner(), ".npc-portrait-viewer"));
+                assertEquals("NPC Portrait — Faendal", replacement.get().getTitle());
                 assertEquals(1, shown.get().satellites().size());
             });
+            awaitFullImage(replacement.get());
         } finally {
             close(shown);
         }
@@ -270,16 +273,20 @@ class NpcPortraitViewerTest {
     @Test
     void escapeClosesTheViewerAndReturnsFocusToTheLauncher() throws Exception {
         AtomicReference<Inspector> shown = inspectorWithLydiaLoaded(images("Lydia (HousecarlWhiterun).png"));
+        AtomicReference<Stage> viewer = new AtomicReference<>();
         try {
             FxTestToolkit.runOnFxThread(() -> {
                 shown.get().launcher().fire();
-                Stage viewer = FxTestToolkit.showingOwnedStage(shown.get().owner(), ".npc-portrait-viewer");
-                Node close = viewer.getScene().getFocusOwner();
+                viewer.set(FxTestToolkit.showingOwnedStage(shown.get().owner(), ".npc-portrait-viewer"));
+            });
+            awaitFullImage(viewer.get());
+            FxTestToolkit.runOnFxThread(() -> {
+                Node close = viewer.get().getScene().getFocusOwner();
 
                 close.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.ESCAPE,
                         false, false, false, false));
 
-                assertFalse(viewer.isShowing());
+                assertFalse(viewer.get().isShowing());
                 assertSame(shown.get().launcher(), shown.get().owner().getScene().getFocusOwner());
                 assertEquals(0, shown.get().satellites().size());
             });
@@ -295,13 +302,17 @@ class NpcPortraitViewerTest {
     @Test
     void viewerFollowsTheShellAppearanceAndClosesWhenTheShellDismissesItsSatellites() throws Exception {
         AtomicReference<Inspector> shown = inspectorWithLydiaLoaded(images("Lydia (HousecarlWhiterun).png"));
+        AtomicReference<Stage> viewer = new AtomicReference<>();
         try {
             FxTestToolkit.runOnFxThread(() -> {
-                SatelliteRegistry satellites = shown.get().satellites();
                 shown.get().launcher().fire();
-                Stage viewer = FxTestToolkit.showingOwnedStage(shown.get().owner(), ".npc-portrait-viewer");
-                Parent root = viewer.getScene().getRoot();
-                assertTrue(hasPseudoClass(root, "workbench-light"));
+                viewer.set(FxTestToolkit.showingOwnedStage(shown.get().owner(), ".npc-portrait-viewer"));
+                assertTrue(hasPseudoClass(viewer.get().getScene().getRoot(), "workbench-light"));
+            });
+            awaitFullImage(viewer.get());
+            FxTestToolkit.runOnFxThread(() -> {
+                SatelliteRegistry satellites = shown.get().satellites();
+                Parent root = viewer.get().getScene().getRoot();
 
                 satellites.retheme(frame(WorkbenchAppearance.ThemeChoice.DARK));
 
@@ -310,7 +321,7 @@ class NpcPortraitViewerTest {
 
                 satellites.dismissAll();
 
-                assertFalse(viewer.isShowing());
+                assertFalse(viewer.get().isShowing());
                 assertEquals(0, satellites.size());
                 satellites.retheme(frame(WorkbenchAppearance.ThemeChoice.LIGHT));
                 assertTrue(hasPseudoClass(root, "workbench-dark"), "a closed viewer must not be re-themed");

@@ -163,6 +163,7 @@ class WorkbenchControllerTest {
         platform.respondNpcSourcesWith(Optional.of(List.of(source)));
         AtomicReference<FXMLLoader> loaded = new AtomicReference<>();
         AtomicReference<Stage> shown = new AtomicReference<>();
+        AtomicReference<Stage> viewer = new AtomicReference<>();
         CountDownLatch thumbnailLoaded = new CountDownLatch(1);
         try {
             FxTestToolkit.runOnFxThread(() -> {
@@ -195,12 +196,25 @@ class WorkbenchControllerTest {
                 assertEquals("Portrait file: Alpha (Alpha01).png",
                         ((Label) loader.getNamespace().get("npcDatabasePortraitStatus")).getText());
                 ((Button) loader.getNamespace().get("openNpcDatabasePortraitViewerButton")).fire();
-                Stage viewer = FxTestToolkit.showingOwnedStage(shown.get(), ".npc-portrait-viewer");
-                assertEquals("NPC Portrait — Alpha", viewer.getTitle());
-
+                viewer.set(FxTestToolkit.showingOwnedStage(shown.get(), ".npc-portrait-viewer"));
+                assertEquals("NPC Portrait — Alpha", viewer.get().getTitle());
+            });
+            // The viewer's background full-image load holds the portrait open; let it finish so the @TempDir can be
+            // deleted on Windows.
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            AtomicBoolean fullImageLoaded = new AtomicBoolean();
+            while (!fullImageLoaded.get()) {
+                assertTrue(System.nanoTime() < deadline, "the viewer's full image never loaded");
+                FxTestToolkit.runOnFxThread(() -> fullImageLoaded.set(viewer.get().getScene().getRoot()
+                        .lookupAll(".label").stream().anyMatch(node -> String.valueOf(node.getAccessibleText())
+                                .endsWith(" pixels"))));
+                if (!fullImageLoaded.get())
+                    Thread.sleep(20L);
+            }
+            FxTestToolkit.runOnFxThread(() -> {
                 shown.get().close();
 
-                assertFalse(viewer.isShowing(), "the viewer closes with the Workbench window");
+                assertFalse(viewer.get().isShowing(), "the viewer closes with the Workbench window");
             });
         } finally {
             FxTestToolkit.runOnFxThread(() -> {
