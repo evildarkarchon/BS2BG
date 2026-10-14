@@ -75,3 +75,42 @@ The modules are:
 - **One stylesheet.** The Area panes join the shell's scene, so `workbench.css` styles them as before.
 - **`FxmlGraphLoadingTest`** checks that every `@FXML` field is injected for the root graph and for every Area graph
   the shell loads. **`WorkbenchFocusPolicyTest`** classifies the Area controls into the shell's landmark containers.
+
+## Implementation refinements (recorded after the decomposition, #154)
+
+*This section was added once all four Areas and the Output drawer were extracted (#149–#153). It records how the
+implementation refined the shapes above. The decision itself is unchanged.*
+
+- **`WorkbenchArea` gained three things.**
+  - `defaultFocusNode()` is the Area's last-resort focus node. By default it is the Area's `PRIMARY_CONTENT`;
+    NPC Database overrides it with its catalog table.
+  - `handleKey(KeyEvent)` is the Area's own key handler, default "not handled". The shell offers it each key right
+    after Ctrl+G and Ctrl+E, before Ctrl+K and navigation. Templates uses it for F2 and for Escape while a rename is
+    open. Event filters on the Area panes would run after the shell's root filter, so the narrow overlay or the
+    drawer would be dismissed before the rename's Escape could cancel it.
+  - `focusNode` may answer a launcher landmark that the Area declares. Morphs answers `NPC_DATABASE_LAUNCHER` with
+    Add NPCs, so Back to Morphs can return to it.
+- **The Output drawer has its own non-Node root, `OutputDrawerParts`.** It holds the `drawer` and the
+  `generateButton`. The shell puts the button into the Area header and appends the drawer to the content stack, so
+  nesting and accessible text are unchanged. `AreaLoader.loadGraph` is the shared constructor-injecting loader for
+  any non-Node root, and `AreaLoader.load` is built on it. The drawer's small interface (`render`, `focusNode`,
+  `reveal`) is a set of public methods, not a Java interface, because there is one implementation.
+- **Constructor injection takes what each module uses**, which sometimes goes beyond the menu above:
+  - the owner `Stage`, for choosers and popups
+  - the Stage's render-scale property, for the catalog heights
+  - the shared `UiaListHelper`, `NpcPortraitViewer` and `WorkbenchSatellites`
+  - the `JobCoordinator`, for the NPC Database importer
+  - a Settings snapshot supplier, for the Templates slider-row previews
+
+  No Area takes a `Clock`, because the features take it.
+- **Diagnostics arbitration is decided by the update's type.**
+  - `DispatchPipeline.ProjectChrome.render` receives the update that moved the Project sequence. The shell keeps a
+    Templates edit's diagnostics out of the Morphs projection, and a Morphs edit's out of Templates.
+  - `ShellPort.projectChanged(update, ownsDiagnostics)` keeps them out of both, for the NPC Database.
+  - One diagnostics owner in the shell replaces the two `…OwnProjectDiagnostics` flags.
+- **Mounting appends.** The shell mounts the Areas in their former FXML order (Templates, Morphs, Settings, NPC
+  Database) and appends each pane to its landmark container.
+- **The test fixture is `ModuleTest<M>`, with `AreaTest<A>` on top.** `OutputDrawerTest` extends `ModuleTest`
+  directly. Tests that drive the whole Workbench reach module controls and typed views through `LoadedWorkbench`.
+  The shell's only package-private test hooks are the platform-injecting `attach`, the loaded module namespaces and
+  its focus policy.

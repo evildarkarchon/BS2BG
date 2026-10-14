@@ -58,6 +58,7 @@ import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 import com.asdasfa.jbs2bg.workbench.templates.SliderChoiceRow;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
+import com.asdasfa.jbs2bg.workbench.templates.TemplatesArea;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
 import javafx.css.PseudoClass;
@@ -283,7 +284,8 @@ class WorkbenchControllerTest {
                 ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
 
                 assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
-                ListView<NpcMorphAssignmentSnapshot> assignments = controller.npcMorphAssignmentListNode();
+                ListView<NpcMorphAssignmentSnapshot> assignments =
+                        LoadedWorkbench.morphs(controller).npcMorphAssignmentListNode();
                 assertEquals("Amber", assignments.getSelectionModel().getSelectedItem().getDisplayName());
                 worker.runNext();
             } finally {
@@ -737,7 +739,7 @@ class WorkbenchControllerTest {
             try {
                 controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                controller.npcMorphAssignmentListNode().getSelectionModel().selectFirst();
+                LoadedWorkbench.morphs(controller).npcMorphAssignmentListNode().getSelectionModel().selectFirst();
                 stage.show();
                 root.resize(900.0, 700.0);
                 ScrollPane inspector = (ScrollPane) LoadedWorkbench.node(loader, "morphsInspectorScroll");
@@ -806,7 +808,7 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                controller.customMorphTargetListNode().requestFocus();
+                LoadedWorkbench.morphs(controller).customMorphTargetListNode().requestFocus();
                 Button launcher = (Button) LoadedWorkbench.node(loader, "addNpcsFromDatabaseButton");
 
                 launcher.fire();
@@ -849,7 +851,8 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
                 if (morphs)
                     ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                shownCatalog.set(morphs ? controller.customMorphTargetListNode() : controller.sliderPresetListNode());
+                shownCatalog.set(morphs ? LoadedWorkbench.morphs(controller).customMorphTargetListNode()
+                        : LoadedWorkbench.templates(controller).sliderPresetListNode());
                 shown.set(stage);
                 stage.show();
                 // Showing a window resets its render scale to the screen's output scale, so force it again.
@@ -942,20 +945,20 @@ class WorkbenchControllerTest {
             available.setValue(available.getItems().getFirst());
             available.fireEvent(new ActionEvent());
             assign.fire();
-            assigned = controller.assignedMorphSliderPresetListNode();
+            assigned = LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode();
             assigned.getSelectionModel().selectFirst();
             assigned.getSelectionModel().clearSelection();
             assertTrue(removeAssignment.isDisabled());
             assigned.getSelectionModel().selectFirst();
             platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
             removeAssignment.fire();
-            assigned = controller.assignedMorphSliderPresetListNode();
+            assigned = LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode();
             assertTrue(assigned.getItems().isEmpty());
 
             available.setValue(available.getItems().getFirst());
             available.fireEvent(new ActionEvent());
             assign.fire();
-            assigned = controller.assignedMorphSliderPresetListNode();
+            assigned = LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode();
             platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
             clearAssignments.fire();
             assertTrue(assigned.getItems().isEmpty());
@@ -1211,9 +1214,9 @@ class WorkbenchControllerTest {
             assertFalse(editor.isVisible() || editor.isManaged());
             // The shell hands the Area its window's render scale, which the Morphs catalog heights track.
             AtomicBoolean catalogResized = new AtomicBoolean();
-            controller.customMorphTargetListNode().prefHeightProperty().addListener(
+            LoadedWorkbench.morphs(controller).customMorphTargetListNode().prefHeightProperty().addListener(
                     (javafx.beans.Observable observable) -> catalogResized.set(true));
-            controller.customMorphTargetListNode().getPrefHeight();
+            LoadedWorkbench.morphs(controller).customMorphTargetListNode().getPrefHeight();
             stage.setRenderScaleY(stage.getRenderScaleY() + 0.5);
             assertTrue(catalogResized.get(), "the Morphs catalog must re-evaluate its height on a render-scale change");
 
@@ -1254,9 +1257,9 @@ class WorkbenchControllerTest {
             assertTrue(editor.isVisible() && editor.isManaged(), "Templates is the first active Area");
             // The shell hands the Area its window's render scale, which the Slider Preset catalog height tracks.
             AtomicBoolean catalogResized = new AtomicBoolean();
-            controller.sliderPresetListNode().prefHeightProperty().addListener(
+            LoadedWorkbench.templates(controller).sliderPresetListNode().prefHeightProperty().addListener(
                     (javafx.beans.Observable observable) -> catalogResized.set(true));
-            controller.sliderPresetListNode().getPrefHeight();
+            LoadedWorkbench.templates(controller).sliderPresetListNode().getPrefHeight();
             stage.setRenderScaleY(stage.getRenderScaleY() + 0.5);
             assertTrue(catalogResized.get(),
                     "the Templates catalog must re-evaluate its height on a render-scale change");
@@ -1267,6 +1270,142 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("templatesAreaButton")).fire();
             assertTrue(editor.isVisible() && editor.isManaged());
             stage.close();
+        });
+    }
+
+    /**
+     * With every Area and the Output drawer extracted, the shell holds only its chrome: every control it keeps a field
+     * for is an injected {@code workbench.fxml} control, no module FXML declares one of them, and each of the four
+     * Areas and the drawer is loaded from its own FXML with its own controller (#154).
+     */
+    @Test
+    void shellHoldsOnlyItsChromeControlsAndEveryModuleLoadsFromItsOwnFxml() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            assertEquals(List.of("TemplatesArea", "MorphsArea", "NpcDatabaseArea", "SettingsArea"),
+                    LoadedWorkbench.areas(loader).stream().map(area -> area.getClass().getSimpleName()).toList());
+            assertNotNull(LoadedWorkbench.outputDrawer(loader), "the Output drawer FXML must be loaded");
+            Map<String, Object> modules = new java.util.HashMap<>();
+            for (WorkbenchNavigation.Area area : WorkbenchNavigation.Area.values())
+                modules.putAll(controller.areaNamespace(area));
+            modules.putAll(controller.outputDrawerNamespace());
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields()) {
+                boolean control = javafx.scene.Node.class.isAssignableFrom(field.getType())
+                        || javafx.scene.control.MenuItem.class.isAssignableFrom(field.getType());
+                if (!control)
+                    continue;
+                assertTrue(field.isAnnotationPresent(javafx.fxml.FXML.class),
+                        "the shell holds no control it did not load: " + field.getName());
+                assertTrue(loader.getNamespace().containsKey(field.getName()),
+                        "the shell's control " + field.getName() + " must be declared in workbench.fxml");
+                assertFalse(modules.containsKey(field.getName()),
+                        "the shell must not declare the module control " + field.getName());
+            }
+            stage.close();
+        });
+    }
+
+    /**
+     * When a semantic target's node cannot take focus, the shell falls back to the target Area's own default node,
+     * which the Area may override (the NPC Database's is its catalog table, not its primary source list) (#154).
+     */
+    @Test
+    void focusFallbackLandsOnEachAreasOwnDefaultNode() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            stage.show();
+            Map<WorkbenchNavigation.Area, String> railButtons = Map.of(
+                    WorkbenchNavigation.Area.TEMPLATES, "templatesAreaButton",
+                    WorkbenchNavigation.Area.MORPHS, "morphsAreaButton",
+                    WorkbenchNavigation.Area.NPC_DATABASE, "npcDatabaseAreaButton",
+                    WorkbenchNavigation.Area.SETTINGS, "settingsAreaButton");
+            List<WorkbenchArea> areas = LoadedWorkbench.areas(loader);
+            for (WorkbenchNavigation.Area area : WorkbenchNavigation.Area.values()) {
+                WorkbenchArea module = areas.get(area.ordinal());
+                ToggleButton railButton = (ToggleButton) loader.getNamespace().get(railButtons.get(area));
+                railButton.fire();
+                javafx.scene.Node inspector = module.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
+                inspector.setVisible(false);
+                railButton.requestFocus();
+
+                controller.focusPolicy().request(
+                        new WorkbenchNavigation.FocusTarget(area, WorkbenchNavigation.Landmark.INSPECTOR));
+
+                assertSame(module.defaultFocusNode(), stage.getScene().getFocusOwner(), area.displayName());
+                inspector.setVisible(true);
+            }
+            assertSame(LoadedWorkbench.node(loader, "npcCatalogTable"),
+                    areas.get(WorkbenchNavigation.Area.NPC_DATABASE.ordinal()).defaultFocusNode());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell's diagnostics arbitration lasts only for the change that owns it. An NPC Database promotion's
+     * diagnostics stay out of the Templates and Morphs projections of the promoted Project frame. Neither that
+     * promotion nor a later Templates edit leaves an owner behind, so a malformed Open after them, which no Area owns,
+     * shows its diagnostics in both projections (#154).
+     */
+    @Test
+    void diagnosticsArbitrationLastsOnlyForTheChangeThatOwnsIt() throws Exception {
+        Path source = temporaryDirectory.resolve("promotion-with-rejection.txt");
+        Files.writeString(source, "Skyrim.esm | Good | Good01 | NordRace | 00000B\n"
+                + "Skyrim.esm | Invalid | Invalid01 | NordRace | XYZ\n");
+        Path malformed = temporaryDirectory.resolve("malformed-project.jbs2bg");
+        Files.copy(Path.of("test-resources", "json-oracles", "project", "malformed-syntax.jbs2bg"), malformed);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, fixture().environment());
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
+
+                ((Button) LoadedWorkbench.node(loader, "addAllNpcsToProjectButton")).fire();
+
+                assertFalse(flow.frame().diagnostics().isEmpty(), "the promoted Project frame carries diagnostics");
+                assertFalse(((HBox) LoadedWorkbench.node(loader, "templatesInfoBar")).isVisible());
+                assertFalse(((HBox) LoadedWorkbench.node(loader, "morphsInfoBar")).isVisible());
+                ((ToggleButton) loader.getNamespace().get("templatesAreaButton")).fire();
+                ((TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput")).setText("Alpha");
+                ((Button) LoadedWorkbench.node(loader, "createSliderPresetButton")).fire();
+                assertEquals(1, flow.frame().snapshot().getSliderPresets().size(), "the Templates edit publishes");
+
+                // The edits left the Project dirty, so Open first asks to discard it.
+                platform.respondWith(WorkbenchProjectFlow.Response.discard());
+                platform.respondWith(WorkbenchProjectFlow.Response.selected(malformed));
+                ((MenuItem) loader.getNamespace().get("openProjectMenuItem")).fire();
+
+                assertTrue(((TextArea) loader.getNamespace().get("diagnosticsText")).getText()
+                        .contains("PROJECT_JSON_MALFORMED"));
+                assertTrue(((HBox) LoadedWorkbench.node(loader, "templatesInfoBar")).isVisible());
+                assertTrue(((HBox) LoadedWorkbench.node(loader, "morphsInfoBar")).isVisible());
+            } finally {
+                stage.close();
+            }
         });
     }
 
@@ -1296,23 +1435,25 @@ class WorkbenchControllerTest {
             sendControlKey(root, KeyCode.K);
             assertEquals(List.of(primaryPane), overlay.getChildren(), "Ctrl+K opens the narrow primary content");
             assertSame(LoadedWorkbench.node(loader, "sliderPresetFilter"), scene.getFocusOwner());
-            controller.sliderPresetListNode().getSelectionModel().select(0);
-            controller.sliderPresetListNode().requestFocus();
+            TemplatesArea templates = LoadedWorkbench.templates(controller);
+            templates.sliderPresetListNode().getSelectionModel().select(0);
+            templates.sliderPresetListNode().requestFocus();
             sendKey(root, KeyCode.F2);
             root.applyCss();
             root.layout();
-            assertSame(controller.activeRenameField().orElseThrow(), scene.getFocusOwner());
+            assertSame(templates.activeRenameField().orElseThrow(), scene.getFocusOwner());
 
             sendKey(root, KeyCode.ESCAPE);
 
-            assertTrue(controller.templatesFrame().rename().isEmpty());
+            assertEquals(-1, templates.sliderPresetListNode().getEditingIndex(), "the rename Escape ends the edit");
+            assertTrue(templates.activeRenameField().isEmpty());
             assertEquals(List.of(primaryPane), overlay.getChildren(), "the rename Escape leaves the overlay open");
             sendKey(root, KeyCode.ESCAPE);
             assertTrue(overlay.getChildren().isEmpty());
-            assertTrue(controller.templatesFrame().selection().isPresent(),
+            assertNotNull(templates.sliderPresetListNode().getSelectionModel().getSelectedItem(),
                     "dismissing the overlay keeps the selection");
             sendKey(root, KeyCode.ESCAPE);
-            assertTrue(controller.templatesFrame().selection().isEmpty());
+            assertNull(templates.sliderPresetListNode().getSelectionModel().getSelectedItem());
             stage.close();
         });
     }
@@ -1614,7 +1755,8 @@ class WorkbenchControllerTest {
             assertSame(presets, scene.getFocusOwner());
             worker.runNext();
 
-            ListView<SliderPresetSnapshot> importedPresets = controller.sliderPresetListNode();
+            ListView<SliderPresetSnapshot> importedPresets =
+                    LoadedWorkbench.templates(controller).sliderPresetListNode();
             assertEquals(List.of("Workbench Import"), importedPresets.getItems().stream()
                     .map(SliderPresetSnapshot::getName).toList());
             assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());

@@ -29,6 +29,36 @@ Activity, status, selection, focus, and dialog states retain text, semantic vect
 is at least two logical pixels. Reduced motion is live and all platform-slice drawer, overlay, selection, and reflow
 changes are already immediate; the centralized job slice (#101) owns later progress animation behavior.
 
+## Shell and Area modules
+
+The Workbench is a shell plus one module per Area
+([ADR-0009](../adr/0009-workbench-areas-as-per-area-fxml-modules.md)). `WorkbenchController` is the shell, and
+`workbench.fxml` holds only its chrome and the empty landmark containers. The shell owns:
+
+- the chrome, File menu, rail, key map and navigation
+- the landmark containers and the responsive layout (narrow overlays and their clip)
+- the Project lifecycle, including the dirty-Settings close gate
+- the Project-frame and job-frame fan-out, as one `WorkbenchContext` rendered into every module
+- diagnostics arbitration between the Templates and Morphs projections
+- feedback rendering (InfoBar, Activity, status) and the appearance
+
+Each Area (`TemplatesArea`, `MorphsArea`, `NpcDatabaseArea`, `SettingsArea`) lives beside its feature in its
+subpackage, with its own FXML. Its root is an `AreaPanes` holder whose three panes the shell mounts into
+`primaryPane`, `editorPane` and `inspectorPane`. The Area owns its controls, renders, feedback wording, popups,
+catalog sizing and exact focus restores. The Output drawer (`workbench.output.OutputDrawer`) is a module but not an
+Area. Its root is an `OutputDrawerParts` holder: the shell puts the Generate button into the Area header and the
+drawer into the content stack.
+
+Modules talk to the shell only through `ShellPort`, and never to each other. Shared work sits in four modules:
+`DispatchPipeline` (job gate and dialog round-trip), `WorkbenchFocusPolicy`, `NpcPortraitViewer` and `UiaListHelper`.
+
+Tests follow the same split:
+
+- Each module has its own suite (`<Area>AreaTest`, `OutputDrawerTest`) on the `ModuleTest` / `AreaTest` fixture.
+  The fixture loads only that module's FXML.
+- `WorkbenchControllerTest` keeps the shell and the cross-Area journeys, through the whole loaded Workbench, and
+  reaches Area controls through `LoadedWorkbench`.
+
 ## Selected semantic icons
 
 The predetermined bundled-vector fallback is the selected and only shipping implementation. The conditional
@@ -115,7 +145,7 @@ they cannot show that a workaround is needed or enough:
   collection goes through it, so retiring a workaround is a one-place deletion. The single-Area workarounds (rename
   edit lifecycle, slider-row reuse, NPC Database HelpText mirror) stay with their Area.
 - **Tier 1 proves the mechanism** as plain JavaFX logic in `UiaListHelperTest` and
-  `WorkbenchAccessibilityContractTest`, plus the older refill checks in `WorkbenchControllerTest`. It covers node
+  `WorkbenchAccessibilityContractTest`, plus the refill checks in `TemplatesAreaTest` and `MorphsAreaTest`. It covers node
   replacement on an empty-to-full refill (all four lists), no list-change event on a membership-preserving re-render
   (every guarded list, the Activity list and both severity icon hosts), the rename edit lifecycle and
   in-place cell update, slider-row identity across edits, `labelFor` re-pointing after the Assigned Slider Presets
