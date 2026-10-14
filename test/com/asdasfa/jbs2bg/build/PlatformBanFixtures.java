@@ -1,5 +1,7 @@
 package com.asdasfa.jbs2bg.build;
 
+import java.util.function.Supplier;
+
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.scene.Node;
@@ -58,6 +60,19 @@ final class PlatformBanFixtures {
         /** A bound method reference to window activation. */
         Runnable deferredRaise(Stage stage) {
             return stage::toFront;
+        }
+    }
+
+    /** Rule 3: reads the live OS appearance preferences directly and through a method reference. */
+    static final class ReadsAppearancePreferences {
+        /** Direct {@code Platform.getPreferences()} read. */
+        Platform.Preferences readNow() {
+            return Platform.getPreferences();
+        }
+
+        /** A method reference to the same read. */
+        Supplier<Platform.Preferences> readLater() {
+            return Platform::getPreferences;
         }
     }
 

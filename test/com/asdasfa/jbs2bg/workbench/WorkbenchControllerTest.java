@@ -3486,6 +3486,8 @@ class WorkbenchControllerTest {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
+            // Explicitly not High Contrast: High Contrast would override the Light choice asserted below.
+            fixture().appearancePreferences().publish(WorkbenchAppearance.PlatformPreferences.light());
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
             BorderPane root = loader.load();
             WorkbenchController controller = loader.getController();
@@ -3506,6 +3508,101 @@ class WorkbenchControllerTest {
             assertEquals(AccessibleRole.NODE, templates.getGraphic().getAccessibleRole());
             assertEquals("Semantic icon: Templates. Keyboard shortcut: Ctrl+1.", templates.getAccessibleHelp());
             stage.close();
+        });
+    }
+
+    /** OS High Contrast at startup wins over the chosen theme, and ending it restores that unchanged choice. */
+    @Test
+    void highContrastPreferenceOverridesTheThemeChoiceThroughTheLoadedWorkbench() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        FakeAppearancePreferencesSource os = fixture().appearancePreferences();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            os.publish(WorkbenchAppearance.PlatformPreferences.light().withHighContrast(true));
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            Label appearance = (Label) loader.getNamespace().get("appearanceStateText");
+
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-high-contrast")));
+            assertEquals("High Contrast theme", appearance.getText());
+
+            @SuppressWarnings("unchecked")
+            ComboBox<WorkbenchAppearance.ThemeChoice> themeChoice =
+                    (ComboBox<WorkbenchAppearance.ThemeChoice>) loader.getNamespace().get("themeChoice");
+            themeChoice.setValue(WorkbenchAppearance.ThemeChoice.DARK);
+            themeChoice.fireEvent(new ActionEvent());
+            assertEquals("High Contrast theme", appearance.getText());
+
+            os.publish(WorkbenchAppearance.PlatformPreferences.light());
+            assertFalse(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-high-contrast")));
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-dark")));
+            assertEquals("Dark theme", appearance.getText());
+            stage.close();
+        });
+    }
+
+    /** A dark OS color scheme renders the Dark theme when the persisted choice follows the System. */
+    @Test
+    void darkSystemPreferenceRendersTheDarkThemeThroughTheLoadedWorkbench() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            fixture().appearancePreferences().publish(WorkbenchAppearance.PlatformPreferences.dark());
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            @SuppressWarnings("unchecked")
+            ComboBox<WorkbenchAppearance.ThemeChoice> themeChoice =
+                    (ComboBox<WorkbenchAppearance.ThemeChoice>) loader.getNamespace().get("themeChoice");
+            assertEquals(WorkbenchAppearance.ThemeChoice.SYSTEM, themeChoice.getValue());
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-dark")));
+            assertFalse(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-light")));
+            assertEquals("Dark theme", ((Label) loader.getNamespace().get("appearanceStateText")).getText());
+            stage.close();
+        });
+    }
+
+    /**
+     * A live OS preference change re-renders the shown Workbench, and hiding the window releases the subscription so
+     * a later change no longer reaches it.
+     */
+    @Test
+    void livePreferenceChangesRefreshTheLoadedWorkbenchUntilItIsHidden() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        FakeAppearancePreferencesSource os = fixture().appearancePreferences();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            stage.show();
+            Label appearance = (Label) loader.getNamespace().get("appearanceStateText");
+            Label motion = (Label) loader.getNamespace().get("motionStateText");
+            assertEquals("Light theme", appearance.getText());
+            assertEquals("Standard motion", motion.getText());
+            assertEquals(1, os.subscriberCount());
+
+            os.publish(WorkbenchAppearance.PlatformPreferences.dark().withReducedMotion(true));
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-dark")));
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-reduced-motion")));
+            assertEquals("Dark theme", appearance.getText());
+            assertEquals("Reduced motion", motion.getText());
+
+            stage.close();
+            assertEquals(0, os.subscriberCount());
+            os.publish(WorkbenchAppearance.PlatformPreferences.light());
+            assertEquals("Dark theme", appearance.getText());
         });
     }
 

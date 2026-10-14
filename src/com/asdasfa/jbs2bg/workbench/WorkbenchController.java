@@ -737,7 +737,7 @@ public final class WorkbenchController {
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
-        configureAppearance(initialChoice, themeStore::save);
+        configureAppearance(initialChoice, themeStore::save, environment.appearancePreferences());
         configureSemanticIcons();
         stage.setOnCloseRequest(event -> {
             if (!finalClose) {
@@ -3663,13 +3663,22 @@ public final class WorkbenchController {
         }
     }
 
-    /** Applies System/Light/Dark immediately while submitting its profile write to the application worker. */
-    private void configureAppearance(WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver saver) {
+    /**
+     * Applies System/Light/Dark immediately while submitting its profile write to the application worker. The
+     * operating-system appearance comes only from the environment's preferences source, never from the live
+     * JavaFX platform preferences (production-ban rule 3).
+     *
+     * @param initialChoice persisted theme choice, or System when none could be loaded
+     * @param saver         profile persistence action invoked only by the worker
+     * @param preferences   operating-system appearance-preferences source from the environment
+     */
+    private void configureAppearance(WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver saver,
+                                     AppearancePreferencesSource preferences) {
         Objects.requireNonNull(saver, "saver");
         WorkbenchAppearance appearance = new WorkbenchAppearance(
-                Objects.requireNonNull(initialChoice, "initialChoice"),
-                JavaFxWorkbenchAppearance.snapshot(Platform.getPreferences()));
-        appearanceAdapter = new JavaFxWorkbenchAppearance(workbenchRoot, appearance, this::renderAppearance);
+                Objects.requireNonNull(initialChoice, "initialChoice"), preferences.current());
+        appearanceAdapter = new JavaFxWorkbenchAppearance(workbenchRoot, appearance, preferences,
+                this::renderAppearance);
         themeChoice.getItems().setAll(WorkbenchAppearance.ThemeChoice.values());
         themeChoice.setValue(initialChoice);
         themeChoice.setOnAction(event -> {
