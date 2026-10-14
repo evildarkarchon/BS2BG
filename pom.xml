@@ -301,6 +301,12 @@
                     for the tests, and Java25ToolchainGuardTest asserts it never reaches the JVM.
                     The two timeouts keep a hung JavaFX toolkit (or a modal dialog opened by mistake) from hanging
                     the build: the fork is killed after the first bound and its exit is forced after the second.
+                    glass.platform and prism.order put every test JVM on JavaFX 27's built-in headless platform with
+                    the software pipeline (ADR-0008), so Tiers 1-2 never show a window on the user's desktop. They
+                    live here, not in the argLine or .mvn/jvm.config (which configures Maven's JVM, not the fork);
+                    ProductionSourceGateTest pins both, and FxTestToolkit refuses to start the toolkit without them.
+                    A command-line -D overrides these entries, which is why that guard exists. The desktop-fx
+                    profile below is the only supported way back to Windows glass.
                 -->
                 <configuration>
                     <argLine>--enable-native-access=ALL-UNNAMED</argLine>
@@ -309,6 +315,8 @@
                     <systemPropertyVariables>
                         <bs2bg.toolchain.jdk.runtimeVersion>${bs2bg.toolchain.jdk.runtimeVersion}</bs2bg.toolchain.jdk.runtimeVersion>
                         <bs2bg.app.version>${bs2bg.app.version}</bs2bg.app.version>
+                        <glass.platform>headless</glass.platform>
+                        <prism.order>sw</prism.order>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -360,6 +368,32 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>desktop-fx</id>
+            <build>
+                <plugins>
+                    <!--
+                        Debugging opt-in only (ADR-0008): `mvnw.cmd test -Pdesktop-fx` runs the tests on Windows glass
+                        and D3D, so real Stages appear on the desktop. There is no <activation> on purpose, and
+                        verify-java25.ps1 rejects this profile, so the gate can never run on the desktop.
+                        combine.self="remove" drops the two inherited headless entries (rather than blanking them, which
+                        would hand JavaFX an empty platform name); bs2bg.test.desktop tells FxTestToolkit the desktop
+                        run is deliberate.
+                    -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <systemPropertyVariables>
+                                <glass.platform combine.self="remove"/>
+                                <prism.order combine.self="remove"/>
+                                <bs2bg.test.desktop>true</bs2bg.test.desktop>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>openrewrite</id>
             <build>

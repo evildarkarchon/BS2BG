@@ -426,6 +426,66 @@ Describe 'Assert-RequiredSurefireSuites' {
     }
 }
 
+Describe 'Assert-GateMavenArguments' {
+    It 'accepts the complete gate lifecycle' {
+        { Assert-GateMavenArguments -Arguments @('clean', 'verify') } | Should -Not -Throw
+        { Assert-GateMavenArguments -Arguments @() } | Should -Not -Throw
+    }
+
+    It 'rejects every argument that skips, filters, or ignores tests' {
+        foreach ($argument in @('-DskipTests', '-Dmaven.test.skip=true', '-Dmaven.test.failure.ignore=true', '-Dtest=ProjectTest', '-Dsurefire.failIfNoSpecifiedTests=false')) {
+            { Assert-GateMavenArguments -Arguments @('clean', 'verify', $argument) } |
+                Should -Throw -ExpectedMessage "*'$argument'*skip or filter*"
+        }
+    }
+
+    It 'rejects the desktop-fx profile however it is activated' {
+        foreach ($arguments in @(@('-Pdesktop-fx'), @('-P', 'desktop-fx'), @('--activate-profiles=openrewrite,desktop-fx'))) {
+            { Assert-GateMavenArguments -Arguments (@('clean', 'verify') + $arguments) } |
+                Should -Throw -ExpectedMessage '*desktop-fx*headless*'
+        }
+    }
+
+    It 'rejects any override of the headless test platform or the desktop opt-in flag' {
+        foreach ($argument in @('-Dglass.platform=win', '-Dglass.platform=headless', '-Dprism.order=d3d', '-Dbs2bg.test.desktop=true')) {
+            { Assert-GateMavenArguments -Arguments @('clean', 'verify', $argument) } |
+                Should -Throw -ExpectedMessage "*'$argument'*headless*"
+        }
+    }
+}
+
+Describe 'verify-java25.ps1 argument gate' {
+    BeforeAll {
+        $script:VerifyScript = Join-Path $PSScriptRoot 'verify-java25.ps1'
+    }
+
+    AfterEach {
+        Remove-Item Env:\MAVEN_ARGS -ErrorAction SilentlyContinue
+    }
+
+    # The rejection happens in the host preflight, before any download or Maven run, so -SkipMaven keeps a
+    # regression from provisioning anything beyond the cached toolchain.
+    It 'fails closed on <Arguments> before provisioning anything' -ForEach @(
+        @{ Arguments = '-Pdesktop-fx' },
+        @{ Arguments = '-Dglass.platform=win' },
+        @{ Arguments = '-Dprism.order=d3d' },
+        @{ Arguments = '-Dbs2bg.test.desktop=true' }
+    ) {
+        $output = & $script:VerifyScript -SkipMaven -MavenGoals @('clean', 'verify', $Arguments) *>&1 | Out-String
+        $LASTEXITCODE | Should -Be 1
+        $output | Should -BeLike "*VERIFICATION FAILED*'$Arguments'*headless*"
+        $output | Should -Not -BeLike '*Provisioning*'
+    }
+
+    It 'fails closed when MAVEN_ARGS activates the desktop-fx profile' {
+        # Maven 3.9 prepends MAVEN_ARGS to the command line, so it would bypass a check of -MavenGoals alone.
+        $env:MAVEN_ARGS = '--batch-mode -Pdesktop-fx'
+        $output = & $script:VerifyScript -SkipMaven *>&1 | Out-String
+        $LASTEXITCODE | Should -Be 1
+        $output | Should -BeLike '*MAVEN_ARGS*desktop-fx*headless*'
+    }
+}
+
 Describe 'Get-PomProperty' {
     It 'reads a property from the committed pom.xml' {
         Get-PomProperty -RepoRoot $script:RepoRoot -Name 'maven.compiler.release' | Should -Be '25'

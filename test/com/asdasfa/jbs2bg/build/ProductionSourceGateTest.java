@@ -55,6 +55,13 @@ class ProductionSourceGateTest {
             Map.entry(Pattern.compile("jfx\\.incubator|javafx\\.incubator|javafx-incubator"), "JavaFX incubator module"));
 
     /**
+     * Build inputs that choose the JavaFX test platform. Only the Surefire properties and the desktop-fx profile
+     * may set them; the gate script rejects them on its command line.
+     */
+    private static final List<String> HEADLESS_PLATFORM_INPUTS = List.of("glass.platform", "prism.order",
+            "bs2bg.test.desktop", "desktop-fx");
+
+    /**
      * Tokens forbidden in FXML and CSS resources.
      */
     private static final Map<Pattern, String> FORBIDDEN_IN_RESOURCES = Map.ofEntries(
@@ -229,6 +236,66 @@ class ProductionSourceGateTest {
             String text = Files.readString(input);
             assertFalse(text.contains("enable-preview"), input + " must not enable preview features");
         }
+    }
+
+    /**
+     * Tiers 1-2 run on JavaFX's built-in headless platform (ADR-0008): Surefire forwards
+     * {@code glass.platform=headless} and {@code prism.order=sw} to every test JVM through
+     * {@code systemPropertyVariables}, and nothing else (argLine, the wrapper's Maven or JVM config) carries
+     * or overrides the platform choice. Removing either entry would silently put test windows back on the
+     * user's desktop, so this pin fails first.
+     */
+    @Test
+    void surefireRunsEveryTestOnTheHeadlessPlatform() throws Exception {
+        Element configuration = child(plugin(parse(POM), "maven-surefire-plugin"), "configuration");
+        Element properties = child(configuration, "systemPropertyVariables");
+        assertEquals("headless", child(properties, "glass.platform").getTextContent().trim(),
+                "Surefire must set glass.platform=headless");
+        assertEquals("sw", child(properties, "prism.order").getTextContent().trim(),
+                "Surefire must set prism.order=sw");
+        assertTrue(children(properties, "bs2bg.test.desktop").isEmpty(),
+                "only the desktop-fx profile may set bs2bg.test.desktop");
+
+        for (Element argLine : children(configuration, "argLine"))
+            for (String platformInput : HEADLESS_PLATFORM_INPUTS)
+                assertFalse(argLine.getTextContent().contains(platformInput),
+                        "the Surefire argLine must not carry " + platformInput);
+        // maven.config applies to every Maven run, so a profile or -D placed there would defeat the gate.
+        for (Path input : List.of(REPO_ROOT.resolve(".mvn").resolve("maven.config"),
+                REPO_ROOT.resolve(".mvn").resolve("jvm.config"))) {
+            if (!Files.exists(input))
+                continue;
+            String text = Files.readString(input);
+            for (String platformInput : HEADLESS_PLATFORM_INPUTS)
+                assertFalse(text.contains(platformInput), input + " must not carry " + platformInput);
+        }
+    }
+
+    /**
+     * The {@code desktop-fx} profile is the one, explicitly activated, way back to Windows glass for debugging:
+     * it has no activation, removes exactly the two headless overrides and sets the {@code bs2bg.test.desktop}
+     * flag that tells {@code FxTestToolkit} the desktop run is deliberate.
+     */
+    @Test
+    void desktopFxProfileIsAnExplicitOptInThatRemovesTheHeadlessOverrides() throws Exception {
+        Element profiles = child(parse(POM).getDocumentElement(), "profiles");
+        List<Element> matches = children(profiles, "profile").stream()
+                .filter(profile -> "desktop-fx".equals(child(profile, "id").getTextContent().trim())).toList();
+        assertEquals(1, matches.size(), "pom.xml must define one desktop-fx profile");
+
+        Element profile = matches.getFirst();
+        assertTrue(children(profile, "activation").isEmpty(), "the desktop-fx profile must require explicit activation");
+        Element surefire = plugin(child(child(profile, "build"), "plugins"), "maven-surefire-plugin",
+                "profiles/profile[id=desktop-fx]/build/plugins");
+        Element properties = child(child(surefire, "configuration"), "systemPropertyVariables");
+        for (String headlessOverride : List.of("glass.platform", "prism.order")) {
+            Element entry = child(properties, headlessOverride);
+            assertEquals("remove", entry.getAttribute("combine.self"),
+                    "desktop-fx must remove the " + headlessOverride + " override, not replace it");
+            assertEquals("", entry.getTextContent().trim(), headlessOverride + " must carry no value under desktop-fx");
+        }
+        assertEquals("true", child(properties, "bs2bg.test.desktop").getTextContent().trim(),
+                "desktop-fx must set bs2bg.test.desktop=true");
     }
 
     /**

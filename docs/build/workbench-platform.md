@@ -43,3 +43,20 @@ restored both inside the successful test step and unconditionally in `finally`; 
 
 The screenshot artifacts support visual review of contrast, clipping, and fidelity that UIA cannot prove. Targeted
 human Narrator and cross-monitor inspection remain release evidence rather than claims inferred from automation.
+
+## Headless test platform workarounds
+
+Tiers 1 and 2 run on JavaFX's built-in headless platform ([ADR-0008](../adr/0008-tiers-1-2-run-headless.md)).
+That platform is new, and it has upstream gaps (for example JDK-8391883: `KeyCharacterCombination` throws headless,
+fixed in jfx28). When a test needs a test-side workaround for such an upstream platform bug, the workaround must
+come out in the JavaFX bump that ships the fix:
+
+- **Comment.** The workaround carries a `JDK-NNNNNNN (fixed in jfxNN)` comment naming the JBS issue and the first
+  JavaFX feature release with the fix.
+- **Registry.** It also gets an entry, with the same JBS id and fix release, in a small test-side registry.
+- **Tripwire.** A tripwire test reads the running `javafx.runtime.version` and fails once it reaches any
+  registered fix release. The workaround is then removed in the same reviewed JavaFX bump.
+
+The registry and the tripwire are built with the first workaround that needs them; none is needed today. A test
+that cannot hold headless is rewritten to be deterministic or deleted from Tier 1, never skipped; behaviour the
+headless platform cannot express moves to Tier 3 only when it proves a decision BS2BG made.

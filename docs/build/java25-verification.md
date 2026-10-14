@@ -18,6 +18,9 @@ The script:
    asserts that `pom.xml` compiles every production source with `-Xlint:all -Werror` and no include/exclude list,
    `<implicit>`, or sourcepath override (`Assert-CompleteSourceScope`). Maven arguments that skip or filter tests
    (`skipTests`, `maven.test.skip`, `-Dtest=`) are rejected, and a gate run must include both `clean` and `verify`.
+   So is any argument that would move the tests off the headless platform (`desktop-fx`, `glass.platform`,
+   `prism.order`, `bs2bg.test.desktop`), in `-MavenGoals` or in `MAVEN_ARGS` (`Assert-GateMavenArguments`; see
+   [Headless test platform](#headless-test-platform)).
 2. Checksum-provisions **Eclipse Temurin 25.0.4.1+1** (Windows x64 JDK) and the **Gluon JavaFX 27** Windows x64
    JMODs into `%LOCALAPPDATA%\BS2BG\build-toolchains\` (override with `-CacheRoot` or `BS2BG_TOOLCHAIN_CACHE`).
    SHA-256 is verified before extraction; the JDK `release` metadata (vendor, full build number, image type,
@@ -48,6 +51,7 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | JavaFX incubator modules disabled | enforcer `bannedDependencies org.openjfx:javafx-incubator-*`; guard test scans the classpath and boot layer; source gate rejects `jfx.incubator` |
 | One converged production JSON codec | Enforcer `dependencyConvergence` and `bannedDependencies com.eclipsesource.minimal-json:*`; `JacksonDependencyPolicyTest` pins Jackson Core 3.1.5, scans production/test imports, and requires the temporary comparison reader to remain deleted |
 | Every production resource in the artifact | `Java25ToolchainGuardTest.everyProductionResourceIsInTheBuildOutput` (`target/classes` and classpath) and `Assert-JarContainsProductionResources` on the packaged jar |
+| Tests run headless, never on the desktop | Surefire `systemPropertyVariables` `glass.platform=headless` / `prism.order=sw`, pinned by `ProductionSourceGateTest.surefireRunsEveryTestOnTheHeadlessPlatform`; `desktop-fx` shape pinned by `desktopFxProfileIsAnExplicitOptInThatRemovesTheHeadlessOverrides`; `Assert-GateMavenArguments` rejects `desktop-fx` and the platform properties; `FxTestToolkit` refuses to start any other platform (`FxTestToolkitTest`) |
 | The sole FXML/controller graph loads | `FxmlGraphLoadingTest` loads `workbench.fxml` with `WorkbenchController` on the pinned toolkit and asserts that no other FXML graph ships |
 | Preview profile isolation | `MainTest` requires an absolute `%LOCALAPPDATA%` root and resolves a distinct `BS2BG Preview` profile; the packaged smoke verifies the active Settings, generation, and theme files stay there without changing the stable profile or working directory |
 | Workbench Project lifecycle and centralized jobs | `JobCoordinatorTest` covers single admission, truthful progress, cancel/commit races, serialized result freshness, retry linkage, observer isolation, stale callbacks, and shutdown; `ProjectSessionOpenTest` proves detached Open parsing does not hold the publication lock; `WorkbenchProjectFlowTest` covers captured asynchronous Open, content-version and selected-source freshness, coherent lifecycle frames, and stale-effect rejection; `TemplatesFeatureTest`, `SettingsFeatureTest`, and `OutputFeatureTest` cover their immutable frame/intent seams; `WorkbenchControllerTest` covers real JavaFX admission/progress/cancel/Activity/Retry and captured Output rendering with platform effects substituted at the native chooser/dialog seam |
@@ -55,7 +59,7 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | Project, Settings, and generated Output contracts | `ProjectSession*Test`, `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`, `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, and `OutputRoutePolicyTest` required by the script; `JacksonJsonTest` and `JacksonDependencyPolicyTest` witness the shared JSON policy |
 
 The required suites the script asserts (report present, at least one test, zero failures/errors):
-`Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxmlGraphLoadingTest`, `LauncherTest`,
+`Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxTestToolkitTest`, `FxmlGraphLoadingTest`, `LauncherTest`,
 `WindowsAppImageGateTest`, `MainTest`, `FilteredViewTest`, `VisibleScopeCommandsTest`, `ProjectSessionTest`,
 `ProjectSessionOpenTest`, `ProjectSessionSaveTest`, `ProjectSessionImportTest`, `ProjectSessionSliderChoiceTest`,
 `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `JacksonJsonTest`,
@@ -63,6 +67,26 @@ The required suites the script asserts (report present, at least one test, zero 
 `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, `OutputRoutePolicyTest`, `JobCoordinatorTest`,
 `WorkbenchProjectFlowTest`, `WorkbenchControllerTest`, `TemplatesFeatureTest`, `SettingsFeatureTest`, and
 `OutputFeatureTest`.
+
+## Headless test platform
+
+Tiers 1 and 2 (`.\mvnw.cmd test` and this script) run every JavaFX test on JavaFX 27's built-in headless platform
+with the software pipeline ([ADR-0008](../adr/0008-tiers-1-2-run-headless.md)). No test window reaches the
+desktop, so you can keep working while the suite runs. Tier 3 (`package-java25.ps1`, the UI Automation smoke run
+of the packaged image) is the only tier that uses the real desktop.
+
+- **Where it is set.** The Surefire `systemPropertyVariables` in `pom.xml` set `glass.platform=headless` and
+  `prism.order=sw`. They are not in the `argLine` or `.mvn/jvm.config`, and `ProductionSourceGateTest` fails if
+  either entry is removed.
+- **Debugging on the desktop.** `.\mvnw.cmd test -Pdesktop-fx` removes both entries, so Windows glass and D3D
+  apply, and sets `bs2bg.test.desktop=true`. The first FX test prints a one-line warning. Windows appear, so leave
+  the desktop alone during such a run. The profile is never activated implicitly.
+- **The gate rejects it.** This script refuses `-Pdesktop-fx` and any `glass.platform`, `prism.order` or
+  `bs2bg.test.desktop` argument, the same way it refuses skip flags. Tier 2 never runs on the desktop.
+- **A bare `-D` fails fast.** Command-line `-D` properties override Surefire's entries, so
+  `.\mvnw.cmd test -Dglass.platform=win` would otherwise switch platforms silently. `FxTestToolkit.ensureStarted()`
+  checks the two properties before `Platform.startup` and fails every FX test with an `AssertionError` that names
+  the `desktop-fx` profile.
 
 ## Public-JavaFX replacements made for this gate
 

@@ -37,7 +37,10 @@
     Lifecycle goals to run. Defaults to 'clean verify'. 'clean' is deliberate: stale class files from a previous
     release target would otherwise survive Maven's incremental compilation and pollute the evidence. Arguments
     that skip, filter, or ignore tests (skipTests, maven.test.skip, maven.test.failure.ignore, -Dtest=) are rejected:
-    the gate is the complete run.
+    the gate is the complete run. So is anything that would move the tests off JavaFX's built-in headless platform
+    (ADR-0008): the desktop-fx profile and any glass.platform, prism.order, or bs2bg.test.desktop property, whether
+    passed here or through MAVEN_ARGS. The headless platform itself comes from pom.xml (Surefire
+    systemPropertyVariables), so this script runs no test window on the desktop.
 
 .PARAMETER SkipMaven
     Provision and verify the toolchain inputs only; do not run the Maven build.
@@ -104,10 +107,11 @@ Write-Host "pom.xml pins release $pomRelease and toolchain runtime $pomRuntimeVe
 # this script would be reporting a partial build, which is exactly what it must never do.
 $scope = Assert-CompleteSourceScope -RepoRoot $repoRoot
 Write-Host "pom.xml compiles all $($scope.ProductionSources.Count) production sources ($($scope.CompilerArgs -join ' '))"
-foreach ($goal in $MavenGoals) {
-    if ($goal -match 'skipTests|maven\.test\.skip|maven\.test\.failure\.ignore|testFailureIgnore|^-Dtest=|failIfNoSpecifiedTests') {
-        throw "Maven argument '$goal' would skip or filter the test phase; the application gate runs every suite."
-    }
+Assert-GateMavenArguments -Arguments $MavenGoals
+# Maven 3.9 prepends MAVEN_ARGS to every command line, so a desktop-fx or skip flag there would bypass the check
+# above just as surely as one in -MavenGoals.
+if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_ARGS)) {
+    Assert-GateMavenArguments -Arguments ($env:MAVEN_ARGS.Trim() -split '\s+') -Source 'MAVEN_ARGS argument'
 }
 if (-not $SkipMaven) {
     if ($MavenGoals -cnotcontains 'clean' -or $MavenGoals -cnotcontains 'verify') {
@@ -191,12 +195,14 @@ $requiredSuiteCounts = $null
 $artifact = $null
 
 # Suites whose presence and green result the gate requires, beyond the Surefire totals: the toolchain witness,
-# the structural source/pom gate, the FXML/controller harness, the Preview profile contract,
+# the structural source/pom gate, the headless-platform startup guard (ADR-0008), the FXML/controller harness,
+# the Preview profile contract,
 # the packaged-launcher and app-image staging contracts (#97), and the ProjectSession, Project, filtering-seam, and
 # persistence-compatibility contracts, plus the centralized job coordinator race and shutdown contract.
 $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest',
     'com.asdasfa.jbs2bg.build.ProductionSourceGateTest',
+    'com.asdasfa.jbs2bg.fx.FxTestToolkitTest',
     'com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest',
     'com.asdasfa.jbs2bg.build.LauncherTest',
     'com.asdasfa.jbs2bg.build.WindowsAppImageGateTest',
