@@ -318,6 +318,68 @@ class WorkbenchControllerTest {
         });
     }
 
+    /**
+     * The NPC Database gate refuses mutations while any job runs, not only a Project-exclusive one: Enter-to-add is
+     * refused during an NPC Database import, whose job leaves Templates and Morphs editable, until it settles.
+     */
+    @Test
+    void npcDatabasePromotionIsRefusedWhileAnyJobRuns() throws Exception {
+        Path npcSource = temporaryDirectory.resolve("first-import.txt");
+        Files.writeString(npcSource, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        Path laterSource = temporaryDirectory.resolve("later-import.txt");
+        Files.writeString(laterSource, "Skyrim.esm | Beta | Beta01 | NordRace | 00012346\n");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Each job is settled by the test before prolonged feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        ProjectSession session = fixture().newSession();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session, jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(npcSource)));
+        platform.respondNpcSourcesWith(Optional.of(List.of(laterSource)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, fixture().environment());
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                Button importSources = (Button) loader.getNamespace().get("importNpcSourcesButton");
+                importSources.fire();
+                worker.runNext();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                catalog.getSelectionModel().selectFirst();
+                importSources.fire();
+                assertTrue(jobs.frame().active());
+                assertFalse(jobs.frame().projectMutationsBlocked());
+
+                catalog.requestFocus();
+                sendKey(catalog, KeyCode.ENTER);
+
+                assertTrue(session.getSnapshot().getNpcMorphAssignments().isEmpty());
+                assertFalse(((Label) loader.getNamespace().get("npcPromotionInfoBarMessage")).getText()
+                        .contains("Amber"));
+                worker.runNext();
+                assertFalse(jobs.frame().active());
+                assertEquals("Amber", catalog.getSelectionModel().getSelectedItem().getName());
+
+                sendKey(catalog, KeyCode.ENTER);
+
+                assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
     /** Filtered Add All keeps catalog selection and exposes every duplicate and validation refusal. */
     @Test
     void npcDatabaseAddAllReportsFilteredDuplicatesAndRejections() throws Exception {

@@ -14,6 +14,7 @@ import java.util.OptionalLong;
 
 import org.junit.jupiter.api.Test;
 
+import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 /**
@@ -78,6 +79,54 @@ class DispatchPipelineTest {
         assertFalse(pipeline.mutationsBlocked());
         assertTrue(pipeline.dispatch(feature, callbacks(), new Edit()).isPresent());
         assertEquals(List.of(new Edit()), feature.dispatched);
+    }
+
+    /**
+     * A job that does not block Project mutations, such as a snapshot-derived Generate, leaves the default gate open,
+     * while a dispatch that asks for the any-job gate is refused until that job settles.
+     */
+    @Test
+    void anyJobGateRefusesMutationsWhileANonProjectExclusiveJobRuns() {
+        FakeFeature feature = new FakeFeature(new FakeUpdate("browsed", OptionalLong.empty(), Optional.empty()),
+                new FakeUpdate("edited", OptionalLong.empty(), Optional.empty()),
+                new FakeUpdate("edited again", OptionalLong.empty(), Optional.empty()));
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The test settles the job before prolonged feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        assertTrue(jobs.submit(new JobCoordinator.Submission<>(new JobCoordinator.Operation("Generate",
+                List.of(), List.of(), Optional.empty(), JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED),
+                context -> JobCoordinator.Result.completed("done", "Generated.", List.of(), List.of()),
+                (attempt, result) -> {
+                    // The fake job publishes nothing.
+                }, Optional.empty())).admitted());
+        pipeline.acceptJobFrame(jobs.frame());
+
+        assertFalse(pipeline.mutationsBlocked());
+        assertTrue(pipeline.mutationsBlocked(DispatchPipeline.Gate.ANY_JOB));
+        assertTrue(pipeline.dispatch(feature, DispatchPipeline.Gate.ANY_JOB, callbacks(), new Edit()).isEmpty());
+        assertTrue(pipeline.dispatch(feature, DispatchPipeline.Gate.ANY_JOB, callbacks(), new Browse()).isPresent());
+        assertTrue(pipeline.dispatch(feature, callbacks(), new Edit()).isPresent());
+        assertEquals(List.of(new Browse(), new Edit()), feature.dispatched);
+
+        worker.runNext();
+        pipeline.acceptJobFrame(jobs.frame());
+
+        assertFalse(pipeline.mutationsBlocked(DispatchPipeline.Gate.ANY_JOB));
+        assertTrue(pipeline.dispatch(feature, DispatchPipeline.Gate.ANY_JOB, callbacks(), new Edit()).isPresent());
+    }
+
+    /** A requested shutdown closes both gates, since it pauses Project mutations as well as every later job. */
+    @Test
+    void shutdownClosesBothGates() {
+        pipeline.acceptJobFrame(BLOCKING);
+
+        assertTrue(pipeline.mutationsBlocked(DispatchPipeline.Gate.PROJECT_MUTATIONS));
+        assertTrue(pipeline.mutationsBlocked(DispatchPipeline.Gate.ANY_JOB));
     }
 
     /**

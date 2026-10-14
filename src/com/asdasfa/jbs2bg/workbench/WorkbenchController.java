@@ -1537,10 +1537,11 @@ public final class WorkbenchController {
 
     /**
      * Runs one NPC Database intent through the gated dispatch pipeline: promotion and catalog removal are refused
-     * while a job blocks mutations, and every accepted intent renders its committed catalog frame.
+     * while any job runs, not only a Project-exclusive one, and every accepted intent renders its committed catalog
+     * frame.
      */
     private void dispatchNpcDatabase(NpcDatabaseFeature.Intent intent) {
-        pipeline.dispatch(npcDatabaseFeature, DispatchPipeline.Callbacks.of(
+        pipeline.dispatch(npcDatabaseFeature, DispatchPipeline.Gate.ANY_JOB, DispatchPipeline.Callbacks.of(
                 this::renderNpcDatabaseUpdate, this::realizeNpcDatabaseEffect, this::reportNpcDatabaseOutcome),
                 Objects.requireNonNull(intent, "intent"));
     }

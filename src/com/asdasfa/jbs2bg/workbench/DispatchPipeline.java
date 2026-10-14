@@ -33,6 +33,7 @@ public final class DispatchPipeline {
     private final Consumer<WorkbenchFeedback.Frame> feedbackView;
     private final ProjectChrome chrome;
     private boolean mutationsBlocked;
+    private boolean anyJobBlocks;
 
     /**
      * Creates the pipeline for one Workbench window.
@@ -58,18 +59,36 @@ public final class DispatchPipeline {
      * @param frame latest job frame the shell rendered
      */
     public void acceptJobFrame(JobCoordinator.Frame frame) {
-        mutationsBlocked = Objects.requireNonNull(frame, "frame").projectMutationsBlocked();
+        Objects.requireNonNull(frame, "frame");
+        mutationsBlocked = frame.projectMutationsBlocked();
+        anyJobBlocks = frame.active() || frame.shutdownRequested();
     }
 
     /**
-     * @return whether the job gate currently refuses mutations; renders use it to disable mutation controls
+     * @return whether the default {@link Gate#PROJECT_MUTATIONS} gate currently refuses mutations; renders use it to
+     * disable mutation controls
      */
     public boolean mutationsBlocked() {
         return mutationsBlocked;
     }
 
     /**
-     * Runs one intent through the gate, the feature, the render and every requested effect, then reports it.
+     * Reports whether one gate currently refuses mutations, from the latest rendered job frame.
+     *
+     * @param gate gate to query
+     * @return true while that gate refuses mutations
+     * @throws NullPointerException when gate is null
+     */
+    public boolean mutationsBlocked(Gate gate) {
+        return switch (Objects.requireNonNull(gate, "gate")) {
+            case PROJECT_MUTATIONS -> mutationsBlocked;
+            case ANY_JOB -> anyJobBlocks;
+        };
+    }
+
+    /**
+     * Runs one intent through the default {@link Gate#PROJECT_MUTATIONS} gate, the feature, the render and every
+     * requested effect, then reports it.
      *
      * @param feature   feature that owns the intent
      * @param callbacks the caller's render, realize and report callbacks for this feature
@@ -83,10 +102,30 @@ public final class DispatchPipeline {
      */
     public <I, U extends WorkbenchFeature.Update<E>, E> Optional<Outcome<I, U>> dispatch(
             WorkbenchFeature<I, U, E> feature, Callbacks<I, U, E> callbacks, I intent) {
+        return dispatch(feature, Gate.PROJECT_MUTATIONS, callbacks, intent);
+    }
+
+    /**
+     * Runs one intent through the given gate, the feature, the render and every requested effect, then reports it.
+     *
+     * @param feature   feature that owns the intent
+     * @param gate      which jobs refuse the feature's mutations
+     * @param callbacks the caller's render, realize and report callbacks for this feature
+     * @param intent    intent to dispatch
+     * @param <I>       intent type
+     * @param <U>       update type
+     * @param <E>       effect type
+     * @return the settled outcome, or empty when the job gate refused the intent (nothing was dispatched,
+     * rendered or reported)
+     * @throws NullPointerException when an argument is null
+     */
+    public <I, U extends WorkbenchFeature.Update<E>, E> Optional<Outcome<I, U>> dispatch(
+            WorkbenchFeature<I, U, E> feature, Gate gate, Callbacks<I, U, E> callbacks, I intent) {
         Objects.requireNonNull(feature, "feature");
+        Objects.requireNonNull(gate, "gate");
         Objects.requireNonNull(callbacks, "callbacks");
         Objects.requireNonNull(intent, "intent");
-        if (mutationsBlocked && feature.isMutation(intent))
+        if (mutationsBlocked(gate) && feature.isMutation(intent))
             return Optional.empty();
         U update = feature.dispatch(intent);
         render(callbacks, update);
@@ -164,6 +203,23 @@ public final class DispatchPipeline {
         if (sequence.isPresent() && sequence.getAsLong() != chrome.renderedSequence())
             chrome.render(sequence.getAsLong());
         callbacks.render(update);
+    }
+
+    /**
+     * Which jobs refuse a feature's mutations. Both gates follow the latest rendered job frame, and both close once
+     * shutdown is requested.
+     */
+    public enum Gate {
+        /**
+         * Refuses mutations while a Project-exclusive job runs. Snapshot-derived jobs (Generate, theme) and NPC
+         * Database imports leave the Project editable. Templates, Morphs, Settings and Output use this gate.
+         */
+        PROJECT_MUTATIONS,
+        /**
+         * Refuses mutations while any job runs. The NPC Database uses it: its promotion and catalog removal have
+         * always waited for every job, matching its controls, which stay disabled while any job runs.
+         */
+        ANY_JOB
     }
 
     /**
