@@ -6,10 +6,14 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
+
+import javafx.scene.Node;
 
 /**
  * Test double for the {@link ShellPort}: it records every request an Area makes, in order, as a readable line, and
@@ -22,6 +26,9 @@ public final class RecordingShellPort implements ShellPort {
     private final List<String> requests = new ArrayList<>();
     private WorkbenchFeedback.Frame feedbackFrame = feedback.frame();
     private Predicate<SettingsFeature.Effect> settingsJobs;
+    private WorkbenchNavigation.FocusTarget focusTarget =
+            new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.NPC_DATABASE,
+                    WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
 
     /** @return the feedback model publications are applied to; the fixture's pipeline shares it */
     public WorkbenchFeedback feedback() {
@@ -83,5 +90,49 @@ public final class RecordingShellPort implements ShellPort {
     @Override
     public void revealOutput() {
         requests.add("revealOutput()");
+    }
+
+    /** Records the request with the assignment's editor ID, or {@code none}. */
+    @Override
+    public void returnToMorphs(Optional<NpcMorphAssignmentIdentity> assignment) {
+        requests.add("returnToMorphs(" + assignment.map(NpcMorphAssignmentIdentity::getEditorId).orElse("none") + ")");
+    }
+
+    /** Records the request with whether the Area owns the change's diagnostics. */
+    @Override
+    public void projectChanged(WorkbenchFeature.Update<?> update, boolean ownsDiagnostics) {
+        Objects.requireNonNull(update, "update");
+        requests.add("projectChanged(ownsDiagnostics=" + ownsDiagnostics + ")");
+    }
+
+    /**
+     * Records the request and answers the target set by {@link #focusTargetIs}; the NPC Database primary content
+     * until a test sets another, since there is no real focus policy behind this port.
+     */
+    @Override
+    public WorkbenchNavigation.FocusTarget currentFocus() {
+        requests.add("currentFocus()");
+        return focusTarget;
+    }
+
+    /** Records the requested target. */
+    @Override
+    public void requestFocus(WorkbenchNavigation.FocusTarget target) {
+        requests.add("requestFocus(" + target.area() + ", " + target.landmark() + ")");
+    }
+
+    /** Records the launcher's id and the fallback landmark. */
+    @Override
+    public void restoreFocusAfterSatellite(Node launcher, WorkbenchNavigation.Landmark fallback) {
+        requests.add("restoreFocusAfterSatellite(" + launcher.getId() + ", " + fallback + ")");
+    }
+
+    /**
+     * Sets the semantic target {@link #currentFocus()} answers.
+     *
+     * @param target the target the stand-in focus policy reports
+     */
+    public void focusTargetIs(WorkbenchNavigation.FocusTarget target) {
+        focusTarget = Objects.requireNonNull(target, "target");
     }
 }

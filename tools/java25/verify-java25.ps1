@@ -238,6 +238,7 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.workbench.NpcPortraitViewerTest',
     'com.asdasfa.jbs2bg.workbench.templates.TemplatesFeatureTest',
     'com.asdasfa.jbs2bg.workbench.morphs.MorphsFeatureTest',
+    'com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseAreaTest',
     'com.asdasfa.jbs2bg.workbench.settings.SettingsFeatureTest',
     'com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunnerTest',
     'com.asdasfa.jbs2bg.workbench.settings.SettingsAreaTest',

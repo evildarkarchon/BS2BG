@@ -20,8 +20,9 @@ so test results never depend on the developer's OS theme or High Contrast settin
 Owned satellite surfaces live in their own scenes, so they register their root with the shell's appearance through
 `WorkbenchSatellites.register(root, dismiss)`, which returns a handle. While the handle is open, the shell re-themes
 that root with every appearance frame and dismisses the satellite when the Workbench window is hidden; the satellite
-closes the handle as it hides. The shared NPC portrait viewer (`NpcPortraitViewer`) uses it, and looks portraits up
-in the `WorkbenchEnvironment` slot `withPortraitDirectory`, which defaults to `images` under the working directory.
+closes the handle as it hides. The shared NPC portrait viewer (`NpcPortraitViewer`) and the NPC Database Area's
+column-filter popup use it. The viewer looks portraits up in the `WorkbenchEnvironment` slot `withPortraitDirectory`,
+which defaults to `images` under the working directory.
 
 The Workbench uses one application-owned stylesheet, `workbench.css`. Color is never the only status cue: InfoBar,
 Activity, status, selection, focus, and dialog states retain text, semantic vectors, and boundaries. Focus styling
