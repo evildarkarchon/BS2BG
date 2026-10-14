@@ -21,6 +21,9 @@
     The root is a non-Node holder, so this file has no layout of its own. Accessible text, visible text and nesting
     are exactly what they were in workbench.fxml; the packaged smoke run finds these controls by name, role and
     region.
+
+    A control with a mnemonic label is built in an fx:define ahead of that label and placed with fx:reference.
+    FXMLLoader leaves a forward labelFor="$id" null, which loses both the mnemonic and the accessible label (#155).
 -->
 <AreaPanes fx:id="panes" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1"
         fx:controller="com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseArea">
@@ -95,11 +98,14 @@
                         text="No NPC Database entries" wrapText="true" />
                 <HBox alignment="CENTER_LEFT" spacing="6.0">
                     <children>
+                        <fx:define>
+                            <ComboBox fx:id="npcSortChoice"
+                                    accessibleText="NPC Database sort"
+                                    maxWidth="Infinity" HBox.hgrow="ALWAYS" />
+                        </fx:define>
                         <Label labelFor="$npcSortChoice" mnemonicParsing="true"
                                 text="_Sort NPC catalog:" />
-                        <ComboBox fx:id="npcSortChoice"
-                                accessibleText="NPC Database sort"
-                                maxWidth="Infinity" HBox.hgrow="ALWAYS" />
+                        <fx:reference source="npcSortChoice" />
                     </children>
                 </HBox>
                 <HBox alignment="CENTER_LEFT" spacing="6.0">

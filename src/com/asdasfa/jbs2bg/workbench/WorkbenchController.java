@@ -530,7 +530,8 @@ public final class WorkbenchController {
 
     /**
      * Registers one loaded Area and appends each of its panes to the matching landmark container, so Areas mounted in
-     * FXML order keep the containers' child order. The Area renders the current context at once, as each Area's
+     * FXML order keep the containers' child order. The panes' mnemonic labels are kept registered across the shell's
+     * re-parenting (see {@link MnemonicLabels}). The Area renders the current context at once, as each Area's
      * configure step did before it had its own FXML.
      *
      * @param area   the Area the module renders
@@ -539,6 +540,9 @@ public final class WorkbenchController {
     private void mountArea(WorkbenchNavigation.Area area, AreaLoader.Loaded<? extends WorkbenchArea> loaded) {
         WorkbenchArea module = loaded.area();
         AreaPanes panes = module.panes();
+        // renderResponsivePanes re-parents these panes on every navigation render.
+        for (Node pane : List.of(panes.getPrimary(), panes.getEditor(), panes.getInspector()))
+            MnemonicLabels.keepRegistered(pane);
         primaryPane.getChildren().add(panes.getPrimary());
         editorPane.getChildren().add(panes.getEditor());
         inspectorPane.getChildren().add(panes.getInspector());

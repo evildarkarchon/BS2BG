@@ -17,6 +17,9 @@
     The Morphs Area: three panes the shell mounts into its primary, editor and inspector landmark containers. The root
     is a non-Node holder, so this file has no layout of its own. Accessible text, visible text and nesting are exactly
     what they were in workbench.fxml; the packaged smoke run finds these controls by name, role and region.
+
+    A control with a mnemonic label is built in an fx:define ahead of that label and placed with fx:reference.
+    FXMLLoader leaves a forward labelFor="$id" null, which loses both the mnemonic and the accessible label (#155).
 -->
 <AreaPanes fx:id="panes" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1"
         fx:controller="com.asdasfa.jbs2bg.workbench.morphs.MorphsArea">
@@ -54,30 +57,39 @@
                                         mnemonicParsing="true" text="_Dismiss" />
                             </children>
                         </HBox>
+                        <fx:define>
+                            <TextField fx:id="customMorphTargetFilter"
+                                    accessibleText="Filter Custom Morph Targets"
+                                    promptText="Filter by condition or name" />
+                        </fx:define>
                         <Label labelFor="$customMorphTargetFilter"
                                 mnemonicParsing="true"
                                 text="_Filter Custom Morph Targets:" />
-                        <TextField fx:id="customMorphTargetFilter"
-                                accessibleText="Filter Custom Morph Targets"
-                                promptText="Filter by condition or name" />
+                        <fx:reference source="customMorphTargetFilter" />
+                        <fx:define>
+                            <ComboBox fx:id="customMorphTargetSort"
+                                    accessibleText="Custom Morph Target sort"
+                                    maxWidth="Infinity" />
+                        </fx:define>
                         <Label labelFor="$customMorphTargetSort"
                                 mnemonicParsing="true"
                                 text="_Sort Custom Morph Targets:" />
-                        <ComboBox fx:id="customMorphTargetSort"
-                                accessibleText="Custom Morph Target sort"
-                                maxWidth="Infinity" />
+                        <fx:reference source="customMorphTargetSort" />
                         <ListView fx:id="customMorphTargetList"
                                 accessibleText="Custom Morph Targets"
                                 fixedCellSize="28.0"
                                 focusTraversable="true"
                                 VBox.vgrow="ALWAYS" />
+                        <fx:define>
+                            <TextField fx:id="customMorphTargetNameInput"
+                                    accessibleHelp="BodyGen condition syntax such as All|Female is preserved."
+                                    accessibleText="Custom Morph Target name"
+                                    promptText="All|Female" />
+                        </fx:define>
                         <Label labelFor="$customMorphTargetNameInput"
                                 mnemonicParsing="true"
                                 text="Custom Morph Target _name:" />
-                        <TextField fx:id="customMorphTargetNameInput"
-                                accessibleHelp="BodyGen condition syntax such as All|Female is preserved."
-                                accessibleText="Custom Morph Target name"
-                                promptText="All|Female" />
+                        <fx:reference source="customMorphTargetNameInput" />
                         <Button fx:id="createCustomMorphTargetButton"
                                 accessibleText="Create Custom Morph Target"
                                 maxWidth="Infinity" mnemonicParsing="true"
@@ -95,55 +107,76 @@
                                 accessibleText="Add NPCs from NPC Database"
                                 maxWidth="Infinity" mnemonicParsing="true"
                                 text="_Add NPCs…" />
+                        <fx:define>
+                            <TextField fx:id="npcMorphAssignmentFilter"
+                                    accessibleText="Filter NPC Morph Assignments"
+                                    promptText="Filter by name, plugin, ID, race, or Form ID" />
+                        </fx:define>
                         <Label labelFor="$npcMorphAssignmentFilter"
                                 mnemonicParsing="true"
                                 text="_Filter NPC Morph Assignments:" />
-                        <TextField fx:id="npcMorphAssignmentFilter"
-                                accessibleText="Filter NPC Morph Assignments"
-                                promptText="Filter by name, plugin, ID, race, or Form ID" />
+                        <fx:reference source="npcMorphAssignmentFilter" />
+                        <fx:define>
+                            <ComboBox fx:id="npcMorphAssignmentSort"
+                                    accessibleText="NPC Morph Assignment sort"
+                                    maxWidth="Infinity" />
+                        </fx:define>
                         <Label labelFor="$npcMorphAssignmentSort"
                                 mnemonicParsing="true"
                                 text="_Sort NPC Morph Assignments:" />
-                        <ComboBox fx:id="npcMorphAssignmentSort"
-                                accessibleText="NPC Morph Assignment sort"
-                                maxWidth="Infinity" />
+                        <fx:reference source="npcMorphAssignmentSort" />
                         <ListView fx:id="npcMorphAssignmentList"
                                 accessibleText="NPC Morph Assignments"
                                 fixedCellSize="28.0"
                                 focusTraversable="true"
                                 VBox.vgrow="ALWAYS" />
+                        <fx:define>
+                            <TextField fx:id="npcDisplayNameInput"
+                                    accessibleHelp="An empty display name uses Unnamed (editor ID)."
+                                    accessibleText="NPC display name"
+                                    promptText="Optional display name" />
+                        </fx:define>
                         <Label labelFor="$npcDisplayNameInput"
                                 mnemonicParsing="true"
                                 text="NPC _display name:" />
-                        <TextField fx:id="npcDisplayNameInput"
-                                accessibleHelp="An empty display name uses Unnamed (editor ID)."
-                                accessibleText="NPC display name"
-                                promptText="Optional display name" />
+                        <fx:reference source="npcDisplayNameInput" />
+                        <fx:define>
+                            <TextField fx:id="npcPluginNameInput"
+                                    accessibleText="NPC plugin name"
+                                    promptText="Example.esp" />
+                        </fx:define>
                         <Label labelFor="$npcPluginNameInput"
                                 mnemonicParsing="true"
                                 text="NPC _plugin name:" />
-                        <TextField fx:id="npcPluginNameInput"
-                                accessibleText="NPC plugin name"
-                                promptText="Example.esp" />
+                        <fx:reference source="npcPluginNameInput" />
+                        <fx:define>
+                            <TextField fx:id="npcEditorIdInput"
+                                    accessibleText="NPC editor ID"
+                                    promptText="ActorEditorID" />
+                        </fx:define>
                         <Label labelFor="$npcEditorIdInput"
                                 mnemonicParsing="true"
                                 text="NPC _editor ID:" />
-                        <TextField fx:id="npcEditorIdInput"
-                                accessibleText="NPC editor ID"
-                                promptText="ActorEditorID" />
+                        <fx:reference source="npcEditorIdInput" />
+                        <fx:define>
+                            <TextField fx:id="npcRaceInput"
+                                    accessibleText="NPC race"
+                                    promptText="Race" />
+                        </fx:define>
                         <Label labelFor="$npcRaceInput"
                                 mnemonicParsing="true"
                                 text="NPC _race:" />
-                        <TextField fx:id="npcRaceInput"
-                                accessibleText="NPC race"
-                                promptText="Race" />
+                        <fx:reference source="npcRaceInput" />
+                        <fx:define>
+                            <TextField fx:id="npcFormIdInput"
+                                    accessibleHelp="Load order prefixes and leading zeroes normalize to the final Form ID."
+                                    accessibleText="NPC Form ID"
+                                    promptText="000ABC" />
+                        </fx:define>
                         <Label labelFor="$npcFormIdInput"
                                 mnemonicParsing="true"
                                 text="NPC _Form ID:" />
-                        <TextField fx:id="npcFormIdInput"
-                                accessibleHelp="Load order prefixes and leading zeroes normalize to the final Form ID."
-                                accessibleText="NPC Form ID"
-                                promptText="000ABC" />
+                        <fx:reference source="npcFormIdInput" />
                         <Button fx:id="createNpcMorphAssignmentButton"
                                 accessibleText="Create NPC Morph Assignment"
                                 maxWidth="Infinity" mnemonicParsing="true"
@@ -227,14 +260,17 @@
                                         text="_Open portrait viewer" />
                             </children>
                         </VBox>
+                        <fx:define>
+                            <ListView fx:id="assignedMorphSliderPresetList"
+                                    accessibleText="Assigned Slider Presets"
+                                    fixedCellSize="28.0" focusTraversable="true"
+                                    prefHeight="120.0" />
+                        </fx:define>
                         <Label fx:id="assignedMorphSliderPresetLabel"
                                 labelFor="$assignedMorphSliderPresetList"
                                 mnemonicParsing="true"
                                 text="_Assigned Slider Presets:" />
-                        <ListView fx:id="assignedMorphSliderPresetList"
-                                accessibleText="Assigned Slider Presets"
-                                fixedCellSize="28.0" focusTraversable="true"
-                                prefHeight="120.0" />
+                        <fx:reference source="assignedMorphSliderPresetList" />
                         <Button fx:id="removeMorphSliderPresetButton"
                                 accessibleText="Remove selected Slider Preset relationship"
                                 maxWidth="Infinity" mnemonicParsing="true"
@@ -243,13 +279,16 @@
                                 accessibleText="Clear assigned Slider Presets"
                                 maxWidth="Infinity" mnemonicParsing="true"
                                 text="_Clear assigned Slider Presets" />
+                        <fx:define>
+                            <ComboBox fx:id="availableMorphSliderPreset"
+                                    accessibleText="Available Slider Preset"
+                                    maxWidth="Infinity" />
+                        </fx:define>
                         <Label fx:id="availableMorphSliderPresetLabel"
                                 labelFor="$availableMorphSliderPreset"
                                 mnemonicParsing="true"
                                 text="A_vailable Slider Preset:" />
-                        <ComboBox fx:id="availableMorphSliderPreset"
-                                accessibleText="Available Slider Preset"
-                                maxWidth="Infinity" />
+                        <fx:reference source="availableMorphSliderPreset" />
                         <Button fx:id="assignMorphSliderPresetButton"
                                 accessibleText="Assign selected Slider Preset"
                                 maxWidth="Infinity" mnemonicParsing="true"

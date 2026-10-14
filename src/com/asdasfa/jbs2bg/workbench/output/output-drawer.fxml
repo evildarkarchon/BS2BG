@@ -67,11 +67,15 @@
                             <content>
                                 <VBox spacing="6.0">
                                     <children>
+                                        <!-- Built ahead of its label: FXMLLoader leaves a forward labelFor null (#155). -->
+                                        <fx:define>
+                                            <ComboBox fx:id="bosArtifactChoice"
+                                                    accessibleText="Generated BoS Slider Preset"
+                                                    maxWidth="Infinity" />
+                                        </fx:define>
                                         <Label labelFor="$bosArtifactChoice" mnemonicParsing="true"
                                                 text="BoS Slider _Preset:" />
-                                        <ComboBox fx:id="bosArtifactChoice"
-                                                accessibleText="Generated BoS Slider Preset"
-                                                maxWidth="Infinity" />
+                                        <fx:reference source="bosArtifactChoice" />
                                         <TextArea fx:id="bosOutputText"
                                                 accessibleText="Generated BoS JSON output" editable="false"
                                                 focusTraversable="true"

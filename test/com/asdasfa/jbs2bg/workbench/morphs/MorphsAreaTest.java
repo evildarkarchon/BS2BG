@@ -904,8 +904,8 @@ class MorphsAreaTest extends AreaTest<MorphsArea> {
      * the Assigned Slider Presets list must re-point its label at the fresh node, so the relationship never stays
      * on a node that has left the scene graph.
      *
-     * <p>The label's FXML {@code labelFor="$assignedMorphSliderPresetList"} is a forward reference, which FXMLLoader
-     * resolves to {@code null}, so only the controller's re-pointing establishes the relationship today.</p>
+     * <p>The FXML declares the list before its label (#155), so the relationship already holds for the initial empty
+     * list; each swap then hands it on.</p>
      */
     @Test
     void assignedSliderPresetsLabelForFollowsEveryListSwap() throws Exception {
@@ -919,6 +919,8 @@ class MorphsAreaTest extends AreaTest<MorphsArea> {
             ListView<CustomMorphTargetSnapshot> targets = area.customMorphTargetListNode();
             ListView<SliderPresetSnapshot> initial = area.assignedMorphSliderPresetListNode();
             assertTrue(initial.getItems().isEmpty());
+            assertSame(initial, label.getLabelFor());
+            assertSame(label, initial.queryAccessibleAttribute(AccessibleAttribute.LABELED_BY));
 
             targets.getSelectionModel().select(0);
 

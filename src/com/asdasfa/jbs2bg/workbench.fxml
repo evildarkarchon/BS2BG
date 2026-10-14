@@ -50,8 +50,12 @@
                 <ToggleButton fx:id="outputAreaButton" maxWidth="Infinity" text="Output" />
                 <ToggleButton fx:id="settingsAreaButton" maxWidth="Infinity" text="Settings" />
                 <Region VBox.vgrow="ALWAYS" />
+                <!-- Built ahead of its label: FXMLLoader leaves a forward labelFor null (#155). -->
+                <fx:define>
+                    <ComboBox fx:id="themeChoice" accessibleText="Theme choice" maxWidth="Infinity" />
+                </fx:define>
                 <Label labelFor="$themeChoice" mnemonicParsing="true" text="_Theme:" />
-                <ComboBox fx:id="themeChoice" accessibleText="Theme choice" maxWidth="Infinity" />
+                <fx:reference source="themeChoice" />
                 <Label fx:id="appearanceStateText" accessibleText="Effective theme"
                         maxWidth="Infinity" text="System theme" wrapText="true" />
                 <Label fx:id="motionStateText" accessibleText="Motion preference"
