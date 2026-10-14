@@ -202,7 +202,7 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                Button launcher = (Button) loader.getNamespace().get("addNpcsFromDatabaseButton");
+                Button launcher = (Button) LoadedWorkbench.node(loader, "addNpcsFromDatabaseButton");
                 launcher.requestFocus();
                 launcher.fire();
                 assertTrue(((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).isSelected());
@@ -268,7 +268,7 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                ((Button) loader.getNamespace().get("addNpcsFromDatabaseButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "addNpcsFromDatabaseButton")).fire();
                 ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 worker.runNext();
                 @SuppressWarnings("unchecked")
@@ -664,51 +664,6 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** The Fill Empty flyout requires a chosen preset and cancellation preserves every NPC assignment. */
-    @Test
-    void fillEmptyFlyoutCancelsAndAppliesOnlyChosenPresets() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                stage.show();
-                Button launcher = (Button) loader.getNamespace().get("fillEmptyNpcMorphAssignmentsButton");
-                launcher.fire();
-                Popup first = FxTestToolkit.showingPopup(stage, "#fillEmptyApplyButton");
-                Button firstApply = (Button) first.getScene().getRoot().lookup("#fillEmptyApplyButton");
-                assertTrue(firstApply.isDisabled());
-                ((Button) first.getScene().getRoot().lookup("#fillEmptyCancelButton")).fire();
-                assertFalse(first.isShowing());
-                assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst()
-                        .getSliderPresetNames().isEmpty());
-
-                launcher.fire();
-                Popup second = FxTestToolkit.showingPopup(stage, "#fillEmptyApplyButton");
-                @SuppressWarnings("unchecked")
-                ListView<SliderPresetSnapshot> choices =
-                        (ListView<SliderPresetSnapshot>) second.getScene().getRoot()
-                                .lookup("#fillEmptySliderPresetList");
-                choices.getSelectionModel().selectFirst();
-                Button apply = (Button) second.getScene().getRoot().lookup("#fillEmptyApplyButton");
-                assertEquals("Fill 1 NPC from 1 preset", apply.getText());
-                apply.fire();
-                assertFalse(second.isShowing());
-                assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().getFirst()
-                        .getSliderPresetNames());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
     /**
      * Fill Empty Apply goes through the gated dispatch pipeline: once a job blocks Project mutations, applying an
      * offer opened before the job leaves every NPC Morph Assignment untouched and closes the flyout.
@@ -740,7 +695,7 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
                 stage.show();
-                ((Button) loader.getNamespace().get("fillEmptyNpcMorphAssignmentsButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "fillEmptyNpcMorphAssignmentsButton")).fire();
                 Popup flyout = FxTestToolkit.showingPopup(stage, "#fillEmptyApplyButton");
                 @SuppressWarnings("unchecked")
                 ListView<SliderPresetSnapshot> choices = (ListView<SliderPresetSnapshot>) flyout.getScene()
@@ -758,40 +713,6 @@ class WorkbenchControllerTest {
                 assertFalse(jobs.frame().projectMutationsBlocked());
                 assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst()
                         .getSliderPresetNames().isEmpty());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /** The inspector portrait follows logical NPC selection and explains the missing-file fallback. */
-    @Test
-    void npcPortraitInspectorClearsWithSelectionAndDescribesMissingImage() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(NpcMorphAssignmentEdits.create("NoPortraitFixture", "Skyrim.esm", "HousecarlWhiterun",
-                "NordRace", "000A2C94"));
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                ListView<NpcMorphAssignmentSnapshot> npcs = controller.npcMorphAssignmentListNode();
-                npcs.getSelectionModel().selectFirst();
-                ImageView portrait = (ImageView) loader.getNamespace().get("npcPortraitImage");
-                Label status = (Label) loader.getNamespace().get("npcPortraitStatus");
-                Button viewer = (Button) loader.getNamespace().get("openNpcPortraitViewerButton");
-                assertEquals(AccessibleRole.NODE, portrait.getAccessibleRole());
-                assertNull(portrait.getAccessibleText(),
-                        "the named NPC inspector makes its adjacent thumbnail decorative");
-                assertTrue(status.getText().contains("NoPortraitFixture (HousecarlWhiterun).jpg"));
-                assertTrue(viewer.isDisabled());
-                ((TextField) loader.getNamespace().get("npcMorphAssignmentFilter")).setText("no match");
-                assertNull(portrait.getAccessibleText());
-                assertNull(portrait.getImage());
             } finally {
                 stage.close();
             }
@@ -818,12 +739,81 @@ class WorkbenchControllerTest {
                 controller.npcMorphAssignmentListNode().getSelectionModel().selectFirst();
                 stage.show();
                 root.resize(900.0, 700.0);
-                ScrollPane inspector = (ScrollPane) loader.getNamespace().get("morphsInspectorScroll");
+                ScrollPane inspector = (ScrollPane) LoadedWorkbench.node(loader, "morphsInspectorScroll");
                 inspector.setVvalue(1.0);
 
                 sendKey(root, KeyCode.F7);
 
                 assertEquals(0.0, inspector.getVvalue());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /**
+     * In narrow mode Ctrl+K in Morphs first opens the primary-content overlay, where both Morphs filters live, then
+     * focuses the filter of the catalog in use (#152: the Morphs Area asks the shell to reveal its primary content).
+     */
+    @Test
+    void narrowMorphsSearchOpensThePrimaryOverlayBeforeFocusingTheFilter() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 900.0, 700.0);
+            stage.setScene(scene);
+            try {
+                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                stage.show();
+                root.resize(900.0, 700.0);
+                StackPane overlay = (StackPane) loader.getNamespace().get("overlayLayer");
+                // Entering narrow mode may open the primary overlay; dismiss it so Ctrl+K has to reopen it.
+                if (!overlay.getChildren().isEmpty())
+                    sendKey(root, KeyCode.ESCAPE);
+                assertFalse(overlay.getChildren().contains(loader.getNamespace().get("primaryPane")));
+
+                sendControlKey(root, KeyCode.K);
+
+                assertTrue(overlay.getChildren().contains(loader.getNamespace().get("primaryPane")));
+                assertSame(LoadedWorkbench.node(loader, "customMorphTargetFilter"), scene.getFocusOwner());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /**
+     * Add NPCs hands the shell its own launcher as the NPC Database return target, so Back to Morphs returns there
+     * even when the launcher fired without holding focus (as a mnemonic can).
+     */
+    @Test
+    void backToMorphsReturnsToTheAddNpcsLauncherThatFiredWithoutFocus() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(CustomMorphTargetEdits.create("All|Female"));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300.0, 800.0);
+            stage.setScene(scene);
+            try {
+                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                controller.customMorphTargetListNode().requestFocus();
+                Button launcher = (Button) LoadedWorkbench.node(loader, "addNpcsFromDatabaseButton");
+
+                launcher.fire();
+                assertTrue(((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).isSelected());
+                ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
+
+                assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
+                assertSame(launcher, scene.getFocusOwner());
             } finally {
                 stage.close();
             }
@@ -904,84 +894,6 @@ class WorkbenchControllerTest {
     }
 
     /**
-     * The Morphs JavaFX adapter renders immutable target frames and translates catalog and relationship controls into
-     * typed intents without retaining control-local Project state.
-     */
-    @Test
-    void morphsControlsCreateFilterAndAssignThroughTheAuthoritativeProjectFlow() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(SliderPresetEdits.create("Beta"));
-        flow.apply(CustomMorphTargetEdits.create("Existing"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-            @SuppressWarnings("unchecked")
-            ListView<CustomMorphTargetSnapshot> targets =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-            TextField name = (TextField) loader.getNamespace().get("customMorphTargetNameInput");
-            TextField filter = (TextField) loader.getNamespace().get("customMorphTargetFilter");
-            Button create = (Button) loader.getNamespace().get("createCustomMorphTargetButton");
-            @SuppressWarnings("unchecked")
-            ComboBox<SliderPresetSnapshot> available =
-                    (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
-            Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
-            Label condition = (Label) loader.getNamespace().get("morphTargetConditionText");
-            Label selection = (Label) loader.getNamespace().get("morphTargetSelectionText");
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> assigned =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
-            Set<Character> inspectorMnemonics = List.<Labeled>of(
-                            (Label) loader.getNamespace().get("assignedMorphSliderPresetLabel"),
-                            (Button) loader.getNamespace().get("removeMorphSliderPresetButton"),
-                            (Button) loader.getNamespace().get("clearMorphSliderPresetsButton"),
-                            (Label) loader.getNamespace().get("availableMorphSliderPresetLabel"),
-                            assign,
-                            (Button) loader.getNamespace().get("assignAllMorphSliderPresetsButton"))
-                    .stream().map(Labeled::getText).filter(text -> text.contains("_"))
-                    .map(text -> Character.toUpperCase(text.charAt(text.indexOf('_') + 1)))
-                    .collect(java.util.stream.Collectors.toSet());
-
-            assertTrue(targets.isVisible());
-            assertEquals(Set.of('A', 'R', 'C', 'V', 'I', 'L'), inspectorMnemonics);
-            assertEquals(List.of("Existing"), targets.getItems().stream()
-                    .map(CustomMorphTargetSnapshot::getName).toList());
-            name.setText("  All|Female  ");
-            create.fire();
-            assertEquals("All|Female", targets.getSelectionModel().getSelectedItem().getName());
-
-            targets.getSelectionModel().select(targets.getItems().stream()
-                    .filter(target -> target.getName().equals("Existing")).findFirst().orElseThrow());
-            available.setValue(available.getItems().stream()
-                    .filter(preset -> preset.getName().equals("Alpha")).findFirst().orElseThrow());
-            available.fireEvent(new ActionEvent());
-            assign.fire();
-            assigned = controller.assignedMorphSliderPresetListNode();
-
-            assertEquals(List.of("Alpha"), assigned.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertEquals(List.of("Alpha"), flow.frame().snapshot().getCustomMorphTargets().stream()
-                    .filter(target -> target.getName().equals("Existing")).findFirst().orElseThrow()
-                    .getSliderPresetNames());
-            assertEquals("BodyGen condition: Existing", condition.getAccessibleText());
-            assertEquals("Selected Custom Morph Target Existing", selection.getAccessibleText());
-            filter.setText("all");
-            assertNull(targets.getSelectionModel().getSelectedItem());
-            assertTrue(assigned.getItems().isEmpty());
-            assertEquals("Morphs inspector: no selection", selection.getAccessibleText());
-            assertEquals("Select a Custom Morph Target or NPC Morph Assignment to inspect it.",
-                    condition.getAccessibleText());
-            stage.close();
-        });
-    }
-
-    /**
      * Morphs validation stays pane-local, relationship removal is immediate, and destructive relationship/catalog
      * clears consume the correctly named confirmation actions without retargeting selection.
      */
@@ -1002,25 +914,25 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ListView<CustomMorphTargetSnapshot> targets =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-            TextField name = (TextField) loader.getNamespace().get("customMorphTargetNameInput");
-            Button create = (Button) loader.getNamespace().get("createCustomMorphTargetButton");
+                    (ListView<CustomMorphTargetSnapshot>) LoadedWorkbench.node(loader, "customMorphTargetList");
+            TextField name = (TextField) LoadedWorkbench.node(loader, "customMorphTargetNameInput");
+            Button create = (Button) LoadedWorkbench.node(loader, "createCustomMorphTargetButton");
             @SuppressWarnings("unchecked")
             ComboBox<SliderPresetSnapshot> available =
-                    (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
-            Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
+                    (ComboBox<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "availableMorphSliderPreset");
+            Button assign = (Button) LoadedWorkbench.node(loader, "assignMorphSliderPresetButton");
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> assigned =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
-            Button removeAssignment = (Button) loader.getNamespace().get("removeMorphSliderPresetButton");
-            Button clearAssignments = (Button) loader.getNamespace().get("clearMorphSliderPresetsButton");
-            Button removeTarget = (Button) loader.getNamespace().get("removeCustomMorphTargetButton");
-            Button clearTargets = (Button) loader.getNamespace().get("clearCustomMorphTargetsButton");
-            TextField filter = (TextField) loader.getNamespace().get("customMorphTargetFilter");
+                    (ListView<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "assignedMorphSliderPresetList");
+            Button removeAssignment = (Button) LoadedWorkbench.node(loader, "removeMorphSliderPresetButton");
+            Button clearAssignments = (Button) LoadedWorkbench.node(loader, "clearMorphSliderPresetsButton");
+            Button removeTarget = (Button) LoadedWorkbench.node(loader, "removeCustomMorphTargetButton");
+            Button clearTargets = (Button) LoadedWorkbench.node(loader, "clearCustomMorphTargetsButton");
+            TextField filter = (TextField) LoadedWorkbench.node(loader, "customMorphTargetFilter");
 
             name.setText("existing");
             create.fire();
-            assertTrue(((HBox) loader.getNamespace().get("morphsInfoBar")).isVisible());
+            assertTrue(((HBox) LoadedWorkbench.node(loader, "morphsInfoBar")).isVisible());
             assertFalse(((HBox) loader.getNamespace().get("templatesInfoBar")).isVisible());
             assertTrue(((ListView<?>) loader.getNamespace().get("activityList")).getItems().isEmpty());
 
@@ -1085,11 +997,11 @@ class WorkbenchControllerTest {
             try {
                 controller.attach(flow, stage, platform, fixture().environment());
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                ListView<?> targets = (ListView<?>) loader.getNamespace().get("customMorphTargetList");
+                ListView<?> targets = (ListView<?>) LoadedWorkbench.node(loader, "customMorphTargetList");
                 targets.getSelectionModel().selectFirst();
-                ((Button) loader.getNamespace().get("removeCustomMorphTargetButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "removeCustomMorphTargetButton")).fire();
 
-                assertTrue(((Label) loader.getNamespace().get("morphsInfoBarMessage")).getText()
+                assertTrue(((Label) LoadedWorkbench.node(loader, "morphsInfoBarMessage")).getText()
                         .contains("The target could not be removed."));
                 assertTrue(((Label) loader.getNamespace().get("statusText")).getText()
                         .contains("The target could not be removed."));
@@ -1101,231 +1013,6 @@ class WorkbenchControllerTest {
             } finally {
                 stage.close();
             }
-        });
-    }
-
-    /** Empty target and NPC entries are emitted as Morphs lines even without Slider Preset assignments. */
-    @Test
-    void unassignedMorphEntriesDescribeTheirEmittedOutput() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(CustomMorphTargetEdits.create("Unassigned"));
-        flow.apply(NpcMorphAssignmentEdits.create("Guard", "Skyrim.esm", "Guard01", "NordRace", "000123"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            try {
-                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                @SuppressWarnings("unchecked")
-                ListView<CustomMorphTargetSnapshot> targets =
-                        (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-                @SuppressWarnings("unchecked")
-                ListView<NpcMorphAssignmentSnapshot> npcs =
-                        (ListView<NpcMorphAssignmentSnapshot>) loader.getNamespace().get("npcMorphAssignmentList");
-                Label status = (Label) loader.getNamespace().get("morphTargetOutputStatusText");
-
-                targets.getSelectionModel().selectFirst();
-                assertEquals("Included in Morphs output without Slider Preset assignments.", status.getText());
-                npcs.getSelectionModel().selectFirst();
-                assertEquals("Included in Morphs output without Slider Preset assignments.", status.getText());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /**
-     * The Morphs controls author an NPC through the Project flow and keep its selection separate from a Custom
-     * Morph Target while the shared editor exposes the NPC's complete output identity.
-     */
-    @Test
-    void morphsNpcControlsCreateInspectAndSelectWithoutRetargeting() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(CustomMorphTargetEdits.create("All|Female"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                @SuppressWarnings("unchecked")
-                ListView<CustomMorphTargetSnapshot> targets =
-                        (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-                @SuppressWarnings("unchecked")
-                ListView<NpcMorphAssignmentSnapshot> npcs =
-                        (ListView<NpcMorphAssignmentSnapshot>) loader.getNamespace().get("npcMorphAssignmentList");
-                targets.getSelectionModel().selectFirst();
-                @SuppressWarnings("unchecked")
-                ComboBox<SliderPresetSnapshot> available =
-                        (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
-                Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
-                available.setValue(available.getItems().getFirst());
-
-                ((TextField) loader.getNamespace().get("npcDisplayNameInput")).setText("Lyra");
-                ((TextField) loader.getNamespace().get("npcPluginNameInput")).setText("People.esp");
-                ((TextField) loader.getNamespace().get("npcEditorIdInput")).setText("Lyra01");
-                ((TextField) loader.getNamespace().get("npcRaceInput")).setText("NordRace");
-                ((TextField) loader.getNamespace().get("npcFormIdInput")).setText("000A12B3");
-                ((Button) loader.getNamespace().get("createNpcMorphAssignmentButton")).fire();
-
-                npcs = controller.npcMorphAssignmentListNode();
-                NpcMorphAssignmentSnapshot npc = npcs.getSelectionModel().getSelectedItem();
-                assertNotNull(npc);
-                assertNull(targets.getSelectionModel().getSelectedItem());
-                assertNull(available.getValue(), "a pending target preset must not carry to the selected NPC");
-                assertTrue(assign.isDisabled());
-                assertEquals("Lyra", npc.getDisplayName());
-                assertEquals("People.esp", npc.getPluginName());
-                assertEquals("Lyra01", npc.getEditorId());
-                assertEquals("NordRace", npc.getRace());
-                assertEquals("A12B3", npc.getFormId());
-                assertEquals("Lyra", ((Label) loader.getNamespace().get("morphTargetEditorFocusTarget")).getText());
-                assertEquals("Plugin: People.esp; Editor ID: Lyra01",
-                        ((Label) loader.getNamespace().get("npcIdentityText")).getText());
-                assertEquals("Race: NordRace", ((Label) loader.getNamespace().get("npcRaceText")).getText());
-                assertEquals("Form ID: A12B3", ((Label) loader.getNamespace().get("npcFormIdText")).getText());
-
-                available.setValue(available.getItems().getFirst());
-                targets.getSelectionModel().selectFirst();
-                assertNull(npcs.getSelectionModel().getSelectedItem());
-                assertNull(available.getValue(), "a pending NPC preset must not carry to the selected target");
-                assertTrue(assign.isDisabled());
-                assertEquals("BodyGen condition: All|Female",
-                        ((Label) loader.getNamespace().get("morphTargetConditionText")).getText());
-                npcs.getSelectionModel().selectFirst();
-                assertNull(targets.getSelectionModel().getSelectedItem());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /** NPC filtering and sorting retain logical selection, and a confirmed clear removes only the frozen visible set. */
-    @Test
-    void morphsNpcControlsEditRelationshipsAndClearOnlyVisibleAssignments() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
-                "Lyra", "People.esp", "Lyra01", "NordRace", "A12B3", List.of())));
-        flow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
-                "Mira", "Other.esp", "Mira01", "BretonRace", "B45C6", List.of())));
-        RecordingPlatform platform = new RecordingPlatform();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, platform, fixture().environment());
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                ListView<NpcMorphAssignmentSnapshot> npcs = controller.npcMorphAssignmentListNode();
-                npcs.getSelectionModel().select(npcs.getItems().stream()
-                        .filter(npc -> npc.getEditorId().equals("Mira01")).findFirst().orElseThrow());
-                @SuppressWarnings("unchecked")
-                ComboBox<SliderPresetSnapshot> available =
-                        (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
-                available.setValue(available.getItems().getFirst());
-                available.fireEvent(new ActionEvent());
-                ((Button) loader.getNamespace().get("assignMorphSliderPresetButton")).fire();
-                assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().stream()
-                        .filter(npc -> npc.getEditorId().equals("Mira01"))
-                        .findFirst().orElseThrow().getSliderPresetNames());
-
-                @SuppressWarnings("unchecked")
-                ComboBox<com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature.NpcSortOrder> sort =
-                        (ComboBox<com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature.NpcSortOrder>)
-                                loader.getNamespace().get("npcMorphAssignmentSort");
-                sort.setValue(com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature.NpcSortOrder.PLUGIN_DESCENDING);
-                sort.fireEvent(new ActionEvent());
-                assertEquals("Mira01", npcs.getSelectionModel().getSelectedItem().getEditorId());
-
-                TextField filter = (TextField) loader.getNamespace().get("npcMorphAssignmentFilter");
-                filter.setText("lyra");
-                assertNull(npcs.getSelectionModel().getSelectedItem());
-                assertEquals(List.of("Lyra"), npcs.getItems().stream()
-                        .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
-                platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
-                ((Button) loader.getNamespace().get("clearNpcMorphAssignmentsButton")).fire();
-                assertEquals(List.of("Mira"), flow.frame().snapshot().getNpcMorphAssignments().stream()
-                        .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
-                filter.clear();
-                assertEquals(List.of("Mira"), controller.npcMorphAssignmentListNode().getItems().stream()
-                        .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
-                assertNull(controller.npcMorphAssignmentListNode().getSelectionModel().getSelectedItem());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /**
-     * Refilling an empty Morphs list replaces only its JavaFX adapter so the Windows UIA provider receives a fresh
-     * virtualized child subtree without changing feature identity state.
-     */
-    @Test
-    void morphsEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-            @SuppressWarnings("unchecked")
-            ListView<CustomMorphTargetSnapshot> initial =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-            TextField name = (TextField) loader.getNamespace().get("customMorphTargetNameInput");
-
-            name.setText("All|Female");
-            ((Button) loader.getNamespace().get("createCustomMorphTargetButton")).fire();
-
-            assertNotSame(initial, controller.customMorphTargetListNode());
-            assertEquals(List.of("All|Female"), controller.customMorphTargetListNode().getItems().stream()
-                    .map(CustomMorphTargetSnapshot::getName).toList());
-            stage.close();
-        });
-    }
-
-    /**
-     * Refilling an empty assigned-relationship list replaces only its JavaFX adapter so Windows UIA exposes the
-     * immutable relationships selected from a later target frame.
-     */
-    @Test
-    void morphsAssignedRelationshipsEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> initial =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
-            @SuppressWarnings("unchecked")
-            ListView<CustomMorphTargetSnapshot> targets =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-
-            targets.getSelectionModel().selectFirst();
-
-            assertNotSame(initial, controller.assignedMorphSliderPresetListNode());
-            assertEquals(List.of("Alpha"), controller.assignedMorphSliderPresetListNode().getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            stage.close();
         });
     }
 
@@ -1490,6 +1177,49 @@ class WorkbenchControllerTest {
 
             assertTrue(editor.isVisible() && editor.isManaged());
             assertFalse(((javafx.scene.Node) LoadedWorkbench.node(loader, "settingsEditorContent")).isVisible());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell mounts the Morphs Area's own panes right after the Templates panes in its landmark containers, where
+     * they sat in the single Workbench FXML, declares no {@code @FXML} field for any Morphs control, and shows the
+     * panes only while Morphs is the active Area (#152).
+     */
+    @Test
+    void morphsAreaPanesMountIntoTheShellLandmarksAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            assertEquals("morphsPrimaryScroll", childIds(loader, "primaryPane").get(1));
+            assertEquals("morphsEditorContent", childIds(loader, "editorPane").get(1));
+            assertEquals("morphsInspectorScroll", childIds(loader, "inspectorPane").get(1));
+            Map<String, Object> morphs = controller.areaNamespace(WorkbenchNavigation.Area.MORPHS);
+            assertTrue(morphs.containsKey("customMorphTargetList"), "the Morphs Area FXML must be loaded");
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields())
+                assertFalse(field.isAnnotationPresent(javafx.fxml.FXML.class) && morphs.containsKey(field.getName()),
+                        "the shell must not declare the Morphs control " + field.getName());
+            javafx.scene.Node editor = (javafx.scene.Node) LoadedWorkbench.node(loader, "morphsEditorContent");
+            assertFalse(editor.isVisible() || editor.isManaged());
+            // The shell hands the Area its window's render scale, which the Morphs catalog heights track.
+            AtomicBoolean catalogResized = new AtomicBoolean();
+            controller.customMorphTargetListNode().prefHeightProperty().addListener(
+                    (javafx.beans.Observable observable) -> catalogResized.set(true));
+            controller.customMorphTargetListNode().getPrefHeight();
+            stage.setRenderScaleY(stage.getRenderScaleY() + 0.5);
+            assertTrue(catalogResized.get(), "the Morphs catalog must re-evaluate its height on a render-scale change");
+
+            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+
+            assertTrue(editor.isVisible() && editor.isManaged());
+            assertFalse(((javafx.scene.Node) loader.getNamespace().get("templatesEditorContent")).isVisible());
             stage.close();
         });
     }
@@ -3275,9 +3005,9 @@ class WorkbenchControllerTest {
             sendControlKey(root, KeyCode.DIGIT2);
             @SuppressWarnings("unchecked")
             ListView<CustomMorphTargetSnapshot> primary =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-            Label editor = (Label) loader.getNamespace().get("morphTargetEditorFocusTarget");
-            Label inspector = (Label) loader.getNamespace().get("morphTargetSelectionText");
+                    (ListView<CustomMorphTargetSnapshot>) LoadedWorkbench.node(loader, "customMorphTargetList");
+            Label editor = (Label) LoadedWorkbench.node(loader, "morphTargetEditorFocusTarget");
+            Label inspector = (Label) LoadedWorkbench.node(loader, "morphTargetSelectionText");
             Label output = (Label) LoadedWorkbench.node(loader, "outputFocusTarget");
             assertSame(primary, scene.getFocusOwner());
 

@@ -94,7 +94,7 @@ class WorkbenchAccessibilityContractTest {
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ListView<NpcMorphAssignmentSnapshot> initial =
-                    (ListView<NpcMorphAssignmentSnapshot>) loader.getNamespace().get("npcMorphAssignmentList");
+                    (ListView<NpcMorphAssignmentSnapshot>) LoadedWorkbench.node(loader, "npcMorphAssignmentList");
             Parent owner = initial.getParent();
             int position = owner.getChildrenUnmodifiable().indexOf(initial);
             assertTrue(initial.getItems().isEmpty());
@@ -160,7 +160,7 @@ class WorkbenchAccessibilityContractTest {
             guarded.put("NPC Morph Assignments", controller.npcMorphAssignmentListNode().getItems());
             guarded.put("Assigned Slider Presets", controller.assignedMorphSliderPresetListNode().getItems());
             guarded.put("Available Slider Presets",
-                    ((ComboBox<?>) loader.getNamespace().get("availableMorphSliderPreset")).getItems());
+                    ((ComboBox<?>) LoadedWorkbench.node(loader, "availableMorphSliderPreset")).getItems());
             guarded.put("BoS artifacts", ((ComboBox<?>) LoadedWorkbench.node(loader, "bosArtifactChoice")).getItems());
             guarded.put("NPC Database sources",
                     ((ListView<?>) LoadedWorkbench.node(loader, "npcSourceList")).getItems());
@@ -232,8 +232,8 @@ class WorkbenchAccessibilityContractTest {
             });
 
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-            ((TextField) loader.getNamespace().get("customMorphTargetNameInput")).setText("All|Female");
-            ((Button) loader.getNamespace().get("createCustomMorphTargetButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "customMorphTargetNameInput")).setText("All|Female");
+            ((Button) LoadedWorkbench.node(loader, "createCustomMorphTargetButton")).fire();
 
             assertEquals(1, flow.frame().snapshot().getCustomMorphTargets().size());
             assertNotEquals(statusBefore, status.getText(), "the create must have re-rendered the feedback");
@@ -397,7 +397,7 @@ class WorkbenchAccessibilityContractTest {
             stage.setScene(new Scene(root, 1300.0, 800.0));
             controller.attach(flow, stage, new UnusedPlatform(), fixture().environment());
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-            Label label = (Label) loader.getNamespace().get("assignedMorphSliderPresetLabel");
+            Label label = (Label) LoadedWorkbench.node(loader, "assignedMorphSliderPresetLabel");
             ListView<CustomMorphTargetSnapshot> targets = controller.customMorphTargetListNode();
             ListView<SliderPresetSnapshot> initial = controller.assignedMorphSliderPresetListNode();
             assertTrue(initial.getItems().isEmpty());
@@ -408,7 +408,7 @@ class WorkbenchAccessibilityContractTest {
             assertNotSame(initial, first);
             assertSame(first, label.getLabelFor());
             assertSame(label, first.queryAccessibleAttribute(AccessibleAttribute.LABELED_BY));
-            Parent inspector = (Parent) loader.getNamespace().get("morphsInspectorContent");
+            Parent inspector = (Parent) LoadedWorkbench.node(loader, "morphsInspectorContent");
             assertSame(inspector, first.getParent());
 
             targets.getSelectionModel().clearSelection();
@@ -616,12 +616,12 @@ class WorkbenchAccessibilityContractTest {
 
     /** Creates one NPC Morph Assignment through the Morphs authoring controls. */
     private static void createNpc(FXMLLoader loader, String displayName, String editorId) {
-        ((TextField) loader.getNamespace().get("npcDisplayNameInput")).setText(displayName);
-        ((TextField) loader.getNamespace().get("npcPluginNameInput")).setText("People.esp");
-        ((TextField) loader.getNamespace().get("npcEditorIdInput")).setText(editorId);
-        ((TextField) loader.getNamespace().get("npcRaceInput")).setText("NordRace");
-        ((TextField) loader.getNamespace().get("npcFormIdInput")).setText("000A12B3");
-        ((Button) loader.getNamespace().get("createNpcMorphAssignmentButton")).fire();
+        ((TextField) LoadedWorkbench.node(loader, "npcDisplayNameInput")).setText(displayName);
+        ((TextField) LoadedWorkbench.node(loader, "npcPluginNameInput")).setText("People.esp");
+        ((TextField) LoadedWorkbench.node(loader, "npcEditorIdInput")).setText(editorId);
+        ((TextField) LoadedWorkbench.node(loader, "npcRaceInput")).setText("NordRace");
+        ((TextField) LoadedWorkbench.node(loader, "npcFormIdInput")).setText("000A12B3");
+        ((Button) LoadedWorkbench.node(loader, "createNpcMorphAssignmentButton")).fire();
     }
 
     /** Platform adapter that answers only the NPC Database source chooser; every other effect fails the test. */

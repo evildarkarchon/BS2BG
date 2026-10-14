@@ -4,7 +4,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -24,6 +23,7 @@ import com.asdasfa.jbs2bg.workbench.AreaLoader;
 import com.asdasfa.jbs2bg.workbench.AreaPanes;
 import com.asdasfa.jbs2bg.workbench.DispatchPipeline;
 import com.asdasfa.jbs2bg.workbench.NpcPortraitViewer;
+import com.asdasfa.jbs2bg.workbench.SeverityStyle;
 import com.asdasfa.jbs2bg.workbench.ShellPort;
 import com.asdasfa.jbs2bg.workbench.UiaListHelper;
 import com.asdasfa.jbs2bg.workbench.WorkbenchArea;
@@ -806,7 +806,7 @@ public final class NpcDatabaseArea implements WorkbenchArea {
                 npcPromotionInfoBarCue.setText(severity.cue());
                 npcPromotionInfoBarMessage.setText(message);
                 npcPromotionInfoBar.setAccessibleHelp(severity.cue() + ": " + message);
-                setSeverityStyle(npcPromotionInfoBar, severity);
+                SeverityStyle.apply(npcPromotionInfoBar, severity);
             }
             String details = promotion == null ? "" : promotionDetails(promotion);
             npcPromotionDetails.setText(details);
@@ -830,16 +830,6 @@ public final class NpcDatabaseArea implements WorkbenchArea {
     private static void renderLabel(Label label, String value) {
         label.setText(value);
         label.setAccessibleHelp(value);
-    }
-
-    /**
-     * Keeps one severity style class on a feedback node so text/icon/boundary cues stay synchronized. The shell keeps
-     * its own copy for the Workbench InfoBar and status line.
-     */
-    private static void setSeverityStyle(Node node, WorkbenchFeedback.Severity severity) {
-        node.getStyleClass().removeAll("severity-information", "severity-validation", "severity-success",
-                "severity-warning", "severity-failure");
-        node.getStyleClass().add("severity-" + severity.name().toLowerCase(Locale.ROOT));
     }
 
     /** Captures chooser paths once and admits their source-level transaction batch to the central coordinator. */

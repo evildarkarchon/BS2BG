@@ -67,6 +67,20 @@ public interface ShellPort {
     void returnToMorphs(Optional<NpcMorphAssignmentIdentity> assignment);
 
     /**
+     * Opens the NPC Database Area from a launcher in another Area. The shell navigates there and keeps the return
+     * target, so Back to Morphs can put focus back on the launcher.
+     *
+     * @param returnTarget the semantic launcher focus the NPC Database returns to
+     */
+    void openNpcDatabase(WorkbenchNavigation.FocusTarget returnTarget);
+
+    /**
+     * Makes the active Area's primary content reachable before an Area moves focus into it. In narrow mode the shell
+     * opens the primary-content overlay; in wide mode the primary content is always shown and nothing happens.
+     */
+    void revealPrimaryContent();
+
+    /**
      * Reports a Project change the Area published itself, outside the pipeline's generic chrome step, so the shell
      * re-renders the Project chrome and every Area from the current Project frame. The shell arbitrates the change's
      * diagnostics: no other Area projects them.
