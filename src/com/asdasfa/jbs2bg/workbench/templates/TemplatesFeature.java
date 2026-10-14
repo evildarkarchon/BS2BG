@@ -4,15 +4,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -51,8 +48,6 @@ public final class TemplatesFeature
     private final WorkbenchProjectFlow projectFlow;
     private final Supplier<Settings.Snapshot> currentSettings;
     private final Clock clock;
-    private final Consumer<Throwable> observerFailureSink;
-    private final Map<Long, Consumer<Frame>> observers = new LinkedHashMap<>();
     private final FilteredView<SliderPresetSnapshot, NameIdentity> view = new FilteredView<>(
             List.of(FilterColumn.of(NAME_COLUMN, preset -> preset.getName().toLowerCase(Locale.ROOT))),
             ProjectIdentities::sliderPreset);
@@ -65,11 +60,9 @@ public final class TemplatesFeature
     private GangFrame gang = GangFrame.inactive();
     private OutcomeKind lastOutcomeKind = OutcomeKind.NONE;
     private long revision;
-    private long nextObserverId = 1;
     private long nextEffectToken = 1;
     private Frame frame;
     private Effect pendingEffect;
-    private boolean publishing;
 
     /**
      * Creates the window-scoped Templates feature from the latest coherent Project publication.
@@ -80,25 +73,9 @@ public final class TemplatesFeature
      */
     public TemplatesFeature(WorkbenchProjectFlow projectFlow, Supplier<Settings.Snapshot> currentSettings,
                             Clock clock) {
-        this(projectFlow, currentSettings, clock, failure -> {
-            // Production adapters may supply technical diagnostics; the default keeps a renderer failure isolated.
-        });
-    }
-
-    /**
-     * Creates the Templates feature with an explicit technical-diagnostics sink for isolated observer failures.
-     *
-     * @param projectFlow         sole authoritative Project command path
-     * @param currentSettings     read-only view of the current Settings pair used for Slider choice previews
-     * @param clock               deterministic type-ahead clock
-     * @param observerFailureSink receives observer failures after frame state commits
-     */
-    public TemplatesFeature(WorkbenchProjectFlow projectFlow, Supplier<Settings.Snapshot> currentSettings,
-                            Clock clock, Consumer<Throwable> observerFailureSink) {
         this.projectFlow = Objects.requireNonNull(projectFlow, "projectFlow");
         this.currentSettings = Objects.requireNonNull(currentSettings, "currentSettings");
         this.clock = Objects.requireNonNull(clock, "clock");
-        this.observerFailureSink = Objects.requireNonNull(observerFailureSink, "observerFailureSink");
         reconcile(projectFlow.frame(), List.of());
     }
 
@@ -110,18 +87,6 @@ public final class TemplatesFeature
     }
 
     /**
-     * Observes subsequent immutable frame publications until the returned subscription is closed.
-     *
-     * @param observer frame callback invoked after state commit
-     * @return idempotent subscription handle
-     */
-    public Subscription observe(Consumer<Frame> observer) {
-        long id = nextObserverId++;
-        observers.put(id, Objects.requireNonNull(observer, "observer"));
-        return () -> observers.remove(id);
-    }
-
-    /**
      * Applies one feature-specific task intent on the serialized presentation lane.
      *
      * @param intent immutable user task
@@ -130,8 +95,6 @@ public final class TemplatesFeature
     @Override
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
-        if (publishing)
-            throw new IllegalStateException("Templates intents cannot be dispatched during frame publication");
         if (pendingEffect != null)
             return new Update(false, frame);
         return switch (intent) {
@@ -718,18 +681,6 @@ public final class TemplatesFeature
         Optional<EditorFrame> editor = editorFrame(visibleDiagnostics);
         frame = new Frame(++revision, projectSequence, view.visibleSet().getRows(), view.getSelection(), filterText,
                 sortOrder, Optional.ofNullable(rename), editor, lastOutcomeKind, visibleDiagnostics);
-        publishing = true;
-        try {
-            for (Consumer<Frame> observer : List.copyOf(observers.values())) {
-                try {
-                    observer.accept(frame);
-                } catch (RuntimeException failure) {
-                    reportObserverFailure(failure);
-                }
-            }
-        } finally {
-            publishing = false;
-        }
     }
 
     /**
@@ -780,16 +731,6 @@ public final class TemplatesFeature
                 choice);
     }
 
-    /**
-     * Keeps both an observer and an optional technical-diagnostics adapter from breaking publication.
-     */
-    private void reportObserverFailure(RuntimeException failure) {
-        try {
-            observerFailureSink.accept(failure);
-        } catch (RuntimeException sinkFailure) {
-            // A technical-diagnostics sink is observational and must never become a second publication failure.
-        }
-    }
 
     /**
      * Distinguishes usable domain outcomes from typed cancellation, failure, and validation rejection.
@@ -1278,15 +1219,5 @@ public final class TemplatesFeature
             Objects.requireNonNull(effect, "effect");
             Objects.requireNonNull(outcomeKind, "outcomeKind");
         }
-    }
-
-    /**
-     * Idempotent lifetime handle for one Templates frame observer.
-     */
-    @FunctionalInterface
-    public interface Subscription extends AutoCloseable {
-        /** Stops later callbacks; repeated closure is harmless. */
-        @Override
-        void close();
     }
 }

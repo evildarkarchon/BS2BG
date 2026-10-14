@@ -6,7 +6,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -573,30 +572,24 @@ class TemplatesFeatureTest {
     }
 
     /**
-     * Feature observers see state only after commit, callback failures are isolated and reported, and a closed
-     * subscription receives no later frames.
+     * Each dispatch commits its frame before returning it, so the returned update is the feature's current state and
+     * the next dispatch publishes a later revision.
      */
     @Test
-    void observersReceiveCommittedFramesAndIsolateCallbackFailures() {
+    void dispatchReturnsTheCommittedFrame() {
         WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
                 ProjectSessions.create(settings::snapshot));
-        List<Throwable> failures = new ArrayList<>();
         TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
-                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC), failures::add);
-        List<TemplatesFeature.Frame> observed = new ArrayList<>();
-        TemplatesFeature.Subscription subscription = feature.observe(observed::add);
-        feature.observe(frame -> {
-            throw new IllegalStateException("broken Templates renderer");
-        });
+                Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
 
         TemplatesFeature.Update filtered = feature.dispatch(new TemplatesFeature.ChangeFilter("alp"));
 
-        assertSame(filtered.frame(), observed.getLast());
-        assertEquals(List.of("broken Templates renderer"), failures.stream().map(Throwable::getMessage).toList());
-        int beforeClose = observed.size();
-        subscription.close();
-        feature.dispatch(new TemplatesFeature.ChangeSort(TemplatesFeature.SortOrder.NAME_DESCENDING));
-        assertEquals(beforeClose, observed.size());
+        assertSame(filtered.frame(), feature.frame());
+        assertEquals("alp", feature.frame().filterText());
+        TemplatesFeature.Update sorted = feature.dispatch(
+                new TemplatesFeature.ChangeSort(TemplatesFeature.SortOrder.NAME_DESCENDING));
+        assertSame(sorted.frame(), feature.frame());
+        assertTrue(sorted.frame().revision() > filtered.frame().revision());
     }
 
     /**

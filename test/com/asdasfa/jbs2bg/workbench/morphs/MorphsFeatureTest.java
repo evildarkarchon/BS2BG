@@ -5,7 +5,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -563,35 +562,25 @@ class MorphsFeatureTest {
     }
 
     /**
-     * Validation is durable feature state, committed frames reach healthy observers, and one broken renderer cannot
-     * stall publication or outlive a closed subscription.
+     * Validation is durable feature state: a rejected create keeps its diagnostic in the committed frame until it is
+     * dismissed.
      */
     @Test
-    void publishesValidationFramesWhileIsolatingObserverFailures() {
+    void publishesValidationFramesUntilDismissed() {
         WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
                 ProjectSessions.create(emptySettings()));
-        List<Throwable> failures = new ArrayList<>();
         MorphsFeature feature = new MorphsFeature(projectFlow,
-                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC), failures::add);
-        List<MorphsFeature.Frame> observed = new ArrayList<>();
-        MorphsFeature.Subscription subscription = feature.observe(observed::add);
-        feature.observe(frame -> {
-            throw new IllegalStateException("broken Morphs renderer");
-        });
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
 
         MorphsFeature.Update rejected = feature.dispatch(new MorphsFeature.Create("   "));
+        assertEquals(rejected.frame(), feature.frame());
         MorphsFeature.Update dismissed = feature.dispatch(new MorphsFeature.DismissDiagnostics());
-        int beforeClose = observed.size();
-        subscription.close();
-        feature.dispatch(new MorphsFeature.ChangeSort(MorphsFeature.SortOrder.NAME_DESCENDING));
 
         assertEquals(MorphsFeature.OutcomeKind.REJECTED, rejected.outcomeKind());
         assertEquals(ProjectDiagnosticCodes.CUSTOM_MORPH_TARGET_NAME_REQUIRED,
                 rejected.frame().diagnostics().getFirst().getCode());
         assertTrue(dismissed.frame().diagnostics().isEmpty());
-        assertEquals(List.of("broken Morphs renderer", "broken Morphs renderer", "broken Morphs renderer"),
-                failures.stream().map(Throwable::getMessage).toList());
-        assertEquals(beforeClose, observed.size());
+        assertEquals(dismissed.frame(), feature.frame());
     }
 
     /**
