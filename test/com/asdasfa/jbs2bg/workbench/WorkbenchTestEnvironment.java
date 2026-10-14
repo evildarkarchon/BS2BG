@@ -12,15 +12,28 @@ import com.asdasfa.jbs2bg.project.ProjectSessions;
  * One test fixture that builds the {@link WorkbenchEnvironment} and the {@link ProjectSession} from the same isolated
  * Settings store, so the Workbench and its session always agree on the current Settings pair. The store's directory
  * also serves as the preferences directory, as the production profile directory does.
+ *
+ * <p>The environment's appearance preferences come from a {@link FakeAppearancePreferencesSource} that starts as
+ * {@link WorkbenchAppearance.PlatformPreferences#light()} (not High Contrast, standard motion), never from the host.
  */
 public final class WorkbenchTestEnvironment {
     private final Settings settings;
     private final Settings.InitializationResult startup;
+    private final FakeAppearancePreferencesSource appearancePreferences;
 
     /**
-     * Pairs one store with the startup result the Workbench should render.
+     * Pairs one store with a fresh light appearance source and the startup result the Workbench should render.
      */
     private WorkbenchTestEnvironment(Settings settings, Settings.InitializationResult startup) {
+        this(settings, startup, new FakeAppearancePreferencesSource(WorkbenchAppearance.PlatformPreferences.light()));
+    }
+
+    /**
+     * Pairs one store and appearance source with the startup result the Workbench should render.
+     */
+    private WorkbenchTestEnvironment(Settings settings, Settings.InitializationResult startup,
+                                     FakeAppearancePreferencesSource appearancePreferences) {
+        this.appearancePreferences = Objects.requireNonNull(appearancePreferences, "appearancePreferences");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.startup = Objects.requireNonNull(startup, "startup");
     }
@@ -74,7 +87,7 @@ public final class WorkbenchTestEnvironment {
      * @return new fixture over the same store
      */
     public WorkbenchTestEnvironment withStartup(Settings.InitializationResult replacement) {
-        return new WorkbenchTestEnvironment(settings, replacement);
+        return new WorkbenchTestEnvironment(settings, replacement, appearancePreferences);
     }
 
     /** @return the test's one Settings store */
@@ -88,12 +101,22 @@ public final class WorkbenchTestEnvironment {
     }
 
     /**
-     * @return environment over the store with the store's directory as preferences directory and the read-only
-     *         generation-preference fallback that tests and embedded adapters use
+     * @return the fake OS appearance preferences this fixture's environment carries; publish to it on the JavaFX
+     *         thread to simulate a live preference change
+     */
+    public FakeAppearancePreferencesSource appearancePreferences() {
+        return appearancePreferences;
+    }
+
+    /**
+     * @return environment over the store with the store's directory as preferences directory, the read-only
+     *         generation-preference fallback that tests and embedded adapters use, and this fixture's fake
+     *         appearance preferences
      */
     public WorkbenchEnvironment environment() {
         return WorkbenchEnvironment.of(settings, startup, settings.directory(),
-                GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
+                GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK)
+                .withAppearancePreferences(appearancePreferences);
     }
 
     /** @return a new session reading the same store through its read-only snapshot view */
