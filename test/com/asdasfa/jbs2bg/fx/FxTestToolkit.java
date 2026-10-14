@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.stage.Popup;
+import javafx.stage.Stage;
 import javafx.stage.Window;
 
 /**
@@ -25,8 +26,9 @@ import javafx.stage.Window;
  * desktop (see {@link #checkTestPlatform(Properties)}).
  * <p>
  * It also replaces the desktop-coupled idioms tests used to hand-roll:
- * uncaught FX-thread exceptions fail the test that caused them, popups are
- * found by owner ({@link #showingPopup(Window, String)}), layout waits count
+ * uncaught FX-thread exceptions fail the test that caused them, popups and
+ * owned Stages are found by owner ({@link #showingPopup(Window, String)},
+ * {@link #showingOwnedStage(Window, String)}), layout waits count
  * real pulses from the test thread ({@link #awaitLayoutPulses(Scene, int)}),
  * and {@link FxTestExtension} closes leaked windows and checks the headless
  * accessibility tripwire after every test.
@@ -326,6 +328,32 @@ public final class FxTestToolkit {
                 .toList();
         if (matches.size() != 1)
             throw new AssertionError("expected exactly one showing popup owned by " + owner + " matching "
+                    + rootSelector + ", found " + matches.size());
+        return matches.getFirst();
+    }
+
+    /**
+     * Finds the one showing owned {@link Stage} (a satellite window such as the portrait viewer) whose
+     * {@code getOwner()} is {@code owner} and whose scene root matches a CSS selector. It is the Stage counterpart of
+     * {@link #showingPopup(Window, String)}, with the same owner scoping and the same failure contract.
+     *
+     * @param owner the window that owns the Stage (normally the test's Stage)
+     * @param rootSelector selector a node in the Stage's scene must match, for example {@code ".npc-portrait-viewer"}
+     * @return the single matching Stage
+     * @throws IllegalStateException when called off the JavaFX Application Thread
+     * @throws AssertionError when no Stage, or more than one, matches
+     */
+    public static Stage showingOwnedStage(Window owner, String rootSelector) {
+        if (!Platform.isFxApplicationThread())
+            throw new IllegalStateException("showingOwnedStage must be called from an FX body (runOnFxThread)");
+        List<Stage> matches = Window.getWindows().stream()
+                .filter(window -> window instanceof Stage && window.isShowing())
+                .map(Stage.class::cast)
+                .filter(stage -> stage.getOwner() == owner)
+                .filter(stage -> stage.getScene() != null && stage.getScene().getRoot().lookup(rootSelector) != null)
+                .toList();
+        if (matches.size() != 1)
+            throw new AssertionError("expected exactly one showing Stage owned by " + owner + " matching "
                     + rootSelector + ", found " + matches.size());
         return matches.getFirst();
     }

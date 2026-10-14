@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.junit.jupiter.api.Test;
 
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
@@ -44,5 +46,43 @@ class JavaFxWorkbenchDialogsTest {
             assertTrue(cancel.isCancelButton());
             owner.close();
         });
+    }
+
+    /**
+     * The safe default owns the dialog scene's focus as soon as the dialog is shown, and still owns it after the
+     * dialog's first queued FX work has run.
+     */
+    @Test
+    void shownDialogFocusesItsSafeDefaultSynchronously() throws Exception {
+        AtomicReference<Stage> owner = new AtomicReference<>();
+        AtomicReference<Dialog<WorkbenchFeedback.DialogAction>> shown = new AtomicReference<>();
+        try {
+            FxTestToolkit.runOnFxThread(() -> {
+                owner.set(new Stage());
+                owner.get().setScene(new Scene(new StackPane(), 300.0, 200.0));
+                owner.get().show();
+                shown.set(JavaFxWorkbenchDialogs.create(WorkbenchFeedback.DialogSpec.destructiveConfirmation(
+                        "Discard changes?", "The current Project has unsaved changes."), owner.get()));
+
+                shown.get().show();
+
+                assertSame(cancelButton(shown.get()), shown.get().getDialogPane().getScene().getFocusOwner());
+            });
+            FxTestToolkit.runOnFxThread(() -> assertSame(cancelButton(shown.get()),
+                    shown.get().getDialogPane().getScene().getFocusOwner()));
+        } finally {
+            FxTestToolkit.runOnFxThread(() -> {
+                if (shown.get() != null)
+                    shown.get().close();
+                if (owner.get() != null)
+                    owner.get().close();
+            });
+        }
+    }
+
+    /** Looks up the typed Cancel button of a created dialog. */
+    private static Button cancelButton(Dialog<WorkbenchFeedback.DialogAction> dialog) {
+        return (Button) dialog.getDialogPane().lookupButton(
+                JavaFxWorkbenchDialogs.buttonType(WorkbenchFeedback.DialogAction.CANCEL));
     }
 }

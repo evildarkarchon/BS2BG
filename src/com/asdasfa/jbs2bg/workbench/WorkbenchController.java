@@ -47,6 +47,7 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
+import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
@@ -566,6 +567,8 @@ public final class WorkbenchController {
     private Stage npcPortraitViewer;
     private Parent npcPortraitViewerRoot;
     private Path npcPortraitViewerPath;
+    /** Directory searched for NPC portraits; relative to the working directory, like the legacy application. */
+    private Path portraitDirectory = Path.of("images");
     private Popup npcFilterPopup;
     private Parent npcFilterPopupRoot;
     private String npcFilterExpandedColumn;
@@ -804,9 +807,30 @@ public final class WorkbenchController {
         renderFeedback(feedback.frame());
         if (workbenchRoot.getWidth() > 0.0)
             applyNavigation(navigation.resize(workbenchRoot.getWidth(), currentSemanticFocus()));
-        // attach happens before Stage.show in production, so initial focus is realized on the next JavaFX pulse.
-        Platform.runLater(() -> requestFocus(new WorkbenchNavigation.FocusTarget(
-                navigationFrame.activeArea(), WorkbenchNavigation.Landmark.PRIMARY_CONTENT)));
+        applyInitialFocusOnceShown();
+    }
+
+    /**
+     * Focuses the active Area's primary content once the Workbench is in a showing window. attach happens before
+     * Stage.show in production, so this is one of the two named focus deferrals (see "Production platform bans" in
+     * docs/build/workbench-platform.md): a one-shot WINDOW_SHOWN handler rather than a runLater, so focus is applied
+     * as the window appears and never races a later user focus move.
+     */
+    private void applyInitialFocusOnceShown() {
+        if (stage.isShowing()) {
+            requestFocus(new WorkbenchNavigation.FocusTarget(
+                    navigationFrame.activeArea(), WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+            return;
+        }
+        stage.addEventHandler(WindowEvent.WINDOW_SHOWN, new EventHandler<>() {
+            /** Applies initial focus for the first show only, then detaches itself. */
+            @Override
+            public void handle(WindowEvent event) {
+                stage.removeEventHandler(WindowEvent.WINDOW_SHOWN, this);
+                requestFocus(new WorkbenchNavigation.FocusTarget(
+                        navigationFrame.activeArea(), WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+            }
+        });
     }
 
     /**
@@ -1028,13 +1052,15 @@ public final class WorkbenchController {
             morphsFeature.cancelFillEmpty(offer.token());
             fillEmptyPopup = null;
             fillEmptyPopupRoot = null;
+            // Restored synchronously: this sets the main scene's focus owner, which JavaFX realizes whenever the
+            // window is active, so no deferral is needed even if another window holds OS focus right now.
             if (stage.isShowing())
-                Platform.runLater(this::restoreFillEmptyLauncherFocus);
+                restoreFillEmptyLauncherFocus();
         });
         Bounds anchor = fillEmptyNpcMorphAssignmentsButton.localToScreen(
                 fillEmptyNpcMorphAssignmentsButton.getBoundsInLocal());
         popup.show(stage, anchor.getMinX(), anchor.getMaxY());
-        Platform.runLater(choices::requestFocus);
+        choices.requestFocus();
     }
 
     /** Restores focus by semantic role when a responsive transition has hidden the former flyout launcher. */
@@ -1044,6 +1070,18 @@ public final class WorkbenchController {
         else
             requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
                     WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+    }
+
+    /**
+     * Reports whether {@code node} is its scene's focus owner. This is the Workbench's only focus check: unlike
+     * {@code Node.isFocused()}, it does not depend on the OS window being active, so a refill or async completion
+     * while another window has focus still preserves the focus owner that JavaFX realizes when the user returns.
+     *
+     * @param node node to test; may be detached
+     * @return true when the node is attached and owns its scene's focus
+     */
+    private static boolean ownsSceneFocus(Node node) {
+        return node.getScene() != null && node.getScene().getFocusOwner() == node;
     }
 
     /** An overlay or Area change can hide an ancestor while leaving the launcher's own visible bit unchanged. */
@@ -1082,7 +1120,7 @@ public final class WorkbenchController {
             return;
         }
         // The selected NPC is already named by the catalog and inspector; only the dedicated viewer names its image.
-        Optional<Path> file = NpcPortraitFiles.find(Path.of("images"), npc);
+        Optional<Path> file = NpcPortraitFiles.find(portraitDirectory, npc);
         if (file.isEmpty()) {
             String expected = "images/" + npc.getDisplayName() + " (" + npc.getEditorId() + ").jpg";
             String status = "No portrait found. Expected " + expected
@@ -1142,7 +1180,7 @@ public final class WorkbenchController {
             npcDatabasePortraitStatus.setAccessibleHelp("Select an NPC Database entry to inspect its portrait.");
             return;
         }
-        Optional<Path> file = NpcPortraitFiles.find(Path.of("images"), npc.getName(), npc.getEditorId());
+        Optional<Path> file = NpcPortraitFiles.find(portraitDirectory, npc.getName(), npc.getEditorId());
         if (file.isEmpty()) {
             String expected = "images/" + npc.getName() + " (" + npc.getEditorId() + ").jpg";
             String status = "No portrait found. Expected " + expected
@@ -1289,17 +1327,16 @@ public final class WorkbenchController {
                 npcPortraitViewerRoot = null;
                 npcPortraitViewerPath = null;
             }
-            if (stage.isShowing())
-                Platform.runLater(() -> {
-                    if (canRestoreFocus(launcher))
-                        launcher.requestFocus();
-                    else
-                        requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
-                                WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
-                });
+            if (stage.isShowing()) {
+                if (canRestoreFocus(launcher))
+                    launcher.requestFocus();
+                else
+                    requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
+                            WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+            }
         });
         viewer.show();
-        Platform.runLater(close::requestFocus);
+        close.requestFocus();
     }
 
     /** Configures the current assigned-relationship ListView, including identity selection dispatch. */
@@ -1705,19 +1742,18 @@ public final class WorkbenchController {
             npcFilterPopupRoot = null;
             npcFilterExpandedColumn = null;
             renderNpcFilterButtons(npcDatabaseFeature.frame());
-            if (stage.isShowing())
-                Platform.runLater(() -> {
-                    if (canRestoreFocus(launcher))
-                        launcher.requestFocus();
-                    else
-                        requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
-                                WorkbenchNavigation.Landmark.EDITOR));
-                });
+            if (stage.isShowing()) {
+                if (canRestoreFocus(launcher))
+                    launcher.requestFocus();
+                else
+                    requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
+                            WorkbenchNavigation.Landmark.EDITOR));
+            }
         });
         Bounds anchor = launcher.localToScreen(launcher.getBoundsInLocal());
         popup.show(stage, anchor.getMinX(), anchor.getMaxY());
         checklist.getSelectionModel().selectFirst();
-        Platform.runLater(checklist::requestFocus);
+        checklist.requestFocus();
     }
 
     /** Keeps each filter button's text, toggle state, and expanded/active description in sync with the feature. */
@@ -2187,11 +2223,9 @@ public final class WorkbenchController {
                     "Morphs validation", severity, message, WorkbenchFeedback.Disposition.FAILED)));
             if (intent instanceof MorphsFeature.Create) {
                 customMorphTargetNameInput.requestFocus();
-                Platform.runLater(customMorphTargetNameInput::requestFocus);
             } else if (intent instanceof MorphsFeature.CreateNpc) {
                 TextField invalidInput = firstInvalidNpcInput(update.frame().diagnostics());
                 invalidInput.requestFocus();
-                Platform.runLater(invalidInput::requestFocus);
             }
             if (update.outcomeKind() == MorphsFeature.OutcomeKind.FAILED)
                 showMorphsFailure(update);
@@ -2714,10 +2748,7 @@ public final class WorkbenchController {
         configureGangSlider(gangAllSlider, gangAllValue, TemplatesFeature.GangMode.ALL);
         configureGangSlider(gangMinimumSlider, gangMinimumValue, TemplatesFeature.GangMode.MINIMUM);
         configureGangSlider(gangMaximumSlider, gangMaximumValue, TemplatesFeature.GangMode.MAXIMUM);
-        goToSetSlidersButton.setOnAction(event -> firstSliderChoiceControl().ifPresent(node -> {
-            node.requestFocus();
-            Platform.runLater(node::requestFocus);
-        }));
+        goToSetSlidersButton.setOnAction(event -> firstSliderChoiceControl().ifPresent(Node::requestFocus));
     }
 
     /**
@@ -2781,7 +2812,6 @@ public final class WorkbenchController {
             if ((intent instanceof TemplatesFeature.CommitRename && update.accepted())
                     || intent instanceof TemplatesFeature.CancelRename) {
                 sliderPresetList.requestFocus();
-                Platform.runLater(sliderPresetList::requestFocus);
             }
         } finally {
             templatesOwnProjectDiagnostics = false;
@@ -2863,7 +2893,6 @@ public final class WorkbenchController {
                     WorkbenchFeedback.Disposition.FAILED)));
             if (intent instanceof TemplatesFeature.Create || intent instanceof TemplatesFeature.Duplicate) {
                 sliderPresetNameInput.requestFocus();
-                Platform.runLater(sliderPresetNameInput::requestFocus);
             }
             return;
         }
@@ -2969,8 +2998,6 @@ public final class WorkbenchController {
         if (!control.isVisible() || control.getParent() == null)
             return false;
         control.requestFocus();
-        if (!control.isFocused())
-            Platform.runLater(control::requestFocus);
         return true;
     }
 
@@ -2997,8 +3024,6 @@ public final class WorkbenchController {
         if (control == null || !control.isVisible() || control.getParent() == null)
             return false;
         control.requestFocus();
-        if (!control.isFocused())
-            Platform.runLater(control::requestFocus);
         return true;
     }
 
@@ -3357,7 +3382,7 @@ public final class WorkbenchController {
 
     /** Replaces only the assigned-relationship JavaFX node while retaining its label and semantic focus. */
     private void replaceEmptyAssignedMorphSliderPresetList() {
-        boolean restoreFocus = assignedMorphSliderPresetList.isFocused();
+        boolean restoreFocus = ownsSceneFocus(assignedMorphSliderPresetList);
         ListView<SliderPresetSnapshot> replacement = new ListView<>();
         replacement.setId("assignedMorphSliderPresetList");
         replacement.setAccessibleText("Assigned Slider Presets");
@@ -3374,13 +3399,12 @@ public final class WorkbenchController {
         if (restoreFocus) {
             // Relationship reconciliation may refill while the list owns focus; the UIA node swap must preserve it.
             replacement.requestFocus();
-            Platform.runLater(replacement::requestFocus);
         }
     }
 
     /** Replaces only the JavaFX adapter node after an empty-to-populated target transition. */
     private void replaceEmptyCustomMorphTargetList() {
-        boolean restoreFocus = customMorphTargetList.isFocused();
+        boolean restoreFocus = ownsSceneFocus(customMorphTargetList);
         ListView<CustomMorphTargetSnapshot> replacement = new ListView<>();
         replacement.setId("customMorphTargetList");
         replacement.setAccessibleText("Custom Morph Targets");
@@ -3396,7 +3420,6 @@ public final class WorkbenchController {
         if (restoreFocus) {
             // A filter clear can refill the list while it owns focus; the UIA node swap must retain that focus.
             replacement.requestFocus();
-            Platform.runLater(replacement::requestFocus);
         }
     }
 
@@ -3438,7 +3461,7 @@ public final class WorkbenchController {
 
     /** Replaces only the NPC catalog adapter node after an empty-to-populated transition. */
     private void replaceEmptyNpcMorphAssignmentList() {
-        boolean restoreFocus = npcMorphAssignmentList.isFocused();
+        boolean restoreFocus = ownsSceneFocus(npcMorphAssignmentList);
         ListView<NpcMorphAssignmentSnapshot> replacement = new ListView<>();
         replacement.setId("npcMorphAssignmentList");
         replacement.setAccessibleText("NPC Morph Assignments");
@@ -3454,7 +3477,6 @@ public final class WorkbenchController {
         if (restoreFocus) {
             // Refilling the catalog must keep keyboard focus on its fresh accessible node.
             replacement.requestFocus();
-            Platform.runLater(replacement::requestFocus);
         }
     }
 
@@ -3463,7 +3485,7 @@ public final class WorkbenchController {
      * virtualized accessibility subtree for the lifetime of that control.
      */
     private void replaceEmptySliderPresetList() {
-        boolean restoreFocus = sliderPresetList.isFocused();
+        boolean restoreFocus = ownsSceneFocus(sliderPresetList);
         ListView<SliderPresetSnapshot> replacement = new ListView<>();
         replacement.setId("sliderPresetList");
         replacement.setAccessibleText("Slider Presets");
@@ -3480,7 +3502,6 @@ public final class WorkbenchController {
         if (restoreFocus) {
             // Import can refill an empty list while it owns semantic focus; the UIA node swap must retain that focus.
             replacement.requestFocus();
-            Platform.runLater(replacement::requestFocus);
         }
     }
 
@@ -3569,6 +3590,16 @@ public final class WorkbenchController {
     /** @return current assigned Slider Preset ListView, including an accessibility-driven refill replacement */
     ListView<SliderPresetSnapshot> assignedMorphSliderPresetListNode() {
         return assignedMorphSliderPresetList;
+    }
+
+    /**
+     * Points portrait lookup at another directory, so package-local tests can supply a real portrait without
+     * writing into the working directory. Call it before the first NPC selection renders.
+     *
+     * @param directory directory holding {@code <name> (<editor ID>).<ext>} portrait files
+     */
+    void usePortraitDirectory(Path directory) {
+        portraitDirectory = Objects.requireNonNull(directory, "directory");
     }
 
     /**
@@ -3800,7 +3831,6 @@ public final class WorkbenchController {
                 if (navigationFrame.narrowMode())
                     applyNavigation(navigation.openPrimaryContent(currentSemanticFocus()));
                 sliderPresetFilter.requestFocus();
-                Platform.runLater(sliderPresetFilter::requestFocus);
                 event.consume();
                 return;
             }
@@ -3822,14 +3852,12 @@ public final class WorkbenchController {
             TextField filter = morphsFeature.frame().npcSelection().isPresent()
                     ? npcMorphAssignmentFilter : customMorphTargetFilter;
             filter.requestFocus();
-            Platform.runLater(filter::requestFocus);
             event.consume();
             return;
         }
         if (navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
                 && event.isControlDown() && event.getCode() == KeyCode.K) {
             npcNameFilterButton.requestFocus();
-            Platform.runLater(npcNameFilterButton::requestFocus);
             event.consume();
             return;
         }
@@ -4094,10 +4122,7 @@ public final class WorkbenchController {
                 case NPC_DATABASE -> npcCatalogTable;
             };
         }
-        Node resolved = node;
-        resolved.requestFocus();
-        if (!resolved.isFocused())
-            Platform.runLater(resolved::requestFocus);
+        node.requestFocus();
     }
 
     /**
@@ -4657,7 +4682,8 @@ public final class WorkbenchController {
         }
 
         /**
-         * Enters the one durable inline editor without refreshing or replacing the surrounding virtualized cells.
+         * Enters the one durable inline editor without refreshing or replacing the surrounding virtualized cells, and
+         * moves focus into it with its draft selected.
          */
         @Override
         public void startEdit() {
@@ -4665,9 +4691,24 @@ public final class WorkbenchController {
             SliderPresetSnapshot preset = getItem();
             if (preset == null)
                 return;
-            templatesFeature.frame().rename()
-                    .filter(value -> value.identity().equals(NameIdentity.of(preset.getName())))
-                    .ifPresent(this::renderRename);
+            Optional<TemplatesFeature.RenameState> rename = templatesFeature.frame().rename()
+                    .filter(value -> value.identity().equals(NameIdentity.of(preset.getName())));
+            if (rename.isEmpty())
+                return;
+            renderRename(rename.orElseThrow());
+            renameField.requestFocus();
+            renameField.selectAll();
+            // One of the two named focus deferrals (docs/build/workbench-platform.md, "Production platform bans"):
+            // ListView's own click handling runs after startEdit and can take focus back to the list. Re-apply focus
+            // once, and only while the list or this cell still owns it, so a control the user has moved to since
+            // keeps its focus.
+            ListView<SliderPresetSnapshot> list = getListView();
+            Platform.runLater(() -> {
+                if (isEditing() && (ownsSceneFocus(list) || ownsSceneFocus(this))) {
+                    renameField.requestFocus();
+                    renameField.selectAll();
+                }
+            });
         }
 
         /**
@@ -4727,12 +4768,6 @@ public final class WorkbenchController {
             setGraphic(renameEditor);
             setAccessibleText(accessibleName);
             setAccessibleHelp(renameField.getAccessibleHelp());
-            if (!renameField.isFocused()) {
-                Platform.runLater(() -> {
-                    renameField.requestFocus();
-                    renameField.selectAll();
-                });
-            }
         }
 
         /**
