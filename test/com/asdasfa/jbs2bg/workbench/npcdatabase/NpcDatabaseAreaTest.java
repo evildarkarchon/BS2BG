@@ -20,6 +20,7 @@ import com.asdasfa.jbs2bg.workbench.AreaPanes;
 import com.asdasfa.jbs2bg.workbench.AreaTest;
 import com.asdasfa.jbs2bg.workbench.NpcPortraitViewer;
 import com.asdasfa.jbs2bg.workbench.WorkbenchFeedback;
+import com.asdasfa.jbs2bg.workbench.WorkbenchNavigation;
 import com.asdasfa.jbs2bg.workbench.WorkbenchNavigation.Landmark;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 import com.asdasfa.jbs2bg.workbench.WorkbenchSatellites;
@@ -378,6 +379,66 @@ class NpcDatabaseAreaTest extends AreaTest<NpcDatabaseArea> {
 
             assertEquals(List.of("returnToMorphs(Beta01)"), shell.requests().subList(back, shell.requests().size()));
         });
+    }
+
+    /**
+     * A source-removal confirmation captures the focus target before its dialog and asks the shell to restore it once
+     * the dialog answers, whether the user declined or confirmed, before the feature acts on the answer.
+     */
+    @Test
+    void sourceRemovalConfirmationRestoresTheFocusItCapturedBeforeTheDialog() throws Exception {
+        Path first = temporaryDirectory.resolve("first-npcs.txt");
+        Path second = temporaryDirectory.resolve("second-npcs.txt");
+        Files.writeString(first, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        Files.writeString(second, "Skyrim.esm | Beta | Beta01 | NordRace | 00012346\n");
+        platform.respondNpcSourcesWith(Optional.of(List.of(first, second)));
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
+        FxTestToolkit.runOnFxThread(() -> {
+            host();
+            hosted().<Button>node("importNpcSourcesButton").fire();
+            ListView<?> sources = hosted().node("npcSourceList");
+            sources.getSelectionModel().selectFirst();
+            shell.focusTargetIs(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.NPC_DATABASE,
+                    Landmark.PRIMARY_CONTENT));
+            Button remove = hosted().node("removeNpcSourceButton");
+
+            int declined = shell.requests().size();
+            remove.fire();
+
+            assertEquals(List.of("currentFocus()", "requestFocus(NPC_DATABASE, PRIMARY_CONTENT)"),
+                    shell.requests().subList(declined, shell.requests().size()));
+            assertEquals(2, sources.getItems().size());
+
+            int confirmed = shell.requests().size();
+            remove.fire();
+
+            List<String> requests = shell.requests().subList(confirmed, shell.requests().size());
+            assertEquals(List.of("currentFocus()", "requestFocus(NPC_DATABASE, PRIMARY_CONTENT)"),
+                    requests.subList(0, 2), "focus is restored before the removal is reported");
+            assertEquals(1, sources.getItems().size());
+        });
+    }
+
+    /**
+     * Opening the narrow inspector overlay scrolls the inspector to the top at once, and again after the overlay's
+     * layout, which can restore the old position.
+     */
+    @Test
+    void inspectorScrollResetsNowAndAgainAfterTheOverlayLaysOut() throws Exception {
+        FxTestToolkit.runOnFxThread(() -> {
+            NpcDatabaseArea area = host().module();
+            ScrollPane inspector = hosted().node("npcDatabaseInspectorScroll");
+            inspector.setVvalue(1.0);
+
+            area.resetInspectorScroll();
+
+            assertEquals(0.0, inspector.getVvalue(), "reset before the overlay lays out");
+            // Stands in for the overlay's layout restoring the old position after the call.
+            inspector.setVvalue(1.0);
+        });
+        FxTestToolkit.runOnFxThread(() -> assertEquals(0.0,
+                hosted().<ScrollPane>node("npcDatabaseInspectorScroll").getVvalue(), "reset again after layout"));
     }
 
     /**
