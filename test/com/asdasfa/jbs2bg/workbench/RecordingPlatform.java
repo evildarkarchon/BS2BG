@@ -10,7 +10,7 @@ import javafx.stage.Stage;
 
 /**
  * Test adapter for modal platform effects; responses are consumed in user-interaction order. Shared by the whole
- * Workbench tests and the {@link AreaTest} fixture, so its scripting methods are public.
+ * Workbench tests and the {@link ModuleTest} fixture, so its scripting methods are public.
  */
 public final class RecordingPlatform implements WorkbenchPlatform {
     private final Deque<WorkbenchProjectFlow.Response> responses = new ArrayDeque<>();
@@ -97,6 +97,15 @@ public final class RecordingPlatform implements WorkbenchPlatform {
     public boolean copyOutputText(String text) {
         clipboardTexts.add(text);
         return true;
+    }
+
+    /**
+     * Lists the clipboard copies for module tests outside this package; same-package tests read the field.
+     *
+     * @return every copied text so far, oldest first
+     */
+    public List<String> clipboardTexts() {
+        return List.copyOf(clipboardTexts);
     }
 
     /** Returns the next scripted complete-batch directory. */

@@ -19,6 +19,7 @@ import com.asdasfa.jbs2bg.workbench.WorkbenchArea;
 import com.asdasfa.jbs2bg.workbench.WorkbenchController;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 import com.asdasfa.jbs2bg.workbench.WorkbenchTestEnvironment;
+import com.asdasfa.jbs2bg.workbench.output.OutputDrawer;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsArea;
 
 import javafx.fxml.FXML;
@@ -162,14 +163,37 @@ class FxmlGraphLoadingTest {
     }
 
     /**
+     * The Output drawer graph, which is not an Area, loads through the shell with its constructor-injected
+     * controller and every {@code @FXML} field injected (#150).
+     */
+    @Test
+    void outputDrawerGraphLoadsThroughTheShellWithItsController() throws Exception {
+        WorkbenchTestEnvironment fixture = WorkbenchTestEnvironment.initialized(temporaryDirectory);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture.newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = load("workbench.fxml");
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, fixture.environment());
+
+            OutputDrawer drawer = LoadedWorkbench.outputDrawer(loader);
+            assertNotNull(drawer, "the shell must load the Output drawer graph");
+            assertEveryFxmlFieldInjected(drawer);
+            stage.close();
+        });
+    }
+
+    /**
      * The Workbench root graph and the Area graphs it loads are the only FXML on disk, and each is served from the
      * build artifact.
      */
     @Test
     void everyFxmlGraphOnDiskIsServedFromTheClasspath() throws IOException {
         List<String> graphs = fxmlFiles("");
-        assertEquals(List.of("workbench.fxml", "workbench/settings/settings-area.fxml"), graphs,
-                "only the Workbench graph and its Area graphs may ship");
+        assertEquals(List.of("workbench.fxml", "workbench/output/output-drawer.fxml",
+                        "workbench/settings/settings-area.fxml"), graphs,
+                "only the Workbench graph, its Area graphs and the Output drawer graph may ship");
         assertTrue(graphs.contains("workbench.fxml"), "the Workbench must be the packaged root graph");
         assertFalse(graphs.contains("main.fxml"), "the replaced legacy root graph must not ship");
         assertFalse(graphs.contains("popup_bosview.fxml"), "the replaced BoS popup must not ship");

@@ -41,6 +41,8 @@ import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseFeature;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseImporter;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
+import com.asdasfa.jbs2bg.workbench.output.OutputDrawer;
+import com.asdasfa.jbs2bg.workbench.output.OutputDrawerParts;
 import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsArea;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
@@ -71,8 +73,6 @@ import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Slider;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
@@ -133,8 +133,9 @@ public final class WorkbenchController {
     private MenuItem exitMenuItem;
     @FXML
     private Label areaTitle;
+    // The Area header row; the shell places the Output drawer's Generate button into it.
     @FXML
-    private Button generateOutputButton;
+    private HBox areaHeader;
     @FXML
     private Label projectStatusText;
     @FXML
@@ -455,34 +456,6 @@ public final class WorkbenchController {
     private Button showPrimaryOverlayButton;
     @FXML
     private Button showInspectorOverlayButton;
-    @FXML
-    private VBox outputDrawer;
-    @FXML
-    private Slider outputDrawerHeight;
-    @FXML
-    private Label outputFocusTarget;
-    @FXML
-    private TabPane outputTabs;
-    @FXML
-    private Tab templatesOutputTab;
-    @FXML
-    private Tab morphsOutputTab;
-    @FXML
-    private Tab bosOutputTab;
-    @FXML
-    private TextArea templatesOutputText;
-    @FXML
-    private TextArea morphsOutputText;
-    @FXML
-    private ComboBox<String> bosArtifactChoice;
-    @FXML
-    private TextArea bosOutputText;
-    @FXML
-    private Button copyOutputButton;
-    @FXML
-    private Button exportOutputButton;
-    @FXML
-    private Button exportSelectedBosButton;
     private WorkbenchNavigation.Frame navigationFrame = navigation.currentFrame();
     private WorkbenchProjectFlow projectFlow;
     private TemplatesFeature templatesFeature;
@@ -509,7 +482,6 @@ public final class WorkbenchController {
     private long renderedProjectSequence;
     private WorkbenchProjectFlow.Intent activeOperation;
     private JobCoordinator.Subscription jobSubscription;
-    private OutputFeature.Subscription outputSubscription;
     private long renderedTerminalAttemptId;
     private boolean closeAfterActiveJob;
     private SettingsCloseContinuation settingsCloseContinuation;
@@ -524,10 +496,13 @@ public final class WorkbenchController {
     private final Map<WorkbenchNavigation.Area, Map<String, Object>> areaNamespaces =
             new EnumMap<>(WorkbenchNavigation.Area.class);
     private SettingsArea settingsArea;
+    // The Output drawer module, loaded from its own FXML; it is not an Area, so it has its own small interface.
+    private OutputDrawer outputDrawer;
+    // The Output drawer FXML's fx:id namespace; read only by tests that drive the whole loaded Workbench.
+    private Map<String, Object> outputDrawerNamespace = Map.of();
     private boolean renderingTemplates;
     private boolean renderingMorphs;
     private boolean renderingNpcDatabase;
-    private boolean renderingOutput;
     private boolean templatesOwnProjectDiagnostics;
     private boolean morphsOwnProjectDiagnostics;
     private TextField activeRenameField;
@@ -755,7 +730,6 @@ public final class WorkbenchController {
         configureTemplates();
         configureMorphs();
         configureNpcDatabase();
-        configureOutput();
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
@@ -768,7 +742,6 @@ public final class WorkbenchController {
             }
         });
         jobSubscription = projectFlow.jobs().observe(this::renderJobFrame);
-        outputSubscription = outputFeature.observe(this::renderOutputUpdate);
         settingsArea.publishStartupEvidence();
         stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> {
             if (fillEmptyPopup != null)
@@ -778,7 +751,7 @@ public final class WorkbenchController {
             satellites.dismissAll();
             appearanceAdapter.close();
             jobSubscription.close();
-            outputSubscription.close();
+            outputDrawer.close();
         });
         renderedProjectSequence = projectFlow.frame().sequence();
         renderNavigation(navigationFrame);
@@ -1743,7 +1716,7 @@ public final class WorkbenchController {
      * Loads every extracted Area from its own FXML with constructor-injected collaborators, mounts its three panes
      * into this shell's landmark containers, and renders it against the current context. Each pane is inserted where
      * the Area's panes sat in the single Workbench FXML (Templates, Morphs, Settings, NPC Database), so the containers
-     * keep their child order.
+     * keep their child order. The Output drawer, which is not an Area, loads here too with the same shell port.
      */
     private void loadAreas() {
         ShellPort shell = new AreaShell();
@@ -1751,6 +1724,24 @@ public final class WorkbenchController {
         settingsArea = settings.area();
         mountArea(WorkbenchNavigation.Area.SETTINGS, settings,
                 npcDatabasePrimaryScroll, npcDatabaseEditorContent, npcDatabaseInspectorScroll);
+        mountOutputDrawer(OutputDrawer.load(outputFeature, pipeline, platform, shell, stage));
+    }
+
+    /**
+     * Places the Output drawer's two parts where they sat in the single Workbench FXML: the Generate button in the
+     * Area header just before the Project status, and the drawer last in the content stack, over the Area surface.
+     * The drawer becomes the Output landmark and renders the current context at once.
+     *
+     * @param loaded the loaded drawer and its namespace
+     */
+    private void mountOutputDrawer(OutputDrawer.Loaded loaded) {
+        outputDrawer = loaded.drawer();
+        outputDrawerNamespace = loaded.namespace();
+        OutputDrawerParts parts = outputDrawer.parts();
+        insertBefore(areaHeader, parts.getGenerateButton(), projectStatusText);
+        contentStack.getChildren().add(parts.getDrawer());
+        focusPolicy.landmark(parts.getDrawer(), WorkbenchNavigation.Landmark.OUTPUT);
+        outputDrawer.render(context);
     }
 
     /**
@@ -1796,130 +1787,21 @@ public final class WorkbenchController {
     }
 
     /**
+     * Exposes the Output drawer FXML's namespace to tests that look up its controls through the whole loaded
+     * Workbench.
+     *
+     * @return the drawer FXML's read-only {@code fx:id} namespace, or an empty map before the shell is attached
+     */
+    Map<String, Object> outputDrawerNamespace() {
+        return outputDrawerNamespace;
+    }
+
+    /**
      * @param area the Area to look up
      * @return the Area's module, or null while the Area still lives in this controller's own graph
      */
     private WorkbenchArea areaModule(WorkbenchNavigation.Area area) {
         return areaModules.get(area);
-    }
-
-    /** Connects Generate, Output tabs, and BoS identity selection to the JavaFX-independent Output feature. */
-    private void configureOutput() {
-        generateOutputButton.setOnAction(event -> dispatchOutput(new OutputFeature.Generate()));
-        copyOutputButton.setOnAction(event -> dispatchOutput(new OutputFeature.Copy()));
-        exportOutputButton.setOnAction(event -> dispatchOutput(new OutputFeature.Export()));
-        exportSelectedBosButton.setOnAction(event -> dispatchOutput(new OutputFeature.ExportSelected()));
-        outputTabs.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
-            if (renderingOutput || selected == null)
-                return;
-            OutputFeature.Tab tab;
-            if (selected == templatesOutputTab)
-                tab = OutputFeature.Tab.TEMPLATES;
-            else if (selected == morphsOutputTab)
-                tab = OutputFeature.Tab.MORPHS;
-            else if (selected == bosOutputTab)
-                tab = OutputFeature.Tab.BOS_JSON;
-            else
-                return;
-            dispatchOutput(new OutputFeature.SelectTab(tab));
-        });
-        bosArtifactChoice.setOnAction(event -> {
-            if (!renderingOutput && bosArtifactChoice.getValue() != null)
-                dispatchOutput(new OutputFeature.SelectBosArtifact(bosArtifactChoice.getValue()));
-        });
-        renderOutput(outputFeature.frame());
-    }
-
-    /** Dispatches one Output task and renders synchronous selection updates; Generate completes via observation. */
-    private void dispatchOutput(OutputFeature.Intent intent) {
-        if (intent instanceof OutputFeature.Generate && !context.settingsLiveAvailable()) {
-            // Keyboard generation bypasses the disabled button, so enforce the same Settings prerequisite here.
-            return;
-        }
-        pipeline.dispatch(outputFeature, DispatchPipeline.Callbacks.of(
-                update -> renderOutput(update.frame()),
-                effect -> {
-                    applyOutputEffect(effect);
-                    return DispatchPipeline.Realization.done();
-                },
-                outcome -> {
-                    // Output reports through its observed job publications and applyOutputEffect, not per intent.
-                }), Objects.requireNonNull(intent, "intent"));
-    }
-
-    /** Applies one committed Output publication and consumes its optional drawer reveal exactly once. */
-    private void renderOutputUpdate(OutputFeature.Update update) {
-        renderOutput(Objects.requireNonNull(update, "update").frame());
-        update.effect().ifPresent(this::applyOutputEffect);
-    }
-
-    /** Realizes one typed Output platform or navigation effect without reading preview-control state. */
-    private void applyOutputEffect(OutputFeature.Effect effect) {
-        switch (Objects.requireNonNull(effect, "effect")) {
-            case OutputFeature.RevealDrawer ignored -> applyNavigation(navigation.revealOutput());
-            case OutputFeature.CopyToClipboard copy -> publishCopyOutcome(copy,
-                    platform.copyOutputText(copy.text()));
-            case OutputFeature.ChooseExportDirectory chooser -> renderOutput(
-                    outputFeature.completeExport(chooser.token(), platform.chooseOutputDirectory(stage)).frame());
-            case OutputFeature.ChooseExportFile chooser -> renderOutput(outputFeature.completeSelectedExport(
-                    chooser.token(), platform.chooseOutputFile(chooser.suggestedFileName(), stage)).frame());
-        }
-    }
-
-    /** Publishes non-modal copy success or failure through the Workbench InfoBar and durable Activity path. */
-    private void publishCopyOutcome(OutputFeature.CopyToClipboard copy, boolean copied) {
-        WorkbenchFeedback.Notification notification = copied
-                ? new WorkbenchFeedback.Notification("Copy Output", WorkbenchFeedback.Severity.SUCCESS,
-                copy.artifactName() + " copied to the clipboard.", WorkbenchFeedback.Disposition.COMPLETED)
-                : new WorkbenchFeedback.Notification("Copy Output", WorkbenchFeedback.Severity.FAILURE,
-                copy.artifactName() + " could not be copied to the clipboard.",
-                WorkbenchFeedback.Disposition.FAILED);
-        renderFeedback(feedback.publish(notification));
-    }
-
-    /**
-     * Renders accepted generated bytes and feature-owned tab/BoS identity without listener command loops. This is the
-     * only writer of Generate, whose job and live-Settings prerequisites come from the shell's context.
-     */
-    private void renderOutput(OutputFeature.Frame frame) {
-        renderingOutput = true;
-        try {
-            String emptyText = frame.displayedText();
-            frame.generatedOutput().ifPresentOrElse(output -> {
-                templatesOutputText.setText(output.getTemplatesText());
-                morphsOutputText.setText(output.getMorphsText());
-                UiaListHelper.setAllIfChanged(bosArtifactChoice.getItems(), frame.bosArtifactNames());
-                bosArtifactChoice.setValue(frame.selectedBosArtifact().orElse(null));
-                bosOutputText.setText(frame.selectedBosText());
-            }, () -> {
-                templatesOutputText.setText(emptyText);
-                morphsOutputText.setText(emptyText);
-                UiaListHelper.setAllIfChanged(bosArtifactChoice.getItems(), List.of());
-                bosArtifactChoice.setValue(null);
-                bosOutputText.setText(emptyText);
-            });
-            outputTabs.getSelectionModel().select(switch (frame.selectedTab()) {
-                case TEMPLATES -> templatesOutputTab;
-                case MORPHS -> morphsOutputTab;
-                case BOS_JSON -> bosOutputTab;
-            });
-            bosArtifactChoice.setDisable(frame.bosArtifactNames().isEmpty());
-            boolean accepted = frame.freshness() == OutputFeature.Freshness.FRESH;
-            boolean jobBlocked = context.anyJobActive();
-            generateOutputButton.setDisable(jobBlocked || !context.settingsLiveAvailable());
-            copyOutputButton.setDisable(!accepted || frame.displayedArtifact().isEmpty());
-            exportOutputButton.setDisable(!accepted || jobBlocked);
-            exportSelectedBosButton.setDisable(!accepted || jobBlocked
-                    || frame.selectedTab() != OutputFeature.Tab.BOS_JSON || frame.displayedArtifact().isEmpty());
-            String freshness = switch (frame.freshness()) {
-                case EMPTY -> "No generated Output is available.";
-                case FRESH -> "Generated Output matches the current Project and Settings.";
-                case INVALIDATED -> "Project changed—Generate again.";
-            };
-            outputTabs.setAccessibleHelp(freshness);
-        } finally {
-            renderingOutput = false;
-        }
     }
 
     /**
@@ -2073,8 +1955,8 @@ public final class WorkbenchController {
     }
 
     /**
-     * The shell side of the {@link ShellPort}: Areas reach shell-owned work (feedback, the Settings job runner, the
-     * close continuation) and other Areas' refreshes only through these requests.
+     * The shell side of the {@link ShellPort}: Areas and the Output drawer reach shell-owned work (feedback, the
+     * Settings job runner, the close continuation, navigation) and other Areas' refreshes only through these requests.
      */
     private final class AreaShell implements ShellPort {
         /** Applies an Area-worded publication to the one feedback model and renders the frame it returns. */
@@ -2104,7 +1986,7 @@ public final class WorkbenchController {
         /** Re-renders Output against its refreshed generation settings. */
         @Override
         public void generationSettingsChanged() {
-            renderOutput(outputFeature.refreshGenerationSettings().frame());
+            outputDrawer.refreshGenerationSettings();
         }
 
         /**
@@ -2116,9 +1998,15 @@ public final class WorkbenchController {
             if (projectFlow.jobs().frame().shutdownRequested())
                 settingsRefreshDeferred = true;
             else if (!pair)
-                renderOutput(outputFeature.refreshGenerationSettings().frame());
+                outputDrawer.refreshGenerationSettings();
             else
                 refreshPublishedSettings();
+        }
+
+        /** Reveals Output through navigation; the automatic reveal carries no focus effect. */
+        @Override
+        public void revealOutput() {
+            applyNavigation(navigation.revealOutput());
         }
     }
 
@@ -2161,7 +2049,7 @@ public final class WorkbenchController {
         renderedProjectSequence = projectFrame.sequence();
         render(projectFrame);
         renderTemplates(templatesFeature.refreshSettings().frame());
-        renderOutput(outputFeature.refreshGenerationSettings().frame());
+        outputDrawer.refreshGenerationSettings();
     }
 
     /**
@@ -2973,18 +2861,16 @@ public final class WorkbenchController {
     }
 
     /**
-     * Clips the drawer to Workbench content and maps its public Slider value to drawer height.
+     * Clips the drawer to Workbench content and lets the drawer fit its height range to the content height; the
+     * drawer maps its own Slider value to its height.
      */
     private void configureDrawerGeometry() {
         Rectangle clip = new Rectangle();
         clip.widthProperty().bind(contentStack.widthProperty());
         clip.heightProperty().bind(contentStack.heightProperty());
         contentStack.setClip(clip);
-        outputDrawerHeight.valueProperty().addListener((observable, oldValue, newValue) ->
-                applyDrawerHeight(newValue.doubleValue()));
-        applyDrawerHeight(outputDrawerHeight.getValue());
         contentStack.heightProperty().addListener((observable, oldHeight, newHeight) ->
-                updateDrawerMaximum(newHeight.doubleValue()));
+                outputDrawer.fitContentHeight(newHeight.doubleValue()));
     }
 
     /**
@@ -3108,36 +2994,16 @@ public final class WorkbenchController {
     }
 
     /**
-     * Pins the bottom-aligned resizable VBox to the user-selected drawer height.
-     */
-    private void applyDrawerHeight(double height) {
-        outputDrawer.setPrefHeight(height);
-        outputDrawer.setMaxHeight(height);
-    }
-
-    /**
-     * Keeps the drawer proportional at small client heights while retaining its accepted keyboard resize range.
-     */
-    private void updateDrawerMaximum(double contentHeight) {
-        if (contentHeight <= 0.0)
-            return;
-        double maximum = Math.max(outputDrawerHeight.getMin(), contentHeight * 0.65);
-        outputDrawerHeight.setMax(maximum);
-        if (outputDrawerHeight.getValue() > maximum)
-            outputDrawerHeight.setValue(maximum);
-    }
-
-    /**
      * Translates one accepted key gesture into a typed navigation transition.
      */
     private void handleNavigationKey(KeyEvent event) {
         if (event.isControlDown() && event.getCode() == KeyCode.G) {
-            dispatchOutput(new OutputFeature.Generate());
+            outputDrawer.dispatch(new OutputFeature.Generate());
             event.consume();
             return;
         }
         if (event.isControlDown() && event.getCode() == KeyCode.E) {
-            dispatchOutput(new OutputFeature.Export());
+            outputDrawer.dispatch(new OutputFeature.Export());
             event.consume();
             return;
         }
@@ -3323,10 +3189,7 @@ public final class WorkbenchController {
         showInspectorOverlayButton.setVisible(frame.narrowMode());
 
         renderResponsivePanes(frame);
-        outputDrawer.setManaged(frame.outputDrawerVisible());
-        outputDrawer.setVisible(frame.outputDrawerVisible());
-        if (frame.outputDrawerVisible())
-            outputDrawer.toFront();
+        outputDrawer.reveal(frame.outputDrawerVisible());
     }
 
     /** Shows or hides one Area module's three panes together; a hidden pane also leaves its container's layout. */
@@ -3370,7 +3233,8 @@ public final class WorkbenchController {
      * classifies into its nearest registered ancestor; anything outside them (the rail, the Area header, the
      * Workbench notification and Project diagnostics) is on the rail. The launchers are registered as their own
      * landmarks, and Morphs' Add NPCs launcher is the one registration inside an Area pane: it keeps its distinct
-     * NPC_DATABASE_LAUNCHER token so Back to Morphs can return to it.
+     * NPC_DATABASE_LAUNCHER token so Back to Morphs can return to it. The Output drawer comes from its own FXML, so
+     * it registers as the Output landmark when the shell mounts it.
      */
     private WorkbenchFocusPolicy createFocusPolicy() {
         return new WorkbenchFocusPolicy(stage, () -> navigationFrame.activeArea(),
@@ -3390,7 +3254,6 @@ public final class WorkbenchController {
                 .landmark(primaryPane, WorkbenchNavigation.Landmark.PRIMARY_CONTENT)
                 .landmark(editorPane, WorkbenchNavigation.Landmark.EDITOR)
                 .landmark(inspectorPane, WorkbenchNavigation.Landmark.INSPECTOR)
-                .landmark(outputDrawer, WorkbenchNavigation.Landmark.OUTPUT)
                 .landmark(activitySection, WorkbenchNavigation.Landmark.ACTIVITY)
                 .landmark(statusBar, WorkbenchNavigation.Landmark.STATUS)
                 .landmark(showPrimaryOverlayButton, WorkbenchNavigation.Landmark.PRIMARY_LAUNCHER)
@@ -3463,7 +3326,7 @@ public final class WorkbenchController {
                 case NPC_DATABASE -> npcInspectorName;
             };
             case OUTPUT_LAUNCHER -> outputAreaButton;
-            case OUTPUT -> outputFocusTarget;
+            case OUTPUT -> outputDrawer.focusNode(WorkbenchNavigation.Landmark.OUTPUT);
             case ACTIVITY -> activityList;
             case STATUS -> statusText;
         };
@@ -3666,7 +3529,7 @@ public final class WorkbenchController {
         renderMorphs(morphsFeature.frame());
         renderNpcDatabase(npcDatabaseFeature.frame());
         settingsArea.render(context);
-        renderOutput(outputFeature.frame());
+        outputDrawer.render(context);
     }
 
     /**

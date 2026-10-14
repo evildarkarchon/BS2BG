@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
@@ -1655,6 +1656,93 @@ class WorkbenchControllerTest {
         });
     }
 
+    /**
+     * The shell places the Output drawer's two parts where they sat in the single Workbench FXML (Generate in the Area
+     * header before the Project status, the drawer last in the content stack), declares no {@code @FXML} field for any
+     * drawer control, and shows the drawer only while navigation reveals it (#150).
+     */
+    @Test
+    void outputDrawerPartsMountIntoTheShellAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            assertEquals(Arrays.asList("areaTitle", "showPrimaryOverlayButton", "showInspectorOverlayButton", null,
+                    "generateOutputButton", "projectStatusText"), childIds(loader, "areaHeader"));
+            assertEquals(List.of("areaSurface", "outputDrawer"), childIds(loader, "contentStack"));
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields())
+                assertFalse(field.isAnnotationPresent(javafx.fxml.FXML.class)
+                                && controller.outputDrawerNamespace().containsKey(field.getName()),
+                        "the shell must not declare the drawer control " + field.getName());
+            VBox drawer = (VBox) LoadedWorkbench.node(loader, "outputDrawer");
+            assertFalse(drawer.isVisible() || drawer.isManaged());
+
+            ((ToggleButton) loader.getNamespace().get("outputAreaButton")).fire();
+
+            assertTrue(drawer.isVisible() && drawer.isManaged());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell's Ctrl+G and Ctrl+E reach the Output drawer: a successful Generate reveals the drawer through
+     * navigation, and neither the reveal nor the export moves focus out of the active Area (#150).
+     */
+    @Test
+    void outputShortcutsGenerateAndExportThroughTheDrawerWithoutMovingAreaFocus() throws Exception {
+        assertTrue(fixture().startup().isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // This small generated Project settles before prolonged cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
+        flow.apply(SliderPresetEdits.create("Shortcut UI"));
+        RecordingPlatform platform = new RecordingPlatform();
+        Path exportDirectory = Files.createDirectory(temporaryDirectory.resolve("shortcut-output"));
+        platform.respondOutputDirectoryWith(Optional.of(exportDirectory));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300, 720);
+            stage.setScene(scene);
+            controller.attach(flow, stage, platform, fixture().environment());
+            stage.show();
+            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
+            editor.requestFocus();
+
+            sendControlKey(root, KeyCode.G);
+            assertTrue(jobs.frame().active());
+            worker.runNext();
+
+            assertTrue(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
+            assertTrue(((ToggleButton) loader.getNamespace().get("outputAreaButton")).isSelected());
+            TextArea templates = (TextArea) LoadedWorkbench.node(loader, "templatesOutputText");
+            assertTrue(templates.getText().startsWith("Shortcut UI="));
+            assertSame(editor, scene.getFocusOwner());
+
+            sendControlKey(root, KeyCode.E);
+            assertTrue(jobs.frame().active());
+            worker.runNext();
+            assertArrayEquals(templates.getText().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    Files.readAllBytes(exportDirectory.resolve("templates.ini")));
+            assertSame(editor, scene.getFocusOwner());
+            stage.close();
+        });
+    }
+
     /** @return the {@code fx:id}s of one shell container's children, in order */
     private static List<String> childIds(FXMLLoader loader, String containerId) {
         return ((javafx.scene.layout.Pane) loader.getNamespace().get(containerId)).getChildren().stream()
@@ -1863,7 +1951,7 @@ class WorkbenchControllerTest {
             controller.attach(flow, stage, new RecordingPlatform(), fixture().withStartup(rejected).environment());
 
             assertTrue(((Button) loader.getNamespace().get("importBodySlideButton")).isDisabled());
-            assertTrue(((Button) loader.getNamespace().get("generateOutputButton")).isDisabled());
+            assertTrue(((Button) LoadedWorkbench.node(loader, "generateOutputButton")).isDisabled());
             @SuppressWarnings("unchecked")
             ListView<WorkbenchFeedback.ActivityRecord> activity =
                     (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
@@ -1951,9 +2039,9 @@ class WorkbenchControllerTest {
         return disabled.get();
     }
 
-    /** @return whether the named FXML button is disabled */
+    /** @return whether the named FXML button, from the shell or any module graph, is disabled */
     private static boolean isDisabled(FXMLLoader loader, String id) {
-        return ((Button) loader.getNamespace().get(id)).isDisabled();
+        return ((Button) LoadedWorkbench.node(loader, id)).isDisabled();
     }
 
     /**
@@ -3309,8 +3397,8 @@ class WorkbenchControllerTest {
             assertEquals("Morphs", ((Label) loader.getNamespace().get("areaTitle")).getText());
             assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
             assertTrue(((ToggleButton) loader.getNamespace().get("outputAreaButton")).isSelected());
-            VBox outputDrawer = (VBox) loader.getNamespace().get("outputDrawer");
-            Slider outputHeight = (Slider) loader.getNamespace().get("outputDrawerHeight");
+            VBox outputDrawer = (VBox) LoadedWorkbench.node(loader, "outputDrawer");
+            Slider outputHeight = (Slider) LoadedWorkbench.node(loader, "outputDrawerHeight");
             assertTrue(outputDrawer.isVisible());
             outputHeight.setValue(260.0);
             assertEquals(260.0, outputDrawer.getPrefHeight());
@@ -3318,7 +3406,7 @@ class WorkbenchControllerTest {
 
             sendControlKey(root, KeyCode.BACK_QUOTE);
             assertEquals("Morphs", ((Label) loader.getNamespace().get("areaTitle")).getText());
-            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
+            assertFalse(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
 
             ToggleButton outputLauncher = (ToggleButton) loader.getNamespace().get("outputAreaButton");
             outputLauncher.requestFocus();
@@ -3352,7 +3440,7 @@ class WorkbenchControllerTest {
                     (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
             Label editor = (Label) loader.getNamespace().get("morphTargetEditorFocusTarget");
             Label inspector = (Label) loader.getNamespace().get("morphTargetSelectionText");
-            Label output = (Label) loader.getNamespace().get("outputFocusTarget");
+            Label output = (Label) LoadedWorkbench.node(loader, "outputFocusTarget");
             assertSame(primary, scene.getFocusOwner());
 
             sendKey(root, KeyCode.F6);
@@ -3366,130 +3454,7 @@ class WorkbenchControllerTest {
 
             sendKey(root, KeyCode.ESCAPE);
             assertSame(inspector, scene.getFocusOwner());
-            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
-            stage.close();
-        });
-    }
-
-    /** Ctrl+G publishes all captured Output tabs through the central job without moving editor focus. */
-    @Test
-    void generateRendersReadOnlyOutputTabsWithoutStealingFocus() throws Exception {
-        Settings.InitializationResult initialized = fixture().startup();
-        assertTrue(initialized.isSuccessful());
-        ManualExecutor worker = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
-                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // This small generated Project settles before prolonged cancellation feedback is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected coordinator callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", fixture().newSession(), jobs);
-        flow.apply(SliderPresetEdits.create("Generated UI"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            Scene scene = new Scene(root, 1300, 720);
-            stage.setScene(scene);
-            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-            stage.show();
-
-            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
-            editor.requestFocus();
-            sendControlKey(root, KeyCode.G);
-
-            Button generate = (Button) loader.getNamespace().get("generateOutputButton");
-            assertTrue(jobs.frame().active());
-            assertTrue(generate.isDisabled());
-            worker.runNext();
-
-            assertTrue(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
-            TabPane tabs = (TabPane) loader.getNamespace().get("outputTabs");
-            TextArea templates = (TextArea) loader.getNamespace().get("templatesOutputText");
-            TextArea morphs = (TextArea) loader.getNamespace().get("morphsOutputText");
-            TextArea bos = (TextArea) loader.getNamespace().get("bosOutputText");
-            assertEquals(3, tabs.getTabs().size());
-            assertTrue(templates.getText().startsWith("Generated UI="));
-            assertEquals("", morphs.getText());
-            assertFalse(bos.getText().isEmpty());
-            for (TextArea output : List.of(templates, morphs, bos)) {
-                assertFalse(output.isEditable());
-                assertTrue(output.isFocusTraversable());
-            }
-            assertSame(editor, scene.getFocusOwner());
-            stage.close();
-        });
-    }
-
-    /** Output controls realize accepted copy and complete/selected export effects without reading editable UI state. */
-    @Test
-    void copyAndExportOutputUseThePlatformAdapterAndCentralJobPath() throws Exception {
-        Settings.InitializationResult initialized = fixture().startup();
-        assertTrue(initialized.isSuccessful());
-        ManualExecutor worker = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
-                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // These small export batches settle before prolonged cancellation feedback is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected coordinator callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", fixture().newSession(), jobs);
-        flow.apply(SliderPresetEdits.create("Platform Output"));
-        RecordingPlatform platform = new RecordingPlatform();
-        Path completeDirectory = Files.createDirectory(temporaryDirectory.resolve("complete-output"));
-        Path selectedFile = temporaryDirectory.resolve("selected.JSON");
-        platform.respondOutputDirectoryWith(Optional.of(completeDirectory));
-        platform.respondOutputFileWith(Optional.of(selectedFile));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            Scene scene = new Scene(root, 1300, 720);
-            stage.setScene(scene);
-            controller.attach(flow, stage, platform, fixture().environment());
-            stage.show();
-            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
-            editor.requestFocus();
-            ((Button) loader.getNamespace().get("generateOutputButton")).fire();
-            worker.runNext();
-
-            TextArea templates = (TextArea) loader.getNamespace().get("templatesOutputText");
-            Button copy = (Button) loader.getNamespace().get("copyOutputButton");
-            Button exportAll = (Button) loader.getNamespace().get("exportOutputButton");
-            assertFalse(copy.isDisabled());
-            assertFalse(exportAll.isDisabled());
-            copy.fire();
-            assertEquals(List.of(templates.getText()), platform.clipboardTexts);
-            assertEquals("templates.ini copied to the clipboard.",
-                    ((Label) loader.getNamespace().get("infoBarMessage")).getText());
-            assertSame(editor, scene.getFocusOwner());
-
-            sendControlKey(root, KeyCode.E);
-            assertTrue(jobs.frame().active());
-            assertTrue(exportAll.isDisabled());
-            worker.runNext();
-            assertArrayEquals(templates.getText().getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                    Files.readAllBytes(completeDirectory.resolve("templates.ini")));
-            assertSame(editor, scene.getFocusOwner());
-
-            TabPane tabs = (TabPane) loader.getNamespace().get("outputTabs");
-            tabs.getSelectionModel().select((javafx.scene.control.Tab) loader.getNamespace().get("bosOutputTab"));
-            Button selectedExport = (Button) loader.getNamespace().get("exportSelectedBosButton");
-            assertFalse(selectedExport.isDisabled());
-            String bos = ((TextArea) loader.getNamespace().get("bosOutputText")).getText();
-            selectedExport.fire();
-            worker.runNext();
-            assertArrayEquals(bos.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                    Files.readAllBytes(selectedFile));
-            assertSame(editor, scene.getFocusOwner());
+            assertFalse(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
             stage.close();
         });
     }
@@ -3532,9 +3497,9 @@ class WorkbenchControllerTest {
             create.fire();
             worker.runNext();
 
-            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
+            assertFalse(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
             assertEquals("Generate Project output to inspect it here.",
-                    ((TextArea) loader.getNamespace().get("templatesOutputText")).getText());
+                    ((TextArea) LoadedWorkbench.node(loader, "templatesOutputText")).getText());
             JobCoordinator.Attempt stale = jobs.frame().attempt().orElseThrow();
             assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, stale.lifecycle());
             assertEquals(List.of("STALE_RESULT"), stale.diagnostics().stream()
@@ -3577,9 +3542,9 @@ class WorkbenchControllerTest {
 
             assertEquals(JobCoordinator.Lifecycle.CANCELLED,
                     jobs.frame().attempt().orElseThrow().lifecycle());
-            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
+            assertFalse(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
             assertEquals("Generate Project output to inspect it here.",
-                    ((TextArea) loader.getNamespace().get("templatesOutputText")).getText());
+                    ((TextArea) LoadedWorkbench.node(loader, "templatesOutputText")).getText());
             @SuppressWarnings("unchecked")
             ListView<WorkbenchFeedback.ActivityRecord> activity =
                     (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");

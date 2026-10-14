@@ -5,12 +5,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.asdasfa.jbs2bg.workbench.output.OutputDrawer;
+
 import javafx.fxml.FXMLLoader;
 
 /**
  * Looks controls up in a whole loaded Workbench: the shell's {@code workbench.fxml} namespace plus the namespace of
- * every Area FXML the attached shell loaded. Tests that drive cross-Area journeys through the full Workbench use it
- * for controls that moved into an Area's own FXML.
+ * every Area FXML and the Output drawer FXML the attached shell loaded. Tests that drive cross-Area journeys through
+ * the full Workbench use it for controls that moved into a module's own FXML.
  */
 public final class LoadedWorkbench {
 
@@ -47,8 +49,20 @@ public final class LoadedWorkbench {
     }
 
     /**
-     * Merges the shell namespace with every loaded Area namespace. Shell entries win a key collision; only FXMLLoader's
-     * own keys (such as {@code controller}) and each Area root's {@code panes} id can collide.
+     * Returns the Output drawer controller the attached shell loaded from its own FXML.
+     *
+     * @param loader the loader of {@code workbench.fxml}, whose controller is attached
+     * @return the loaded drawer controller, or null before the shell is attached
+     */
+    public static OutputDrawer outputDrawer(FXMLLoader loader) {
+        WorkbenchController controller = loader.getController();
+        return (OutputDrawer) controller.outputDrawerNamespace().get(FXMLLoader.CONTROLLER_KEYWORD);
+    }
+
+    /**
+     * Merges the shell namespace with every loaded Area namespace and the Output drawer's. Shell entries win a key
+     * collision; only FXMLLoader's own keys (such as {@code controller}) and each module root's id ({@code panes},
+     * {@code parts}) can collide.
      *
      * @param loader the loader of {@code workbench.fxml}, whose controller is attached
      * @return a new merged map
@@ -58,6 +72,7 @@ public final class LoadedWorkbench {
         WorkbenchController controller = loader.getController();
         for (WorkbenchNavigation.Area area : WorkbenchNavigation.Area.values())
             controller.areaNamespace(area).forEach(merged::putIfAbsent);
+        controller.outputDrawerNamespace().forEach(merged::putIfAbsent);
         return merged;
     }
 }

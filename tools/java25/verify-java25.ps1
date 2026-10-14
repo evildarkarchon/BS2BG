@@ -241,7 +241,8 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.workbench.settings.SettingsFeatureTest',
     'com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunnerTest',
     'com.asdasfa.jbs2bg.workbench.settings.SettingsAreaTest',
-    'com.asdasfa.jbs2bg.workbench.output.OutputFeatureTest'
+    'com.asdasfa.jbs2bg.workbench.output.OutputFeatureTest',
+    'com.asdasfa.jbs2bg.workbench.output.OutputDrawerTest'
 )
 
 if (-not $SkipMaven) {

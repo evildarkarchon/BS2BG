@@ -7,9 +7,10 @@ import java.util.Optional;
 import javafx.stage.Stage;
 
 /**
- * Platform seam for modal chooser/confirmation effects and final window closure.
+ * Platform seam for modal chooser/confirmation effects and final window closure. It is public because the shell
+ * constructor-injects it into modules in the feature subpackages (first the Output drawer).
  */
-interface WorkbenchPlatform {
+public interface WorkbenchPlatform {
 
     /**
      * Copies accepted Output text through the native clipboard boundary.
