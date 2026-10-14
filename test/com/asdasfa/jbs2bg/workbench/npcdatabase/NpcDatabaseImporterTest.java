@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg.workbench.npcdatabase;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,7 +17,9 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.testing.ManualExecutor;
+import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 /** Verifies the NPC Database import through its central job admission seam. */
@@ -46,7 +49,9 @@ class NpcDatabaseImporterTest {
         Files.writeString(second, "Master.esm | Beta | Second | NordRace | 000002\n");
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
-        NpcDatabaseFeature feature = new NpcDatabaseFeature();
+        NpcDatabaseFeature feature = new NpcDatabaseFeature(new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings())), Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"),
+                ZoneOffset.UTC));
         List<NpcDatabaseFeature.Frame> publications = new ArrayList<>();
         boolean[] cancellationRequested = {false};
         jobs.observe(frame -> frame.attempt().ifPresent(attempt -> {
