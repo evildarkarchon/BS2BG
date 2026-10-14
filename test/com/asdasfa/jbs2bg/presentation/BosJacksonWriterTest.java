@@ -14,7 +14,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
@@ -68,35 +70,31 @@ final class BosJacksonWriterTest {
      * multiplier, float, half-up rounding, zero, and exponent behavior.
      */
     @Test
-    void calculatedValueGoldenIsTheDefensivelyOwnedProductionArtifact() throws Exception {
+    void calculatedValueGoldenIsTheDefensivelyOwnedProductionArtifact(@TempDir Path directory) throws Exception {
         Path golden = Path.of("test-resources", "json-oracles", "bos", "calculated.json");
         byte[] expected = Files.readAllBytes(golden);
         Map<String, Float> multipliers = Map.of("Breasts", Float.valueOf(1.25f),
                 "OracleExponent", Float.valueOf(1.0E8f));
-        SettingsTestSupport.installStandardOutput(multipliers, List.of("Breasts"));
-        try {
-            ProjectSession session = ProjectSessions.create();
-            session.newProject();
-            session.apply(SliderPresetEdits.create("Alpha"));
-            session.apply(SliderPresetEdits.setSliderChoice("Alpha", new SliderChoiceSnapshot(
-                    "Breasts", true, Integer.valueOf(10), Integer.valueOf(100),
-                    10, 100, 100, 100, false)));
-            session.apply(SliderPresetEdits.setSliderChoice("Alpha", new SliderChoiceSnapshot(
-                    "OracleExponent", true, Integer.valueOf(25), Integer.valueOf(100),
-                    25, 100, 100, 100, false)));
+        Settings settings = SettingsTestSupport.installStandardOutput(directory, multipliers, List.of("Breasts"));
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Alpha"));
+        session.apply(SliderPresetEdits.setSliderChoice("Alpha", new SliderChoiceSnapshot(
+                "Breasts", true, Integer.valueOf(10), Integer.valueOf(100),
+                10, 100, 100, 100, false)));
+        session.apply(SliderPresetEdits.setSliderChoice("Alpha", new SliderChoiceSnapshot(
+                "OracleExponent", true, Integer.valueOf(25), Integer.valueOf(100),
+                25, 100, 100, 100, false)));
 
-            BosJsonArtifact artifact = ProjectOutputFormatter.generate(session.getSnapshot(), false)
-                    .getBosJsonArtifacts().getFirst();
-            byte[] exposed = artifact.getBytes();
-            exposed[0] = 'x';
+        BosJsonArtifact artifact = ProjectOutputFormatter.generate(session.getSnapshot(), settings.snapshot(), false)
+                .getBosJsonArtifacts().getFirst();
+        byte[] exposed = artifact.getBytes();
+        exposed[0] = 'x';
 
-            assertEquals("Alpha", artifact.getSliderPresetName());
-            assertEquals("Alpha.json", artifact.getFileName());
-            assertEquals(new String(expected, StandardCharsets.UTF_8), artifact.getText());
-            assertArrayEquals(expected, artifact.getBytes());
-        } finally {
-            SettingsTestSupport.restoreRepositorySettings();
-        }
+        assertEquals("Alpha", artifact.getSliderPresetName());
+        assertEquals("Alpha.json", artifact.getFileName());
+        assertEquals(new String(expected, StandardCharsets.UTF_8), artifact.getText());
+        assertArrayEquals(expected, artifact.getBytes());
     }
 
     /**
@@ -116,58 +114,52 @@ final class BosJacksonWriterTest {
      * Production reports non-finite calculations only after retaining every attempted filename mapping.
      */
     @Test
-    void rejectsNonFiniteProductionValuesWithCompleteMappingsAndDiagnostics() {
-        SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());
-        try {
-            ProjectSession session = ProjectSessions.create();
-            session.newProject();
-            session.apply(SliderPresetEdits.create("Broken"));
-            session.apply(SliderPresetEdits.setSliderChoice("Broken", new SliderChoiceSnapshot(
-                    "Overflow", true, Integer.valueOf(10), Integer.valueOf(200),
-                    10, 200, 100, 100, false)));
-            session.apply(SliderPresetEdits.create("Safe"));
+    void rejectsNonFiniteProductionValuesWithCompleteMappingsAndDiagnostics(@TempDir Path directory) {
+        Settings settings = SettingsTestSupport.installStandardOutput(directory, Map.of("Overflow",
+                Float.valueOf(Float.MAX_VALUE)), List.of());
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Broken"));
+        session.apply(SliderPresetEdits.setSliderChoice("Broken", new SliderChoiceSnapshot(
+                "Overflow", true, Integer.valueOf(10), Integer.valueOf(200),
+                10, 200, 100, 100, false)));
+        session.apply(SliderPresetEdits.create("Safe"));
 
-            BosOutputException exception = assertThrows(BosOutputException.class,
-                    () -> ProjectOutputFormatter.generate(session.getSnapshot(), false));
+        BosOutputException exception = assertThrows(BosOutputException.class,
+                () -> ProjectOutputFormatter.generate(session.getSnapshot(), settings.snapshot(), false));
 
-            assertEquals(2, exception.getFileNameMappings().size());
-            assertEquals("Broken.json", exception.getFileNameMappings().getFirst().getFileName().orElseThrow());
-            assertEquals("Safe.json", exception.getFileNameMappings().get(1).getFileName().orElseThrow());
-            assertEquals(1, exception.getDiagnostics().size());
-            assertEquals("BOS_VALUE_NON_FINITE", exception.getDiagnostics().getFirst().getCode());
-            assertEquals("Broken", exception.getDiagnostics().getFirst().getSliderPresetName());
-        } finally {
-            SettingsTestSupport.restoreRepositorySettings();
-        }
+        assertEquals(2, exception.getFileNameMappings().size());
+        assertEquals("Broken.json", exception.getFileNameMappings().getFirst().getFileName().orElseThrow());
+        assertEquals("Safe.json", exception.getFileNameMappings().get(1).getFileName().orElseThrow());
+        assertEquals(1, exception.getDiagnostics().size());
+        assertEquals("BOS_VALUE_NON_FINITE", exception.getDiagnostics().getFirst().getCode());
+        assertEquals("Broken", exception.getDiagnostics().getFirst().getSliderPresetName());
     }
 
     /**
      * Filename and finite-input overflow failures are reported together before publishing.
      */
     @Test
-    void reportsFilenameAndNonFiniteFailuresTogetherBeforePublishing() {
-        SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());
-        try {
-            ProjectSession session = ProjectSessions.create();
-            session.newProject();
-            session.apply(SliderPresetEdits.create("Broken\uD800"));
-            session.apply(SliderPresetEdits.create("Infinite Value"));
-            session.apply(SliderPresetEdits.setSliderChoice("Infinite Value", new SliderChoiceSnapshot(
-                    "Overflow", true, Integer.valueOf(10), Integer.valueOf(200),
-                    10, 200, 100, 100, false)));
+    void reportsFilenameAndNonFiniteFailuresTogetherBeforePublishing(@TempDir Path directory) {
+        Settings settings = SettingsTestSupport.installStandardOutput(directory, Map.of("Overflow",
+                Float.valueOf(Float.MAX_VALUE)), List.of());
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
+        session.newProject();
+        session.apply(SliderPresetEdits.create("Broken\uD800"));
+        session.apply(SliderPresetEdits.create("Infinite Value"));
+        session.apply(SliderPresetEdits.setSliderChoice("Infinite Value", new SliderChoiceSnapshot(
+                "Overflow", true, Integer.valueOf(10), Integer.valueOf(200),
+                10, 200, 100, 100, false)));
 
-            BosOutputException exception = assertThrows(BosOutputException.class,
-                    () -> ProjectOutputFormatter.generate(session.getSnapshot(), false));
+        BosOutputException exception = assertThrows(BosOutputException.class,
+                () -> ProjectOutputFormatter.generate(session.getSnapshot(), settings.snapshot(), false));
 
-            assertEquals(2, exception.getFileNameMappings().size());
-            assertTrue(exception.getFileNameMappings().getFirst().getFileName().isEmpty());
-            assertEquals("Infinite Value.json",
-                    exception.getFileNameMappings().get(1).getFileName().orElseThrow());
-            assertEquals(List.of("BOS_FILENAME_UNREPRESENTABLE", "BOS_VALUE_NON_FINITE"),
-                    exception.getDiagnostics().stream().map(BosOutputDiagnostic::getCode).toList());
-        } finally {
-            SettingsTestSupport.restoreRepositorySettings();
-        }
+        assertEquals(2, exception.getFileNameMappings().size());
+        assertTrue(exception.getFileNameMappings().getFirst().getFileName().isEmpty());
+        assertEquals("Infinite Value.json",
+                exception.getFileNameMappings().get(1).getFileName().orElseThrow());
+        assertEquals(List.of("BOS_FILENAME_UNREPRESENTABLE", "BOS_VALUE_NON_FINITE"),
+                exception.getDiagnostics().stream().map(BosOutputDiagnostic::getCode).toList());
     }
 
 }

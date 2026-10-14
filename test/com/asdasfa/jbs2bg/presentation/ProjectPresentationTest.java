@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg.presentation;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -44,7 +45,7 @@ class ProjectPresentationTest {
      * Creates a presentation read model from the canonical New Project outcome.
      */
     private static ProjectPresentation newPresentation() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectOutcome outcome = session.newProject();
         return new ProjectPresentation("jBS2BG", outcome.getSnapshot());
     }

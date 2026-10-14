@@ -47,6 +47,7 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
+import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
@@ -519,6 +520,8 @@ public final class WorkbenchController {
     private NpcDatabaseFeature npcDatabaseFeature;
     private NpcDatabaseImporter npcDatabaseImporter;
     private SettingsFeature settingsFeature;
+    // The one Settings store from the attach environment; features read it, only Settings effects publish to it.
+    private Settings settings;
     private OutputFeature outputFeature;
     private Stage stage;
     private WorkbenchPlatform platform;
@@ -566,6 +569,8 @@ public final class WorkbenchController {
     private Stage npcPortraitViewer;
     private Parent npcPortraitViewerRoot;
     private Path npcPortraitViewerPath;
+    /** Directory searched for NPC portraits; relative to the working directory, like the legacy application. */
+    private Path portraitDirectory = Path.of("images");
     private Popup npcFilterPopup;
     private Parent npcFilterPopupRoot;
     private String npcFilterExpandedColumn;
@@ -672,95 +677,55 @@ public final class WorkbenchController {
     }
 
     /**
-     * Attaches the loaded JavaFX graph with the exact Settings startup result so recovery and failures become visible
-     * Workbench evidence rather than being stranded in the composition root.
+     * Attaches the loaded JavaFX graph to the real JavaFX platform. The environment carries the exact Settings startup
+     * result so recovery and failures become visible Workbench evidence rather than being stranded in the
+     * composition root.
      *
-     * @param flow               authoritative Workbench Project flow
-     * @param ownerStage         application window that owns effects and focus
-     * @param settingsDirectory  profile directory owning Settings and appearance preferences
-     * @param settingsStartup    original paired Settings startup result
+     * @param flow        authoritative Workbench Project flow
+     * @param ownerStage  application window that owns effects and focus
+     * @param environment the one Settings store, its startup result, preferences directory, and migration policy
      * @throws NullPointerException when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
-    public void attach(WorkbenchProjectFlow flow, Stage ownerStage, Path settingsDirectory,
-                       Settings.InitializationResult settingsStartup) {
-        WorkbenchAppearanceStore store = new WorkbenchAppearanceStore(settingsDirectory);
-        WorkbenchAppearance.ThemeChoice initialChoice;
-        try {
-            initialChoice = store.load();
-        } catch (IOException exception) {
-            // A damaged or unreadable optional preference must not prevent the Workbench from starting safely.
-            initialChoice = WorkbenchAppearance.ThemeChoice.SYSTEM;
-        }
-        attach(flow, ownerStage, new JavaFxWorkbenchPlatform(), initialChoice, store::save,
-                settingsDirectory, settingsStartup, GenerationPreferencesStore.MigrationPolicy.MIGRATE);
+    public void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchEnvironment environment) {
+        attach(flow, ownerStage, new JavaFxWorkbenchPlatform(), environment);
     }
 
     /**
      * Attaches one platform adapter on the JavaFX Application Thread. The controller owns the Stage handlers until
-     * the flow publishes its final close effect; it cannot be attached again.
+     * the flow publishes its final close effect; it cannot be attached again. The theme choice is loaded from and
+     * saved to the environment's preferences directory.
      *
      * @param flow            authoritative window-scoped Project flow
      * @param ownerStage      Stage whose title, close request, choosers, and dialogs are owned by this controller
-     * @param platformAdapter native-effect adapter retained for the controller lifetime
-     * @throws NullPointerException  when an argument is null
-     * @throws IllegalStateException when this controller is already attached
-     */
-    void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter) {
-        attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
-            // Tests and embedded adapters intentionally keep theme selection in memory only.
-        }, Path.of("."), Settings.publishedState(),
-                GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
-    }
-
-    /**
-     * Test and embedded adapter seam that supplies isolated Settings persistence and startup evidence on the JavaFX
-     * Application Thread. The adapter and feature state remain owned until the Stage is hidden.
-     *
-     * @param flow authoritative window-scoped Project flow
-     * @param ownerStage Stage owning controls, focus, and platform effects
-     * @param platformAdapter native-effect adapter retained for the window lifetime
-     * @param settingsDirectory isolated directory owning Settings persistence
-     * @param settingsStartup startup Settings result rendered into the Settings feature and Activity
-     * @throws NullPointerException when an argument is null
-     * @throws IllegalStateException when this controller is already attached
-     */
-    void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
-                Path settingsDirectory, Settings.InitializationResult settingsStartup) {
-        attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
-            // Tests and embedded adapters intentionally keep theme selection in memory only.
-        }, settingsDirectory, settingsStartup,
-                GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
-    }
-
-    /**
-     * Attaches Project, platform, and profile appearance adapters through one window-lifetime initialization path.
-     *
-     * @param flow            authoritative window-scoped Project flow
-     * @param ownerStage      Stage that owns dialogs, focus, and the live appearance listener
      * @param platformAdapter native-effect adapter retained until the Stage is hidden
-     * @param initialChoice   persisted System, Light, or Dark choice
-     * @param themeSaver      profile persistence callback used after user selection
-     * @param settingsDirectory directory owning the paired Settings files
-     * @param settingsStartup original Settings startup result rendered as durable evidence
-     * @param migrationPolicy explicit production migration or embedded read-only fallback policy
+     * @param environment     the one Settings store, its startup result, preferences directory, and migration policy
      * @throws NullPointerException  when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
     void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
-                        WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver,
-                        Path settingsDirectory, Settings.InitializationResult settingsStartup,
-                        GenerationPreferencesStore.MigrationPolicy migrationPolicy) {
+                WorkbenchEnvironment environment) {
         if (projectFlow != null)
             throw new IllegalStateException("WorkbenchController is already attached");
+        Objects.requireNonNull(environment, "environment");
+        WorkbenchAppearanceStore themeStore = new WorkbenchAppearanceStore(environment.preferencesDirectory());
+        WorkbenchAppearance.ThemeChoice initialChoice;
+        try {
+            initialChoice = themeStore.load();
+        } catch (IOException exception) {
+            // A damaged or unreadable optional preference must not prevent the Workbench from starting safely.
+            initialChoice = WorkbenchAppearance.ThemeChoice.SYSTEM;
+        }
         projectFlow = Objects.requireNonNull(flow, "flow");
-        templatesFeature = new TemplatesFeature(projectFlow, Clock.systemUTC());
+        settings = environment.settings();
+        templatesFeature = new TemplatesFeature(projectFlow, settings::snapshot, Clock.systemUTC());
         morphsFeature = new MorphsFeature(projectFlow, Clock.systemUTC());
         npcDatabaseFeature = new NpcDatabaseFeature();
         npcDatabaseImporter = new NpcDatabaseImporter(npcDatabaseFeature, projectFlow.jobs(), this::renderNpcDatabase);
-        settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup, migrationPolicy);
+        settingsFeature = new SettingsFeature(settings, environment.settingsStartup(),
+                environment.preferencesDirectory(), environment.migrationPolicy());
         outputFeature = new OutputFeature(projectFlow, () -> new OutputFeature.GenerationSettings(
-                Settings.snapshot(), settingsFeature.frame().omitRedundantSliders()));
+                settings.snapshot(), settingsFeature.frame().omitRedundantSliders()));
         stage = Objects.requireNonNull(ownerStage, "ownerStage");
         platform = Objects.requireNonNull(platformAdapter, "platformAdapter");
         configureProjectCommands();
@@ -772,7 +737,7 @@ public final class WorkbenchController {
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
-        configureAppearance(initialChoice, themeSaver);
+        configureAppearance(initialChoice, themeStore::save);
         configureSemanticIcons();
         stage.setOnCloseRequest(event -> {
             if (!finalClose) {
@@ -804,9 +769,30 @@ public final class WorkbenchController {
         renderFeedback(feedback.frame());
         if (workbenchRoot.getWidth() > 0.0)
             applyNavigation(navigation.resize(workbenchRoot.getWidth(), currentSemanticFocus()));
-        // attach happens before Stage.show in production, so initial focus is realized on the next JavaFX pulse.
-        Platform.runLater(() -> requestFocus(new WorkbenchNavigation.FocusTarget(
-                navigationFrame.activeArea(), WorkbenchNavigation.Landmark.PRIMARY_CONTENT)));
+        applyInitialFocusOnceShown();
+    }
+
+    /**
+     * Focuses the active Area's primary content once the Workbench is in a showing window. attach happens before
+     * Stage.show in production, so this is one of the two named focus deferrals (see "Production platform bans" in
+     * docs/build/workbench-platform.md): a one-shot WINDOW_SHOWN handler rather than a runLater, so focus is applied
+     * as the window appears and never races a later user focus move.
+     */
+    private void applyInitialFocusOnceShown() {
+        if (stage.isShowing()) {
+            requestFocus(new WorkbenchNavigation.FocusTarget(
+                    navigationFrame.activeArea(), WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+            return;
+        }
+        stage.addEventHandler(WindowEvent.WINDOW_SHOWN, new EventHandler<>() {
+            /** Applies initial focus for the first show only, then detaches itself. */
+            @Override
+            public void handle(WindowEvent event) {
+                stage.removeEventHandler(WindowEvent.WINDOW_SHOWN, this);
+                requestFocus(new WorkbenchNavigation.FocusTarget(
+                        navigationFrame.activeArea(), WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+            }
+        });
     }
 
     /**
@@ -1028,13 +1014,15 @@ public final class WorkbenchController {
             morphsFeature.cancelFillEmpty(offer.token());
             fillEmptyPopup = null;
             fillEmptyPopupRoot = null;
+            // Restored synchronously: this sets the main scene's focus owner, which JavaFX realizes whenever the
+            // window is active, so no deferral is needed even if another window holds OS focus right now.
             if (stage.isShowing())
-                Platform.runLater(this::restoreFillEmptyLauncherFocus);
+                restoreFillEmptyLauncherFocus();
         });
         Bounds anchor = fillEmptyNpcMorphAssignmentsButton.localToScreen(
                 fillEmptyNpcMorphAssignmentsButton.getBoundsInLocal());
         popup.show(stage, anchor.getMinX(), anchor.getMaxY());
-        Platform.runLater(choices::requestFocus);
+        choices.requestFocus();
     }
 
     /** Restores focus by semantic role when a responsive transition has hidden the former flyout launcher. */
@@ -1044,6 +1032,18 @@ public final class WorkbenchController {
         else
             requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
                     WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+    }
+
+    /**
+     * Reports whether {@code node} is its scene's focus owner. This is the Workbench's only focus check: unlike
+     * {@code Node.isFocused()}, it does not depend on the OS window being active, so a refill or async completion
+     * while another window has focus still preserves the focus owner that JavaFX realizes when the user returns.
+     *
+     * @param node node to test; may be detached
+     * @return true when the node is attached and owns its scene's focus
+     */
+    private static boolean ownsSceneFocus(Node node) {
+        return node.getScene() != null && node.getScene().getFocusOwner() == node;
     }
 
     /** An overlay or Area change can hide an ancestor while leaving the launcher's own visible bit unchanged. */
@@ -1082,7 +1082,7 @@ public final class WorkbenchController {
             return;
         }
         // The selected NPC is already named by the catalog and inspector; only the dedicated viewer names its image.
-        Optional<Path> file = NpcPortraitFiles.find(Path.of("images"), npc);
+        Optional<Path> file = NpcPortraitFiles.find(portraitDirectory, npc);
         if (file.isEmpty()) {
             String expected = "images/" + npc.getDisplayName() + " (" + npc.getEditorId() + ").jpg";
             String status = "No portrait found. Expected " + expected
@@ -1142,7 +1142,7 @@ public final class WorkbenchController {
             npcDatabasePortraitStatus.setAccessibleHelp("Select an NPC Database entry to inspect its portrait.");
             return;
         }
-        Optional<Path> file = NpcPortraitFiles.find(Path.of("images"), npc.getName(), npc.getEditorId());
+        Optional<Path> file = NpcPortraitFiles.find(portraitDirectory, npc.getName(), npc.getEditorId());
         if (file.isEmpty()) {
             String expected = "images/" + npc.getName() + " (" + npc.getEditorId() + ").jpg";
             String status = "No portrait found. Expected " + expected
@@ -1289,17 +1289,16 @@ public final class WorkbenchController {
                 npcPortraitViewerRoot = null;
                 npcPortraitViewerPath = null;
             }
-            if (stage.isShowing())
-                Platform.runLater(() -> {
-                    if (canRestoreFocus(launcher))
-                        launcher.requestFocus();
-                    else
-                        requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
-                                WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
-                });
+            if (stage.isShowing()) {
+                if (canRestoreFocus(launcher))
+                    launcher.requestFocus();
+                else
+                    requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
+                            WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+            }
         });
         viewer.show();
-        Platform.runLater(close::requestFocus);
+        close.requestFocus();
     }
 
     /** Configures the current assigned-relationship ListView, including identity selection dispatch. */
@@ -1705,19 +1704,18 @@ public final class WorkbenchController {
             npcFilterPopupRoot = null;
             npcFilterExpandedColumn = null;
             renderNpcFilterButtons(npcDatabaseFeature.frame());
-            if (stage.isShowing())
-                Platform.runLater(() -> {
-                    if (canRestoreFocus(launcher))
-                        launcher.requestFocus();
-                    else
-                        requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
-                                WorkbenchNavigation.Landmark.EDITOR));
-                });
+            if (stage.isShowing()) {
+                if (canRestoreFocus(launcher))
+                    launcher.requestFocus();
+                else
+                    requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
+                            WorkbenchNavigation.Landmark.EDITOR));
+            }
         });
         Bounds anchor = launcher.localToScreen(launcher.getBoundsInLocal());
         popup.show(stage, anchor.getMinX(), anchor.getMaxY());
         checklist.getSelectionModel().selectFirst();
-        Platform.runLater(checklist::requestFocus);
+        checklist.requestFocus();
     }
 
     /** Keeps each filter button's text, toggle state, and expanded/active description in sync with the feature. */
@@ -2187,11 +2185,9 @@ public final class WorkbenchController {
                     "Morphs validation", severity, message, WorkbenchFeedback.Disposition.FAILED)));
             if (intent instanceof MorphsFeature.Create) {
                 customMorphTargetNameInput.requestFocus();
-                Platform.runLater(customMorphTargetNameInput::requestFocus);
             } else if (intent instanceof MorphsFeature.CreateNpc) {
                 TextField invalidInput = firstInvalidNpcInput(update.frame().diagnostics());
                 invalidInput.requestFocus();
-                Platform.runLater(invalidInput::requestFocus);
             }
             if (update.outcomeKind() == MorphsFeature.OutcomeKind.FAILED)
                 showMorphsFailure(update);
@@ -2349,7 +2345,7 @@ public final class WorkbenchController {
                         ? List.of(effect.directory().toString()) : List.of(),
                 Optional.empty());
         return new JobCoordinator.Submission<>(operation,
-                context -> runSettingsEffect(effect, context),
+                context -> runSettingsEffect(settings, effect, context),
                 (attempt, result) -> completeSettingsEffect(effect, result),
                 Optional.of(settingsRetryFactory(effect)));
     }
@@ -2390,9 +2386,15 @@ public final class WorkbenchController {
     /**
      * Executes blocking Settings I/O on the worker. Reload stays cancellable through lock acquisition and ordinary
      * pair reads; the Settings seam enters commit immediately before recovery or publication can mutate state.
+     *
+     * @param settings the Settings store that Save persists to and Reload reloads
+     * @param effect   tokenized Save, Reload, or generation-preference effect captured on the JavaFX thread
+     * @param context  coordinator context owning cancellation and the commit boundary
+     * @return terminal coordinator result carrying the feature completion
      */
     static JobCoordinator.Result<SettingsFeature.Completion> runSettingsEffect(
-            SettingsFeature.Effect effect, JobCoordinator.Context context) {
+            Settings settings, SettingsFeature.Effect effect, JobCoordinator.Context context) {
+        Objects.requireNonNull(settings, "settings");
         context.checkCancellation();
         String commitPhase = switch (effect) {
             case SettingsFeature.SaveEffect ignored -> "Saving Settings";
@@ -2411,7 +2413,7 @@ public final class WorkbenchController {
         String failureSummary;
         switch (effect) {
             case SettingsFeature.SaveEffect save -> {
-                Settings.PersistenceResult result = Settings.persist(save.directory(), save.replacement());
+                Settings.PersistenceResult result = settings.persist(save.replacement());
                 completion = new SettingsFeature.SaveCompletion(save.token(), result);
                 successful = result.isSuccessful();
                 diagnostics = settingsDiagnostics(result);
@@ -2419,8 +2421,7 @@ public final class WorkbenchController {
                 failureSummary = "Settings could not be saved.";
             }
             case SettingsFeature.ReloadEffect reload -> {
-                Settings.InitializationResult result = Settings.initialize(reload.directory(),
-                        () -> context.beginCommit(commitPhase));
+                Settings.InitializationResult result = settings.reload(() -> context.beginCommit(commitPhase));
                 completion = new SettingsFeature.ReloadCompletion(reload.token(), result);
                 successful = result.isSuccessful();
                 diagnostics = settingsDiagnostics(result);
@@ -2714,10 +2715,7 @@ public final class WorkbenchController {
         configureGangSlider(gangAllSlider, gangAllValue, TemplatesFeature.GangMode.ALL);
         configureGangSlider(gangMinimumSlider, gangMinimumValue, TemplatesFeature.GangMode.MINIMUM);
         configureGangSlider(gangMaximumSlider, gangMaximumValue, TemplatesFeature.GangMode.MAXIMUM);
-        goToSetSlidersButton.setOnAction(event -> firstSliderChoiceControl().ifPresent(node -> {
-            node.requestFocus();
-            Platform.runLater(node::requestFocus);
-        }));
+        goToSetSlidersButton.setOnAction(event -> firstSliderChoiceControl().ifPresent(Node::requestFocus));
     }
 
     /**
@@ -2781,7 +2779,6 @@ public final class WorkbenchController {
             if ((intent instanceof TemplatesFeature.CommitRename && update.accepted())
                     || intent instanceof TemplatesFeature.CancelRename) {
                 sliderPresetList.requestFocus();
-                Platform.runLater(sliderPresetList::requestFocus);
             }
         } finally {
             templatesOwnProjectDiagnostics = false;
@@ -2863,7 +2860,6 @@ public final class WorkbenchController {
                     WorkbenchFeedback.Disposition.FAILED)));
             if (intent instanceof TemplatesFeature.Create || intent instanceof TemplatesFeature.Duplicate) {
                 sliderPresetNameInput.requestFocus();
-                Platform.runLater(sliderPresetNameInput::requestFocus);
             }
             return;
         }
@@ -2969,8 +2965,6 @@ public final class WorkbenchController {
         if (!control.isVisible() || control.getParent() == null)
             return false;
         control.requestFocus();
-        if (!control.isFocused())
-            Platform.runLater(control::requestFocus);
         return true;
     }
 
@@ -2997,8 +2991,6 @@ public final class WorkbenchController {
         if (control == null || !control.isVisible() || control.getParent() == null)
             return false;
         control.requestFocus();
-        if (!control.isFocused())
-            Platform.runLater(control::requestFocus);
         return true;
     }
 
@@ -3273,7 +3265,7 @@ public final class WorkbenchController {
             String key = choice.name().toLowerCase(Locale.ROOT);
             SliderChoiceRow row = sliderChoiceRowsByName.get(key);
             if (row == null)
-                row = new SliderChoiceRow(this::dispatchTemplates);
+                row = new SliderChoiceRow(this::dispatchTemplates, settings::snapshot);
             row.render(editorFrame, choice, templatesMutationsBlocked);
             next.put(key, row);
             return row;
@@ -3357,7 +3349,7 @@ public final class WorkbenchController {
 
     /** Replaces only the assigned-relationship JavaFX node while retaining its label and semantic focus. */
     private void replaceEmptyAssignedMorphSliderPresetList() {
-        boolean restoreFocus = assignedMorphSliderPresetList.isFocused();
+        boolean restoreFocus = ownsSceneFocus(assignedMorphSliderPresetList);
         ListView<SliderPresetSnapshot> replacement = new ListView<>();
         replacement.setId("assignedMorphSliderPresetList");
         replacement.setAccessibleText("Assigned Slider Presets");
@@ -3374,13 +3366,12 @@ public final class WorkbenchController {
         if (restoreFocus) {
             // Relationship reconciliation may refill while the list owns focus; the UIA node swap must preserve it.
             replacement.requestFocus();
-            Platform.runLater(replacement::requestFocus);
         }
     }
 
     /** Replaces only the JavaFX adapter node after an empty-to-populated target transition. */
     private void replaceEmptyCustomMorphTargetList() {
-        boolean restoreFocus = customMorphTargetList.isFocused();
+        boolean restoreFocus = ownsSceneFocus(customMorphTargetList);
         ListView<CustomMorphTargetSnapshot> replacement = new ListView<>();
         replacement.setId("customMorphTargetList");
         replacement.setAccessibleText("Custom Morph Targets");
@@ -3396,7 +3387,6 @@ public final class WorkbenchController {
         if (restoreFocus) {
             // A filter clear can refill the list while it owns focus; the UIA node swap must retain that focus.
             replacement.requestFocus();
-            Platform.runLater(replacement::requestFocus);
         }
     }
 
@@ -3438,7 +3428,7 @@ public final class WorkbenchController {
 
     /** Replaces only the NPC catalog adapter node after an empty-to-populated transition. */
     private void replaceEmptyNpcMorphAssignmentList() {
-        boolean restoreFocus = npcMorphAssignmentList.isFocused();
+        boolean restoreFocus = ownsSceneFocus(npcMorphAssignmentList);
         ListView<NpcMorphAssignmentSnapshot> replacement = new ListView<>();
         replacement.setId("npcMorphAssignmentList");
         replacement.setAccessibleText("NPC Morph Assignments");
@@ -3454,7 +3444,6 @@ public final class WorkbenchController {
         if (restoreFocus) {
             // Refilling the catalog must keep keyboard focus on its fresh accessible node.
             replacement.requestFocus();
-            Platform.runLater(replacement::requestFocus);
         }
     }
 
@@ -3463,7 +3452,7 @@ public final class WorkbenchController {
      * virtualized accessibility subtree for the lifetime of that control.
      */
     private void replaceEmptySliderPresetList() {
-        boolean restoreFocus = sliderPresetList.isFocused();
+        boolean restoreFocus = ownsSceneFocus(sliderPresetList);
         ListView<SliderPresetSnapshot> replacement = new ListView<>();
         replacement.setId("sliderPresetList");
         replacement.setAccessibleText("Slider Presets");
@@ -3480,7 +3469,6 @@ public final class WorkbenchController {
         if (restoreFocus) {
             // Import can refill an empty list while it owns semantic focus; the UIA node swap must retain that focus.
             replacement.requestFocus();
-            Platform.runLater(replacement::requestFocus);
         }
     }
 
@@ -3569,6 +3557,16 @@ public final class WorkbenchController {
     /** @return current assigned Slider Preset ListView, including an accessibility-driven refill replacement */
     ListView<SliderPresetSnapshot> assignedMorphSliderPresetListNode() {
         return assignedMorphSliderPresetList;
+    }
+
+    /**
+     * Points portrait lookup at another directory, so package-local tests can supply a real portrait without
+     * writing into the working directory. Call it before the first NPC selection renders.
+     *
+     * @param directory directory holding {@code <name> (<editor ID>).<ext>} portrait files
+     */
+    void usePortraitDirectory(Path directory) {
+        portraitDirectory = Objects.requireNonNull(directory, "directory");
     }
 
     /**
@@ -3800,7 +3798,6 @@ public final class WorkbenchController {
                 if (navigationFrame.narrowMode())
                     applyNavigation(navigation.openPrimaryContent(currentSemanticFocus()));
                 sliderPresetFilter.requestFocus();
-                Platform.runLater(sliderPresetFilter::requestFocus);
                 event.consume();
                 return;
             }
@@ -3822,14 +3819,12 @@ public final class WorkbenchController {
             TextField filter = morphsFeature.frame().npcSelection().isPresent()
                     ? npcMorphAssignmentFilter : customMorphTargetFilter;
             filter.requestFocus();
-            Platform.runLater(filter::requestFocus);
             event.consume();
             return;
         }
         if (navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
                 && event.isControlDown() && event.getCode() == KeyCode.K) {
             npcNameFilterButton.requestFocus();
-            Platform.runLater(npcNameFilterButton::requestFocus);
             event.consume();
             return;
         }
@@ -4094,10 +4089,7 @@ public final class WorkbenchController {
                 case NPC_DATABASE -> npcCatalogTable;
             };
         }
-        Node resolved = node;
-        resolved.requestFocus();
-        if (!resolved.isFocused())
-            Platform.runLater(resolved::requestFocus);
+        node.requestFocus();
     }
 
     /**
@@ -4657,7 +4649,8 @@ public final class WorkbenchController {
         }
 
         /**
-         * Enters the one durable inline editor without refreshing or replacing the surrounding virtualized cells.
+         * Enters the one durable inline editor without refreshing or replacing the surrounding virtualized cells, and
+         * moves focus into it with its draft selected.
          */
         @Override
         public void startEdit() {
@@ -4665,9 +4658,24 @@ public final class WorkbenchController {
             SliderPresetSnapshot preset = getItem();
             if (preset == null)
                 return;
-            templatesFeature.frame().rename()
-                    .filter(value -> value.identity().equals(NameIdentity.of(preset.getName())))
-                    .ifPresent(this::renderRename);
+            Optional<TemplatesFeature.RenameState> rename = templatesFeature.frame().rename()
+                    .filter(value -> value.identity().equals(NameIdentity.of(preset.getName())));
+            if (rename.isEmpty())
+                return;
+            renderRename(rename.orElseThrow());
+            renameField.requestFocus();
+            renameField.selectAll();
+            // One of the two named focus deferrals (docs/build/workbench-platform.md, "Production platform bans"):
+            // ListView's own click handling runs after startEdit and can take focus back to the list. Re-apply focus
+            // once, and only while the list or this cell still owns it, so a control the user has moved to since
+            // keeps its focus.
+            ListView<SliderPresetSnapshot> list = getListView();
+            Platform.runLater(() -> {
+                if (isEditing() && (ownsSceneFocus(list) || ownsSceneFocus(this))) {
+                    renameField.requestFocus();
+                    renameField.selectAll();
+                }
+            });
         }
 
         /**
@@ -4727,12 +4735,6 @@ public final class WorkbenchController {
             setGraphic(renameEditor);
             setAccessibleText(accessibleName);
             setAccessibleHelp(renameField.getAccessibleHelp());
-            if (!renameField.isFocused()) {
-                Platform.runLater(() -> {
-                    renameField.requestFocus();
-                    renameField.selectAll();
-                });
-            }
         }
 
         /**

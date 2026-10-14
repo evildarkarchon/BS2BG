@@ -202,6 +202,7 @@ $artifact = $null
 $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest',
     'com.asdasfa.jbs2bg.build.ProductionSourceGateTest',
+    'com.asdasfa.jbs2bg.build.ProductionPlatformBanGateTest',
     'com.asdasfa.jbs2bg.fx.FxTestToolkitTest',
     'com.asdasfa.jbs2bg.fx.FxTestHarnessTest',
     'com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest',
@@ -229,6 +230,7 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.workbench.jobs.JobCoordinatorTest',
     'com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlowTest',
     'com.asdasfa.jbs2bg.workbench.WorkbenchControllerTest',
+    'com.asdasfa.jbs2bg.workbench.WorkbenchFocusTest',
     'com.asdasfa.jbs2bg.workbench.WorkbenchAccessibilityContractTest',
     'com.asdasfa.jbs2bg.workbench.templates.TemplatesFeatureTest',
     'com.asdasfa.jbs2bg.workbench.morphs.MorphsFeatureTest',

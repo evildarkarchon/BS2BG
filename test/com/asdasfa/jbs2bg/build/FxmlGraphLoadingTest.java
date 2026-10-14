@@ -13,11 +13,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.asdasfa.jbs2bg.Main;
-import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
-import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.workbench.WorkbenchController;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
+import com.asdasfa.jbs2bg.workbench.WorkbenchTestEnvironment;
 
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -107,11 +106,11 @@ class FxmlGraphLoadingTest {
      */
     @Test
     void attachedWorkbenchSaveCommandPublishesTheReturnedProjectFrame() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        WorkbenchTestEnvironment fixture = WorkbenchTestEnvironment.initialized(temporaryDirectory);
         Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture.newSession());
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN).effect().orElseThrow();
         flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selected(source));
 
@@ -119,7 +118,7 @@ class FxmlGraphLoadingTest {
             FXMLLoader loader = load("workbench.fxml");
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, temporaryDirectory, Settings.publishedState());
+            controller.attach(flow, stage, fixture.environment());
 
             assertEquals("BS2BG Preview - *recovery-source.jbs2bg", stage.getTitle());
             MenuItem save = (MenuItem) loader.getNamespace().get("saveProjectMenuItem");

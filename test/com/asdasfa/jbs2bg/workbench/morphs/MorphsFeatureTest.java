@@ -22,6 +22,7 @@ import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -30,7 +31,7 @@ class MorphsFeatureTest {
     /** Fill Empty freezes visible empty identities and draws once per eligible NPC from only the chosen presets. */
     @Test
     void fillEmptyUsesCapturedVisibleEmptyNpcsAndIndependentChosenPresetDraws() {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(emptySettings()));
         for (String name : List.of("Alpha", "Beta", "Gamma"))
             flow.apply(SliderPresetEdits.create(name));
         NpcMorphAssignmentIdentity first = new NpcMorphAssignmentIdentity("Visible.esp", "First");
@@ -78,7 +79,7 @@ class MorphsFeatureTest {
     /** Cancel and an empty visible scope never mutate the Project. */
     @Test
     void fillEmptyCancellationAndEmptyScopeLeaveProjectUntouched() {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(emptySettings()));
         flow.apply(SliderPresetEdits.create("Alpha"));
         flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
                 "NordRace", "000A2C94"));
@@ -99,7 +100,7 @@ class MorphsFeatureTest {
     /** A missing Project preset catalog and a forged flyout choice fail inline without an edit. */
     @Test
     void fillEmptyRejectsNoPresetsAndChoicesOutsideTheCapturedOffer() {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(emptySettings()));
         flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
                 "NordRace", "000A2C94"));
         MorphsFeature feature = new MorphsFeature(flow,
@@ -121,7 +122,8 @@ class MorphsFeatureTest {
     /** NPC and Custom Morph Target selections have separate identities and exactly one active inspector. */
     @Test
     void createsNpcAndKeepsMorphSelectionsMutuallyExclusive() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(CustomMorphTargetEdits.create("Lydia"));
         MorphsFeature feature = new MorphsFeature(projectFlow,
                 Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
@@ -147,7 +149,8 @@ class MorphsFeatureTest {
     /** NPC filtering and ordering preserve a visible plugin/editor identity even when display names repeat. */
     @Test
     void filtersAndSortsNpcsWithoutRetargetingSelection() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
                 "NordRace", "000A2C94"));
         projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Companion.esp", "SecondLydia",
@@ -182,7 +185,8 @@ class MorphsFeatureTest {
     /** NPC relationship edits stay on the selected identity and Project cascades survive rename and removal. */
     @Test
     void editsNpcRelationshipsThroughProjectAndDropsStalePresetSelection() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
         projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
@@ -216,7 +220,8 @@ class MorphsFeatureTest {
     /** A filtered clear captures plugin/editor identities and cannot remove a later matching NPC. */
     @Test
     void confirmedNpcClearRemovesOnlyCapturedVisibleIdentities() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
                 "NordRace", "000A2C94"));
         projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Companion.esp", "SecondLydia",
@@ -246,7 +251,8 @@ class MorphsFeatureTest {
     /** A confirmed relationship edit addresses its frozen NPC identity after external selection changes. */
     @Test
     void rejectedNpcRelationshipRemovalDoesNotRetargetAnotherNpc() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
                 "NordRace", "000A2C94"));
@@ -279,7 +285,8 @@ class MorphsFeatureTest {
      */
     @Test
     void createsBodyGenConditionTargetThroughProjectFlowAndSelectsIt() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         MorphsFeature feature = new MorphsFeature(projectFlow,
                 Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
 
@@ -300,7 +307,8 @@ class MorphsFeatureTest {
      */
     @Test
     void creationAutomaticallyAssignsOneEligibleSliderPreset() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
         MorphsFeature feature = new MorphsFeature(projectFlow,
@@ -319,7 +327,8 @@ class MorphsFeatureTest {
      */
     @Test
     void editsSliderPresetRelationshipsWithoutBypassingProjectIntegrity() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
         projectFlow.apply(CustomMorphTargetEdits.create("All|Female"));
@@ -350,7 +359,8 @@ class MorphsFeatureTest {
      */
     @Test
     void reconcilesSelectionByIdentityAcrossFilteringSortingAndProjectRefresh() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(CustomMorphTargetEdits.create("Alpha"));
         projectFlow.apply(CustomMorphTargetEdits.create("Beta"));
         projectFlow.apply(CustomMorphTargetEdits.create("Gamma"));
@@ -385,7 +395,8 @@ class MorphsFeatureTest {
      */
     @Test
     void confirmedClearDeletesOnlyTheCapturedVisibleTargets() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(CustomMorphTargetEdits.create("Alpha"));
         projectFlow.apply(CustomMorphTargetEdits.create("Beta"));
         projectFlow.apply(CustomMorphTargetEdits.create("Gamma"));
@@ -413,7 +424,8 @@ class MorphsFeatureTest {
      */
     @Test
     void managesAllRelationshipsWithoutSilentlyRetargetingAssignedSelection() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
         projectFlow.apply(SliderPresetEdits.create("Gamma"));
@@ -461,7 +473,8 @@ class MorphsFeatureTest {
      */
     @Test
     void typeAheadCyclesVisibleMatchesAndResetsAfterTimeout() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(CustomMorphTargetEdits.create("Alpha"));
         projectFlow.apply(CustomMorphTargetEdits.create("Amber"));
         projectFlow.apply(CustomMorphTargetEdits.create("Beta"));
@@ -486,7 +499,8 @@ class MorphsFeatureTest {
      */
     @Test
     void publishesValidationFramesWhileIsolatingObserverFailures() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         List<Throwable> failures = new ArrayList<>();
         MorphsFeature feature = new MorphsFeature(projectFlow,
                 Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC), failures::add);
@@ -517,7 +531,8 @@ class MorphsFeatureTest {
      */
     @Test
     void removeConfirmationNeverRetargetsSelection() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(emptySettings()));
         projectFlow.apply(CustomMorphTargetEdits.create("Alpha"));
         projectFlow.apply(CustomMorphTargetEdits.create("Beta"));
         MorphsFeature feature = new MorphsFeature(projectFlow,

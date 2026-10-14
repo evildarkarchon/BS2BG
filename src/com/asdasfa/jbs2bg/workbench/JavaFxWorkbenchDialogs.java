@@ -4,7 +4,6 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Objects;
 
-import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.scene.AccessibleRole;
 import javafx.scene.control.Button;
@@ -73,8 +72,9 @@ final class JavaFxWorkbenchDialogs {
             }
         }
         dialog.setResultConverter(JavaFxWorkbenchDialogs::actionFor);
-        dialog.setOnShown(event -> Platform.runLater(() ->
-                pane.lookupButton(buttonType(request.safeDefault())).requestFocus()));
+        // Focus the safe default as the dialog appears: setting the dialog scene's focus owner needs no deferral,
+        // and a deferred request is banned in production (docs/build/workbench-platform.md).
+        dialog.setOnShown(event -> pane.lookupButton(buttonType(request.safeDefault())).requestFocus());
         return dialog;
     }
 

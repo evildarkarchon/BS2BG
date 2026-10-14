@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProjectSessionSaveTest {
@@ -19,7 +20,7 @@ class ProjectSessionSaveTest {
      */
     @Test
     void saveBeforeActiveProjectRejectsAndPreservesTheNoProjectSnapshot() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot before = session.getSnapshot();
 
         ProjectOutcome outcome = session.save();
@@ -38,7 +39,7 @@ class ProjectSessionSaveTest {
      */
     @Test
     void saveWithoutFileIdentityRejectsAndPreservesLatestSnapshot() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         ProjectSnapshot dirty = session.apply(SliderPresetEdits.create("Unsaved")).getSnapshot();
 
@@ -56,7 +57,7 @@ class ProjectSessionSaveTest {
      */
     @Test
     void newProjectReplacesDirtyFileBackedStateAndThenReturnsUnchanged() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.saveAs(tempDirectory.resolve("existing.jbs2bg"));
@@ -83,7 +84,7 @@ class ProjectSessionSaveTest {
      */
     @Test
     void successfulSaveAsWritesProjectAndAdoptsFileIdentity() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         ProjectSnapshot dirty = session.apply(SliderPresetEdits.create("Alpha")).getSnapshot();
         Path target = tempDirectory.resolve("saved-project.jbs2bg");
@@ -97,7 +98,7 @@ class ProjectSessionSaveTest {
         assertEquals(target.toAbsolutePath().normalize(), outcome.getSnapshot().getFileIdentity().get());
         assertTrue(dirty.isDirty());
 
-        ProjectOutcome reopened = ProjectSessions.create().open(target);
+        ProjectOutcome reopened = ProjectSessions.create(emptySettings()).open(target);
         assertInstanceOf(ChangedOutcome.class, reopened);
         assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().getFirst().getName());
     }
@@ -112,7 +113,7 @@ class ProjectSessionSaveTest {
      */
     @Test
     void saveAsNearFilenameLengthLimitStillStagesAndReplacesAtomically() throws Exception {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         // 241 characters plus the extension is 248: legal on NTFS and ext4 (255), but
@@ -126,7 +127,7 @@ class ProjectSessionSaveTest {
         assertInstanceOf(ChangedOutcome.class, outcome);
         assertFalse(outcome.getSnapshot().isDirty());
         assertEquals(target.toAbsolutePath().normalize(), outcome.getSnapshot().getFileIdentity().get());
-        ProjectOutcome reopened = ProjectSessions.create().open(target);
+        ProjectOutcome reopened = ProjectSessions.create(emptySettings()).open(target);
         assertInstanceOf(ChangedOutcome.class, reopened);
         assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().getFirst().getName());
         try (java.util.stream.Stream<Path> siblings = Files.list(tempDirectory)) {
@@ -140,7 +141,7 @@ class ProjectSessionSaveTest {
      */
     @Test
     void successfulSaveWritesCurrentProjectToAdoptedIdentity() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         Path target = tempDirectory.resolve("adopted-project.jbs2bg");
@@ -155,7 +156,7 @@ class ProjectSessionSaveTest {
         assertEquals(target.toAbsolutePath().normalize(), outcome.getSnapshot().getFileIdentity().get());
         assertTrue(dirty.isDirty());
 
-        ProjectOutcome reopened = ProjectSessions.create().open(target);
+        ProjectOutcome reopened = ProjectSessions.create(emptySettings()).open(target);
         assertInstanceOf(ChangedOutcome.class, reopened);
         assertEquals(2, reopened.getSnapshot().getSliderPresets().size());
         assertEquals("Bravo", reopened.getSnapshot().getSliderPresets().get(1).getName());
@@ -169,7 +170,7 @@ class ProjectSessionSaveTest {
      */
     @Test
     void cleanSaveStillWritesAndReturnsUnchangedSnapshot() throws Exception {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         Path target = tempDirectory.resolve("clean-project.jbs2bg");
@@ -183,7 +184,7 @@ class ProjectSessionSaveTest {
         assertInstanceOf(UnchangedOutcome.class, outcome);
         assertSame(clean, outcome.getSnapshot());
         assertSame(clean, session.getSnapshot());
-        ProjectOutcome reopened = ProjectSessions.create().open(target);
+        ProjectOutcome reopened = ProjectSessions.create(emptySettings()).open(target);
         assertEquals("Alpha", reopened.getSnapshot().getSliderPresets().getFirst().getName());
     }
 
@@ -196,7 +197,7 @@ class ProjectSessionSaveTest {
     @Test
     void failedSaveAsPreservesSnapshotPriorIdentityAndExistingTarget() throws Exception {
         Path original = tempDirectory.resolve("original.jbs2bg");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.saveAs(original);
@@ -235,7 +236,7 @@ class ProjectSessionSaveTest {
     @Test
     void resourceLimitSaveAsPreservesDirtyIdentityAndExistingTarget() throws Exception {
         Path original = tempDirectory.resolve("resource-original.jbs2bg");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.saveAs(original);
@@ -278,7 +279,7 @@ class ProjectSessionSaveTest {
     void failedSavePreservesLatestSnapshotAndAdoptedIdentity() throws Exception {
         Path parent = Files.createDirectory(tempDirectory.resolve("adopted-parent"));
         Path target = parent.resolve("project.jbs2bg");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.saveAs(target);
@@ -308,7 +309,7 @@ class ProjectSessionSaveTest {
     void saveAsAtomicallyReplacesExistingTargetWithCompleteProject() throws Exception {
         Path target = tempDirectory.resolve("replacement.jbs2bg");
         Files.write(target, "previous persisted bytes".getBytes(StandardCharsets.UTF_8));
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Replacement"));
 
@@ -316,7 +317,7 @@ class ProjectSessionSaveTest {
 
         assertInstanceOf(ChangedOutcome.class, outcome);
         assertFalse(outcome.getSnapshot().isDirty());
-        ProjectOutcome reopened = ProjectSessions.create().open(target);
+        ProjectOutcome reopened = ProjectSessions.create(emptySettings()).open(target);
         assertInstanceOf(ChangedOutcome.class, reopened);
         assertEquals("Replacement", reopened.getSnapshot().getSliderPresets().getFirst().getName());
     }
@@ -334,7 +335,7 @@ class ProjectSessionSaveTest {
                 + "\"CustomMorphTargets\":{\"Target\":{\"SliderPresets\":[\"Missing\"]}},"
                 + "\"MorphedNPCs\":{}}")
                 .getBytes(StandardCharsets.UTF_8));
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot recovered = session.open(target).getSnapshot();
 
         ProjectOutcome saved = session.save();
@@ -345,7 +346,7 @@ class ProjectSessionSaveTest {
         assertFalse(saved.getSnapshot().isDirty());
         assertEquals(ProjectLifecycleStatus.FILE_BACKED, saved.getSnapshot().getLifecycleStatus());
         assertEquals(target.toAbsolutePath().normalize(), saved.getSnapshot().getFileIdentity().get());
-        ProjectOutcome reopened = ProjectSessions.create().open(target);
+        ProjectOutcome reopened = ProjectSessions.create(emptySettings()).open(target);
         assertTrue(reopened.getDiagnostics().isEmpty());
         assertTrue(reopened.getSnapshot().getCustomMorphTargets().getFirst().getSliderPresetNames().isEmpty());
     }
@@ -358,7 +359,7 @@ class ProjectSessionSaveTest {
         Path target = tempDirectory.resolve("cancelled-replacement.jbs2bg");
         byte[] previous = "previous destination bytes".getBytes(StandardCharsets.UTF_8);
         Files.write(target, previous);
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         ProjectSnapshot dirty = session.apply(SliderPresetEdits.create("Unsaved")).getSnapshot();
         ProjectOperationContext context = new ProjectOperationContext() {

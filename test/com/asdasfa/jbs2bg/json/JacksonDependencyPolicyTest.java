@@ -151,7 +151,7 @@ final class JacksonDependencyPolicyTest {
         String loader = Files.readString(
                 Path.of("src/com/asdasfa/jbs2bg/project/ProjectFileLoader.java"));
 
-        assertTrue(loader.contains("ProjectJacksonAdapter.read(source, operation)"));
+        assertTrue(loader.contains("ProjectJacksonAdapter.read(source, settings, operation)"));
         assertFalse(loader.contains("LegacyProjectFileLoader"));
         assertFalse(loader.contains("com.eclipsesource.json"));
         try (var sources = Files.walk(Path.of("src"))) {

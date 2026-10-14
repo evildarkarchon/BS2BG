@@ -3,6 +3,9 @@ package com.asdasfa.jbs2bg.workbench;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import com.asdasfa.jbs2bg.data.Settings;
 
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
@@ -23,6 +26,7 @@ import javafx.scene.layout.VBox;
  */
 final class SliderChoiceRow extends VBox {
     private final Consumer<TemplatesFeature.Intent> dispatcher;
+    private final Supplier<Settings.Snapshot> currentSettings;
     private final CheckBox enabled = new CheckBox();
     private final Label preview = new Label();
     private final Label defaultState = new Label();
@@ -37,10 +41,12 @@ final class SliderChoiceRow extends VBox {
     /**
      * Creates one reusable row and wires its controls to the typed intent dispatcher.
      *
-     * @param dispatcher serialized Workbench Templates dispatcher
+     * @param dispatcher      serialized Workbench Templates dispatcher
+     * @param currentSettings read-only view of the current Settings pair used for drag-draft previews
      */
-    SliderChoiceRow(Consumer<TemplatesFeature.Intent> dispatcher) {
+    SliderChoiceRow(Consumer<TemplatesFeature.Intent> dispatcher, Supplier<Settings.Snapshot> currentSettings) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+        this.currentSettings = Objects.requireNonNull(currentSettings, "currentSettings");
         getStyleClass().add("slider-choice-row");
         setAccessibleRole(AccessibleRole.PARENT);
         setSpacing(6.0);
@@ -133,7 +139,7 @@ final class SliderChoiceRow extends VBox {
         try {
             previewText = ProjectOutputFormatter.formatSliderChoicePreview(
                     choice.snapshot().withPercentageRange(lower, upper),
-                    editor.profile() == TemplatesFeature.Profile.UUNP);
+                    editor.profile() == TemplatesFeature.Profile.UUNP, currentSettings.get());
         } catch (ProjectOutputFormatter.SliderChoicePreviewException exception) {
             // A pointer draft has no committed feature frame for diagnostics; the completed range intent supplies it.
             previewText = "Preview unavailable";

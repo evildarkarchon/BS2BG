@@ -1,5 +1,7 @@
 package com.asdasfa.jbs2bg.presentation;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySnapshot;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -430,11 +432,11 @@ final class OutputArtifactPublisherTest {
 
     /** Generates one accepted output value with the requested canonical Slider Preset order. */
     private static ProjectGeneratedOutput generatedOutput(String... names) {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         for (String name : names)
             session.apply(SliderPresetEdits.create(name));
-        return ProjectOutputFormatter.generate(session.getSnapshot(), false);
+        return ProjectOutputFormatter.generate(session.getSnapshot(), emptySnapshot(), false);
     }
 
     /** Requires every command-owned transaction directory to be cleaned after success, failure, or cancellation. */

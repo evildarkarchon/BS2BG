@@ -20,7 +20,6 @@ import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
-import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 
@@ -64,13 +63,26 @@ class WorkbenchAccessibilityContractTest {
     @TempDir
     Path temporaryDirectory;
 
+    // The test's one Settings store, environment, and session source; see fixture().
+    private WorkbenchTestEnvironment fixture;
+
+    /**
+     * Returns this test's Workbench fixture, creating and reloading an empty store in the temporary directory on first
+     * use. Tests that need seeded Settings assign {@link #fixture} before the first call.
+     */
+    private WorkbenchTestEnvironment fixture() {
+        if (fixture == null)
+            fixture = WorkbenchTestEnvironment.initialized(temporaryDirectory);
+        return fixture;
+    }
+
     /**
      * Refilling an empty NPC Morph Assignments list replaces its JavaFX node in place, so the Windows UIA provider
      * discovers the new virtualized rows instead of keeping the stale empty subtree.
      */
     @Test
     void npcMorphAssignmentsEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -78,7 +90,7 @@ class WorkbenchAccessibilityContractTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new UnusedPlatform());
+            controller.attach(flow, stage, new UnusedPlatform(), fixture().environment());
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ListView<NpcMorphAssignmentSnapshot> initial =
@@ -110,71 +122,68 @@ class WorkbenchAccessibilityContractTest {
      */
     @Test
     void reRenderWithUnchangedMembershipFiresNoListChangeOnGuardedCollections() throws Exception {
-        SettingsTestSupport.installDefaults(
+        fixture = WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(
+                temporaryDirectory.resolve("settings"),
                 Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)),
-                Map.of("Arms", new DefaultSliderValue(0.1f, 0.5f)));
-        try {
-            Path source = temporaryDirectory.resolve("npcs.txt");
-            Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n"
-                    + "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
-            WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-            flow.apply(SliderPresetEdits.create("Alpha"));
-            flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
-            flow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
-                    "Lyra", "People.esp", "Lyra01", "NordRace", "A12B3", List.of())));
+                Map.of("Arms", new DefaultSliderValue(0.1f, 0.5f))));
+        Path source = temporaryDirectory.resolve("npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n"
+                + "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
+        flow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
+                "Lyra", "People.esp", "Lyra01", "NordRace", "A12B3", List.of())));
 
-            FxTestToolkit.runOnFxThread(() -> {
-                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-                Parent root = loader.load();
-                WorkbenchController controller = loader.getController();
-                Stage stage = new Stage();
-                stage.setScene(new Scene(root, 1300.0, 800.0));
-                controller.attach(flow, stage, new UnusedPlatform(List.of(source)));
-                stage.show();
-                controller.sliderPresetListNode().getSelectionModel().select(0);
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                controller.customMorphTargetListNode().getSelectionModel().select(0);
-                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            controller.attach(flow, stage, new UnusedPlatform(List.of(source)), fixture().environment());
+            stage.show();
+            controller.sliderPresetListNode().getSelectionModel().select(0);
+            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+            controller.customMorphTargetListNode().getSelectionModel().select(0);
+            ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+            ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
 
-                Map<String, ObservableList<?>> guarded = new LinkedHashMap<>();
-                guarded.put("Slider Presets", controller.sliderPresetListNode().getItems());
-                guarded.put("Slider choice rows",
-                        ((VBox) loader.getNamespace().get("sliderChoiceRows")).getChildren());
-                guarded.put("Custom Morph Targets", controller.customMorphTargetListNode().getItems());
-                guarded.put("NPC Morph Assignments", controller.npcMorphAssignmentListNode().getItems());
-                guarded.put("Assigned Slider Presets", controller.assignedMorphSliderPresetListNode().getItems());
-                guarded.put("NPC Database sources",
-                        ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems());
-                guarded.put("NPC Database catalog",
-                        ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getItems());
-                guarded.put("Settings entries",
-                        ((ListView<?>) loader.getNamespace().get("settingsEntryList")).getItems());
-                List<String> changed = new ArrayList<>();
-                guarded.forEach((name, items) -> {
-                    assertFalse(items.isEmpty(), name + " must be populated for a no-op re-render to be observable");
-                    items.addListener((ListChangeListener<Object>) change -> changed.add(name));
-                });
-                ListView<?> activity = (ListView<?>) loader.getNamespace().get("activityList");
-                int activityBefore = activity.getItems().size();
-
-                @SuppressWarnings("unchecked")
-                ComboBox<WorkbenchAppearance.ThemeChoice> theme =
-                        (ComboBox<WorkbenchAppearance.ThemeChoice>) loader.getNamespace().get("themeChoice");
-                theme.setValue(WorkbenchAppearance.ThemeChoice.DARK);
-                theme.fireEvent(new ActionEvent());
-
-                assertFalse(flow.jobs().frame().active());
-                assertEquals("Save Theme Preference",
-                        flow.jobs().frame().attempt().orElseThrow().operation().name());
-                assertTrue(activity.getItems().size() > activityBefore,
-                        "the theme job frames must have re-rendered the Workbench");
-                assertEquals(List.of(), changed);
-                stage.close();
+            Map<String, ObservableList<?>> guarded = new LinkedHashMap<>();
+            guarded.put("Slider Presets", controller.sliderPresetListNode().getItems());
+            guarded.put("Slider choice rows",
+                    ((VBox) loader.getNamespace().get("sliderChoiceRows")).getChildren());
+            guarded.put("Custom Morph Targets", controller.customMorphTargetListNode().getItems());
+            guarded.put("NPC Morph Assignments", controller.npcMorphAssignmentListNode().getItems());
+            guarded.put("Assigned Slider Presets", controller.assignedMorphSliderPresetListNode().getItems());
+            guarded.put("NPC Database sources",
+                    ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems());
+            guarded.put("NPC Database catalog",
+                    ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getItems());
+            guarded.put("Settings entries",
+                    ((ListView<?>) loader.getNamespace().get("settingsEntryList")).getItems());
+            List<String> changed = new ArrayList<>();
+            guarded.forEach((name, items) -> {
+                assertFalse(items.isEmpty(), name + " must be populated for a no-op re-render to be observable");
+                items.addListener((ListChangeListener<Object>) change -> changed.add(name));
             });
-        } finally {
-            SettingsTestSupport.restoreRepositorySettings();
-        }
+            ListView<?> activity = (ListView<?>) loader.getNamespace().get("activityList");
+            int activityBefore = activity.getItems().size();
+
+            @SuppressWarnings("unchecked")
+            ComboBox<WorkbenchAppearance.ThemeChoice> theme =
+                    (ComboBox<WorkbenchAppearance.ThemeChoice>) loader.getNamespace().get("themeChoice");
+            theme.setValue(WorkbenchAppearance.ThemeChoice.DARK);
+            theme.fireEvent(new ActionEvent());
+
+            assertFalse(flow.jobs().frame().active());
+            assertEquals("Save Theme Preference",
+                    flow.jobs().frame().attempt().orElseThrow().operation().name());
+            assertTrue(activity.getItems().size() > activityBefore,
+                    "the theme job frames must have re-rendered the Workbench");
+            assertEquals(List.of(), changed);
+            stage.close();
+        });
     }
 
     /**
@@ -184,7 +193,7 @@ class WorkbenchAccessibilityContractTest {
      */
     @Test
     void inlineRenameMovesTheEditingIndexAndUpdatesTheRenameCellInPlace() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         flow.apply(SliderPresetEdits.create("Alpha"));
         flow.apply(SliderPresetEdits.create("Beta"));
         AtomicReference<Stage> stageHolder = new AtomicReference<>();
@@ -197,7 +206,7 @@ class WorkbenchAccessibilityContractTest {
                 WorkbenchController controller = loader.getController();
                 Stage stage = new Stage();
                 stage.setScene(new Scene(root, 1300.0, 800.0));
-                controller.attach(flow, stage, new UnusedPlatform());
+                controller.attach(flow, stage, new UnusedPlatform(), fixture().environment());
                 stage.show();
                 stageHolder.set(stage);
                 controllerHolder.set(controller);
@@ -264,51 +273,48 @@ class WorkbenchAccessibilityContractTest {
      */
     @Test
     void sliderChoiceEditsKeepTheSameRowNode() throws Exception {
-        SettingsTestSupport.installDefaults(
+        fixture = WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(
+                temporaryDirectory.resolve("settings"),
                 Map.of("Arms", new DefaultSliderValue(0.1f, 0.9f),
                         "Waist", new DefaultSliderValue(0.2f, 0.8f)),
-                Map.of());
-        try {
-            WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-            flow.apply(SliderPresetEdits.create("Alpha"));
+                Map.of()));
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
 
-            FxTestToolkit.runOnFxThread(() -> {
-                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-                Parent root = loader.load();
-                WorkbenchController controller = loader.getController();
-                Stage stage = new Stage();
-                stage.setScene(new Scene(root, 1300.0, 800.0));
-                controller.attach(flow, stage, new UnusedPlatform());
-                controller.sliderPresetListNode().getSelectionModel().select(0);
-                VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
-                List<Node> before = List.copyOf(rows.getChildren());
-                assertEquals(List.of("Arms", "Waist"), before.stream()
-                        .map(row -> ((SliderChoiceRow) row).choiceName()).toList());
-                SliderChoiceRow waist = (SliderChoiceRow) before.get(1);
-                CheckBox enabled = waist.enabledControl();
-                Slider minimum = waist.minimumControl();
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            controller.attach(flow, stage, new UnusedPlatform(), fixture().environment());
+            controller.sliderPresetListNode().getSelectionModel().select(0);
+            VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
+            List<Node> before = List.copyOf(rows.getChildren());
+            assertEquals(List.of("Arms", "Waist"), before.stream()
+                    .map(row -> ((SliderChoiceRow) row).choiceName()).toList());
+            SliderChoiceRow waist = (SliderChoiceRow) before.get(1);
+            CheckBox enabled = waist.enabledControl();
+            Slider minimum = waist.minimumControl();
 
-                enabled.fire();
-                ((Button) loader.getNamespace().get("fiftyAllSliderChoicesButton")).fire();
+            enabled.fire();
+            ((Button) loader.getNamespace().get("fiftyAllSliderChoicesButton")).fire();
 
-                SliderPresetSnapshot edited = flow.frame().snapshot().getSliderPresets().getFirst();
-                assertFalse(edited.getSliderChoices().stream()
-                        .filter(choice -> choice.getName().equals("Waist")).findFirst().orElseThrow().isEnabled());
-                // The bulk action edits only enabled rows, so Arms changes while the disabled Waist keeps its value.
-                assertEquals(50, edited.getSliderChoices().stream()
-                        .filter(choice -> choice.getName().equals("Arms")).findFirst().orElseThrow()
-                        .getPercentageMinimum());
-                assertEquals(before, List.copyOf(rows.getChildren()));
-                for (int index = 0; index < before.size(); index++)
-                    assertSame(before.get(index), rows.getChildren().get(index), "row " + index + " was rebuilt");
-                assertSame(enabled, waist.enabledControl());
-                assertSame(minimum, waist.minimumControl());
-                assertFalse(enabled.isSelected());
-                stage.close();
-            });
-        } finally {
-            SettingsTestSupport.restoreRepositorySettings();
-        }
+            SliderPresetSnapshot edited = flow.frame().snapshot().getSliderPresets().getFirst();
+            assertFalse(edited.getSliderChoices().stream()
+                    .filter(choice -> choice.getName().equals("Waist")).findFirst().orElseThrow().isEnabled());
+            // The bulk action edits only enabled rows, so Arms changes while the disabled Waist keeps its value.
+            assertEquals(50, edited.getSliderChoices().stream()
+                    .filter(choice -> choice.getName().equals("Arms")).findFirst().orElseThrow()
+                    .getPercentageMinimum());
+            assertEquals(before, List.copyOf(rows.getChildren()));
+            for (int index = 0; index < before.size(); index++)
+                assertSame(before.get(index), rows.getChildren().get(index), "row " + index + " was rebuilt");
+            assertSame(enabled, waist.enabledControl());
+            assertSame(minimum, waist.minimumControl());
+            assertFalse(enabled.isSelected());
+            stage.close();
+        });
     }
 
     /**
@@ -321,7 +327,7 @@ class WorkbenchAccessibilityContractTest {
      */
     @Test
     void assignedSliderPresetsLabelForFollowsEveryListSwap() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         flow.apply(SliderPresetEdits.create("Alpha"));
         flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
 
@@ -331,7 +337,7 @@ class WorkbenchAccessibilityContractTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new UnusedPlatform());
+            controller.attach(flow, stage, new UnusedPlatform(), fixture().environment());
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
             Label label = (Label) loader.getNamespace().get("assignedMorphSliderPresetLabel");
             ListView<CustomMorphTargetSnapshot> targets = controller.customMorphTargetListNode();
@@ -381,8 +387,8 @@ class WorkbenchAccessibilityContractTest {
                 WorkbenchController controller = loader.getController();
                 Stage stage = new Stage();
                 stage.setScene(new Scene(root, 1300.0, 800.0));
-                controller.attach(new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create()), stage,
-                        new UnusedPlatform());
+                controller.attach(new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession()), stage,
+                        new UnusedPlatform(), fixture().environment());
                 stage.show();
                 stageHolder.set(stage);
                 loaderHolder.set(loader);
@@ -470,7 +476,7 @@ class WorkbenchAccessibilityContractTest {
         Path source = temporaryDirectory.resolve("npcs.txt");
         Files.writeString(source, "Skyrim.esm | Zq Portraitless | ZqNone01 | NordRace | 00012345\n"
                 + "Skyrim.esm | Zq Second | ZqNone02 | BretonRace | 00012346\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -478,7 +484,7 @@ class WorkbenchAccessibilityContractTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new UnusedPlatform(List.of(source)));
+            controller.attach(flow, stage, new UnusedPlatform(List.of(source)), fixture().environment());
             ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
 
             Map<String, String> empty = new LinkedHashMap<>();

@@ -52,6 +52,7 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | One converged production JSON codec | Enforcer `dependencyConvergence` and `bannedDependencies com.eclipsesource.minimal-json:*`; `JacksonDependencyPolicyTest` pins Jackson Core 3.1.5, scans production/test imports, and requires the temporary comparison reader to remain deleted |
 | Every production resource in the artifact | `Java25ToolchainGuardTest.everyProductionResourceIsInTheBuildOutput` (`target/classes` and classpath) and `Assert-JarContainsProductionResources` on the packaged jar |
 | Tests run headless, never on the desktop | Surefire `systemPropertyVariables` `glass.platform=headless` / `prism.order=sw`, pinned by `ProductionSourceGateTest.surefireRunsEveryTestOnTheHeadlessPlatform`; `desktop-fx` shape pinned by `desktopFxProfileIsAnExplicitOptInThatRemovesTheHeadlessOverrides`; `Assert-GateMavenArguments` rejects `desktop-fx` and the platform properties; `FxTestToolkit` refuses to start any other platform (`FxTestToolkitTest`) |
+| Production focus logic never depends on the OS-active window | `ProductionPlatformBanGateTest` reads every class in `target/classes` with `java.lang.classfile` and enforces the bans in [workbench-platform.md](workbench-platform.md#production-platform-bans), proving each rule against planted fixture violations; `WorkbenchFocusTest` asserts the resulting focus behaviour through `Scene.getFocusOwner()` |
 | The sole FXML/controller graph loads | `FxmlGraphLoadingTest` loads `workbench.fxml` with `WorkbenchController` on the pinned toolkit and asserts that no other FXML graph ships |
 | Preview profile isolation | `MainTest` requires an absolute `%LOCALAPPDATA%` root and resolves a distinct `BS2BG Preview` profile; the packaged smoke verifies the active Settings, generation, and theme files stay there without changing the stable profile or working directory |
 | Workbench Project lifecycle and centralized jobs | `JobCoordinatorTest` covers single admission, truthful progress, cancel/commit races, serialized result freshness, retry linkage, observer isolation, stale callbacks, and shutdown; `ProjectSessionOpenTest` proves detached Open parsing does not hold the publication lock; `WorkbenchProjectFlowTest` covers captured asynchronous Open, content-version and selected-source freshness, coherent lifecycle frames, and stale-effect rejection; `TemplatesFeatureTest`, `SettingsFeatureTest`, and `OutputFeatureTest` cover their immutable frame/intent seams; `WorkbenchControllerTest` covers real JavaFX admission/progress/cancel/Activity/Retry and captured Output rendering with platform effects substituted at the native chooser/dialog seam |
@@ -59,14 +60,15 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | Project, Settings, and generated Output contracts | `ProjectSession*Test`, `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`, `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, and `OutputRoutePolicyTest` required by the script; `JacksonJsonTest` and `JacksonDependencyPolicyTest` witness the shared JSON policy |
 
 The required suites the script asserts (report present, at least one test, zero failures/errors):
-`Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxTestToolkitTest`, `FxTestHarnessTest`, `FxmlGraphLoadingTest`, `LauncherTest`,
+`Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `ProductionPlatformBanGateTest`, `FxTestToolkitTest`, `FxTestHarnessTest`,
+`FxmlGraphLoadingTest`, `LauncherTest`,
 `WindowsAppImageGateTest`, `MainTest`, `FilteredViewTest`, `VisibleScopeCommandsTest`, `ProjectSessionTest`,
 `ProjectSessionOpenTest`, `ProjectSessionSaveTest`, `ProjectSessionImportTest`, `ProjectSessionSliderChoiceTest`,
 `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `JacksonJsonTest`,
 `JacksonDependencyPolicyTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`,
 `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, `OutputRoutePolicyTest`, `JobCoordinatorTest`,
-`WorkbenchProjectFlowTest`, `WorkbenchControllerTest`, `WorkbenchAccessibilityContractTest`, `TemplatesFeatureTest`,
-`SettingsFeatureTest`, and
+`WorkbenchProjectFlowTest`, `WorkbenchControllerTest`, `WorkbenchFocusTest`, `WorkbenchAccessibilityContractTest`,
+`TemplatesFeatureTest`, `SettingsFeatureTest`, and
 `OutputFeatureTest`.
 
 ## Headless test platform

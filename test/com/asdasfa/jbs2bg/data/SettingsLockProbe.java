@@ -19,7 +19,7 @@ public final class SettingsLockProbe {
     public static void main(String[] arguments) throws Exception {
         Path directory = Path.of(arguments[0]);
         Files.writeString(Path.of(arguments[1]), "ready");
-        Settings.InitializationResult result = Settings.initialize(directory);
+        Settings.InitializationResult result = new Settings(directory).reload();
         if (!result.isSuccessful())
             throw new IllegalStateException(result.getFailure().orElseThrow().formatForDisplay());
     }

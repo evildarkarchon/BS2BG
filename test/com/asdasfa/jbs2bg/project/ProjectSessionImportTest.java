@@ -17,11 +17,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 
@@ -31,6 +31,8 @@ class ProjectSessionImportTest {
 
     @TempDir
     Path tempDirectory;
+    // One isolated store per test, seeded by the @BeforeEach fixture.
+    private Settings settings;
 
     /**
      * Asserts the stable machine-readable fields for one failed XML source.
@@ -93,15 +95,8 @@ class ProjectSessionImportTest {
     void initializeSliderSettings() {
         Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
         standard.put("Breasts", new DefaultSliderValue(0.2f, 1f));
-        SettingsTestSupport.installDefaults(standard, Collections.emptyMap());
-    }
-
-    /**
-     * Restores process-wide Slider settings after each import seam test.
-     */
-    @AfterEach
-    void restoreSliderSettings() {
-        SettingsTestSupport.restoreRepositorySettings();
+        settings = SettingsTestSupport.installDefaults(tempDirectory.resolve("settings"), standard,
+                Collections.emptyMap());
     }
 
     /**
@@ -109,7 +104,7 @@ class ProjectSessionImportTest {
      */
     @Test
     void importBeforeActiveProjectRejectsEverySourceWithoutPublishing() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         ProjectSnapshot before = session.getSnapshot();
         List<Path> sources = Arrays.asList(tempDirectory.resolve("first.xml"),
                 tempDirectory.resolve("second.xml"));
@@ -145,7 +140,7 @@ class ProjectSessionImportTest {
                 + "<Preset name=\"Alpha.Shape\">"
                 + "<SetSlider name=\"Arms\" size=\"big\" value=\"90\"/>"
                 + "</Preset></SliderPresets>");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(zulu, alpha));
@@ -190,7 +185,7 @@ class ProjectSessionImportTest {
                 "<SliderPresets><Preset name=\"Must Not Commit\"/></SliderPresets>");
         Path third = writeXml("third.xml",
                 "<SliderPresets><Preset name=\"Also Unprocessed\"/></SliderPresets>");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         ProjectSnapshot clean = session.newProject().getSnapshot();
         ProjectOperationContext context = new ProjectOperationContext() {
             private boolean cancel;
@@ -260,7 +255,7 @@ class ProjectSessionImportTest {
         };
 
         assertThrows(CancellationException.class,
-                () -> BodySlidePresetFileParser.parse(source, context));
+                () -> BodySlidePresetFileParser.parse(source, settings.snapshot(), context));
     }
 
     /**
@@ -272,7 +267,7 @@ class ProjectSessionImportTest {
     @Test
     void oversizedBodySlideSourceIsRejectedBeforeDomConstruction() throws Exception {
         Path source = writePaddedXml("oversized.xml", 8 * 1024 * 1024 + 1);
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         ProjectSnapshot before = session.newProject().getSnapshot();
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(List.of(source));
@@ -326,7 +321,7 @@ class ProjectSessionImportTest {
 
         BodySlidePresetFileParser.InvalidBodySlidePresetException exception = assertThrows(
                 BodySlidePresetFileParser.InvalidBodySlidePresetException.class,
-                () -> BodySlidePresetFileParser.parse(source, context));
+                () -> BodySlidePresetFileParser.parse(source, settings.snapshot(), context));
 
         assertEquals("SLIDER_PRESET_XML_RESOURCE_LIMIT", exception.getCode());
         assertEquals("/", exception.getElement());
@@ -345,7 +340,7 @@ class ProjectSessionImportTest {
                 + "<SetSlider name=\"Waist\" size=\"small\" value=\"10\"/>"
                 + "</Preset></SliderPresets>");
         Path missing = tempDirectory.resolve("missing.xml");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(malformed, valid, missing));
@@ -382,7 +377,7 @@ class ProjectSessionImportTest {
         Path wrongRoot = writeXml("wrong-root.xml", "<NotSliderPresets/>");
         Path blankName = writeXml("blank-name.xml",
                 "<SliderPresets><Preset name=\"...\"/></SliderPresets>");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         ProjectSnapshot clean = session.newProject().getSnapshot();
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(wrongRoot, blankName));
@@ -417,7 +412,7 @@ class ProjectSessionImportTest {
                 + "<SetSlider name=\"Arms\" size=\"big\" value=\"not-an-integer\"/>"
                 + "</Preset>"
                 + "</SliderPresets>");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         ProjectSnapshot clean = session.newProject().getSnapshot();
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Arrays.asList(source));
@@ -441,7 +436,7 @@ class ProjectSessionImportTest {
      */
     @Test
     void missingSizeMeansBigWhileUnsupportedExplicitSizeRejectsTheSource() throws Exception {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         Path missingSize = writeXml("missing-size.xml", "<SliderPresets>"
                 + "<Preset name=\"Legacy Missing Size\">"
@@ -478,7 +473,7 @@ class ProjectSessionImportTest {
                 + "</Preset></SliderPresets>";
         Path duplicate = writeXml("duplicate.xml", xml);
         Path empty = writeXml("empty.xml", "<SliderPresets/>");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.importSliderPresets(Arrays.asList(duplicate));
         session.saveAs(tempDirectory.resolve("clean.jbs2bg"));
@@ -506,7 +501,7 @@ class ProjectSessionImportTest {
      */
     @Test
     void reimportUpdatesChoicesWithoutBreakingProjectRelationships() throws Exception {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.setUunp("Alpha", true));
@@ -553,7 +548,7 @@ class ProjectSessionImportTest {
                 "<SliderPresets><Preset name=\"Alpha\"/></SliderPresets>");
         Path beta = writeXml("concurrent-beta.xml",
                 "<SliderPresets><Preset name=\"beta\"/></SliderPresets>");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -598,7 +593,7 @@ class ProjectSessionImportTest {
                         return Boolean.valueOf(proxy == arguments[0]);
                     throw new AssertionError("Unexpected Path method: " + method.getName());
                 });
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
 
         SliderPresetImportOutcome outcome = session.importSliderPresets(Collections.singletonList(source));

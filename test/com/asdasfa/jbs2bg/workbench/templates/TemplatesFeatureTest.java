@@ -13,10 +13,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.filtering.NameIdentity;
@@ -48,6 +49,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TemplatesFeatureTest {
 
+    @TempDir
+    Path temporaryDirectory;
+    // One isolated store per test, seeded by the @BeforeEach fixture.
+    private Settings settings;
+
     /**
      * Publishes distinct profile defaults so profile switches and preview text are independently observable.
      */
@@ -57,15 +63,7 @@ class TemplatesFeatureTest {
         standard.put("Waist", new DefaultSliderValue(0.2f, 0.8f));
         Map<String, DefaultSliderValue> uunp = new LinkedHashMap<>();
         uunp.put("Arms", new DefaultSliderValue(0.1f, 0.5f));
-        SettingsTestSupport.installDefaults(standard, uunp);
-    }
-
-    /**
-     * Restores repository Settings so this feature fixture cannot leak into other test classes.
-     */
-    @AfterEach
-    void restoreSliderSettings() {
-        SettingsTestSupport.restoreRepositorySettings();
+        settings = SettingsTestSupport.installDefaults(temporaryDirectory, standard, uunp);
     }
 
     /**
@@ -74,9 +72,10 @@ class TemplatesFeatureTest {
      */
     @Test
     void profileSwitchRebuildsSynthesizedChoicesAndPublishesExactPreview() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
 
@@ -108,9 +107,10 @@ class TemplatesFeatureTest {
      */
     @Test
     void rowEnableEditDistinguishesChangedFromUnchangedAndPreservesSelection() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
 
@@ -132,9 +132,10 @@ class TemplatesFeatureTest {
      */
     @Test
     void rowRangeEditPublishesPreviewAndRetainsAcceptedStateAfterValidationRejection() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
 
@@ -157,13 +158,15 @@ class TemplatesFeatureTest {
     /** A disabled choice with an overflowing finite multiplier still renders a typed preview diagnostic. */
     @Test
     void disabledChoiceWithOverflowingMultiplierDoesNotBreakTemplatesRender() {
-        SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        SettingsTestSupport.replaceStandardOutput(settings, Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)),
+                List.of());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.setSliderChoice("Alpha", new SliderChoiceSnapshot(
                 "Overflow", false, Integer.valueOf(10), Integer.valueOf(200),
                 10, 200, 100, 100, false)));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
 
         TemplatesFeature.Update selected = feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
@@ -171,10 +174,11 @@ class TemplatesFeatureTest {
         assertTrue(selected.accepted());
         assertEquals("Preview unavailable", choiceNamed(selected.frame(), "Overflow").previewText());
         assertEquals("TEMPLATE_PREVIEW_NON_FINITE", selected.frame().diagnostics().getFirst().getCode());
-        assertEquals("Alpha=", ProjectOutputFormatter.generate(projectFlow.frame().snapshot(), false)
+        assertEquals("Alpha=", ProjectOutputFormatter.generate(projectFlow.frame().snapshot(), settings.snapshot(),
+                false)
                 .getTemplatesText());
 
-        SettingsTestSupport.installStandardOutput(Map.of(), List.of());
+        SettingsTestSupport.replaceStandardOutput(settings, Map.of(), List.of());
         TemplatesFeature.Update refreshed = feature.refreshSettings();
         assertEquals("Overflow@2.0", choiceNamed(refreshed.frame(), "Overflow").previewText());
         assertTrue(refreshed.frame().diagnostics().isEmpty());
@@ -186,7 +190,8 @@ class TemplatesFeatureTest {
      */
     @Test
     void gangOperationsAreAtomicEnabledOnlyAndMutuallyExclusive() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.setSliderChoice("Alpha",
                 new SliderChoiceSnapshot("Arms", true, Integer.valueOf(10), Integer.valueOf(90), 10, 90,
@@ -195,7 +200,7 @@ class TemplatesFeatureTest {
                 projectFlow.frame().snapshot().getSliderPresets().getFirst().getSliderChoices().stream()
                         .filter(choice -> choice.getName().equals("Waist")).findFirst().orElseThrow()
                         .withEnabled(false)));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
         long beforeSequence = feature.frame().projectSequence();
@@ -229,11 +234,11 @@ class TemplatesFeatureTest {
      */
     @Test
     void failedRowEditPreservesSelectionAndLastCommittedEditorFrame() {
-        FailingApplySession session = new FailingApplySession(ProjectSessions.create());
+        FailingApplySession session = new FailingApplySession(ProjectSessions.create(settings::snapshot));
         WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", session);
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         session.failEdits();
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
 
@@ -258,10 +263,11 @@ class TemplatesFeatureTest {
      */
     @Test
     void createPublishesAndSelectsTheReturnedSliderPresetIdentity() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Gamma"));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         assertEquals(List.of("Alpha", "Gamma"), names(feature.frame().visiblePresets()));
         assertTrue(feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("gamma"))).accepted());
@@ -277,9 +283,10 @@ class TemplatesFeatureTest {
     /** Creating and selecting a preset releases state owned by the previous preset. */
     @Test
     void createSelectionClearsThePreviousPresetGangAndRename() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
         feature.dispatch(new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.ALL, true));
@@ -298,10 +305,11 @@ class TemplatesFeatureTest {
      */
     @Test
     void filteringOutTheSelectionNeverSilentlyRestoresOrRetargetsIt() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Beta")));
 
@@ -323,12 +331,13 @@ class TemplatesFeatureTest {
      */
     @Test
     void typeAheadUsesVisibleSortedOrderAndResetsAfterSevenHundredFiftyMilliseconds() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
         projectFlow.apply(SliderPresetEdits.create("Bravo"));
         MutableClock clock = new MutableClock(Instant.parse("2026-08-31T12:00:00Z"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow, clock);
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot, clock);
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
 
         TemplatesFeature.Update sorted = feature.dispatch(
@@ -349,10 +358,11 @@ class TemplatesFeatureTest {
     /** A type-ahead selection must release the previous preset's inspector-owned gang lock. */
     @Test
     void typeAheadSelectionClearsThePreviousPresetGangMode() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
         feature.dispatch(new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.ALL, true));
@@ -370,10 +380,11 @@ class TemplatesFeatureTest {
      */
     @Test
     void duplicateCopiesTheSelectedSliderPresetAndSelectsTheCopy() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.setUunp("Alpha", true));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("alpha")));
 
@@ -388,9 +399,10 @@ class TemplatesFeatureTest {
     /** Duplicating and selecting a copy releases state owned by the source preset. */
     @Test
     void duplicateSelectionClearsTheSourcePresetGangAndRename() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
         feature.dispatch(new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.ALL, true));
@@ -409,13 +421,14 @@ class TemplatesFeatureTest {
      */
     @Test
     void inlineRenameRetainsRejectedDraftThenPublishesReferentialCascade() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
         projectFlow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
         projectFlow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
                 "Aela", "Skyrim.esm", "Aela", "NordRace", "1A696", List.of("Alpha"))));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
         feature.dispatch(new TemplatesFeature.BeginRename());
@@ -444,10 +457,11 @@ class TemplatesFeatureTest {
     /** Selecting another preset abandons a rename draft owned by the previous selection. */
     @Test
     void selectingAnotherPresetCancelsThePreviousInlineRename() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
         feature.dispatch(new TemplatesFeature.BeginRename());
@@ -467,11 +481,12 @@ class TemplatesFeatureTest {
      */
     @Test
     void confirmedRemoveDeletesTheCapturedIdentityWithoutRetargetingSelection() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
         projectFlow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha", "Beta")));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.Select(NameIdentity.of("Alpha")));
 
@@ -497,12 +512,13 @@ class TemplatesFeatureTest {
      */
     @Test
     void confirmedClearVisiblePreservesHiddenSliderPresetsAndRelationships() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         projectFlow.apply(SliderPresetEdits.create("Alpha"));
         projectFlow.apply(SliderPresetEdits.create("Beta"));
         projectFlow.apply(SliderPresetEdits.create("Gamma"));
         projectFlow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha", "Beta", "Gamma")));
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC));
         feature.dispatch(new TemplatesFeature.ChangeFilter("bet"));
 
@@ -528,9 +544,10 @@ class TemplatesFeatureTest {
      */
     @Test
     void observersReceiveCommittedFramesAndIsolateCallbackFailures() {
-        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow projectFlow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         List<Throwable> failures = new ArrayList<>();
-        TemplatesFeature feature = new TemplatesFeature(projectFlow,
+        TemplatesFeature feature = new TemplatesFeature(projectFlow, settings::snapshot,
                 Clock.fixed(Instant.parse("2026-08-31T12:00:00Z"), ZoneOffset.UTC), failures::add);
         List<TemplatesFeature.Frame> observed = new ArrayList<>();
         TemplatesFeature.Subscription subscription = feature.observe(observed::add);
