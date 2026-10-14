@@ -59,7 +59,7 @@ invocation. Delete the cache directory to force a fresh download and hash verifi
 | Project, Settings, and generated Output contracts | `ProjectSession*Test`, `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`, `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, and `OutputRoutePolicyTest` required by the script; `JacksonJsonTest` and `JacksonDependencyPolicyTest` witness the shared JSON policy |
 
 The required suites the script asserts (report present, at least one test, zero failures/errors):
-`Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxTestToolkitTest`, `FxmlGraphLoadingTest`, `LauncherTest`,
+`Java25ToolchainGuardTest`, `ProductionSourceGateTest`, `FxTestToolkitTest`, `FxTestHarnessTest`, `FxmlGraphLoadingTest`, `LauncherTest`,
 `WindowsAppImageGateTest`, `MainTest`, `FilteredViewTest`, `VisibleScopeCommandsTest`, `ProjectSessionTest`,
 `ProjectSessionOpenTest`, `ProjectSessionSaveTest`, `ProjectSessionImportTest`, `ProjectSessionSliderChoiceTest`,
 `ProjectJacksonCompatibilityTest`, `ProjectTest`, `ProjectPersistenceCompatibilityTest`, `JacksonJsonTest`,
@@ -87,6 +87,25 @@ of the packaged image) is the only tier that uses the real desktop.
   `.\mvnw.cmd test -Dglass.platform=win` would otherwise switch platforms silently. `FxTestToolkit.ensureStarted()`
   checks the two properties before `Platform.startup` and fails every FX test with an `AssertionError` that names
   the `desktop-fx` profile.
+
+## JavaFX test harness
+
+FX tests use `FxTestToolkit` and its JUnit companion `FxTestExtension` (both in `test/com/asdasfa/jbs2bg/fx/`).
+`FxTestHarnessTest` proves each guarantee on the real headless toolkit.
+
+- **After every test.** `FxTestExtension` is registered for every test through JUnit extension autodetection
+  (`test-resources/junit-platform.properties` and the `META-INF/services` entry beside it). Once the toolkit runs, it
+  silently hides every window still showing, so a leaked Stage or popup cannot reach the next test. It also asserts
+  that JavaFX accessibility is not active on the headless platform, a tripwire for JavaFX updates. Tests still
+  close their own stages in `try/finally`.
+- **Uncaught FX-thread exceptions fail the test.** An uncaught-exception handler on the FX thread records anything
+  a `runLater`, event handler or pulse listener throws. The next `runOnFxThread` body fails with it, or the
+  after-each cleanup does if no body follows. An `UploadingPainter` blit fault that JavaFX only prints is not
+  caught; there is no stderr scan.
+- **Popups are found by owner.** `FxTestToolkit.showingPopup(owner, selector)` returns the one showing `Popup`
+  owned by the test's window whose scene matches the selector. Tests do not scan `Window.getWindows()`.
+- **Layout waits use real pulses.** `FxTestToolkit.awaitLayoutPulses(scene, n)` is called from the test thread
+  between FX bodies and waits for `n` post-layout pulses. Tests do not enter nested event loops.
 
 ## Public-JavaFX replacements made for this gate
 

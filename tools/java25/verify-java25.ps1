@@ -203,6 +203,7 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest',
     'com.asdasfa.jbs2bg.build.ProductionSourceGateTest',
     'com.asdasfa.jbs2bg.fx.FxTestToolkitTest',
+    'com.asdasfa.jbs2bg.fx.FxTestHarnessTest',
     'com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest',
     'com.asdasfa.jbs2bg.build.LauncherTest',
     'com.asdasfa.jbs2bg.build.WindowsAppImageGateTest',

@@ -91,7 +91,6 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.Popup;
-import javafx.stage.Window;
 import javafx.stage.WindowEvent;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -321,10 +320,7 @@ class WorkbenchControllerTest {
 
                 ToggleButton raceFilter = (ToggleButton) loader.getNamespace().get("npcRaceFilterButton");
                 raceFilter.fire();
-                Popup cancelledFilter = (Popup) Window.getWindows().stream()
-                        .filter(window -> window instanceof Popup && window.isShowing()
-                                && window.getScene().getRoot().lookup("#npcColumnFilterChoices") != null)
-                        .findFirst().orElseThrow();
+                Popup cancelledFilter = FxTestToolkit.showingPopup(stage, "#npcColumnFilterChoices");
                 sendKey(cancelledFilter.getScene().getRoot(), KeyCode.ESCAPE);
                 assertFalse(cancelledFilter.isShowing());
                 assertEquals(2, catalog.getItems().size());
@@ -624,9 +620,7 @@ class WorkbenchControllerTest {
                 stage.show();
                 Button launcher = (Button) loader.getNamespace().get("fillEmptyNpcMorphAssignmentsButton");
                 launcher.fire();
-                Popup first = (Popup) Window.getWindows().stream()
-                        .filter(window -> window instanceof Popup && window.isShowing())
-                        .findFirst().orElseThrow();
+                Popup first = FxTestToolkit.showingPopup(stage, "#fillEmptyApplyButton");
                 Button firstApply = (Button) first.getScene().getRoot().lookup("#fillEmptyApplyButton");
                 assertTrue(firstApply.isDisabled());
                 ((Button) first.getScene().getRoot().lookup("#fillEmptyCancelButton")).fire();
@@ -635,9 +629,7 @@ class WorkbenchControllerTest {
                         .getSliderPresetNames().isEmpty());
 
                 launcher.fire();
-                Popup second = (Popup) Window.getWindows().stream()
-                        .filter(window -> window instanceof Popup && window.isShowing())
-                        .findFirst().orElseThrow();
+                Popup second = FxTestToolkit.showingPopup(stage, "#fillEmptyApplyButton");
                 @SuppressWarnings("unchecked")
                 ListView<SliderPresetSnapshot> choices =
                         (ListView<SliderPresetSnapshot>) second.getScene().getRoot()
@@ -731,54 +723,57 @@ class WorkbenchControllerTest {
         flow.apply(SliderPresetEdits.create("Beta"));
         flow.apply(CustomMorphTargetEdits.create("First"));
         flow.apply(CustomMorphTargetEdits.create("Second"));
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            stage.getScene().getStylesheets().add(Main.class.getResource("workbench.css").toExternalForm());
-            stage.setForceIntegerRenderScale(false);
-            stage.setRenderScaleX(renderScale);
-            stage.setRenderScaleY(renderScale);
-            controller.attach(flow, stage, new RecordingPlatform());
-            if (morphs)
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-            ListView<?> catalog = morphs ? controller.customMorphTargetListNode() : controller.sliderPresetListNode();
-            try {
-                stage.show();
+        AtomicReference<Stage> shown = new AtomicReference<>();
+        AtomicReference<ListView<?>> shownCatalog = new AtomicReference<>();
+        // Multi-block test: the shown Stage stays live on the FX thread while the test thread waits for real
+        // layout pulses between the bodies (FxTestToolkit.awaitLayoutPulses), instead of a nested event loop.
+        try {
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+                Parent root = loader.load();
+                WorkbenchController controller = loader.getController();
+                Stage stage = new Stage();
+                stage.setScene(new Scene(root, 1300.0, 800.0));
+                stage.getScene().getStylesheets().add(Main.class.getResource("workbench.css").toExternalForm());
+                stage.setForceIntegerRenderScale(false);
                 stage.setRenderScaleX(renderScale);
                 stage.setRenderScaleY(renderScale);
-                settleCatalogLayout(root);
-                assertShortCatalogHasNoVerticalScrollbar(catalog);
+                controller.attach(flow, stage, new RecordingPlatform());
+                if (morphs)
+                    ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                shownCatalog.set(morphs ? controller.customMorphTargetListNode() : controller.sliderPresetListNode());
+                shown.set(stage);
+                stage.show();
+                // Showing a window resets its render scale to the screen's output scale, so force it again.
+                stage.setRenderScaleX(renderScale);
+                stage.setRenderScaleY(renderScale);
+            });
+            FxTestToolkit.awaitLayoutPulses(shown.get().getScene(), 2);
+            FxTestToolkit.runOnFxThread(() -> {
+                assertRenderScale(renderScale, shown.get());
+                assertShortCatalogHasNoVerticalScrollbar(shownCatalog.get());
                 // A displayed window can move to another monitor without any Project frame changing.
-                stage.setRenderScaleX(1.5);
-                stage.setRenderScaleY(1.5);
-                settleCatalogLayout(root);
-                assertShortCatalogHasNoVerticalScrollbar(catalog);
-            } finally {
-                stage.close();
-            }
-        });
+                shown.get().setRenderScaleX(1.5);
+                shown.get().setRenderScaleY(1.5);
+            });
+            FxTestToolkit.awaitLayoutPulses(shown.get().getScene(), 2);
+            FxTestToolkit.runOnFxThread(() -> {
+                assertRenderScale(1.5, shown.get());
+                assertShortCatalogHasNoVerticalScrollbar(shownCatalog.get());
+            });
+        } finally {
+            if (shown.get() != null)
+                FxTestToolkit.runOnFxThread(() -> shown.get().close());
+        }
     }
 
-    /** Waits for CSS/navigation and VirtualFlow's deferred cell metrics to finish real layout pulses. */
-    private static void settleCatalogLayout(Parent root) {
-        Object loop = new Object();
-        int[] pulses = {0};
-        Runnable listener = () -> {
-            if (++pulses[0] == 2)
-                Platform.runLater(() -> Platform.exitNestedEventLoop(loop, null));
-            else
-                Platform.requestNextPulse();
-        };
-        root.getScene().addPostLayoutPulseListener(listener);
-        try {
-            Platform.requestNextPulse();
-            Platform.enterNestedEventLoop(loop);
-        } finally {
-            root.getScene().removePostLayoutPulseListener(listener);
-        }
+    /**
+     * Proves a forced render scale actually reached the shown window, so the scrollbar assertions that follow
+     * really ran at the fractional scale rather than at the headless screen's own scale.
+     */
+    private static void assertRenderScale(double expected, Stage stage) {
+        assertEquals(expected, stage.getRenderScaleX(), "renderScaleX override was not applied");
+        assertEquals(expected, stage.getRenderScaleY(), "renderScaleY override was not applied");
     }
 
     /** Asserts user-visible list overflow through JavaFX's public accessibility surface. */
@@ -2164,10 +2159,7 @@ class WorkbenchControllerTest {
         };
         ToggleButton launcher = (ToggleButton) loader.getNamespace().get(buttonId);
         launcher.fire();
-        Popup popup = (Popup) Window.getWindows().stream()
-                .filter(window -> window instanceof Popup && window.isShowing()
-                        && window.getScene().getRoot().lookup("#npcColumnFilterChoices") != null)
-                .findFirst().orElseThrow();
+        Popup popup = FxTestToolkit.showingPopup(launcher.getScene().getWindow(), "#npcColumnFilterChoices");
         assertTrue(launcher.getAccessibleHelp().contains("expanded"));
         ListView<?> choices = (ListView<?>) popup.getScene().getRoot().lookup("#npcColumnFilterChoices");
         int index = java.util.stream.IntStream.range(0, choices.getItems().size())
