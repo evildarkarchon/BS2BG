@@ -874,7 +874,7 @@
                                                         wrapText="true" VBox.vgrow="ALWAYS" />
                                             </children>
                                         </VBox>
-                                        <VBox prefWidth="360.0" spacing="4.0" HBox.hgrow="ALWAYS">
+                                        <VBox fx:id="activitySection" prefWidth="360.0" spacing="4.0" HBox.hgrow="ALWAYS">
                                             <children>
                                                 <Label text="Activity" />
                                                 <ListView fx:id="activityList" accessibleText="Activity"
