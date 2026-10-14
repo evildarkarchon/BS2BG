@@ -446,6 +446,112 @@ function Wait-UiaElement {
 
 <#
 .SYNOPSIS
+    Reports whether an exception (or anything it wraps) means a UIA element is no longer available.
+.DESCRIPTION
+    The managed client raises ElementNotAvailableException; the native provider can surface the same condition as a
+    COMException carrying UIA_E_ELEMENTNOTAVAILABLE (0x80040201). PowerShell wraps either one in its own invocation
+    exceptions, so the whole InnerException chain is inspected.
+.PARAMETER Exception
+    The exception to classify; pass $_.Exception from a catch block.
+#>
+function Test-UiaElementUnavailableError {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [System.Exception]$Exception)
+    $current = $Exception
+    while ($null -ne $current) {
+        if ($current -is [System.Windows.Automation.ElementNotAvailableException]) { return $true }
+        if ($current -is [System.Runtime.InteropServices.COMException] -and $current.HResult -eq -2147220991) {
+            return $true
+        }
+        $current = $current.InnerException
+    }
+    return $false
+}
+
+<#
+.SYNOPSIS
+    Looks up one element exactly once and fails at once, without polling, when it is missing or unavailable.
+.DESCRIPTION
+    Wait-UiaCondition deliberately swallows element-unavailable errors while it polls, so it cannot prove that the
+    provider kept an element alive. Checks that must prove an element survived a re-render use this lookup instead;
+    every other error is rethrown unchanged.
+.OUTPUTS
+    The element that satisfies Condition.
+#>
+function Find-UiaElementStrict {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Root,
+        [Parameter(Mandatory)] $Condition,
+        [Parameter(Mandatory)] [string]$Description,
+        [ValidateSet('Children', 'Descendants')] [string]$Scope = 'Descendants'
+    )
+    try {
+        $element = Find-UiaElement -Root $Root -Condition $Condition -Scope $Scope
+    }
+    catch {
+        if (Test-UiaElementUnavailableError -Exception $_.Exception) {
+            throw "UIA reported element-unavailable while looking up ${Description}: $($_.Exception.Message)"
+        }
+        throw
+    }
+    if ($null -eq $element) { throw "UIA did not find $Description." }
+    return $element
+}
+
+<#
+.SYNOPSIS
+    Proves that a held element is still live and that a fresh strict lookup returns the same RuntimeId.
+.DESCRIPTION
+    A provider that drops and recreates its children can keep every name intact while invalidating the elements an
+    assistive technology holds. This reads the held element's live state, then looks the element up again with
+    Find-UiaElementStrict, and fails on any element-unavailable error or a changed RuntimeId.
+.PARAMETER Element
+    The element captured before the re-render.
+.PARAMETER ExpectedRuntimeId
+    The RuntimeId read from Element before the re-render.
+.OUTPUTS
+    The stable RuntimeId as dotted text, for smoke evidence.
+#>
+function Assert-UiaElementStable {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Element,
+        [Parameter(Mandatory)] [int[]]$ExpectedRuntimeId,
+        [Parameter(Mandatory)] $Root,
+        [Parameter(Mandatory)] $Condition,
+        [Parameter(Mandatory)] [string]$Description
+    )
+    $expected = $ExpectedRuntimeId -join '.'
+    try {
+        # GetRuntimeId and Current both query the live provider, so a dropped element throws here.
+        $held = @($Element.GetRuntimeId()) -join '.'
+        $null = $Element.Current.Name
+    }
+    catch {
+        if (Test-UiaElementUnavailableError -Exception $_.Exception) {
+            throw "The held $Description became element-unavailable after the re-render: $($_.Exception.Message)"
+        }
+        throw
+    }
+    $fresh = Find-UiaElementStrict -Root $Root -Condition $Condition -Description $Description
+    try {
+        $actual = @($fresh.GetRuntimeId()) -join '.'
+    }
+    catch {
+        if (Test-UiaElementUnavailableError -Exception $_.Exception) {
+            throw "The fresh $Description became element-unavailable during the RuntimeId read: $($_.Exception.Message)"
+        }
+        throw
+    }
+    if ($held -cne $expected -or $actual -cne $expected) {
+        throw "$Description changed identity across the re-render: RuntimeId $expected became $actual (held element reports $held)."
+    }
+    return $expected
+}
+
+<#
+.SYNOPSIS
     Waits for a top-level window owned by the process with the given title.
 #>
 function Wait-UiaWindow {
@@ -1174,6 +1280,9 @@ Export-ModuleMember -Function @(
     'Find-UiaElements',
     'Wait-UiaCondition',
     'Wait-UiaElement',
+    'Test-UiaElementUnavailableError',
+    'Find-UiaElementStrict',
+    'Assert-UiaElementStable',
     'Wait-UiaWindow',
     'Wait-UiaOwnedWindow',
     'Wait-UiaPointOwner',

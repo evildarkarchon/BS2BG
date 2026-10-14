@@ -44,6 +44,33 @@ restored both inside the successful test step and unconditionally in `finally`; 
 The screenshot artifacts support visual review of contrast, clipping, and fidelity that UIA cannot prove. Targeted
 human Narrator and cross-monitor inspection remain release evidence rather than claims inferred from automation.
 
+### Mechanism at Tier 1, outcome at Tier 3
+
+Each accessibility workaround and contract is proven twice
+([#128](https://github.com/evildarkarchon/BS2BG/issues/128)). Headless Tiers 1-2 never activate accessibility, so
+they cannot show that a workaround is needed or enough:
+
+- **Tier 1 proves the mechanism** as plain JavaFX logic in `WorkbenchAccessibilityContractTest`, plus the older
+  refill checks in `WorkbenchControllerTest`. It covers node replacement on an empty-to-full refill (all four lists),
+  no list-change event on a membership-preserving re-render (every guarded list), the rename edit lifecycle and
+  in-place cell update, slider-row identity across edits, `labelFor` re-pointing after the Assigned Slider Presets
+  swap, mnemonic stripping from accessible names, and the NPC Database label and portrait-status HelpText values.
+  Each test fails if its workaround or contract is removed.
+- **Tier 3 proves the outcome** through real UIA and never asserts how it was achieved. Its existing locators match
+  ControlType, Name and HelpText, which already proves the property-to-UIA mapping. Two checks target workarounds
+  directly:
+  - **Slider Presets RuntimeId stability.** The smoke holds the `UUNP Athletic` ListItem, re-renders Templates
+    through a keyboard selection that keeps list membership, and asserts that the held element is still live and
+    that a fresh lookup returns the same RuntimeId. It uses the strict helpers `Find-UiaElementStrict` and
+    `Assert-UiaElementStable`, which fail on element-unavailable errors that `Wait-UiaCondition` swallows while
+    polling. Only this check uses them.
+  - **NPC column filter outside click.** A pointer click on the NPC Database Area title closes the open Name filter
+    popup and discards its pending choice. The popup sets `autoHide` and `consumeAutoHidingEvents`, which is
+    BS2BG's own choice. The existing Fill Empty outside-click check stays.
+- **Not automated.** Closing popups when the main window loses focus is JavaFX's built-in `autoHide` behaviour and
+  is not tested. Focus announcements mean only that UIA reports `HasKeyboardFocus` on the expected element;
+  Narrator speech stays human release evidence.
+
 ## Headless test platform workarounds
 
 Tiers 1 and 2 run on JavaFX's built-in headless platform ([ADR-0008](../adr/0008-tiers-1-2-run-headless.md)).

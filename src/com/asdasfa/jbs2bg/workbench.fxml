@@ -830,6 +830,7 @@
                                                                                         preserveRatio="true" smooth="true" />
                                                                                 <Label fx:id="npcDatabasePortraitStatus"
                                                                                         accessibleText="NPC Database portrait status"
+                                                                                        accessibleHelp="Select an NPC Database entry to inspect its portrait."
                                                                                         text="No NPC portrait selected"
                                                                                         wrapText="true" />
                                                                                 <Button fx:id="openNpcDatabasePortraitViewerButton"
