@@ -317,9 +317,12 @@ public final class WorkbenchController {
         }
         projectFlow = Objects.requireNonNull(flow, "flow");
         settings = environment.settings();
-        templatesFeature = new TemplatesFeature(projectFlow, settings::snapshot, Clock.systemUTC());
-        morphsFeature = new MorphsFeature(projectFlow, Clock.systemUTC());
-        npcDatabaseFeature = new NpcDatabaseFeature(projectFlow, Clock.systemUTC());
+        // The three features read their clock only to time type-ahead gaps, so they get monotonic ticker time: a
+        // wall-clock adjustment between two keys must not expire or extend a prefix.
+        Clock typeAheadClock = MonotonicClock.system();
+        templatesFeature = new TemplatesFeature(projectFlow, settings::snapshot, typeAheadClock);
+        morphsFeature = new MorphsFeature(projectFlow, typeAheadClock);
+        npcDatabaseFeature = new NpcDatabaseFeature(projectFlow, typeAheadClock);
         settingsFeature = new SettingsFeature(settings, environment.settingsStartup(),
                 environment.preferencesDirectory(), environment.migrationPolicy());
         settingsJobs = new SettingsJobRunner(settingsFeature, settings, projectFlow.jobs(),
