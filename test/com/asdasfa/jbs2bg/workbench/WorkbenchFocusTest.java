@@ -493,20 +493,28 @@ class WorkbenchFocusTest {
                     thumbnailLoaded.countDown();
             });
             assertTrue(thumbnailLoaded.await(30, TimeUnit.SECONDS), "portrait thumbnail never loaded");
+            AtomicReference<Stage> viewer = new AtomicReference<>();
             FxTestToolkit.runOnFxThread(() -> {
                 Button launcher = shown.get().node("openNpcPortraitViewerButton");
                 shown.get().controller().npcMorphAssignmentListNode().requestFocus();
 
                 launcher.fire();
 
-                Stage viewer = FxTestToolkit.showingOwnedStage(shown.get().stage(), ".npc-portrait-viewer");
-                Node close = viewer.getScene().getFocusOwner();
+                viewer.set(FxTestToolkit.showingOwnedStage(shown.get().stage(), ".npc-portrait-viewer"));
+                Node close = viewer.get().getScene().getFocusOwner();
                 assertTrue(close instanceof Button button && button.getText().equals("Close"),
                         () -> "viewer focus owner: " + close);
+            });
+            // Closing before the full image has loaded would leave the portrait file open and the @TempDir
+            // undeletable on Windows.
+            PortraitTestSupport.awaitFullImage(viewer.get());
+            FxTestToolkit.runOnFxThread(() -> {
+                Button launcher = shown.get().node("openNpcPortraitViewerButton");
+                Node close = viewer.get().getScene().getFocusOwner();
 
                 ((Button) close).fire();
 
-                assertFalse(viewer.isShowing());
+                assertFalse(viewer.get().isShowing());
                 assertSame(launcher, shown.get().scene().getFocusOwner());
             });
         } finally {

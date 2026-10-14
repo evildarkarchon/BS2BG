@@ -201,16 +201,7 @@ class WorkbenchControllerTest {
             });
             // The viewer's background full-image load holds the portrait open; let it finish so the @TempDir can be
             // deleted on Windows.
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-            AtomicBoolean fullImageLoaded = new AtomicBoolean();
-            while (!fullImageLoaded.get()) {
-                assertTrue(System.nanoTime() < deadline, "the viewer's full image never loaded");
-                FxTestToolkit.runOnFxThread(() -> fullImageLoaded.set(viewer.get().getScene().getRoot()
-                        .lookupAll(".label").stream().anyMatch(node -> String.valueOf(node.getAccessibleText())
-                                .endsWith(" pixels"))));
-                if (!fullImageLoaded.get())
-                    Thread.sleep(20L);
-            }
+            PortraitTestSupport.awaitFullImage(viewer.get());
             FxTestToolkit.runOnFxThread(() -> {
                 shown.get().close();
 

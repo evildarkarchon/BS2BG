@@ -6,12 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static com.asdasfa.jbs2bg.workbench.PortraitTestSupport.awaitFullImage;
+import static com.asdasfa.jbs2bg.workbench.PortraitTestSupport.awaitOnFx;
+import static com.asdasfa.jbs2bg.workbench.PortraitTestSupport.copyPortrait;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BooleanSupplier;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -59,11 +60,11 @@ class NpcPortraitViewerTest {
         return node.getPseudoClassStates().contains(PseudoClass.getPseudoClass(pseudoClass));
     }
 
-    /** Copies the application icon into the image directory as a real decodable portrait. */
+    /** Copies the application icon into the image directory as a real decodable portrait per file name. */
     private Path images(String... portraitFiles) throws Exception {
         Path images = Files.createDirectories(temporaryDirectory.resolve("images"));
         for (String file : portraitFiles)
-            Files.copy(Path.of("assets", "res", "icon.png"), images.resolve(file));
+            copyPortrait(images, file);
         return images;
     }
 
@@ -92,30 +93,6 @@ class NpcPortraitViewerTest {
         });
         awaitOnFx("the thumbnail to load", () -> !shown.get().launcher().isDisabled());
         return shown;
-    }
-
-    /**
-     * Waits until a viewer's full-resolution image has loaded and reports its dimensions. Tests wait for this before
-     * closing a viewer, because the background load holds the portrait file open and Windows would then refuse to
-     * delete the {@code @TempDir}.
-     */
-    private static void awaitFullImage(Stage viewer) throws Exception {
-        awaitOnFx("the full image to load", () -> viewer.getScene().getRoot().lookupAll(".label").stream()
-                .anyMatch(node -> "NPC portrait dimensions: 512 × 512 pixels".equals(node.getAccessibleText())));
-    }
-
-    /** Polls an FX-thread condition from the test thread, failing after the harness timeout. */
-    private static void awaitOnFx(String description, BooleanSupplier condition) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(FxTestToolkit.TIMEOUT_SECONDS);
-        boolean[] met = new boolean[1];
-        while (true) {
-            FxTestToolkit.runOnFxThread(() -> met[0] = condition.getAsBoolean());
-            if (met[0])
-                return;
-            if (System.nanoTime() > deadline)
-                throw new AssertionError("timed out waiting for " + description);
-            Thread.sleep(20L);
-        }
     }
 
     /** Closes the inspector's owner window from the test thread. */
