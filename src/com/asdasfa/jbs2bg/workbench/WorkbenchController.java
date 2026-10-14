@@ -719,7 +719,7 @@ public final class WorkbenchController {
         settings = environment.settings();
         templatesFeature = new TemplatesFeature(projectFlow, settings::snapshot, Clock.systemUTC());
         morphsFeature = new MorphsFeature(projectFlow, Clock.systemUTC());
-        npcDatabaseFeature = new NpcDatabaseFeature();
+        npcDatabaseFeature = new NpcDatabaseFeature(projectFlow, Clock.systemUTC());
         npcDatabaseImporter = new NpcDatabaseImporter(npcDatabaseFeature, projectFlow.jobs(), this::renderNpcDatabase);
         settingsFeature = new SettingsFeature(settings, environment.settingsStartup(),
                 environment.preferencesDirectory(), environment.migrationPolicy());
@@ -1444,10 +1444,9 @@ public final class WorkbenchController {
             }
         });
         npcSourceList.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
-            if (!renderingNpcDatabase) {
-                npcDatabaseFeature.selectSource(selected == null ? Optional.empty() : Optional.of(selected.path()));
-                renderNpcDatabase(npcDatabaseFeature.frame());
-            }
+            if (!renderingNpcDatabase)
+                dispatchNpcDatabase(new NpcDatabaseFeature.SelectSource(
+                        selected == null ? Optional.empty() : Optional.of(selected.path())));
         });
         npcNameColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getName()));
         npcMasterColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getMod()));
@@ -1472,33 +1471,25 @@ public final class WorkbenchController {
                 keys.add(column.getSortType() == TableColumn.SortType.DESCENDING
                         ? SortKey.descending(column.getText()) : SortKey.ascending(column.getText()));
             }
-            npcDatabaseFeature.setSortOrder(keys);
-            renderNpcDatabase(npcDatabaseFeature.frame());
+            dispatchNpcDatabase(new NpcDatabaseFeature.ChangeSort(keys));
             return true;
         });
         npcCatalogTable.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
-            if (!renderingNpcDatabase) {
-                if (selected == null)
-                    npcDatabaseFeature.clearSelection();
-                else
-                    npcDatabaseFeature.selectRow(ProjectIdentities.npcDatabaseEntry(selected));
-                renderNpcDatabase(npcDatabaseFeature.frame());
-            }
+            if (!renderingNpcDatabase)
+                dispatchNpcDatabase(selected == null ? new NpcDatabaseFeature.ClearSelection()
+                        : new NpcDatabaseFeature.SelectRow(ProjectIdentities.npcDatabaseEntry(selected)));
         });
         npcCatalogTable.addEventFilter(KeyEvent.KEY_TYPED, event -> {
             if (event.getCharacter().length() == 1 && !event.isControlDown() && !event.isAltDown()
                     && !Character.isISOControl(event.getCharacter().charAt(0))
                     && !Character.isWhitespace(event.getCharacter().charAt(0))) {
-                NpcDatabaseFeature.Frame typed = npcDatabaseFeature.typeAhead(
-                        event.getCharacter().charAt(0), System.nanoTime());
-                renderNpcDatabase(typed);
-                typed.selectedRow().ifPresent(row -> npcCatalogTable.scrollTo(typed.visibleRows().indexOf(row)));
+                dispatchNpcDatabase(new NpcDatabaseFeature.TypeAhead(event.getCharacter().charAt(0)));
                 event.consume();
             }
         });
         npcCatalogTable.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.getCode() == KeyCode.ENTER) {
-                promoteNpcDatabase(false);
+                dispatchNpcDatabase(new NpcDatabaseFeature.AddSelected());
                 event.consume();
             }
         });
@@ -1510,10 +1501,8 @@ public final class WorkbenchController {
         npcSortChoice.getItems().setAll(npcSortChoices.keySet());
         npcSortChoice.setAccessibleHelp("NPC Database sort: source order or any catalog column ascending or descending.");
         npcSortChoice.setOnAction(event -> {
-            if (!renderingNpcDatabase && npcSortChoices.containsKey(npcSortChoice.getValue())) {
-                npcDatabaseFeature.setSortOrder(npcSortChoices.get(npcSortChoice.getValue()));
-                renderNpcDatabase(npcDatabaseFeature.frame());
-            }
+            if (!renderingNpcDatabase && npcSortChoices.containsKey(npcSortChoice.getValue()))
+                dispatchNpcDatabase(new NpcDatabaseFeature.ChangeSort(npcSortChoices.get(npcSortChoice.getValue())));
         });
         npcFilterButtons.put("Name", npcNameFilterButton);
         npcFilterButtons.put("Master", npcMasterFilterButton);
@@ -1522,25 +1511,18 @@ public final class WorkbenchController {
         npcFilterButtons.put("FormID", npcFormIdFilterButton);
         npcFilterButtons.forEach((column, button) ->
                 button.setOnAction(event -> showNpcColumnFilter(column, button)));
-        clearNpcFiltersButton.setOnAction(event -> {
-            npcDatabaseFeature.clearAllCriteria();
-            renderNpcDatabase(npcDatabaseFeature.frame());
-        });
+        clearNpcFiltersButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.ClearAllCriteria()));
         importNpcSourcesButton.setOnAction(event -> chooseNpcSources());
-        removeNpcSourceButton.setOnAction(event -> removeSelectedNpcSource());
-        clearNpcDatabaseButton.setOnAction(event -> clearVisibleNpcDatabaseEntries());
-        addNpcToProjectButton.setOnAction(event -> promoteNpcDatabase(false));
-        addAllNpcsToProjectButton.setOnAction(event -> promoteNpcDatabase(true));
-        backToMorphsButton.setOnAction(event -> backToMorphs());
-        dismissNpcPromotionInfoBarButton.setOnAction(event -> {
-            npcDatabaseFeature.dismissPromotionReport();
-            renderNpcDatabase(npcDatabaseFeature.frame());
-        });
+        removeNpcSourceButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.RequestRemoveSource()));
+        clearNpcDatabaseButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.RequestClearVisible()));
+        addNpcToProjectButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.AddSelected()));
+        addAllNpcsToProjectButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.AddAllVisible()));
+        backToMorphsButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.BackToMorphs()));
+        dismissNpcPromotionInfoBarButton.setOnAction(event ->
+                dispatchNpcDatabase(new NpcDatabaseFeature.DismissPromotionReport()));
         assignRandomNpcPresetCheck.setOnAction(event -> {
-            if (!renderingNpcDatabase) {
-                npcDatabaseFeature.setAssignRandom(assignRandomNpcPresetCheck.isSelected());
-                renderNpcDatabase(npcDatabaseFeature.frame());
-            }
+            if (!renderingNpcDatabase)
+                dispatchNpcDatabase(new NpcDatabaseFeature.SetAssignRandom(assignRandomNpcPresetCheck.isSelected()));
         });
         openNpcDatabasePortraitViewerButton.setOnAction(event -> showNpcDatabasePortraitViewer());
         renderNpcDatabase(npcDatabaseFeature.frame());
@@ -1554,25 +1536,27 @@ public final class WorkbenchController {
     }
 
     /**
-     * Returns to the Morphs launcher and selects the last added identity when it is still visible.
-     * Project and feature frames are already committed before navigation realizes the focus effect.
+     * Runs one NPC Database intent through the gated dispatch pipeline: promotion and catalog removal are refused
+     * while a job blocks mutations, and every accepted intent renders its committed catalog frame.
      */
-    private void backToMorphs() {
-        npcDatabaseFeature.consumeReturnAssignment().ifPresent(identity ->
-                dispatchMorphs(new MorphsFeature.SelectNpc(identity)));
-        NpcMorphAssignmentSnapshot selected = npcMorphAssignmentList.getSelectionModel().getSelectedItem();
-        if (selected != null)
-            npcMorphAssignmentList.scrollTo(selected);
-        applyNavigation(navigation.backToMorphs());
+    private void dispatchNpcDatabase(NpcDatabaseFeature.Intent intent) {
+        pipeline.dispatch(npcDatabaseFeature, DispatchPipeline.Callbacks.of(
+                this::renderNpcDatabaseUpdate, this::realizeNpcDatabaseEffect, this::reportNpcDatabaseOutcome),
+                Objects.requireNonNull(intent, "intent"));
     }
 
-    /** Promotes captured NPCs through ProjectSession, then reports the complete operation at its UI tier. */
-    private void promoteNpcDatabase(boolean bulk) {
-        if (projectFlow.jobs().frame().active() || projectFlow.jobs().frame().shutdownRequested())
-            return;
-        NpcDatabaseFeature.PromotionReport report = bulk
-                ? npcDatabaseFeature.promoteVisible(projectFlow)
-                : npcDatabaseFeature.promoteSelected(projectFlow);
+    /**
+     * Renders one NPC Database update. A promotion first reconciles the Project chrome and the other Areas with the
+     * snapshot it published, as the update carries no Project sequence for the pipeline's generic chrome step: that
+     * step would project the Project frame's diagnostics, which the NPC Database reports itself.
+     */
+    private void renderNpcDatabaseUpdate(NpcDatabaseFeature.Update update) {
+        update.promotion().ifPresent(report -> renderPromotedProject(report.bulk()));
+        renderNpcDatabase(update.frame());
+    }
+
+    /** Re-renders the Project chrome and the other Areas after Add or Add All published a Project snapshot. */
+    private void renderPromotedProject(boolean bulk) {
         // NPC Database owns these diagnostics and task wording. Suppress the generic lifecycle feedback while
         // Project chrome and other Areas reconcile the final snapshot after promotion has published.
         templatesOwnProjectDiagnostics = true;
@@ -1587,7 +1571,84 @@ public final class WorkbenchController {
             templatesOwnProjectDiagnostics = false;
             morphsOwnProjectDiagnostics = false;
         }
-        renderNpcDatabase(npcDatabaseFeature.frame());
+    }
+
+    /**
+     * Realizes one NPC Database effect: source-management confirmations run as the pipeline's dialog round-trip,
+     * and the return to Morphs is handled here.
+     */
+    private DispatchPipeline.Realization<NpcDatabaseFeature.Update> realizeNpcDatabaseEffect(
+            NpcDatabaseFeature.Effect effect) {
+        return switch (Objects.requireNonNull(effect, "effect")) {
+            case NpcDatabaseFeature.ConfirmRemoveSource remove -> confirmNpcDatabaseAction(remove.token(),
+                    WorkbenchFeedback.DialogSpec.destructiveAction("Remove NPC Database source?",
+                            "Remove " + remove.source().getFileName() + " from this session's catalog?",
+                            WorkbenchFeedback.DialogAction.REMOVE), WorkbenchFeedback.DialogAction.REMOVE);
+            case NpcDatabaseFeature.ConfirmClearVisible clear -> confirmNpcDatabaseAction(clear.token(),
+                    WorkbenchFeedback.DialogSpec.destructiveAction("Clear visible NPC Database entries?",
+                            "Clear " + clear.identities().size() + " visible entries from this session's catalog?",
+                            WorkbenchFeedback.DialogAction.CLEAR), WorkbenchFeedback.DialogAction.CLEAR);
+            case NpcDatabaseFeature.ReturnToMorphs returning -> {
+                returnToMorphs(returning.assignment());
+                yield DispatchPipeline.Realization.done();
+            }
+        };
+    }
+
+    /**
+     * Returns to the Morphs launcher and selects the last added identity when it is still visible.
+     * Project and feature frames are already committed before navigation realizes the focus effect.
+     */
+    private void returnToMorphs(Optional<NpcMorphAssignmentIdentity> assignment) {
+        assignment.ifPresent(identity -> dispatchMorphs(new MorphsFeature.SelectNpc(identity)));
+        NpcMorphAssignmentSnapshot selected = npcMorphAssignmentList.getSelectionModel().getSelectedItem();
+        if (selected != null)
+            npcMorphAssignmentList.scrollTo(selected);
+        applyNavigation(navigation.backToMorphs());
+    }
+
+    /**
+     * Maps one settled NPC Database dispatch to feedback: a promotion is reported at its UI tier, a confirmed
+     * removal or clear is recorded in Activity, and type-ahead scrolls the selected row into view.
+     */
+    private void reportNpcDatabaseOutcome(
+            DispatchPipeline.Outcome<NpcDatabaseFeature.Intent, NpcDatabaseFeature.Update> outcome) {
+        NpcDatabaseFeature.Update update = outcome.settled();
+        switch (outcome.intent()) {
+            case NpcDatabaseFeature.AddSelected ignored ->
+                    publishPromotion(outcome.update().promotion().orElseThrow());
+            case NpcDatabaseFeature.AddAllVisible ignored ->
+                    publishPromotion(outcome.update().promotion().orElseThrow());
+            case NpcDatabaseFeature.RequestRemoveSource ignored -> {
+                if (outcome.answer().filter(WorkbenchFeedback.DialogAction.REMOVE::equals).isPresent()) {
+                    Path source = ((NpcDatabaseFeature.ConfirmRemoveSource) outcome.update().effect().orElseThrow())
+                            .source();
+                    renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+                            "Remove NPC Database Source", WorkbenchFeedback.Severity.SUCCESS,
+                            "Removed source " + source.getFileName() + ".",
+                            WorkbenchFeedback.Disposition.COMPLETED)));
+                }
+            }
+            case NpcDatabaseFeature.RequestClearVisible ignored -> {
+                if (outcome.answer().filter(WorkbenchFeedback.DialogAction.CLEAR::equals).isPresent()) {
+                    int cleared = ((NpcDatabaseFeature.ConfirmClearVisible) outcome.update().effect()
+                            .orElseThrow()).identities().size();
+                    renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
+                            "Clear visible NPC Database entries", WorkbenchFeedback.Severity.SUCCESS,
+                            "Cleared " + cleared + " visible entries.", WorkbenchFeedback.Disposition.COMPLETED)));
+                }
+            }
+            case NpcDatabaseFeature.TypeAhead ignored -> update.frame().selectedRow().ifPresent(row ->
+                    npcCatalogTable.scrollTo(update.frame().visibleRows().indexOf(row)));
+            default -> {
+                // Selection, filtering, sorting, visit state and the return to Morphs report through their render.
+            }
+        }
+    }
+
+    /** Reports one completed Add or Add All at its UI tier: Add on the status line, Add All in Activity. */
+    private void publishPromotion(NpcDatabaseFeature.PromotionReport report) {
+        boolean bulk = report.bulk();
         boolean issues = report.rejectedCount() > 0 || report.duplicateCount() > 0
                 || report.entries().isEmpty();
         WorkbenchFeedback.Severity severity = promotionSeverity(report);
@@ -1697,8 +1758,7 @@ public final class WorkbenchController {
         apply.setOnAction(event -> {
             List<String> hidden = choices.stream().filter(choice -> !choice.isSelected())
                     .map(NpcFilterChoice::value).toList();
-            npcDatabaseFeature.setCriterion(ColumnCriterion.hiding(columnId, hidden));
-            renderNpcDatabase(npcDatabaseFeature.frame());
+            dispatchNpcDatabase(new NpcDatabaseFeature.SetCriterion(ColumnCriterion.hiding(columnId, hidden)));
             popup.hide();
         });
         cancel.setOnAction(event -> popup.hide());
@@ -1919,51 +1979,18 @@ public final class WorkbenchController {
                     WorkbenchFeedback.Disposition.FAILED)));
     }
 
-    /** Removes one selected source after a typed destructive confirmation. */
-    private void removeSelectedNpcSource() {
-        Optional<Path> selected = npcDatabaseFeature.frame().selectedSource();
-        if (selected.isEmpty() || projectFlow.jobs().frame().active())
-            return;
-        Path source = selected.orElseThrow();
-        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.destructiveAction(
-                "Remove NPC Database source?", "Remove " + source.getFileName() + " from this session's catalog?",
-                WorkbenchFeedback.DialogAction.REMOVE);
-        if (!confirmNpcDatabaseAction(spec, WorkbenchFeedback.DialogAction.REMOVE))
-            return;
-        npcDatabaseFeature.removeSource(source);
-        renderNpcDatabase(npcDatabaseFeature.frame());
-        renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
-                "Remove NPC Database Source", WorkbenchFeedback.Severity.SUCCESS,
-                "Removed source " + source.getFileName() + ".", WorkbenchFeedback.Disposition.COMPLETED)));
-    }
-
-    /** Clears exactly the visible identities captured before the confirmation dialog. */
-    private void clearVisibleNpcDatabaseEntries() {
-        if (projectFlow.jobs().frame().active())
-            return;
-        List<NpcMorphAssignmentIdentity> identities = npcDatabaseFeature.visibleSet().getIdentities();
-        if (identities.isEmpty())
-            return;
-        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.destructiveAction(
-                "Clear visible NPC Database entries?",
-                "Clear " + identities.size() + " visible entries from this session's catalog?",
-                WorkbenchFeedback.DialogAction.CLEAR);
-        if (!confirmNpcDatabaseAction(spec, WorkbenchFeedback.DialogAction.CLEAR))
-            return;
-        npcDatabaseFeature.clearEntries(identities);
-        renderNpcDatabase(npcDatabaseFeature.frame());
-        renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
-                "Clear visible NPC Database entries", WorkbenchFeedback.Severity.SUCCESS,
-                "Cleared " + identities.size() + " visible entries.", WorkbenchFeedback.Disposition.COMPLETED)));
-    }
-
-    /** Publishes and completes one source-management confirmation while retaining its launcher focus. */
-    private boolean confirmNpcDatabaseAction(WorkbenchFeedback.DialogSpec spec,
-                                             WorkbenchFeedback.DialogAction acceptance) {
+    /**
+     * Hands one source-management confirmation to the pipeline's dialog round-trip while retaining its launcher
+     * focus. The removal or clear acts on the operands the feature captured before the dialog: the selected source,
+     * or exactly the identities visible when the clear was requested.
+     */
+    private DispatchPipeline.Realization<NpcDatabaseFeature.Update> confirmNpcDatabaseAction(
+            long token, WorkbenchFeedback.DialogSpec spec, WorkbenchFeedback.DialogAction acceptance) {
         WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
-        WorkbenchFeedback.DialogAction action = pipeline.confirm(spec);
-        requestFocus(returnTarget);
-        return action == acceptance;
+        return DispatchPipeline.Realization.confirm(spec, action -> {
+            requestFocus(returnTarget);
+            return npcDatabaseFeature.respond(token, action == acceptance);
+        });
     }
 
     /**
@@ -3854,8 +3881,7 @@ public final class WorkbenchController {
         } else if (event.getCode() == KeyCode.ESCAPE
                 && navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
                 && npcDatabaseFeature.frame().selectedRow().isPresent()) {
-            npcDatabaseFeature.clearSelection();
-            renderNpcDatabase(npcDatabaseFeature.frame());
+            dispatchNpcDatabase(new NpcDatabaseFeature.ClearSelection());
             event.consume();
         }
     }
@@ -3876,8 +3902,7 @@ public final class WorkbenchController {
         navigationFrame = transition.frame();
         if (leavingNpcDatabase) {
             // Promotion feedback and return selection are visit-scoped; rail navigation must not revive them later.
-            npcDatabaseFeature.leaveArea();
-            renderNpcDatabase(npcDatabaseFeature.frame());
+            dispatchNpcDatabase(new NpcDatabaseFeature.LeaveArea());
         }
         if (navigationFrame.activeArea() != WorkbenchNavigation.Area.NPC_DATABASE && npcFilterPopup != null)
             npcFilterPopup.hide();
@@ -4249,8 +4274,7 @@ public final class WorkbenchController {
         boolean resetOutput = resetTemplatesOnNextProjectFrame || resetMorphsOnNextProjectFrame || lifecycleReset;
         if (lifecycleReset && npcDatabaseFeature != null) {
             navigation.clearNpcDatabaseReturn();
-            npcDatabaseFeature.clearAllSelections();
-            renderNpcDatabase(npcDatabaseFeature.frame());
+            dispatchNpcDatabase(new NpcDatabaseFeature.ClearAllSelections());
         }
         if (templatesFeature != null && templatesFeature.frame().projectSequence() != frame.sequence()) {
             renderTemplates(templatesFeature.acceptProjectFrame(frame, resetTemplates,
@@ -4321,8 +4345,7 @@ public final class WorkbenchController {
                     && (terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED
                     || terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES)) {
                 navigation.clearNpcDatabaseReturn();
-                npcDatabaseFeature.clearAllSelections();
-                renderNpcDatabase(npcDatabaseFeature.frame());
+                dispatchNpcDatabase(new NpcDatabaseFeature.ClearAllSelections());
             }
             // The job terminal record is the authoritative feedback source for async work.
             renderedProjectSequence = projectFrame.sequence();
