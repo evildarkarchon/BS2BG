@@ -17,6 +17,9 @@
     The Templates Area: three panes the shell mounts into its primary, editor and inspector landmark containers. The
     root is a non-Node holder, so this file has no layout of its own. Accessible text, visible text and nesting are
     exactly what they were in workbench.fxml; the packaged smoke run finds these controls by name, role and region.
+
+    A control with a mnemonic label is built in an fx:define ahead of that label and placed with fx:reference.
+    FXMLLoader leaves a forward labelFor="$id" null, which loses both the mnemonic and the accessible label (#155).
 -->
 <AreaPanes fx:id="panes" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1"
         fx:controller="com.asdasfa.jbs2bg.workbench.templates.TemplatesArea">
@@ -54,29 +57,38 @@
                                 mnemonicParsing="true" text="_Dismiss" />
                     </children>
                 </HBox>
+                <fx:define>
+                    <TextField fx:id="sliderPresetFilter"
+                            accessibleText="Filter Slider Presets"
+                            promptText="Filter by name" />
+                </fx:define>
                 <Label labelFor="$sliderPresetFilter"
                         mnemonicParsing="true"
                         text="_Filter Slider Presets:" />
-                <TextField fx:id="sliderPresetFilter"
-                        accessibleText="Filter Slider Presets"
-                        promptText="Filter by name" />
+                <fx:reference source="sliderPresetFilter" />
+                <fx:define>
+                    <ComboBox fx:id="sliderPresetSort"
+                            accessibleText="Slider Preset sort"
+                            maxWidth="Infinity" />
+                </fx:define>
                 <Label labelFor="$sliderPresetSort"
                         mnemonicParsing="true"
                         text="_Sort Slider Presets:" />
-                <ComboBox fx:id="sliderPresetSort"
-                        accessibleText="Slider Preset sort"
-                        maxWidth="Infinity" />
+                <fx:reference source="sliderPresetSort" />
                 <ListView fx:id="sliderPresetList"
                         accessibleText="Slider Presets"
                         fixedCellSize="28.0"
                         focusTraversable="true"
                         VBox.vgrow="ALWAYS" />
+                <fx:define>
+                    <TextField fx:id="sliderPresetNameInput"
+                            accessibleText="Slider Preset name"
+                            promptText="New or duplicate name" />
+                </fx:define>
                 <Label labelFor="$sliderPresetNameInput"
                         mnemonicParsing="true"
                         text="_Slider Preset name:" />
-                <TextField fx:id="sliderPresetNameInput"
-                        accessibleText="Slider Preset name"
-                        promptText="New or duplicate name" />
+                <fx:reference source="sliderPresetNameInput" />
                 <Button fx:id="createSliderPresetButton"
                         accessibleText="Create Slider Preset"
                         maxWidth="Infinity" mnemonicParsing="true"
@@ -118,14 +130,17 @@
                         text="No slider choices" />
                 <HBox alignment="CENTER_LEFT" spacing="8.0">
                     <children>
+                        <fx:define>
+                            <ComboBox fx:id="sliderPresetProfile"
+                                    accessibleText="Slider Preset profile"
+                                    disable="true" maxWidth="Infinity"
+                                    HBox.hgrow="ALWAYS" />
+                        </fx:define>
                         <!-- Keep the mnemonic legible when the ComboBox absorbs editor width. -->
                         <Label labelFor="$sliderPresetProfile"
                                 minWidth="72.0" mnemonicParsing="true"
                                 text="_Profile:" />
-                        <ComboBox fx:id="sliderPresetProfile"
-                                accessibleText="Slider Preset profile"
-                                disable="true" maxWidth="Infinity"
-                                HBox.hgrow="ALWAYS" />
+                        <fx:reference source="sliderPresetProfile" />
                     </children>
                 </HBox>
                 <ScrollPane fx:id="sliderChoicesScroll"

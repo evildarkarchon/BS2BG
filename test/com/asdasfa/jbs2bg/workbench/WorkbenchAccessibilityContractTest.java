@@ -39,6 +39,9 @@ import javafx.scene.control.Slider;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.Mnemonic;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
@@ -255,6 +258,93 @@ class WorkbenchAccessibilityContractTest {
                 }
                 assertTrue(marked.containsAll(List.of("_Theme:", "_Dismiss", "_Filter Slider Presets:",
                         "_Assigned Slider Presets:")), "the sweep must reach every Area: " + marked);
+            });
+        } finally {
+            FxTestToolkit.runOnFxThread(() -> {
+                if (stageHolder.get() != null)
+                    stageHolder.get().close();
+            });
+        }
+    }
+
+    /**
+     * Every Workbench label that carries a mnemonic names the control that follows it (#155). The label's
+     * {@code labelFor} is the source of both its Alt+letter mnemonic, which moves focus to that control, and the
+     * control's {@code LABELED_BY}, which the Windows provider publishes as an Edit or ComboBox's UIA Name.
+     * FXMLLoader leaves a forward {@code $id} reference null, so a label that precedes its
+     * control in FXML silently loses both unless the control is declared before the label. The mnemonic must also
+     * outlive the navigation renders that move the Area panes out of and back into the scene.
+     */
+    @Test
+    void workbenchMnemonicLabelsTargetTheControlTheyPrecede() throws Exception {
+        AtomicReference<Stage> stageHolder = new AtomicReference<>();
+        AtomicReference<FXMLLoader> loaderHolder = new AtomicReference<>();
+
+        try {
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+                Parent root = loader.load();
+                WorkbenchController controller = loader.getController();
+                Stage stage = new Stage();
+                stage.setScene(new Scene(root, 1300.0, 800.0));
+                controller.attach(new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession()), stage,
+                        new UnusedPlatform(), fixture().environment());
+                stage.show();
+                stageHolder.set(stage);
+                loaderHolder.set(loader);
+            });
+            // Label skins register mnemonics, and ScrollPane skins expose the Area content to the sweep.
+            FxTestToolkit.awaitLayoutPulses(stageHolder.get().getScene(), 2);
+            // Every navigation render re-parents the Area panes, so each label and its control leave and re-enter
+            // the scene; their mnemonics must survive the round trip.
+            FxTestToolkit.runOnFxThread(() -> {
+                ((ToggleButton) loaderHolder.get().getNamespace().get("morphsAreaButton")).fire();
+                ((ToggleButton) loaderHolder.get().getNamespace().get("templatesAreaButton")).fire();
+            });
+            FxTestToolkit.awaitLayoutPulses(stageHolder.get().getScene(), 2);
+            FxTestToolkit.runOnFxThread(() -> {
+                Scene scene = stageHolder.get().getScene();
+                List<Node> mnemonicTargets = scene.getMnemonics().values().stream()
+                        .flatMap(List::stream).map(Mnemonic::getNode).toList();
+                Map<String, String> targets = new LinkedHashMap<>();
+                for (Node node : scene.getRoot().lookupAll("*")) {
+                    // Skins mirror their owner's text in Label subclasses (the menu bar's LabeledImpl); only a plain
+                    // Label is one the Workbench authored.
+                    if (node.getClass() != Label.class)
+                        continue;
+                    Label label = (Label) node;
+                    if (!label.isMnemonicParsing() || label.getText() == null || !label.getText().contains("_"))
+                        continue;
+                    String text = "'" + label.getText() + "'";
+                    Node target = label.getLabelFor();
+                    assertNotNull(target, text + " has no labelFor target");
+                    List<Node> siblings = label.getParent().getChildrenUnmodifiable();
+                    int next = siblings.indexOf(label) + 1;
+                    assertTrue(next < siblings.size(), text + " has no following control");
+                    assertSame(siblings.get(next), target, text + " must name the control that follows it");
+                    assertSame(label, target.queryAccessibleAttribute(AccessibleAttribute.LABELED_BY),
+                            text + " must be its control's LABELED_BY");
+                    assertTrue(mnemonicTargets.contains(target), text + " registers no mnemonic for its control");
+                    targets.put(label.getText(), target.getId());
+                }
+                assertTrue(targets.entrySet().containsAll(Map.of(
+                        "_Theme:", "themeChoice",
+                        "BoS Slider _Preset:", "bosArtifactChoice",
+                        "_Filter Slider Presets:", "sliderPresetFilter",
+                        "_Profile:", "sliderPresetProfile",
+                        "_Filter Custom Morph Targets:", "customMorphTargetFilter",
+                        "_Assigned Slider Presets:", "assignedMorphSliderPresetList",
+                        "A_vailable Slider Preset:", "availableMorphSliderPreset",
+                        "_Sort NPC catalog:", "npcSortChoice",
+                        "Settings _profile:", "settingsProfileChoice",
+                        "_Multiplier (blank means absent):", "settingsMultiplierInput").entrySet()),
+                        "the sweep must reach the shell, the Output drawer and every Area: " + targets);
+
+                Node theme = (Node) loaderHolder.get().getNamespace().get("themeChoice");
+                Node origin = scene.getFocusOwner() != null ? scene.getFocusOwner() : scene.getRoot();
+                // A mnemonic matches the event's text, not its key code.
+                origin.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "t", KeyCode.T, false, false, true, false));
+                assertSame(theme, scene.getFocusOwner(), "Alt+T must move focus to the Theme choice");
             });
         } finally {
             FxTestToolkit.runOnFxThread(() -> {
