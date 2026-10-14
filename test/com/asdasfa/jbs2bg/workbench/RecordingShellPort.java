@@ -12,6 +12,7 @@ import java.util.function.Predicate;
 
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
+import com.asdasfa.jbs2bg.workbench.settings.SettingsShellPort;
 
 import javafx.scene.Node;
 
@@ -20,7 +21,7 @@ import javafx.scene.Node;
  * applies feedback publications to its own feedback model so tests can assert the Area's wording. Requests that need
  * a real collaborator (a Settings job) are delegated to one the test wires; an unwired one fails the test.
  */
-public final class RecordingShellPort implements ShellPort {
+public final class RecordingShellPort implements SettingsShellPort {
     private final WorkbenchFeedback feedback =
             new WorkbenchFeedback(Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC));
     private final List<String> requests = new ArrayList<>();

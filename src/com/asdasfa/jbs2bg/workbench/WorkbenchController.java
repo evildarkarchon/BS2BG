@@ -27,6 +27,7 @@ import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsArea;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunner;
+import com.asdasfa.jbs2bg.workbench.settings.SettingsShellPort;
 
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
@@ -487,7 +488,7 @@ public final class WorkbenchController {
      *                  inspector thumbnails
      */
     private void loadAreas(NpcPortraitViewer portraits) {
-        ShellPort shell = new AreaShell();
+        SettingsShellPort shell = new AreaShell();
         AreaLoader.Loaded<TemplatesArea> templates = TemplatesArea.load(templatesFeature, pipeline, shell, uiaLists,
                 settings::snapshot, stage.renderScaleYProperty());
         templatesArea = templates.area();
@@ -583,10 +584,11 @@ public final class WorkbenchController {
     }
 
     /**
-     * The shell side of the {@link ShellPort}: Areas and the Output drawer reach shell-owned work (feedback, the
-     * Settings job runner, the close continuation, navigation) and other Areas' refreshes only through these requests.
+     * The shell side of the {@link ShellPort} and its Settings extension ({@link SettingsShellPort}): Areas and the
+     * Output drawer reach shell-owned work (feedback, the Settings job runner, the close continuation, navigation) and
+     * other Areas' refreshes only through these requests.
      */
-    private final class AreaShell implements ShellPort {
+    private final class AreaShell implements SettingsShellPort {
         /** Applies an Area-worded publication to the one feedback model and renders the frame it returns. */
         @Override
         public void publishFeedback(Function<WorkbenchFeedback, WorkbenchFeedback.Frame> publication) {

@@ -4,7 +4,6 @@ import java.util.Optional;
 import java.util.function.Function;
 
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
-import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 
 import javafx.scene.Node;
 
@@ -15,6 +14,8 @@ import javafx.scene.Node;
  * same rule. Every method runs on the JavaFX Application Thread.
  * <p>
  * The port grows one request at a time as Areas are extracted; a request belongs here only when an Area makes it.
+ * A request typed by one Area's own feature types extends this port in that Area's package instead
+ * ({@code workbench.settings.SettingsShellPort}), so this contract type depends on no Area package.
  */
 public interface ShellPort {
 
@@ -26,16 +27,6 @@ public interface ShellPort {
      *                    shell's feedback model and returns the resulting frame
      */
     void publishFeedback(Function<WorkbenchFeedback, WorkbenchFeedback.Frame> publication);
-
-    /**
-     * Admits one Settings worker effect (Save, Reload or a generation preference) to the shell's Settings job
-     * runner. A refused admission has already cancelled the feature's pending effect; the Area re-renders its own
-     * draft. The shell attaches any pending close continuation before the job can complete.
-     *
-     * @param effect the captured worker effect
-     * @return whether the coordinator admitted the job
-     */
-    boolean submitSettingsEffect(SettingsFeature.Effect effect);
 
     /**
      * Reports an accepted Settings change that did not publish the Settings pair, so Output refreshes its generation

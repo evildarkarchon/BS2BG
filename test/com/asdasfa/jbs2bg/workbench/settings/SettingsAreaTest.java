@@ -49,8 +49,8 @@ class SettingsAreaTest extends AreaTest<SettingsArea> {
         WorkbenchEnvironment environment = collaborators.environment();
         feature = new SettingsFeature(environment.settings(), environment.settingsStartup(),
                 environment.preferencesDirectory(), environment.migrationPolicy());
-        AreaLoader.Loaded<SettingsArea> loaded = SettingsArea.load(feature, collaborators.pipeline(),
-                collaborators.shell());
+        // The Settings Area takes the Settings extension of the port, which the recording port implements.
+        AreaLoader.Loaded<SettingsArea> loaded = SettingsArea.load(feature, collaborators.pipeline(), shell);
         SettingsJobRunner runner = new SettingsJobRunner(feature, environment.settings(), collaborators.flow().jobs(),
                 loaded.area()::completeJob);
         shell.runSettingsJobsWith(runner::submit);
