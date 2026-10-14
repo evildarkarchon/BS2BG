@@ -150,7 +150,7 @@ class WorkbenchAccessibilityContractTest {
             controller.customMorphTargetListNode().getSelectionModel().select(0);
             ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
             ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
-            ((Button) loader.getNamespace().get("generateOutputButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "generateOutputButton")).fire();
 
             Map<String, ObservableList<?>> guarded = new LinkedHashMap<>();
             guarded.put("Slider Presets", controller.sliderPresetListNode().getItems());
@@ -161,7 +161,7 @@ class WorkbenchAccessibilityContractTest {
             guarded.put("Assigned Slider Presets", controller.assignedMorphSliderPresetListNode().getItems());
             guarded.put("Available Slider Presets",
                     ((ComboBox<?>) loader.getNamespace().get("availableMorphSliderPreset")).getItems());
-            guarded.put("BoS artifacts", ((ComboBox<?>) loader.getNamespace().get("bosArtifactChoice")).getItems());
+            guarded.put("BoS artifacts", ((ComboBox<?>) LoadedWorkbench.node(loader, "bosArtifactChoice")).getItems());
             guarded.put("NPC Database sources",
                     ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems());
             guarded.put("NPC Database catalog",

@@ -90,7 +90,7 @@ class SettingsAreaTest extends AreaTest<SettingsArea> {
     @Test
     void settingsAreaLoadsAloneIntoItsThreeLandmarkPanes() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {
-            AreaPanes panes = host().area().panes();
+            AreaPanes panes = host().module().panes();
 
             assertSame(hosted().node("settingsPrimaryScroll"), panes.getPrimary());
             assertSame(hosted().node("settingsEditorContent"), panes.getEditor());
@@ -112,7 +112,7 @@ class SettingsAreaTest extends AreaTest<SettingsArea> {
     @Test
     void settingsPanesKeepTheirAccessibleOutline() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {
-            AreaPanes panes = host().area().panes();
+            AreaPanes panes = host().module().panes();
 
             assertEquals(List.of(
                     "ScrollPane #settingsPrimaryScroll name=Settings profiles and entries",
@@ -164,7 +164,7 @@ class SettingsAreaTest extends AreaTest<SettingsArea> {
     @Test
     void focusNodesFollowTheSettingsDraft() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {
-            SettingsArea area = host().area();
+            SettingsArea area = host().module();
 
             assertSame(hosted().node("settingsEntryList"), area.focusNode(Landmark.PRIMARY_CONTENT));
             assertSame(hosted().node("settingsEntryList"), area.defaultFocusNode());

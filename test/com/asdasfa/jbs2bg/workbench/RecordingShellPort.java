@@ -78,4 +78,10 @@ public final class RecordingShellPort implements ShellPort {
     public void settingsPublished(boolean pair) {
         requests.add("settingsPublished(pair=" + pair + ")");
     }
+
+    /** Records the request. */
+    @Override
+    public void revealOutput() {
+        requests.add("revealOutput()");
+    }
 }

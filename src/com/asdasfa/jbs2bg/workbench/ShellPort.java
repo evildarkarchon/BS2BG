@@ -7,7 +7,8 @@ import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 /**
  * The shell port: every request an Area makes of the shell or of another Area. Areas never reference each other;
  * they ask the shell, and the shell calls the target Area's typed method or does the shell-owned work itself. Each
- * Area injects this port through its constructor. Every method runs on the JavaFX Application Thread.
+ * Area injects this port through its constructor, and so does the Output drawer, which is not an Area but follows the
+ * same rule. Every method runs on the JavaFX Application Thread.
  * <p>
  * The port grows one request at a time as Areas are extracted; a request belongs here only when an Area makes it.
  */
@@ -46,4 +47,10 @@ public interface ShellPort {
      *             generation preference changed
      */
     void settingsPublished(boolean pair);
+
+    /**
+     * Reveals the Output drawer through the shell's navigation, after a Generate published fresh Output. The reveal is
+     * automatic, so it moves no focus.
+     */
+    void revealOutput();
 }
