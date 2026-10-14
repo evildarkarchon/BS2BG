@@ -20,6 +20,33 @@ import static org.junit.jupiter.api.Assertions.*;
 final class SettingsFeatureTest {
 
     /**
+     * The feature declares which intents can change live or on-disk Settings, so the dispatch pipeline pauses only
+     * those while a job blocks mutations and profile browsing stays available.
+     *
+     * @param directory isolated Settings directory
+     */
+    @Test
+    void declaresSettingsChangesAsMutationsAndBrowsingAsLocal(@TempDir Path directory) {
+        Settings store = new Settings(directory);
+        SettingsFeature feature = new SettingsFeature(store, store.reload());
+
+        for (SettingsFeature.Intent mutation : java.util.List.of(
+                new SettingsFeature.AddEntry("Waist"),
+                new SettingsFeature.EditEntry("Waist", "Waist", Optional.of("0"), Optional.of("1"),
+                        Optional.of("1"), false),
+                new SettingsFeature.RemoveEntry("Waist"),
+                new SettingsFeature.ChangeOmitRedundantSliders(true),
+                new SettingsFeature.Save(),
+                new SettingsFeature.Reload()))
+            assertTrue(feature.isMutation(mutation), mutation.toString());
+        for (SettingsFeature.Intent local : java.util.List.of(
+                new SettingsFeature.SelectProfile(SettingsFeature.Profile.UUNP),
+                new SettingsFeature.SelectEntry("Waist"),
+                new SettingsFeature.DismissNotice()))
+            assertFalse(feature.isMutation(local), local.toString());
+    }
+
+    /**
      * Invalid numeric drafts remain visible without changing the pair, while accepted Standard and UUNP edits save
      * together and become the live Settings value.
      *

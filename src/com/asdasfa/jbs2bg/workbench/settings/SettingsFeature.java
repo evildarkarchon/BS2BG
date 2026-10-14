@@ -14,11 +14,13 @@ import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.json.JacksonJson;
 import com.asdasfa.jbs2bg.workbench.GenerationPreferencesStore;
+import com.asdasfa.jbs2bg.workbench.WorkbenchFeature;
 
 /**
  * Owns Workbench Settings drafts, validation, paired persistence, and immutable presentation frames.
  */
-public final class SettingsFeature {
+public final class SettingsFeature
+        implements WorkbenchFeature<SettingsFeature.Intent, SettingsFeature.Update, SettingsFeature.Effect> {
     private final Settings settings;
     private final Path preferencesDirectory;
     private final GenerationPreferencesStore generationPreferences;
@@ -119,6 +121,7 @@ public final class SettingsFeature {
      * @param intent immutable user task
      * @return whether the task was accepted and the resulting immutable frame
      */
+    @Override
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
         if (pendingEffect != null && isMutation(intent))
@@ -136,10 +139,27 @@ public final class SettingsFeature {
         };
     }
 
-    /** Reports whether an intent could invalidate a captured persistence input or perform another disk mutation. */
-    private static boolean isMutation(Intent intent) {
-        return intent instanceof AddEntry || intent instanceof EditEntry || intent instanceof RemoveEntry
-                || intent instanceof ChangeOmitRedundantSliders || intent instanceof Save || intent instanceof Reload;
+    /**
+     * Reports whether an intent could invalidate a captured persistence input or perform another disk mutation. The
+     * feature rejects these while its own worker effect is pending; the dispatch pipeline also pauses them while a job
+     * blocks mutations.
+     *
+     * @param intent intent about to be dispatched
+     * @return true for intents that can change live or on-disk Settings
+     */
+    @Override
+    public boolean isMutation(Intent intent) {
+        return switch (Objects.requireNonNull(intent, "intent")) {
+            case AddEntry ignored -> true;
+            case EditEntry ignored -> true;
+            case RemoveEntry ignored -> true;
+            case ChangeOmitRedundantSliders ignored -> true;
+            case Save ignored -> true;
+            case Reload ignored -> true;
+            case SelectProfile ignored -> false;
+            case SelectEntry ignored -> false;
+            case DismissNotice ignored -> false;
+        };
     }
 
     /** Selects one profile without discarding either profile's draft or logical selection. */
@@ -999,7 +1019,8 @@ public final class SettingsFeature {
     }
 
     /** Result of one task intent and its committed immutable frame, with optional worker-bound persistence. */
-    public record Update(boolean accepted, Frame frame, Optional<Effect> effect) {
+    public record Update(boolean accepted, Frame frame, Optional<Effect> effect)
+            implements WorkbenchFeature.Update<Effect> {
         /** Creates an update without a worker-bound effect. */
         public Update(boolean accepted, Frame frame) {
             this(accepted, frame, Optional.empty());

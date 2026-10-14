@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.random.RandomGenerator;
@@ -39,13 +40,15 @@ import com.asdasfa.jbs2bg.project.RejectedOutcome;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.UnchangedOutcome;
+import com.asdasfa.jbs2bg.workbench.WorkbenchFeature;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 /**
  * JavaFX-independent Morphs Area state machine. It renders immutable Custom Morph Target and NPC Morph Assignment
  * frames and submits task-oriented intents only through the authoritative Workbench Project flow.
  */
-public final class MorphsFeature {
+public final class MorphsFeature
+        implements WorkbenchFeature<MorphsFeature.Intent, MorphsFeature.Update, MorphsFeature.Effect> {
     private static final String NAME_COLUMN = "name";
     private static final String NPC_SEARCH_COLUMN = "search";
     private static final String NPC_DISPLAY_NAME_COLUMN = "displayName";
@@ -160,11 +163,13 @@ public final class MorphsFeature {
      * @throws NullPointerException  when intent is null
      * @throws IllegalStateException when an observer attempts reentrant dispatch during frame publication
      */
+    @Override
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
         if (publishing)
             throw new IllegalStateException("Morphs intents cannot be dispatched during frame publication");
-        if (pendingEffect != null || pendingFillEmpty != null)
+        // Applying the open Fill Empty offer is the one intent the pending offer admits; it answers that offer.
+        if (pendingEffect != null || (pendingFillEmpty != null && !(intent instanceof ApplyFillEmpty)))
             return new Update(false, frame, OutcomeKind.NONE);
         return switch (intent) {
             case Create create -> create(create.name());
@@ -188,8 +193,46 @@ public final class MorphsFeature {
             case RequestClearVisible ignored -> requestClearVisible();
             case RequestClearVisibleNpcs ignored -> requestClearVisibleNpcs();
             case RequestFillEmpty ignored -> requestFillEmpty();
+            case ApplyFillEmpty apply -> respondFillEmpty(apply.token(), apply.selectedPresets());
             case ClearSelection ignored -> clearSelection();
             case DismissDiagnostics ignored -> dismissDiagnostics();
+        };
+    }
+
+    /**
+     * Distinguishes Project mutations from local Morphs browsing so an active job blocks writes without freezing the
+     * surface.
+     *
+     * @param intent intent about to be dispatched
+     * @return true for intents that create, assign, remove, clear or fill Morphs entries
+     */
+    @Override
+    public boolean isMutation(Intent intent) {
+        return switch (Objects.requireNonNull(intent, "intent")) {
+            case Create ignored -> true;
+            case CreateNpc ignored -> true;
+            case AssignSliderPreset ignored -> true;
+            case AssignAllSliderPresets ignored -> true;
+            case RemoveAssignedSliderPreset ignored -> true;
+            case RequestClearAssignments ignored -> true;
+            case RequestRemove ignored -> true;
+            case RequestClearVisible ignored -> true;
+            case RequestRemoveNpc ignored -> true;
+            case RequestClearVisibleNpcs ignored -> true;
+            case RequestFillEmpty ignored -> true;
+            case ApplyFillEmpty ignored -> true;
+            case Select ignored -> false;
+            case SelectNpc ignored -> false;
+            case SelectAssignedSliderPreset ignored -> false;
+            case ClearAssignedSliderPresetSelection ignored -> false;
+            case ChangeFilter ignored -> false;
+            case ChangeNpcFilter ignored -> false;
+            case ChangeSort ignored -> false;
+            case ChangeNpcSort ignored -> false;
+            case TypeAhead ignored -> false;
+            case NpcTypeAhead ignored -> false;
+            case ClearSelection ignored -> false;
+            case DismissDiagnostics ignored -> false;
         };
     }
 
@@ -933,7 +976,8 @@ public final class MorphsFeature {
             SelectAssignedSliderPreset, ClearAssignedSliderPresetSelection, RemoveAssignedSliderPreset,
             RequestClearAssignments, ChangeFilter, ChangeNpcFilter,
             ChangeSort, ChangeNpcSort, TypeAhead, NpcTypeAhead, RequestRemove, RequestRemoveNpc,
-            RequestClearVisible, RequestClearVisibleNpcs, RequestFillEmpty, ClearSelection, DismissDiagnostics {
+            RequestClearVisible, RequestClearVisibleNpcs, RequestFillEmpty, ApplyFillEmpty, ClearSelection,
+            DismissDiagnostics {
     }
 
     /** Requests one validated Custom Morph Target creation. */
@@ -1046,6 +1090,20 @@ public final class MorphsFeature {
 
     /** Captures the visible empty NPC set and eligible presets for one light-dismiss flyout. */
     public record RequestFillEmpty() implements Intent {
+    }
+
+    /**
+     * Applies the chosen Slider Presets to the open Fill Empty offer. It has the same effect as
+     * {@link #respondFillEmpty(long, List)} but, as an intent, runs through the gated dispatch pipeline.
+     *
+     * @param token           offer token returned by {@link RequestFillEmpty}
+     * @param selectedPresets selected Slider Preset identities from that offer
+     */
+    public record ApplyFillEmpty(long token, List<NameIdentity> selectedPresets) implements Intent {
+        /** Owns an immutable copy of the selection. */
+        public ApplyFillEmpty {
+            selectedPresets = List.copyOf(Objects.requireNonNull(selectedPresets, "selectedPresets"));
+        }
     }
 
     /** Requests confirmation before deleting the selected Custom Morph Target. */
@@ -1205,7 +1263,14 @@ public final class MorphsFeature {
 
     /** Result of one serialized feature intent. */
     public record Update(boolean accepted, Frame frame, Optional<Effect> effect,
-                         Optional<FillEmptyOffer> fillEmptyOffer, OutcomeKind outcomeKind) {
+                         Optional<FillEmptyOffer> fillEmptyOffer, OutcomeKind outcomeKind)
+            implements WorkbenchFeature.Update<Effect> {
+        /** @return the Project sequence the frame was reconciled against, so the pipeline can refresh chrome */
+        @Override
+        public OptionalLong projectSequence() {
+            return OptionalLong.of(frame.projectSequence());
+        }
+
         /** Creates an update without a platform effect. */
         public Update(boolean accepted, Frame frame, OutcomeKind outcomeKind) {
             this(accepted, frame, Optional.empty(), Optional.empty(), outcomeKind);

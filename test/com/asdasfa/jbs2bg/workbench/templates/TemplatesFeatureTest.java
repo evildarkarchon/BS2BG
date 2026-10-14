@@ -67,6 +67,40 @@ class TemplatesFeatureTest {
     }
 
     /**
+     * The feature declares which intents edit the Project, so the dispatch pipeline can pause exactly those while a
+     * job blocks Project mutations and leave browsing, filtering and dismissals available.
+     */
+    @Test
+    void declaresProjectEditsAsMutationsAndBrowsingAsLocal() {
+        TemplatesFeature feature = new TemplatesFeature(new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot)), settings::snapshot, Clock.systemUTC());
+
+        for (TemplatesFeature.Intent mutation : List.of(
+                new TemplatesFeature.Create("Alpha"),
+                new TemplatesFeature.Duplicate("Alpha copy"),
+                new TemplatesFeature.BeginRename(),
+                new TemplatesFeature.ChangeRename("Beta"),
+                new TemplatesFeature.CommitRename(),
+                new TemplatesFeature.RequestRemove(),
+                new TemplatesFeature.RequestClearVisible(),
+                new TemplatesFeature.ChangeProfile(TemplatesFeature.Profile.UUNP),
+                new TemplatesFeature.SetChoiceEnabled("Waist", true),
+                new TemplatesFeature.SetChoiceRange("Waist", 0, 100),
+                new TemplatesFeature.ApplyBulkValue(TemplatesFeature.GangMode.ALL, 50),
+                new TemplatesFeature.ToggleGang(TemplatesFeature.GangMode.MINIMUM, true)))
+            assertTrue(feature.isMutation(mutation), mutation.toString());
+        for (TemplatesFeature.Intent local : List.of(
+                new TemplatesFeature.Select(NameIdentity.of("Alpha")),
+                new TemplatesFeature.ChangeFilter("Al"),
+                new TemplatesFeature.ChangeSort(TemplatesFeature.SortOrder.NAME_DESCENDING),
+                new TemplatesFeature.TypeAhead('a'),
+                new TemplatesFeature.CancelRename(),
+                new TemplatesFeature.ClearSelection(),
+                new TemplatesFeature.DismissDiagnostics()))
+            assertFalse(feature.isMutation(local), local.toString());
+    }
+
+    /**
      * Selecting a Slider Preset exposes every synthesized profile choice with exact BodyGen preview text; changing
      * profile writes through the authoritative Project flow while preserving the selected logical identity.
      */
