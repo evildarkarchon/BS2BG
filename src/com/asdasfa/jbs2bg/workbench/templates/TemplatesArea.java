@@ -428,9 +428,8 @@ public final class TemplatesArea implements WorkbenchArea {
     private void dispatch(TemplatesFeature.Intent intent) {
         pipeline.dispatch(feature, DispatchPipeline.Callbacks.of(
                 update -> renderTemplates(update.frame()),
-                effect -> DispatchPipeline.Realization.confirm(WorkbenchFeedback.DialogSpec.destructiveAction(
-                                effect.title(), effect.message(), templatesDestructiveAction(effect)),
-                        action -> feature.respond(effect.token(), action == templatesDestructiveAction(effect))),
+                effect -> DispatchPipeline.Realization.confirmDestructive(effect.title(), effect.message(),
+                        templatesDestructiveAction(effect), accepted -> feature.respond(effect.token(), accepted)),
                 this::reportTemplatesOutcome), Objects.requireNonNull(intent, "intent"));
     }
 
