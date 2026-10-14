@@ -279,7 +279,7 @@ The application is then driven through Windows UI Automation the way an assistiv
 | Locator kind | Examples |
 | --- | --- |
 | Accessible role + accessible name | `Button 'Generate Templates'`, `MenuItem 'Open…'`, `TabItem 'Morphs'`, `CheckBox 'Omit Redundant Sliders'`, `Edit 'File name:'` |
-| Accessible names declared in `main.fxml` for the Project collections | `List 'Slider Presets'`, `List 'Custom Morph Targets'`, `List 'Target Slider Presets'`, `Table 'NPC Morph Assignments'` (CONTEXT.md vocabulary) |
+| Accessible names declared in `main.fxml` for the Project collections | `List 'Slider Presets'`, `List 'Custom Morph Targets'`, `List 'Target Slider Presets'`, `Table 'NPC Morph Assignments'` (GLOSSARY.md vocabulary) |
 | Project-domain identity | `ListItem 'CBBE Curvy'`, `ListItem 'All|Female|NordRace'`, the NPC row exposing `HousecarlWhiterun` and `Skyrim.esm` |
 | Semantic relationships | the field that follows the `Custom Target:` label, the `Add` button that follows that field, the output area that precedes the `Omit Redundant Sliders` option, the counter that follows `Count:` |
 

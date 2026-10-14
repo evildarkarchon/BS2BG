@@ -13,7 +13,7 @@ Production Java lives in `src/com/asdasfa/jbs2bg/`; JavaFX FXML and CSS are colo
 
 ## Coding Style & Naming Conventions
 
-Follow `.editorconfig`: UTF-8, final newline, trimmed trailing whitespace, and four-space indentation where specified; match surrounding legacy Java where it differs. Use `PascalCase` for types/files, `camelCase` for methods and fields, and `UPPER_SNAKE_CASE` for constants. Java targets release 25, and `javac -Xlint:all -Werror` is enforced. Add concise Javadoc to new or substantially rewritten methods and comments that explain non-obvious constraints or lifecycle behavior. Use the domain terms in `CONTEXT.md` and preserve accepted decisions in `docs/adr/`.
+Follow `.editorconfig`: UTF-8, final newline, trimmed trailing whitespace, and four-space indentation where specified; match surrounding legacy Java where it differs. Use `PascalCase` for types/files, `camelCase` for methods and fields, and `UPPER_SNAKE_CASE` for constants. Java targets release 25, and `javac -Xlint:all -Werror` is enforced. Add concise Javadoc to new or substantially rewritten methods and comments that explain non-obvious constraints or lifecycle behavior. Use the domain terms in `GLOSSARY.md` and preserve accepted decisions in `docs/adr/`.
 
 ## Testing Guidelines
 
