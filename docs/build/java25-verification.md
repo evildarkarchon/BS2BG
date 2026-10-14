@@ -69,7 +69,7 @@ The required suites the script asserts (report present, at least one test, zero 
 `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, `OutputRoutePolicyTest`, `JobCoordinatorTest`,
 `WorkbenchProjectFlowTest`, `WorkbenchControllerTest`, `WorkbenchFocusTest`, `WorkbenchAccessibilityContractTest`,
 `DispatchPipelineTest`,
-`TemplatesFeatureTest`, `SettingsFeatureTest`, and
+`TemplatesFeatureTest`, `SettingsFeatureTest`, `SettingsJobRunnerTest`, and
 `OutputFeatureTest`.
 
 ## Headless test platform

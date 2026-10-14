@@ -9,6 +9,8 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import com.asdasfa.jbs2bg.testing.JavaFxFreeTypeGraph;
+
 class WorkbenchFeedbackTest {
 
     private static final Instant FIXED_TIME = Instant.parse("2026-08-29T12:00:00Z");
@@ -29,7 +31,7 @@ class WorkbenchFeedbackTest {
         WorkbenchFeedback.ActivityRecord activity = frame.activities().getLast();
         assertEquals(WorkbenchFeedback.Severity.WARNING, infoBar.severity());
         assertEquals("Warning", infoBar.cue());
-        assertEquals(SemanticIcons.IconKey.WARNING, infoBar.icon());
+        assertEquals(IconKey.WARNING, infoBar.icon());
         assertEquals(infoBar.severity(), activity.severity());
         assertEquals(infoBar.cue(), activity.cue());
         assertEquals(infoBar.icon(), activity.icon());
@@ -48,11 +50,11 @@ class WorkbenchFeedbackTest {
                 WorkbenchFeedback.Severity.SUCCESS, "Success",
                 WorkbenchFeedback.Severity.WARNING, "Warning",
                 WorkbenchFeedback.Severity.FAILURE, "Failure");
-        java.util.Map<WorkbenchFeedback.Severity, SemanticIcons.IconKey> icons = java.util.Map.of(
-                WorkbenchFeedback.Severity.VALIDATION, SemanticIcons.IconKey.VALIDATION,
-                WorkbenchFeedback.Severity.SUCCESS, SemanticIcons.IconKey.SUCCESS,
-                WorkbenchFeedback.Severity.WARNING, SemanticIcons.IconKey.WARNING,
-                WorkbenchFeedback.Severity.FAILURE, SemanticIcons.IconKey.FAILURE);
+        java.util.Map<WorkbenchFeedback.Severity, IconKey> icons = java.util.Map.of(
+                WorkbenchFeedback.Severity.VALIDATION, IconKey.VALIDATION,
+                WorkbenchFeedback.Severity.SUCCESS, IconKey.SUCCESS,
+                WorkbenchFeedback.Severity.WARNING, IconKey.WARNING,
+                WorkbenchFeedback.Severity.FAILURE, IconKey.FAILURE);
         WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.fixed(FIXED_TIME, ZoneOffset.UTC));
 
         for (WorkbenchFeedback.Severity severity : cues.keySet()) {
@@ -62,6 +64,15 @@ class WorkbenchFeedbackTest {
             assertEquals(icons.get(severity), frame.infoBar().orElseThrow().icon());
             assertEquals(severity, frame.status().severity());
         }
+    }
+
+    /**
+     * The feedback model and the semantic icon requests it carries are JavaFX-free, so the dispatch pipeline and
+     * windowless tests can use it without a toolkit; only the shell turns an icon request into a node.
+     */
+    @Test
+    void feedbackModelReachesNoJavaFxType() {
+        JavaFxFreeTypeGraph.assertJavaFxFree(WorkbenchFeedback.class);
     }
 
     /**

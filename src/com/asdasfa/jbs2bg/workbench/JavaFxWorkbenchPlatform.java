@@ -94,25 +94,6 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
     }
 
     /**
-     * Returns the typed dialog contract for one Project confirmation effect.
-     *
-     * @param kind Project platform-effect kind
-     * @return typed destructive confirmation request, or empty for chooser/final-window effects
-     * @throws NullPointerException when kind is null
-     */
-    static Optional<WorkbenchFeedback.DialogSpec> dialogSpec(WorkbenchProjectFlow.EffectKind kind) {
-        return switch (Objects.requireNonNull(kind, "kind")) {
-            case CONFIRM_NEW -> Optional.of(WorkbenchFeedback.DialogSpec.destructiveConfirmation(
-                    "Create a new Project?", "The current Project has unsaved changes."));
-            case CONFIRM_OPEN -> Optional.of(WorkbenchFeedback.DialogSpec.destructiveConfirmation(
-                    "Open another Project?", "The current Project has unsaved changes."));
-            case CONFIRM_CLOSE -> Optional.of(WorkbenchFeedback.DialogSpec.unsavedClose(
-                    "Save changes before closing?", "Closing now would discard unsaved Project changes."));
-            case CHOOSE_BODYSLIDE_SOURCES, CHOOSE_OPEN_PATH, CHOOSE_SAVE_PATH, CLOSE_WINDOW -> Optional.empty();
-        };
-    }
-
-    /**
      * Converts one typed dialog action to the Project flow's ordinary response intent.
      *
      * @param action action returned by the typed dialog
@@ -142,9 +123,9 @@ final class JavaFxWorkbenchPlatform implements WorkbenchPlatform {
             case CHOOSE_SAVE_PATH -> chooseProject(owner, true);
             case CHOOSE_BODYSLIDE_SOURCES -> chooseBodySlideSources(owner);
             case CONFIRM_NEW, CONFIRM_OPEN -> response(JavaFxWorkbenchDialogs.show(
-                    dialogSpec(effect.kind()).orElseThrow(), owner));
+                    ProjectEffectDialogs.spec(effect.kind()).orElseThrow(), owner));
             case CONFIRM_CLOSE -> response(JavaFxWorkbenchDialogs.show(
-                    dialogSpec(effect.kind()).orElseThrow(), owner));
+                    ProjectEffectDialogs.spec(effect.kind()).orElseThrow(), owner));
             case CLOSE_WINDOW -> throw new IllegalArgumentException("CLOSE_WINDOW is not a modal platform effect");
         };
     }
