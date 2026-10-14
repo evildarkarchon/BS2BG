@@ -70,7 +70,7 @@ final class SettingsDirectoryLockTest {
                         SettingsLockProbe.class.getName(), directory.toString(), ready.toString())
                         .redirectErrorStream(true)
                         .start();
-                assertTrue(awaitFile(ready, Duration.ofSeconds(10)), "child did not reach Settings.initialize");
+                assertTrue(awaitFile(ready, Duration.ofSeconds(10)), "child did not reach the Settings reload");
                 Thread.sleep(250);
                 assertTrue(child.isAlive(), "child initialized while the parent process held the lock");
                 assertFalse(Files.exists(directory.resolve("settings.json")));

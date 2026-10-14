@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -13,7 +14,7 @@ class NpcMorphAssignmentAuthoringTest {
     /** Manual authoring uses the same persisted Form ID and identity as a reopened Project. */
     @Test
     void createsNpcWithNormalizedFormIdAndStableIdentity() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
 
         ProjectOutcome created = session.apply(NpcMorphAssignmentEdits.create(
@@ -38,7 +39,7 @@ class NpcMorphAssignmentAuthoringTest {
     /** Incomplete or malformed manual fields are rejected without publishing a partial NPC. */
     @Test
     void rejectsInvalidNpcAuthoringFieldsWithoutChangingProject() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         ProjectSnapshot unchanged = session.getSnapshot();
 
@@ -61,7 +62,7 @@ class NpcMorphAssignmentAuthoringTest {
     /** An authored plugin name cannot inject target syntax or a second line into generated Morphs output. */
     @Test
     void rejectsPluginNamesThatWouldBreakMorphsOutput() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         ProjectSnapshot unchanged = session.getSnapshot();
 

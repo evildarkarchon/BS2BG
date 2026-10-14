@@ -13,9 +13,9 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -65,14 +65,6 @@ final class SettingsJacksonAdapterTest {
     }
 
     /**
-     * Restores the repository Settings pair after every process-wide publication test.
-     */
-    @AfterEach
-    void restoreRepositorySettings() {
-        SettingsTestSupport.restoreRepositorySettings();
-    }
-
-    /**
      * Publishes the validated pair through the production Settings seam and proves a later rejected pair cannot
      * replace either live profile.
      *
@@ -82,31 +74,32 @@ final class SettingsJacksonAdapterTest {
     @Test
     void productionLoadPublishesBothProfilesTogetherAndPreservesThemOnFailure(@TempDir Path directory)
             throws IOException {
+        Settings store = new Settings(directory);
         Path standard = directory.resolve("settings.json");
         Path uunp = directory.resolve("settings_UUNP.json");
         Files.copy(fixture("standard.json"), standard);
         Files.copy(fixture("uunp.json"), uunp);
 
-        Settings.InitializationResult loaded = Settings.initialize(directory);
+        Settings.InitializationResult loaded = store.reload();
 
         assertTrue(loaded.isSuccessful());
         assertEquals(List.of("/Defaults/Waist/FutureDefault", "/Future"),
                 loaded.getDiagnostics().stream().map(Settings.Diagnostic::getPath).toList());
-        assertEquals(2f, Settings.getMultiplier("Exponent"));
-        assertEquals(2f, Settings.getMultiplierUUNP("Arms"));
-        assertTrue(Settings.isInverted("Waist"));
+        assertEquals(2f, store.getMultiplier("Exponent"));
+        assertEquals(2f, store.getMultiplierUUNP("Arms"));
+        assertTrue(store.isInverted("Waist"));
 
         Files.copy(fixture("duplicate-uunp.json"), uunp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        Settings.InitializationResult rejected = Settings.initialize(directory);
+        Settings.InitializationResult rejected = store.reload();
 
         assertFalse(rejected.isSuccessful());
         Settings.Failure failure = rejected.getFailure().orElseThrow();
         assertEquals("SETTINGS_MEMBER_DUPLICATE", failure.getCode());
         assertEquals(uunp.toString(), failure.getSource());
         assertEquals("/Defaults/Arms/valueSmall", failure.getPath());
-        assertEquals(2f, Settings.getMultiplier("Exponent"));
-        assertEquals(2f, Settings.getMultiplierUUNP("Arms"));
-        assertTrue(Settings.isInverted("Waist"));
+        assertEquals(2f, store.getMultiplier("Exponent"));
+        assertEquals(2f, store.getMultiplierUUNP("Arms"));
+        assertTrue(store.isInverted("Waist"));
     }
 
     /**
@@ -119,10 +112,11 @@ final class SettingsJacksonAdapterTest {
     @Test
     void productionLoadPreservesTheLivePairAcrossMalformedNonFiniteAndLimitedInputs(@TempDir Path directory)
             throws IOException {
+        Settings store = new Settings(directory);
         Path standard = directory.resolve("settings.json");
         Files.copy(fixture("standard.json"), standard);
         Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
-        assertTrue(Settings.initialize(directory).isSuccessful());
+        assertTrue(store.reload().isSuccessful());
 
         List<InvalidProductionFixture> invalidFixtures = List.of(
                 new InvalidProductionFixture("non-finite.json", "SETTINGS_NUMBER_NON_FINITE",
@@ -132,15 +126,15 @@ final class SettingsJacksonAdapterTest {
         for (InvalidProductionFixture invalid : invalidFixtures) {
             Files.copy(fixture(invalid.name()), standard, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-            Settings.InitializationResult rejected = Settings.initialize(directory);
+            Settings.InitializationResult rejected = store.reload();
 
             assertFalse(rejected.isSuccessful(), invalid.name());
             Settings.Failure failure = rejected.getFailure().orElseThrow();
             assertEquals(invalid.code(), failure.getCode(), invalid.name());
             assertEquals(invalid.path(), failure.getPath(), invalid.name());
-            assertEquals(2f, Settings.getMultiplier("Exponent"), invalid.name());
-            assertEquals(2f, Settings.getMultiplierUUNP("Arms"), invalid.name());
-            assertTrue(Settings.isInverted("Waist"), invalid.name());
+            assertEquals(2f, store.getMultiplier("Exponent"), invalid.name());
+            assertEquals(2f, store.getMultiplierUUNP("Arms"), invalid.name());
+            assertTrue(store.isInverted("Waist"), invalid.name());
         }
     }
 
@@ -151,7 +145,7 @@ final class SettingsJacksonAdapterTest {
     void missingWorkingDirectoryProducesTheOwnedLockFailure(@TempDir Path directory) {
         Path missing = directory.resolve("missing");
 
-        Settings.InitializationResult rejected = Settings.initialize(missing);
+        Settings.InitializationResult rejected = new Settings(missing).reload();
 
         assertFalse(rejected.isSuccessful());
         Settings.Failure failure = rejected.getFailure().orElseThrow();
@@ -169,7 +163,8 @@ final class SettingsJacksonAdapterTest {
      */
     @Test
     void missingSettingsAreCreatedAsOneCanonicalPair(@TempDir Path directory) throws IOException {
-        Settings.InitializationResult result = Settings.initialize(directory);
+        Settings store = new Settings(directory);
+        Settings.InitializationResult result = store.reload();
 
         assertTrue(result.isSuccessful());
         Path standard = directory.resolve("settings.json");
@@ -178,8 +173,8 @@ final class SettingsJacksonAdapterTest {
         SettingsJacksonAdapter.SettingsPairBytes canonical = SettingsJacksonAdapter.writePair(candidate);
         assertArrayEquals(canonical.standardUtf8(), Files.readAllBytes(standard));
         assertArrayEquals(canonical.uunpUtf8(), Files.readAllBytes(uunp));
-        assertEquals(20, Settings.getDefaultValueSmall("Breasts"));
-        assertEquals(100, Settings.getDefaultValueSmallUUNP("Breasts"));
+        assertEquals(20, store.getDefaultValueSmall("Breasts"));
+        assertEquals(100, store.getDefaultValueSmallUUNP("Breasts"));
         try (var entries = Files.list(directory)) {
             assertTrue(entries.noneMatch(path -> path.getFileName().toString().startsWith(".bs2bg-settings-")));
         }
@@ -194,6 +189,7 @@ final class SettingsJacksonAdapterTest {
      */
     @Test
     void interruptedPublicationRecoversThePriorPairBeforeLoading(@TempDir Path directory) throws IOException {
+        Settings store = new Settings(directory);
         Path standard = directory.resolve("settings.json");
         Path uunp = directory.resolve("settings_UUNP.json");
         Files.copy(fixture("standard.json"), standard);
@@ -207,14 +203,14 @@ final class SettingsJacksonAdapterTest {
         Files.move(uunp, transaction.resolve("uunp.backup"));
         Files.copy(fixture("standard.canonical.json"), standard);
 
-        Settings.InitializationResult result = Settings.initialize(directory);
+        Settings.InitializationResult result = store.reload();
 
         assertTrue(result.isSuccessful());
         assertEquals("SETTINGS_PUBLICATION_RECOVERED", result.getDiagnostics().getFirst().getCode());
         assertArrayEquals(priorStandard, Files.readAllBytes(standard));
         assertArrayEquals(priorUunp, Files.readAllBytes(uunp));
         assertFalse(Files.exists(transaction));
-        assertEquals(2f, Settings.getMultiplierUUNP("Arms"));
+        assertEquals(2f, store.getMultiplierUUNP("Arms"));
     }
 
     /**
@@ -227,17 +223,18 @@ final class SettingsJacksonAdapterTest {
     @Test
     void oneMissingProfileUsesItsBuiltInDefaultAndRepublishesTheCompletePair(@TempDir Path directory)
             throws IOException {
+        Settings store = new Settings(directory);
         Path standard = directory.resolve("settings.json");
         Path uunp = directory.resolve("settings_UUNP.json");
         Files.copy(fixture("standard.json"), standard);
 
-        Settings.InitializationResult result = Settings.initialize(directory);
+        Settings.InitializationResult result = store.reload();
 
         assertTrue(result.isSuccessful());
         assertTrue(Files.isRegularFile(uunp));
-        assertEquals(2f, Settings.getMultiplier("Exponent"));
-        assertEquals(1f, Settings.getMultiplierUUNP("Arms"));
-        assertEquals(100, Settings.getDefaultValueSmallUUNP("Arms"));
+        assertEquals(2f, store.getMultiplier("Exponent"));
+        assertEquals(1f, store.getMultiplierUUNP("Arms"));
+        assertEquals(100, store.getDefaultValueSmallUUNP("Arms"));
         SettingsJacksonAdapter.SettingsCandidate published = SettingsJacksonAdapter.readPair(standard, uunp);
         SettingsJacksonAdapter.SettingsPairBytes canonical = SettingsJacksonAdapter.writePair(published);
         assertArrayEquals(canonical.standardUtf8(), Files.readAllBytes(standard));
@@ -253,14 +250,15 @@ final class SettingsJacksonAdapterTest {
     @Test
     void publishedDefaultsCannotBeMutatedOutsideThePairedSettingsSeam(@TempDir Path directory)
             throws IOException {
+        Settings store = new Settings(directory);
         Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
         Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
-        assertTrue(Settings.initialize(directory).isSuccessful());
+        assertTrue(store.reload().isSuccessful());
 
-        assertThrows(UnsupportedOperationException.class, () -> Settings.getDefaultsMap().clear());
-        assertThrows(UnsupportedOperationException.class, () -> Settings.getDefaultsMapUUNP().clear());
-        assertEquals(0, Settings.getDefaultValueSmall("Waist"));
-        assertEquals(100, Settings.getDefaultValueSmallUUNP("Arms"));
+        assertThrows(UnsupportedOperationException.class, () -> store.getDefaultsMap().clear());
+        assertThrows(UnsupportedOperationException.class, () -> store.getDefaultsMapUUNP().clear());
+        assertEquals(0, store.getDefaultValueSmall("Waist"));
+        assertEquals(100, store.getDefaultValueSmallUUNP("Arms"));
     }
 
     /**
@@ -272,14 +270,15 @@ final class SettingsJacksonAdapterTest {
      */
     @Test
     void productionSettingsDriveLegacyProjectOutput(@TempDir Path directory) throws IOException {
+        Settings store = new Settings(directory);
         Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
         Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        ProjectSession session = ProjectSessions.create();
+        assertTrue(store.reload().isSuccessful());
+        ProjectSession session = ProjectSessions.create(store::snapshot);
 
         ProjectOutcome opened = session.open(Path.of("test-resources", "projects",
                 "legacy-project-semantics.jbs2bg"));
-        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(opened.getSnapshot(), false);
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(opened.getSnapshot(), store.snapshot(), false);
 
         assertInstanceOf(ChangedOutcome.class, opened);
         assertEquals("CBBE Curvy=Waist@0.74:0.26, Ångström/形@0.0",
@@ -297,33 +296,33 @@ final class SettingsJacksonAdapterTest {
      */
     @Test
     void workbenchSettingsPersistAsOnePairAndImmediatelyAffectOutput(@TempDir Path directory) throws IOException {
+        Settings store = new Settings(directory);
         Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
         Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        Settings.Snapshot loaded = Settings.snapshot();
+        assertTrue(store.reload().isSuccessful());
+        Settings.Snapshot loaded = store.snapshot();
         LinkedHashMap<String, Float> standardMultipliers =
                 new LinkedHashMap<>(loaded.standard().multipliers());
         standardMultipliers.put("Waist", 2f);
         Settings.Profile editedStandard = new Settings.Profile(loaded.standard().defaults(),
                 standardMultipliers, loaded.standard().inverted());
 
-        Settings.PersistenceResult persisted = Settings.persist(directory,
-                new Settings.Snapshot(editedStandard, loaded.uunp()));
+        Settings.PersistenceResult persisted = store.persist(new Settings.Snapshot(editedStandard, loaded.uunp()));
 
         assertTrue(persisted.isSuccessful());
         assertTrue(persisted.getDiagnostics().isEmpty());
-        assertEquals(2f, Settings.getMultiplier("Waist"));
-        ProjectSession session = ProjectSessions.create();
+        assertEquals(2f, store.getMultiplier("Waist"));
+        ProjectSession session = ProjectSessions.create(store::snapshot);
         ProjectOutcome opened = session.open(Path.of("test-resources", "projects",
                 "legacy-project-semantics.jbs2bg"));
         assertEquals("CBBE Curvy=Waist@1.48:0.52, Ångström/形@0.0",
-                ProjectOutputFormatter.generate(opened.getSnapshot(), false)
+                ProjectOutputFormatter.generate(opened.getSnapshot(), store.snapshot(), false)
                         .getTemplateLinesByPresetName().get("CBBE Curvy"));
 
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        assertEquals(2f, Settings.snapshot().standard().multipliers().get("Waist"));
+        assertTrue(store.reload().isSuccessful());
+        assertEquals(2f, store.snapshot().standard().multipliers().get("Waist"));
         assertEquals("CBBE Curvy=Waist@1.48:0.52, Ångström/形@0.0",
-                ProjectOutputFormatter.generate(opened.getSnapshot(), false)
+                ProjectOutputFormatter.generate(opened.getSnapshot(), store.snapshot(), false)
                         .getTemplateLinesByPresetName().get("CBBE Curvy"));
     }
 
@@ -332,21 +331,25 @@ final class SettingsJacksonAdapterTest {
     void postCommitLockReleaseFailureKeepsCommittedSettingsLive(@TempDir Path directory) throws IOException {
         Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
         Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        Settings.Snapshot loaded = Settings.snapshot();
+        AtomicBoolean failRelease = new AtomicBoolean();
+        Settings store = new Settings(directory, lock -> {
+            lock.close();
+            if (failRelease.get())
+                throw new IOException("injected post-commit lock release failure");
+        });
+        assertTrue(store.reload().isSuccessful());
+        Settings.Snapshot loaded = store.snapshot();
         LinkedHashMap<String, Float> multipliers = new LinkedHashMap<>(loaded.standard().multipliers());
         multipliers.put("Waist", 7f);
         Settings.Snapshot replacement = new Settings.Snapshot(new Settings.Profile(
                 loaded.standard().defaults(), multipliers, loaded.standard().inverted()), loaded.uunp());
+        failRelease.set(true);
 
-        Settings.PersistenceResult result = Settings.persist(directory, replacement, lock -> {
-            lock.close();
-            throw new IOException("injected post-commit lock release failure");
-        });
+        Settings.PersistenceResult result = store.persist(replacement);
 
         assertTrue(result.isSuccessful());
         assertEquals("SETTINGS_LOCK_RELEASE_FAILED", result.getDiagnostics().getLast().getCode());
-        assertEquals(7f, Settings.getMultiplier("Waist"));
+        assertEquals(7f, store.getMultiplier("Waist"));
         assertEquals(7f, SettingsJacksonAdapter.readPair(directory.resolve("settings.json"),
                 directory.resolve("settings_UUNP.json")).standard().multipliers().get("Waist"));
     }
@@ -354,21 +357,22 @@ final class SettingsJacksonAdapterTest {
     /** Cancellation of a clean paired read reaches the commit callback once without changing live or disk state. */
     @Test
     void cancelledExistingPairInitializationLeavesPriorSettingsLive(@TempDir Path directory) throws IOException {
+        Settings store = new Settings(directory);
         Files.copy(fixture("standard.json"), directory.resolve("settings.json"));
         Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        Settings.Snapshot before = Settings.snapshot();
+        assertTrue(store.reload().isSuccessful());
+        Settings.Snapshot before = store.snapshot();
         byte[] standardBefore = Files.readAllBytes(directory.resolve("settings.json"));
         byte[] uunpBefore = Files.readAllBytes(directory.resolve("settings_UUNP.json"));
         AtomicInteger admissions = new AtomicInteger();
 
-        assertThrows(CancellationException.class, () -> Settings.initialize(directory, () -> {
+        assertThrows(CancellationException.class, () -> store.reload(() -> {
             admissions.incrementAndGet();
             return false;
         }));
 
         assertEquals(1, admissions.get());
-        assertEquals(before, Settings.snapshot());
+        assertEquals(before, store.snapshot());
         assertArrayEquals(standardBefore, Files.readAllBytes(directory.resolve("settings.json")));
         assertArrayEquals(uunpBefore, Files.readAllBytes(directory.resolve("settings_UUNP.json")));
     }
@@ -376,16 +380,17 @@ final class SettingsJacksonAdapterTest {
     /** Cancellation before first-run pair creation leaves both production Settings files absent. */
     @Test
     void cancelledFirstRunInitializationDoesNotCreateSettingsPair(@TempDir Path directory) {
-        Settings.Snapshot before = Settings.snapshot();
+        Settings store = new Settings(directory);
+        Settings.Snapshot before = store.snapshot();
         AtomicInteger admissions = new AtomicInteger();
 
-        assertThrows(CancellationException.class, () -> Settings.initialize(directory, () -> {
+        assertThrows(CancellationException.class, () -> store.reload(() -> {
             admissions.incrementAndGet();
             return false;
         }));
 
         assertEquals(1, admissions.get());
-        assertEquals(before, Settings.snapshot());
+        assertEquals(before, store.snapshot());
         assertFalse(Files.exists(directory.resolve("settings.json")));
         assertFalse(Files.exists(directory.resolve("settings_UUNP.json")));
     }
@@ -393,12 +398,13 @@ final class SettingsJacksonAdapterTest {
     /** Cancellation before owned recovery leaves its interrupted journal and partial files untouched. */
     @Test
     void cancelledRecoveryDoesNotRollbackOrDeleteTheJournal(@TempDir Path directory) throws IOException {
+        Settings store = new Settings(directory);
         Path standard = directory.resolve("settings.json");
         Path uunp = directory.resolve("settings_UUNP.json");
         Files.copy(fixture("standard.json"), standard);
         Files.copy(fixture("uunp.json"), uunp);
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        Settings.Snapshot before = Settings.snapshot();
+        assertTrue(store.reload().isSuccessful());
+        Settings.Snapshot before = store.snapshot();
         Path transaction = Files.createDirectory(directory.resolve(".bs2bg-settings-stage-interrupted"));
         Files.writeString(transaction.resolve("owner"), "BS2BG Settings transaction v1\n",
                 StandardCharsets.US_ASCII);
@@ -408,13 +414,13 @@ final class SettingsJacksonAdapterTest {
         byte[] partialStandard = Files.readAllBytes(standard);
         AtomicInteger admissions = new AtomicInteger();
 
-        assertThrows(CancellationException.class, () -> Settings.initialize(directory, () -> {
+        assertThrows(CancellationException.class, () -> store.reload(() -> {
             admissions.incrementAndGet();
             return false;
         }));
 
         assertEquals(1, admissions.get());
-        assertEquals(before, Settings.snapshot());
+        assertEquals(before, store.snapshot());
         assertArrayEquals(partialStandard, Files.readAllBytes(standard));
         assertFalse(Files.exists(uunp));
         assertTrue(Files.isRegularFile(transaction.resolve("standard.backup")));
@@ -424,16 +430,18 @@ final class SettingsJacksonAdapterTest {
     /** First-run disk commit remains successful and live when releasing its lock reports a later failure. */
     @Test
     void firstRunInitializationPublishesAfterPostCommitLockReleaseFailure(@TempDir Path directory) {
-        Settings.InitializationResult result = Settings.initialize(directory, () -> true, lock -> {
+        Settings store = new Settings(directory, lock -> {
             lock.close();
             throw new IOException("injected post-commit lock release failure");
         });
+
+        Settings.InitializationResult result = store.reload();
 
         assertTrue(result.isSuccessful());
         assertEquals("SETTINGS_LOCK_RELEASE_FAILED", result.getDiagnostics().getLast().getCode());
         assertTrue(Files.isRegularFile(directory.resolve("settings.json")));
         assertTrue(Files.isRegularFile(directory.resolve("settings_UUNP.json")));
-        assertEquals(20, Settings.getDefaultValueSmall("Breasts"));
+        assertEquals(20, store.getDefaultValueSmall("Breasts"));
     }
 
     /** A failed pair read followed by lock-close trouble cannot replace the prior live Settings value. */
@@ -441,33 +449,35 @@ final class SettingsJacksonAdapterTest {
     void preCommitInitializationFailureRetainsPriorLiveSettings(@TempDir Path directory) throws IOException {
         Files.writeString(directory.resolve("settings.json"), "{");
         Files.copy(fixture("uunp.json"), directory.resolve("settings_UUNP.json"));
-        Settings.Snapshot before = Settings.snapshot();
-
-        Settings.InitializationResult result = Settings.initialize(directory, () -> true, lock -> {
+        Settings store = new Settings(directory, lock -> {
             lock.close();
             throw new IOException("injected pre-commit lock release failure");
         });
+        Settings.Snapshot before = store.snapshot();
+
+        Settings.InitializationResult result = store.reload();
 
         assertFalse(result.isSuccessful());
-        assertEquals(before, Settings.snapshot());
+        assertEquals(before, store.snapshot());
         assertEquals("{", Files.readString(directory.resolve("settings.json")));
     }
 
     /** A Workbench save fails immediately when another writer owns the pair lock and retains the live snapshot. */
     @Test
     void workbenchSettingsPersistenceDoesNotBlockBehindAnotherWriter(@TempDir Path directory) throws IOException {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        Settings.Snapshot before = Settings.snapshot();
+        Settings store = new Settings(directory);
+        assertTrue(store.reload().isSuccessful());
+        Settings.Snapshot before = store.snapshot();
 
         Settings.PersistenceResult result;
         try (SettingsDirectoryLock lock = SettingsDirectoryLock.acquire(directory)) {
             assertNotNull(lock);
-            result = Settings.persist(directory, before);
+            result = store.persist(before);
         }
 
         assertFalse(result.isSuccessful());
         assertEquals("SETTINGS_LOCK_FAILED", result.getFailure().orElseThrow().getCode());
-        assertEquals(before, Settings.snapshot());
+        assertEquals(before, store.snapshot());
     }
 
     /**

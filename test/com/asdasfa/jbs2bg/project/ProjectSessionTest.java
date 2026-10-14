@@ -29,12 +29,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.asdasfa.jbs2bg.data.SettingsTestSupport;
+import com.asdasfa.jbs2bg.data.Settings;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProjectSessionTest {
@@ -54,6 +53,10 @@ class ProjectSessionTest {
             }
             assertFalse(rawType.getName().startsWith("javafx."),
                     "JavaFX leaked through ProjectSession: " + rawType);
+            // The immutable Settings.Snapshot is the session's one permitted data type: it reads Settings only
+            // through a read-only snapshot view, so the Settings store itself must still never appear.
+            if (rawType == Settings.Snapshot.class)
+                return;
             assertFalse(rawType.getName().startsWith("com.asdasfa.jbs2bg.data."),
                     "Legacy mutable Project type leaked through ProjectSession: " + rawType);
             return;
@@ -258,28 +261,12 @@ class ProjectSessionTest {
     }
 
     /**
-     * Publishes empty profiles so session unit tests synthesize only choices they explicitly request.
-     */
-    @BeforeEach
-    void initializeEmptySettings() {
-        SettingsTestSupport.installDefaults(Collections.emptyMap(), Collections.emptyMap());
-    }
-
-    /**
-     * Restores the checked-in Settings pair after each process-wide session test.
-     */
-    @AfterEach
-    void restoreSettings() {
-        SettingsTestSupport.restoreRepositorySettings();
-    }
-
-    /**
      * Verifies that New Project establishes the lifecycle's canonical empty state
      * through the same interface used by presentation callers.
      */
     @Test
     void newProjectProducesAnEmptyCleanUntitledSnapshot() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot before = session.getSnapshot();
 
         ProjectOutcome outcome = session.newProject();
@@ -305,7 +292,7 @@ class ProjectSessionTest {
      */
     @Test
     void repeatedNewProjectIsUnchangedUntilTheProjectIsEdited() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot first = session.newProject().getSnapshot();
 
         ProjectOutcome repeated = session.newProject();
@@ -330,7 +317,7 @@ class ProjectSessionTest {
      */
     @Test
     void contentVersionAdvancesForNewAndContentMutationButNotForUnchangedOrRejectedWork() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectContentVersion before = session.getSnapshot().getContentVersion();
 
         ProjectOutcome created = session.newProject();
@@ -351,8 +338,8 @@ class ProjectSessionTest {
      */
     @Test
     void contentVersionsFromDifferentSessionsNeverCompareEqual() {
-        ProjectSession first = ProjectSessions.create();
-        ProjectSession second = ProjectSessions.create();
+        ProjectSession first = ProjectSessions.create(emptySettings());
+        ProjectSession second = ProjectSessions.create(emptySettings());
 
         ProjectContentVersion firstVersion = first.newProject().getSnapshot().getContentVersion();
         ProjectContentVersion secondVersion = second.newProject().getSnapshot().getContentVersion();
@@ -417,7 +404,7 @@ class ProjectSessionTest {
      */
     @Test
     void outcomesAreDistinctAndCarryImmutableDiagnosticsWithTheirSnapshot() {
-        ProjectSnapshot snapshot = ProjectSessions.create().getSnapshot();
+        ProjectSnapshot snapshot = ProjectSessions.create(emptySettings()).getSnapshot();
         SourceLocation location = new SourceLocation(Optional.of(Path.of("broken.jbs2bg")),
                 Optional.of("/SliderPresets/CBBE Curvy"), OptionalInt.of(4), OptionalInt.of(12));
         ProjectDiagnostic diagnostic = new ProjectDiagnostic("PROJECT_INVALID", DiagnosticSeverity.ERROR,
@@ -455,7 +442,7 @@ class ProjectSessionTest {
      */
     @Test
     void applyRejectsAnUnsupportedProjectEditWithTheLatestSnapshot() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot before = session.getSnapshot();
         ProjectEdit unsupported = new ProjectEdit() {
         };
@@ -475,7 +462,7 @@ class ProjectSessionTest {
      */
     @Test
     void creatingSliderPresetsTrimsNamesOrdersSnapshotsAndMarksDirty() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
 
         ProjectOutcome first = session.apply(SliderPresetEdits.create(" beta "));
@@ -496,7 +483,7 @@ class ProjectSessionTest {
      */
     @Test
     void invalidAndDuplicateSliderPresetCreationPreservesSnapshotAndDirtyState() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot clean = session.newProject().getSnapshot();
 
         ProjectOutcome blank = session.apply(SliderPresetEdits.create("   "));
@@ -520,7 +507,7 @@ class ProjectSessionTest {
      */
     @Test
     void creatingCustomMorphTargetsTrimsNamesOrdersSnapshotsAndMarksDirty() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
 
         ProjectOutcome first = session.apply(CustomMorphTargetEdits.create(" zeta|Female "));
@@ -541,7 +528,7 @@ class ProjectSessionTest {
      */
     @Test
     void creatingCustomMorphTargetWithAssignmentsIsAtomic() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Zulu"));
         session.apply(SliderPresetEdits.create("alpha"));
@@ -569,7 +556,7 @@ class ProjectSessionTest {
      */
     @Test
     void invalidAndDuplicateCustomMorphTargetCreationPreservesSnapshotAndDirtyState() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot clean = session.newProject().getSnapshot();
 
         ProjectOutcome omitted = session.apply(CustomMorphTargetEdits.create(null));
@@ -594,7 +581,7 @@ class ProjectSessionTest {
      */
     @Test
     void addingCustomMorphTargetAssignmentsOrdersNamesAndTreatsDuplicatesAsUnchanged() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Zulu"));
         session.apply(SliderPresetEdits.create("alpha"));
@@ -624,7 +611,7 @@ class ProjectSessionTest {
      */
     @Test
     void addingMultipleCustomMorphTargetAssignmentsIsAtomic() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Zulu"));
         session.apply(SliderPresetEdits.create("alpha"));
@@ -650,7 +637,7 @@ class ProjectSessionTest {
      */
     @Test
     void removingAndClearingCustomMorphTargetAssignmentsReportsTruthfulOutcomes() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.create("beta"));
@@ -685,7 +672,7 @@ class ProjectSessionTest {
      */
     @Test
     void deletingAndClearingCustomMorphTargetsReportsTruthfulOutcomes() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(CustomMorphTargetEdits.create("Alpha"));
         session.apply(CustomMorphTargetEdits.create("beta|Female"));
@@ -714,7 +701,7 @@ class ProjectSessionTest {
      */
     @Test
     void bulkCustomMorphTargetDeletionUsesTheCapturedLogicalIdentitySet() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(CustomMorphTargetEdits.create("Alpha"));
         session.apply(CustomMorphTargetEdits.create("Beta"));
@@ -739,7 +726,7 @@ class ProjectSessionTest {
      */
     @Test
     void addingNpcCopiesSourceAndTreatsPluginAndEditorIdAsIdentity() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         List<String> callerAssignments = new ArrayList<>(Arrays.asList("alpha"));
@@ -776,7 +763,7 @@ class ProjectSessionTest {
     /** Invalid promoted source fields obey manual authoring rules without changing the Project. */
     @Test
     void addingNpcRejectsInvalidSourceFieldsWithoutPublishing() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot clean = session.newProject().getSnapshot();
         List<NpcMorphAssignmentSnapshot> invalid = List.of(
                 new NpcMorphAssignmentSnapshot("Lydia", " ", "HousecarlWhiterun", "NordRace", "000A2C94", List.of()),
@@ -814,7 +801,7 @@ class ProjectSessionTest {
     /** Promotion normalizes copied source fields and retains resolved Slider Preset relationships. */
     @Test
     void addingNpcNormalizesSourceFieldsAndRetainsPresetRelationships() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         NpcMorphAssignmentSnapshot source = new NpcMorphAssignmentSnapshot(" Lydia ", " Skyrim.esm ",
@@ -852,7 +839,7 @@ class ProjectSessionTest {
      */
     @Test
     void npcSliderPresetAssignmentEditsAreUniqueCanonicalAndTruthful() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Zulu"));
         session.apply(SliderPresetEdits.create("alpha"));
@@ -892,7 +879,7 @@ class ProjectSessionTest {
      */
     @Test
     void addingMultipleNpcSliderPresetAssignmentsIsAtomic() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Zulu"));
         session.apply(SliderPresetEdits.create("alpha"));
@@ -919,7 +906,7 @@ class ProjectSessionTest {
      */
     @Test
     void npcRemovalAndClearEditsPreserveCanonicalOrderingAndNoOps() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(NpcMorphAssignmentEdits.addNpc(npc("Zulu", "Skyrim.esm", "ZuluEditor")));
         session.apply(NpcMorphAssignmentEdits.addNpc(npc("Dawnguard", "Dawnguard.esm", "ZuluEditor")));
@@ -961,7 +948,7 @@ class ProjectSessionTest {
      */
     @Test
     void filteredBulkNpcAddIsDefensivelyCopiedAndAtomicOnRejection() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         List<NpcMorphAssignmentSnapshot> filteredSources = new ArrayList<>(Arrays.asList(
@@ -1006,7 +993,7 @@ class ProjectSessionTest {
      */
     @Test
     void fillEmptyUsesExplicitChoicesAndPublishesAtomically() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.create("beta"));
@@ -1054,7 +1041,7 @@ class ProjectSessionTest {
      */
     @Test
     void filteredNpcAssignmentClearIsDefensivelyCopiedAndAtomic() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot("First", "Skyrim.esm",
@@ -1093,7 +1080,7 @@ class ProjectSessionTest {
      */
     @Test
     void sliderPresetRenameDeleteAndClearCascadeToNpcAssignmentsOnly() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.create("beta"));
@@ -1129,7 +1116,7 @@ class ProjectSessionTest {
      */
     @Test
     void npcEditsRequireActiveProjectAndEmptyBulkActionsRemainClean() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot noProject = session.getSnapshot();
 
         ProjectOutcome beforeActiveProject = session.apply(NpcMorphAssignmentEdits.clearNpcs());
@@ -1162,7 +1149,7 @@ class ProjectSessionTest {
      */
     @Test
     void invalidNpcEditEndpointsRejectWithoutChangingProjectState() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(NpcMorphAssignmentEdits.addNpc(npc("Lydia", "Skyrim.esm", "HousecarlWhiterun")));
@@ -1194,7 +1181,7 @@ class ProjectSessionTest {
      */
     @Test
     void renamingSliderPresetCascadesToEveryCustomMorphTargetRelationship() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.create("beta"));
@@ -1224,7 +1211,7 @@ class ProjectSessionTest {
      */
     @Test
     void deletingAndClearingSliderPresetsCascadeToEveryCustomMorphTargetRelationship() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.create("beta"));
@@ -1262,7 +1249,7 @@ class ProjectSessionTest {
      */
     @Test
     void uunpAndSliderChoiceEditsPreserveImmutableValueSemantics() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         // The 30/70 effective pair deliberately disagrees with the absent stored endpoints.
@@ -1284,10 +1271,9 @@ class ProjectSessionTest {
         SliderChoiceSnapshot exposedWaist = preset.getSliderChoices().get(1);
         assertFalse(exposedWaist.getStoredSmallValue().isPresent());
         assertFalse(exposedWaist.getStoredBigValue().isPresent());
-        assertEquals(com.asdasfa.jbs2bg.data.Settings.getDefaultValueSmallUUNP("Waist"),
-                exposedWaist.getEffectiveSmallValue());
-        assertEquals(com.asdasfa.jbs2bg.data.Settings.getDefaultValueBigUUNP("Waist"),
-                exposedWaist.getEffectiveBigValue());
+        // With empty Settings an unconfigured UUNP default resolves to zero on both endpoints.
+        assertEquals(0, exposedWaist.getEffectiveSmallValue());
+        assertEquals(0, exposedWaist.getEffectiveBigValue());
         assertEquals(25, exposedWaist.getPercentageMinimum());
         assertEquals(75, exposedWaist.getPercentageMaximum());
         assertTrue(exposedWaist.isMissingDefault());
@@ -1308,7 +1294,7 @@ class ProjectSessionTest {
      */
     @Test
     void duplicatingSliderPresetCopiesValuesWithoutSharingLaterEdits() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.setUunp("Alpha", true));
@@ -1339,7 +1325,7 @@ class ProjectSessionTest {
      */
     @Test
     void renamingAndUpdatingSliderPresetsRetainsIdentityAndCanonicalOrder() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("bravo"));
         session.apply(SliderPresetEdits.create("delta"));
@@ -1388,7 +1374,7 @@ class ProjectSessionTest {
      */
     @Test
     void deletingAndClearingSliderPresetsReportsTruthfulOutcomes() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.create("beta"));
@@ -1416,7 +1402,7 @@ class ProjectSessionTest {
      */
     @Test
     void bulkSliderPresetDeletionDeduplicatesCanonicalIdentities() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.create("Beta"));
@@ -1438,7 +1424,7 @@ class ProjectSessionTest {
      */
     @Test
     void sliderPresetEditBeforeActiveProjectReturnsStructuredRejection() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot before = session.getSnapshot();
 
         ProjectOutcome outcome = session.apply(SliderPresetEdits.create("Alpha"));
@@ -1485,7 +1471,7 @@ class ProjectSessionTest {
         assertEquals(new HashSet<>(Arrays.asList("getSnapshot", "newProject", "open", "save", "saveAs",
                 "importSliderPresets", "refreshSettings", "apply", "promoteNpcs")), methodNames);
 
-        Class<?> implementation = ProjectSessions.create().getClass();
+        Class<?> implementation = ProjectSessions.create(emptySettings()).getClass();
         assertFalse(Modifier.isPublic(implementation.getModifiers()),
                 "ProjectSession implementation must remain hidden behind the external seam");
         for (Field field : implementation.getDeclaredFields())
@@ -1510,7 +1496,7 @@ class ProjectSessionTest {
      */
     @Test
     void workerThreadsObserveOnlyAtomicProjectSnapshots() throws Exception {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         ProjectSnapshot before = session.getSnapshot();
         int workerCount = 8;
         int iterations = 250;
@@ -1560,7 +1546,7 @@ class ProjectSessionTest {
      */
     @Test
     void readersObserveWholeRelationshipCascadeSnapshots() throws Exception {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(CustomMorphTargetEdits.create("All|Female", Collections.singletonList("Alpha")));

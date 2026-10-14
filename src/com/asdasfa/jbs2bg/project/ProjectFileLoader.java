@@ -4,6 +4,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
+import com.asdasfa.jbs2bg.data.Settings;
+
 /**
  * Owns Project filesystem loading while delegating JSON policy to the streaming
  * adapter. The detached result is published only by {@link ProjectSession}.
@@ -16,27 +18,29 @@ final class ProjectFileLoader {
     /**
      * Reads and validates one complete Project candidate from the production filesystem.
      *
-     * @param source Project path to inspect and stream-parse
+     * @param source   Project path to inspect and stream-parse
+     * @param settings Settings generation pinned for this load
      * @return detached Project content and ordered recovery diagnostics
      * @throws ProjectJacksonAdapter.ProjectFormatException when reading, parsing,
      *                                                      validation, or resource-limit enforcement fails
      */
-    static LoadedProject load(Path source) {
-        return load(source, ProjectOperationContext.nonCancellable());
+    static LoadedProject load(Path source, Settings.Snapshot settings) {
+        return load(source, settings, ProjectOperationContext.nonCancellable());
     }
 
     /**
      * Reads and validates one complete candidate while reporting real adapter phases.
      *
-     * @param source  Project path to inspect and stream-parse
-     * @param context operation context retained for this synchronous load
+     * @param source   Project path to inspect and stream-parse
+     * @param settings Settings generation pinned for this load
+     * @param context  operation context retained for this synchronous load
      * @return detached Project content and ordered recovery diagnostics
      */
-    static LoadedProject load(Path source, ProjectOperationContext context) {
+    static LoadedProject load(Path source, Settings.Snapshot settings, ProjectOperationContext context) {
         ProjectOperationContext operation = Objects.requireNonNull(context, "context");
         operation.report(ProjectOperationProgress.indeterminate("Inspecting Project"));
         operation.checkCancellation();
-        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(source, operation);
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(source, settings, operation);
         return new LoadedProject(candidate.snapshot(), candidate.diagnostics());
     }
 

@@ -315,7 +315,7 @@ final class SettingsPairPublisherTest {
 
         assertEquals("injected commit move failure", failure.getMessage());
         assertTrue(failure.getSuppressed().length > 0);
-        Settings.InitializationResult recovered = Settings.initialize(directory);
+        Settings.InitializationResult recovered = new Settings(directory).reload();
         assertTrue(recovered.isSuccessful());
         assertEquals("SETTINGS_PUBLICATION_RECOVERED", recovered.getDiagnostics().getFirst().getCode());
         assertArrayEquals(priorStandard, Files.readAllBytes(standard));
@@ -357,7 +357,7 @@ final class SettingsPairPublisherTest {
                     .startsWith(".bs2bg-settings-stage-")).count());
         }
 
-        Settings.InitializationResult recovered = Settings.initialize(directory);
+        Settings.InitializationResult recovered = new Settings(directory).reload();
 
         assertTrue(recovered.isSuccessful());
         assertEquals("SETTINGS_PUBLICATION_RECOVERED", recovered.getDiagnostics().getFirst().getCode());

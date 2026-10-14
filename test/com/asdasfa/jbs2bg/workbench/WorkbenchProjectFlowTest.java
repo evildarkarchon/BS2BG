@@ -59,8 +59,9 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void saveAsAdoptsNormalizedIdentityAndLeavesProjectClean() {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
 
         WorkbenchProjectFlow.Update requested = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS);
         WorkbenchProjectFlow.Effect chooser = requested.effect().orElseThrow();
@@ -82,13 +83,13 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void saveAsPersistsOnlyWhenTheApplicationWorkerRuns() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
         List<JobCoordinator.Frame> observedJobs = new ArrayList<>();
         jobs.observe(observedJobs::add);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         flow.apply(SliderPresetEdits.create("Queued Save As"));
         WorkbenchProjectFlow.Frame before = flow.frame();
         Path target = temporaryDirectory.resolve("async-save-as.jbs2bg").toAbsolutePath().normalize();
@@ -127,7 +128,7 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void bodySlideImportUsesCapturedSourcesAndTheCentralJobPath() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("captured.xml").toAbsolutePath().normalize();
         Files.writeString(source, "<SliderPresets><Preset name=\"Imported Preset\">"
                 + "<SetSlider name=\"Waist\" size=\"small\" value=\"25\"/>"
@@ -138,7 +139,7 @@ class WorkbenchProjectFlowTest {
         List<JobCoordinator.Frame> importFrames = new ArrayList<>();
         jobs.observe(importFrames::add);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         WorkbenchProjectFlow.Frame before = flow.frame();
 
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE)
@@ -174,7 +175,7 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void bodySlideImportReportsPartialSourceOutcomes() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path valid = temporaryDirectory.resolve("valid.xml").toAbsolutePath().normalize();
         Path malformed = temporaryDirectory.resolve("malformed.xml").toAbsolutePath().normalize();
         Path missing = temporaryDirectory.resolve("missing.xml").toAbsolutePath().normalize();
@@ -183,7 +184,7 @@ class WorkbenchProjectFlowTest {
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
 
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE)
                 .effect().orElseThrow();
@@ -204,11 +205,11 @@ class WorkbenchProjectFlowTest {
     /** An unreadable-only import is a failed attempt and retains the prior authoritative Project. */
     @Test
     void bodySlideImportFailsWhenNoSelectedSourceProducesAUsableOutcome() {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         WorkbenchProjectFlow.Frame before = flow.frame();
         Path missing = temporaryDirectory.resolve("missing-only.xml").toAbsolutePath().normalize();
 
@@ -227,7 +228,7 @@ class WorkbenchProjectFlowTest {
     /** Cancellation at the next source safe point retains the earlier committed source and names that effect. */
     @Test
     void bodySlideImportCancellationRetainsEarlierCommittedSources() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path first = temporaryDirectory.resolve("first.xml").toAbsolutePath().normalize();
         Path second = temporaryDirectory.resolve("second.xml").toAbsolutePath().normalize();
         Files.writeString(first, "<SliderPresets><Preset name=\"Committed First\"/></SliderPresets>");
@@ -242,7 +243,7 @@ class WorkbenchProjectFlowTest {
             }
         }));
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE)
                 .effect().orElseThrow();
         flow.respond(chooser.token(), WorkbenchProjectFlow.Response.selectedSources(List.of(first, second)));
@@ -262,11 +263,12 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void recoveredOpenPublishesOneCoherentDirtyFrame() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
 
         WorkbenchProjectFlow.Update requested = flow.request(WorkbenchProjectFlow.Intent.OPEN);
         WorkbenchProjectFlow.Effect chooser = requested.effect().orElseThrow();
@@ -289,13 +291,13 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void openRunsThroughCentralAdmissionWithCapturedInputsAndTruthfulProgress() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("async-source.jbs2bg");
         Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         WorkbenchProjectFlow.Frame before = flow.frame();
 
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
@@ -326,12 +328,12 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void staleOpenCompletionCannotOverwriteANewerProjectContentVersion() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("stale-source.jbs2bg");
         Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session, jobs);
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
@@ -353,7 +355,7 @@ class WorkbenchProjectFlowTest {
     /** A source changed after worker stamp capture is stale even when its replacement is a valid Project. */
     @Test
     void changedOpenSourceCannotPublishAsTheCapturedInput() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("changing-source.jbs2bg");
         Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source);
         ManualExecutor worker = new ManualExecutor();
@@ -371,7 +373,7 @@ class WorkbenchProjectFlowTest {
                 throw new AssertionError("Could not change the source after the worker read it", exception);
             }
         });
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session, jobs);
         WorkbenchProjectFlow.Frame before = flow.frame();
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
@@ -394,13 +396,13 @@ class WorkbenchProjectFlowTest {
     /** The initial source stamp is taken on the worker, after chooser response has returned. */
     @Test
     void openCapturesInitialSourceStampWhenWorkerStarts() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("worker-stamp-source.jbs2bg");
         Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
 
@@ -424,13 +426,13 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void openRetryIsUnavailableAfterTheCurrentProjectBecomesDirty() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("dirty-retry-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "malformed-syntax.jbs2bg"), source);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         flow.request(WorkbenchProjectFlow.Intent.NEW);
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
@@ -457,27 +459,24 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void refreshSettingsPublishesTheSessionOutcome() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         flow.request(WorkbenchProjectFlow.Intent.NEW);
         flow.apply(SliderPresetEdits.create("Alpha"));
         WorkbenchProjectFlow.Frame before = flow.frame();
         Map<String, DefaultSliderValue> changedDefaults = new LinkedHashMap<>();
         changedDefaults.put("Only", new DefaultSliderValue(0.3f, 0.7f));
 
-        try {
-            SettingsTestSupport.installDefaults(changedDefaults, Map.of());
-            ProjectOutcome refreshed = flow.refreshSettings();
+        SettingsTestSupport.replaceDefaults(settings, changedDefaults, Map.of());
+        ProjectOutcome refreshed = flow.refreshSettings();
 
-            assertInstanceOf(ChangedOutcome.class, refreshed);
-            assertEquals(refreshed.getSnapshot(), flow.frame().snapshot());
-            assertNotEquals(before.snapshot().getContentVersion(),
-                    flow.frame().snapshot().getContentVersion());
-            assertEquals(List.of("Only"), flow.frame().snapshot().getSliderPresets().getFirst()
-                    .getSliderChoices().stream().map(choice -> choice.getName()).toList());
-        } finally {
-            SettingsTestSupport.restoreRepositorySettings();
-        }
+        assertInstanceOf(ChangedOutcome.class, refreshed);
+        assertEquals(refreshed.getSnapshot(), flow.frame().snapshot());
+        assertNotEquals(before.snapshot().getContentVersion(),
+                flow.frame().snapshot().getContentVersion());
+        assertEquals(List.of("Only"), flow.frame().snapshot().getSliderPresets().getFirst()
+                .getSliderChoices().stream().map(choice -> choice.getName()).toList());
     }
 
     /**
@@ -485,8 +484,9 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void refreshSettingsRejectsWhileAPlatformEffectIsPending() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         flow.request(WorkbenchProjectFlow.Intent.SAVE_AS);
 
         assertThrows(IllegalStateException.class, flow::refreshSettings);
@@ -497,11 +497,12 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void dirtyNewCanBeCancelledOrExplicitlyDiscarded() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         WorkbenchProjectFlow.Effect openChooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
         WorkbenchProjectFlow.Frame dirty = flow.respond(openChooser.token(),
@@ -534,11 +535,12 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void saveUsesTheAdoptedIdentityOfARecoveredProject() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         WorkbenchProjectFlow.Effect openChooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
         assertTrue(flow.respond(openChooser.token(), WorkbenchProjectFlow.Response.selected(source))
@@ -560,11 +562,11 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void saveToAnAdoptedIdentityPersistsOnlyWhenTheApplicationWorkerRuns() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         Path target = temporaryDirectory.resolve("async-save.jbs2bg").toAbsolutePath().normalize();
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
                 .effect().orElseThrow();
@@ -594,11 +596,11 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void saveRetryUsesTheCurrentAdoptedIdentity() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         Path failedParent = Files.createDirectory(temporaryDirectory.resolve("failed-identity"));
         Path failedIdentity = failedParent.resolve("project.jbs2bg").toAbsolutePath().normalize();
         WorkbenchProjectFlow.Effect firstChooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
@@ -636,11 +638,12 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void dirtyCloseCanBeCancelledBeforeDiscardClosesExactlyOnce() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         WorkbenchProjectFlow.Effect openChooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
         WorkbenchProjectFlow.Frame dirty = flow.respond(openChooser.token(),
@@ -675,11 +678,12 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void dirtyCloseSavesBeforePublishingTheCloseEffect() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         WorkbenchProjectFlow.Effect openChooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
         assertTrue(flow.respond(openChooser.token(), WorkbenchProjectFlow.Response.selected(source))
@@ -702,12 +706,13 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void failedCloseSavePreservesUnsavedWorkAndDoesNotClose() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path parent = Files.createDirectory(temporaryDirectory.resolve("adopted-parent"));
         Path source = parent.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         WorkbenchProjectFlow.Effect openChooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
         WorkbenchProjectFlow.Frame dirty = flow.respond(openChooser.token(),
@@ -733,14 +738,15 @@ class WorkbenchProjectFlowTest {
     /** A later Activity retry saves the Project but leaves Close to recheck current Settings drafts. */
     @Test
     void retriedFailedCloseSaveDoesNotRetainOldCloseIntent() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path parent = Files.createDirectory(temporaryDirectory.resolve("retry-close-parent"));
         Path source = parent.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot), jobs);
         WorkbenchProjectFlow.Effect openChooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
         flow.respond(openChooser.token(), WorkbenchProjectFlow.Response.selected(source));
@@ -777,8 +783,9 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void staleEffectResponseIsRejectedWithoutConsumingTheCurrentEffect() {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         WorkbenchProjectFlow.Effect stale = flow.request(WorkbenchProjectFlow.Intent.OPEN).effect().orElseThrow();
         assertTrue(flow.respond(stale.token(), WorkbenchProjectFlow.Response.cancelled()).accepted());
         WorkbenchProjectFlow.Effect current = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
@@ -803,13 +810,14 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void dirtyOpenConfirmsBeforeLaunchingTheChooser() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         Path recovery = temporaryDirectory.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 recovery);
         Path replacement = temporaryDirectory.resolve("replacement.jbs2bg");
         Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), replacement);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         WorkbenchProjectFlow.Effect firstChooser = flow.request(WorkbenchProjectFlow.Intent.OPEN)
                 .effect().orElseThrow();
         WorkbenchProjectFlow.Frame dirty = flow.respond(firstChooser.token(),
@@ -838,8 +846,9 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void dirtyUntitledCloseChoosesAPathBeforeClosing() {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot));
         flow.apply(SliderPresetEdits.create("Unsaved"));
         assertTrue(flow.frame().snapshot().isDirty());
         assertTrue(flow.frame().snapshot().getFileIdentity().isEmpty());
@@ -867,11 +876,11 @@ class WorkbenchProjectFlowTest {
      */
     @Test
     void dirtyUntitledCloseWaitsForTheApplicationWorkerSaveAsBeforeClosing() {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory);
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = coordinator(worker);
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", ProjectSessions.create(settings::snapshot), jobs);
         flow.apply(SliderPresetEdits.create("Unsaved worker close"));
         WorkbenchProjectFlow.Frame dirty = flow.frame();
         Path target = temporaryDirectory.resolve("worker-close-save-as.jbs2bg").toAbsolutePath().normalize();
