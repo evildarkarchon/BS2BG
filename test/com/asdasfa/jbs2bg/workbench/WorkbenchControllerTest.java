@@ -1982,6 +1982,87 @@ class WorkbenchControllerTest {
     }
 
     /**
+     * The controls that several Areas used to race on (BodySlide import, the NPC Database source buttons and
+     * Generate) each have one writer fed by the shared Workbench context, so a job frame followed by a Project frame
+     * leaves them exactly as the reverse order does, with live or rejected Settings.
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void crossAreaControlsSettleTheSameWhetherTheJobFrameOrTheProjectFrameComesLast(boolean liveSettings)
+            throws Exception {
+        Path source = temporaryDirectory.resolve("ordered-npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        WorkbenchTestEnvironment environment = fixture();
+        if (!liveSettings) {
+            Files.writeString(temporaryDirectory.resolve("settings.json"), "{\"Defaults\":");
+            Settings.InitializationResult rejected = fixture().settings().reload();
+            assertFalse(rejected.isSuccessful());
+            environment = fixture().withStartup(rejected);
+        }
+        // Imported sources are loaded but none is selected, so only Remove stays disabled once the import settles;
+        // rejected Settings keep BodySlide import and Generate from consuming fallback values.
+        Map<String, Boolean> expected = Map.of(
+                "importNpcSourcesButton", false,
+                "removeNpcSourceButton", true,
+                "clearNpcDatabaseButton", false,
+                "importBodySlideButton", !liveSettings,
+                "generateOutputButton", !liveSettings);
+
+        assertEquals(expected, crossAreaControlsAfter(true, source, environment));
+        assertEquals(expected, crossAreaControlsAfter(false, source, environment));
+    }
+
+    /**
+     * Attaches a fresh Workbench, then settles an NPC Database import (its job frames) and a Slider Preset creation
+     * (a Project frame) in the requested order.
+     *
+     * @param jobFrameFirst true to import before creating, so the Project frame renders last
+     * @return the disabled state of each cross-Area control, keyed by FXML id
+     */
+    private Map<String, Boolean> crossAreaControlsAfter(boolean jobFrameFirst, Path source,
+                                                         WorkbenchTestEnvironment environment) throws Exception {
+        ProjectSession session = environment.newSession();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        AtomicReference<Map<String, Boolean>> disabled = new AtomicReference<>();
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, environment.environment());
+                Runnable importSources = () -> ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                Runnable createPreset = () -> {
+                    ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Ordered");
+                    ((Button) loader.getNamespace().get("createSliderPresetButton")).fire();
+                };
+                (jobFrameFirst ? importSources : createPreset).run();
+                (jobFrameFirst ? createPreset : importSources).run();
+
+                assertEquals(1, session.getSnapshot().getSliderPresets().size());
+                assertEquals(1, ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getItems().size());
+                disabled.set(Map.of(
+                        "importNpcSourcesButton", isDisabled(loader, "importNpcSourcesButton"),
+                        "removeNpcSourceButton", isDisabled(loader, "removeNpcSourceButton"),
+                        "clearNpcDatabaseButton", isDisabled(loader, "clearNpcDatabaseButton"),
+                        "importBodySlideButton", isDisabled(loader, "importBodySlideButton"),
+                        "generateOutputButton", isDisabled(loader, "generateOutputButton")));
+            } finally {
+                stage.close();
+            }
+        });
+        return disabled.get();
+    }
+
+    /** @return whether the named FXML button is disabled */
+    private static boolean isDisabled(FXMLLoader loader, String id) {
+        return ((Button) loader.getNamespace().get(id)).isDisabled();
+    }
+
+    /**
      * The Templates JavaFX adapter renders immutable feature frames and translates controls into typed feature intents
      * without retaining a row-index selection.
      */
