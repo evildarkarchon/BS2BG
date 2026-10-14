@@ -196,9 +196,9 @@ $artifact = $null
 
 # Suites whose presence and green result the gate requires, beyond the Surefire totals: the toolchain witness,
 # the structural source/pom gate, the headless-platform startup guard (ADR-0008), the FXML/controller harness,
-# the Preview profile contract,
-# the packaged-launcher and app-image staging contracts (#97), and the ProjectSession, Project, filtering-seam, and
-# persistence-compatibility contracts, plus the centralized job coordinator race and shutdown contract.
+# the Preview profile contract, the packaged-launcher and app-image staging contracts (#97), and the ProjectSession,
+# Project, filtering-seam, and persistence-compatibility contracts, plus the centralized job coordinator race and
+# shutdown contract.
 $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest',
     'com.asdasfa.jbs2bg.build.ProductionSourceGateTest',
