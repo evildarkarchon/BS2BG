@@ -7,11 +7,16 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
+
+import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 /**
- * Persists the Workbench theme choice inside the application's isolated working profile.
+ * Persists the Workbench theme choice inside the application's isolated working profile, and captures the
+ * worker-owned save job the theme selector submits.
  */
 public final class WorkbenchAppearanceStore {
     static final String FILE_NAME = "workbench-appearance.properties";
@@ -60,6 +65,37 @@ public final class WorkbenchAppearanceStore {
             // Preferences are backward-tolerant: an unknown future or damaged value falls back to System.
             return WorkbenchAppearance.ThemeChoice.SYSTEM;
         }
+    }
+
+    /**
+     * Captures one theme choice as a worker-owned save job. The coordinator publishes completion through Activity;
+     * a failed optional preference write completes with issues and leaves the already applied appearance active.
+     *
+     * @param selected immutable System, Light, or Dark choice selected on the JavaFX thread
+     * @return captured job submission with the selected choice as its completion value
+     */
+    public JobCoordinator.Submission<WorkbenchAppearance.ThemeChoice> saveSubmission(
+            WorkbenchAppearance.ThemeChoice selected) {
+        Objects.requireNonNull(selected, "selected");
+        JobCoordinator.Operation operation = new JobCoordinator.Operation("Save Theme Preference", List.of(),
+                List.of(), Optional.of(selected.name()), JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED);
+        return new JobCoordinator.Submission<>(operation, context -> {
+            context.checkCancellation();
+            if (!context.beginCommit("Saving theme preference"))
+                return JobCoordinator.Result.cancelled("Theme preference save cancelled.", List.of(), List.of());
+            try {
+                save(selected);
+                return JobCoordinator.Result.completed(selected, "Theme preference saved.",
+                        List.of("Theme preference saved"), List.of());
+            } catch (IOException exception) {
+                return JobCoordinator.Result.completedWithIssues(selected,
+                        "The selected theme could not be saved.", List.of(), List.of(
+                                new JobCoordinator.Diagnostic("THEME_PREFERENCE_SAVE_FAILED",
+                                        "The selected theme could not be saved.", Optional.empty())));
+            }
+        }, (attempt, result) -> {
+            // The coordinator publishes the worker outcome through the ordinary Activity path.
+        }, Optional.empty());
     }
 
     /**

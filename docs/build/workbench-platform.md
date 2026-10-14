@@ -26,8 +26,9 @@ changes are already immediate; the centralized job slice (#101) owns later progr
 
 The predetermined bundled-vector fallback is the selected and only shipping implementation. The conditional
 Ikonli candidate could not satisfy the complete adoption gate in this checkpoint because its packaged font loading,
-UIA, DPI/theme, licensing, and targeted Narrator evidence were not all established. `SemanticIcons.IconKey` is the
-feature interface and fresh public-JavaFX `SVGPath` nodes are the sole adapter. The POM bans
+UIA, DPI/theme, licensing, and targeted Narrator evidence were not all established. The JavaFX-free `IconKey` enum is
+the feature interface (the feedback model carries it), and fresh public-JavaFX `SVGPath` nodes from `SemanticIcons`
+are the sole adapter. The POM bans
 `org.kordamp.ikonli:*` transitively so no dormant alternative can enter the image. `SemanticIconsTest`, the source
 gate, dependency convergence, and the packaged smoke continuously verify that choice.
 

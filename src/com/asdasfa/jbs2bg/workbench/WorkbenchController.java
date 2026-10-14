@@ -39,6 +39,7 @@ import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
+import com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunner;
 
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
@@ -520,6 +521,8 @@ public final class WorkbenchController {
     private NpcDatabaseFeature npcDatabaseFeature;
     private NpcDatabaseImporter npcDatabaseImporter;
     private SettingsFeature settingsFeature;
+    // Admits, runs, retries, and settles Settings persistence; the shell keeps only the token-keyed close continuation.
+    private SettingsJobRunner settingsJobs;
     // The one Settings store from the attach environment; features read it, only Settings effects publish to it.
     private Settings settings;
     private OutputFeature outputFeature;
@@ -580,22 +583,9 @@ public final class WorkbenchController {
     /**
      * Pairs one decorative vector with the text label and exposes its keyboard cue as help text.
      */
-    private static void configureSemanticIcon(ToggleButton button, SemanticIcons.IconKey key, String shortcut) {
+    private static void configureSemanticIcon(ToggleButton button, IconKey key, String shortcut) {
         button.setGraphic(SemanticIcons.create(key, true));
         button.setAccessibleHelp("Semantic icon: " + key.accessibleName() + ". Keyboard shortcut: " + shortcut + ".");
-    }
-
-    /**
-     * Converts a Project confirmation response into the matching typed dialog action.
-     */
-    private static WorkbenchFeedback.DialogAction dialogAction(WorkbenchProjectFlow.Response response) {
-        return switch (response.kind()) {
-            case SAVE -> WorkbenchFeedback.DialogAction.SAVE;
-            case DISCARD -> WorkbenchFeedback.DialogAction.DISCARD;
-            case CANCELLED -> WorkbenchFeedback.DialogAction.CANCEL;
-            case PATH_SELECTED, PATHS_SELECTED -> throw new IllegalArgumentException(
-                    "A Project confirmation cannot return a selected path");
-        };
     }
 
     /**
@@ -723,6 +713,20 @@ public final class WorkbenchController {
         npcDatabaseImporter = new NpcDatabaseImporter(npcDatabaseFeature, projectFlow.jobs(), this::renderNpcDatabase);
         settingsFeature = new SettingsFeature(settings, environment.settingsStartup(),
                 environment.preferencesDirectory(), environment.migrationPolicy());
+        settingsJobs = new SettingsJobRunner(settingsFeature, settings, projectFlow.jobs(),
+                new SettingsJobRunner.Listener() {
+                    /** Renders the settled job and continues any close waiting on it. */
+                    @Override
+                    public void completed(SettingsFeature.Effect effect, SettingsFeature.Update update) {
+                        completeSettingsEffect(effect, update);
+                    }
+
+                    /** Keeps a pending close attached to the retried Save. */
+                    @Override
+                    public void recaptured(SettingsFeature.Effect previous, SettingsFeature.Effect replacement) {
+                        transferSettingsClose(previous, replacement);
+                    }
+                });
         outputFeature = new OutputFeature(projectFlow, () -> new OutputFeature.GenerationSettings(
                 settings.snapshot(), settingsFeature.frame().omitRedundantSliders()));
         stage = Objects.requireNonNull(ownerStage, "ownerStage");
@@ -762,7 +766,7 @@ public final class WorkbenchController {
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
-        configureAppearance(initialChoice, themeStore::save, environment.appearancePreferences());
+        configureAppearance(initialChoice, themeStore, environment.appearancePreferences());
         configureSemanticIcons();
         stage.setOnCloseRequest(event -> {
             if (!finalClose) {
@@ -2334,185 +2338,28 @@ public final class WorkbenchController {
             renderOutput(outputFeature.refreshGenerationSettings().frame());
     }
 
-    /** Admits one immutable Settings effect to the existing application-wide coordinator. */
+    /**
+     * Admits one Settings worker effect through the runner. A refused admission has already cancelled the feature's
+     * pending effect, so the Settings draft is re-rendered free for the next intent.
+     *
+     * @param effect captured Save, Reload, or generation-preference effect
+     * @return whether the coordinator admitted the job
+     */
     private boolean submitSettingsEffect(SettingsFeature.Effect effect) {
-        if (effect instanceof SettingsFeature.ReloadConfirmationEffect)
-            throw new IllegalArgumentException("Reload confirmation must complete before worker admission");
-        JobCoordinator.Admission admission = projectFlow.jobs().submit(settingsSubmission(effect));
-        if (!admission.admitted()) {
-            settingsFeature.cancel(effect.token());
+        boolean admitted = settingsJobs.submit(effect);
+        if (!admitted)
             renderSettings(settingsFeature.frame());
-        }
-        return admission.admitted();
-    }
-
-    /** Builds one retryable Settings submission whose retry recaptures current feature inputs. */
-    private JobCoordinator.Submission<SettingsFeature.Completion> settingsSubmission(SettingsFeature.Effect effect) {
-        String operationName = switch (effect) {
-            case SettingsFeature.SaveEffect ignored -> "Save Settings";
-            case SettingsFeature.ReloadEffect ignored -> "Reload Settings";
-            case SettingsFeature.PreferenceEffect ignored -> "Save Generation Preference";
-            case SettingsFeature.ReloadConfirmationEffect ignored -> throw new IllegalArgumentException(
-                    "Reload confirmation must complete before worker admission");
-        };
-        JobCoordinator.Operation operation = new JobCoordinator.Operation(
-                operationName,
-                effect instanceof SettingsFeature.ReloadEffect ? List.of(effect.directory().toString()) : List.of(),
-                effect instanceof SettingsFeature.SaveEffect || effect instanceof SettingsFeature.PreferenceEffect
-                        ? List.of(effect.directory().toString()) : List.of(),
-                Optional.empty());
-        return new JobCoordinator.Submission<>(operation,
-                context -> runSettingsEffect(settings, effect, context),
-                (attempt, result) -> completeSettingsEffect(effect, result),
-                Optional.of(settingsRetryFactory(effect)));
-    }
-
-    /** Builds dynamic retry availability and recapture around the current Settings draft. */
-    private JobCoordinator.RetryFactory<SettingsFeature.Completion> settingsRetryFactory(
-            SettingsFeature.Effect previous) {
-        return new JobCoordinator.RetryFactory<>() {
-            /** Recaptures current inputs and transfers any close continuation to the new effect token. */
-            @Override
-            public JobCoordinator.Submission<SettingsFeature.Completion> recapture() {
-                return recaptureSettingsSubmission(previous);
-            }
-
-            /** Save needs a valid draft; dirty Reload must use the ordinary confirmation path. */
-            @Override
-            public Optional<String> unavailableReason() {
-                if (previous instanceof SettingsFeature.SaveEffect)
-                    return settingsFeature.saveRetryUnavailableReason();
-                if (previous instanceof SettingsFeature.ReloadEffect)
-                    return settingsFeature.reloadRetryUnavailableReason();
-                return Optional.empty();
-            }
-        };
-    }
-
-    /** Recaptures Save drafts or the Reload directory when the user explicitly retries a failed Settings job. */
-    private JobCoordinator.Submission<SettingsFeature.Completion> recaptureSettingsSubmission(
-            SettingsFeature.Effect previous) {
-        SettingsFeature.Update recaptured = settingsFeature.retry(previous);
-        SettingsFeature.Effect replacement = recaptured.effect().orElseThrow(
-                () -> new IllegalStateException("Settings retry could not recapture its persistence inputs"));
-        if (settingsCloseContinuation != null && settingsCloseContinuation.effectToken() == previous.token())
-            settingsCloseContinuation = settingsCloseContinuation.forEffect(replacement.token());
-        return settingsSubmission(replacement);
+        return admitted;
     }
 
     /**
-     * Executes blocking Settings I/O on the worker. Reload stays cancellable through lock acquisition and ordinary
-     * pair reads; the Settings seam enters commit immediately before recovery or publication can mutate state.
+     * Renders one settled Settings job on the publication lane, refreshes Settings-dependent features after a
+     * publication, realizes any follow-up effect, and then lets the close lifecycle continue.
      *
-     * @param settings the Settings store that Save persists to and Reload reloads
-     * @param effect   tokenized Save, Reload, or generation-preference effect captured on the JavaFX thread
-     * @param context  coordinator context owning cancellation and the commit boundary
-     * @return terminal coordinator result carrying the feature completion
+     * @param effect the worker effect that settled
+     * @param update the feature update after completion or cancellation
      */
-    static JobCoordinator.Result<SettingsFeature.Completion> runSettingsEffect(
-            Settings settings, SettingsFeature.Effect effect, JobCoordinator.Context context) {
-        Objects.requireNonNull(settings, "settings");
-        context.checkCancellation();
-        String commitPhase = switch (effect) {
-            case SettingsFeature.SaveEffect ignored -> "Saving Settings";
-            case SettingsFeature.ReloadEffect ignored -> "Reloading Settings";
-            case SettingsFeature.PreferenceEffect ignored -> "Saving generation preference";
-            case SettingsFeature.ReloadConfirmationEffect ignored -> throw new IllegalArgumentException(
-                    "Reload confirmation cannot execute on the worker");
-        };
-        boolean reloadEffect = effect instanceof SettingsFeature.ReloadEffect;
-        if (!reloadEffect && !context.beginCommit(commitPhase))
-            return JobCoordinator.Result.cancelled("Settings operation cancelled.", List.of(), List.of());
-        SettingsFeature.Completion completion;
-        boolean successful;
-        List<JobCoordinator.Diagnostic> diagnostics;
-        String successSummary;
-        String failureSummary;
-        switch (effect) {
-            case SettingsFeature.SaveEffect save -> {
-                Settings.PersistenceResult result = settings.persist(save.replacement());
-                completion = new SettingsFeature.SaveCompletion(save.token(), result);
-                successful = result.isSuccessful();
-                diagnostics = settingsDiagnostics(result);
-                successSummary = "Settings saved.";
-                failureSummary = "Settings could not be saved.";
-            }
-            case SettingsFeature.ReloadEffect reload -> {
-                Settings.InitializationResult result = settings.reload(() -> context.beginCommit(commitPhase));
-                completion = new SettingsFeature.ReloadCompletion(reload.token(), result);
-                successful = result.isSuccessful();
-                diagnostics = settingsDiagnostics(result);
-                boolean recovered = result.getDiagnostics().stream()
-                        .anyMatch(value -> value.getCode().equals("SETTINGS_PUBLICATION_RECOVERED"));
-                successSummary = recovered ? "Settings recovered and reloaded." : "Settings reloaded.";
-                failureSummary = "Settings could not be reloaded.";
-            }
-            case SettingsFeature.PreferenceEffect preference -> {
-                try {
-                    new GenerationPreferencesStore(preference.directory()).save(preference.selected());
-                    completion = SettingsFeature.PreferenceCompletion.successful(preference.token());
-                    successful = true;
-                    diagnostics = List.of();
-                } catch (IOException failure) {
-                    SettingsFeature.PreferenceCompletion failed =
-                            SettingsFeature.PreferenceCompletion.failed(preference.token(), failure);
-                    completion = failed;
-                    successful = false;
-                    diagnostics = List.of(generationPreferenceDiagnostic(preference.directory(),
-                            failed.failureMessage().orElseThrow()));
-                }
-                successSummary = "Generation preference saved.";
-                failureSummary = "Generation preference could not be saved.";
-            }
-            case SettingsFeature.ReloadConfirmationEffect ignored -> throw new IllegalArgumentException(
-                    "Reload confirmation cannot execute on the worker");
-        }
-        if (!successful)
-            return JobCoordinator.Result.failed(completion, failureSummary, diagnostics);
-        List<String> effects = effect instanceof SettingsFeature.PreferenceEffect
-                ? List.of("Published generated-output preference")
-                : List.of("Published Standard and UUNP Settings");
-        return diagnostics.isEmpty()
-                ? JobCoordinator.Result.completed(completion, successSummary, effects, List.of())
-                : JobCoordinator.Result.completedWithIssues(completion, successSummary, effects, diagnostics);
-    }
-
-    /** Preserves a generation-preference failure's stable code and profile-local path in terminal job evidence. */
-    private static JobCoordinator.Diagnostic generationPreferenceDiagnostic(Path directory, String message) {
-        return new JobCoordinator.Diagnostic("GENERATION_PREFERENCES_IO_FAILED", message,
-                Optional.of(directory + " /omitRedundantSliders"));
-    }
-
-    /** Converts one Save failure or warning set to coordinator-owned structured diagnostics. */
-    private static List<JobCoordinator.Diagnostic> settingsDiagnostics(Settings.PersistenceResult result) {
-        if (!result.isSuccessful())
-            return List.of(settingsDiagnostic(result.getFailure().orElseThrow()));
-        return result.getDiagnostics().stream().map(WorkbenchController::settingsDiagnostic).toList();
-    }
-
-    /** Converts one Reload failure or warning set to coordinator-owned structured diagnostics. */
-    private static List<JobCoordinator.Diagnostic> settingsDiagnostics(Settings.InitializationResult result) {
-        if (!result.isSuccessful())
-            return List.of(settingsDiagnostic(result.getFailure().orElseThrow()));
-        return result.getDiagnostics().stream().map(WorkbenchController::settingsDiagnostic).toList();
-    }
-
-    /** Preserves a Settings failure's stable code and source path in terminal job evidence. */
-    private static JobCoordinator.Diagnostic settingsDiagnostic(Settings.Failure failure) {
-        return new JobCoordinator.Diagnostic(failure.getCode(), failure.getMessage(),
-                Optional.of(failure.getSource() + " " + failure.getPath()));
-    }
-
-    /** Preserves a non-blocking Settings diagnostic in terminal job evidence. */
-    private static JobCoordinator.Diagnostic settingsDiagnostic(Settings.Diagnostic diagnostic) {
-        return new JobCoordinator.Diagnostic(diagnostic.getCode(), diagnostic.getMessage(),
-                Optional.of(diagnostic.getSource() + " " + diagnostic.getPath()));
-    }
-
-    /** Applies one terminal worker result and continues a confirmed Close or Reload only after Save succeeds. */
-    private void completeSettingsEffect(SettingsFeature.Effect effect,
-                                        JobCoordinator.Result<SettingsFeature.Completion> result) {
-        SettingsFeature.Update update = applySettingsCompletion(settingsFeature, effect, result);
+    private void completeSettingsEffect(SettingsFeature.Effect effect, SettingsFeature.Update update) {
         renderSettings(update.frame());
         boolean published = update.accepted() && (update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED
                 || update.frame().outcome() == SettingsFeature.OutcomeKind.RELOADED
@@ -2529,6 +2376,17 @@ public final class WorkbenchController {
         }
         // Rejected admission already cancels the feature effect; shutdown races are an ordinary abandoned continuation.
         update.effect().ifPresent(this::submitSettingsEffect);
+        continueSettingsClose(effect, update);
+    }
+
+    /**
+     * Continues a confirmed Close only after the Save it waits on succeeded; a failed or cancelled Save keeps the
+     * continuation so an explicit retry can still close. Touches only the feature update and semantic focus.
+     *
+     * @param effect the worker effect that settled
+     * @param update the feature update after completion or cancellation
+     */
+    private void continueSettingsClose(SettingsFeature.Effect effect, SettingsFeature.Update update) {
         SettingsCloseContinuation close = settingsCloseContinuation != null
                 && settingsCloseContinuation.effectToken() == effect.token() ? settingsCloseContinuation : null;
         if (close != null) {
@@ -2541,22 +2399,15 @@ public final class WorkbenchController {
     }
 
     /**
-     * Applies a Settings worker value only when its coordinator lifecycle accepted it. A cancellation won before
-     * commit may still carry a failed I/O value, which must not replace the retained draft with failure feedback.
+     * Moves a pending close onto the effect that a Settings retry recaptured, keeping the same user intent and
+     * focus target.
      *
-     * @param feature Settings draft state awaiting the effect
-     * @param effect tokenized worker effect being settled
-     * @param result authoritative coordinator result after cancellation classification
-     * @return the completed feature frame, or the unchanged frame after cancellation
+     * @param previous    the failed effect being retried
+     * @param replacement the recaptured effect that runs instead
      */
-    static SettingsFeature.Update applySettingsCompletion(SettingsFeature feature, SettingsFeature.Effect effect,
-                                                          JobCoordinator.Result<SettingsFeature.Completion> result) {
-        Objects.requireNonNull(feature, "feature");
-        Objects.requireNonNull(effect, "effect");
-        Objects.requireNonNull(result, "result");
-        if (result.lifecycle() == JobCoordinator.Lifecycle.CANCELLED || result.value().isEmpty())
-            return feature.cancel(effect.token());
-        return feature.complete(result.value().orElseThrow());
+    private void transferSettingsClose(SettingsFeature.Effect previous, SettingsFeature.Effect replacement) {
+        if (settingsCloseContinuation != null && settingsCloseContinuation.effectToken() == previous.token())
+            settingsCloseContinuation = settingsCloseContinuation.forEffect(replacement.token());
     }
 
     /** Reprojects every Settings-dependent feature after the live pair is published. */
@@ -3642,12 +3493,12 @@ public final class WorkbenchController {
      * JavaFX platform preferences (production-ban rule 3).
      *
      * @param initialChoice persisted theme choice, or System when none could be loaded
-     * @param saver         profile persistence action invoked only by the worker
+     * @param themeStore    profile theme store whose save job the worker runs
      * @param preferences   operating-system appearance-preferences source from the environment
      */
-    private void configureAppearance(WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver saver,
-                                     AppearancePreferencesSource preferences) {
-        Objects.requireNonNull(saver, "saver");
+    private void configureAppearance(WorkbenchAppearance.ThemeChoice initialChoice,
+                                     WorkbenchAppearanceStore themeStore, AppearancePreferencesSource preferences) {
+        Objects.requireNonNull(themeStore, "themeStore");
         WorkbenchAppearance appearance = new WorkbenchAppearance(
                 Objects.requireNonNull(initialChoice, "initialChoice"), preferences.current());
         appearanceAdapter = new JavaFxWorkbenchAppearance(workbenchRoot, appearance, preferences,
@@ -3659,7 +3510,7 @@ public final class WorkbenchController {
             if (selected == null)
                 return;
             appearanceAdapter.selectTheme(selected);
-            JobCoordinator.Admission admission = projectFlow.jobs().submit(themeSubmission(selected, saver));
+            JobCoordinator.Admission admission = projectFlow.jobs().submit(themeStore.saveSubmission(selected));
             if (!admission.admitted())
                 renderFeedback(feedback.publishStatus(new WorkbenchFeedback.Notification(
                         "Theme preference", WorkbenchFeedback.Severity.WARNING,
@@ -3670,45 +3521,14 @@ public final class WorkbenchController {
     }
 
     /**
-     * Captures one theme choice and profile writer for a worker-owned save. The coordinator publishes completion
-     * through Activity; a failed optional preference write leaves the already applied appearance active.
-     *
-     * @param selected immutable System, Light, or Dark choice selected on the JavaFX thread
-     * @param saver profile persistence action invoked only by the worker
-     * @return captured job submission with the selected choice as its completion value
-     */
-    private JobCoordinator.Submission<WorkbenchAppearance.ThemeChoice> themeSubmission(
-            WorkbenchAppearance.ThemeChoice selected, ThemeChoiceSaver saver) {
-        JobCoordinator.Operation operation = new JobCoordinator.Operation("Save Theme Preference", List.of(),
-                List.of(), Optional.of(selected.name()), JobCoordinator.ConsistencyClass.SNAPSHOT_DERIVED);
-        return new JobCoordinator.Submission<>(operation, context -> {
-            context.checkCancellation();
-            if (!context.beginCommit("Saving theme preference"))
-                return JobCoordinator.Result.cancelled("Theme preference save cancelled.", List.of(), List.of());
-            try {
-                saver.save(selected);
-                return JobCoordinator.Result.completed(selected, "Theme preference saved.",
-                        List.of("Theme preference saved"), List.of());
-            } catch (IOException exception) {
-                return JobCoordinator.Result.completedWithIssues(selected,
-                        "The selected theme could not be saved.", List.of(), List.of(
-                                new JobCoordinator.Diagnostic("THEME_PREFERENCE_SAVE_FAILED",
-                                        "The selected theme could not be saved.", Optional.empty())));
-            }
-        }, (attempt, result) -> {
-            // The coordinator publishes the worker outcome through the ordinary Activity path.
-        }, Optional.empty());
-    }
-
-    /**
      * Adds the selected bundled-vector implementation to every text-labelled Workbench rail action.
      */
     private void configureSemanticIcons() {
-        configureSemanticIcon(templatesAreaButton, SemanticIcons.IconKey.TEMPLATES, "Ctrl+1");
-        configureSemanticIcon(morphsAreaButton, SemanticIcons.IconKey.MORPHS, "Ctrl+2");
-        configureSemanticIcon(npcDatabaseAreaButton, SemanticIcons.IconKey.NPC_DATABASE, "Ctrl+3");
-        configureSemanticIcon(outputAreaButton, SemanticIcons.IconKey.OUTPUT, "Ctrl+4 or Ctrl+Backtick");
-        configureSemanticIcon(settingsAreaButton, SemanticIcons.IconKey.SETTINGS, "Ctrl+5");
+        configureSemanticIcon(templatesAreaButton, IconKey.TEMPLATES, "Ctrl+1");
+        configureSemanticIcon(morphsAreaButton, IconKey.MORPHS, "Ctrl+2");
+        configureSemanticIcon(npcDatabaseAreaButton, IconKey.NPC_DATABASE, "Ctrl+3");
+        configureSemanticIcon(outputAreaButton, IconKey.OUTPUT, "Ctrl+4 or Ctrl+Backtick");
+        configureSemanticIcon(settingsAreaButton, IconKey.SETTINGS, "Ctrl+5");
     }
 
     /**
@@ -4208,11 +4028,11 @@ public final class WorkbenchController {
                 return;
             }
             returnTarget = currentSemanticFocus();
-            var dialogSpec = JavaFxWorkbenchPlatform.dialogSpec(effect.kind());
+            var dialogSpec = ProjectEffectDialogs.spec(effect.kind());
             // Choosers complete without a dialog; confirmations run the pipeline's pending-dialog round-trip.
             WorkbenchProjectFlow.Response response = dialogSpec.isPresent()
                     ? pipeline.roundTrip(dialogSpec.orElseThrow(), () -> platform.complete(effect, stage),
-                    WorkbenchController::dialogAction)
+                    ProjectEffectDialogs::answer)
                     : platform.complete(effect, stage);
             if (response.kind() == WorkbenchProjectFlow.ResponseKind.CANCELLED)
                 publishProjectCancellation(activeOperation);
@@ -4429,7 +4249,8 @@ public final class WorkbenchController {
 
     /** Restores a retained Settings close target only after terminal rendering has re-enabled its controls. */
     private void restoreSettingsCloseFocus(JobCoordinator.Attempt attempt) {
-        if (settingsCloseContinuation != null && attempt.operation().name().equals("Save Settings")
+        if (settingsCloseContinuation != null
+                && attempt.operation().name().equals(SettingsJobRunner.SAVE_OPERATION)
                 && (attempt.lifecycle() == JobCoordinator.Lifecycle.FAILED
                 || attempt.lifecycle() == JobCoordinator.Lifecycle.CANCELLED))
             requestFocus(settingsCloseContinuation.returnTarget());
@@ -4572,17 +4393,6 @@ public final class WorkbenchController {
         GANG_ALL_SLIDER,
         GANG_MINIMUM_SLIDER,
         GANG_MAXIMUM_SLIDER
-    }
-
-    /**
-     * Profile persistence function whose checked failure becomes nonmodal feedback.
-     */
-    @FunctionalInterface
-    interface ThemeChoiceSaver {
-        /**
-         * Persists one selected theme inside the active application profile.
-         */
-        void save(WorkbenchAppearance.ThemeChoice choice) throws IOException;
     }
 
     /**

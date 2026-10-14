@@ -5,16 +5,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.random.RandomGenerator;
 
 import com.asdasfa.jbs2bg.filtering.ColumnCriterion;
@@ -58,8 +55,6 @@ public final class MorphsFeature
     private final WorkbenchProjectFlow projectFlow;
     private final Clock clock;
     private final RandomGenerator random;
-    private final Consumer<Throwable> observerFailureSink;
-    private final Map<Long, Consumer<Frame>> observers = new LinkedHashMap<>();
     private final FilteredView<CustomMorphTargetSnapshot, NameIdentity> view = new FilteredView<>(
             List.of(FilterColumn.of(NAME_COLUMN, target -> target.getName().toLowerCase(Locale.ROOT))),
             ProjectIdentities::customMorphTarget);
@@ -81,13 +76,11 @@ public final class MorphsFeature
     private String npcTypeAheadPrefix = "";
     private Instant lastNpcTypeAhead;
     private long revision;
-    private long nextObserverId = 1;
     private long nextEffectToken = 1;
     private Frame frame;
     private Effect pendingEffect;
     private FillEmptyOffer pendingFillEmpty;
     private VisibleSet<NpcMorphAssignmentSnapshot, NpcMorphAssignmentIdentity> pendingFillScope;
-    private boolean publishing;
 
     /**
      * Creates the window-scoped Morphs feature from the latest coherent Project publication.
@@ -96,9 +89,7 @@ public final class MorphsFeature
      * @param clock       deterministic source for type-ahead timing
      */
     public MorphsFeature(WorkbenchProjectFlow projectFlow, Clock clock) {
-        this(projectFlow, clock, RandomGenerator.getDefault(), failure -> {
-            // Production adapters may supply technical diagnostics; the default keeps a renderer failure isolated.
-        });
+        this(projectFlow, clock, RandomGenerator.getDefault());
     }
 
     /**
@@ -109,30 +100,9 @@ public final class MorphsFeature
      * @param random      source used to capture the legacy automatic initial relationship
      */
     MorphsFeature(WorkbenchProjectFlow projectFlow, Clock clock, RandomGenerator random) {
-        this(projectFlow, clock, random, failure -> {
-            // Deterministic randomness tests do not need a technical diagnostics adapter.
-        });
-    }
-
-    /**
-     * Creates the feature with an explicit observer-failure sink.
-     *
-     * @param projectFlow         sole authoritative Project command path
-     * @param clock               deterministic source for type-ahead timing
-     * @param observerFailureSink receives observer failures after frame state commits
-     */
-    public MorphsFeature(WorkbenchProjectFlow projectFlow, Clock clock,
-                         Consumer<Throwable> observerFailureSink) {
-        this(projectFlow, clock, RandomGenerator.getDefault(), observerFailureSink);
-    }
-
-    /** Creates the feature with every environmental source explicit. */
-    private MorphsFeature(WorkbenchProjectFlow projectFlow, Clock clock, RandomGenerator random,
-                          Consumer<Throwable> observerFailureSink) {
         this.projectFlow = Objects.requireNonNull(projectFlow, "projectFlow");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.random = Objects.requireNonNull(random, "random");
-        this.observerFailureSink = Objects.requireNonNull(observerFailureSink, "observerFailureSink");
         reconcile(projectFlow.frame(), OutcomeKind.NONE, List.of());
     }
 
@@ -144,30 +114,15 @@ public final class MorphsFeature
     }
 
     /**
-     * Observes subsequent immutable frame publications until the returned subscription is closed.
-     *
-     * @param observer frame callback invoked after state commit
-     * @return idempotent subscription handle
-     */
-    public Subscription observe(Consumer<Frame> observer) {
-        long id = nextObserverId++;
-        observers.put(id, Objects.requireNonNull(observer, "observer"));
-        return () -> observers.remove(id);
-    }
-
-    /**
      * Applies one feature-specific task intent on the serialized presentation lane.
      *
      * @param intent immutable user task
      * @return whether the task was accepted and the resulting immutable frame
-     * @throws NullPointerException  when intent is null
-     * @throws IllegalStateException when an observer attempts reentrant dispatch during frame publication
+     * @throws NullPointerException when intent is null
      */
     @Override
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
-        if (publishing)
-            throw new IllegalStateException("Morphs intents cannot be dispatched during frame publication");
         // Applying the open Fill Empty offer is the one intent the pending offer admits; it answers that offer.
         if (pendingEffect != null || (pendingFillEmpty != null && !(intent instanceof ApplyFillEmpty)))
             return new Update(false, frame, OutcomeKind.NONE);
@@ -919,27 +874,6 @@ public final class MorphsFeature
         frame = new Frame(++revision, projectSequence, view.visibleSet().getRows(), view.getSelection(), filterText,
                 sortOrder, editorFrame(), outcomeKind, diagnostics, npcView.visibleSet().getRows(),
                 npcView.getSelection(), npcFilterText, npcSortOrder, npcEditorFrame());
-        publishing = true;
-        try {
-            for (Consumer<Frame> observer : List.copyOf(observers.values())) {
-                try {
-                    observer.accept(frame);
-                } catch (RuntimeException failure) {
-                    reportObserverFailure(failure);
-                }
-            }
-        } finally {
-            publishing = false;
-        }
-    }
-
-    /** Keeps both an observer and its optional diagnostics sink from breaking publication. */
-    private void reportObserverFailure(RuntimeException failure) {
-        try {
-            observerFailureSink.accept(failure);
-        } catch (RuntimeException sinkFailure) {
-            // A technical-diagnostics sink is observational and must never become a second publication failure.
-        }
     }
 
     /** Permanently drops an assigned-preset selection when its owner or relationship is no longer visible. */
@@ -1288,13 +1222,5 @@ public final class MorphsFeature
             fillEmptyOffer = Objects.requireNonNull(fillEmptyOffer, "fillEmptyOffer");
             Objects.requireNonNull(outcomeKind, "outcomeKind");
         }
-    }
-
-    /** Idempotent frame-observer lifetime handle. */
-    @FunctionalInterface
-    public interface Subscription extends AutoCloseable {
-        /** Stops later frame publications from reaching this observer. */
-        @Override
-        void close();
     }
 }
