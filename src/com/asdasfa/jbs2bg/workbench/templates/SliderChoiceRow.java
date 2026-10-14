@@ -1,4 +1,4 @@
-package com.asdasfa.jbs2bg.workbench;
+package com.asdasfa.jbs2bg.workbench.templates;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -8,7 +8,6 @@ import java.util.function.Supplier;
 import com.asdasfa.jbs2bg.data.Settings;
 
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
-import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
 import javafx.geometry.Pos;
 import javafx.scene.AccessibleRole;
@@ -22,9 +21,11 @@ import javafx.scene.layout.VBox;
 
 /**
  * JavaFX adapter for one immutable Slider choice row. It owns only control-local drag coalescing and translates each
- * completed gesture into a typed Templates intent; durable choice state remains in {@link TemplatesFeature}.
+ * completed gesture into a typed Templates intent; durable choice state remains in {@link TemplatesFeature}. The
+ * Templates Area builds and reuses the rows; its read-only accessors are public for tests that drive the whole
+ * loaded Workbench.
  */
-final class SliderChoiceRow extends VBox {
+public final class SliderChoiceRow extends VBox {
     private final Consumer<TemplatesFeature.Intent> dispatcher;
     private final Supplier<Settings.Snapshot> currentSettings;
     private final CheckBox enabled = new CheckBox();
@@ -213,27 +214,27 @@ final class SliderChoiceRow extends VBox {
     }
 
     /** @return stable case-preserving Slider choice name */
-    String choiceName() {
+    public String choiceName() {
         return choice.name();
     }
 
     /** @return first editable control used by semantic editor focus */
-    CheckBox enabledControl() {
+    public CheckBox enabledControl() {
         return enabled;
     }
 
     /** @return exact BodyGen preview label for adapter and accessibility verification */
-    Label previewControl() {
+    public Label previewControl() {
         return preview;
     }
 
     /** @return independently reachable Minimum Slider */
-    Slider minimumControl() {
+    public Slider minimumControl() {
         return minimum;
     }
 
     /** @return independently reachable Maximum Slider */
-    Slider maximumControl() {
+    public Slider maximumControl() {
         return maximum;
     }
 
@@ -243,7 +244,7 @@ final class SliderChoiceRow extends VBox {
     }
 
     /** @return semantic row control currently focused, when the focus owner is editable */
-    Optional<FocusControl> focusedControl(Node focusOwner) {
+    public Optional<FocusControl> focusedControl(Node focusOwner) {
         if (focusOwner == enabled)
             return Optional.of(FocusControl.ENABLED);
         if (focusOwner == minimum)
@@ -254,7 +255,7 @@ final class SliderChoiceRow extends VBox {
     }
 
     /** @return current JavaFX control for one semantic row-control identity */
-    Node control(FocusControl control) {
+    public Node control(FocusControl control) {
         return switch (Objects.requireNonNull(control, "control")) {
             case ENABLED -> enabled;
             case MINIMUM -> minimum;
@@ -265,7 +266,7 @@ final class SliderChoiceRow extends VBox {
     /**
      * Stable editable control families used to restore exact row focus after a modal failure.
      */
-    enum FocusControl {
+    public enum FocusControl {
         ENABLED,
         MINIMUM,
         MAXIMUM

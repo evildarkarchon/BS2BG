@@ -6,9 +6,7 @@ import static com.asdasfa.jbs2bg.workbench.WorkbenchFocusPolicy.ownsSceneFocus;
 import java.io.IOException;
 import java.time.Clock;
 import java.util.EnumMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -18,8 +16,6 @@ import java.util.function.Function;
 import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
-import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
-import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
@@ -30,6 +26,7 @@ import com.asdasfa.jbs2bg.workbench.morphs.MorphsArea;
 import com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseFeature;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseArea;
+import com.asdasfa.jbs2bg.workbench.templates.TemplatesArea;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 import com.asdasfa.jbs2bg.workbench.output.OutputDrawer;
@@ -39,7 +36,6 @@ import com.asdasfa.jbs2bg.workbench.settings.SettingsArea;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunner;
 
-import javafx.application.Platform;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
@@ -53,11 +49,8 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
-import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
@@ -78,9 +71,6 @@ import javafx.stage.WindowEvent;
  * JavaFX adapter for the Workbench root graph; Project and navigation state remain JavaFX-independent.
  */
 public final class WorkbenchController {
-    private static final double SLIDER_PRESET_CELL_HEIGHT = 28.0;
-    private static final int MAX_VISIBLE_SLIDER_PRESET_ROWS = 8;
-
     private final WorkbenchNavigation navigation = new WorkbenchNavigation();
     private final WorkbenchFeedback feedback = new WorkbenchFeedback(Clock.systemUTC());
     @FXML
@@ -161,94 +151,6 @@ public final class WorkbenchController {
     @FXML
     private StackPane overlayLayer;
     @FXML
-    private ScrollPane templatesPrimaryScroll;
-    @FXML
-    private VBox templatesPrimaryContent;
-    @FXML
-    private HBox templatesInfoBar;
-    @FXML
-    private Label templatesInfoBarCue;
-    @FXML
-    private Label templatesInfoBarMessage;
-    @FXML
-    private Button dismissTemplatesInfoBarButton;
-    @FXML
-    private TextField sliderPresetFilter;
-    @FXML
-    private ListView<SliderPresetSnapshot> sliderPresetList;
-    @FXML
-    private TextField sliderPresetNameInput;
-    @FXML
-    private Button createSliderPresetButton;
-    @FXML
-    private ComboBox<TemplatesFeature.SortOrder> sliderPresetSort;
-    @FXML
-    private Button duplicateSliderPresetButton;
-    @FXML
-    private Button removeSliderPresetButton;
-    @FXML
-    private Button clearSliderPresetsButton;
-    @FXML
-    private Button importBodySlideButton;
-    @FXML
-    private VBox templatesEditorContent;
-    @FXML
-    private Label templateEditorFocusTarget;
-    @FXML
-    private Label templateProfileText;
-    @FXML
-    private Label templateChoiceCountText;
-    @FXML
-    private ComboBox<TemplatesFeature.Profile> sliderPresetProfile;
-    @FXML
-    private VBox sliderChoiceRows;
-    @FXML
-    private VBox templatesInspectorContent;
-    @FXML
-    private ScrollPane templatesInspectorScroll;
-    @FXML
-    private Label templateSelectionText;
-    @FXML
-    private Button goToSetSlidersButton;
-    @FXML
-    private Button renameSliderPresetButton;
-    @FXML
-    private Button zeroAllSliderChoicesButton;
-    @FXML
-    private Button fiftyAllSliderChoicesButton;
-    @FXML
-    private Button hundredAllSliderChoicesButton;
-    @FXML
-    private Button zeroAllMinimumButton;
-    @FXML
-    private Button fiftyAllMinimumButton;
-    @FXML
-    private Button hundredAllMinimumButton;
-    @FXML
-    private Button zeroAllMaximumButton;
-    @FXML
-    private Button fiftyAllMaximumButton;
-    @FXML
-    private Button hundredAllMaximumButton;
-    @FXML
-    private javafx.scene.control.CheckBox gangAllCheck;
-    @FXML
-    private javafx.scene.control.CheckBox gangMinimumCheck;
-    @FXML
-    private javafx.scene.control.CheckBox gangMaximumCheck;
-    @FXML
-    private Slider gangAllSlider;
-    @FXML
-    private Slider gangMinimumSlider;
-    @FXML
-    private Slider gangMaximumSlider;
-    @FXML
-    private Label gangAllValue;
-    @FXML
-    private Label gangMinimumValue;
-    @FXML
-    private Label gangMaximumValue;
-    @FXML
     private Button showPrimaryOverlayButton;
     @FXML
     private Button showInspectorOverlayButton;
@@ -290,6 +192,7 @@ public final class WorkbenchController {
     // Each loaded Area FXML's fx:id namespace; read only by tests that drive the whole loaded Workbench.
     private final Map<WorkbenchNavigation.Area, Map<String, Object>> areaNamespaces =
             new EnumMap<>(WorkbenchNavigation.Area.class);
+    private TemplatesArea templatesArea;
     private MorphsArea morphsArea;
     private SettingsArea settingsArea;
     private NpcDatabaseArea npcDatabaseArea;
@@ -297,20 +200,15 @@ public final class WorkbenchController {
     private OutputDrawer outputDrawer;
     // The Output drawer FXML's fx:id namespace; read only by tests that drive the whole loaded Workbench.
     private Map<String, Object> outputDrawerNamespace = Map.of();
-    private boolean renderingTemplates;
     private boolean templatesOwnProjectDiagnostics;
     private boolean morphsOwnProjectDiagnostics;
-    private TextField activeRenameField;
-    private SliderPresetCell activeRenameCell;
     private boolean resetTemplatesOnNextProjectFrame;
     private boolean resetMorphsOnNextProjectFrame;
-    // The shared UIA list workarounds; each refilling list is bound once its owner pane has been injected. The
-    // Morphs Area is handed this one helper for its three lists.
+    // The shared UIA list workarounds; the Templates and Morphs Areas are handed this one helper for their
+    // refilling lists.
     private final UiaListHelper uiaLists = new UiaListHelper(WorkbenchFocusPolicy::ownsSceneFocus);
-    private UiaListHelper.RefillingList<SliderPresetSnapshot> sliderPresetItems;
     // Satellite surfaces registered with the shell's appearance; built in attach, before the appearance first renders.
     private SatelliteRegistry satellites;
-    private final Map<String, SliderChoiceRow> sliderChoiceRowsByName = new LinkedHashMap<>();
 
     /**
      * Pairs one decorative vector with the text label and exposes its keyboard cue as help text.
@@ -478,22 +376,25 @@ public final class WorkbenchController {
 
             /**
              * Records the feature-owned sequence first so render does not replay generic lifecycle feedback. The
-             * shell arbitrates the change's diagnostics by the feature that published it: a Morphs edit presents
-             * its own, so the Templates projection of the same Project frame stays clear meanwhile.
+             * shell arbitrates the change's diagnostics by the feature that published it: a Templates or Morphs
+             * edit presents its own, so the other Area's projection of the same Project frame stays clear meanwhile.
              */
             @Override
             public void render(long sequence, WorkbenchFeature.Update<?> update) {
                 renderedProjectSequence = sequence;
-                boolean previous = morphsOwnProjectDiagnostics;
-                morphsOwnProjectDiagnostics = previous || update instanceof MorphsFeature.Update;
+                boolean previousTemplates = templatesOwnProjectDiagnostics;
+                boolean previousMorphs = morphsOwnProjectDiagnostics;
+                templatesOwnProjectDiagnostics = previousTemplates || update instanceof TemplatesFeature.Update;
+                morphsOwnProjectDiagnostics = previousMorphs || update instanceof MorphsFeature.Update;
                 try {
                     WorkbenchController.this.render(projectFlow.frame());
                 } finally {
-                    morphsOwnProjectDiagnostics = previous;
+                    templatesOwnProjectDiagnostics = previousTemplates;
+                    morphsOwnProjectDiagnostics = previousMorphs;
                 }
             }
         });
-        // The configure* steps render their Areas, so they need a context before the first Project or job frame.
+        // Each Area renders as it mounts in loadAreas, so it needs a context before the first Project or job frame.
         context = buildContext(projectFlow.frame(), false, false);
         focusPolicy = createFocusPolicy();
         // Read only when a satellite registers, which is after configureAppearance has built the adapter.
@@ -505,7 +406,6 @@ public final class WorkbenchController {
         // and NPC Database Areas bind their own inspector thumbnails to the shared viewer.
         loadAreas(portraits);
         configureProjectCommands();
-        configureTemplates();
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
@@ -543,6 +443,10 @@ public final class WorkbenchController {
      */
     private void applyInitialFocusOnceShown() {
         if (stage.isShowing()) {
+            // The Area panes were mounted into an already-showing scene, so their controls have no skins yet; until a
+            // CSS pass creates the ScrollPane skins, each pane's content (and the control to focus) is not in the
+            // scene. A stage shown after attach gets that pass from show() before WINDOW_SHOWN.
+            workbenchRoot.applyCss();
             requestFocus(new WorkbenchNavigation.FocusTarget(
                     navigationFrame.activeArea(), WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
             return;
@@ -575,47 +479,6 @@ public final class WorkbenchController {
     }
 
     /**
-     * Translates Templates controls into feature-specific typed intents and renders only committed immutable frames.
-     */
-    private void configureTemplates() {
-        sliderPresetSort.getItems().setAll(TemplatesFeature.SortOrder.values());
-        sliderPresetSort.setValue(templatesFeature.frame().sortOrder());
-        sliderPresetProfile.getItems().setAll(TemplatesFeature.Profile.values());
-        configureSliderPresetList();
-        sliderPresetItems = uiaLists.refilling(() -> sliderPresetList, templatesPrimaryContent,
-                "Templates primary content no longer owns the Slider Preset list",
-                this::newSliderPresetList, this::adoptSliderPresetList);
-        sliderPresetFilter.textProperty().addListener((observable, previous, current) -> {
-            if (!renderingTemplates)
-                dispatchTemplates(new TemplatesFeature.ChangeFilter(current));
-        });
-        sliderPresetSort.setOnAction(event -> {
-            if (!renderingTemplates && sliderPresetSort.getValue() != null)
-                dispatchTemplates(new TemplatesFeature.ChangeSort(sliderPresetSort.getValue()));
-        });
-        sliderPresetProfile.setOnAction(event -> {
-            if (!renderingTemplates && sliderPresetProfile.getValue() != null
-                    && templatesFeature.frame().editor().stream()
-                    .anyMatch(editor -> editor.profile() != sliderPresetProfile.getValue()))
-                dispatchTemplates(new TemplatesFeature.ChangeProfile(sliderPresetProfile.getValue()));
-        });
-        createSliderPresetButton.setOnAction(event ->
-                dispatchTemplates(new TemplatesFeature.Create(sliderPresetNameInput.getText())));
-        duplicateSliderPresetButton.setOnAction(event ->
-                dispatchTemplates(new TemplatesFeature.Duplicate(sliderPresetNameInput.getText())));
-        renameSliderPresetButton.setOnAction(event ->
-                dispatchTemplates(new TemplatesFeature.BeginRename()));
-        removeSliderPresetButton.setOnAction(event ->
-                dispatchTemplates(new TemplatesFeature.RequestRemove()));
-        clearSliderPresetsButton.setOnAction(event ->
-                dispatchTemplates(new TemplatesFeature.RequestClearVisible()));
-        dismissTemplatesInfoBarButton.setOnAction(event ->
-                dispatchTemplates(new TemplatesFeature.DismissDiagnostics()));
-        importBodySlideButton.setOnAction(event -> dispatch(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE));
-        configureGangControls();
-    }
-
-    /**
      * Returns to the Morphs launcher and selects the last added identity when it is still visible.
      * Project and feature frames are already committed before navigation realizes the focus effect.
      */
@@ -636,6 +499,10 @@ public final class WorkbenchController {
      */
     private void loadAreas(NpcPortraitViewer portraits) {
         ShellPort shell = new AreaShell();
+        AreaLoader.Loaded<TemplatesArea> templates = TemplatesArea.load(templatesFeature, pipeline, shell, uiaLists,
+                settings::snapshot, stage.renderScaleYProperty());
+        templatesArea = templates.area();
+        mountArea(WorkbenchNavigation.Area.TEMPLATES, templates);
         AreaLoader.Loaded<MorphsArea> morphs = MorphsArea.load(morphsFeature, pipeline, shell, portraits,
                 uiaLists, satellites, stage, stage.renderScaleYProperty());
         morphsArea = morphs.area();
@@ -823,6 +690,12 @@ public final class WorkbenchController {
                 applyNavigation(navigation.openPrimaryContent(currentSemanticFocus()));
         }
 
+        /** Runs the BodySlide import through the Project lifecycle, as the File commands do. */
+        @Override
+        public void importBodySlidePresets() {
+            dispatch(WorkbenchProjectFlow.Intent.IMPORT_BODYSLIDE);
+        }
+
         /** Classifies the current focus owner through the shell's focus policy. */
         @Override
         public WorkbenchNavigation.FocusTarget currentFocus() {
@@ -880,511 +753,9 @@ public final class WorkbenchController {
         // Settings-driven derived choices are not a second user Project command and must not create generic Activity.
         renderedProjectSequence = projectFrame.sequence();
         render(projectFrame);
-        renderTemplates(templatesFeature.refreshSettings().frame());
+        templatesFeature.refreshSettings();
+        templatesArea.render(context);
         outputDrawer.refreshGenerationSettings();
-    }
-
-    /**
-     * Connects every inspector bulk button, mutually exclusive gang check, and coalesced gang Slider gesture to the
-     * same typed Templates intent seam.
-     */
-    private void configureGangControls() {
-        configureBulkButton(zeroAllSliderChoicesButton, TemplatesFeature.GangMode.ALL, 0);
-        configureBulkButton(fiftyAllSliderChoicesButton, TemplatesFeature.GangMode.ALL, 50);
-        configureBulkButton(hundredAllSliderChoicesButton, TemplatesFeature.GangMode.ALL, 100);
-        configureBulkButton(zeroAllMinimumButton, TemplatesFeature.GangMode.MINIMUM, 0);
-        configureBulkButton(fiftyAllMinimumButton, TemplatesFeature.GangMode.MINIMUM, 50);
-        configureBulkButton(hundredAllMinimumButton, TemplatesFeature.GangMode.MINIMUM, 100);
-        configureBulkButton(zeroAllMaximumButton, TemplatesFeature.GangMode.MAXIMUM, 0);
-        configureBulkButton(fiftyAllMaximumButton, TemplatesFeature.GangMode.MAXIMUM, 50);
-        configureBulkButton(hundredAllMaximumButton, TemplatesFeature.GangMode.MAXIMUM, 100);
-        gangAllCheck.setOnAction(event -> dispatchTemplates(new TemplatesFeature.ToggleGang(
-                TemplatesFeature.GangMode.ALL, gangAllCheck.isSelected())));
-        gangMinimumCheck.setOnAction(event -> dispatchTemplates(new TemplatesFeature.ToggleGang(
-                TemplatesFeature.GangMode.MINIMUM, gangMinimumCheck.isSelected())));
-        gangMaximumCheck.setOnAction(event -> dispatchTemplates(new TemplatesFeature.ToggleGang(
-                TemplatesFeature.GangMode.MAXIMUM, gangMaximumCheck.isSelected())));
-        configureGangSlider(gangAllSlider, gangAllValue, TemplatesFeature.GangMode.ALL);
-        configureGangSlider(gangMinimumSlider, gangMinimumValue, TemplatesFeature.GangMode.MINIMUM);
-        configureGangSlider(gangMaximumSlider, gangMaximumValue, TemplatesFeature.GangMode.MAXIMUM);
-        goToSetSlidersButton.setOnAction(event -> firstSliderChoiceControl().ifPresent(Node::requestFocus));
-    }
-
-    /**
-     * Binds one fixed-value bulk button to an atomic enabled-row edit.
-     */
-    private void configureBulkButton(Button button, TemplatesFeature.GangMode mode, int value) {
-        button.setOnAction(event -> dispatchTemplates(new TemplatesFeature.ApplyBulkValue(mode, value)));
-    }
-
-    /**
-     * Keeps pointer drags local until release while conventional keyboard Slider changes publish immediately.
-     */
-    private void configureGangSlider(Slider slider, Label valueLabel, TemplatesFeature.GangMode mode) {
-        slider.valueProperty().addListener((observable, previous, current) -> {
-            valueLabel.setText(current.intValue() + "%");
-            if (!renderingTemplates && !slider.isValueChanging())
-                dispatchTemplates(new TemplatesFeature.ApplyBulkValue(mode, current.intValue()));
-        });
-        slider.valueChangingProperty().addListener((observable, previous, changing) -> {
-            if (!renderingTemplates && !changing.booleanValue())
-                dispatchTemplates(new TemplatesFeature.ApplyBulkValue(mode, (int) slider.getValue()));
-        });
-    }
-
-    /**
-     * Configures the current Slider Preset ListView instance; the UIA empty/refill workaround may replace that node.
-     */
-    private void configureSliderPresetList() {
-        CatalogHeight.bind(sliderPresetList, SLIDER_PRESET_CELL_HEIGHT, MAX_VISIBLE_SLIDER_PRESET_ROWS,
-                stage.renderScaleYProperty());
-        sliderPresetList.setEditable(true);
-        sliderPresetList.setFixedCellSize(SLIDER_PRESET_CELL_HEIGHT);
-        sliderPresetList.setCellFactory(list -> new SliderPresetCell());
-        sliderPresetList.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
-            if (renderingTemplates)
-                return;
-            dispatchTemplates(selected == null
-                    ? new TemplatesFeature.ClearSelection()
-                    : new TemplatesFeature.Select(NameIdentity.of(selected.getName())));
-        });
-        sliderPresetList.addEventFilter(KeyEvent.KEY_TYPED, event -> {
-            if (!(event.getTarget() instanceof TextInputControl) && event.getCharacter().length() == 1
-                    && !event.isControlDown() && !event.isAltDown()) {
-                dispatchTemplates(new TemplatesFeature.TypeAhead(event.getCharacter().charAt(0)));
-                event.consume();
-            }
-        });
-    }
-
-    /**
-     * Runs one Templates intent through the gated dispatch pipeline. Templates owns the Project diagnostics of its own
-     * dispatch, so the Morphs projection of the same Project frame stays clear meanwhile.
-     */
-    private void dispatchTemplates(TemplatesFeature.Intent intent) {
-        templatesOwnProjectDiagnostics = true;
-        try {
-            pipeline.dispatch(templatesFeature, DispatchPipeline.Callbacks.of(
-                    update -> renderTemplates(update.frame()),
-                    effect -> DispatchPipeline.Realization.confirm(WorkbenchFeedback.DialogSpec.destructiveAction(
-                                    effect.title(), effect.message(), templatesDestructiveAction(effect)),
-                            action -> templatesFeature.respond(effect.token(),
-                                    action == templatesDestructiveAction(effect))),
-                    this::reportTemplatesOutcome), Objects.requireNonNull(intent, "intent"));
-        } finally {
-            templatesOwnProjectDiagnostics = false;
-        }
-    }
-
-    /** Returns the named destructive action a Templates confirmation offers beside Cancel. */
-    private static WorkbenchFeedback.DialogAction templatesDestructiveAction(TemplatesFeature.Effect effect) {
-        return effect.kind() == TemplatesFeature.EffectKind.CONFIRM_REMOVE
-                ? WorkbenchFeedback.DialogAction.REMOVE
-                : WorkbenchFeedback.DialogAction.CLEAR;
-    }
-
-    /**
-     * Maps one settled Templates dispatch to feedback: a confirmed destructive edit is recorded first, then the
-     * dispatched intent's own outcome is routed to its tier, and a finished rename returns focus to the list.
-     */
-    private void reportTemplatesOutcome(
-            DispatchPipeline.Outcome<TemplatesFeature.Intent, TemplatesFeature.Update> outcome) {
-        TemplatesFeature.Intent intent = outcome.intent();
-        TemplatesFeature.Update update = outcome.update();
-        if (outcome.answer().isPresent()) {
-            TemplatesFeature.Effect effect = update.effect().orElseThrow();
-            if (outcome.answer().orElseThrow() == templatesDestructiveAction(effect))
-                publishTemplatesMutation(effect.kind() == TemplatesFeature.EffectKind.CONFIRM_REMOVE
-                        ? "Remove Slider Preset" : "Clear visible Slider Presets", outcome.settled());
-        }
-        publishTemplatesOutcome(intent, update);
-        if ((intent instanceof TemplatesFeature.CommitRename && update.accepted())
-                || intent instanceof TemplatesFeature.CancelRename) {
-            sliderPresetList.requestFocus();
-        }
-    }
-
-    /**
-     * Routes feature validation and mutation outcomes into inline InfoBar, Activity, and status projections.
-     */
-    private void publishTemplatesOutcome(TemplatesFeature.Intent intent, TemplatesFeature.Update update) {
-        if (isSliderChoiceIntent(intent)) {
-            publishSliderChoiceOutcome(intent, update);
-            return;
-        }
-        // A retained preview failure describes current Settings, not validation of this Templates intent.
-        List<ProjectDiagnostic> operationDiagnostics = update.frame().diagnostics().stream()
-                .filter(diagnostic -> !ProjectOutputFormatter.SliderChoicePreviewException.CODE
-                        .equals(diagnostic.getCode()))
-                .toList();
-        if (!operationDiagnostics.isEmpty()) {
-            String message = ProjectDiagnosticFormatter.format(operationDiagnostics);
-            renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
-                    "Templates validation", WorkbenchFeedback.Severity.VALIDATION, message,
-                    WorkbenchFeedback.Disposition.FAILED)));
-            if (intent instanceof TemplatesFeature.Create || intent instanceof TemplatesFeature.Duplicate) {
-                sliderPresetNameInput.requestFocus();
-            }
-            return;
-        }
-        if (!update.accepted() || update.effect().isPresent())
-            return;
-        String operation = switch (intent) {
-            case TemplatesFeature.Create ignored -> "Create Slider Preset";
-            case TemplatesFeature.Duplicate ignored -> "Duplicate Slider Preset";
-            case TemplatesFeature.CommitRename ignored -> "Rename Slider Preset";
-            default -> null;
-        };
-        if (operation != null)
-            publishTemplatesMutation(operation, update);
-    }
-
-    /**
-     * Identifies in-place profile, row, and gang tasks whose feedback follows the accepted per-gesture/bulk tiers.
-     */
-    private static boolean isSliderChoiceIntent(TemplatesFeature.Intent intent) {
-        return intent instanceof TemplatesFeature.ChangeProfile
-                || intent instanceof TemplatesFeature.SetChoiceEnabled
-                || intent instanceof TemplatesFeature.SetChoiceRange
-                || intent instanceof TemplatesFeature.ApplyBulkValue
-                || intent instanceof TemplatesFeature.ToggleGang;
-    }
-
-    /**
-     * Projects the exact feature outcome without flooding Activity for individual row gestures or stealing focus.
-     */
-    private void publishSliderChoiceOutcome(TemplatesFeature.Intent intent, TemplatesFeature.Update update) {
-        boolean bulk = intent instanceof TemplatesFeature.ApplyBulkValue
-                || intent instanceof TemplatesFeature.ToggleGang;
-        String operation = bulk ? "Edit Slider choices" : "Edit Slider choice";
-        WorkbenchFeedback.Notification notification = switch (update.outcomeKind()) {
-            case CHANGED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.SUCCESS,
-                    operation + " changed.", WorkbenchFeedback.Disposition.COMPLETED);
-            case UNCHANGED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.INFORMATION,
-                    "No Slider choice values changed.", WorkbenchFeedback.Disposition.COMPLETED);
-            case REJECTED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.VALIDATION,
-                    "Slider choice validation rejected the edit.", WorkbenchFeedback.Disposition.FAILED);
-            case FAILED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.FAILURE,
-                    "Slider choice editing failed.", WorkbenchFeedback.Disposition.FAILED);
-            case CANCELLED -> new WorkbenchFeedback.Notification(operation, WorkbenchFeedback.Severity.INFORMATION,
-                    "Slider choice editing was cancelled.", WorkbenchFeedback.Disposition.CANCELLED);
-            case NONE -> null;
-        };
-        if (notification == null)
-            return;
-        renderFeedback(bulk
-                ? feedback.publishActivity(notification)
-                : feedback.publishStatus(notification));
-        if (update.outcomeKind() == TemplatesFeature.OutcomeKind.FAILED)
-            showTemplatesFailure(update);
-    }
-
-    /**
-     * Realizes an unexpected synchronous Templates failure as the accepted focus-restoring failure dialog.
-     */
-    private void showTemplatesFailure(TemplatesFeature.Update update) {
-        Optional<SliderChoiceFocus> exactFocus = currentSliderChoiceFocus();
-        Optional<TemplatesControlFocus> exactControlFocus = currentTemplatesControlFocus();
-        WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
-        String details = ProjectDiagnosticFormatter.format(update.frame().diagnostics());
-        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
-                "Slider choice editing failed", "The Slider Preset could not be edited.",
-                details.isBlank() ? "No diagnostic details were provided." : details, false);
-        pipeline.fail(spec);
-        if (!restoreSliderChoiceFocus(exactFocus) && !restoreTemplatesControlFocus(exactControlFocus))
-            requestFocus(returnTarget);
-    }
-
-    /**
-     * Captures the focused Slider choice through semantic identities rather than retaining a JavaFX Node reference.
-     */
-    private Optional<SliderChoiceFocus> currentSliderChoiceFocus() {
-        Node focusOwner = stage != null && stage.getScene() != null ? stage.getScene().getFocusOwner() : null;
-        if (focusOwner == null)
-            return Optional.empty();
-        for (SliderChoiceRow row : sliderChoiceRowsByName.values()) {
-            Optional<SliderChoiceRow.FocusControl> control = row.focusedControl(focusOwner);
-            if (control.isPresent())
-                return Optional.of(new SliderChoiceFocus(row.choiceName(), control.orElseThrow()));
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * Restores one still-valid logical Slider row control after a failure dialog without silently retargeting.
-     */
-    private boolean restoreSliderChoiceFocus(Optional<SliderChoiceFocus> requested) {
-        if (requested.isEmpty())
-            return false;
-        SliderChoiceFocus focus = requested.orElseThrow();
-        SliderChoiceRow row = sliderChoiceRowsByName.get(focus.choiceName().toLowerCase(Locale.ROOT));
-        if (row == null)
-            return false;
-        Node control = row.control(focus.control());
-        if (!control.isVisible() || control.getParent() == null)
-            return false;
-        control.requestFocus();
-        return true;
-    }
-
-    /**
-     * Captures profile, gang, and bulk-action focus through a stable semantic control family.
-     */
-    private Optional<TemplatesControlFocus> currentTemplatesControlFocus() {
-        Node focusOwner = stage != null && stage.getScene() != null ? stage.getScene().getFocusOwner() : null;
-        if (focusOwner == null)
-            return Optional.empty();
-        return templatesFocusNodes().entrySet().stream()
-                .filter(entry -> entry.getValue() == focusOwner)
-                .map(Map.Entry::getKey)
-                .findFirst();
-    }
-
-    /**
-     * Restores a still-valid profile, gang, or bulk-action focus target after a synchronous failure dialog.
-     */
-    private boolean restoreTemplatesControlFocus(Optional<TemplatesControlFocus> requested) {
-        if (requested.isEmpty())
-            return false;
-        Node control = templatesFocusNodes().get(requested.orElseThrow());
-        if (control == null || !control.isVisible() || control.getParent() == null)
-            return false;
-        control.requestFocus();
-        return true;
-    }
-
-    /**
-     * Maps every non-row Templates editor/inspector focus identity to its current JavaFX adapter node.
-     */
-    private Map<TemplatesControlFocus, Node> templatesFocusNodes() {
-        Map<TemplatesControlFocus, Node> controls = new java.util.EnumMap<>(TemplatesControlFocus.class);
-        controls.put(TemplatesControlFocus.PROFILE, sliderPresetProfile);
-        controls.put(TemplatesControlFocus.GO_TO_SET_SLIDERS, goToSetSlidersButton);
-        controls.put(TemplatesControlFocus.RENAME, renameSliderPresetButton);
-        controls.put(TemplatesControlFocus.ZERO_ALL, zeroAllSliderChoicesButton);
-        controls.put(TemplatesControlFocus.FIFTY_ALL, fiftyAllSliderChoicesButton);
-        controls.put(TemplatesControlFocus.HUNDRED_ALL, hundredAllSliderChoicesButton);
-        controls.put(TemplatesControlFocus.ZERO_MINIMUM, zeroAllMinimumButton);
-        controls.put(TemplatesControlFocus.FIFTY_MINIMUM, fiftyAllMinimumButton);
-        controls.put(TemplatesControlFocus.HUNDRED_MINIMUM, hundredAllMinimumButton);
-        controls.put(TemplatesControlFocus.ZERO_MAXIMUM, zeroAllMaximumButton);
-        controls.put(TemplatesControlFocus.FIFTY_MAXIMUM, fiftyAllMaximumButton);
-        controls.put(TemplatesControlFocus.HUNDRED_MAXIMUM, hundredAllMaximumButton);
-        controls.put(TemplatesControlFocus.GANG_ALL_CHECK, gangAllCheck);
-        controls.put(TemplatesControlFocus.GANG_MINIMUM_CHECK, gangMinimumCheck);
-        controls.put(TemplatesControlFocus.GANG_MAXIMUM_CHECK, gangMaximumCheck);
-        controls.put(TemplatesControlFocus.GANG_ALL_SLIDER, gangAllSlider);
-        controls.put(TemplatesControlFocus.GANG_MINIMUM_SLIDER, gangMinimumSlider);
-        controls.put(TemplatesControlFocus.GANG_MAXIMUM_SLIDER, gangMaximumSlider);
-        return controls;
-    }
-
-    /**
-     * Publishes one successful Templates mutation through the shared durable feedback path.
-     */
-    private void publishTemplatesMutation(String operation, TemplatesFeature.Update update) {
-        if (!update.accepted())
-            return;
-        renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(operation,
-                WorkbenchFeedback.Severity.SUCCESS, operation + " completed.",
-                WorkbenchFeedback.Disposition.COMPLETED)));
-    }
-
-    /**
-     * Renders one immutable Templates frame while suppressing control listeners from becoming a second command path.
-     * Job admission and live Settings come only from the shell's context.
-     */
-    private void renderTemplates(TemplatesFeature.Frame frame) {
-        renderingTemplates = true;
-        try {
-            sliderPresetFilter.setText(frame.filterText());
-            sliderPresetSort.setValue(frame.sortOrder());
-            sliderPresetItems.reconcile(frame.visiblePresets());
-            reconcileSliderPresetSelection(frame.selection());
-            boolean validationVisible = !frame.diagnostics().isEmpty();
-            templatesInfoBar.setManaged(validationVisible);
-            templatesInfoBar.setVisible(validationVisible);
-            if (validationVisible) {
-                String message = ProjectDiagnosticFormatter.format(frame.diagnostics());
-                WorkbenchFeedback.Severity severity = frame.outcomeKind() == TemplatesFeature.OutcomeKind.FAILED
-                        ? WorkbenchFeedback.Severity.FAILURE
-                        : WorkbenchFeedback.Severity.VALIDATION;
-                templatesInfoBarCue.setText(severity.cue());
-                templatesInfoBarMessage.setText(message);
-                templatesInfoBar.setAccessibleHelp(severity.cue() + ": " + message);
-                SeverityStyle.apply(templatesInfoBar, severity);
-            }
-            boolean selected = frame.selection().isPresent();
-            createSliderPresetButton.setDisable(context.projectMutationsBlocked());
-            duplicateSliderPresetButton.setDisable(context.projectMutationsBlocked() || !selected);
-            renameSliderPresetButton.setDisable(context.projectMutationsBlocked() || !selected);
-            removeSliderPresetButton.setDisable(context.projectMutationsBlocked() || !selected);
-            clearSliderPresetsButton.setDisable(context.projectMutationsBlocked() || frame.visiblePresets().isEmpty());
-            // BodySlide import is a Project command that lives in the Templates pane; this is its only writer, and
-            // it waits on any job and on live Settings so an import never consumes fallback Settings values.
-            importBodySlideButton.setDisable(context.projectMutationsBlocked() || context.anyJobActive()
-                    || !context.settingsLiveAvailable());
-            Optional<SliderPresetSnapshot> selectedPreset = frame.selection().flatMap(identity ->
-                    frame.visiblePresets().stream()
-                            .filter(candidate -> NameIdentity.of(candidate.getName()).equals(identity))
-                            .findFirst());
-            selectedPreset.ifPresentOrElse(preset -> {
-                templateEditorFocusTarget.setText(preset.getName());
-                templateProfileText.setText(preset.isUunp() ? "UUNP profile" : "Standard profile");
-                templateChoiceCountText.setText(preset.getSliderChoices().size()
-                        + (preset.getSliderChoices().size() == 1 ? " slider choice" : " slider choices"));
-                templateSelectionText.setText("Selected: " + preset.getName());
-                renameSliderPresetButton.setAccessibleText("Rename Slider Preset " + preset.getName());
-            }, () -> {
-                templateEditorFocusTarget.setText("No Slider Preset selected");
-                templateProfileText.setText("Select a Slider Preset to browse its profile.");
-                templateChoiceCountText.setText("No slider choices");
-                templateSelectionText.setText("No Slider Preset selected");
-                renameSliderPresetButton.setAccessibleText("Rename selected Slider Preset");
-            });
-            reconcileSliderChoiceRows(frame.editor());
-            synchronizeRenameEditor(frame.rename());
-        } finally {
-            renderingTemplates = false;
-        }
-    }
-
-    /**
-     * Reuses JavaFX row adapters by case-insensitive choice identity so edits preserve focus and the UIA subtree.
-     */
-    private void reconcileSliderChoiceRows(Optional<TemplatesFeature.EditorFrame> editor) {
-        renderGangControls(editor);
-        if (editor.isEmpty()) {
-            sliderPresetProfile.setDisable(true);
-            sliderPresetProfile.setValue(null);
-            sliderChoiceRowsByName.clear();
-            sliderChoiceRows.getChildren().clear();
-            return;
-        }
-        TemplatesFeature.EditorFrame editorFrame = editor.orElseThrow();
-        sliderPresetProfile.setDisable(context.projectMutationsBlocked());
-        sliderPresetProfile.setValue(editorFrame.profile());
-        Map<String, SliderChoiceRow> next = new LinkedHashMap<>();
-        List<SliderChoiceRow> ordered = editorFrame.choices().stream().map(choice -> {
-            String key = choice.name().toLowerCase(Locale.ROOT);
-            SliderChoiceRow row = sliderChoiceRowsByName.get(key);
-            if (row == null)
-                row = new SliderChoiceRow(this::dispatchTemplates, settings::snapshot);
-            row.render(editorFrame, choice, context.projectMutationsBlocked());
-            next.put(key, row);
-            return row;
-        }).toList();
-        sliderChoiceRowsByName.clear();
-        sliderChoiceRowsByName.putAll(next);
-        UiaListHelper.setAllIfChanged(sliderChoiceRows.getChildren(), ordered);
-    }
-
-    /**
-     * Renders mutually exclusive gang state and disables every Project mutation when no preset is selected or a job
-     * owns admission.
-     */
-    private void renderGangControls(Optional<TemplatesFeature.EditorFrame> editor) {
-        boolean available = editor.isPresent() && !context.projectMutationsBlocked();
-        TemplatesFeature.GangFrame gang = editor.map(TemplatesFeature.EditorFrame::gang).orElse(null);
-        Optional<TemplatesFeature.GangMode> active = gang == null ? Optional.empty() : gang.activeMode();
-        gangAllCheck.setSelected(active.equals(Optional.of(TemplatesFeature.GangMode.ALL)));
-        gangMinimumCheck.setSelected(active.equals(Optional.of(TemplatesFeature.GangMode.MINIMUM)));
-        gangMaximumCheck.setSelected(active.equals(Optional.of(TemplatesFeature.GangMode.MAXIMUM)));
-        int all = gang == null ? 100 : gang.allValue();
-        int minimum = gang == null ? 100 : gang.minimumValue();
-        int maximum = gang == null ? 100 : gang.maximumValue();
-        gangAllSlider.setValue(all);
-        gangMinimumSlider.setValue(minimum);
-        gangMaximumSlider.setValue(maximum);
-        gangAllValue.setText(all + "%");
-        gangMinimumValue.setText(minimum + "%");
-        gangMaximumValue.setText(maximum + "%");
-        goToSetSlidersButton.setDisable(!available
-                || editor.stream().allMatch(frame -> frame.choices().isEmpty()));
-        renameSliderPresetButton.setDisable(!available);
-        for (Button button : List.of(zeroAllSliderChoicesButton, fiftyAllSliderChoicesButton,
-                hundredAllSliderChoicesButton, zeroAllMinimumButton, fiftyAllMinimumButton,
-                hundredAllMinimumButton, zeroAllMaximumButton, fiftyAllMaximumButton,
-                hundredAllMaximumButton))
-            button.setDisable(!available);
-        gangAllCheck.setDisable(!available);
-        gangMinimumCheck.setDisable(!available);
-        gangMaximumCheck.setDisable(!available);
-        gangAllSlider.setDisable(!available || !gangAllCheck.isSelected());
-        gangMinimumSlider.setDisable(!available || !gangMinimumCheck.isSelected());
-        gangMaximumSlider.setDisable(!available || !gangMaximumCheck.isSelected());
-    }
-
-    /** Builds the Slider Preset ListView that replaces an empty one on refill (see {@link UiaListHelper}). */
-    private ListView<SliderPresetSnapshot> newSliderPresetList() {
-        ListView<SliderPresetSnapshot> replacement = new ListView<>();
-        replacement.setId("sliderPresetList");
-        replacement.setAccessibleText("Slider Presets");
-        replacement.setFocusTraversable(true);
-        VBox.setVgrow(replacement, javafx.scene.layout.Priority.ALWAYS);
-        return replacement;
-    }
-
-    /**
-     * Adopts the swapped-in Slider Preset node. Any rename editor belonged to a cell of the stale node, so the active
-     * rename references are dropped with it.
-     */
-    private void adoptSliderPresetList(ListView<SliderPresetSnapshot> replacement) {
-        sliderPresetList = replacement;
-        activeRenameCell = null;
-        activeRenameField = null;
-        configureSliderPresetList();
-    }
-
-    /**
-     * Preserves the current focus/caret when the logical selection already matches the immutable feature frame.
-     */
-    private void reconcileSliderPresetSelection(Optional<NameIdentity> selection) {
-        SliderPresetSnapshot selected = sliderPresetList.getSelectionModel().getSelectedItem();
-        Optional<NameIdentity> current = selected == null
-                ? Optional.empty()
-                : Optional.of(NameIdentity.of(selected.getName()));
-        if (current.equals(selection))
-            return;
-        sliderPresetList.getSelectionModel().clearSelection();
-        selection.ifPresent(identity -> {
-            for (int index = 0; index < sliderPresetList.getItems().size(); index++) {
-                SliderPresetSnapshot candidate = sliderPresetList.getItems().get(index);
-                if (NameIdentity.of(candidate.getName()).equals(identity)) {
-                    sliderPresetList.getSelectionModel().select(index);
-                    break;
-                }
-            }
-        });
-    }
-
-    /**
-     * Uses ListView's editing lifecycle rather than refresh(), which drops UIA children after rejected edits on
-     * JavaFX 25, where this was last confirmed. JavaFX 26 changed refresh() to re-index cells instead of recreating
-     * them (JDK-8359599), which may remove the cause; dropping this workaround needs a Tier 3 check first.
-     */
-    private void synchronizeRenameEditor(Optional<TemplatesFeature.RenameState> rename) {
-        if (rename.isEmpty()) {
-            if (sliderPresetList.getEditingIndex() >= 0)
-                sliderPresetList.edit(-1);
-            return;
-        }
-        NameIdentity identity = rename.orElseThrow().identity();
-        int renameIndex = -1;
-        for (int index = 0; index < sliderPresetList.getItems().size(); index++) {
-            if (NameIdentity.of(sliderPresetList.getItems().get(index).getName()).equals(identity)) {
-                renameIndex = index;
-                break;
-            }
-        }
-        if (renameIndex < 0) {
-            sliderPresetList.edit(-1);
-            return;
-        }
-        if (sliderPresetList.getEditingIndex() != renameIndex)
-            sliderPresetList.edit(renameIndex);
-        if (activeRenameCell != null)
-            activeRenameCell.renderRename(rename.orElseThrow());
     }
 
     /**
@@ -1395,17 +766,19 @@ public final class WorkbenchController {
     }
 
     /**
-     * @return the currently materialized inline rename field, when its virtualized row is visible
+     * @return the Templates Area's currently materialized inline rename field, when its virtualized row is visible,
+     *         for tests that drive the whole loaded Workbench
      */
     Optional<TextField> activeRenameField() {
-        return Optional.ofNullable(activeRenameField);
+        return templatesArea.activeRenameField();
     }
 
     /**
-     * @return current Slider Preset ListView node, including an accessibility-driven empty/refill replacement
+     * @return the Templates Area's current Slider Preset ListView, including an accessibility-driven empty/refill
+     *         replacement, for tests that drive the whole loaded Workbench
      */
     ListView<SliderPresetSnapshot> sliderPresetListNode() {
-        return sliderPresetList;
+        return templatesArea.sliderPresetListNode();
     }
 
     /**
@@ -1602,26 +975,13 @@ public final class WorkbenchController {
             event.consume();
             return;
         }
-        if (navigationFrame.activeArea() == WorkbenchNavigation.Area.TEMPLATES) {
-            if (event.isControlDown() && event.getCode() == KeyCode.K) {
-                if (navigationFrame.narrowMode())
-                    applyNavigation(navigation.openPrimaryContent(currentSemanticFocus()));
-                sliderPresetFilter.requestFocus();
-                event.consume();
-                return;
-            }
-            if (event.getCode() == KeyCode.F2) {
-                dispatchTemplates(new TemplatesFeature.BeginRename());
-                event.consume();
-                return;
-            }
-            if (event.getCode() == KeyCode.ESCAPE && templatesFeature.frame().rename().isPresent()) {
-                dispatchTemplates(new TemplatesFeature.CancelRename());
-                event.consume();
-                return;
-            }
-        }
         WorkbenchArea activeModule = areaModule(navigationFrame.activeArea());
+        // The active Area's own keys (Templates' F2 and Escape while renaming) win over navigation, so an Escape
+        // cancels an open rename before it would dismiss the overlay or drawer around it.
+        if (activeModule != null && activeModule.handleKey(event)) {
+            event.consume();
+            return;
+        }
         if (activeModule != null && event.isControlDown() && event.getCode() == KeyCode.K) {
             activeModule.focusSearch();
             event.consume();
@@ -1656,11 +1016,6 @@ public final class WorkbenchController {
         }
         if (transition != null) {
             applyNavigation(transition);
-            event.consume();
-        } else if (event.getCode() == KeyCode.ESCAPE
-                && navigationFrame.activeArea() == WorkbenchNavigation.Area.TEMPLATES
-                && templatesFeature.frame().selection().isPresent()) {
-            dispatchTemplates(new TemplatesFeature.ClearSelection());
             event.consume();
         } else if (event.getCode() == KeyCode.ESCAPE && activeModule != null && activeModule.escape()) {
             event.consume();
@@ -1701,13 +1056,6 @@ public final class WorkbenchController {
         outputAreaButton.setSelected(frame.outputDrawerVisible());
 
         String area = frame.activeArea().displayName();
-        boolean templatesActive = frame.activeArea() == WorkbenchNavigation.Area.TEMPLATES;
-        templatesPrimaryScroll.setManaged(templatesActive);
-        templatesPrimaryScroll.setVisible(templatesActive);
-        templatesEditorContent.setManaged(templatesActive);
-        templatesEditorContent.setVisible(templatesActive);
-        templatesInspectorScroll.setManaged(templatesActive);
-        templatesInspectorScroll.setVisible(templatesActive);
         areaModules.forEach((moduleArea, module) -> showAreaPanes(module.panes(), moduleArea == frame.activeArea()));
         areaTitle.setText(area);
         areaTitle.setAccessibleText(area + " Area");
@@ -1819,7 +1167,7 @@ public final class WorkbenchController {
      */
     private Node areaDefaultFocusNode(WorkbenchNavigation.Area area) {
         return switch (area) {
-            case TEMPLATES -> sliderPresetList;
+            case TEMPLATES -> templatesArea.defaultFocusNode();
             case MORPHS -> morphsArea.defaultFocusNode();
             case SETTINGS -> settingsArea.defaultFocusNode();
             case NPC_DATABASE -> npcDatabaseArea.defaultFocusNode();
@@ -1835,21 +1183,20 @@ public final class WorkbenchController {
             case NPC_DATABASE_LAUNCHER -> morphsArea.focusNode(WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER);
             case PRIMARY_LAUNCHER -> showPrimaryOverlayButton;
             case PRIMARY_CONTENT -> switch (target.area()) {
-                case TEMPLATES -> sliderPresetList;
+                case TEMPLATES -> templatesArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
                 case MORPHS -> morphsArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
                 case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
                 case NPC_DATABASE -> npcDatabaseArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
             };
             case EDITOR -> switch (target.area()) {
-                case TEMPLATES -> firstSliderChoiceControl().orElse(templateEditorFocusTarget);
+                case TEMPLATES -> templatesArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
                 case MORPHS -> morphsArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
                 case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
                 case NPC_DATABASE -> npcDatabaseArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
             };
             case INSPECTOR_LAUNCHER -> showInspectorOverlayButton;
             case INSPECTOR -> switch (target.area()) {
-                case TEMPLATES -> renameSliderPresetButton.isDisabled()
-                        ? templateSelectionText : renameSliderPresetButton;
+                case TEMPLATES -> templatesArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
                 case MORPHS -> morphsArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
                 case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
                 case NPC_DATABASE -> npcDatabaseArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
@@ -1859,14 +1206,6 @@ public final class WorkbenchController {
             case ACTIVITY -> activityList;
             case STATUS -> statusText;
         };
-    }
-
-    /**
-     * Resolves the first canonical Slider choice row without retaining a control reference in navigation state.
-     */
-    private Optional<Node> firstSliderChoiceControl() {
-        return sliderChoiceRowsByName.values().stream().findFirst().map(SliderChoiceRow::enabledControl)
-                .map(Node.class::cast);
     }
 
     /**
@@ -2056,7 +1395,7 @@ public final class WorkbenchController {
      * {@link #context} and writes only its own controls. Renders are idempotent, so the repeat on every frame is safe.
      */
     private void renderAreas() {
-        renderTemplates(templatesFeature.frame());
+        templatesArea.render(context);
         morphsArea.render(context);
         npcDatabaseArea.render(context);
         settingsArea.render(context);
@@ -2327,181 +1666,6 @@ public final class WorkbenchController {
         /** Transfers the same user close intent and focus target to a freshly recaptured retry effect. */
         private SettingsCloseContinuation forEffect(long token) {
             return new SettingsCloseContinuation(token, returnTarget);
-        }
-    }
-
-    /**
-     * Semantic Slider row focus token retained only across one synchronous failure dialog.
-     */
-    private record SliderChoiceFocus(String choiceName, SliderChoiceRow.FocusControl control) {
-        /** Requires a complete logical row and editable-control identity. */
-        private SliderChoiceFocus {
-            Objects.requireNonNull(choiceName, "choiceName");
-            Objects.requireNonNull(control, "control");
-        }
-    }
-
-    /**
-     * Stable Templates editor/inspector controls used for exact failure-dialog focus restoration.
-     */
-    private enum TemplatesControlFocus {
-        PROFILE,
-        GO_TO_SET_SLIDERS,
-        RENAME,
-        ZERO_ALL,
-        FIFTY_ALL,
-        HUNDRED_ALL,
-        ZERO_MINIMUM,
-        FIFTY_MINIMUM,
-        HUNDRED_MINIMUM,
-        ZERO_MAXIMUM,
-        FIFTY_MAXIMUM,
-        HUNDRED_MAXIMUM,
-        GANG_ALL_CHECK,
-        GANG_MINIMUM_CHECK,
-        GANG_MAXIMUM_CHECK,
-        GANG_ALL_SLIDER,
-        GANG_MINIMUM_SLIDER,
-        GANG_MAXIMUM_SLIDER
-    }
-
-    /**
-     * Reusable Slider Preset cell that replaces exactly the renamed logical row with an accessible editor and attached
-     * validation while JavaFX virtualizes list cells.
-     */
-    private final class SliderPresetCell extends ListCell<SliderPresetSnapshot> {
-        private final TextField renameField = new TextField();
-        private final Label renameValidation = new Label();
-        private final VBox renameEditor = new VBox(4.0, renameField, renameValidation);
-        private boolean rendering;
-
-        private SliderPresetCell() {
-            renameValidation.getStyleClass().add("validation-text");
-            renameValidation.setWrapText(true);
-            renameValidation.setLabelFor(renameField);
-            renameField.textProperty().addListener((observable, previous, current) -> {
-                if (!rendering && templatesFeature.frame().rename().isPresent())
-                    dispatchTemplates(new TemplatesFeature.ChangeRename(current));
-            });
-            renameField.setOnAction(event -> dispatchTemplates(new TemplatesFeature.CommitRename()));
-            renameField.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-                if (event.getCode() == KeyCode.ESCAPE) {
-                    dispatchTemplates(new TemplatesFeature.CancelRename());
-                    event.consume();
-                }
-            });
-        }
-
-        /**
-         * Enters the one durable inline editor without refreshing or replacing the surrounding virtualized cells, and
-         * moves focus into it with its draft selected.
-         */
-        @Override
-        public void startEdit() {
-            super.startEdit();
-            SliderPresetSnapshot preset = getItem();
-            if (preset == null)
-                return;
-            Optional<TemplatesFeature.RenameState> rename = templatesFeature.frame().rename()
-                    .filter(value -> value.identity().equals(NameIdentity.of(preset.getName())));
-            if (rename.isEmpty())
-                return;
-            renderRename(rename.orElseThrow());
-            renameField.requestFocus();
-            renameField.selectAll();
-            // One of the two named focus deferrals (docs/build/workbench-platform.md, "Production platform bans"):
-            // ListView's own click handling runs after startEdit and can take focus back to the list. Re-apply focus
-            // once, and only while the list or this cell still owns it, so a control the user has moved to since
-            // keeps its focus.
-            ListView<SliderPresetSnapshot> list = getListView();
-            Platform.runLater(() -> {
-                if (isEditing() && (ownsSceneFocus(list) || ownsSceneFocus(this))) {
-                    renameField.requestFocus();
-                    renameField.selectAll();
-                }
-            });
-        }
-
-        /**
-         * Restores the ordinary accessible row after commit, cancellation, filtering, or Project publication.
-         */
-        @Override
-        public void cancelEdit() {
-            super.cancelEdit();
-            clearActiveRenameCell();
-            renderPreset(getItem());
-        }
-
-        /**
-         * Publishes or clears all accessible state whenever JavaFX reuses this cell for another logical identity.
-         */
-        @Override
-        protected void updateItem(SliderPresetSnapshot preset, boolean empty) {
-            super.updateItem(preset, empty);
-            if (empty || preset == null) {
-                clearActiveRenameCell();
-                setText(null);
-                setGraphic(null);
-                setAccessibleText(null);
-                setAccessibleHelp(null);
-                return;
-            }
-            Optional<TemplatesFeature.RenameState> active = templatesFeature.frame().rename()
-                    .filter(rename -> rename.identity().equals(NameIdentity.of(preset.getName())));
-            if (isEditing() && active.isPresent())
-                renderRename(active.orElseThrow());
-            else
-                renderPreset(preset);
-        }
-
-        /**
-         * Updates the stable editor cell in place so validation does not invalidate the UIA SelectionItem subtree.
-         */
-        private void renderRename(TemplatesFeature.RenameState rename) {
-            SliderPresetSnapshot preset = getItem();
-            if (preset == null)
-                return;
-            rendering = true;
-            renameField.setText(rename.draft());
-            rendering = false;
-            String accessibleName = "Rename Slider Preset " + preset.getName();
-            String validation = ProjectDiagnosticFormatter.format(rename.diagnostics());
-            renameField.setAccessibleText(accessibleName);
-            renameField.setAccessibleHelp(validation.isEmpty()
-                    ? "Enter commits the name. Escape cancels and restores the Slider Preset row."
-                    : validation);
-            renameValidation.setText(validation);
-            renameValidation.setManaged(!validation.isEmpty());
-            renameValidation.setVisible(!validation.isEmpty());
-            activeRenameCell = this;
-            activeRenameField = renameField;
-            setText(null);
-            setGraphic(renameEditor);
-            setAccessibleText(accessibleName);
-            setAccessibleHelp(renameField.getAccessibleHelp());
-        }
-
-        /**
-         * Restores normal row text and complete accessible metadata.
-         */
-        private void renderPreset(SliderPresetSnapshot preset) {
-            if (preset == null)
-                return;
-            setGraphic(null);
-            setText(preset.getName());
-            setAccessibleText(preset.getName());
-            setAccessibleHelp((preset.isUunp() ? "UUNP" : "Standard") + " Slider Preset with "
-                    + preset.getSliderChoices().size() + " slider choices.");
-        }
-
-        /**
-         * Clears outer references only when this virtualized cell owns the active editor.
-         */
-        private void clearActiveRenameCell() {
-            if (activeRenameCell == this)
-                activeRenameCell = null;
-            if (activeRenameField == renameField)
-                activeRenameField = null;
         }
     }
 

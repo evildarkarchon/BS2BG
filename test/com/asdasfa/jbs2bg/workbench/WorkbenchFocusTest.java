@@ -24,6 +24,7 @@ import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.workbench.templates.SliderChoiceRow;
 
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -294,6 +295,40 @@ class WorkbenchFocusTest {
                 fiftyAll.fire();
 
                 assertSame(fiftyAll, shown.scene().getFocusOwner());
+            } finally {
+                shown.stage().close();
+            }
+        });
+    }
+
+    /**
+     * When the control that had focus before the failure dialog is neither a Slider choice row control nor a
+     * Templates profile, gang or bulk control, the Templates Area hands the restore to the shell, which focuses the
+     * semantic landmark that held focus (#153).
+     */
+    @Test
+    void templatesFailureFocusFallsBackToTheShellsSemanticTarget() throws Exception {
+        fixture = WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(temporaryDirectory,
+                Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)), Map.of()));
+        WorkbenchControllerTest.RefusingEditSession session =
+                new WorkbenchControllerTest.RefusingEditSession(fixture().newSession());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        RecordingPlatform platform = new RecordingPlatform();
+        FxTestToolkit.runOnFxThread(() -> {
+            Shown shown = show(flow, platform);
+            try {
+                shown.controller().sliderPresetListNode().getSelectionModel().select(0);
+                shown.<TextField>node("sliderPresetFilter").requestFocus();
+                session.refuseEdits(true);
+                // While the dialog is up, something else in the main scene takes focus.
+                platform.respondFailureWith(WorkbenchFeedback.DialogAction.CLOSE,
+                        () -> shown.<Button>node("renameSliderPresetButton").requestFocus());
+
+                shown.<Button>node("fiftyAllSliderChoicesButton").fire();
+
+                assertSame(shown.controller().sliderPresetListNode(), shown.scene().getFocusOwner(),
+                        "the filter sits in the primary content, whose landmark node is the Slider Preset list");
             } finally {
                 shown.stage().close();
             }

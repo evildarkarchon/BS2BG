@@ -56,6 +56,7 @@ import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
+import com.asdasfa.jbs2bg.workbench.templates.SliderChoiceRow;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
@@ -276,7 +277,7 @@ class WorkbenchControllerTest {
                 catalog.getSelectionModel().selectFirst();
                 ((Button) LoadedWorkbench.node(loader, "addNpcToProjectButton")).fire();
                 assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
-                ((Button) loader.getNamespace().get("importBodySlideButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).fire();
                 assertTrue(jobs.frame().projectMutationsBlocked());
 
                 ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
@@ -330,7 +331,7 @@ class WorkbenchControllerTest {
                 @SuppressWarnings("unchecked")
                 TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
-                ((Button) loader.getNamespace().get("importBodySlideButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).fire();
                 assertTrue(jobs.frame().projectMutationsBlocked());
 
                 catalog.requestFocus();
@@ -547,8 +548,8 @@ class WorkbenchControllerTest {
                 assertTrue(importButton.isDisabled());
                 assertTrue(((ProgressBar) loader.getNamespace().get("operationProgress")).isVisible());
                 ((ToggleButton) loader.getNamespace().get("templatesAreaButton")).fire();
-                ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Edited during NPC import");
-                Button createPreset = (Button) loader.getNamespace().get("createSliderPresetButton");
+                ((TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput")).setText("Edited during NPC import");
+                Button createPreset = (Button) LoadedWorkbench.node(loader, "createSliderPresetButton");
                 assertFalse(createPreset.isDisabled());
                 createPreset.fire();
                 assertEquals(1, flow.frame().snapshot().getSliderPresets().size());
@@ -701,7 +702,7 @@ class WorkbenchControllerTest {
                 ListView<SliderPresetSnapshot> choices = (ListView<SliderPresetSnapshot>) flyout.getScene()
                         .getRoot().lookup("#fillEmptySliderPresetList");
                 choices.getSelectionModel().selectFirst();
-                ((Button) loader.getNamespace().get("importBodySlideButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).fire();
                 assertTrue(jobs.frame().projectMutationsBlocked());
 
                 ((Button) flyout.getScene().getRoot().lookup("#fillEmptyApplyButton")).fire();
@@ -933,7 +934,7 @@ class WorkbenchControllerTest {
             name.setText("existing");
             create.fire();
             assertTrue(((HBox) LoadedWorkbench.node(loader, "morphsInfoBar")).isVisible());
-            assertFalse(((HBox) loader.getNamespace().get("templatesInfoBar")).isVisible());
+            assertFalse(((HBox) LoadedWorkbench.node(loader, "templatesInfoBar")).isVisible());
             assertTrue(((ListView<?>) loader.getNamespace().get("activityList")).getItems().isEmpty());
 
             targets.getSelectionModel().select(targets.getItems().stream()
@@ -1139,7 +1140,7 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
 
             assertTrue(settingsEditor.isVisible() && settingsEditor.isManaged());
-            assertFalse(((javafx.scene.Node) loader.getNamespace().get("templatesEditorContent")).isVisible());
+            assertFalse(((javafx.scene.Node) LoadedWorkbench.node(loader, "templatesEditorContent")).isVisible());
             stage.close();
         });
     }
@@ -1219,7 +1220,128 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
 
             assertTrue(editor.isVisible() && editor.isManaged());
-            assertFalse(((javafx.scene.Node) loader.getNamespace().get("templatesEditorContent")).isVisible());
+            assertFalse(((javafx.scene.Node) LoadedWorkbench.node(loader, "templatesEditorContent")).isVisible());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell mounts the Templates Area's own panes first in its landmark containers, where they sat in the single
+     * Workbench FXML, declares no {@code @FXML} field for any Templates control, hands the Area its window's render
+     * scale, and shows the panes only while Templates is the active Area (#153).
+     */
+    @Test
+    void templatesAreaPanesMountIntoTheShellLandmarksAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            assertEquals("templatesPrimaryScroll", childIds(loader, "primaryPane").getFirst());
+            assertEquals("templatesEditorContent", childIds(loader, "editorPane").getFirst());
+            assertEquals("templatesInspectorScroll", childIds(loader, "inspectorPane").getFirst());
+            Map<String, Object> templates = controller.areaNamespace(WorkbenchNavigation.Area.TEMPLATES);
+            assertTrue(templates.containsKey("sliderPresetList"), "the Templates Area FXML must be loaded");
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields())
+                assertFalse(field.isAnnotationPresent(javafx.fxml.FXML.class) && templates.containsKey(field.getName()),
+                        "the shell must not declare the Templates control " + field.getName());
+            javafx.scene.Node editor = (javafx.scene.Node) LoadedWorkbench.node(loader, "templatesEditorContent");
+            assertTrue(editor.isVisible() && editor.isManaged(), "Templates is the first active Area");
+            // The shell hands the Area its window's render scale, which the Slider Preset catalog height tracks.
+            AtomicBoolean catalogResized = new AtomicBoolean();
+            controller.sliderPresetListNode().prefHeightProperty().addListener(
+                    (javafx.beans.Observable observable) -> catalogResized.set(true));
+            controller.sliderPresetListNode().getPrefHeight();
+            stage.setRenderScaleY(stage.getRenderScaleY() + 0.5);
+            assertTrue(catalogResized.get(),
+                    "the Templates catalog must re-evaluate its height on a render-scale change");
+
+            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+
+            assertFalse(editor.isVisible() || editor.isManaged());
+            ((ToggleButton) loader.getNamespace().get("templatesAreaButton")).fire();
+            assertTrue(editor.isVisible() && editor.isManaged());
+            stage.close();
+        });
+    }
+
+    /**
+     * The Templates Area's own keys reach it through the shell's key map before navigation: in narrow mode, Escape in
+     * an inline rename inside the primary overlay cancels the rename and leaves the overlay open, and only the next
+     * Escape dismisses the overlay; Ctrl+K and the final Escape tier go through the Area's search and Escape (#153).
+     */
+    @Test
+    void templatesRenameEscapeWinsOverTheNarrowOverlayAndSelectionClearComesLast() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300, 720);
+            stage.setScene(scene);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            stage.show();
+            root.resize(1199, 720);
+            StackPane overlay = (StackPane) loader.getNamespace().get("overlayLayer");
+            VBox primaryPane = (VBox) loader.getNamespace().get("primaryPane");
+
+            sendControlKey(root, KeyCode.K);
+            assertEquals(List.of(primaryPane), overlay.getChildren(), "Ctrl+K opens the narrow primary content");
+            assertSame(LoadedWorkbench.node(loader, "sliderPresetFilter"), scene.getFocusOwner());
+            controller.sliderPresetListNode().getSelectionModel().select(0);
+            controller.sliderPresetListNode().requestFocus();
+            sendKey(root, KeyCode.F2);
+            root.applyCss();
+            root.layout();
+            assertSame(controller.activeRenameField().orElseThrow(), scene.getFocusOwner());
+
+            sendKey(root, KeyCode.ESCAPE);
+
+            assertTrue(controller.templatesFrame().rename().isEmpty());
+            assertEquals(List.of(primaryPane), overlay.getChildren(), "the rename Escape leaves the overlay open");
+            sendKey(root, KeyCode.ESCAPE);
+            assertTrue(overlay.getChildren().isEmpty());
+            assertTrue(controller.templatesFrame().selection().isPresent(),
+                    "dismissing the overlay keeps the selection");
+            sendKey(root, KeyCode.ESCAPE);
+            assertTrue(controller.templatesFrame().selection().isEmpty());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell keeps the Project diagnostics of a Templates edit with Templates: a rejected Slider Preset create
+     * publishes a Project frame whose diagnostic shows in the Templates InfoBar, while the Morphs projection of the
+     * same frame stays clear (#153).
+     */
+    @Test
+    void templatesValidationDiagnosticsStayOutOfTheMorphsProjection() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            long before = flow.frame().sequence();
+
+            ((TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput")).setText("alpha");
+            ((Button) LoadedWorkbench.node(loader, "createSliderPresetButton")).fire();
+
+            assertTrue(flow.frame().sequence() > before, "the rejected create publishes a Project frame");
+            assertFalse(flow.frame().diagnostics().isEmpty());
+            assertTrue(((HBox) LoadedWorkbench.node(loader, "templatesInfoBar")).isVisible());
+            assertFalse(((HBox) LoadedWorkbench.node(loader, "morphsInfoBar")).isVisible());
             stage.close();
         });
     }
@@ -1288,7 +1410,7 @@ class WorkbenchControllerTest {
             stage.setScene(scene);
             controller.attach(flow, stage, platform, fixture().environment());
             stage.show();
-            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
+            Label editor = (Label) LoadedWorkbench.node(loader, "templateEditorFocusTarget");
             editor.requestFocus();
 
             sendControlKey(root, KeyCode.G);
@@ -1479,10 +1601,10 @@ class WorkbenchControllerTest {
             stage.setScene(scene);
             controller.attach(flow, stage, platform, fixture().environment());
             stage.show();
-            Button importButton = (Button) loader.getNamespace().get("importBodySlideButton");
+            Button importButton = (Button) LoadedWorkbench.node(loader, "importBodySlideButton");
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+                    (ListView<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "sliderPresetList");
             importButton.requestFocus();
 
             importButton.fire();
@@ -1518,7 +1640,7 @@ class WorkbenchControllerTest {
             stage.setScene(new Scene(root, 1300, 720));
             controller.attach(flow, stage, new RecordingPlatform(), fixture().withStartup(rejected).environment());
 
-            assertTrue(((Button) loader.getNamespace().get("importBodySlideButton")).isDisabled());
+            assertTrue(((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).isDisabled());
             assertTrue(((Button) LoadedWorkbench.node(loader, "generateOutputButton")).isDisabled());
             @SuppressWarnings("unchecked")
             ListView<WorkbenchFeedback.ActivityRecord> activity =
@@ -1586,8 +1708,8 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, environment.environment());
                 Runnable importSources = () -> ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 Runnable createPreset = () -> {
-                    ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Ordered");
-                    ((Button) loader.getNamespace().get("createSliderPresetButton")).fire();
+                    ((TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput")).setText("Ordered");
+                    ((Button) LoadedWorkbench.node(loader, "createSliderPresetButton")).fire();
                 };
                 (jobFrameFirst ? importSources : createPreset).run();
                 (jobFrameFirst ? createPreset : importSources).run();
@@ -1610,106 +1732,6 @@ class WorkbenchControllerTest {
     /** @return whether the named FXML button, from the shell or any module graph, is disabled */
     private static boolean isDisabled(FXMLLoader loader, String id) {
         return ((Button) LoadedWorkbench.node(loader, id)).isDisabled();
-    }
-
-    /**
-     * The Templates JavaFX adapter renders immutable feature frames and translates controls into typed feature intents
-     * without retaining a row-index selection.
-     */
-    @Test
-    void templatesControlsCreateAndFilterThroughTheAuthoritativeProjectFlow() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            TextField name = (TextField) loader.getNamespace().get("sliderPresetNameInput");
-            TextField filter = (TextField) loader.getNamespace().get("sliderPresetFilter");
-            Button create = (Button) loader.getNamespace().get("createSliderPresetButton");
-
-            assertEquals(List.of("Alpha"), presets.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            name.setText(" Beta ");
-            create.fire();
-            assertEquals(List.of("Alpha", "Beta"), presets.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertEquals("Beta", presets.getSelectionModel().getSelectedItem().getName());
-
-            filter.setText("alp");
-            assertEquals(List.of("Alpha"), presets.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertNull(presets.getSelectionModel().getSelectedItem());
-            filter.clear();
-            assertEquals(List.of("Alpha", "Beta"), presets.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertNull(presets.getSelectionModel().getSelectedItem());
-            assertEquals(flow.frame().sequence(), controller.templatesFrame().projectSequence());
-            assertSame(root, loader.getRoot());
-            stage.close();
-        });
-    }
-
-    /**
-     * The in-place Templates editor renders one accessible group per immutable Slider choice, keeps focus on a row
-     * through its authoritative edit, and switches profile without losing the selected Slider Preset identity.
-     */
-    @Test
-    void templatesEditorRendersAccessibleRowsAndPreservesFocusAcrossEdits() throws Exception {
-        fixture = WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(temporaryDirectory,
-                Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)),
-                Map.of("Arms", new DefaultSliderValue(0.1f, 0.5f))));
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            Scene scene = new Scene(root, 1300.0, 800.0);
-            stage.setScene(scene);
-            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-            stage.show();
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            presets.getSelectionModel().select(0);
-            VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
-            SliderChoiceRow waist = (SliderChoiceRow) rows.getChildren().getFirst();
-
-            assertEquals("Slider choice Waist in Slider Preset Alpha", waist.getAccessibleText());
-            assertEquals("Waist@0.8", waist.previewControl().getText());
-            assertEquals("Waist Minimum in Slider Preset Alpha", waist.minimumControl().getAccessibleText());
-            waist.minimumControl().requestFocus();
-            assertEquals(SliderChoiceRow.FocusControl.MINIMUM,
-                    waist.focusedControl(scene.getFocusOwner()).orElseThrow());
-            assertSame(waist.minimumControl(), waist.control(SliderChoiceRow.FocusControl.MINIMUM));
-            CheckBox enabled = waist.enabledControl();
-            enabled.requestFocus();
-            enabled.fire();
-
-            assertSame(enabled, scene.getFocusOwner());
-            assertFalse(flow.frame().snapshot().getSliderPresets().getFirst().getSliderChoices().getFirst().isEnabled());
-            assertEquals(0, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
-            assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("changed"));
-
-            @SuppressWarnings("unchecked")
-            ComboBox<TemplatesFeature.Profile> profile =
-                    (ComboBox<TemplatesFeature.Profile>) loader.getNamespace().get("sliderPresetProfile");
-            profile.setValue(TemplatesFeature.Profile.UUNP);
-            profile.fireEvent(new ActionEvent());
-
-            assertEquals("Alpha", presets.getSelectionModel().getSelectedItem().getName());
-            assertEquals("Arms", ((SliderChoiceRow) rows.getChildren().getFirst()).choiceName());
-            stage.close();
-        });
     }
 
     /**
@@ -1736,12 +1758,12 @@ class WorkbenchControllerTest {
             stage.show();
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+                    (ListView<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "sliderPresetList");
             presets.getSelectionModel().select(0);
-            VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
-            Button fiftyAll = (Button) loader.getNamespace().get("fiftyAllSliderChoicesButton");
-            CheckBox minimumGang = (CheckBox) loader.getNamespace().get("gangMinimumCheck");
-            CheckBox maximumGang = (CheckBox) loader.getNamespace().get("gangMaximumCheck");
+            VBox rows = (VBox) LoadedWorkbench.node(loader, "sliderChoiceRows");
+            Button fiftyAll = (Button) LoadedWorkbench.node(loader, "fiftyAllSliderChoicesButton");
+            CheckBox minimumGang = (CheckBox) LoadedWorkbench.node(loader, "gangMinimumCheck");
+            CheckBox maximumGang = (CheckBox) LoadedWorkbench.node(loader, "gangMaximumCheck");
 
             fiftyAll.requestFocus();
             fiftyAll.fire();
@@ -1768,139 +1790,6 @@ class WorkbenchControllerTest {
             minimumGang.requestFocus();
             sendKey(root, KeyCode.F6);
             assertSame(loader.getNamespace().get("activityList"), scene.getFocusOwner());
-            stage.close();
-        });
-    }
-
-    /**
-     * F2 exposes one inline row editor whose rejected diagnostics retain the draft; a valid retry restores focusable
-     * selection to the renamed identity and the final Esc tier clears it without retargeting.
-     */
-    @Test
-    void templatesInlineRenameIsKeyboardCompleteAcrossRejectionAndSelectionClear() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(SliderPresetEdits.create("Beta"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-            stage.show();
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            presets.getSelectionModel().select(0);
-
-            sendKey(root, KeyCode.F2);
-            root.applyCss();
-            root.layout();
-            TextField rename = controller.activeRenameField().orElseThrow();
-            rename.setText("Beta");
-            rename.fireEvent(new ActionEvent());
-
-            assertEquals("Beta", controller.templatesFrame().rename().orElseThrow().draft());
-            assertFalse(controller.templatesFrame().rename().orElseThrow().diagnostics().isEmpty());
-            assertEquals("Alpha", presets.getSelectionModel().getSelectedItem().getName());
-            assertTrue(((HBox) loader.getNamespace().get("templatesInfoBar")).isVisible());
-            assertFalse(((HBox) loader.getNamespace().get("infoBar")).isVisible());
-            assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
-            assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("Validation"));
-
-            rename.setText("Gamma");
-            rename.fireEvent(new ActionEvent());
-
-            assertTrue(controller.templatesFrame().rename().isEmpty());
-            assertEquals("Gamma", presets.getSelectionModel().getSelectedItem().getName());
-            sendKey(root, KeyCode.ESCAPE);
-            assertNull(presets.getSelectionModel().getSelectedItem());
-            assertTrue(controller.templatesFrame().selection().isEmpty());
-            stage.close();
-        });
-    }
-
-    /**
-     * Templates destructive commands publish typed confirmations first, honor Cancel, and apply the captured selected
-     * or visible identity set only after the matching named action.
-     */
-    @Test
-    void templatesRemoveAndClearVisibleRequireSafeTypedConfirmation() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(SliderPresetEdits.create("Beta"));
-        flow.apply(SliderPresetEdits.create("Gamma"));
-        RecordingPlatform platform = new RecordingPlatform();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            controller.attach(flow, stage, platform, fixture().environment());
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            Button remove = (Button) loader.getNamespace().get("removeSliderPresetButton");
-            Button clear = (Button) loader.getNamespace().get("clearSliderPresetsButton");
-            TextField filter = (TextField) loader.getNamespace().get("sliderPresetFilter");
-            presets.getSelectionModel().select(0);
-
-            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
-            remove.fire();
-            assertEquals(List.of("Alpha", "Beta", "Gamma"), flow.frame().snapshot().getSliderPresets().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-
-            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
-            remove.fire();
-            assertEquals(List.of("Beta", "Gamma"), flow.frame().snapshot().getSliderPresets().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertNull(presets.getSelectionModel().getSelectedItem());
-
-            filter.setText("bet");
-            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
-            clear.fire();
-            assertEquals(List.of("Gamma"), flow.frame().snapshot().getSliderPresets().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertTrue(controller.templatesFrame().visiblePresets().isEmpty());
-            stage.close();
-        });
-    }
-
-    /**
-     * Refilling a genuinely empty Templates list replaces its JavaFX node so Windows UI Automation receives a fresh
-     * virtualized child subtree instead of retaining the provider's stale empty tree.
-     */
-    @Test
-    void templatesEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> initial =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            TextField name = (TextField) loader.getNamespace().get("sliderPresetNameInput");
-            Button create = (Button) loader.getNamespace().get("createSliderPresetButton");
-
-            name.setText("Alpha");
-            create.fire();
-
-            assertNotSame(initial, controller.sliderPresetListNode());
-            assertEquals(List.of("Alpha"), controller.sliderPresetListNode().getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            root.applyCss();
-            assertTrue(controller.sliderPresetListNode().getPrefHeight() >= 28.0);
-            assertTrue(controller.sliderPresetListNode().getPrefHeight() < 56.0);
-            assertEquals(28.0, controller.sliderPresetListNode().getFixedCellSize());
-            assertSame(name.getParent(), controller.sliderPresetListNode().getParent());
             stage.close();
         });
     }
@@ -2652,46 +2541,6 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** A persistent preview diagnostic must not turn a successful Duplicate into failed Activity validation. */
-    @Test
-    void templatesDuplicateWithUnavailablePreviewRecordsTheMutation() throws Exception {
-        fixture = WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installStandardOutput(temporaryDirectory,
-                Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of()));
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(SliderPresetEdits.setSliderChoice("Alpha", new SliderChoiceSnapshot(
-                "Overflow", false, Integer.valueOf(10), Integer.valueOf(200),
-                10, 200, 100, 100, false)));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            try {
-                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-                controller.sliderPresetListNode().getSelectionModel().selectFirst();
-                ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Beta");
-                ((Button) loader.getNamespace().get("duplicateSliderPresetButton")).fire();
-
-                assertEquals(List.of("Alpha", "Beta"), flow.frame().snapshot().getSliderPresets().stream()
-                        .map(SliderPresetSnapshot::getName).toList());
-                assertEquals("TEMPLATE_PREVIEW_NON_FINITE",
-                        controller.templatesFrame().diagnostics().getFirst().getCode());
-                @SuppressWarnings("unchecked")
-                ListView<WorkbenchFeedback.ActivityRecord> activity =
-                        (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
-                assertEquals(1, activity.getItems().size(), activity.getItems().stream()
-                        .map(item -> item.operation() + ": " + item.message()).toList().toString());
-                assertEquals("Duplicate Slider Preset", activity.getItems().getFirst().operation());
-                assertEquals(WorkbenchFeedback.Disposition.COMPLETED,
-                        activity.getItems().getFirst().disposition());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
     /** A failure during a pending Close cannot offer Retry while coordinator admission remains shut down. */
     @Test
     void pendingShutdownFailureDialogDoesNotOfferUnadmittableRetry() throws Exception {
@@ -3053,14 +2902,14 @@ class WorkbenchControllerTest {
             stage.setScene(scene);
             controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             stage.show();
-            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
+            Label editor = (Label) LoadedWorkbench.node(loader, "templateEditorFocusTarget");
             editor.requestFocus();
 
             sendControlKey(root, KeyCode.G);
-            TextField name = (TextField) loader.getNamespace().get("sliderPresetNameInput");
-            Button create = (Button) loader.getNamespace().get("createSliderPresetButton");
+            TextField name = (TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput");
+            Button create = (Button) LoadedWorkbench.node(loader, "createSliderPresetButton");
             assertFalse(create.isDisabled());
-            assertTrue(((Button) loader.getNamespace().get("importBodySlideButton")).isDisabled());
+            assertTrue(((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).isDisabled());
             name.setText("Newer UI");
             create.fire();
             worker.runNext();
@@ -3327,8 +3176,8 @@ class WorkbenchControllerTest {
             Button inspectorLauncher = (Button) loader.getNamespace().get("showInspectorOverlayButton");
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> primary =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            Label inspector = (Label) loader.getNamespace().get("templateSelectionText");
+                    (ListView<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "sliderPresetList");
+            Label inspector = (Label) LoadedWorkbench.node(loader, "templateSelectionText");
 
             assertEquals(java.util.List.of(editorPane), areaPanes.getChildren());
             assertTrue(listLauncher.isVisible());

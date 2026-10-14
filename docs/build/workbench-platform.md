@@ -75,7 +75,7 @@ Each exception is keyed by declaring class and method, and keeps a why-comment a
 | 1 | No `isFocused` / `focusedProperty` on any `javafx/*` type, including inherited calls from a production subclass | none |
 | 2 | No `requestFocus` / `toFront` on any `javafx/stage/*` type (window activation) | `NpcPortraitViewer.openViewer`: raising the portrait viewer when it is already open (synchronous, directly commanded by the user, application already in the foreground) |
 | 3 | No `Platform.getPreferences` call or method reference outside the appearance-preferences source | every method of `JavaFxAppearancePreferencesSource`: the one JavaFX appearance-preferences source |
-| 4 | No `Platform.runLater` whose runnable is a `requestFocus` method reference, or a lambda that calls `requestFocus` directly | `WorkbenchController$SliderPresetCell.startEdit`: the rename-editor deferral |
+| 4 | No `Platform.runLater` whose runnable is a `requestFocus` method reference, or a lambda that calls `requestFocus` directly | `TemplatesArea$SliderPresetCell.startEdit` (in `workbench.templates`): the rename-editor deferral |
 
 Two focus deferrals are named, and no other is allowed:
 

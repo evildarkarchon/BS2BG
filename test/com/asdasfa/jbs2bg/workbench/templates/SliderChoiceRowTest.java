@@ -1,4 +1,4 @@
-package com.asdasfa.jbs2bg.workbench;
+package com.asdasfa.jbs2bg.workbench.templates;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -15,7 +15,6 @@ import com.asdasfa.jbs2bg.filtering.NameIdentity;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
-import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;

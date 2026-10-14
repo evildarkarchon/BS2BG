@@ -22,6 +22,7 @@ import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
+import com.asdasfa.jbs2bg.workbench.templates.SliderChoiceRow;
 
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -155,7 +156,7 @@ class WorkbenchAccessibilityContractTest {
             Map<String, ObservableList<?>> guarded = new LinkedHashMap<>();
             guarded.put("Slider Presets", controller.sliderPresetListNode().getItems());
             guarded.put("Slider choice rows",
-                    ((VBox) loader.getNamespace().get("sliderChoiceRows")).getChildren());
+                    ((VBox) LoadedWorkbench.node(loader, "sliderChoiceRows")).getChildren());
             guarded.put("Custom Morph Targets", controller.customMorphTargetListNode().getItems());
             guarded.put("NPC Morph Assignments", controller.npcMorphAssignmentListNode().getItems());
             guarded.put("Assigned Slider Presets", controller.assignedMorphSliderPresetListNode().getItems());
@@ -347,7 +348,7 @@ class WorkbenchAccessibilityContractTest {
             stage.setScene(new Scene(root, 1300.0, 800.0));
             controller.attach(flow, stage, new UnusedPlatform(), fixture().environment());
             controller.sliderPresetListNode().getSelectionModel().select(0);
-            VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
+            VBox rows = (VBox) LoadedWorkbench.node(loader, "sliderChoiceRows");
             List<Node> before = List.copyOf(rows.getChildren());
             assertEquals(List.of("Arms", "Waist"), before.stream()
                     .map(row -> ((SliderChoiceRow) row).choiceName()).toList());
@@ -356,7 +357,7 @@ class WorkbenchAccessibilityContractTest {
             Slider minimum = waist.minimumControl();
 
             enabled.fire();
-            ((Button) loader.getNamespace().get("fiftyAllSliderChoicesButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "fiftyAllSliderChoicesButton")).fire();
 
             SliderPresetSnapshot edited = flow.frame().snapshot().getSliderPresets().getFirst();
             assertFalse(edited.getSliderChoices().stream()

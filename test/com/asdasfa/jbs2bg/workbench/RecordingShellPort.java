@@ -110,6 +110,12 @@ public final class RecordingShellPort implements ShellPort {
         requests.add("revealPrimaryContent()");
     }
 
+    /** Records the request. */
+    @Override
+    public void importBodySlidePresets() {
+        requests.add("importBodySlidePresets()");
+    }
+
     /** Records the request with whether the Area owns the change's diagnostics. */
     @Override
     public void projectChanged(WorkbenchFeature.Update<?> update, boolean ownsDiagnostics) {
