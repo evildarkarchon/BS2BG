@@ -49,8 +49,11 @@ class ProductionPlatformBanGateTest {
 
     private static final String PLATFORM = "javafx/application/Platform";
 
+    private static final String APPEARANCE_SOURCE =
+            "com/asdasfa/jbs2bg/workbench/JavaFxAppearancePreferencesSource";
+
     /**
-     * The production bans. Rule 3 (the appearance-preferences seam) is added by its own issue as one more entry.
+     * The production bans, numbered as in docs/build/workbench-platform.md.
      */
     static final List<Rule> RULES = List.of(
             Rule.invocations("1", "no isFocused/focusedProperty on any javafx/* type (window activation read)",
@@ -63,6 +66,11 @@ class ProductionPlatformBanGateTest {
                     // The portrait viewer raise when it is already open: synchronous, directly commanded by the
                     // user, and the application is already in the foreground.
                     Set.of(new MethodKey(WORKBENCH_CONTROLLER, "showPortraitViewer"))),
+            Rule.invocations("3", "no Platform.getPreferences outside the appearance-preferences source",
+                    call -> call.owner().equals(PLATFORM) && call.name().equals("getPreferences"),
+                    // The one JavaFX appearance-preferences source. Everything else receives a source through
+                    // WorkbenchEnvironment, so tests substitute a fake and never read the host's OS theme.
+                    Set.of(new MethodKey(APPEARANCE_SOURCE, "*"))),
             Rule.deferredFocus("4",
                     "no Platform.runLater of a requestFocus method reference or a lambda that calls requestFocus",
                     // The Slider Preset rename editor: ListView click handling can take focus back after startEdit.
@@ -109,6 +117,16 @@ class ProductionPlatformBanGateTest {
                         "focusPopup -> javafx/stage/Popup.requestFocus",
                         "deferredRaise -> javafx/stage/Stage.toFront"),
                 describe(scan(rule, List.of(fixture(PlatformBanFixtures.ActivatesWindow.class)))));
+        assertEquals(List.of(), scan(rule, List.of(fixture(PlatformBanFixtures.Permitted.class))));
+    }
+
+    @Test
+    void liveAppearancePreferenceReadsFailRuleThreeIncludingAMethodReference() throws IOException {
+        Rule rule = rule("3");
+
+        assertEquals(List.of("readNow -> javafx/application/Platform.getPreferences",
+                        "readLater -> javafx/application/Platform.getPreferences"),
+                describe(scan(rule, List.of(fixture(PlatformBanFixtures.ReadsAppearancePreferences.class)))));
         assertEquals(List.of(), scan(rule, List.of(fixture(PlatformBanFixtures.Permitted.class))));
     }
 

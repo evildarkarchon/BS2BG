@@ -3,10 +3,19 @@
 Issue #100 delivers the application-owned Workbench platform layer on standard JavaFX controls and Modena
 (delivered on JavaFX 25; the baseline is now JavaFX 27, see ADR-0007). `WorkbenchAppearance` owns the persisted System/Light/Dark choice, effective theme, reduced-motion state, and
 semantic tokens without depending on JavaFX. `JavaFxWorkbenchAppearance` is the production adapter: it observes
-the public [`Platform.Preferences`](https://openjfx.io/javadoc/27/javafx.graphics/javafx/application/Platform.Preferences.html)
-interface, including the documented Windows `Windows.SPI.HighContrast` and system-color keys, and applies one
-coherent frame to the loaded Workbench root. High Contrast always overrides the manual choice and ending High
-Contrast restores that unchanged choice.
+an `AppearancePreferencesSource` and applies one coherent frame to the loaded Workbench root. High Contrast always
+overrides the manual choice and ending High Contrast restores that unchanged choice.
+
+The appearance-preferences source is the one BS2BG-owned seam for operating-system appearance
+([#124](https://github.com/evildarkarchon/BS2BG/issues/124)). It has two operations: read the current
+`WorkbenchAppearance.PlatformPreferences`, and subscribe to changes. The Workbench receives it through the
+`WorkbenchEnvironment` slot (`withAppearancePreferences`), which defaults to `JavaFxAppearancePreferencesSource`.
+That production source reads the public
+[`Platform.Preferences`](https://openjfx.io/javadoc/27/javafx.graphics/javafx/application/Platform.Preferences.html)
+interface, including the documented Windows `Windows.SPI.HighContrast` and system-color keys, through weak
+listeners. `Platform.Preferences` itself is never injected, because it is a large interface that grows between
+releases. Tests use `FakeAppearancePreferencesSource` through `WorkbenchTestEnvironment` (light, not High Contrast),
+so test results never depend on the developer's OS theme or High Contrast setting.
 
 The Workbench uses one application-owned stylesheet, `workbench.css`. Color is never the only status cue: InfoBar,
 Activity, status, selection, focus, and dialog states retain text, semantic vectors, and boundaries. Focus styling
@@ -40,13 +49,15 @@ JavaFX gives focus to it when the user returns to the window. The only focus che
 once, synchronously. Satellite windows (the Fill Empty and NPC filter popups, the portrait viewer) request focus right
 after `show()` and restore it inside `onHidden`.
 
-`ProductionPlatformBanGateTest` reads every production class file with `java.lang.classfile` and enforces these rules.
+`ProductionPlatformBanGateTest` reads every production class file with `java.lang.classfile` and enforces these rules
+(rules 1, 2 and 4 keep focus off window activation; rule 3 keeps OS appearance behind its seam).
 Each exception is keyed by declaring class and method, and keeps a why-comment at its site:
 
 | # | Rule | Allowed exceptions |
 | --- | --- | --- |
 | 1 | No `isFocused` / `focusedProperty` on any `javafx/*` type, including inherited calls from a production subclass | none |
 | 2 | No `requestFocus` / `toFront` on any `javafx/stage/*` type (window activation) | `WorkbenchController.showPortraitViewer`: raising the portrait viewer when it is already open (synchronous, directly commanded by the user, application already in the foreground) |
+| 3 | No `Platform.getPreferences` call or method reference outside the appearance-preferences source | every method of `JavaFxAppearancePreferencesSource`: the one JavaFX appearance-preferences source |
 | 4 | No `Platform.runLater` whose runnable is a `requestFocus` method reference, or a lambda that calls `requestFocus` directly | `WorkbenchController$SliderPresetCell.startEdit`: the rename-editor deferral |
 
 Two focus deferrals are named, and no other is allowed:
@@ -59,7 +70,7 @@ Two focus deferrals are named, and no other is allowed:
 
 The deferral check is not transitive: `Platform.runLater(this::helper)`, or a lambda calling a helper that requests
 focus, is not detected. This rule still covers it: no production code defers a focus request except the rename
-editor. Rule 3 (`Platform.getPreferences` only in the appearance-preferences source) is added with that seam.
+editor.
 
 ## Packaged verification
 
