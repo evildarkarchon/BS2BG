@@ -19,6 +19,7 @@ import com.asdasfa.jbs2bg.workbench.WorkbenchArea;
 import com.asdasfa.jbs2bg.workbench.WorkbenchController;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 import com.asdasfa.jbs2bg.workbench.WorkbenchTestEnvironment;
+import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseArea;
 import com.asdasfa.jbs2bg.workbench.output.OutputDrawer;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsArea;
 
@@ -155,7 +156,8 @@ class FxmlGraphLoadingTest {
             controller.attach(flow, stage, fixture.environment());
 
             List<WorkbenchArea> areas = LoadedWorkbench.areas(loader);
-            assertEquals(List.of(SettingsArea.class), areas.stream().map(Object::getClass).toList());
+            assertEquals(List.of(NpcDatabaseArea.class, SettingsArea.class),
+                    areas.stream().map(Object::getClass).toList());
             for (WorkbenchArea area : areas)
                 assertEveryFxmlFieldInjected(area);
             stage.close();
@@ -191,7 +193,8 @@ class FxmlGraphLoadingTest {
     @Test
     void everyFxmlGraphOnDiskIsServedFromTheClasspath() throws IOException {
         List<String> graphs = fxmlFiles("");
-        assertEquals(List.of("workbench.fxml", "workbench/output/output-drawer.fxml",
+        assertEquals(List.of("workbench.fxml", "workbench/npcdatabase/npc-database-area.fxml",
+                        "workbench/output/output-drawer.fxml",
                         "workbench/settings/settings-area.fxml"), graphs,
                 "only the Workbench graph, its Area graphs and the Output drawer graph may ship");
         assertTrue(graphs.contains("workbench.fxml"), "the Workbench must be the packaged root graph");

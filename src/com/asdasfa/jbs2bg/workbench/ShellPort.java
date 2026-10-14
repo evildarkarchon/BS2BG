@@ -1,8 +1,12 @@
 package com.asdasfa.jbs2bg.workbench;
 
+import java.util.Optional;
 import java.util.function.Function;
 
+import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
+
+import javafx.scene.Node;
 
 /**
  * The shell port: every request an Area makes of the shell or of another Area. Areas never reference each other;
@@ -53,4 +57,49 @@ public interface ShellPort {
      * automatic, so it moves no focus.
      */
     void revealOutput();
+
+    /**
+     * Returns from the NPC Database to the Morphs Area. The shell selects the promoted assignment in Morphs when there
+     * is one, scrolls it into view, and navigates back to the Morphs launcher that opened the NPC Database.
+     *
+     * @param assignment the NPC Morph Assignment the latest promotion added, or empty when there is none to select
+     */
+    void returnToMorphs(Optional<NpcMorphAssignmentIdentity> assignment);
+
+    /**
+     * Reports a Project change the Area published itself, outside the pipeline's generic chrome step, so the shell
+     * re-renders the Project chrome and every Area from the current Project frame. The shell arbitrates the change's
+     * diagnostics: no other Area projects them.
+     *
+     * @param update          the feature update that published the change
+     * @param ownsDiagnostics true when the Area presents every diagnostic of the change itself, so the Workbench's
+     *                        Project diagnostics surface stays clear; false shows the Project frame's diagnostics
+     *                        there
+     */
+    void projectChanged(WorkbenchFeature.Update<?> update, boolean ownsDiagnostics);
+
+    /**
+     * Classifies the current focus owner as a semantic target, so an Area can put focus back after a modal dialog
+     * without retaining a node that a re-render may replace.
+     *
+     * @return the shell focus policy's semantic target for the current focus owner
+     */
+    WorkbenchNavigation.FocusTarget currentFocus();
+
+    /**
+     * Requests one semantic focus target through the shell's focus policy, which falls back to the target Area's
+     * default node when the target cannot take focus.
+     *
+     * @param target the semantic target to focus
+     */
+    void requestFocus(WorkbenchNavigation.FocusTarget target);
+
+    /**
+     * Puts focus back after an Area's satellite (a flyout or popup) hid: on its launcher while it can take focus,
+     * otherwise on the active Area's fallback landmark. Nothing happens once the Workbench window is hidden.
+     *
+     * @param launcher the control that opened the satellite
+     * @param fallback the active Area's landmark to focus when the launcher cannot take focus
+     */
+    void restoreFocusAfterSatellite(Node launcher, WorkbenchNavigation.Landmark fallback);
 }

@@ -149,7 +149,7 @@ class WorkbenchAccessibilityContractTest {
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
             controller.customMorphTargetListNode().getSelectionModel().select(0);
             ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-            ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
             ((Button) LoadedWorkbench.node(loader, "generateOutputButton")).fire();
 
             Map<String, ObservableList<?>> guarded = new LinkedHashMap<>();
@@ -163,9 +163,9 @@ class WorkbenchAccessibilityContractTest {
                     ((ComboBox<?>) loader.getNamespace().get("availableMorphSliderPreset")).getItems());
             guarded.put("BoS artifacts", ((ComboBox<?>) LoadedWorkbench.node(loader, "bosArtifactChoice")).getItems());
             guarded.put("NPC Database sources",
-                    ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems());
+                    ((ListView<?>) LoadedWorkbench.node(loader, "npcSourceList")).getItems());
             guarded.put("NPC Database catalog",
-                    ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getItems());
+                    ((TableView<?>) LoadedWorkbench.node(loader, "npcCatalogTable")).getItems());
             guarded.put("Settings entries",
                     ((ListView<?>) LoadedWorkbench.node(loader, "settingsEntryList")).getItems());
             List<String> changed = new ArrayList<>();
@@ -558,10 +558,10 @@ class WorkbenchAccessibilityContractTest {
             empty.put("NPC Database portrait status", "Select an NPC Database entry to inspect its portrait.");
             assertEquals(empty, npcDatabaseHelpText(loader));
 
-            ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
             @SuppressWarnings("unchecked")
             TableView<com.asdasfa.jbs2bg.data.NPC> catalog =
-                    (TableView<com.asdasfa.jbs2bg.data.NPC>) loader.getNamespace().get("npcCatalogTable");
+                    (TableView<com.asdasfa.jbs2bg.data.NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
             catalog.getSelectionModel().select(catalog.getItems().stream()
                     .filter(npc -> npc.getName().equals("Zq Portraitless")).findFirst().orElseThrow());
 
@@ -591,7 +591,7 @@ class WorkbenchAccessibilityContractTest {
         for (String id : List.of("npcSourceCountText", "npcCatalogSummary", "npcInspectorName",
                 "npcInspectorSource", "npcInspectorMaster", "npcInspectorEditorId", "npcInspectorRace",
                 "npcInspectorFormId", "npcDatabaseDiagnostics", "npcDatabasePortraitStatus")) {
-            Label label = (Label) loader.getNamespace().get(id);
+            Label label = (Label) LoadedWorkbench.node(loader, id);
             String help = (String) label.queryAccessibleAttribute(AccessibleAttribute.HELP);
             if (!id.equals("npcDatabasePortraitStatus") || !label.getText().equals("No NPC portrait selected"))
                 assertEquals(label.getText(), help, id + " HelpText must mirror its displayed value");

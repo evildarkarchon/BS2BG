@@ -68,7 +68,7 @@ class WorkbenchFocusTest {
         /** @return the named FXML node */
         @SuppressWarnings("unchecked")
         <T> T node(String id) {
-            return (T) loader.getNamespace().get(id);
+            return (T) LoadedWorkbench.node(loader, id);
         }
 
         /** @return the main scene */

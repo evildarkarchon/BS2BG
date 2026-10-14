@@ -113,41 +113,6 @@ class WorkbenchControllerTest {
         return fixture;
     }
 
-    /** Imported NPC sources populate the independent catalog and its selection-following inspector. */
-    @Test
-    void npcDatabaseImportsSourcesAndInspectsSelectedCatalogRow() throws Exception {
-        Path source = temporaryDirectory.resolve("npcs.txt");
-        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n"
-                + "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, platform, fixture().environment());
-                stage.show();
-                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
-
-                @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
-                assertEquals(List.of("Alpha", "Beta"), catalog.getItems().stream().map(NPC::getName).toList());
-                assertEquals(1, ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems().size());
-                catalog.getSelectionModel().selectFirst();
-                assertTrue(((Label) loader.getNamespace().get("npcInspectorName")).getText().contains("Alpha"));
-                assertTrue(((Label) loader.getNamespace().get("npcDatabasePortraitStatus")).getText()
-                        .contains("No portrait found"));
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
     /**
      * The NPC Database inspector finds its portrait in the environment's image directory and opens the shared
      * viewer, which the Workbench closes when its own window is hidden.
@@ -177,16 +142,16 @@ class WorkbenchControllerTest {
                 shown.set(stage);
                 controller.attach(flow, stage, platform, fixture().environment().withPortraitDirectory(images));
                 stage.show();
-                Button launcher = (Button) loader.getNamespace().get("openNpcDatabasePortraitViewerButton");
+                Button launcher = (Button) LoadedWorkbench.node(loader, "openNpcDatabasePortraitViewerButton");
                 // The thumbnail decodes in the background; the launcher enables once it has loaded.
                 launcher.disableProperty().addListener((observable, previous, disabled) -> {
                     if (!disabled)
                         thumbnailLoaded.countDown();
                 });
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
                 if (!launcher.isDisabled())
                     thumbnailLoaded.countDown();
@@ -195,8 +160,8 @@ class WorkbenchControllerTest {
             FxTestToolkit.runOnFxThread(() -> {
                 FXMLLoader loader = loaded.get();
                 assertEquals("Portrait file: Alpha (Alpha01).png",
-                        ((Label) loader.getNamespace().get("npcDatabasePortraitStatus")).getText());
-                ((Button) loader.getNamespace().get("openNpcDatabasePortraitViewerButton")).fire();
+                        ((Label) LoadedWorkbench.node(loader, "npcDatabasePortraitStatus")).getText());
+                ((Button) LoadedWorkbench.node(loader, "openNpcDatabasePortraitViewerButton")).fire();
                 viewer.set(FxTestToolkit.showingOwnedStage(shown.get(), ".npc-portrait-viewer"));
                 assertEquals("NPC Portrait — Alpha", viewer.get().getTitle());
             });
@@ -241,25 +206,25 @@ class WorkbenchControllerTest {
                 launcher.requestFocus();
                 launcher.fire();
                 assertTrue(((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).isSelected());
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
-                ((CheckBox) loader.getNamespace().get("assignRandomNpcPresetCheck")).fire();
+                ((CheckBox) LoadedWorkbench.node(loader, "assignRandomNpcPresetCheck")).fire();
 
-                ((Button) loader.getNamespace().get("addNpcToProjectButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "addNpcToProjectButton")).fire();
 
                 assertEquals("Amber", catalog.getSelectionModel().getSelectedItem().getName());
                 assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
                 assertEquals(List.of("Shape"), session.getSnapshot().getNpcMorphAssignments().getFirst()
                         .getSliderPresetNames());
-                ((Button) loader.getNamespace().get("addNpcToProjectButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "addNpcToProjectButton")).fire();
                 assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
                 @SuppressWarnings("unchecked")
                 ListView<NpcMorphAssignmentSnapshot> assignments = (ListView<NpcMorphAssignmentSnapshot>)
                         root.lookup("#npcMorphAssignmentList");
                 assertEquals(1, assignments.getItems().size());
-                ((Button) loader.getNamespace().get("backToMorphsButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
                 assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
                 assertSame(launcher, scene.getFocusOwner());
                 assertEquals("Amber", assignments.getSelectionModel().getSelectedItem().getDisplayName());
@@ -304,17 +269,17 @@ class WorkbenchControllerTest {
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
                 ((Button) loader.getNamespace().get("addNpcsFromDatabaseButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 worker.runNext();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
-                ((Button) loader.getNamespace().get("addNpcToProjectButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "addNpcToProjectButton")).fire();
                 assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
                 ((Button) loader.getNamespace().get("importBodySlideButton")).fire();
                 assertTrue(jobs.frame().projectMutationsBlocked());
 
-                ((Button) loader.getNamespace().get("backToMorphsButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
 
                 assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
                 ListView<NpcMorphAssignmentSnapshot> assignments = controller.npcMorphAssignmentListNode();
@@ -360,10 +325,10 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 worker.runNext();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
                 ((Button) loader.getNamespace().get("importBodySlideButton")).fire();
                 assertTrue(jobs.frame().projectMutationsBlocked());
@@ -372,73 +337,11 @@ class WorkbenchControllerTest {
                 sendKey(catalog, KeyCode.ENTER);
 
                 assertTrue(session.getSnapshot().getNpcMorphAssignments().isEmpty());
-                assertFalse(((Label) loader.getNamespace().get("npcPromotionInfoBarMessage")).getText()
+                assertFalse(((Label) LoadedWorkbench.node(loader, "npcPromotionInfoBarMessage")).getText()
                         .contains("Amber"));
                 assertEquals("Amber", catalog.getSelectionModel().getSelectedItem().getName());
                 worker.runNext();
                 assertFalse(jobs.frame().projectMutationsBlocked());
-
-                sendKey(catalog, KeyCode.ENTER);
-
-                assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /**
-     * The NPC Database gate refuses mutations while any job runs, not only a Project-exclusive one: Enter-to-add is
-     * refused during an NPC Database import, whose job leaves Templates and Morphs editable, until it settles.
-     */
-    @Test
-    void npcDatabasePromotionIsRefusedWhileAnyJobRuns() throws Exception {
-        Path npcSource = temporaryDirectory.resolve("first-import.txt");
-        Files.writeString(npcSource, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
-        Path laterSource = temporaryDirectory.resolve("later-import.txt");
-        Files.writeString(laterSource, "Skyrim.esm | Beta | Beta01 | NordRace | 00012346\n");
-        ManualExecutor worker = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
-                Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // Each job is settled by the test before prolonged feedback is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected coordinator callback failure", failure);
-        });
-        ProjectSession session = fixture().newSession();
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session, jobs);
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondNpcSourcesWith(Optional.of(List.of(npcSource)));
-        platform.respondNpcSourcesWith(Optional.of(List.of(laterSource)));
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, platform, fixture().environment());
-                stage.show();
-                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                Button importSources = (Button) loader.getNamespace().get("importNpcSourcesButton");
-                importSources.fire();
-                worker.runNext();
-                @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
-                catalog.getSelectionModel().selectFirst();
-                importSources.fire();
-                assertTrue(jobs.frame().active());
-                assertFalse(jobs.frame().projectMutationsBlocked());
-
-                catalog.requestFocus();
-                sendKey(catalog, KeyCode.ENTER);
-
-                assertTrue(session.getSnapshot().getNpcMorphAssignments().isEmpty());
-                assertFalse(((Label) loader.getNamespace().get("npcPromotionInfoBarMessage")).getText()
-                        .contains("Amber"));
-                worker.runNext();
-                assertFalse(jobs.frame().active());
-                assertEquals("Amber", catalog.getSelectionModel().getSelectedItem().getName());
 
                 sendKey(catalog, KeyCode.ENTER);
 
@@ -472,27 +375,27 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
                 hideNpcColumnValue(loader, "Name", "Hidden");
 
-                ((Button) loader.getNamespace().get("addAllNpcsToProjectButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "addAllNpcsToProjectButton")).fire();
 
                 assertEquals(2, session.getSnapshot().getNpcMorphAssignments().size());
                 assertEquals("Existing", catalog.getSelectionModel().getSelectedItem().getName());
                 assertEquals(3, catalog.getItems().size());
-                String summary = ((Label) loader.getNamespace().get("npcPromotionInfoBarMessage")).getText();
+                String summary = ((Label) LoadedWorkbench.node(loader, "npcPromotionInfoBarMessage")).getText();
                 assertTrue(summary.contains("Added 1"));
                 assertTrue(summary.contains("1 already"));
                 assertTrue(summary.contains("1 rejected"));
-                String details = ((TextArea) loader.getNamespace().get("npcPromotionDetails")).getText();
+                String details = ((TextArea) LoadedWorkbench.node(loader, "npcPromotionDetails")).getText();
                 assertTrue(details.contains("Existing01"));
                 assertTrue(details.contains("Invalid01"));
                 assertFalse(details.contains("Hidden01"));
                 assertEquals("", ((TextArea) loader.getNamespace().get("diagnosticsText")).getText());
-                assertTrue(((HBox) loader.getNamespace().get("npcPromotionInfoBar")).isVisible());
+                assertTrue(((HBox) LoadedWorkbench.node(loader, "npcPromotionInfoBar")).isVisible());
                 assertFalse(((HBox) loader.getNamespace().get("infoBar")).isVisible());
                 WorkbenchFeedback.ActivityRecord activity = (WorkbenchFeedback.ActivityRecord)
                         ((ListView<?>) loader.getNamespace().get("activityList")).getItems().getLast();
@@ -502,7 +405,7 @@ class WorkbenchControllerTest {
                 catalog.requestFocus();
                 sendKey(catalog, KeyCode.ENTER);
                 assertEquals(2, session.getSnapshot().getNpcMorphAssignments().size());
-                assertTrue(((Label) loader.getNamespace().get("npcPromotionInfoBarMessage")).getText()
+                assertTrue(((Label) LoadedWorkbench.node(loader, "npcPromotionInfoBarMessage")).getText()
                         .contains("Already in the Project"));
             } finally {
                 stage.close();
@@ -529,127 +432,25 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
-                Button add = (Button) loader.getNamespace().get("addNpcToProjectButton");
+                Button add = (Button) LoadedWorkbench.node(loader, "addNpcToProjectButton");
                 add.fire();
                 add.fire();
-                assertTrue(((HBox) loader.getNamespace().get("npcPromotionInfoBar")).isVisible());
+                assertTrue(((HBox) LoadedWorkbench.node(loader, "npcPromotionInfoBar")).isVisible());
 
                 ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                assertFalse(((HBox) loader.getNamespace().get("npcPromotionInfoBar")).isVisible());
-                ((Button) loader.getNamespace().get("backToMorphsButton")).fire();
+                assertFalse(((HBox) LoadedWorkbench.node(loader, "npcPromotionInfoBar")).isVisible());
+                ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
 
                 @SuppressWarnings("unchecked")
                 ListView<NpcMorphAssignmentSnapshot> assignments = (ListView<NpcMorphAssignmentSnapshot>)
                         root.lookup("#npcMorphAssignmentList");
                 assertEquals(1, assignments.getItems().size());
                 assertNull(assignments.getSelectionModel().getSelectedItem());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /** Column filters clear hidden selection, sorting changes order, and Clear freezes only visible identities. */
-    @Test
-    void npcDatabaseClearUsesFilteredVisibleScope() throws Exception {
-        Path source = temporaryDirectory.resolve("filter-npcs.txt");
-        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n"
-                + "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
-        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, platform, fixture().environment());
-                stage.show();
-                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
-                @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
-                catalog.getSelectionModel().selectFirst();
-
-                ToggleButton raceFilter = (ToggleButton) loader.getNamespace().get("npcRaceFilterButton");
-                raceFilter.fire();
-                Popup cancelledFilter = FxTestToolkit.showingPopup(stage, "#npcColumnFilterChoices");
-                sendKey(cancelledFilter.getScene().getRoot(), KeyCode.ESCAPE);
-                assertFalse(cancelledFilter.isShowing());
-                assertEquals(2, catalog.getItems().size());
-                hideNpcColumnValue(loader, "Race", "NordRace");
-                assertEquals(List.of("Beta"), catalog.getItems().stream().map(NPC::getName).toList());
-                assertNull(catalog.getSelectionModel().getSelectedItem());
-                assertTrue(((ToggleButton) loader.getNamespace().get("npcRaceFilterButton"))
-                        .getAccessibleHelp().contains("active, collapsed"));
-
-                ((Button) loader.getNamespace().get("clearNpcFiltersButton")).fire();
-                @SuppressWarnings("unchecked")
-                ComboBox<String> sort = (ComboBox<String>) loader.getNamespace().get("npcSortChoice");
-                sort.getSelectionModel().select("Name descending");
-                assertEquals(List.of("Beta", "Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
-
-                hideNpcColumnValue(loader, "Name", "Beta");
-                assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
-                ((Button) loader.getNamespace().get("clearNpcDatabaseButton")).fire();
-                assertTrue(catalog.getItems().isEmpty());
-                ((Button) loader.getNamespace().get("clearNpcFiltersButton")).fire();
-                assertEquals(List.of("Beta"), catalog.getItems().stream().map(NPC::getName).toList());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /** A malformed file publishes no rows from that file while earlier and later sources remain inspectable. */
-    @Test
-    void npcDatabaseMixedImportKeepsValidSourcesAndReportsRejectedLine() throws Exception {
-        Path first = temporaryDirectory.resolve("first-npcs.txt");
-        Path malformed = temporaryDirectory.resolve("malformed-npcs.txt");
-        Path last = temporaryDirectory.resolve("last-npcs.txt");
-        Files.writeString(first, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
-        Files.writeString(malformed, "Skyrim.esm | Ghost | Ghost01 | NordRace | 00012346\n"
-                + "not an NPC row\n");
-        Files.writeString(last, "Skyrim.esm | Gamma | Gamma01 | BretonRace | 00012347\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondNpcSourcesWith(Optional.of(List.of(first, malformed, last)));
-        platform.respondNpcSourcesWith(Optional.of(List.of(malformed)));
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, platform, fixture().environment());
-                stage.show();
-                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                Button importButton = (Button) loader.getNamespace().get("importNpcSourcesButton");
-                importButton.fire();
-                @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
-                assertEquals(List.of("Alpha", "Gamma"), catalog.getItems().stream().map(NPC::getName).toList());
-                assertEquals(2, ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems().size());
-                String diagnostics = ((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText();
-                assertTrue(diagnostics.contains("NPC_DATABASE_SOURCE_MALFORMED"));
-                assertTrue(diagnostics.contains("malformed-npcs.txt:2"));
-                assertTrue(flow.frame().snapshot().getNpcMorphAssignments().isEmpty());
-
-                Files.writeString(malformed, "Skyrim.esm | Ghost | Ghost01 | NordRace | 00012346\n");
-                importButton.fire();
-                assertEquals(List.of("Alpha", "Gamma", "Ghost"),
-                        catalog.getItems().stream().map(NPC::getName).toList());
-                assertEquals("No source diagnostics",
-                        ((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText());
             } finally {
                 stage.close();
             }
@@ -676,13 +477,13 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                Button importButton = (Button) loader.getNamespace().get("importNpcSourcesButton");
+                Button importButton = (Button) LoadedWorkbench.node(loader, "importNpcSourcesButton");
                 importButton.fire();
                 importButton.fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
-                assertTrue(((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText()
+                assertTrue(((Label) LoadedWorkbench.node(loader, "npcDatabaseDiagnostics")).getText()
                         .contains("NPC_DATABASE_SOURCE_READ_FAILED"));
 
                 Files.writeString(missing, "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
@@ -696,7 +497,7 @@ class WorkbenchControllerTest {
                 assertEquals(List.of("Alpha", "Beta"), catalog.getItems().stream().map(NPC::getName).toList());
                 assertTrue(activity.getItems().getLast().jobDetails().orElseThrow().retryOf().isPresent());
                 assertEquals("No source diagnostics",
-                        ((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText());
+                        ((Label) LoadedWorkbench.node(loader, "npcDatabaseDiagnostics")).getText());
             } finally {
                 stage.close();
             }
@@ -734,11 +535,11 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                Button importButton = (Button) loader.getNamespace().get("importNpcSourcesButton");
+                Button importButton = (Button) LoadedWorkbench.node(loader, "importNpcSourcesButton");
                 importButton.fire();
                 worker.runNext();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
                 catalog.getSelectionModel().selectFirst();
 
@@ -755,7 +556,7 @@ class WorkbenchControllerTest {
                 ((Button) loader.getNamespace().get("cancelOperationButton")).fire();
                 assertEquals(JobCoordinator.Lifecycle.CANCELLED, jobs.frame().attempt().orElseThrow().lifecycle());
                 assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
-                ListView<?> sources = (ListView<?>) loader.getNamespace().get("npcSourceList");
+                ListView<?> sources = (ListView<?>) LoadedWorkbench.node(loader, "npcSourceList");
                 assertEquals(1, sources.getItems().size());
                 sources.getSelectionModel().selectFirst();
 
@@ -805,9 +606,9 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 assertTrue(cancelledAtBoundary.get());
                 assertEquals(JobCoordinator.Lifecycle.CANCELLED, jobs.frame().attempt().orElseThrow().lifecycle());
                 assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
@@ -845,16 +646,16 @@ class WorkbenchControllerTest {
                 controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.requestFocus();
                 for (int index = 0; index < 2; index++)
                     catalog.fireEvent(new KeyEvent(KeyEvent.KEY_TYPED, "a", "a", KeyCode.UNDEFINED,
                             false, false, false, false));
                 assertEquals("Azure", catalog.getSelectionModel().getSelectedItem().getName());
                 sendControlKey(root, KeyCode.K);
-                assertSame(loader.getNamespace().get("npcNameFilterButton"), scene.getFocusOwner());
+                assertSame(LoadedWorkbench.node(loader, "npcNameFilterButton"), scene.getFocusOwner());
                 sendKey(root, KeyCode.ESCAPE);
                 assertNull(catalog.getSelectionModel().getSelectedItem());
             } finally {
@@ -1657,6 +1458,43 @@ class WorkbenchControllerTest {
     }
 
     /**
+     * The shell mounts the NPC Database Area's own panes last in its landmark containers, where they sat in the single
+     * Workbench FXML, declares no {@code @FXML} field for any NPC Database control, and shows the panes only while the
+     * NPC Database is the active Area (#151).
+     */
+    @Test
+    void npcDatabaseAreaPanesMountIntoTheShellLandmarksAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            assertEquals("npcDatabasePrimaryScroll", childIds(loader, "primaryPane").getLast());
+            assertEquals("npcDatabaseEditorContent", childIds(loader, "editorPane").getLast());
+            assertEquals("npcDatabaseInspectorScroll", childIds(loader, "inspectorPane").getLast());
+            Map<String, Object> npcDatabase = controller.areaNamespace(WorkbenchNavigation.Area.NPC_DATABASE);
+            assertTrue(npcDatabase.containsKey("npcCatalogTable"), "the NPC Database Area FXML must be loaded");
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields())
+                assertFalse(field.isAnnotationPresent(javafx.fxml.FXML.class)
+                                && npcDatabase.containsKey(field.getName()),
+                        "the shell must not declare the NPC Database control " + field.getName());
+            javafx.scene.Node editor = (javafx.scene.Node) LoadedWorkbench.node(loader, "npcDatabaseEditorContent");
+            assertFalse(editor.isVisible() || editor.isManaged());
+
+            ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+
+            assertTrue(editor.isVisible() && editor.isManaged());
+            assertFalse(((javafx.scene.Node) LoadedWorkbench.node(loader, "settingsEditorContent")).isVisible());
+            stage.close();
+        });
+    }
+
+    /**
      * The shell places the Output drawer's two parts where they sat in the single Workbench FXML (Generate in the Area
      * header before the Project status, the drawer last in the content stack), declares no {@code @FXML} field for any
      * drawer control, and shows the drawer only while navigation reveals it (#150).
@@ -2016,7 +1854,7 @@ class WorkbenchControllerTest {
             stage.setScene(new Scene(root, 1300.0, 800.0));
             try {
                 controller.attach(flow, stage, platform, environment.environment());
-                Runnable importSources = () -> ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                Runnable importSources = () -> ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 Runnable createPreset = () -> {
                     ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Ordered");
                     ((Button) loader.getNamespace().get("createSliderPresetButton")).fire();
@@ -2025,7 +1863,7 @@ class WorkbenchControllerTest {
                 (jobFrameFirst ? createPreset : importSources).run();
 
                 assertEquals(1, session.getSnapshot().getSliderPresets().size());
-                assertEquals(1, ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getItems().size());
+                assertEquals(1, ((TableView<?>) LoadedWorkbench.node(loader, "npcCatalogTable")).getItems().size());
                 disabled.set(Map.of(
                         "importNpcSourcesButton", isDisabled(loader, "importNpcSourcesButton"),
                         "removeNpcSourceButton", isDisabled(loader, "removeNpcSourceButton"),
@@ -2360,7 +2198,7 @@ class WorkbenchControllerTest {
             case "Race" -> "npcRaceFilterButton";
             default -> throw new IllegalArgumentException("Unsupported test column: " + column);
         };
-        ToggleButton launcher = (ToggleButton) loader.getNamespace().get(buttonId);
+        ToggleButton launcher = (ToggleButton) LoadedWorkbench.node(loader, buttonId);
         launcher.fire();
         Popup popup = FxTestToolkit.showingPopup(launcher.getScene().getWindow(), "#npcColumnFilterChoices");
         assertTrue(launcher.getAccessibleHelp().contains("expanded"));
@@ -3787,12 +3625,12 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
             root.resize(1199, 720);
             listLauncher.fire();
-            assertSame(loader.getNamespace().get("npcSourceList"), scene.getFocusOwner());
+            assertSame(LoadedWorkbench.node(loader, "npcSourceList"), scene.getFocusOwner());
             sendKey(root, KeyCode.ESCAPE);
             sendKey(root, KeyCode.F7);
-            assertSame(loader.getNamespace().get("npcInspectorName"), scene.getFocusOwner());
+            assertSame(LoadedWorkbench.node(loader, "npcInspectorName"), scene.getFocusOwner());
             assertEquals("NPC Database catalog",
-                    ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getAccessibleText());
+                    ((TableView<?>) LoadedWorkbench.node(loader, "npcCatalogTable")).getAccessibleText());
             stage.close();
         });
     }

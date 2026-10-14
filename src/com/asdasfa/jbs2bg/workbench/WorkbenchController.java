@@ -4,9 +4,7 @@ import static com.asdasfa.jbs2bg.workbench.WorkbenchFocusPolicy.canRestoreFocus;
 import static com.asdasfa.jbs2bg.workbench.WorkbenchFocusPolicy.ownsSceneFocus;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.time.Clock;
-import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,17 +13,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.function.Function;
 
 import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.Settings;
-import com.asdasfa.jbs2bg.filtering.ColumnCriterion;
-import com.asdasfa.jbs2bg.filtering.FilterColumn;
-import com.asdasfa.jbs2bg.filtering.NpcTableColumns;
-import com.asdasfa.jbs2bg.filtering.ProjectIdentities;
-import com.asdasfa.jbs2bg.filtering.SortKey;
-import com.asdasfa.jbs2bg.filtering.SortDirection;
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.filtering.NameIdentity;
@@ -38,7 +29,7 @@ import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseFeature;
-import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseImporter;
+import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseArea;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 import com.asdasfa.jbs2bg.workbench.output.OutputDrawer;
@@ -51,10 +42,6 @@ import com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunner;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.DoubleBinding;
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.ReadOnlyStringWrapper;
-import javafx.beans.property.SimpleBooleanProperty;
-import javafx.collections.FXCollections;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.geometry.Bounds;
@@ -73,10 +60,6 @@ import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Slider;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableRow;
-import javafx.scene.control.TableView;
-import javafx.scene.control.cell.CheckBoxListCell;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
@@ -217,89 +200,7 @@ public final class WorkbenchController {
     @FXML
     private Button importBodySlideButton;
     @FXML
-    private ScrollPane npcDatabasePrimaryScroll;
-    @FXML
-    private Label npcSourceCountText;
-    @FXML
-    private ListView<NpcDatabaseFeature.Source> npcSourceList;
-    @FXML
-    private Button importNpcSourcesButton;
-    @FXML
-    private Button removeNpcSourceButton;
-    @FXML
-    private Button clearNpcDatabaseButton;
-    @FXML
     private Button addNpcsFromDatabaseButton;
-    @FXML
-    private VBox npcDatabaseEditorContent;
-    @FXML
-    private Button backToMorphsButton;
-    @FXML
-    private HBox npcPromotionInfoBar;
-    @FXML
-    private Label npcPromotionInfoBarCue;
-    @FXML
-    private Label npcPromotionInfoBarMessage;
-    @FXML
-    private Button dismissNpcPromotionInfoBarButton;
-    @FXML
-    private Label npcCatalogSummary;
-    @FXML
-    private ComboBox<String> npcSortChoice;
-    @FXML
-    private ToggleButton npcNameFilterButton;
-    @FXML
-    private ToggleButton npcMasterFilterButton;
-    @FXML
-    private ToggleButton npcRaceFilterButton;
-    @FXML
-    private ToggleButton npcEditorIdFilterButton;
-    @FXML
-    private ToggleButton npcFormIdFilterButton;
-    @FXML
-    private Button clearNpcFiltersButton;
-    @FXML
-    private TableView<NPC> npcCatalogTable;
-    @FXML
-    private Button addAllNpcsToProjectButton;
-    @FXML
-    private TextArea npcPromotionDetails;
-    @FXML
-    private TableColumn<NPC, String> npcNameColumn;
-    @FXML
-    private TableColumn<NPC, String> npcMasterColumn;
-    @FXML
-    private TableColumn<NPC, String> npcRaceColumn;
-    @FXML
-    private TableColumn<NPC, String> npcEditorIdColumn;
-    @FXML
-    private TableColumn<NPC, String> npcFormIdColumn;
-    @FXML
-    private ScrollPane npcDatabaseInspectorScroll;
-    @FXML
-    private Label npcInspectorName;
-    @FXML
-    private Label npcInspectorSource;
-    @FXML
-    private Label npcInspectorMaster;
-    @FXML
-    private Label npcInspectorEditorId;
-    @FXML
-    private Label npcInspectorRace;
-    @FXML
-    private Label npcInspectorFormId;
-    @FXML
-    private Button addNpcToProjectButton;
-    @FXML
-    private javafx.scene.control.CheckBox assignRandomNpcPresetCheck;
-    @FXML
-    private ImageView npcDatabasePortraitImage;
-    @FXML
-    private Label npcDatabasePortraitStatus;
-    @FXML
-    private Button openNpcDatabasePortraitViewerButton;
-    @FXML
-    private Label npcDatabaseDiagnostics;
     @FXML
     private VBox templatesEditorContent;
     @FXML
@@ -461,7 +362,6 @@ public final class WorkbenchController {
     private TemplatesFeature templatesFeature;
     private MorphsFeature morphsFeature;
     private NpcDatabaseFeature npcDatabaseFeature;
-    private NpcDatabaseImporter npcDatabaseImporter;
     private SettingsFeature settingsFeature;
     // Admits, runs, retries, and settles Settings persistence; the shell keeps only the token-keyed close continuation.
     private SettingsJobRunner settingsJobs;
@@ -496,13 +396,13 @@ public final class WorkbenchController {
     private final Map<WorkbenchNavigation.Area, Map<String, Object>> areaNamespaces =
             new EnumMap<>(WorkbenchNavigation.Area.class);
     private SettingsArea settingsArea;
+    private NpcDatabaseArea npcDatabaseArea;
     // The Output drawer module, loaded from its own FXML; it is not an Area, so it has its own small interface.
     private OutputDrawer outputDrawer;
     // The Output drawer FXML's fx:id namespace; read only by tests that drive the whole loaded Workbench.
     private Map<String, Object> outputDrawerNamespace = Map.of();
     private boolean renderingTemplates;
     private boolean renderingMorphs;
-    private boolean renderingNpcDatabase;
     private boolean templatesOwnProjectDiagnostics;
     private boolean morphsOwnProjectDiagnostics;
     private TextField activeRenameField;
@@ -521,14 +421,8 @@ public final class WorkbenchController {
     private SatelliteRegistry satellites;
     // The shared portrait viewer's thumbnail loaders for the Morphs and NPC Database inspectors.
     private NpcPortraitViewer.Thumbnail morphsPortrait;
-    private NpcPortraitViewer.Thumbnail npcDatabasePortrait;
     private Popup fillEmptyPopup;
     private Parent fillEmptyPopupRoot;
-    private Popup npcFilterPopup;
-    private Parent npcFilterPopupRoot;
-    private String npcFilterExpandedColumn;
-    private final Map<String, ToggleButton> npcFilterButtons = new LinkedHashMap<>();
-    private final Map<String, List<SortKey>> npcSortChoices = new LinkedHashMap<>();
     private final Map<String, SliderChoiceRow> sliderChoiceRowsByName = new LinkedHashMap<>();
 
     /**
@@ -661,7 +555,6 @@ public final class WorkbenchController {
         templatesFeature = new TemplatesFeature(projectFlow, settings::snapshot, Clock.systemUTC());
         morphsFeature = new MorphsFeature(projectFlow, Clock.systemUTC());
         npcDatabaseFeature = new NpcDatabaseFeature(projectFlow, Clock.systemUTC());
-        npcDatabaseImporter = new NpcDatabaseImporter(npcDatabaseFeature, projectFlow.jobs(), this::renderNpcDatabase);
         settingsFeature = new SettingsFeature(settings, environment.settingsStartup(),
                 environment.preferencesDirectory(), environment.migrationPolicy());
         settingsJobs = new SettingsJobRunner(settingsFeature, settings, projectFlow.jobs(),
@@ -722,14 +615,12 @@ public final class WorkbenchController {
                         WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
         morphsPortrait = portraits.thumbnail(npcPortraitImage, npcPortraitStatus, openNpcPortraitViewerButton,
                 "Select an NPC Morph Assignment to inspect its portrait.");
-        npcDatabasePortrait = portraits.thumbnail(npcDatabasePortraitImage, npcDatabasePortraitStatus,
-                openNpcDatabasePortraitViewerButton, "Select an NPC Database entry to inspect its portrait.");
-        // Every feature exists by now, so the Areas load next, before any configure step can render.
-        loadAreas();
+        // Every feature exists by now, so the Areas load next, before any configure step can render. The NPC
+        // Database Area binds its own inspector thumbnail to the shared viewer.
+        loadAreas(portraits);
         configureProjectCommands();
         configureTemplates();
         configureMorphs();
-        configureNpcDatabase();
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
@@ -746,8 +637,6 @@ public final class WorkbenchController {
         stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> {
             if (fillEmptyPopup != null)
                 fillEmptyPopup.hide();
-            if (npcFilterPopup != null)
-                npcFilterPopup.hide();
             satellites.dismissAll();
             appearanceAdapter.close();
             jobSubscription.close();
@@ -1042,14 +931,6 @@ public final class WorkbenchController {
                     npc.getDisplayName());
     }
 
-    /** Follows stable NPC Database selection through the shared viewer's thumbnail loader. */
-    private void renderNpcDatabasePortrait(NPC npc) {
-        if (npc == null)
-            npcDatabasePortrait.clear();
-        else
-            npcDatabasePortrait.show(ProjectIdentities.npcDatabaseEntry(npc), npc.getName());
-    }
-
     /** Configures the current assigned-relationship ListView, including identity selection dispatch. */
     private void configureAssignedMorphSliderPresetList() {
         assignedMorphSliderPresetList.setCellFactory(list -> new SliderPresetDisplayCell());
@@ -1148,176 +1029,11 @@ public final class WorkbenchController {
         });
     }
 
-    /** Connects source management, column filtering, catalog sorting, and selection to one window-scoped catalog. */
-    private void configureNpcDatabase() {
-        npcSourceList.setCellFactory(list -> new ListCell<>() {
-            /** {@inheritDoc} */
-            @Override
-            protected void updateItem(NpcDatabaseFeature.Source source, boolean empty) {
-                super.updateItem(source, empty);
-                if (empty || source == null) {
-                    setText(null);
-                    setAccessibleText(null);
-                    setAccessibleHelp(null);
-                    return;
-                }
-                String count = source.rowCount() + (source.rowCount() == 1 ? " row" : " rows");
-                setText(source.path().getFileName() + " — " + count);
-                setAccessibleText(source.path().getFileName() + ", " + count);
-                setAccessibleHelp("Source file: " + source.path());
-            }
-        });
-        npcSourceList.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
-            if (!renderingNpcDatabase)
-                dispatchNpcDatabase(new NpcDatabaseFeature.SelectSource(
-                        selected == null ? Optional.empty() : Optional.of(selected.path())));
-        });
-        npcNameColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getName()));
-        npcMasterColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getMod()));
-        npcRaceColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getRace()));
-        npcEditorIdColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getEditorId()));
-        npcFormIdColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getFormId()));
-        npcCatalogTable.setRowFactory(table -> new TableRow<>() {
-            /** {@inheritDoc} */
-            @Override
-            protected void updateItem(NPC npc, boolean empty) {
-                super.updateItem(npc, empty);
-                setAccessibleText(empty || npc == null ? null : npc.getName() + ". Plugin: " + npc.getMod()
-                        + ". Editor ID: " + npc.getEditorId() + ". Race: " + npc.getRace()
-                        + ". Form ID: " + npc.getFormId() + ".");
-            }
-        });
-        npcCatalogTable.setSortPolicy(table -> {
-            if (renderingNpcDatabase)
-                return true;
-            List<SortKey> keys = new ArrayList<>();
-            for (TableColumn<NPC, ?> column : table.getSortOrder()) {
-                keys.add(column.getSortType() == TableColumn.SortType.DESCENDING
-                        ? SortKey.descending(column.getText()) : SortKey.ascending(column.getText()));
-            }
-            dispatchNpcDatabase(new NpcDatabaseFeature.ChangeSort(keys));
-            return true;
-        });
-        npcCatalogTable.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
-            if (!renderingNpcDatabase)
-                dispatchNpcDatabase(selected == null ? new NpcDatabaseFeature.ClearSelection()
-                        : new NpcDatabaseFeature.SelectRow(ProjectIdentities.npcDatabaseEntry(selected)));
-        });
-        npcCatalogTable.addEventFilter(KeyEvent.KEY_TYPED, event -> {
-            if (event.getCharacter().length() == 1 && !event.isControlDown() && !event.isAltDown()
-                    && !Character.isISOControl(event.getCharacter().charAt(0))
-                    && !Character.isWhitespace(event.getCharacter().charAt(0))) {
-                dispatchNpcDatabase(new NpcDatabaseFeature.TypeAhead(event.getCharacter().charAt(0)));
-                event.consume();
-            }
-        });
-        npcCatalogTable.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (event.getCode() == KeyCode.ENTER) {
-                dispatchNpcDatabase(new NpcDatabaseFeature.AddSelected());
-                event.consume();
-            }
-        });
-        npcSortChoices.put("Source order", List.of());
-        for (FilterColumn<NPC> column : NpcTableColumns.npcDatabase()) {
-            npcSortChoices.put(column.getId() + " ascending", List.of(SortKey.ascending(column.getId())));
-            npcSortChoices.put(column.getId() + " descending", List.of(SortKey.descending(column.getId())));
-        }
-        npcSortChoice.getItems().setAll(npcSortChoices.keySet());
-        npcSortChoice.setAccessibleHelp("NPC Database sort: source order or any catalog column ascending or descending.");
-        npcSortChoice.setOnAction(event -> {
-            if (!renderingNpcDatabase && npcSortChoices.containsKey(npcSortChoice.getValue()))
-                dispatchNpcDatabase(new NpcDatabaseFeature.ChangeSort(npcSortChoices.get(npcSortChoice.getValue())));
-        });
-        npcFilterButtons.put("Name", npcNameFilterButton);
-        npcFilterButtons.put("Master", npcMasterFilterButton);
-        npcFilterButtons.put("Race", npcRaceFilterButton);
-        npcFilterButtons.put("EditorID", npcEditorIdFilterButton);
-        npcFilterButtons.put("FormID", npcFormIdFilterButton);
-        npcFilterButtons.forEach((column, button) ->
-                button.setOnAction(event -> showNpcColumnFilter(column, button)));
-        clearNpcFiltersButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.ClearAllCriteria()));
-        importNpcSourcesButton.setOnAction(event -> chooseNpcSources());
-        removeNpcSourceButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.RequestRemoveSource()));
-        clearNpcDatabaseButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.RequestClearVisible()));
-        addNpcToProjectButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.AddSelected()));
-        addAllNpcsToProjectButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.AddAllVisible()));
-        backToMorphsButton.setOnAction(event -> dispatchNpcDatabase(new NpcDatabaseFeature.BackToMorphs()));
-        dismissNpcPromotionInfoBarButton.setOnAction(event ->
-                dispatchNpcDatabase(new NpcDatabaseFeature.DismissPromotionReport()));
-        assignRandomNpcPresetCheck.setOnAction(event -> {
-            if (!renderingNpcDatabase)
-                dispatchNpcDatabase(new NpcDatabaseFeature.SetAssignRandom(assignRandomNpcPresetCheck.isSelected()));
-        });
-        // openNpcDatabasePortraitViewerButton is wired by its portrait thumbnail (see attach).
-        renderNpcDatabase(npcDatabaseFeature.frame());
-    }
-
     /** Opens the catalog from its Morphs launcher with a semantic return target. */
     private void openNpcDatabaseFromMorphs() {
         applyNavigation(navigation.navigate(WorkbenchNavigation.Destination.NPC_DATABASE,
                 new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.MORPHS,
                         WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER)));
-    }
-
-    /**
-     * Runs one NPC Database intent through the gated dispatch pipeline: promotion and catalog removal are refused
-     * while any job runs, not only a Project-exclusive one, and every accepted intent renders its committed catalog
-     * frame.
-     */
-    private void dispatchNpcDatabase(NpcDatabaseFeature.Intent intent) {
-        pipeline.dispatch(npcDatabaseFeature, DispatchPipeline.Gate.ANY_JOB, DispatchPipeline.Callbacks.of(
-                this::renderNpcDatabaseUpdate, this::realizeNpcDatabaseEffect, this::reportNpcDatabaseOutcome),
-                Objects.requireNonNull(intent, "intent"));
-    }
-
-    /**
-     * Renders one NPC Database update. A promotion first reconciles the Project chrome and the other Areas with the
-     * snapshot it published, as the update carries no Project sequence for the pipeline's generic chrome step: that
-     * step would project the Project frame's diagnostics, which the NPC Database reports itself.
-     */
-    private void renderNpcDatabaseUpdate(NpcDatabaseFeature.Update update) {
-        update.promotion().ifPresent(report -> renderPromotedProject(report.bulk()));
-        renderNpcDatabase(update.frame());
-    }
-
-    /** Re-renders the Project chrome and the other Areas after Add or Add All published a Project snapshot. */
-    private void renderPromotedProject(boolean bulk) {
-        // NPC Database owns these diagnostics and task wording. Suppress the generic lifecycle feedback while
-        // Project chrome and other Areas reconcile the final snapshot after promotion has published.
-        templatesOwnProjectDiagnostics = true;
-        morphsOwnProjectDiagnostics = true;
-        try {
-            WorkbenchProjectFlow.Frame projectFrame = projectFlow.frame();
-            renderedProjectSequence = projectFrame.sequence();
-            // The bulk report presents every row diagnostic locally; projecting the Project frame here would
-            // expose either a final row's diagnostic or the same aggregate on an unrelated global surface.
-            render(projectFrame, bulk ? List.of() : projectFrame.diagnostics());
-        } finally {
-            templatesOwnProjectDiagnostics = false;
-            morphsOwnProjectDiagnostics = false;
-        }
-    }
-
-    /**
-     * Realizes one NPC Database effect: source-management confirmations run as the pipeline's dialog round-trip,
-     * and the return to Morphs is handled here.
-     */
-    private DispatchPipeline.Realization<NpcDatabaseFeature.Update> realizeNpcDatabaseEffect(
-            NpcDatabaseFeature.Effect effect) {
-        return switch (Objects.requireNonNull(effect, "effect")) {
-            case NpcDatabaseFeature.ConfirmRemoveSource remove -> confirmNpcDatabaseAction(remove.token(),
-                    WorkbenchFeedback.DialogSpec.destructiveAction("Remove NPC Database source?",
-                            "Remove " + remove.source().getFileName() + " from this session's catalog?",
-                            WorkbenchFeedback.DialogAction.REMOVE), WorkbenchFeedback.DialogAction.REMOVE);
-            case NpcDatabaseFeature.ConfirmClearVisible clear -> confirmNpcDatabaseAction(clear.token(),
-                    WorkbenchFeedback.DialogSpec.destructiveAction("Clear visible NPC Database entries?",
-                            "Clear " + clear.identities().size() + " visible entries from this session's catalog?",
-                            WorkbenchFeedback.DialogAction.CLEAR), WorkbenchFeedback.DialogAction.CLEAR);
-            case NpcDatabaseFeature.ReturnToMorphs returning -> {
-                returnToMorphs(returning.assignment());
-                yield DispatchPipeline.Realization.done();
-            }
-        };
     }
 
     /**
@@ -1333,397 +1049,23 @@ public final class WorkbenchController {
     }
 
     /**
-     * Maps one settled NPC Database dispatch to feedback: a promotion is reported at its UI tier, a confirmed
-     * removal or clear is recorded in Activity, and type-ahead scrolls the selected row into view.
-     */
-    private void reportNpcDatabaseOutcome(
-            DispatchPipeline.Outcome<NpcDatabaseFeature.Intent, NpcDatabaseFeature.Update> outcome) {
-        NpcDatabaseFeature.Update update = outcome.settled();
-        switch (outcome.intent()) {
-            case NpcDatabaseFeature.AddSelected ignored ->
-                    publishPromotion(outcome.update().promotion().orElseThrow());
-            case NpcDatabaseFeature.AddAllVisible ignored ->
-                    publishPromotion(outcome.update().promotion().orElseThrow());
-            case NpcDatabaseFeature.RequestRemoveSource ignored -> {
-                if (outcome.answer().filter(WorkbenchFeedback.DialogAction.REMOVE::equals).isPresent()) {
-                    Path source = ((NpcDatabaseFeature.ConfirmRemoveSource) outcome.update().effect().orElseThrow())
-                            .source();
-                    renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
-                            "Remove NPC Database Source", WorkbenchFeedback.Severity.SUCCESS,
-                            "Removed source " + source.getFileName() + ".",
-                            WorkbenchFeedback.Disposition.COMPLETED)));
-                }
-            }
-            case NpcDatabaseFeature.RequestClearVisible ignored -> {
-                if (outcome.answer().filter(WorkbenchFeedback.DialogAction.CLEAR::equals).isPresent()) {
-                    int cleared = ((NpcDatabaseFeature.ConfirmClearVisible) outcome.update().effect()
-                            .orElseThrow()).identities().size();
-                    renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
-                            "Clear visible NPC Database entries", WorkbenchFeedback.Severity.SUCCESS,
-                            "Cleared " + cleared + " visible entries.", WorkbenchFeedback.Disposition.COMPLETED)));
-                }
-            }
-            case NpcDatabaseFeature.TypeAhead ignored -> update.frame().selectedRow().ifPresent(row ->
-                    npcCatalogTable.scrollTo(update.frame().visibleRows().indexOf(row)));
-            default -> {
-                // Selection, filtering, sorting, visit state and the return to Morphs report through their render.
-            }
-        }
-    }
-
-    /** Reports one completed Add or Add All at its UI tier: Add on the status line, Add All in Activity. */
-    private void publishPromotion(NpcDatabaseFeature.PromotionReport report) {
-        boolean bulk = report.bulk();
-        boolean issues = report.rejectedCount() > 0 || report.duplicateCount() > 0
-                || report.entries().isEmpty();
-        WorkbenchFeedback.Severity severity = promotionSeverity(report);
-        WorkbenchFeedback.Disposition disposition = issues
-                ? WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES
-                : WorkbenchFeedback.Disposition.COMPLETED;
-        WorkbenchFeedback.Notification notification = new WorkbenchFeedback.Notification(
-                bulk ? "Add All NPCs to Project" : "Add NPC to Project", severity,
-                promotionSummary(report), disposition);
-        if (bulk) {
-            String details = promotionDetails(report);
-            renderFeedback(details.isEmpty() ? feedback.publishActivity(notification)
-                    : feedback.publishActivityDetailed(notification, details));
-        } else {
-            renderFeedback(feedback.publishStatus(notification));
-        }
-    }
-
-    /** Builds a concise outcome summary; the inline details retain every duplicate and rejection. */
-    private static String promotionSummary(NpcDatabaseFeature.PromotionReport report) {
-        if (report.entries().isEmpty())
-            return report.bulk() ? "No visible NPC Database entries to add."
-                    : "Select an NPC Database entry to add.";
-        if (!report.bulk()) {
-            NpcDatabaseFeature.PromotionEntry entry = report.entries().getFirst();
-            return switch (entry.status()) {
-                case ADDED -> "Added " + entry.displayName() + " to the Project.";
-                case DUPLICATE -> "Already in the Project: " + entry.displayName() + ".";
-                case REJECTED, FAILED -> "Could not add " + entry.displayName() + ": "
-                        + ProjectDiagnosticFormatter.format(entry.diagnostics());
-                case UNCHANGED -> "No Project change for " + entry.displayName() + ".";
-            };
-        }
-        return "Added " + report.addedCount() + " NPC Morph Assignments; " + report.duplicateCount()
-                + " already in the Project; " + report.rejectedCount() + " rejected.";
-    }
-
-    /** Keeps pane, status, and Activity cues aligned for the same promotion outcome. */
-    private static WorkbenchFeedback.Severity promotionSeverity(NpcDatabaseFeature.PromotionReport report) {
-        if (report.entries().stream().anyMatch(entry ->
-                entry.status() == NpcDatabaseFeature.PromotionStatus.FAILED))
-            return WorkbenchFeedback.Severity.FAILURE;
-        if (report.rejectedCount() > 0)
-            return WorkbenchFeedback.Severity.WARNING;
-        return report.duplicateCount() > 0 || report.entries().isEmpty()
-                ? WorkbenchFeedback.Severity.VALIDATION : WorkbenchFeedback.Severity.SUCCESS;
-    }
-
-    /** Formats every non-added identity with its Project diagnostic for the scrollable inline report. */
-    private static String promotionDetails(NpcDatabaseFeature.PromotionReport report) {
-        List<String> details = new ArrayList<>();
-        for (NpcDatabaseFeature.PromotionEntry entry : report.entries()) {
-            if (entry.status() == NpcDatabaseFeature.PromotionStatus.ADDED)
-                continue;
-            String identity = entry.identity().getPluginName() + " / " + entry.identity().getEditorId();
-            String diagnostic = entry.diagnostics().isEmpty() ? entry.status().name()
-                    : ProjectDiagnosticFormatter.format(entry.diagnostics());
-            details.add(identity + " — " + diagnostic);
-        }
-        return String.join(System.lineSeparator(), details);
-    }
-
-    /** Opens a keyboard checklist for one named column; its choices come from all catalog rows. */
-    private void showNpcColumnFilter(String columnId, ToggleButton launcher) {
-        if (npcFilterPopup != null) {
-            boolean sameColumn = columnId.equals(npcFilterExpandedColumn);
-            npcFilterPopup.hide();
-            if (sameColumn)
-                return;
-        }
-        FilterColumn<NPC> column = NpcTableColumns.npcDatabase().stream()
-                .filter(candidate -> candidate.getId().equals(columnId)).findFirst().orElseThrow();
-        ColumnCriterion criterion = npcDatabaseFeature.frame().criteria().stream()
-                .filter(candidate -> candidate.getColumnId().equals(columnId)).findFirst().orElse(null);
-        Set<String> values = new TreeSet<>();
-        for (NPC row : npcDatabaseFeature.frame().rows())
-            values.add(column.cellValueOf(row));
-        List<NpcFilterChoice> choices = values.stream()
-                .map(value -> new NpcFilterChoice(value, criterion == null || criterion.admits(value))).toList();
-        ListView<NpcFilterChoice> checklist = new ListView<>(FXCollections.observableArrayList(choices));
-        checklist.setId("npcColumnFilterChoices");
-        checklist.setAccessibleText(columnId + " NPC Database filter choices");
-        checklist.setCellFactory(CheckBoxListCell.forListView(NpcFilterChoice::selectedProperty));
-        checklist.setPrefHeight(210.0);
-        checklist.setPrefWidth(245.0);
-        Button all = new Button("All");
-        all.setAccessibleText("Show all " + columnId + " values");
-        all.setOnAction(event -> choices.forEach(choice -> choice.setSelected(true)));
-        Button none = new Button("None");
-        none.setAccessibleText("Hide all " + columnId + " values");
-        none.setOnAction(event -> choices.forEach(choice -> choice.setSelected(false)));
-        Button apply = new Button("Apply");
-        apply.setAccessibleText("Apply " + columnId + " filter");
-        Button cancel = new Button("Cancel");
-        cancel.setAccessibleText("Cancel " + columnId + " filter");
-        HBox actions = new HBox(6.0, all, none, apply, cancel);
-        VBox content = new VBox(8.0, new Label("Filter " + columnId), checklist, actions);
-        content.setId("workbenchRoot");
-        content.getStyleClass().add("npc-column-filter-popup");
-        content.setAccessibleText(columnId + " NPC Database filter checklist");
-        Popup popup = new Popup();
-        popup.setAutoHide(true);
-        popup.setConsumeAutoHidingEvents(true);
-        popup.getContent().setAll(content);
-        popup.getScene().getStylesheets().add(WorkbenchController.class
-                .getResource("/com/asdasfa/jbs2bg/workbench.css").toExternalForm());
-        apply.setOnAction(event -> {
-            List<String> hidden = choices.stream().filter(choice -> !choice.isSelected())
-                    .map(NpcFilterChoice::value).toList();
-            dispatchNpcDatabase(new NpcDatabaseFeature.SetCriterion(ColumnCriterion.hiding(columnId, hidden)));
-            popup.hide();
-        });
-        cancel.setOnAction(event -> popup.hide());
-        checklist.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (event.getCode() == KeyCode.SPACE && checklist.getSelectionModel().getSelectedItem() != null) {
-                NpcFilterChoice choice = checklist.getSelectionModel().getSelectedItem();
-                choice.setSelected(!choice.isSelected());
-                event.consume();
-            } else if (event.getCode() == KeyCode.ENTER) {
-                apply.fire();
-                event.consume();
-            }
-        });
-        // The focused ListView may consume Escape before Popup hideOnEscape sees it in the packaged runtime.
-        popup.getScene().addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (event.getCode() == KeyCode.ESCAPE) {
-                popup.hide();
-                event.consume();
-            }
-        });
-        npcFilterPopup = popup;
-        npcFilterPopupRoot = content;
-        npcFilterExpandedColumn = columnId;
-        applySatelliteAppearance(content);
-        renderNpcFilterButtons(npcDatabaseFeature.frame());
-        popup.setOnHidden(event -> {
-            npcFilterPopup = null;
-            npcFilterPopupRoot = null;
-            npcFilterExpandedColumn = null;
-            renderNpcFilterButtons(npcDatabaseFeature.frame());
-            focusPolicy.restoreAfterSatellite(launcher, WorkbenchNavigation.Landmark.EDITOR);
-        });
-        Bounds anchor = launcher.localToScreen(launcher.getBoundsInLocal());
-        popup.show(stage, anchor.getMinX(), anchor.getMaxY());
-        checklist.getSelectionModel().selectFirst();
-        checklist.requestFocus();
-    }
-
-    /** Keeps each filter button's text, toggle state, and expanded/active description in sync with the feature. */
-    private void renderNpcFilterButtons(NpcDatabaseFeature.Frame frame) {
-        npcFilterButtons.forEach((column, button) -> {
-            boolean active = frame.criteria().stream().anyMatch(criterion ->
-                    criterion.getColumnId().equals(column));
-            boolean expanded = npcFilterPopup != null && column.equals(npcFilterExpandedColumn);
-            button.setText(column + (active ? " *" : ""));
-            button.setSelected(expanded);
-            button.setAccessibleHelp(column + " column filter, " + (active ? "active" : "inactive")
-                    + ", " + (expanded ? "expanded" : "collapsed")
-                    + ". Enter or Space opens the checklist."
-                    + (frame.rows().isEmpty() ? " No catalog values yet." : ""));
-        });
-    }
-
-    /** One checklist cell whose selected state means its exact column value stays visible. */
-    private static final class NpcFilterChoice {
-        private final String value;
-        private final BooleanProperty selected;
-
-        /** Captures one exact visible column value for an open filter checklist. */
-        private NpcFilterChoice(String value, boolean selected) {
-            this.value = Objects.requireNonNull(value, "value");
-            this.selected = new SimpleBooleanProperty(selected);
-        }
-
-        /** @return exact cell value */
-        private String value() {
-            return value;
-        }
-
-        /** @return whether this value remains visible if the checklist is applied */
-        private boolean isSelected() {
-            return selected.get();
-        }
-
-        /** Changes this pending checklist choice without affecting the catalog until Apply. */
-        private void setSelected(boolean selected) {
-            this.selected.set(selected);
-        }
-
-        /** @return JavaFX property used only by the checkbox cell */
-        private BooleanProperty selectedProperty() {
-            return selected;
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public String toString() {
-            return value;
-        }
-    }
-
-    /**
-     * Renders the immutable catalog frame while suppressing selection echoes from JavaFX list replacements. This is
-     * the only writer of the source-management buttons; whether a job blocks them comes from the shell's context.
-     */
-    private void renderNpcDatabase(NpcDatabaseFeature.Frame frame) {
-        renderingNpcDatabase = true;
-        try {
-            UiaListHelper.setAllIfChanged(npcSourceList.getItems(), frame.sources());
-            NpcDatabaseFeature.Source selectedSource = npcSourceList.getSelectionModel().getSelectedItem();
-            Optional<Path> currentSource = selectedSource == null ? Optional.empty()
-                    : Optional.of(selectedSource.path());
-            if (!currentSource.equals(frame.selectedSource())) {
-                npcSourceList.getSelectionModel().clearSelection();
-                frame.selectedSource().ifPresent(path -> frame.sources().stream()
-                        .filter(source -> source.path().equals(path)).findFirst()
-                        .ifPresent(npcSourceList.getSelectionModel()::select));
-            }
-            UiaListHelper.setAllIfChanged(npcCatalogTable.getItems(), frame.visibleRows());
-            List<TableColumn<NPC, ?>> sortedColumns = new ArrayList<>();
-            for (SortKey key : frame.sortOrder()) {
-                TableColumn<NPC, ?> column = npcCatalogTable.getColumns().stream()
-                        .filter(candidate -> candidate.getText().equals(key.getColumnId()))
-                        .findFirst().orElseThrow();
-                column.setSortType(key.getDirection() == SortDirection.DESCENDING
-                        ? TableColumn.SortType.DESCENDING : TableColumn.SortType.ASCENDING);
-                sortedColumns.add(column);
-            }
-            UiaListHelper.setAllIfChanged(npcCatalogTable.getSortOrder(), sortedColumns);
-            String sortLabel = npcSortChoices.entrySet().stream()
-                    .filter(entry -> entry.getValue().equals(frame.sortOrder()))
-                    .map(Map.Entry::getKey).findFirst().orElse("Multiple columns");
-            npcSortChoice.setValue(sortLabel);
-            NPC selectedTableRow = npcCatalogTable.getSelectionModel().getSelectedItem();
-            Optional<NpcMorphAssignmentIdentity> currentRow = selectedTableRow == null ? Optional.empty()
-                    : Optional.of(ProjectIdentities.npcDatabaseEntry(selectedTableRow));
-            Optional<NpcMorphAssignmentIdentity> selectedRow = frame.selectedRow()
-                    .map(ProjectIdentities::npcDatabaseEntry);
-            if (!currentRow.equals(selectedRow)) {
-                npcCatalogTable.getSelectionModel().clearSelection();
-                frame.selectedRow().ifPresent(selected -> npcCatalogTable.getItems().stream()
-                        .filter(row -> ProjectIdentities.npcDatabaseEntry(row)
-                                .equals(ProjectIdentities.npcDatabaseEntry(selected)))
-                        .findFirst().ifPresent(npcCatalogTable.getSelectionModel()::select));
-            }
-            renderNpcDatabaseLabel(npcSourceCountText, frame.sources().size() + (frame.sources().size() == 1
-                    ? " source loaded" : " sources loaded"));
-            String summary = frame.visibleRows().size() + " of " + frame.rows().size()
-                    + " NPC Database entries visible; " + frame.criteria().size() + " filtered columns.";
-            renderNpcDatabaseLabel(npcCatalogSummary, summary);
-            npcCatalogTable.setAccessibleHelp(summary + " Select a row to inspect its details.");
-            boolean blocked = context.anyJobActive();
-            assignRandomNpcPresetCheck.setSelected(frame.assignRandom());
-            importNpcSourcesButton.setDisable(blocked);
-            removeNpcSourceButton.setDisable(blocked || frame.selectedSource().isEmpty());
-            clearNpcDatabaseButton.setDisable(blocked || frame.visibleRows().isEmpty());
-            addNpcToProjectButton.setDisable(blocked || frame.selectedRow().isEmpty());
-            addAllNpcsToProjectButton.setDisable(blocked || frame.visibleRows().isEmpty());
-            assignRandomNpcPresetCheck.setDisable(blocked);
-            clearNpcFiltersButton.setDisable(frame.criteria().isEmpty());
-            renderNpcFilterButtons(frame);
-            NPC selected = frame.selectedRow().orElse(null);
-            renderNpcDatabaseLabel(npcInspectorName, selected == null ? "No NPC selected" : selected.getName());
-            renderNpcDatabaseLabel(npcInspectorSource, "Source: " + (selected == null ? "none"
-                    : frame.sourceOf(selected).map(Path::toString).orElse("unknown")));
-            renderNpcDatabaseLabel(npcInspectorMaster, "Plugin: " + (selected == null ? "none" : selected.getMod()));
-            renderNpcDatabaseLabel(npcInspectorEditorId,
-                    "Editor ID: " + (selected == null ? "none" : selected.getEditorId()));
-            renderNpcDatabaseLabel(npcInspectorRace, "Race: " + (selected == null ? "none" : selected.getRace()));
-            renderNpcDatabaseLabel(npcInspectorFormId,
-                    "Form ID: " + (selected == null ? "none" : selected.getFormId()));
-            renderNpcDatabasePortrait(selected);
-            renderNpcDatabaseLabel(npcDatabaseDiagnostics, frame.diagnostics().isEmpty() ? "No source diagnostics"
-                    : String.join(System.lineSeparator(), frame.diagnostics().stream()
-                    .map(diagnostic -> diagnostic.code() + ": " + diagnostic.source()
-                            + (diagnostic.line().isPresent() ? ":" + diagnostic.line().orElseThrow() : "")
-                            + " — " + diagnostic.message()).toList()));
-            NpcDatabaseFeature.PromotionReport promotion = frame.promotionReport().orElse(null);
-            boolean showPromotion = promotion != null && (promotion.bulk() || promotion.entries().isEmpty()
-                    || promotion.addedCount() != 1);
-            npcPromotionInfoBar.setManaged(showPromotion);
-            npcPromotionInfoBar.setVisible(showPromotion);
-            if (showPromotion) {
-                WorkbenchFeedback.Severity severity = promotionSeverity(promotion);
-                String message = promotionSummary(promotion);
-                npcPromotionInfoBarCue.setText(severity.cue());
-                npcPromotionInfoBarMessage.setText(message);
-                npcPromotionInfoBar.setAccessibleHelp(severity.cue() + ": " + message);
-                setSeverityStyle(npcPromotionInfoBar, severity);
-            }
-            String details = promotion == null ? "" : promotionDetails(promotion);
-            npcPromotionDetails.setText(details);
-            npcPromotionDetails.setAccessibleHelp(details);
-            npcPromotionDetails.setManaged(!details.isEmpty());
-            npcPromotionDetails.setVisible(!details.isEmpty());
-        } finally {
-            renderingNpcDatabase = false;
-        }
-    }
-
-    /** Exposes a dynamic label value through UI Automation HelpText while its stable accessible name stays locatable. */
-    private static void renderNpcDatabaseLabel(Label label, String value) {
-        label.setText(value);
-        label.setAccessibleHelp(value);
-    }
-
-    /** Captures chooser paths once and admits their source-level transaction batch to the central coordinator. */
-    private void chooseNpcSources() {
-        Optional<List<Path>> selected = platform.chooseNpcSources(stage);
-        if (selected.isEmpty() || selected.orElseThrow().isEmpty()) {
-            renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
-                    "Import NPC Database Sources", WorkbenchFeedback.Severity.INFORMATION,
-                    "NPC Database import cancelled before reading sources.", WorkbenchFeedback.Disposition.CANCELLED)));
-            return;
-        }
-        List<Path> sources = selected.orElseThrow().stream().map(path -> path.toAbsolutePath().normalize()).toList();
-        JobCoordinator.Admission admission = npcDatabaseImporter.submit(sources);
-        if (!admission.admitted())
-            renderFeedback(feedback.publishStatus(new WorkbenchFeedback.Notification(
-                    "Import NPC Database Sources", WorkbenchFeedback.Severity.VALIDATION,
-                    "Another operation is active; retry the import when it finishes.",
-                    WorkbenchFeedback.Disposition.FAILED)));
-    }
-
-    /**
-     * Hands one source-management confirmation to the pipeline's dialog round-trip while retaining its launcher
-     * focus. The removal or clear acts on the operands the feature captured before the dialog: the selected source,
-     * or exactly the identities visible when the clear was requested.
-     */
-    private DispatchPipeline.Realization<NpcDatabaseFeature.Update> confirmNpcDatabaseAction(
-            long token, WorkbenchFeedback.DialogSpec spec, WorkbenchFeedback.DialogAction acceptance) {
-        WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
-        return DispatchPipeline.Realization.confirm(spec, action -> {
-            requestFocus(returnTarget);
-            return npcDatabaseFeature.respond(token, action == acceptance);
-        });
-    }
-
-    /**
      * Loads every extracted Area from its own FXML with constructor-injected collaborators, mounts its three panes
-     * into this shell's landmark containers, and renders it against the current context. Each pane is inserted where
-     * the Area's panes sat in the single Workbench FXML (Templates, Morphs, Settings, NPC Database), so the containers
-     * keep their child order. The Output drawer, which is not an Area, loads here too with the same shell port.
+     * into this shell's landmark containers, and renders it against the current context. The Areas mount in the order
+     * their panes sat in the single Workbench FXML (Templates, Morphs, Settings, NPC Database), each appended after
+     * the panes still declared in {@code workbench.fxml}, so the containers keep their child order. The Output
+     * drawer, which is not an Area, loads here too with the same shell port.
+     *
+     * @param portraits the shared NPC portrait viewer, handed to the NPC Database Area for its inspector thumbnail
      */
-    private void loadAreas() {
+    private void loadAreas(NpcPortraitViewer portraits) {
         ShellPort shell = new AreaShell();
         AreaLoader.Loaded<SettingsArea> settings = SettingsArea.load(settingsFeature, pipeline, shell);
         settingsArea = settings.area();
-        mountArea(WorkbenchNavigation.Area.SETTINGS, settings,
-                npcDatabasePrimaryScroll, npcDatabaseEditorContent, npcDatabaseInspectorScroll);
+        mountArea(WorkbenchNavigation.Area.SETTINGS, settings);
+        AreaLoader.Loaded<NpcDatabaseArea> npcDatabase = NpcDatabaseArea.load(npcDatabaseFeature, projectFlow.jobs(),
+                pipeline, platform, shell, portraits, satellites, stage);
+        npcDatabaseArea = npcDatabase.area();
+        mountArea(WorkbenchNavigation.Area.NPC_DATABASE, npcDatabase);
         mountOutputDrawer(OutputDrawer.load(outputFeature, pipeline, platform, shell, stage));
     }
 
@@ -1745,23 +1087,19 @@ public final class WorkbenchController {
     }
 
     /**
-     * Registers one loaded Area and places each of its panes into the matching landmark container, immediately before
-     * the given sibling from the next Area in FXML order. The Area renders the current context at once, as each Area's
+     * Registers one loaded Area and appends each of its panes to the matching landmark container, so Areas mounted in
+     * FXML order keep the containers' child order. The Area renders the current context at once, as each Area's
      * configure step did before it had its own FXML.
      *
-     * @param area            the Area the module renders
-     * @param loaded          the loaded module and its namespace
-     * @param primaryBefore   the primary-content sibling the primary pane goes before
-     * @param editorBefore    the editor sibling the editor pane goes before
-     * @param inspectorBefore the inspector sibling the inspector pane goes before
+     * @param area   the Area the module renders
+     * @param loaded the loaded module and its namespace
      */
-    private void mountArea(WorkbenchNavigation.Area area, AreaLoader.Loaded<? extends WorkbenchArea> loaded,
-                           Node primaryBefore, Node editorBefore, Node inspectorBefore) {
+    private void mountArea(WorkbenchNavigation.Area area, AreaLoader.Loaded<? extends WorkbenchArea> loaded) {
         WorkbenchArea module = loaded.area();
         AreaPanes panes = module.panes();
-        insertBefore(primaryPane, panes.getPrimary(), primaryBefore);
-        insertBefore(editorPane, panes.getEditor(), editorBefore);
-        insertBefore(inspectorPane, panes.getInspector(), inspectorBefore);
+        primaryPane.getChildren().add(panes.getPrimary());
+        editorPane.getChildren().add(panes.getEditor());
+        inspectorPane.getChildren().add(panes.getInspector());
         areaModules.put(area, module);
         areaNamespaces.put(area, loaded.namespace());
         module.render(context);
@@ -2007,6 +1345,51 @@ public final class WorkbenchController {
         @Override
         public void revealOutput() {
             applyNavigation(navigation.revealOutput());
+        }
+
+        /** Selects the promoted assignment in Morphs and navigates back to the Morphs launcher. */
+        @Override
+        public void returnToMorphs(Optional<NpcMorphAssignmentIdentity> assignment) {
+            WorkbenchController.this.returnToMorphs(Objects.requireNonNull(assignment, "assignment"));
+        }
+
+        /**
+         * Re-renders the Project chrome and the other Areas after an Area published a Project snapshot itself, with
+         * neither Templates nor Morphs projecting the change's diagnostics.
+         */
+        @Override
+        public void projectChanged(WorkbenchFeature.Update<?> update, boolean ownsDiagnostics) {
+            Objects.requireNonNull(update, "update");
+            // NPC Database owns these diagnostics and task wording. Suppress the generic lifecycle feedback while
+            // Project chrome and other Areas reconcile the final snapshot after promotion has published.
+            templatesOwnProjectDiagnostics = true;
+            morphsOwnProjectDiagnostics = true;
+            try {
+                WorkbenchProjectFlow.Frame projectFrame = projectFlow.frame();
+                renderedProjectSequence = projectFrame.sequence();
+                render(projectFrame, ownsDiagnostics ? List.of() : projectFrame.diagnostics());
+            } finally {
+                templatesOwnProjectDiagnostics = false;
+                morphsOwnProjectDiagnostics = false;
+            }
+        }
+
+        /** Classifies the current focus owner through the shell's focus policy. */
+        @Override
+        public WorkbenchNavigation.FocusTarget currentFocus() {
+            return currentSemanticFocus();
+        }
+
+        /** Requests the target through the shell's focus policy, with its Area-default fallback. */
+        @Override
+        public void requestFocus(WorkbenchNavigation.FocusTarget target) {
+            WorkbenchController.this.requestFocus(Objects.requireNonNull(target, "target"));
+        }
+
+        /** Restores focus after a satellite hid through the shell's focus policy. */
+        @Override
+        public void restoreFocusAfterSatellite(Node launcher, WorkbenchNavigation.Landmark fallback) {
+            focusPolicy.restoreAfterSatellite(launcher, fallback);
         }
     }
 
@@ -2970,8 +2353,6 @@ public final class WorkbenchController {
     private void renderAppearance(WorkbenchAppearance.Frame frame) {
         if (fillEmptyPopupRoot != null)
             JavaFxWorkbenchAppearance.applyTo(fillEmptyPopupRoot, frame);
-        if (npcFilterPopupRoot != null)
-            JavaFxWorkbenchAppearance.applyTo(npcFilterPopupRoot, frame);
         satellites.retheme(frame);
         String theme = switch (frame.effectiveTheme()) {
             case LIGHT -> "Light theme";
@@ -3036,12 +2417,6 @@ public final class WorkbenchController {
             event.consume();
             return;
         }
-        if (navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
-                && event.isControlDown() && event.getCode() == KeyCode.K) {
-            npcNameFilterButton.requestFocus();
-            event.consume();
-            return;
-        }
         WorkbenchArea activeModule = areaModule(navigationFrame.activeArea());
         if (activeModule != null && event.isControlDown() && event.getCode() == KeyCode.K) {
             activeModule.focusSearch();
@@ -3089,11 +2464,6 @@ public final class WorkbenchController {
                 || morphsFeature.frame().npcSelection().isPresent())) {
             dispatchMorphs(new MorphsFeature.ClearSelection());
             event.consume();
-        } else if (event.getCode() == KeyCode.ESCAPE
-                && navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
-                && npcDatabaseFeature.frame().selectedRow().isPresent()) {
-            dispatchNpcDatabase(new NpcDatabaseFeature.ClearSelection());
-            event.consume();
         } else if (event.getCode() == KeyCode.ESCAPE && activeModule != null && activeModule.escape()) {
             event.consume();
         }
@@ -3110,19 +2480,11 @@ public final class WorkbenchController {
      * Commits one navigation frame before realizing its optional tokenized focus effect.
      */
     private void applyNavigation(WorkbenchNavigation.Transition transition) {
-        boolean leavingNpcDatabase = navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
-                && transition.frame().activeArea() != WorkbenchNavigation.Area.NPC_DATABASE;
         WorkbenchArea leftModule = navigationFrame.activeArea() != transition.frame().activeArea()
                 ? areaModule(navigationFrame.activeArea()) : null;
         navigationFrame = transition.frame();
         if (leftModule != null)
             leftModule.leave();
-        if (leavingNpcDatabase) {
-            // Promotion feedback and return selection are visit-scoped; rail navigation must not revive them later.
-            dispatchNpcDatabase(new NpcDatabaseFeature.LeaveArea());
-        }
-        if (navigationFrame.activeArea() != WorkbenchNavigation.Area.NPC_DATABASE && npcFilterPopup != null)
-            npcFilterPopup.hide();
         renderNavigation(navigationFrame);
         if (navigationFrame.activeArea() == WorkbenchNavigation.Area.MORPHS
                 && navigationFrame.overlay() == WorkbenchNavigation.Overlay.INSPECTOR
@@ -3131,11 +2493,6 @@ public final class WorkbenchController {
             // must reveal the selected NPC portrait and its viewer action before the relationships below it.
             morphsInspectorScroll.setVvalue(0.0);
             Platform.runLater(() -> morphsInspectorScroll.setVvalue(0.0));
-        }
-        if (navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
-                && navigationFrame.overlay() == WorkbenchNavigation.Overlay.INSPECTOR) {
-            npcDatabaseInspectorScroll.setVvalue(0.0);
-            Platform.runLater(() -> npcDatabaseInspectorScroll.setVvalue(0.0));
         }
         WorkbenchArea activeModule = areaModule(navigationFrame.activeArea());
         if (activeModule != null && navigationFrame.overlay() == WorkbenchNavigation.Overlay.INSPECTOR)
@@ -3156,7 +2513,6 @@ public final class WorkbenchController {
         String area = frame.activeArea().displayName();
         boolean templatesActive = frame.activeArea() == WorkbenchNavigation.Area.TEMPLATES;
         boolean morphsActive = frame.activeArea() == WorkbenchNavigation.Area.MORPHS;
-        boolean npcDatabaseActive = frame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE;
         templatesPrimaryScroll.setManaged(templatesActive);
         templatesPrimaryScroll.setVisible(templatesActive);
         templatesEditorContent.setManaged(templatesActive);
@@ -3169,12 +2525,6 @@ public final class WorkbenchController {
         morphsEditorContent.setVisible(morphsActive);
         morphsInspectorScroll.setManaged(morphsActive);
         morphsInspectorScroll.setVisible(morphsActive);
-        npcDatabasePrimaryScroll.setManaged(npcDatabaseActive);
-        npcDatabasePrimaryScroll.setVisible(npcDatabaseActive);
-        npcDatabaseEditorContent.setManaged(npcDatabaseActive);
-        npcDatabaseEditorContent.setVisible(npcDatabaseActive);
-        npcDatabaseInspectorScroll.setManaged(npcDatabaseActive);
-        npcDatabaseInspectorScroll.setVisible(npcDatabaseActive);
         areaModules.forEach((moduleArea, module) -> showAreaPanes(module.panes(), moduleArea == frame.activeArea()));
         areaTitle.setText(area);
         areaTitle.setAccessibleText(area + " Area");
@@ -3290,7 +2640,7 @@ public final class WorkbenchController {
             case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
                     ? npcMorphAssignmentList : customMorphTargetList;
             case SETTINGS -> settingsArea.defaultFocusNode();
-            case NPC_DATABASE -> npcCatalogTable;
+            case NPC_DATABASE -> npcDatabaseArea.defaultFocusNode();
         };
     }
 
@@ -3307,13 +2657,13 @@ public final class WorkbenchController {
                 case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
                         ? npcMorphAssignmentList : customMorphTargetList;
                 case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
-                case NPC_DATABASE -> npcSourceList;
+                case NPC_DATABASE -> npcDatabaseArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
             };
             case EDITOR -> switch (target.area()) {
                 case TEMPLATES -> firstSliderChoiceControl().orElse(templateEditorFocusTarget);
                 case MORPHS -> morphTargetEditorFocusTarget;
                 case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
-                case NPC_DATABASE -> npcCatalogTable;
+                case NPC_DATABASE -> npcDatabaseArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
             };
             case INSPECTOR_LAUNCHER -> showInspectorOverlayButton;
             case INSPECTOR -> switch (target.area()) {
@@ -3323,7 +2673,7 @@ public final class WorkbenchController {
                         ? morphTargetSelectionText : availableMorphSliderPreset.isDisabled()
                         ? morphTargetSelectionText : availableMorphSliderPreset;
                 case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
-                case NPC_DATABASE -> npcInspectorName;
+                case NPC_DATABASE -> npcDatabaseArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
             };
             case OUTPUT_LAUNCHER -> outputAreaButton;
             case OUTPUT -> outputDrawer.focusNode(WorkbenchNavigation.Landmark.OUTPUT);
@@ -3476,12 +2826,14 @@ public final class WorkbenchController {
         boolean lifecycleReset = lifecyclePublication
                 && (activeOperation == WorkbenchProjectFlow.Intent.NEW
                 || activeOperation == WorkbenchProjectFlow.Intent.OPEN);
-        // Built before the NPC Database reset below, because that dispatch already renders against this context.
+        // Built before the NPC Database reset below, because that dispatch already renders against this context; the
+        // Area is handed it first, as it renders its own updates against the last context it received.
         context = buildContext(frame, resetTemplatesOnNextProjectFrame || lifecycleReset,
                 resetMorphsOnNextProjectFrame || lifecycleReset);
-        if (lifecycleReset && npcDatabaseFeature != null) {
+        if (lifecycleReset && npcDatabaseArea != null) {
             navigation.clearNpcDatabaseReturn();
-            dispatchNpcDatabase(new NpcDatabaseFeature.ClearAllSelections());
+            npcDatabaseArea.render(context);
+            npcDatabaseArea.dispatch(new NpcDatabaseFeature.ClearAllSelections());
         }
         if (templatesFeature != null && templatesFeature.frame().projectSequence() != frame.sequence()) {
             templatesFeature.acceptProjectFrame(frame, context.resetTemplates(),
@@ -3527,7 +2879,7 @@ public final class WorkbenchController {
     private void renderAreas() {
         renderTemplates(templatesFeature.frame());
         renderMorphs(morphsFeature.frame());
-        renderNpcDatabase(npcDatabaseFeature.frame());
+        npcDatabaseArea.render(context);
         settingsArea.render(context);
         outputDrawer.render(context);
     }
@@ -3579,7 +2931,7 @@ public final class WorkbenchController {
                     && (terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED
                     || terminal.lifecycle() == JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES)) {
                 navigation.clearNpcDatabaseReturn();
-                dispatchNpcDatabase(new NpcDatabaseFeature.ClearAllSelections());
+                npcDatabaseArea.dispatch(new NpcDatabaseFeature.ClearAllSelections());
             }
             // The job terminal record is the authoritative feedback source for async work.
             renderedProjectSequence = projectFrame.sequence();
