@@ -51,5 +51,7 @@ platform.
 - Tier 1 and Tier 2 can move to the built-in headless platform without extra jars or `--add-exports`.
 - JavaFX feature releases must be adopted on roughly a six-month cadence to stay on a publicly updated line; each
   is a reviewed lock change gated by Tiers 1–3, as above.
-- The JavaFX 25 UI Automation workarounds in `WorkbenchController` and `tools/java25` stay in place. The Windows
-  UIA provider did not change through JavaFX 27; removing any of them needs a Tier 3 check first.
+- The JavaFX 25 UI Automation workarounds stay in place: the shared ones in `UiaListHelper`, the single-Area ones
+  (the rename edit lifecycle, slider-row reuse, the NPC Database HelpText mirror) in their Areas, as
+  `docs/build/workbench-platform.md` lists, and the smoke-side ones in `tools/java25`. The Windows UIA provider did
+  not change through JavaFX 27; removing any of them needs a Tier 3 check first.
