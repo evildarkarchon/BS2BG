@@ -41,8 +41,9 @@ public final class UiaListHelper {
     /**
      * Creates a helper whose node replacements consult the Workbench focus policy.
      *
-     * @param ownsSceneFocus reports whether a node is its scene's focus owner; it must not depend on the OS window
-     *                       being active, so a refill while another window is active still keeps the focus owner
+     * @param ownsSceneFocus reports whether a node is its scene's focus owner, normally
+     *                       {@link WorkbenchFocusPolicy#ownsSceneFocus}; it must not depend on the OS window being
+     *                       active, so a refill while another window is active still keeps the focus owner
      */
     public UiaListHelper(Predicate<Node> ownsSceneFocus) {
         this.ownsSceneFocus = Objects.requireNonNull(ownsSceneFocus, "ownsSceneFocus");
