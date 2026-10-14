@@ -1,6 +1,7 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import javafx.scene.Node;
+import javafx.scene.input.KeyEvent;
 
 /**
  * One Workbench Area module: its own FXML, controller, controls and renders, loaded by the shell through
@@ -47,6 +48,18 @@ public interface WorkbenchArea {
 
     /** Moves focus to the Area's search or filter field for Ctrl+K; an Area without one does nothing. */
     void focusSearch();
+
+    /**
+     * The Area's own key handler, offered every key press that reaches the Workbench while the Area is active, after
+     * the Output shortcuts and before the shell's navigation keys, so an Area command key wins over an overlay or
+     * drawer dismissal. Templates takes F2 (rename) and Escape while a rename is open here; most Areas take nothing.
+     *
+     * @param event the key press; the shell consumes it when this returns true
+     * @return true when the Area handled the key
+     */
+    default boolean handleKey(KeyEvent event) {
+        return false;
+    }
 
     /**
      * Handles an Escape that the shell's navigation did not consume.

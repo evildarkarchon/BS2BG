@@ -329,13 +329,13 @@ class WorkbenchFocusPolicyTest {
             controller.attach(flow, stage, new RecordingPlatform(), fixture.environment());
             stage.show();
             try {
-                Node sort = (Node) loader.getNamespace().get("sliderPresetSort");
+                Node sort = (Node) LoadedWorkbench.node(loader, "sliderPresetSort");
                 sort.requestFocus();
                 assertSame(sort, stage.getScene().getFocusOwner());
 
                 root.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.F6, false, false, false, false));
 
-                assertSame(loader.getNamespace().get("templateEditorFocusTarget"), stage.getScene().getFocusOwner());
+                assertSame(LoadedWorkbench.node(loader, "templateEditorFocusTarget"), stage.getScene().getFocusOwner());
             } finally {
                 stage.close();
             }

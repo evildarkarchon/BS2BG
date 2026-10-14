@@ -45,7 +45,7 @@ import org.junit.jupiter.api.Test;
  */
 class ProductionPlatformBanGateTest {
 
-    private static final String WORKBENCH_CONTROLLER = "com/asdasfa/jbs2bg/workbench/WorkbenchController";
+    private static final String TEMPLATES_AREA = "com/asdasfa/jbs2bg/workbench/templates/TemplatesArea";
 
     private static final String PORTRAIT_VIEWER = "com/asdasfa/jbs2bg/workbench/NpcPortraitViewer";
 
@@ -76,7 +76,7 @@ class ProductionPlatformBanGateTest {
             Rule.deferredFocus("4",
                     "no Platform.runLater of a requestFocus method reference or a lambda that calls requestFocus",
                     // The Slider Preset rename editor: ListView click handling can take focus back after startEdit.
-                    Set.of(new MethodKey(WORKBENCH_CONTROLLER + "$SliderPresetCell", "startEdit"))));
+                    Set.of(new MethodKey(TEMPLATES_AREA + "$SliderPresetCell", "startEdit"))));
 
     @Test
     void productionClassesRespectEveryPlatformBan() throws IOException, URISyntaxException {

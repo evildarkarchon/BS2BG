@@ -81,6 +81,13 @@ public interface ShellPort {
     void revealPrimaryContent();
 
     /**
+     * Runs the BodySlide import, a Project command whose launcher lives in the Templates Area. The shell dispatches it
+     * through the Project lifecycle, which asks for the source files and admits the import job; the Area only words
+     * its launcher's availability from the context.
+     */
+    void importBodySlidePresets();
+
+    /**
      * Reports a Project change the Area published itself, outside the pipeline's generic chrome step, so the shell
      * re-renders the Project chrome and every Area from the current Project frame. The shell arbitrates the change's
      * diagnostics: no other Area projects them.

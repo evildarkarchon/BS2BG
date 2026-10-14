@@ -23,6 +23,7 @@ import com.asdasfa.jbs2bg.workbench.morphs.MorphsArea;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseArea;
 import com.asdasfa.jbs2bg.workbench.output.OutputDrawer;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsArea;
+import com.asdasfa.jbs2bg.workbench.templates.TemplatesArea;
 
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -157,7 +158,8 @@ class FxmlGraphLoadingTest {
             controller.attach(flow, stage, fixture.environment());
 
             List<WorkbenchArea> areas = LoadedWorkbench.areas(loader);
-            assertEquals(List.of(MorphsArea.class, NpcDatabaseArea.class, SettingsArea.class),
+            assertEquals(List.of(TemplatesArea.class, MorphsArea.class, NpcDatabaseArea.class,
+                            SettingsArea.class),
                     areas.stream().map(Object::getClass).toList());
             for (WorkbenchArea area : areas)
                 assertEveryFxmlFieldInjected(area);
@@ -197,7 +199,8 @@ class FxmlGraphLoadingTest {
         assertEquals(List.of("workbench.fxml", "workbench/morphs/morphs-area.fxml",
                         "workbench/npcdatabase/npc-database-area.fxml",
                         "workbench/output/output-drawer.fxml",
-                        "workbench/settings/settings-area.fxml"), graphs,
+                        "workbench/settings/settings-area.fxml",
+                        "workbench/templates/templates-area.fxml"), graphs,
                 "only the Workbench graph, its Area graphs and the Output drawer graph may ship");
         assertTrue(graphs.contains("workbench.fxml"), "the Workbench must be the packaged root graph");
         assertFalse(graphs.contains("main.fxml"), "the replaced legacy root graph must not ship");
