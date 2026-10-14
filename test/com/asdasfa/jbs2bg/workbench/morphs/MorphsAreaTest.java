@@ -32,6 +32,7 @@ import com.asdasfa.jbs2bg.workbench.WorkbenchSatellites;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 import javafx.event.ActionEvent;
+import javafx.scene.AccessibleAttribute;
 import javafx.scene.AccessibleRole;
 import javafx.scene.Node;
 import javafx.scene.Parent;
@@ -767,6 +768,191 @@ class MorphsAreaTest extends AreaTest<MorphsArea> {
             assertFalse(jobs.frame().projectMutationsBlocked());
             assertTrue(mutations.stream().noneMatch(Button::isDisabled));
         });
+    }
+
+    /** The empty-to-populated Custom Morph Target swap moves focus to the replacement list. */
+    @Test
+    void customMorphTargetRefillKeepsFocusOnTheReplacementList() throws Exception {
+        FxTestToolkit.runOnFxThread(() -> {
+            MorphsArea area = host().module();
+            try {
+                hosted().show();
+                ListView<?> initial = area.customMorphTargetListNode();
+                initial.requestFocus();
+                hosted().<TextField>node("customMorphTargetNameInput").setText("All|Female");
+
+                hosted().<Button>node("createCustomMorphTargetButton").fire();
+
+                assertNotSame(initial, area.customMorphTargetListNode());
+                assertSame(area.customMorphTargetListNode(), hosted().stage().getScene().getFocusOwner());
+            } finally {
+                hosted().stage().close();
+            }
+        });
+    }
+
+    /** Clearing a filter that emptied the NPC catalog refills it without losing the list's focus. */
+    @Test
+    void npcMorphAssignmentRefillKeepsFocusOnTheReplacementList() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
+        FxTestToolkit.runOnFxThread(() -> {
+            MorphsArea area = host(flow).module();
+            try {
+                hosted().show();
+                TextField filter = hosted().node("npcMorphAssignmentFilter");
+                filter.setText("no match");
+                ListView<?> initial = area.npcMorphAssignmentListNode();
+                assertTrue(initial.getItems().isEmpty());
+                initial.requestFocus();
+
+                filter.setText("");
+
+                assertNotSame(initial, area.npcMorphAssignmentListNode());
+                assertSame(area.npcMorphAssignmentListNode(), hosted().stage().getScene().getFocusOwner());
+            } finally {
+                hosted().stage().close();
+            }
+        });
+    }
+
+    /** Selecting a target with relationships refills the focused assigned-preset list on its replacement. */
+    @Test
+    void assignedSliderPresetRefillKeepsFocusOnTheReplacementList() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
+        FxTestToolkit.runOnFxThread(() -> {
+            MorphsArea area = host(flow).module();
+            try {
+                hosted().show();
+                ListView<?> initial = area.assignedMorphSliderPresetListNode();
+                initial.requestFocus();
+
+                area.customMorphTargetListNode().getSelectionModel().selectFirst();
+
+                assertNotSame(initial, area.assignedMorphSliderPresetListNode());
+                assertSame(area.assignedMorphSliderPresetListNode(), hosted().stage().getScene().getFocusOwner());
+            } finally {
+                hosted().stage().close();
+            }
+        });
+    }
+
+    /** Fill Empty focuses its choices as it opens and returns focus to its launcher as it closes. */
+    @Test
+    void fillEmptyFlyoutTakesFocusOnOpenAndReturnsItToTheLauncherOnClose() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
+        FxTestToolkit.runOnFxThread(() -> {
+            MorphsArea area = host(flow).module();
+            try {
+                hosted().show();
+                Button launcher = hosted().node("fillEmptyNpcMorphAssignmentsButton");
+                area.npcMorphAssignmentListNode().requestFocus();
+
+                launcher.fire();
+
+                Popup popup = FxTestToolkit.showingPopup(hosted().stage(), "#fillEmptyApplyButton");
+                assertSame(popup.getScene().getRoot().lookup("#fillEmptySliderPresetList"),
+                        popup.getScene().getFocusOwner());
+                int before = shell.requests().size();
+
+                ((Button) popup.getScene().getRoot().lookup("#fillEmptyCancelButton")).fire();
+
+                assertFalse(popup.isShowing());
+                // The Area hands its launcher to the shell, whose focus policy focuses it while it can take focus
+                // (WorkbenchFocusPolicyTest.satelliteCloseRestoresFocusToItsLauncher).
+                assertEquals(List.of("restoreFocusAfterSatellite(fillEmptyNpcMorphAssignmentsButton,"
+                        + " PRIMARY_CONTENT)"), shell.requests().subList(before, shell.requests().size()));
+            } finally {
+                hosted().stage().close();
+            }
+        });
+    }
+
+    /**
+     * Refilling an empty NPC Morph Assignments list replaces its JavaFX node in place, so the Windows UIA provider
+     * discovers the new virtualized rows instead of keeping the stale empty subtree.
+     */
+    @Test
+    void npcMorphAssignmentsEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
+        FxTestToolkit.runOnFxThread(() -> {
+            MorphsArea area = host().module();
+            ListView<NpcMorphAssignmentSnapshot> initial = hosted().node("npcMorphAssignmentList");
+            Parent owner = initial.getParent();
+            int position = owner.getChildrenUnmodifiable().indexOf(initial);
+            assertTrue(initial.getItems().isEmpty());
+
+            createNpc("Lyra", "Lyra01");
+
+            ListView<NpcMorphAssignmentSnapshot> replacement = area.npcMorphAssignmentListNode();
+            assertNotSame(initial, replacement);
+            assertNull(initial.getParent(), "the stale empty node must leave the scene graph");
+            assertSame(owner, replacement.getParent());
+            assertEquals(position, owner.getChildrenUnmodifiable().indexOf(replacement));
+            assertEquals("npcMorphAssignmentList", replacement.getId());
+            assertEquals("NPC Morph Assignments", replacement.getAccessibleText());
+            assertEquals(List.of("Lyra"), replacement.getItems().stream()
+                    .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
+        });
+    }
+
+    /**
+     * A label's {@code labelFor} is the JavaFX source of the UIA LabeledBy relationship. Every empty-to-full swap of
+     * the Assigned Slider Presets list must re-point its label at the fresh node, so the relationship never stays
+     * on a node that has left the scene graph.
+     *
+     * <p>The label's FXML {@code labelFor="$assignedMorphSliderPresetList"} is a forward reference, which FXMLLoader
+     * resolves to {@code null}, so only the controller's re-pointing establishes the relationship today.</p>
+     */
+    @Test
+    void assignedSliderPresetsLabelForFollowsEveryListSwap() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            MorphsArea area = host(flow).module();
+            Label label = hosted().node("assignedMorphSliderPresetLabel");
+            ListView<CustomMorphTargetSnapshot> targets = area.customMorphTargetListNode();
+            ListView<SliderPresetSnapshot> initial = area.assignedMorphSliderPresetListNode();
+            assertTrue(initial.getItems().isEmpty());
+
+            targets.getSelectionModel().select(0);
+
+            ListView<SliderPresetSnapshot> first = area.assignedMorphSliderPresetListNode();
+            assertNotSame(initial, first);
+            assertSame(first, label.getLabelFor());
+            assertSame(label, first.queryAccessibleAttribute(AccessibleAttribute.LABELED_BY));
+            Parent inspector = hosted().node("morphsInspectorContent");
+            assertSame(inspector, first.getParent());
+
+            targets.getSelectionModel().clearSelection();
+            assertTrue(area.assignedMorphSliderPresetListNode().getItems().isEmpty());
+            targets.getSelectionModel().select(0);
+
+            ListView<SliderPresetSnapshot> second = area.assignedMorphSliderPresetListNode();
+            assertNotSame(first, second);
+            assertNull(first.getParent(), "the first replacement must have left the scene graph");
+            assertSame(inspector, second.getParent());
+            assertSame(second, label.getLabelFor());
+            assertSame(label, second.queryAccessibleAttribute(AccessibleAttribute.LABELED_BY));
+            assertNull(first.queryAccessibleAttribute(AccessibleAttribute.LABELED_BY),
+                    "the detached node must no longer claim the label");
+            assertEquals(List.of("Alpha"), second.getItems().stream().map(SliderPresetSnapshot::getName).toList());
+        });
+    }
+
+    /** Creates one NPC Morph Assignment through the Morphs authoring controls. */
+    private void createNpc(String displayName, String editorId) {
+        hosted().<TextField>node("npcDisplayNameInput").setText(displayName);
+        hosted().<TextField>node("npcPluginNameInput").setText("People.esp");
+        hosted().<TextField>node("npcEditorIdInput").setText(editorId);
+        hosted().<TextField>node("npcRaceInput").setText("NordRace");
+        hosted().<TextField>node("npcFormIdInput").setText("000A12B3");
+        hosted().<Button>node("createNpcMorphAssignmentButton").fire();
     }
 
     /** Lists a pane's nodes depth-first as type, id, Labeled text and accessible name, one line each. */

@@ -144,13 +144,15 @@ they cannot show that a workaround is needed or enough:
   InfoBar and status icon hosts ([#147](https://github.com/evildarkarchon/BS2BG/issues/147)). Every guarded
   collection goes through it, so retiring a workaround is a one-place deletion. The single-Area workarounds (rename
   edit lifecycle, slider-row reuse, NPC Database HelpText mirror) stay with their Area.
-- **Tier 1 proves the mechanism** as plain JavaFX logic in `UiaListHelperTest` and
-  `WorkbenchAccessibilityContractTest`, plus the refill checks in `TemplatesAreaTest` and `MorphsAreaTest`. It covers node
-  replacement on an empty-to-full refill (all four lists), no list-change event on a membership-preserving re-render
-  (every guarded list, the Activity list and both severity icon hosts), the rename edit lifecycle and
-  in-place cell update, slider-row identity across edits, `labelFor` re-pointing after the Assigned Slider Presets
-  swap, mnemonic stripping from accessible names, and the NPC Database label and portrait-status HelpText values.
-  Each test fails if its workaround or contract is removed.
+- **Tier 1 proves the mechanism** as plain JavaFX logic. `UiaListHelperTest` covers the shared helper. Each
+  single-Area workaround is pinned in its Area's suite: node replacement on an empty-to-full refill and the refill
+  focus in `TemplatesAreaTest` and `MorphsAreaTest` (all four lists), the rename edit lifecycle, in-place cell update
+  and slider-row identity across edits in `TemplatesAreaTest`, `labelFor` re-pointing after the Assigned Slider
+  Presets swap in `MorphsAreaTest`, and the NPC Database label and portrait-status HelpText values in
+  `NpcDatabaseAreaTest`. `WorkbenchAccessibilityContractTest` keeps the contracts that span the whole Workbench: no
+  list-change event on a membership-preserving re-render (every guarded list, the Activity list and both severity
+  icon hosts), mnemonic stripping from accessible names, and the typed dialog buttons' names. Each test fails if its
+  workaround or contract is removed.
 - **Tier 3 proves the outcome** through real UIA and never asserts how it was achieved. Its existing locators match
   ControlType, Name and HelpText, which already proves the property-to-UIA mapping. Two checks target workarounds
   directly:
