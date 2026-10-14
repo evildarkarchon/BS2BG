@@ -8,8 +8,9 @@ Production Java lives in `src/com/asdasfa/jbs2bg/`; JavaFX FXML and CSS are colo
 
 - `.\tools\java25\verify-java25.ps1` is the canonical gate. It provisions checksum-pinned Temurin/JavaFX inputs and runs the complete clean Maven verification.
 - `.\mvnw.cmd test` is a faster developer loop after `BS2BG_JDK25_HOME` points to the verified JDK 25 toolchain. Run one suite with `.\mvnw.cmd -Dtest=ProjectSessionTest test`.
+- Both commands above run the JavaFX tests on JavaFX's built-in headless platform (ADR-0008), so no window appears and you may keep using the desktop. `.\mvnw.cmd test -Pdesktop-fx` puts a developer run back on Windows glass for debugging; never pass `-Dglass.platform` or `-Dprism.order` instead, and never use `desktop-fx` with the gate (it rejects it).
 - `Invoke-Pester -Path tools/java25 -Output Detailed` checks the PowerShell toolchain and packaging helpers.
-- `.\tools\java25\package-java25.ps1` builds the Windows x64 app image and drives UI Automation smoke tests. Use a clean committed checkout and do not interact with the desktop during the smoke run.
+- `.\tools\java25\package-java25.ps1` builds the Windows x64 app image and drives UI Automation smoke tests. It is the only tier that uses the real desktop: use a clean committed checkout and do not interact with the desktop during the smoke run.
 
 ## Coding Style & Naming Conventions
 
