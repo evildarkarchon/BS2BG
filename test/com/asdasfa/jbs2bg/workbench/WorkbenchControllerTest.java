@@ -3670,18 +3670,18 @@ class WorkbenchControllerTest {
     }
 
     /** Delegates lifecycle operations while supplying deterministic Project edit rejection or failure. */
-    private static final class RefusingEditSession implements ProjectSession {
+    static final class RefusingEditSession implements ProjectSession {
         private final ProjectSession delegate;
         private boolean refuse;
         private boolean failed;
 
         /** Wraps a real session so fixture setup and snapshots retain production semantics. */
-        private RefusingEditSession(ProjectSession delegate) {
+        RefusingEditSession(ProjectSession delegate) {
             this.delegate = delegate;
         }
 
         /** Arms the requested outcome only after fixture creation through the public Project seam. */
-        private void refuseEdits(boolean failure) {
+        void refuseEdits(boolean failure) {
             refuse = true;
             failed = failure;
         }
@@ -3753,7 +3753,7 @@ class WorkbenchControllerTest {
     /**
      * Test adapter for modal platform effects; responses are consumed in user-interaction order.
      */
-    private static final class RecordingPlatform implements WorkbenchPlatform {
+    static final class RecordingPlatform implements WorkbenchPlatform {
         private final Deque<WorkbenchProjectFlow.Response> responses = new ArrayDeque<>();
         private final Deque<WorkbenchFeedback.DialogAction> confirmationResponses = new ArrayDeque<>();
         private final Deque<WorkbenchFeedback.DialogAction> failureResponses = new ArrayDeque<>();

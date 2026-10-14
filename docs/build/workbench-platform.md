@@ -30,6 +30,37 @@ icon key, and terminal disposition across those projections. Dismissing an InfoB
 terminal summary. Tokenized answers reject stale dialogs. Standard `Dialog`/`DialogPane` rendering provides an
 explicit owner, one modal at a time, safe Enter/Escape defaults, typed actions, and launcher focus restoration.
 
+## Production platform bans
+
+Focus intent lives in the scene's focus owner
+([#123](https://github.com/evildarkarchon/BS2BG/issues/123)). Production never reads window activation and never
+activates a window to deliver focus. Refills, async completions and dialog returns set the scene's focus owner, and
+JavaFX gives focus to it when the user returns to the window. The only focus check is
+`ownsSceneFocus(node)` (`node.getScene() != null && node.getScene().getFocusOwner() == node`), and focus is requested
+once, synchronously. Satellite windows (the Fill Empty and NPC filter popups, the portrait viewer) request focus right
+after `show()` and restore it inside `onHidden`.
+
+`ProductionPlatformBanGateTest` reads every production class file with `java.lang.classfile` and enforces these rules.
+Each exception is keyed by declaring class and method, and keeps a why-comment at its site:
+
+| # | Rule | Allowed exceptions |
+| --- | --- | --- |
+| 1 | No `isFocused` / `focusedProperty` on any `javafx/*` type, including inherited calls from a production subclass | none |
+| 2 | No `requestFocus` / `toFront` on any `javafx/stage/*` type (window activation) | `WorkbenchController.showPortraitViewer`: raising the portrait viewer when it is already open (synchronous, directly commanded by the user, application already in the foreground) |
+| 4 | No `Platform.runLater` whose runnable is a `requestFocus` method reference, or a lambda that calls `requestFocus` directly | `WorkbenchController$SliderPresetCell.startEdit`: the rename-editor deferral |
+
+Two focus deferrals are named, and no other is allowed:
+
+- **Initial focus** (`attach`) is applied immediately when the stage is already showing, and otherwise from a one-shot
+  `WINDOW_SHOWN` handler. It needs no rule exception because it is not a `runLater`.
+- **The Slider Preset rename editor** (`startEdit`) requests focus synchronously, then once more on a `runLater`,
+  because ListView's own click handling can take focus back to the list. The deferred request only applies while
+  the list or that cell still owns focus, so it cannot take focus from a control the user has moved to.
+
+The deferral check is not transitive: `Platform.runLater(this::helper)`, or a lambda calling a helper that requests
+focus, is not detected. This rule still covers it: no production code defers a focus request except the rename
+editor. Rule 3 (`Platform.getPreferences` only in the appearance-preferences source) is added with that seam.
+
 ## Packaged verification
 
 `smoke-app-image.ps1` drives the real packaged launcher by accessible role, stable name, state, and semantic tree
