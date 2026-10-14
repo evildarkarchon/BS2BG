@@ -12,8 +12,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.filtering.ColumnCriterion;
 import com.asdasfa.jbs2bg.filtering.FilterColumn;
 import com.asdasfa.jbs2bg.filtering.FilteredView;
@@ -44,6 +46,7 @@ public final class TemplatesFeature {
     private static final Duration TYPE_AHEAD_TIMEOUT = Duration.ofMillis(750);
 
     private final WorkbenchProjectFlow projectFlow;
+    private final Supplier<Settings.Snapshot> currentSettings;
     private final Clock clock;
     private final Consumer<Throwable> observerFailureSink;
     private final Map<Long, Consumer<Frame>> observers = new LinkedHashMap<>();
@@ -68,11 +71,13 @@ public final class TemplatesFeature {
     /**
      * Creates the window-scoped Templates feature from the latest coherent Project publication.
      *
-     * @param projectFlow sole authoritative Project command path
-     * @param clock       deterministic source for later type-ahead timing
+     * @param projectFlow     sole authoritative Project command path
+     * @param currentSettings read-only view of the current Settings pair used for Slider choice previews
+     * @param clock           deterministic source for later type-ahead timing
      */
-    public TemplatesFeature(WorkbenchProjectFlow projectFlow, Clock clock) {
-        this(projectFlow, clock, failure -> {
+    public TemplatesFeature(WorkbenchProjectFlow projectFlow, Supplier<Settings.Snapshot> currentSettings,
+                            Clock clock) {
+        this(projectFlow, currentSettings, clock, failure -> {
             // Production adapters may supply technical diagnostics; the default keeps a renderer failure isolated.
         });
     }
@@ -81,12 +86,14 @@ public final class TemplatesFeature {
      * Creates the Templates feature with an explicit technical-diagnostics sink for isolated observer failures.
      *
      * @param projectFlow         sole authoritative Project command path
+     * @param currentSettings     read-only view of the current Settings pair used for Slider choice previews
      * @param clock               deterministic type-ahead clock
      * @param observerFailureSink receives observer failures after frame state commits
      */
-    public TemplatesFeature(WorkbenchProjectFlow projectFlow, Clock clock,
-                            Consumer<Throwable> observerFailureSink) {
+    public TemplatesFeature(WorkbenchProjectFlow projectFlow, Supplier<Settings.Snapshot> currentSettings,
+                            Clock clock, Consumer<Throwable> observerFailureSink) {
         this.projectFlow = Objects.requireNonNull(projectFlow, "projectFlow");
+        this.currentSettings = Objects.requireNonNull(currentSettings, "currentSettings");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.observerFailureSink = Objects.requireNonNull(observerFailureSink, "observerFailureSink");
         reconcile(projectFlow.frame(), List.of());
@@ -699,26 +706,29 @@ public final class TemplatesFeature {
         Optional<NameIdentity> selected = view.getSelection();
         if (selected.isEmpty())
             return Optional.empty();
+        // One pinned Settings pair keeps every row preview of this frame consistent.
+        Settings.Snapshot settings = currentSettings.get();
         return sourcePresets.stream()
                 .filter(preset -> ProjectIdentities.sliderPreset(preset).equals(selected.orElseThrow()))
                 .findFirst()
                 .map(preset -> new EditorFrame(ProjectIdentities.sliderPreset(preset),
                         preset.isUunp() ? Profile.UUNP : Profile.STANDARD,
                         preset.getSliderChoices().stream().map(choice -> choiceFrame(choice, preset.isUunp(),
-                                diagnostics))
+                                settings, diagnostics))
                                 .toList(), gang));
     }
 
     /**
      * Projects one immutable Slider choice through the shared exact-output formatter, reporting unavailable previews.
      *
+     * @param settings    Settings pair pinned for the whole editor frame
      * @param diagnostics receives a structured diagnostic when the current Settings overflow the preview
      */
-    private static ChoiceFrame choiceFrame(SliderChoiceSnapshot choice, boolean uunp,
+    private static ChoiceFrame choiceFrame(SliderChoiceSnapshot choice, boolean uunp, Settings.Snapshot settings,
                                            List<ProjectDiagnostic> diagnostics) {
         String preview;
         try {
-            preview = ProjectOutputFormatter.formatSliderChoicePreview(choice, uunp);
+            preview = ProjectOutputFormatter.formatSliderChoicePreview(choice, uunp, settings);
         } catch (ProjectOutputFormatter.SliderChoicePreviewException exception) {
             preview = "Preview unavailable";
             diagnostics.add(new ProjectDiagnostic(ProjectOutputFormatter.SliderChoicePreviewException.CODE,
@@ -730,7 +740,8 @@ public final class TemplatesFeature {
                 choice.getPercentageMaximum(), preview,
                 choice.isMissingDefault(), choice.isMissingDefault() && choice.isEnabled()
                 && choice.getPercentageMinimum() == 100 && choice.getPercentageMaximum() == 100,
-                choice.isEnabled() && ProjectOutputFormatter.isSliderChoiceRedundant(choice, uunp), choice);
+                choice.isEnabled() && ProjectOutputFormatter.isSliderChoiceRedundant(choice, uunp, settings),
+                choice);
     }
 
     /**

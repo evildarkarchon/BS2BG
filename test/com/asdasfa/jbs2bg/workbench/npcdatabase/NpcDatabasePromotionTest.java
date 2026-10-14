@@ -1,5 +1,6 @@
 package com.asdasfa.jbs2bg.workbench.npcdatabase;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,7 +34,7 @@ class NpcDatabasePromotionTest {
     void addSelectedCreatesIndependentAssignmentAndKeepsDatabaseSelection() throws Exception {
         Path source = temporaryDirectory.resolve("catalog.txt");
         Files.writeString(source, "Master.esm | Amber | First | NordRace | 00000A\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         NpcDatabaseFeature feature = new NpcDatabaseFeature();
         feature.commitSource(NpcDatabaseSourceReader.read(source));
@@ -53,7 +54,7 @@ class NpcDatabasePromotionTest {
         assertFalse(feature.consumeReturnAssignment().isPresent());
         Path saved = temporaryDirectory.resolve("promoted.jbs2bg");
         assertInstanceOf(ChangedOutcome.class, session.saveAs(saved));
-        ProjectSession reopened = ProjectSessions.create();
+        ProjectSession reopened = ProjectSessions.create(emptySettings());
         assertInstanceOf(ChangedOutcome.class, reopened.open(saved));
         assertEquals("Amber", reopened.getSnapshot().getNpcMorphAssignments().getFirst().getDisplayName());
         assertEquals("A", reopened.getSnapshot().getNpcMorphAssignments().getFirst().getFormId());
@@ -68,7 +69,7 @@ class NpcDatabasePromotionTest {
                 + " | Blank plugin | Invalid01 | NordRace | 00000C\n"
                 + "Master.esm | Bad form | Invalid02 | NordRace | XYZ\n"
                 + "Master.esm | Hidden | Hidden01 | NordRace | 00000D\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(NpcMorphAssignmentEdits.create("Existing", "Master.esm", "Existing01", "NordRace", "A"));
         NpcDatabaseFeature feature = new NpcDatabaseFeature();
@@ -106,7 +107,7 @@ class NpcDatabasePromotionTest {
                 + "Master.esm | Broken | Broken01 | NordRace | XYZ\n"
                 + "Master.esm | Beta | Beta01 | NordRace | 00000B\n"
                 + "Master.esm | Gamma | Gamma01 | NordRace | 00000C\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         NpcDatabaseFeature feature = new NpcDatabaseFeature();
         feature.commitSource(NpcDatabaseSourceReader.read(source));
@@ -130,7 +131,7 @@ class NpcDatabasePromotionTest {
     void addSelectedCanAssignOneProjectSliderPreset() throws Exception {
         Path source = temporaryDirectory.resolve("random.txt");
         Files.writeString(source, "Master.esm | Amber | First | NordRace | 00000A\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(SliderPresetEdits.create("Shape"));
         NpcDatabaseFeature feature = new NpcDatabaseFeature();
@@ -151,7 +152,7 @@ class NpcDatabasePromotionTest {
     void promotionRejectsNonHexSourceFormIdBeforeCatalogNormalization() throws Exception {
         Path source = temporaryDirectory.resolve("invalid-form.txt");
         Files.writeString(source, "Master.esm | Broken | Bad01 | NordRace | ZZ00000A\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         NpcDatabaseFeature feature = new NpcDatabaseFeature();
         feature.commitSource(NpcDatabaseSourceReader.read(source));

@@ -37,21 +37,8 @@ public final class ProjectOutputFormatter {
     }
 
     /**
-     * Generates Templates, Morphs, BoS payloads, and no-preset diagnostics from the
-     * supplied coherent snapshot. No session or mutable Project state is retained.
-     *
-     * @param snapshot             immutable Project state to format
-     * @param omitRedundantSliders whether redundant template sliders should be omitted
-     * @return one immutable generated-output value
-     * @throws NullPointerException when snapshot is null
-     * @throws BosOutputException   when any BoS filename or calculated value cannot publish safely
-     */
-    public static ProjectGeneratedOutput generate(ProjectSnapshot snapshot, boolean omitRedundantSliders) {
-        return generate(snapshot, Settings.snapshot(), omitRedundantSliders);
-    }
-
-    /**
-     * Generates every artifact from one explicit immutable Project and Settings basis. This overload prevents an
+     * Generates Templates, Morphs, BoS payloads, and no-preset diagnostics from one explicit immutable Project and
+     * Settings basis. No session or mutable Project state is retained, and pinning the Settings snapshot prevents an
      * asynchronous command from mixing Settings publications while its captured Project snapshot is formatted.
      *
      * @param snapshot             immutable Project state to format
@@ -266,16 +253,12 @@ public final class ProjectOutputFormatter {
      * @param choice immutable Slider choice to preview
      * @param uunp   whether the containing Slider Preset uses the UUNP Settings profile
      * @return exact BodyGen choice text without the containing preset name
+     * @param settings immutable paired Settings the preview is computed against
      * @throws NullPointerException when choice is null
-     * @throws SliderChoicePreviewException when the current Settings multiplier makes the preview non-finite
+     * @throws SliderChoicePreviewException when the supplied Settings multiplier makes the preview non-finite
      */
-    public static String formatSliderChoicePreview(SliderChoiceSnapshot choice, boolean uunp) {
-        return formatSliderChoicePreview(choice, uunp, Settings.snapshot());
-    }
-
-    /** Formats one choice from an explicit captured Settings basis. */
-    private static String formatSliderChoicePreview(SliderChoiceSnapshot choice, boolean uunp,
-                                                    Settings.Snapshot settings) {
+    public static String formatSliderChoicePreview(SliderChoiceSnapshot choice, boolean uunp,
+                                                   Settings.Snapshot settings) {
         Objects.requireNonNull(choice, "choice");
         float small = choice.getEffectiveSmallValue() * 0.01f;
         float big = choice.getEffectiveBigValue() * 0.01f;
@@ -316,16 +299,12 @@ public final class ProjectOutputFormatter {
      *
      * @param choice immutable Slider choice to inspect
      * @param uunp   whether the containing Slider Preset uses the UUNP Settings profile
+     * @param settings immutable paired Settings whose inversion decides the neutral endpoint
      * @return whether both effective endpoints equal the profile's neutral endpoint
      * @throws NullPointerException when choice is null
      */
-    public static boolean isSliderChoiceRedundant(SliderChoiceSnapshot choice, boolean uunp) {
-        return isSliderChoiceRedundant(choice, uunp, Settings.snapshot());
-    }
-
-    /** Reports redundancy against an explicit captured Settings basis. */
-    private static boolean isSliderChoiceRedundant(SliderChoiceSnapshot choice, boolean uunp,
-                                                   Settings.Snapshot settings) {
+    public static boolean isSliderChoiceRedundant(SliderChoiceSnapshot choice, boolean uunp,
+                                                  Settings.Snapshot settings) {
         Objects.requireNonNull(choice, "choice");
         int small = choice.getEffectiveSmallValue();
         int big = choice.getEffectiveBigValue();

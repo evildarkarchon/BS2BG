@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted; process-global Settings source superseded by #125 (the session reads an injected read-only Settings view)
 date: 2026-09-01
 ---
 

@@ -14,8 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -38,28 +37,21 @@ class ProjectPersistenceCompatibilityTest {
 
     @TempDir
     Path tempDirectory;
+    // One isolated store per test, seeded by the @BeforeEach fixture.
+    private Settings settings;
 
     /**
-     * Publishes only the defaults exercised by these fixtures, keeping the test
+     * Seeds only the defaults exercised by these fixtures, keeping the test
      * independent from checkout-local settings files.
      */
-    @BeforeAll
-    static void initializeSliderSettings() {
+    @BeforeEach
+    void initializeSliderSettings() {
         Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
         standard.put("Breasts", new DefaultSliderValue(0.2f, 1f));
         Map<String, DefaultSliderValue> uunp = new LinkedHashMap<>();
         uunp.put("Arms", new DefaultSliderValue(1f, 1f));
         uunp.put("Breasts", new DefaultSliderValue(1f, 1f));
-        SettingsTestSupport.installDefaults(standard, uunp);
-    }
-
-    /**
-     * Restores the checked-in Settings pair so this characterization class does
-     * not leak state into later tests.
-     */
-    @AfterAll
-    static void restoreSliderSettings() {
-        SettingsTestSupport.restoreRepositorySettings();
+        settings = SettingsTestSupport.installDefaults(tempDirectory.resolve("settings"), standard, uunp);
     }
 
     /**
@@ -167,7 +159,7 @@ class ProjectPersistenceCompatibilityTest {
     @Test
     void projectSessionReadWriteReadIsSemanticallyStable() throws Exception {
         Path source = fixtureFile(SEMANTICS_FIXTURE).toPath();
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         ProjectSnapshot opened = session.open(source).getSnapshot();
         Path savedProject = tempDirectory.resolve("project-session-semantic-round-trip.jbs2bg");
 
@@ -175,7 +167,7 @@ class ProjectPersistenceCompatibilityTest {
 
         assertFalse(saved.getSnapshot().isDirty());
         assertEquals(savedProject.toAbsolutePath().normalize(), saved.getSnapshot().getFileIdentity().get());
-        ProjectSnapshot reopened = ProjectSessions.create().open(savedProject).getSnapshot();
+        ProjectSnapshot reopened = ProjectSessions.create(settings::snapshot).open(savedProject).getSnapshot();
         assertProjectSnapshotSemantics(opened, reopened);
     }
 
@@ -198,14 +190,14 @@ class ProjectPersistenceCompatibilityTest {
     })
     void projectSessionRoundTripsThePermanentWritableCorpus(String fixtureName) throws Exception {
         Path source = fixtureFile("json-oracles/project/" + fixtureName).toPath();
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         ProjectSnapshot opened = session.open(source).getSnapshot();
         Path savedProject = tempDirectory.resolve(fixtureName);
 
         ProjectOutcome saved = session.saveAs(savedProject);
 
         assertFalse(saved.getSnapshot().isDirty());
-        ProjectSnapshot reopened = ProjectSessions.create().open(savedProject).getSnapshot();
+        ProjectSnapshot reopened = ProjectSessions.create(settings::snapshot).open(savedProject).getSnapshot();
         assertProjectSnapshotSemantics(opened, reopened);
     }
 
@@ -217,7 +209,7 @@ class ProjectPersistenceCompatibilityTest {
      */
     @Test
     void projectSessionPreservesAllDefaultMissingSliderOmission() throws Exception {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.open(fixtureFile(ALL_DEFAULTS_FIXTURE).toPath());
         Path savedProject = tempDirectory.resolve("project-session-all-defaults.jbs2bg");
 
@@ -225,7 +217,7 @@ class ProjectPersistenceCompatibilityTest {
 
         String savedText = Files.readString(savedProject);
         assertTrue(savedText.contains("\"SetSliders\":[]"));
-        ProjectSnapshot reopened = ProjectSessions.create().open(savedProject).getSnapshot();
+        ProjectSnapshot reopened = ProjectSessions.create(settings::snapshot).open(savedProject).getSnapshot();
         SliderChoiceSnapshot breasts = findChoice(findPreset(reopened, "All Defaults"), "Breasts");
         assertTrue(breasts.isMissingDefault());
         assertTrue(breasts.isEnabled());
@@ -251,7 +243,7 @@ class ProjectPersistenceCompatibilityTest {
                 + "\"valueBig\":null,\"pctMin\":100,\"pctMax\":100}]}},"
                 + "\"CustomMorphTargets\":{},\"MorphedNPCs\":{}}")
                 .getBytes(StandardCharsets.UTF_8));
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         SliderChoiceSnapshot opened = findChoice(findPreset(session.open(source).getSnapshot(), "Explicit Nulls"),
                 "Waist");
         Path savedProject = tempDirectory.resolve("explicit-null-values-saved.jbs2bg");
@@ -262,7 +254,7 @@ class ProjectPersistenceCompatibilityTest {
         String savedText = Files.readString(savedProject);
         assertTrue(savedText.contains("\"valueSmall\":null"));
         assertTrue(savedText.contains("\"valueBig\":null"));
-        ProjectSnapshot reopened = ProjectSessions.create().open(savedProject).getSnapshot();
+        ProjectSnapshot reopened = ProjectSessions.create(settings::snapshot).open(savedProject).getSnapshot();
         assertFalse(findChoice(findPreset(reopened, "Explicit Nulls"), "Waist").isMissingDefault());
     }
 

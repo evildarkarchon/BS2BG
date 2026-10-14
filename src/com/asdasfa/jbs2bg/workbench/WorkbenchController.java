@@ -519,6 +519,8 @@ public final class WorkbenchController {
     private NpcDatabaseFeature npcDatabaseFeature;
     private NpcDatabaseImporter npcDatabaseImporter;
     private SettingsFeature settingsFeature;
+    // The one Settings store from the attach environment; features read it, only Settings effects publish to it.
+    private Settings settings;
     private OutputFeature outputFeature;
     private Stage stage;
     private WorkbenchPlatform platform;
@@ -672,95 +674,55 @@ public final class WorkbenchController {
     }
 
     /**
-     * Attaches the loaded JavaFX graph with the exact Settings startup result so recovery and failures become visible
-     * Workbench evidence rather than being stranded in the composition root.
+     * Attaches the loaded JavaFX graph to the real JavaFX platform. The environment carries the exact Settings startup
+     * result so recovery and failures become visible Workbench evidence rather than being stranded in the
+     * composition root.
      *
-     * @param flow               authoritative Workbench Project flow
-     * @param ownerStage         application window that owns effects and focus
-     * @param settingsDirectory  profile directory owning Settings and appearance preferences
-     * @param settingsStartup    original paired Settings startup result
+     * @param flow        authoritative Workbench Project flow
+     * @param ownerStage  application window that owns effects and focus
+     * @param environment the one Settings store, its startup result, preferences directory, and migration policy
      * @throws NullPointerException when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
-    public void attach(WorkbenchProjectFlow flow, Stage ownerStage, Path settingsDirectory,
-                       Settings.InitializationResult settingsStartup) {
-        WorkbenchAppearanceStore store = new WorkbenchAppearanceStore(settingsDirectory);
-        WorkbenchAppearance.ThemeChoice initialChoice;
-        try {
-            initialChoice = store.load();
-        } catch (IOException exception) {
-            // A damaged or unreadable optional preference must not prevent the Workbench from starting safely.
-            initialChoice = WorkbenchAppearance.ThemeChoice.SYSTEM;
-        }
-        attach(flow, ownerStage, new JavaFxWorkbenchPlatform(), initialChoice, store::save,
-                settingsDirectory, settingsStartup, GenerationPreferencesStore.MigrationPolicy.MIGRATE);
+    public void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchEnvironment environment) {
+        attach(flow, ownerStage, new JavaFxWorkbenchPlatform(), environment);
     }
 
     /**
      * Attaches one platform adapter on the JavaFX Application Thread. The controller owns the Stage handlers until
-     * the flow publishes its final close effect; it cannot be attached again.
+     * the flow publishes its final close effect; it cannot be attached again. The theme choice is loaded from and
+     * saved to the environment's preferences directory.
      *
      * @param flow            authoritative window-scoped Project flow
      * @param ownerStage      Stage whose title, close request, choosers, and dialogs are owned by this controller
-     * @param platformAdapter native-effect adapter retained for the controller lifetime
-     * @throws NullPointerException  when an argument is null
-     * @throws IllegalStateException when this controller is already attached
-     */
-    void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter) {
-        attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
-            // Tests and embedded adapters intentionally keep theme selection in memory only.
-        }, Path.of("."), Settings.publishedState(),
-                GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
-    }
-
-    /**
-     * Test and embedded adapter seam that supplies isolated Settings persistence and startup evidence on the JavaFX
-     * Application Thread. The adapter and feature state remain owned until the Stage is hidden.
-     *
-     * @param flow authoritative window-scoped Project flow
-     * @param ownerStage Stage owning controls, focus, and platform effects
-     * @param platformAdapter native-effect adapter retained for the window lifetime
-     * @param settingsDirectory isolated directory owning Settings persistence
-     * @param settingsStartup startup Settings result rendered into the Settings feature and Activity
-     * @throws NullPointerException when an argument is null
-     * @throws IllegalStateException when this controller is already attached
-     */
-    void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
-                Path settingsDirectory, Settings.InitializationResult settingsStartup) {
-        attach(flow, ownerStage, platformAdapter, WorkbenchAppearance.ThemeChoice.SYSTEM, choice -> {
-            // Tests and embedded adapters intentionally keep theme selection in memory only.
-        }, settingsDirectory, settingsStartup,
-                GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
-    }
-
-    /**
-     * Attaches Project, platform, and profile appearance adapters through one window-lifetime initialization path.
-     *
-     * @param flow            authoritative window-scoped Project flow
-     * @param ownerStage      Stage that owns dialogs, focus, and the live appearance listener
      * @param platformAdapter native-effect adapter retained until the Stage is hidden
-     * @param initialChoice   persisted System, Light, or Dark choice
-     * @param themeSaver      profile persistence callback used after user selection
-     * @param settingsDirectory directory owning the paired Settings files
-     * @param settingsStartup original Settings startup result rendered as durable evidence
-     * @param migrationPolicy explicit production migration or embedded read-only fallback policy
+     * @param environment     the one Settings store, its startup result, preferences directory, and migration policy
      * @throws NullPointerException  when an argument is null
      * @throws IllegalStateException when this controller is already attached
      */
     void attach(WorkbenchProjectFlow flow, Stage ownerStage, WorkbenchPlatform platformAdapter,
-                        WorkbenchAppearance.ThemeChoice initialChoice, ThemeChoiceSaver themeSaver,
-                        Path settingsDirectory, Settings.InitializationResult settingsStartup,
-                        GenerationPreferencesStore.MigrationPolicy migrationPolicy) {
+                WorkbenchEnvironment environment) {
         if (projectFlow != null)
             throw new IllegalStateException("WorkbenchController is already attached");
+        Objects.requireNonNull(environment, "environment");
+        WorkbenchAppearanceStore themeStore = new WorkbenchAppearanceStore(environment.preferencesDirectory());
+        WorkbenchAppearance.ThemeChoice initialChoice;
+        try {
+            initialChoice = themeStore.load();
+        } catch (IOException exception) {
+            // A damaged or unreadable optional preference must not prevent the Workbench from starting safely.
+            initialChoice = WorkbenchAppearance.ThemeChoice.SYSTEM;
+        }
         projectFlow = Objects.requireNonNull(flow, "flow");
-        templatesFeature = new TemplatesFeature(projectFlow, Clock.systemUTC());
+        settings = environment.settings();
+        templatesFeature = new TemplatesFeature(projectFlow, settings::snapshot, Clock.systemUTC());
         morphsFeature = new MorphsFeature(projectFlow, Clock.systemUTC());
         npcDatabaseFeature = new NpcDatabaseFeature();
         npcDatabaseImporter = new NpcDatabaseImporter(npcDatabaseFeature, projectFlow.jobs(), this::renderNpcDatabase);
-        settingsFeature = new SettingsFeature(settingsDirectory, settingsStartup, migrationPolicy);
+        settingsFeature = new SettingsFeature(settings, environment.settingsStartup(),
+                environment.preferencesDirectory(), environment.migrationPolicy());
         outputFeature = new OutputFeature(projectFlow, () -> new OutputFeature.GenerationSettings(
-                Settings.snapshot(), settingsFeature.frame().omitRedundantSliders()));
+                settings.snapshot(), settingsFeature.frame().omitRedundantSliders()));
         stage = Objects.requireNonNull(ownerStage, "ownerStage");
         platform = Objects.requireNonNull(platformAdapter, "platformAdapter");
         configureProjectCommands();
@@ -772,7 +734,7 @@ public final class WorkbenchController {
         configureNavigation();
         configureDrawerGeometry();
         configureFeedback();
-        configureAppearance(initialChoice, themeSaver);
+        configureAppearance(initialChoice, themeStore::save);
         configureSemanticIcons();
         stage.setOnCloseRequest(event -> {
             if (!finalClose) {
@@ -2349,7 +2311,7 @@ public final class WorkbenchController {
                         ? List.of(effect.directory().toString()) : List.of(),
                 Optional.empty());
         return new JobCoordinator.Submission<>(operation,
-                context -> runSettingsEffect(effect, context),
+                context -> runSettingsEffect(settings, effect, context),
                 (attempt, result) -> completeSettingsEffect(effect, result),
                 Optional.of(settingsRetryFactory(effect)));
     }
@@ -2390,9 +2352,15 @@ public final class WorkbenchController {
     /**
      * Executes blocking Settings I/O on the worker. Reload stays cancellable through lock acquisition and ordinary
      * pair reads; the Settings seam enters commit immediately before recovery or publication can mutate state.
+     *
+     * @param settings the Settings store that Save persists to and Reload reloads
+     * @param effect   tokenized Save, Reload, or generation-preference effect captured on the JavaFX thread
+     * @param context  coordinator context owning cancellation and the commit boundary
+     * @return terminal coordinator result carrying the feature completion
      */
     static JobCoordinator.Result<SettingsFeature.Completion> runSettingsEffect(
-            SettingsFeature.Effect effect, JobCoordinator.Context context) {
+            Settings settings, SettingsFeature.Effect effect, JobCoordinator.Context context) {
+        Objects.requireNonNull(settings, "settings");
         context.checkCancellation();
         String commitPhase = switch (effect) {
             case SettingsFeature.SaveEffect ignored -> "Saving Settings";
@@ -2411,7 +2379,7 @@ public final class WorkbenchController {
         String failureSummary;
         switch (effect) {
             case SettingsFeature.SaveEffect save -> {
-                Settings.PersistenceResult result = Settings.persist(save.directory(), save.replacement());
+                Settings.PersistenceResult result = settings.persist(save.replacement());
                 completion = new SettingsFeature.SaveCompletion(save.token(), result);
                 successful = result.isSuccessful();
                 diagnostics = settingsDiagnostics(result);
@@ -2419,8 +2387,7 @@ public final class WorkbenchController {
                 failureSummary = "Settings could not be saved.";
             }
             case SettingsFeature.ReloadEffect reload -> {
-                Settings.InitializationResult result = Settings.initialize(reload.directory(),
-                        () -> context.beginCommit(commitPhase));
+                Settings.InitializationResult result = settings.reload(() -> context.beginCommit(commitPhase));
                 completion = new SettingsFeature.ReloadCompletion(reload.token(), result);
                 successful = result.isSuccessful();
                 diagnostics = settingsDiagnostics(result);
@@ -3273,7 +3240,7 @@ public final class WorkbenchController {
             String key = choice.name().toLowerCase(Locale.ROOT);
             SliderChoiceRow row = sliderChoiceRowsByName.get(key);
             if (row == null)
-                row = new SliderChoiceRow(this::dispatchTemplates);
+                row = new SliderChoiceRow(this::dispatchTemplates, settings::snapshot);
             row.render(editorFrame, choice, templatesMutationsBlocked);
             next.put(key, row);
             return row;
