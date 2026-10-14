@@ -83,6 +83,59 @@ class FxTestHarnessTest {
     }
 
     @Test
+    void ownedStageLookupReturnsOnlyAShowingStageOwnedByTheGivenWindow() throws Exception {
+        FxTestToolkit.runOnFxThread(() -> {
+            Stage mine = new Stage();
+            mine.setScene(new Scene(new StackPane(), 200.0, 200.0));
+            Stage other = new Stage();
+            other.setScene(new Scene(new StackPane(), 200.0, 200.0));
+            try {
+                mine.show();
+                other.show();
+                Stage foreign = ownedStageWithRoot(other, "viewer");
+                foreign.show();
+                // A closed viewer: shown, then closed again, so it must not count as a match.
+                Stage closed = ownedStageWithRoot(mine, "viewer");
+                closed.show();
+                closed.close();
+                Stage owned = ownedStageWithRoot(mine, "viewer");
+                owned.show();
+
+                assertSame(owned, FxTestToolkit.showingOwnedStage(mine, "#viewer"));
+                assertSame(foreign, FxTestToolkit.showingOwnedStage(other, "#viewer"));
+                AssertionError missing = assertThrows(AssertionError.class,
+                        () -> FxTestToolkit.showingOwnedStage(mine, "#noSuchRoot"));
+                assertTrue(missing.getMessage().contains("#noSuchRoot"), missing.getMessage());
+
+                Stage twin = ownedStageWithRoot(mine, "viewer");
+                twin.show();
+                AssertionError ambiguous = assertThrows(AssertionError.class,
+                        () -> FxTestToolkit.showingOwnedStage(mine, "#viewer"));
+                assertTrue(ambiguous.getMessage().contains("2"), ambiguous.getMessage());
+            } finally {
+                mine.close();
+                other.close();
+            }
+        });
+    }
+
+    /** Builds an owned Stage whose scene root carries the given id, the shape of the portrait viewer. */
+    private static Stage ownedStageWithRoot(Stage owner, String rootId) {
+        StackPane content = new StackPane();
+        content.setId(rootId);
+        Stage stage = new Stage();
+        stage.initOwner(owner);
+        stage.setScene(new Scene(content, 100.0, 100.0));
+        return stage;
+    }
+
+    @Test
+    void ownedStageLookupRefusesToRunOffTheFxThread() {
+        Stage[] none = new Stage[1];
+        assertThrows(IllegalStateException.class, () -> FxTestToolkit.showingOwnedStage(none[0], "#anything"));
+    }
+
+    @Test
     void anExceptionFromRunLaterFailsTheNextFxBody() throws Exception {
         FxTestToolkit.ensureStarted();
         IllegalStateException boom = new IllegalStateException("thrown from runLater");
