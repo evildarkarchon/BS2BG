@@ -68,6 +68,7 @@ The required suites the script asserts (report present, at least one test, zero 
 `JacksonDependencyPolicyTest`, `SettingsJacksonAdapterTest`, `SettingsPairPublisherTest`,
 `ProjectOutputFormatterTest`, `BosJacksonWriterTest`, `OutputArtifactPublisherTest`, `OutputRoutePolicyTest`, `JobCoordinatorTest`,
 `WorkbenchProjectFlowTest`, `WorkbenchControllerTest`, `WorkbenchFocusTest`, `WorkbenchAccessibilityContractTest`,
+`DispatchPipelineTest`,
 `TemplatesFeatureTest`, `SettingsFeatureTest`, and
 `OutputFeatureTest`.
 

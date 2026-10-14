@@ -525,6 +525,8 @@ public final class WorkbenchController {
     private OutputFeature outputFeature;
     private Stage stage;
     private WorkbenchPlatform platform;
+    // Built in attach once the platform and Stage exist; owns the job gate and the dialog round-trip.
+    private DispatchPipeline pipeline;
     private JavaFxWorkbenchAppearance appearanceAdapter;
     private boolean finalClose;
     private long renderedProjectSequence;
@@ -545,9 +547,6 @@ public final class WorkbenchController {
     private boolean morphsOwnProjectDiagnostics;
     private TextField activeRenameField;
     private SliderPresetCell activeRenameCell;
-    private boolean templatesMutationsBlocked;
-    private boolean morphsMutationsBlocked;
-    private boolean settingsMutationsBlocked;
     private boolean resetTemplatesOnNextProjectFrame;
     private boolean resetMorphsOnNextProjectFrame;
     private boolean sliderPresetListInitialized;
@@ -728,6 +727,32 @@ public final class WorkbenchController {
                 settings.snapshot(), settingsFeature.frame().omitRedundantSliders()));
         stage = Objects.requireNonNull(ownerStage, "ownerStage");
         platform = Objects.requireNonNull(platformAdapter, "platformAdapter");
+        pipeline = new DispatchPipeline(feedback, new DispatchPipeline.DialogPort() {
+            /** Completes a confirmation modal owned by this Workbench window. */
+            @Override
+            public WorkbenchFeedback.DialogAction confirm(WorkbenchFeedback.DialogSpec spec) {
+                return platform.completeConfirmation(spec, stage);
+            }
+
+            /** Completes a failure modal owned by this Workbench window. */
+            @Override
+            public WorkbenchFeedback.DialogAction fail(WorkbenchFeedback.DialogSpec spec) {
+                return platform.completeFailure(spec, stage);
+            }
+        }, this::renderFeedback, new DispatchPipeline.ProjectChrome() {
+            /** @return the Project sequence the chrome last rendered */
+            @Override
+            public long renderedSequence() {
+                return renderedProjectSequence;
+            }
+
+            /** Records the feature-owned sequence first so render does not replay generic lifecycle feedback. */
+            @Override
+            public void render(long sequence) {
+                renderedProjectSequence = sequence;
+                WorkbenchController.this.render(projectFlow.frame());
+            }
+        });
         configureProjectCommands();
         configureTemplates();
         configureMorphs();
@@ -895,7 +920,7 @@ public final class WorkbenchController {
         availableMorphSliderPreset.setCellFactory(list -> new SliderPresetDisplayCell());
         availableMorphSliderPreset.setButtonCell(new SliderPresetDisplayCell());
         availableMorphSliderPreset.setOnAction(event -> assignMorphSliderPresetButton.setDisable(
-                morphsMutationsBlocked || availableMorphSliderPreset.getValue() == null));
+                pipeline.mutationsBlocked() || availableMorphSliderPreset.getValue() == null));
         assignMorphSliderPresetButton.setOnAction(event -> {
             SliderPresetSnapshot preset = availableMorphSliderPreset.getValue();
             if (preset != null)
@@ -997,9 +1022,9 @@ public final class WorkbenchController {
         apply.setOnAction(event -> {
             List<NameIdentity> selected = choices.getSelectionModel().getSelectedItems().stream()
                     .map(preset -> NameIdentity.of(preset.getName())).toList();
-            MorphsFeature.Update response = morphsFeature.respondFillEmpty(offer.token(), selected);
-            renderMorphsUpdate(response);
-            publishMorphsOutcome(new MorphsFeature.RequestFillEmpty(), response);
+            // Through the gated pipeline: while a job blocks mutations the apply is refused, and hiding the
+            // popup then cancels the offer without an edit.
+            dispatchMorphs(new MorphsFeature.ApplyFillEmpty(offer.token(), selected));
             popup.hide();
         });
         HBox commitActions = new HBox(8.0, apply, cancel);
@@ -1533,8 +1558,8 @@ public final class WorkbenchController {
      * Project and feature frames are already committed before navigation realizes the focus effect.
      */
     private void backToMorphs() {
-        npcDatabaseFeature.consumeReturnAssignment().ifPresent(identity -> renderMorphsUpdate(
-                morphsFeature.dispatch(new MorphsFeature.SelectNpc(identity))));
+        npcDatabaseFeature.consumeReturnAssignment().ifPresent(identity ->
+                dispatchMorphs(new MorphsFeature.SelectNpc(identity)));
         NpcMorphAssignmentSnapshot selected = npcMorphAssignmentList.getSelectionModel().getSelectedItem();
         if (selected != null)
             npcMorphAssignmentList.scrollTo(selected);
@@ -1936,11 +1961,7 @@ public final class WorkbenchController {
     private boolean confirmNpcDatabaseAction(WorkbenchFeedback.DialogSpec spec,
                                              WorkbenchFeedback.DialogAction acceptance) {
         WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
-        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
-        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
-        renderFeedback(pendingFrame);
-        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
-        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(pending.token(), action)).frame());
+        WorkbenchFeedback.DialogAction action = pipeline.confirm(spec);
         requestFocus(returnTarget);
         return action == acceptance;
     }
@@ -2008,9 +2029,15 @@ public final class WorkbenchController {
             // Keyboard generation bypasses the disabled button, so enforce the same Settings prerequisite here.
             return;
         }
-        OutputFeature.Update update = outputFeature.dispatch(Objects.requireNonNull(intent, "intent"));
-        renderOutput(update.frame());
-        update.effect().ifPresent(this::applyOutputEffect);
+        pipeline.dispatch(outputFeature, DispatchPipeline.Callbacks.of(
+                update -> renderOutput(update.frame()),
+                effect -> {
+                    applyOutputEffect(effect);
+                    return DispatchPipeline.Realization.done();
+                },
+                outcome -> {
+                    // Output reports through its observed job publications and applyOutputEffect, not per intent.
+                }), Objects.requireNonNull(intent, "intent"));
     }
 
     /** Applies one committed Output publication and consumes its optional drawer reveal exactly once. */
@@ -2085,93 +2112,76 @@ public final class WorkbenchController {
         }
     }
 
-    /** Commits a typed Morphs update before rendering Project chrome or later platform effects. */
+    /**
+     * Runs one Morphs intent through the gated dispatch pipeline. Morphs owns the Project diagnostics of its own
+     * dispatch, so the Templates projection of the same Project frame stays clear meanwhile.
+     */
     private void dispatchMorphs(MorphsFeature.Intent intent) {
-        if (morphsMutationsBlocked && isMorphsMutation(intent))
-            return;
         morphsOwnProjectDiagnostics = true;
         try {
-            MorphsFeature.Update update = morphsFeature.dispatch(Objects.requireNonNull(intent, "intent"));
-            renderMorphsUpdate(update);
-            // The confirmed edit owns diagnostics; reporting the request would hide a rejected or failed response.
-            if (update.effect().isPresent())
-                update = completeMorphsEffect(update.effect().orElseThrow());
-            if (update.fillEmptyOffer().isPresent())
-                showFillEmptyFlyout(update.fillEmptyOffer().orElseThrow());
-            publishMorphsOutcome(intent, update);
-            if (intent instanceof MorphsFeature.Create && update.accepted()
-                    && update.outcomeKind() == MorphsFeature.OutcomeKind.CHANGED)
-                customMorphTargetNameInput.clear();
-            if (intent instanceof MorphsFeature.CreateNpc && update.accepted()
-                    && update.outcomeKind() == MorphsFeature.OutcomeKind.CHANGED) {
-                npcDisplayNameInput.clear();
-                npcPluginNameInput.clear();
-                npcEditorIdInput.clear();
-                npcRaceInput.clear();
-                npcFormIdInput.clear();
-            }
+            pipeline.dispatch(morphsFeature, DispatchPipeline.Callbacks.of(
+                    update -> renderMorphs(update.frame()),
+                    effect -> DispatchPipeline.Realization.confirm(morphsConfirmation(effect),
+                            action -> morphsFeature.respond(effect.token(),
+                                    action == morphsDestructiveAction(effect))),
+                    this::reportMorphsOutcome), Objects.requireNonNull(intent, "intent"));
         } finally {
             morphsOwnProjectDiagnostics = false;
         }
     }
 
-    /** Distinguishes Project mutations from local Morphs browsing while a central job owns admission. */
-    private static boolean isMorphsMutation(MorphsFeature.Intent intent) {
-        return intent instanceof MorphsFeature.Create
-                || intent instanceof MorphsFeature.CreateNpc
-                || intent instanceof MorphsFeature.AssignSliderPreset
-                || intent instanceof MorphsFeature.AssignAllSliderPresets
-                || intent instanceof MorphsFeature.RemoveAssignedSliderPreset
-                || intent instanceof MorphsFeature.RequestClearAssignments
-                || intent instanceof MorphsFeature.RequestRemove
-                || intent instanceof MorphsFeature.RequestClearVisible
-                || intent instanceof MorphsFeature.RequestRemoveNpc
-                || intent instanceof MorphsFeature.RequestClearVisibleNpcs
-                || intent instanceof MorphsFeature.RequestFillEmpty;
-    }
-
-    /** Renders one Morphs update and refreshes Project chrome without replaying lifecycle-only feedback. */
-    private void renderMorphsUpdate(MorphsFeature.Update update) {
-        if (update.frame().projectSequence() != renderedProjectSequence) {
-            // Morphs owns task wording and inline validation, so suppress the lifecycle-only generic projection.
-            renderedProjectSequence = update.frame().projectSequence();
-            render(projectFlow.frame());
-        }
-        renderMorphs(update.frame());
-    }
-
-    /**
-     * Realizes one tokenized destructive Morphs confirmation and returns its completed feature response for reporting.
-     */
-    private MorphsFeature.Update completeMorphsEffect(MorphsFeature.Effect effect) {
-        WorkbenchFeedback.DialogAction destructiveAction = effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE
+    /** Returns the named destructive action a Morphs confirmation offers beside Cancel. */
+    private static WorkbenchFeedback.DialogAction morphsDestructiveAction(MorphsFeature.Effect effect) {
+        return effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE
                 || effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE_NPC
                 || effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE_ASSIGNMENT
                 ? WorkbenchFeedback.DialogAction.REMOVE
                 : WorkbenchFeedback.DialogAction.CLEAR;
-        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.destructiveAction(
-                effect.title(), effect.message(), destructiveAction);
-        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
-        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
-        renderFeedback(pendingFrame);
-        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
-        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
-                pending.token(), action)).frame());
-        boolean confirmed = action == destructiveAction;
-        MorphsFeature.Update response = morphsFeature.respond(effect.token(), confirmed);
-        renderMorphsUpdate(response);
-        if (confirmed) {
-            String operation = switch (effect.kind()) {
-                case CONFIRM_REMOVE -> "Remove Custom Morph Target";
-                case CONFIRM_REMOVE_NPC -> "Remove NPC Morph Assignment";
-                case CONFIRM_REMOVE_ASSIGNMENT -> "Remove Slider Preset assignment";
-                case CONFIRM_CLEAR_VISIBLE -> "Clear visible Custom Morph Targets";
-                case CONFIRM_CLEAR_VISIBLE_NPCS -> "Clear visible NPC Morph Assignments";
-                case CONFIRM_CLEAR_ASSIGNMENTS -> "Clear Slider Preset assignments";
-            };
-            publishMorphsMutation(operation, response, true);
+    }
+
+    /** Builds the safe-default destructive confirmation for one tokenized Morphs effect. */
+    private static WorkbenchFeedback.DialogSpec morphsConfirmation(MorphsFeature.Effect effect) {
+        return WorkbenchFeedback.DialogSpec.destructiveAction(effect.title(), effect.message(),
+                morphsDestructiveAction(effect));
+    }
+
+    /**
+     * Maps one settled Morphs dispatch to feedback: a confirmed destructive edit is recorded in Activity, a Fill
+     * Empty offer opens its flyout, the outcome is routed to its tier, and successful creation clears its inputs.
+     * After a confirmation the response, not the request, is reported, so a rejected or failed response stays
+     * visible.
+     */
+    private void reportMorphsOutcome(DispatchPipeline.Outcome<MorphsFeature.Intent, MorphsFeature.Update> outcome) {
+        MorphsFeature.Intent intent = outcome.intent();
+        MorphsFeature.Update update = outcome.settled();
+        if (outcome.answer().isPresent()) {
+            MorphsFeature.Effect effect = outcome.update().effect().orElseThrow();
+            if (outcome.answer().orElseThrow() == morphsDestructiveAction(effect)) {
+                String operation = switch (effect.kind()) {
+                    case CONFIRM_REMOVE -> "Remove Custom Morph Target";
+                    case CONFIRM_REMOVE_NPC -> "Remove NPC Morph Assignment";
+                    case CONFIRM_REMOVE_ASSIGNMENT -> "Remove Slider Preset assignment";
+                    case CONFIRM_CLEAR_VISIBLE -> "Clear visible Custom Morph Targets";
+                    case CONFIRM_CLEAR_VISIBLE_NPCS -> "Clear visible NPC Morph Assignments";
+                    case CONFIRM_CLEAR_ASSIGNMENTS -> "Clear Slider Preset assignments";
+                };
+                publishMorphsMutation(operation, update, true);
+            }
         }
-        return response;
+        if (update.fillEmptyOffer().isPresent())
+            showFillEmptyFlyout(update.fillEmptyOffer().orElseThrow());
+        publishMorphsOutcome(intent, update);
+        if (intent instanceof MorphsFeature.Create && update.accepted()
+                && update.outcomeKind() == MorphsFeature.OutcomeKind.CHANGED)
+            customMorphTargetNameInput.clear();
+        if (intent instanceof MorphsFeature.CreateNpc && update.accepted()
+                && update.outcomeKind() == MorphsFeature.OutcomeKind.CHANGED) {
+            npcDisplayNameInput.clear();
+            npcPluginNameInput.clear();
+            npcEditorIdInput.clear();
+            npcRaceInput.clear();
+            npcFormIdInput.clear();
+        }
     }
 
     /** Routes Morphs validation and task outcomes into the accepted inline, status, Activity, and failure tiers. */
@@ -2201,12 +2211,14 @@ public final class WorkbenchController {
             case MorphsFeature.AssignSliderPreset ignored -> "Assign Slider Preset";
             case MorphsFeature.AssignAllSliderPresets ignored -> "Assign all Slider Presets";
             case MorphsFeature.RequestFillEmpty ignored -> "Fill Empty NPC Morph Assignments";
+            case MorphsFeature.ApplyFillEmpty ignored -> "Fill Empty NPC Morph Assignments";
             default -> null;
         };
         if (operation != null && (update.outcomeKind() == MorphsFeature.OutcomeKind.CHANGED
                 || update.outcomeKind() == MorphsFeature.OutcomeKind.UNCHANGED))
             publishMorphsMutation(operation, update, intent instanceof MorphsFeature.AssignAllSliderPresets
-                    || intent instanceof MorphsFeature.RequestFillEmpty);
+                    || intent instanceof MorphsFeature.RequestFillEmpty
+                    || intent instanceof MorphsFeature.ApplyFillEmpty);
     }
 
     /**
@@ -2246,12 +2258,7 @@ public final class WorkbenchController {
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
                 "Morphs editing failed", "The Morphs edit could not be completed.",
                 details.isBlank() ? "No diagnostic details were provided." : details, false);
-        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
-        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
-        renderFeedback(pendingFrame);
-        WorkbenchFeedback.DialogAction action = platform.completeFailure(spec, stage);
-        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
-                pending.token(), action)).frame());
+        pipeline.fail(spec);
         requestFocus(returnTarget);
     }
 
@@ -2265,56 +2272,66 @@ public final class WorkbenchController {
      *
      * @param intent requested Settings task
      * @param closeReturnTarget semantic focus to restore while continuing a close-save, otherwise empty
-     * @return committed feature update, or rejected update when coordinator admission failed
+     * @return settled feature update, or a rejected update when the job gate refused the intent or coordinator
+     * admission failed
      */
     private SettingsFeature.Update dispatchSettings(SettingsFeature.Intent intent,
                                                      Optional<WorkbenchNavigation.FocusTarget> closeReturnTarget) {
-        if (settingsMutationsBlocked && isSettingsMutation(intent))
-            return new SettingsFeature.Update(false, settingsFeature.frame());
-        SettingsFeature.Update update = settingsFeature.dispatch(Objects.requireNonNull(intent, "intent"));
-        renderSettings(update.frame());
-        if (update.effect().isPresent()) {
-            SettingsFeature.Effect effect = update.effect().orElseThrow();
-            if (effect instanceof SettingsFeature.ReloadConfirmationEffect confirmation)
-                return completeSettingsReloadConfirmation(confirmation);
-            closeReturnTarget.ifPresent(target ->
-                    settingsCloseContinuation = new SettingsCloseContinuation(effect.token(), target));
-            if (!submitSettingsEffect(effect)) {
-                if (settingsCloseContinuation != null && settingsCloseContinuation.effectToken() == effect.token())
-                    settingsCloseContinuation = null;
-                return new SettingsFeature.Update(false, settingsFeature.frame());
-            }
-        } else {
-            publishSettingsOutcome(update);
-        }
-        if (update.accepted() && update.effect().isEmpty())
-            renderOutput(outputFeature.refreshGenerationSettings().frame());
-        return update;
+        return pipeline.dispatch(settingsFeature, DispatchPipeline.Callbacks.of(
+                        update -> renderSettings(update.frame()),
+                        effect -> realizeSettingsEffect(effect, closeReturnTarget),
+                        this::reportSettingsOutcome), Objects.requireNonNull(intent, "intent"))
+                .map(DispatchPipeline.Outcome::settled)
+                .orElseGet(() -> new SettingsFeature.Update(false, settingsFeature.frame()));
     }
 
-    /** Publishes and resolves one dirty-Reload dialog before admitting the selected Settings worker operation. */
-    private SettingsFeature.Update completeSettingsReloadConfirmation(
-            SettingsFeature.ReloadConfirmationEffect effect) {
-        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.unsavedClose(
-                effect.title(), effect.message());
-        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
-        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
-        renderFeedback(pendingFrame);
-        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
-        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
-                pending.token(), action)).frame());
-        SettingsFeature.ReloadDecision decision = switch (action) {
+    /**
+     * Realizes one Settings effect: a dirty-Reload confirmation goes back to the pipeline's dialog round-trip, and a
+     * worker effect is admitted to the coordinator, installing the close continuation first when one is requested.
+     *
+     * @param effect            effect requested by the latest Settings update
+     * @param closeReturnTarget semantic focus to restore while continuing a close-save, otherwise empty
+     * @return the confirmation for the pipeline, or a handled realization that is rejected when admission failed
+     */
+    private DispatchPipeline.Realization<SettingsFeature.Update> realizeSettingsEffect(
+            SettingsFeature.Effect effect, Optional<WorkbenchNavigation.FocusTarget> closeReturnTarget) {
+        if (effect instanceof SettingsFeature.ReloadConfirmationEffect confirmation)
+            return DispatchPipeline.Realization.confirm(
+                    WorkbenchFeedback.DialogSpec.unsavedClose(confirmation.title(), confirmation.message()),
+                    action -> settingsFeature.respondReload(confirmation.token(), reloadDecision(action)));
+        closeReturnTarget.ifPresent(target ->
+                settingsCloseContinuation = new SettingsCloseContinuation(effect.token(), target));
+        if (!submitSettingsEffect(effect)) {
+            if (settingsCloseContinuation != null && settingsCloseContinuation.effectToken() == effect.token())
+                settingsCloseContinuation = null;
+            return DispatchPipeline.Realization.settledBy(new SettingsFeature.Update(false, settingsFeature.frame()));
+        }
+        return DispatchPipeline.Realization.done();
+    }
+
+    /** Maps the dirty-Reload dialog answer to the feature's explicit Save, Discard or Cancel decision. */
+    private static SettingsFeature.ReloadDecision reloadDecision(WorkbenchFeedback.DialogAction action) {
+        return switch (action) {
             case SAVE -> SettingsFeature.ReloadDecision.SAVE;
             case DISCARD -> SettingsFeature.ReloadDecision.DISCARD;
             case CANCEL -> SettingsFeature.ReloadDecision.CANCEL;
             case COPY_DETAILS, RETRY, REMOVE, CLEAR, CLOSE -> throw new IllegalArgumentException(
                     "Dirty Settings Reload returned an unsupported dialog action: " + action);
         };
-        SettingsFeature.Update response = settingsFeature.respondReload(effect.token(), decision);
-        renderSettings(response.frame());
-        if (response.effect().isPresent() && !submitSettingsEffect(response.effect().orElseThrow()))
-            return new SettingsFeature.Update(false, settingsFeature.frame());
-        return response;
+    }
+
+    /**
+     * Reports a Settings dispatch that completed without an effect and refreshes Output's generation settings when it
+     * was accepted. Worker effects report through their job terminal records instead.
+     */
+    private void reportSettingsOutcome(
+            DispatchPipeline.Outcome<SettingsFeature.Intent, SettingsFeature.Update> outcome) {
+        SettingsFeature.Update update = outcome.update();
+        if (update.effect().isPresent())
+            return;
+        publishSettingsOutcome(update);
+        if (update.accepted())
+            renderOutput(outputFeature.refreshGenerationSettings().frame());
     }
 
     /** Admits one immutable Settings effect to the existing application-wide coordinator. */
@@ -2553,16 +2570,6 @@ public final class WorkbenchController {
         renderOutput(outputFeature.refreshGenerationSettings().frame());
     }
 
-    /** Distinguishes local profile browsing from operations that can change live or on-disk Settings. */
-    private static boolean isSettingsMutation(SettingsFeature.Intent intent) {
-        return intent instanceof SettingsFeature.AddEntry
-                || intent instanceof SettingsFeature.EditEntry
-                || intent instanceof SettingsFeature.RemoveEntry
-                || intent instanceof SettingsFeature.ChangeOmitRedundantSliders
-                || intent instanceof SettingsFeature.Save
-                || intent instanceof SettingsFeature.Reload;
-    }
-
     /** Projects Settings outcomes through inline validation, status-only drafts, and durable bulk Activity. */
     private void publishSettingsOutcome(SettingsFeature.Update update) {
         SettingsFeature.OutcomeKind kind = update.frame().outcome();
@@ -2674,18 +2681,18 @@ public final class WorkbenchController {
             omitRedundantSlidersCheck.setSelected(frame.omitRedundantSliders());
             boolean backgroundJobBlocked = projectFlow.jobs().frame().active()
                     || projectFlow.jobs().frame().shutdownRequested();
-            omitRedundantSlidersCheck.setDisable(settingsMutationsBlocked || backgroundJobBlocked);
-            boolean editable = frame.editor().isPresent() && !settingsMutationsBlocked;
+            omitRedundantSlidersCheck.setDisable(pipeline.mutationsBlocked() || backgroundJobBlocked);
+            boolean editable = frame.editor().isPresent() && !pipeline.mutationsBlocked();
             for (javafx.scene.control.Control control : List.of(settingsEntryNameInput, settingsSmallInput,
                     settingsBigInput, settingsMultiplierInput, settingsInvertedCheck, applySettingsEntryButton,
                     removeSettingsEntryButton))
                 control.setDisable(!editable);
-            newSettingsEntryName.setDisable(settingsMutationsBlocked);
-            addSettingsEntryButton.setDisable(settingsMutationsBlocked);
-            saveSettingsButton.setDisable(settingsMutationsBlocked || backgroundJobBlocked || !frame.dirty()
+            newSettingsEntryName.setDisable(pipeline.mutationsBlocked());
+            addSettingsEntryButton.setDisable(pipeline.mutationsBlocked());
+            saveSettingsButton.setDisable(pipeline.mutationsBlocked() || backgroundJobBlocked || !frame.dirty()
                     || !frame.validation().isEmpty());
-            reloadSettingsButton.setDisable(settingsMutationsBlocked || backgroundJobBlocked);
-            importBodySlideButton.setDisable(settingsMutationsBlocked || projectFlow.jobs().frame().active()
+            reloadSettingsButton.setDisable(pipeline.mutationsBlocked() || backgroundJobBlocked);
+            importBodySlideButton.setDisable(pipeline.mutationsBlocked() || projectFlow.jobs().frame().active()
                     || projectFlow.jobs().frame().shutdownRequested() || !frame.liveAvailable());
         } finally {
             renderingSettings = false;
@@ -2765,79 +2772,50 @@ public final class WorkbenchController {
     }
 
     /**
-     * Commits a typed Templates update before rendering Project chrome, feature controls, or later platform effects.
+     * Runs one Templates intent through the gated dispatch pipeline. Templates owns the Project diagnostics of its own
+     * dispatch, so the Morphs projection of the same Project frame stays clear meanwhile.
      */
     private void dispatchTemplates(TemplatesFeature.Intent intent) {
-        if (templatesMutationsBlocked && isTemplatesMutation(intent))
-            return;
         templatesOwnProjectDiagnostics = true;
         try {
-            TemplatesFeature.Update update = templatesFeature.dispatch(Objects.requireNonNull(intent, "intent"));
-            renderTemplatesUpdate(update);
-            update.effect().ifPresent(this::completeTemplatesEffect);
-            publishTemplatesOutcome(intent, update);
-            if ((intent instanceof TemplatesFeature.CommitRename && update.accepted())
-                    || intent instanceof TemplatesFeature.CancelRename) {
-                sliderPresetList.requestFocus();
-            }
+            pipeline.dispatch(templatesFeature, DispatchPipeline.Callbacks.of(
+                    update -> renderTemplates(update.frame()),
+                    effect -> DispatchPipeline.Realization.confirm(WorkbenchFeedback.DialogSpec.destructiveAction(
+                                    effect.title(), effect.message(), templatesDestructiveAction(effect)),
+                            action -> templatesFeature.respond(effect.token(),
+                                    action == templatesDestructiveAction(effect))),
+                    this::reportTemplatesOutcome), Objects.requireNonNull(intent, "intent"));
         } finally {
             templatesOwnProjectDiagnostics = false;
         }
     }
 
-    /**
-     * Distinguishes Project mutations from local browsing so active jobs block writes without freezing the surface.
-     */
-    private static boolean isTemplatesMutation(TemplatesFeature.Intent intent) {
-        return intent instanceof TemplatesFeature.Create
-                || intent instanceof TemplatesFeature.Duplicate
-                || intent instanceof TemplatesFeature.BeginRename
-                || intent instanceof TemplatesFeature.ChangeRename
-                || intent instanceof TemplatesFeature.CommitRename
-                || intent instanceof TemplatesFeature.RequestRemove
-                || intent instanceof TemplatesFeature.RequestClearVisible
-                || intent instanceof TemplatesFeature.ChangeProfile
-                || intent instanceof TemplatesFeature.SetChoiceEnabled
-                || intent instanceof TemplatesFeature.SetChoiceRange
-                || intent instanceof TemplatesFeature.ApplyBulkValue
-                || intent instanceof TemplatesFeature.ToggleGang;
-    }
-
-    /**
-     * Renders one feature update and refreshes Project chrome without replaying generic lifecycle feedback.
-     */
-    private void renderTemplatesUpdate(TemplatesFeature.Update update) {
-        if (update.frame().projectSequence() != renderedProjectSequence) {
-            // Templates owns task wording and inline validation, so suppress the lifecycle-only generic projection.
-            renderedProjectSequence = update.frame().projectSequence();
-            render(projectFlow.frame());
-        }
-        renderTemplates(update.frame());
-    }
-
-    /**
-     * Publishes a destructive Templates dialog before realizing it, then returns the matching action as an ordinary
-     * tokenized feature response.
-     */
-    private void completeTemplatesEffect(TemplatesFeature.Effect effect) {
-        WorkbenchFeedback.DialogAction destructiveAction = effect.kind()
-                == TemplatesFeature.EffectKind.CONFIRM_REMOVE
+    /** Returns the named destructive action a Templates confirmation offers beside Cancel. */
+    private static WorkbenchFeedback.DialogAction templatesDestructiveAction(TemplatesFeature.Effect effect) {
+        return effect.kind() == TemplatesFeature.EffectKind.CONFIRM_REMOVE
                 ? WorkbenchFeedback.DialogAction.REMOVE
                 : WorkbenchFeedback.DialogAction.CLEAR;
-        WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.destructiveAction(
-                effect.title(), effect.message(), destructiveAction);
-        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
-        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
-        renderFeedback(pendingFrame);
-        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
-        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
-                pending.token(), action)).frame());
-        boolean confirmed = action == destructiveAction;
-        TemplatesFeature.Update response = templatesFeature.respond(effect.token(), confirmed);
-        renderTemplatesUpdate(response);
-        if (confirmed)
-            publishTemplatesMutation(effect.kind() == TemplatesFeature.EffectKind.CONFIRM_REMOVE
-                    ? "Remove Slider Preset" : "Clear visible Slider Presets", response);
+    }
+
+    /**
+     * Maps one settled Templates dispatch to feedback: a confirmed destructive edit is recorded first, then the
+     * dispatched intent's own outcome is routed to its tier, and a finished rename returns focus to the list.
+     */
+    private void reportTemplatesOutcome(
+            DispatchPipeline.Outcome<TemplatesFeature.Intent, TemplatesFeature.Update> outcome) {
+        TemplatesFeature.Intent intent = outcome.intent();
+        TemplatesFeature.Update update = outcome.update();
+        if (outcome.answer().isPresent()) {
+            TemplatesFeature.Effect effect = update.effect().orElseThrow();
+            if (outcome.answer().orElseThrow() == templatesDestructiveAction(effect))
+                publishTemplatesMutation(effect.kind() == TemplatesFeature.EffectKind.CONFIRM_REMOVE
+                        ? "Remove Slider Preset" : "Clear visible Slider Presets", outcome.settled());
+        }
+        publishTemplatesOutcome(intent, update);
+        if ((intent instanceof TemplatesFeature.CommitRename && update.accepted())
+                || intent instanceof TemplatesFeature.CancelRename) {
+            sliderPresetList.requestFocus();
+        }
     }
 
     /**
@@ -2926,12 +2904,7 @@ public final class WorkbenchController {
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
                 "Slider choice editing failed", "The Slider Preset could not be edited.",
                 details.isBlank() ? "No diagnostic details were provided." : details, false);
-        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
-        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
-        renderFeedback(pendingFrame);
-        WorkbenchFeedback.DialogAction action = platform.completeFailure(spec, stage);
-        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
-                pending.token(), action)).frame());
+        pipeline.fail(spec);
         if (!restoreSliderChoiceFocus(exactFocus) && !restoreTemplatesControlFocus(exactControlFocus))
             requestFocus(returnTarget);
     }
@@ -3084,13 +3057,13 @@ public final class WorkbenchController {
 
             boolean selected = frame.editor().isPresent();
             boolean npcSelected = frame.npcEditor().isPresent();
-            createCustomMorphTargetButton.setDisable(morphsMutationsBlocked);
-            removeCustomMorphTargetButton.setDisable(morphsMutationsBlocked || !selected);
-            clearCustomMorphTargetsButton.setDisable(morphsMutationsBlocked || frame.visibleTargets().isEmpty());
-            createNpcMorphAssignmentButton.setDisable(morphsMutationsBlocked);
-            removeNpcMorphAssignmentButton.setDisable(morphsMutationsBlocked || !npcSelected);
-            clearNpcMorphAssignmentsButton.setDisable(morphsMutationsBlocked || frame.visibleNpcs().isEmpty());
-            fillEmptyNpcMorphAssignmentsButton.setDisable(morphsMutationsBlocked);
+            createCustomMorphTargetButton.setDisable(pipeline.mutationsBlocked());
+            removeCustomMorphTargetButton.setDisable(pipeline.mutationsBlocked() || !selected);
+            clearCustomMorphTargetsButton.setDisable(pipeline.mutationsBlocked() || frame.visibleTargets().isEmpty());
+            createNpcMorphAssignmentButton.setDisable(pipeline.mutationsBlocked());
+            removeNpcMorphAssignmentButton.setDisable(pipeline.mutationsBlocked() || !npcSelected);
+            clearNpcMorphAssignmentsButton.setDisable(pipeline.mutationsBlocked() || frame.visibleNpcs().isEmpty());
+            fillEmptyNpcMorphAssignmentsButton.setDisable(pipeline.mutationsBlocked());
             long visibleEmptyCount = frame.visibleNpcs().stream()
                     .filter(npc -> npc.getSliderPresetNames().isEmpty()).count();
             fillEmptyNpcMorphAssignmentsButton.setAccessibleHelp(visibleEmptyCount +
@@ -3178,12 +3151,12 @@ public final class WorkbenchController {
             boolean assignedSelected = assignedPresetSelection.isPresent();
             boolean hasAssignments = !assignedPresets.isEmpty();
             boolean hasAvailable = !availablePresets.isEmpty();
-            availableMorphSliderPreset.setDisable(morphsMutationsBlocked || !hasAvailable);
-            assignMorphSliderPresetButton.setDisable(morphsMutationsBlocked || !hasAvailable
+            availableMorphSliderPreset.setDisable(pipeline.mutationsBlocked() || !hasAvailable);
+            assignMorphSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !hasAvailable
                     || availableMorphSliderPreset.getValue() == null);
-            assignAllMorphSliderPresetsButton.setDisable(morphsMutationsBlocked || !hasAvailable);
-            removeMorphSliderPresetButton.setDisable(morphsMutationsBlocked || !assignedSelected);
-            clearMorphSliderPresetsButton.setDisable(morphsMutationsBlocked || !hasAssignments);
+            assignAllMorphSliderPresetsButton.setDisable(pipeline.mutationsBlocked() || !hasAvailable);
+            removeMorphSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !assignedSelected);
+            clearMorphSliderPresetsButton.setDisable(pipeline.mutationsBlocked() || !hasAssignments);
             renderedMorphTargetSelection = frame.selection();
             renderedNpcSelection = frame.npcSelection();
         } finally {
@@ -3215,11 +3188,11 @@ public final class WorkbenchController {
                 setSeverityStyle(templatesInfoBar, severity);
             }
             boolean selected = frame.selection().isPresent();
-            createSliderPresetButton.setDisable(templatesMutationsBlocked);
-            duplicateSliderPresetButton.setDisable(templatesMutationsBlocked || !selected);
-            renameSliderPresetButton.setDisable(templatesMutationsBlocked || !selected);
-            removeSliderPresetButton.setDisable(templatesMutationsBlocked || !selected);
-            clearSliderPresetsButton.setDisable(templatesMutationsBlocked || frame.visiblePresets().isEmpty());
+            createSliderPresetButton.setDisable(pipeline.mutationsBlocked());
+            duplicateSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !selected);
+            renameSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !selected);
+            removeSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !selected);
+            clearSliderPresetsButton.setDisable(pipeline.mutationsBlocked() || frame.visiblePresets().isEmpty());
             Optional<SliderPresetSnapshot> selectedPreset = frame.selection().flatMap(identity ->
                     frame.visiblePresets().stream()
                             .filter(candidate -> NameIdentity.of(candidate.getName()).equals(identity))
@@ -3258,7 +3231,7 @@ public final class WorkbenchController {
             return;
         }
         TemplatesFeature.EditorFrame editorFrame = editor.orElseThrow();
-        sliderPresetProfile.setDisable(templatesMutationsBlocked);
+        sliderPresetProfile.setDisable(pipeline.mutationsBlocked());
         sliderPresetProfile.setValue(editorFrame.profile());
         Map<String, SliderChoiceRow> next = new LinkedHashMap<>();
         List<SliderChoiceRow> ordered = editorFrame.choices().stream().map(choice -> {
@@ -3266,7 +3239,7 @@ public final class WorkbenchController {
             SliderChoiceRow row = sliderChoiceRowsByName.get(key);
             if (row == null)
                 row = new SliderChoiceRow(this::dispatchTemplates, settings::snapshot);
-            row.render(editorFrame, choice, templatesMutationsBlocked);
+            row.render(editorFrame, choice, pipeline.mutationsBlocked());
             next.put(key, row);
             return row;
         }).toList();
@@ -3281,7 +3254,7 @@ public final class WorkbenchController {
      * owns admission.
      */
     private void renderGangControls(Optional<TemplatesFeature.EditorFrame> editor) {
-        boolean available = editor.isPresent() && !templatesMutationsBlocked;
+        boolean available = editor.isPresent() && !pipeline.mutationsBlocked();
         TemplatesFeature.GangFrame gang = editor.map(TemplatesFeature.EditorFrame::gang).orElse(null);
         Optional<TemplatesFeature.GangMode> active = gang == null ? Optional.empty() : gang.activeMode();
         gangAllCheck.setSelected(active.equals(Optional.of(TemplatesFeature.GangMode.ALL)));
@@ -4190,11 +4163,7 @@ public final class WorkbenchController {
         WorkbenchNavigation.FocusTarget returnTarget = currentSemanticFocus();
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.unsavedClose(
                 "Save Settings before closing?", "Closing now would discard unsaved Settings changes.");
-        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
-        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
-        renderFeedback(pendingFrame);
-        WorkbenchFeedback.DialogAction action = platform.completeConfirmation(spec, stage);
-        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(pending.token(), action)).frame());
+        WorkbenchFeedback.DialogAction action = pipeline.confirm(spec);
         if (action == WorkbenchFeedback.DialogAction.CANCEL) {
             renderFeedback(feedback.publishActivity(new WorkbenchFeedback.Notification(
                     "Close Workbench", WorkbenchFeedback.Severity.INFORMATION, "Close Workbench cancelled.",
@@ -4239,19 +4208,12 @@ public final class WorkbenchController {
                 return;
             }
             returnTarget = currentSemanticFocus();
-            WorkbenchFeedback.PendingDialog pendingDialog = null;
             var dialogSpec = JavaFxWorkbenchPlatform.dialogSpec(effect.kind());
-            if (dialogSpec.isPresent()) {
-                WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(dialogSpec.orElseThrow());
-                pendingDialog = pendingFrame.pendingDialog().orElseThrow();
-                renderFeedback(pendingFrame);
-            }
-            WorkbenchProjectFlow.Response response = platform.complete(effect, stage);
-            if (pendingDialog != null) {
-                WorkbenchFeedback.DialogResult result = new WorkbenchFeedback.DialogResult(
-                        pendingDialog.token(), dialogAction(response));
-                renderFeedback(feedback.answerDialog(result).frame());
-            }
+            // Choosers complete without a dialog; confirmations run the pipeline's pending-dialog round-trip.
+            WorkbenchProjectFlow.Response response = dialogSpec.isPresent()
+                    ? pipeline.roundTrip(dialogSpec.orElseThrow(), () -> platform.complete(effect, stage),
+                    WorkbenchController::dialogAction)
+                    : platform.complete(effect, stage);
             if (response.kind() == WorkbenchProjectFlow.ResponseKind.CANCELLED)
                 publishProjectCancellation(activeOperation);
             current = projectFlow.respond(effect.token(), response);
@@ -4313,9 +4275,7 @@ public final class WorkbenchController {
     private void renderJobFrame(JobCoordinator.Frame frame) {
         Objects.requireNonNull(frame, "frame");
         boolean blocked = frame.active() || frame.shutdownRequested();
-        templatesMutationsBlocked = frame.projectMutationsBlocked();
-        morphsMutationsBlocked = frame.projectMutationsBlocked();
-        settingsMutationsBlocked = frame.projectMutationsBlocked();
+        pipeline.acceptJobFrame(frame);
         newProjectMenuItem.setDisable(blocked);
         openProjectMenuItem.setDisable(blocked);
         saveProjectMenuItem.setDisable(blocked);
@@ -4489,12 +4449,7 @@ public final class WorkbenchController {
                 && !projectFlow.jobs().frame().shutdownRequested();
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
                 attempt.operation().name() + " failed", attempt.summary(), details, retryable);
-        WorkbenchFeedback.Frame pendingFrame = feedback.requestDialog(spec);
-        WorkbenchFeedback.PendingDialog pending = pendingFrame.pendingDialog().orElseThrow();
-        renderFeedback(pendingFrame);
-        WorkbenchFeedback.DialogAction action = platform.completeFailure(spec, stage);
-        renderFeedback(feedback.answerDialog(new WorkbenchFeedback.DialogResult(
-                pending.token(), action)).frame());
+        WorkbenchFeedback.DialogAction action = pipeline.fail(spec);
         if (action == WorkbenchFeedback.DialogAction.RETRY && retryable)
             projectFlow.jobs().retry(attempt.id());
     }

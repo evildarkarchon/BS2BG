@@ -200,6 +200,63 @@ class WorkbenchControllerTest {
         });
     }
 
+    /**
+     * Back to Morphs dispatches its return selection through the gated pipeline rather than straight into the
+     * feature. Selecting an NPC is browsing, not a Project mutation, so a job that blocks mutations still lets the
+     * user land on the assignment they just promoted.
+     */
+    @Test
+    void backToMorphsSelectsThePromotedAssignmentThroughTheGateWhileAJobBlocksMutations() throws Exception {
+        Path npcSource = temporaryDirectory.resolve("gated-return.txt");
+        Files.writeString(npcSource, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        Path presetSource = temporaryDirectory.resolve("blocking-import.xml").toAbsolutePath().normalize();
+        Files.writeString(presetSource, "<SliderPresets><Preset name=\"Blocking Import\"/></SliderPresets>");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Each job is settled by the test before prolonged feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        ProjectSession session = fixture().newSession();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session, jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(npcSource)));
+        platform.respondWith(WorkbenchProjectFlow.Response.selectedSources(List.of(presetSource)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, fixture().environment());
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                ((Button) loader.getNamespace().get("addNpcsFromDatabaseButton")).fire();
+                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                worker.runNext();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                catalog.getSelectionModel().selectFirst();
+                ((Button) loader.getNamespace().get("addNpcToProjectButton")).fire();
+                assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
+                ((Button) loader.getNamespace().get("importBodySlideButton")).fire();
+                assertTrue(jobs.frame().projectMutationsBlocked());
+
+                ((Button) loader.getNamespace().get("backToMorphsButton")).fire();
+
+                assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
+                ListView<NpcMorphAssignmentSnapshot> assignments = controller.npcMorphAssignmentListNode();
+                assertEquals("Amber", assignments.getSelectionModel().getSelectedItem().getDisplayName());
+                worker.runNext();
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
     /** Filtered Add All keeps catalog selection and exposes every duplicate and validation refusal. */
     @Test
     void npcDatabaseAddAllReportsFilteredDuplicatesAndRejections() throws Exception {
@@ -653,6 +710,61 @@ class WorkbenchControllerTest {
                 assertFalse(second.isShowing());
                 assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().getFirst()
                         .getSliderPresetNames());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /**
+     * Fill Empty Apply goes through the gated dispatch pipeline: once a job blocks Project mutations, applying an
+     * offer opened before the job leaves every NPC Morph Assignment untouched and closes the flyout.
+     */
+    @Test
+    void fillEmptyApplyIsRefusedWhileAJobBlocksProjectMutations() throws Exception {
+        Path source = temporaryDirectory.resolve("blocking-import.xml").toAbsolutePath().normalize();
+        Files.writeString(source, "<SliderPresets><Preset name=\"Blocking Import\"/></SliderPresets>");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The import is settled by the test before prolonged feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondWith(WorkbenchProjectFlow.Response.selectedSources(List.of(source)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, fixture().environment());
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                stage.show();
+                ((Button) loader.getNamespace().get("fillEmptyNpcMorphAssignmentsButton")).fire();
+                Popup flyout = FxTestToolkit.showingPopup(stage, "#fillEmptyApplyButton");
+                @SuppressWarnings("unchecked")
+                ListView<SliderPresetSnapshot> choices = (ListView<SliderPresetSnapshot>) flyout.getScene()
+                        .getRoot().lookup("#fillEmptySliderPresetList");
+                choices.getSelectionModel().selectFirst();
+                ((Button) loader.getNamespace().get("importBodySlideButton")).fire();
+                assertTrue(jobs.frame().projectMutationsBlocked());
+
+                ((Button) flyout.getScene().getRoot().lookup("#fillEmptyApplyButton")).fire();
+
+                assertFalse(flyout.isShowing());
+                assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst()
+                        .getSliderPresetNames().isEmpty());
+                worker.runNext();
+                assertFalse(jobs.frame().projectMutationsBlocked());
+                assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst()
+                        .getSliderPresetNames().isEmpty());
             } finally {
                 stage.close();
             }

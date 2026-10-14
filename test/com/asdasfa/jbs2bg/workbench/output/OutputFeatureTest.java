@@ -47,6 +47,23 @@ class OutputFeatureTest {
     }
 
     /**
+     * No Output intent edits the Project or Settings: Generate and Export are admitted by the job coordinator itself,
+     * so the dispatch pipeline's mutation gate never pauses them.
+     */
+    @Test
+    void declaresNoIntentAsAProjectMutation() {
+        Settings settings = SettingsTestSupport.initializedStore(temporaryDirectory.resolve("settings"));
+        OutputFeature feature = new OutputFeature(new WorkbenchProjectFlow("BS2BG Preview",
+                ProjectSessions.create(settings::snapshot)),
+                () -> new OutputFeature.GenerationSettings(settings.snapshot(), false));
+
+        for (OutputFeature.Intent intent : List.of(new OutputFeature.Generate(),
+                new OutputFeature.SelectTab(OutputFeature.Tab.MORPHS), new OutputFeature.SelectBosArtifact("Alpha"),
+                new OutputFeature.Copy(), new OutputFeature.Export(), new OutputFeature.ExportSelected()))
+            assertFalse(feature.isMutation(intent), intent.toString());
+    }
+
+    /**
      * Generate captures one Project and Settings basis, then publishes all three output families only after the
      * central worker completes.
      */

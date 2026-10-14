@@ -24,6 +24,7 @@ import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MorphsFeatureTest {
@@ -74,6 +75,74 @@ class MorphsFeatureTest {
         assertTrue(flow.frame().snapshot().getNpcMorphAssignments().stream()
                 .filter(npc -> npc.getEditorId().equals("Hidden")).findFirst().orElseThrow()
                 .getSliderPresetNames().isEmpty());
+    }
+
+    /**
+     * Applying a Fill Empty offer is an ordinary intent, so it runs through the gated dispatch pipeline like every
+     * other Morphs edit and fills exactly what the captured offer allows.
+     */
+    @Test
+    void applyFillEmptyIntentFillsTheCapturedOfferAndIsAMutation() {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(emptySettings()));
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
+                "NordRace", "000A2C94"));
+        MorphsFeature feature = new MorphsFeature(flow,
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        MorphsFeature.FillEmptyOffer offer = feature.dispatch(new MorphsFeature.RequestFillEmpty())
+                .fillEmptyOffer().orElseThrow();
+        MorphsFeature.ApplyFillEmpty apply = new MorphsFeature.ApplyFillEmpty(offer.token(),
+                List.of(NameIdentity.of("Alpha")));
+
+        MorphsFeature.Update filled = feature.dispatch(apply);
+        MorphsFeature.Update stale = feature.dispatch(apply);
+
+        assertTrue(feature.isMutation(apply));
+        assertEquals(MorphsFeature.OutcomeKind.CHANGED, filled.outcomeKind());
+        assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().getFirst()
+                .getSliderPresetNames());
+        assertFalse(stale.accepted());
+    }
+
+    /**
+     * The feature declares which intents edit the Project, so the dispatch pipeline can pause exactly those while a
+     * job blocks Project mutations and leave browsing, filtering and selection available.
+     */
+    @Test
+    void declaresProjectEditsAsMutationsAndBrowsingAsLocal() {
+        MorphsFeature feature = new MorphsFeature(
+                new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(emptySettings())),
+                Clock.fixed(Instant.parse("2026-09-02T12:00:00Z"), ZoneOffset.UTC));
+        NpcMorphAssignmentIdentity lydia = new NpcMorphAssignmentIdentity("Skyrim.esm", "HousecarlWhiterun");
+
+        for (MorphsFeature.Intent mutation : List.of(
+                new MorphsFeature.Create("Target"),
+                new MorphsFeature.CreateNpc("Lydia", "Skyrim.esm", "HousecarlWhiterun", "NordRace", "000A2C94"),
+                new MorphsFeature.AssignSliderPreset(NameIdentity.of("Alpha")),
+                new MorphsFeature.AssignAllSliderPresets(),
+                new MorphsFeature.RemoveAssignedSliderPreset(),
+                new MorphsFeature.RequestClearAssignments(),
+                new MorphsFeature.RequestRemove(),
+                new MorphsFeature.RequestClearVisible(),
+                new MorphsFeature.RequestRemoveNpc(),
+                new MorphsFeature.RequestClearVisibleNpcs(),
+                new MorphsFeature.RequestFillEmpty(),
+                new MorphsFeature.ApplyFillEmpty(1, List.of(NameIdentity.of("Alpha")))))
+            assertTrue(feature.isMutation(mutation), mutation.toString());
+        for (MorphsFeature.Intent local : List.of(
+                new MorphsFeature.Select(NameIdentity.of("Target")),
+                new MorphsFeature.SelectNpc(lydia),
+                new MorphsFeature.SelectAssignedSliderPreset(NameIdentity.of("Alpha")),
+                new MorphsFeature.ClearAssignedSliderPresetSelection(),
+                new MorphsFeature.ChangeFilter("Ta"),
+                new MorphsFeature.ChangeNpcFilter("Ly"),
+                new MorphsFeature.ChangeSort(MorphsFeature.SortOrder.NAME_DESCENDING),
+                new MorphsFeature.ChangeNpcSort(MorphsFeature.NpcSortOrder.PLUGIN_ASCENDING),
+                new MorphsFeature.TypeAhead('t'),
+                new MorphsFeature.NpcTypeAhead('l'),
+                new MorphsFeature.ClearSelection(),
+                new MorphsFeature.DismissDiagnostics()))
+            assertFalse(feature.isMutation(local), local.toString());
     }
 
     /** Cancel and an empty visible scope never mutate the Project. */

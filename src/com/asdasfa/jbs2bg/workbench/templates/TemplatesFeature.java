@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -35,13 +36,15 @@ import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.UnchangedOutcome;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
+import com.asdasfa.jbs2bg.workbench.WorkbenchFeature;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 /**
  * JavaFX-independent Templates Area state machine. It renders immutable Slider Preset frames and translates
  * task-oriented intents into edits submitted only through the authoritative Workbench Project flow.
  */
-public final class TemplatesFeature {
+public final class TemplatesFeature
+        implements WorkbenchFeature<TemplatesFeature.Intent, TemplatesFeature.Update, TemplatesFeature.Effect> {
     private static final String NAME_COLUMN = "name";
     private static final Duration TYPE_AHEAD_TIMEOUT = Duration.ofMillis(750);
 
@@ -124,6 +127,7 @@ public final class TemplatesFeature {
      * @param intent immutable user task
      * @return whether the task was accepted and the resulting immutable frame
      */
+    @Override
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
         if (publishing)
@@ -152,6 +156,38 @@ public final class TemplatesFeature {
             case CancelRename ignored -> cancelRename();
             case ClearSelection ignored -> clearSelection();
             case DismissDiagnostics ignored -> dismissDiagnostics();
+        };
+    }
+
+    /**
+     * Distinguishes Project mutations from local browsing so an active job blocks writes without freezing the
+     * surface. Rename drafting counts as a mutation because it leads straight to a committed rename.
+     *
+     * @param intent intent about to be dispatched
+     * @return true for intents that create, rename, remove or edit Slider Presets
+     */
+    @Override
+    public boolean isMutation(Intent intent) {
+        return switch (Objects.requireNonNull(intent, "intent")) {
+            case Create ignored -> true;
+            case Duplicate ignored -> true;
+            case BeginRename ignored -> true;
+            case ChangeRename ignored -> true;
+            case CommitRename ignored -> true;
+            case RequestRemove ignored -> true;
+            case RequestClearVisible ignored -> true;
+            case ChangeProfile ignored -> true;
+            case SetChoiceEnabled ignored -> true;
+            case SetChoiceRange ignored -> true;
+            case ApplyBulkValue ignored -> true;
+            case ToggleGang ignored -> true;
+            case Select ignored -> false;
+            case ChangeFilter ignored -> false;
+            case ChangeSort ignored -> false;
+            case TypeAhead ignored -> false;
+            case CancelRename ignored -> false;
+            case ClearSelection ignored -> false;
+            case DismissDiagnostics ignored -> false;
         };
     }
 
@@ -1218,10 +1254,17 @@ public final class TemplatesFeature {
      * @param effect   tokenized platform effect, when requested
      * @param outcomeKind exact Project outcome classification, or NONE for local-only intents
      */
-    public record Update(boolean accepted, Frame frame, Optional<Effect> effect, OutcomeKind outcomeKind) {
+    public record Update(boolean accepted, Frame frame, Optional<Effect> effect, OutcomeKind outcomeKind)
+            implements WorkbenchFeature.Update<Effect> {
         /** Creates an update without a platform effect. */
         private Update(boolean accepted, Frame frame) {
             this(accepted, frame, Optional.empty(), OutcomeKind.NONE);
+        }
+
+        /** @return the Project sequence the frame was reconciled against, so the pipeline can refresh chrome */
+        @Override
+        public OptionalLong projectSequence() {
+            return OptionalLong.of(frame.projectSequence());
         }
 
         /** Creates a local update with one tokenized platform effect. */
