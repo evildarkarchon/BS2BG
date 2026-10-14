@@ -115,7 +115,7 @@ class WorkbenchFocusTest {
         AtomicReference<Shown> shown = new AtomicReference<>();
         try {
             FxTestToolkit.runOnFxThread(() -> {
-                shown.set(show(flow, new WorkbenchControllerTest.RecordingPlatform()));
+                shown.set(show(flow, new RecordingPlatform()));
                 assertSame(shown.get().controller().sliderPresetListNode(), shown.get().scene().getFocusOwner());
             });
             FxTestToolkit.runOnFxThread(() -> assertSame(shown.get().controller().sliderPresetListNode(),
@@ -137,7 +137,7 @@ class WorkbenchFocusTest {
             stage.setScene(new Scene(root, 1300.0, 800.0));
             try {
                 stage.show();
-                controller.attach(flow, stage, new WorkbenchControllerTest.RecordingPlatform(), fixture().environment());
+                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
 
                 assertSame(controller.sliderPresetListNode(), stage.getScene().getFocusOwner());
             } finally {
@@ -151,7 +151,7 @@ class WorkbenchFocusTest {
     void sliderPresetRefillKeepsFocusOnTheReplacementList() throws Exception {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new WorkbenchControllerTest.RecordingPlatform());
+            Shown shown = show(flow, new RecordingPlatform());
             try {
                 ListView<?> initial = shown.controller().sliderPresetListNode();
                 initial.requestFocus();
@@ -172,7 +172,7 @@ class WorkbenchFocusTest {
     void customMorphTargetRefillKeepsFocusOnTheReplacementList() throws Exception {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new WorkbenchControllerTest.RecordingPlatform());
+            Shown shown = show(flow, new RecordingPlatform());
             try {
                 shown.<ToggleButton>node("morphsAreaButton").fire();
                 ListView<?> initial = shown.controller().customMorphTargetListNode();
@@ -195,7 +195,7 @@ class WorkbenchFocusTest {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
         FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new WorkbenchControllerTest.RecordingPlatform());
+            Shown shown = show(flow, new RecordingPlatform());
             try {
                 shown.<ToggleButton>node("morphsAreaButton").fire();
                 TextField filter = shown.node("npcMorphAssignmentFilter");
@@ -221,7 +221,7 @@ class WorkbenchFocusTest {
         flow.apply(SliderPresetEdits.create("Alpha"));
         flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
         FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new WorkbenchControllerTest.RecordingPlatform());
+            Shown shown = show(flow, new RecordingPlatform());
             try {
                 shown.<ToggleButton>node("morphsAreaButton").fire();
                 ListView<?> initial = shown.controller().assignedMorphSliderPresetListNode();
@@ -246,7 +246,7 @@ class WorkbenchFocusTest {
                 new WorkbenchControllerTest.RefusingEditSession(fixture().newSession());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(SliderPresetEdits.create("Alpha"));
-        WorkbenchControllerTest.RecordingPlatform platform = new WorkbenchControllerTest.RecordingPlatform();
+        RecordingPlatform platform = new RecordingPlatform();
         FxTestToolkit.runOnFxThread(() -> {
             Shown shown = show(flow, platform);
             try {
@@ -280,7 +280,7 @@ class WorkbenchFocusTest {
                 new WorkbenchControllerTest.RefusingEditSession(fixture().newSession());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(SliderPresetEdits.create("Alpha"));
-        WorkbenchControllerTest.RecordingPlatform platform = new WorkbenchControllerTest.RecordingPlatform();
+        RecordingPlatform platform = new RecordingPlatform();
         FxTestToolkit.runOnFxThread(() -> {
             Shown shown = show(flow, platform);
             try {
@@ -308,7 +308,7 @@ class WorkbenchFocusTest {
         AtomicReference<Shown> shown = new AtomicReference<>();
         try {
             FxTestToolkit.runOnFxThread(() -> {
-                shown.set(show(flow, new WorkbenchControllerTest.RecordingPlatform()));
+                shown.set(show(flow, new RecordingPlatform()));
                 ListView<?> presets = shown.get().controller().sliderPresetListNode();
                 presets.getSelectionModel().select(0);
                 presets.requestFocus();
@@ -333,7 +333,7 @@ class WorkbenchFocusTest {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         flow.apply(SliderPresetEdits.create("Alpha"));
         FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new WorkbenchControllerTest.RecordingPlatform());
+            Shown shown = show(flow, new RecordingPlatform());
             try {
                 shown.controller().sliderPresetListNode().getSelectionModel().select(0);
                 Button rename = shown.node("renameSliderPresetButton");
@@ -358,7 +358,7 @@ class WorkbenchFocusTest {
         AtomicReference<Shown> shown = new AtomicReference<>();
         try {
             FxTestToolkit.runOnFxThread(() -> {
-                shown.set(show(flow, new WorkbenchControllerTest.RecordingPlatform()));
+                shown.set(show(flow, new RecordingPlatform()));
                 ListView<?> presets = shown.get().controller().sliderPresetListNode();
                 presets.getSelectionModel().select(0);
                 presets.requestFocus();
@@ -382,7 +382,7 @@ class WorkbenchFocusTest {
         flow.apply(SliderPresetEdits.create("Alpha"));
         flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
         FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new WorkbenchControllerTest.RecordingPlatform());
+            Shown shown = show(flow, new RecordingPlatform());
             try {
                 shown.<ToggleButton>node("morphsAreaButton").fire();
                 Button launcher = shown.node("fillEmptyNpcMorphAssignmentsButton");
@@ -411,7 +411,7 @@ class WorkbenchFocusTest {
         flow.apply(SliderPresetEdits.create("Alpha"));
         flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
         FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new WorkbenchControllerTest.RecordingPlatform());
+            Shown shown = show(flow, new RecordingPlatform());
             try {
                 shown.<ToggleButton>node("morphsAreaButton").fire();
                 shown.<Button>node("fillEmptyNpcMorphAssignmentsButton").fire();
@@ -434,7 +434,7 @@ class WorkbenchFocusTest {
         Path source = temporaryDirectory.resolve("npcs.txt");
         Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        WorkbenchControllerTest.RecordingPlatform platform = new WorkbenchControllerTest.RecordingPlatform();
+        RecordingPlatform platform = new RecordingPlatform();
         platform.respondNpcSourcesWith(Optional.of(List.of(source)));
         FxTestToolkit.runOnFxThread(() -> {
             Shown shown = show(flow, platform);
@@ -477,7 +477,7 @@ class WorkbenchFocusTest {
                 WorkbenchController controller = loader.getController();
                 Stage stage = new Stage();
                 stage.setScene(new Scene(root, 1300.0, 800.0));
-                controller.attach(flow, stage, new WorkbenchControllerTest.RecordingPlatform(),
+                controller.attach(flow, stage, new RecordingPlatform(),
                         fixture().environment().withPortraitDirectory(images));
                 stage.show();
                 shown.set(new Shown(loader, controller, stage));
