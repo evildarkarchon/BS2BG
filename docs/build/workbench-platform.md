@@ -1,9 +1,9 @@
 # Workbench appearance, accessibility, and feedback checkpoint
 
-Issue #100 delivers the application-owned Workbench platform layer on standard JavaFX 25 controls and Modena.
-`WorkbenchAppearance` owns the persisted System/Light/Dark choice, effective theme, reduced-motion state, and
+Issue #100 delivers the application-owned Workbench platform layer on standard JavaFX controls and Modena
+(delivered on JavaFX 25; the baseline is now JavaFX 27, see ADR-0007). `WorkbenchAppearance` owns the persisted System/Light/Dark choice, effective theme, reduced-motion state, and
 semantic tokens without depending on JavaFX. `JavaFxWorkbenchAppearance` is the production adapter: it observes
-the public [`Platform.Preferences`](https://openjfx.io/javadoc/25/javafx.graphics/javafx/application/Platform.Preferences.html)
+the public [`Platform.Preferences`](https://openjfx.io/javadoc/27/javafx.graphics/javafx/application/Platform.Preferences.html)
 interface, including the documented Windows `Windows.SPI.HighContrast` and system-color keys, and applies one
 coherent frame to the loaded Workbench root. High Contrast always overrides the manual choice and ending High
 Contrast restores that unchanged choice.

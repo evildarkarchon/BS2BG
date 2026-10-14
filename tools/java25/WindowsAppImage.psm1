@@ -4,7 +4,7 @@
     Deterministic helpers for building and verifying the self-contained Windows x64 app-image (issue #97).
 
 .DESCRIPTION
-    tools/java25/package-java25.ps1 drives jdeps, jlink, and jpackage from the pinned Temurin 25 / JavaFX 25 inputs
+    tools/java25/package-java25.ps1 drives jdeps, jlink, and jpackage from the pinned Temurin 25 / JavaFX 27 inputs
     that tools/java25/verify-java25.ps1 provisions. Every decision that does not need those native tools lives
     here so it can be unit tested with Pester (see WindowsAppImage.Tests.ps1): what counts as a complete staged
     payload, how the measured module closure is read and widened, what the generated launcher configuration must

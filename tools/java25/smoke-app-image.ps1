@@ -694,7 +694,7 @@ function Wait-NpcDatabaseText {
 .SYNOPSIS
     Locates the keyboard sort ComboBox by its owned description or one of its domain choices.
 .NOTES
-    JavaFX 25's Windows provider can expose a ComboBox with an empty UIA Name despite its JavaFX accessibleText;
+    The JavaFX 25+ Windows provider can expose a ComboBox with an empty UIA Name despite its JavaFX accessibleText;
     the bound label and HelpText still describe it, and its ValuePattern exposes the selected sort choice.
 #>
 function Wait-NpcDatabaseSort {
@@ -870,7 +870,7 @@ function Select-CurrentThemeChoice {
 .PARAMETER Description
     Bounded-wait description used in diagnostics.
 .NOTES
-    JavaFX 25 exposes the selected TextArea as an unnamed Edit, so the locator combines its Edit role with the
+    JavaFX 25+ exposes the selected TextArea as an unnamed Edit, so the locator combines its Edit role with the
     named TabItem selection and named parent-region ownership instead of relying on an unavailable AutomationId.
 #>
 function Get-SelectedOutputText {

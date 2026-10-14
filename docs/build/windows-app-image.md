@@ -111,7 +111,7 @@ The script:
    requires exactly `tools.jackson.core:jackson-core:3.1.5`, requires the Jackson Core classes to occur only in
    that jar, and rejects minimal-json or every other reviewed production codec family even when shaded.
 3. Measures the runtime module closure with `jdeps --print-module-deps` over the staged jars against the pinned
-   JavaFX 25 JMODs. `jdeps` reads jars and exploded modules but not JMOD archives, so the pinned JMODs are first
+   JavaFX 27 JMODs. `jdeps` reads jars and exploded modules but not JMOD archives, so the pinned JMODs are first
    extracted with `jmod extract` into `target/app-image-measure/`. The measured closure is widened only by the
    explicit additions listed in the script, each with a recorded reason (currently `jdk.charsets`: the extended
    charsets that the owned Project reader may resolve at runtime from a juniversalchardet detection).

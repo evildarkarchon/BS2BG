@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted; JavaFX version clause superseded by ADR-0007
 date: 2026-08-28
 supersedes: ADR-0001 wherever it conflicts with the Java 25 baseline (today: its "preserving Java 8" clause)
 ---

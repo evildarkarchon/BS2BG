@@ -3321,7 +3321,7 @@ public final class WorkbenchController {
     }
 
     /**
-     * Replaces an empty target ListView only when a later frame refills it, preserving JavaFX 25 UIA child discovery.
+     * Replaces an empty target ListView only when a later frame refills it, preserving JavaFX 25+ UIA child discovery.
      */
     private void reconcileCustomMorphTargetItems(List<CustomMorphTargetSnapshot> visibleTargets) {
         boolean refill = customMorphTargetListInitialized && customMorphTargetList.getItems().isEmpty()
@@ -3401,7 +3401,7 @@ public final class WorkbenchController {
     }
 
     /**
-     * Avoids replacing an unchanged ListView collection because JavaFX 25 UI Automation can drop every virtualized
+     * Avoids replacing an unchanged ListView collection because JavaFX 25+ UI Automation can drop every virtualized
      * cell after a no-op empty/refill notification sequence. Changed membership or values still replace atomically.
      */
     private void reconcileSliderPresetItems(List<SliderPresetSnapshot> visiblePresets) {
@@ -3459,7 +3459,7 @@ public final class WorkbenchController {
     }
 
     /**
-     * Replaces only an empty ListView before refill because JavaFX 25's Windows UIA provider otherwise keeps an empty
+     * Replaces only an empty ListView before refill because the JavaFX 25+ Windows UIA provider otherwise keeps an empty
      * virtualized accessibility subtree for the lifetime of that control.
      */
     private void replaceEmptySliderPresetList() {
@@ -3507,7 +3507,9 @@ public final class WorkbenchController {
     }
 
     /**
-     * Uses ListView's editing lifecycle rather than refresh(), which drops JavaFX 25 UIA children after rejected edits.
+     * Uses ListView's editing lifecycle rather than refresh(), which drops UIA children after rejected edits on
+     * JavaFX 25, where this was last confirmed. JavaFX 26 changed refresh() to re-index cells instead of recreating
+     * them (JDK-8359599), which may remove the cause; dropping this workaround needs a Tier 3 check first.
      */
     private void synchronizeRenameEditor(Optional<TemplatesFeature.RenameState> rename) {
         if (rename.isEmpty()) {

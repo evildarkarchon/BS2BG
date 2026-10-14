@@ -1,7 +1,7 @@
 # Java 25 application verification run
 
 Status: complete application gate (issue #96, parent #81; the pinned runner was introduced by #94). A green run
-proves that every production source and resource builds, packages, and links on the pinned Java 25 / JavaFX 25
+proves that every production source and resource builds, packages, and links on the pinned Java 25 / JavaFX 27
 toolchain. A source-filtered build can no longer be reported or invoked through this command.
 
 ## One command
@@ -18,7 +18,7 @@ The script:
    asserts that `pom.xml` compiles every production source with `-Xlint:all -Werror` and no include/exclude list,
    `<implicit>`, or sourcepath override (`Assert-CompleteSourceScope`). Maven arguments that skip or filter tests
    (`skipTests`, `maven.test.skip`, `-Dtest=`) are rejected, and a gate run must include both `clean` and `verify`.
-2. Checksum-provisions **Eclipse Temurin 25.0.4.1+1** (Windows x64 JDK) and the **Gluon JavaFX 25.0.4** Windows x64
+2. Checksum-provisions **Eclipse Temurin 25.0.4.1+1** (Windows x64 JDK) and the **Gluon JavaFX 27** Windows x64
    JMODs into `%LOCALAPPDATA%\BS2BG\build-toolchains\` (override with `-CacheRoot` or `BS2BG_TOOLCHAIN_CACHE`).
    SHA-256 is verified before extraction; the JDK `release` metadata (vendor, full build number, image type,
    OS, architecture) and each `jmod describe` header are verified after. Nothing is written to a global JDK.
@@ -70,7 +70,7 @@ The required suites the script asserts (report present, at least one test, zero 
   modules own `FilteredView` state and expose immutable visible rows to their JavaFX controls. The NPC Database
   column-filter popup applies `ColumnCriterion` through the feature, and Morphs bulk commands pass a frozen
   visible set to `VisibleScopeCommands`.
-- Type-ahead and selection reveal call `scrollTo` directly. JavaFX 25's `VirtualFlow.scrollTo` performs the
+- Type-ahead and selection reveal call `scrollTo` directly. JavaFX's `VirtualFlow.scrollTo` (unchanged from 25 through 27) performs the
   minimal scroll and is a no-op when the row is already visible, so the JavaFX 8 `isIndexVisible` skin probe
   had no remaining purpose.
 - Information, error, warning, and confirmation graphics come from Workbench `SemanticIcons`, drawn with public
@@ -83,8 +83,8 @@ The required suites the script asserts (report present, at least one test, zero 
 | Apache Maven distribution | `3.9.16`, SHA-256 in `.mvn/wrapper/maven-wrapper.properties` (`only-script` wrapper) | `mvnw.cmd` at download; `requireMavenVersion [3.9.16]` in `pom.xml`; lock cross-check in the script |
 | Lifecycle and verification plugins | explicit versions in `pom.xml` `<pluginManagement>` | `requirePluginVersions` (bans LATEST/RELEASE/SNAPSHOT and default bindings) |
 | Toolchain JDK | Temurin `25.0.4.1+1`, SHA-256 and `release` strings in `toolchain-lock.json`; OpenJDK `jdk-25.0.4.1-ga` source URL/revision in the same lock; `bs2bg.toolchain.jdk.runtimeVersion` in `pom.xml` | script (hash, `release` file, `java -version`, `os.arch`, pom/lock cross-check); `maven-toolchains-plugin` requires `jdk` `version=25 vendor=temurin`; `Java25ToolchainGuardTest` asserts feature 25, `java.vendor`, and the forwarded `java.runtime.version` inside the forked test JVM; packaging emits the source pin in its component manifest |
-| JavaFX (build input) | `org.openjfx:*:25.0.4` from Maven Central via `javafx.version` (`win` classifier) | exact version pin; `-C` transport checksums; resolved jar SHA-256s recorded in `test-classpath-sha256.txt` |
-| JavaFX (runtime input) | Gluon `25.0.4` Windows x64 JMODs by SHA-256 in the lock; OpenJFX `25.0.4+3` source URL/revision in the same lock | `jmod describe` for `javafx.base/graphics/controls/fxml`; provisioned for the jlink/jpackage checkpoints (#81), not consumed by this Maven run; packaging emits the source pin in its component manifest |
+| JavaFX (build input) | `org.openjfx:*:27` from Maven Central via `javafx.version` (`win` classifier) | exact version pin; `-C` transport checksums; resolved jar SHA-256s recorded in `test-classpath-sha256.txt` |
+| JavaFX (runtime input) | Gluon `27` Windows x64 JMODs by SHA-256 in the lock; OpenJFX `27+30` source URL/revision in the same lock | `jmod describe` for `javafx.base/graphics/controls/fxml`; provisioned for the jlink/jpackage checkpoints (#81), not consumed by this Maven run; packaging emits the source pin in its component manifest |
 | Architecture | Windows x64 | `requireOS family=windows arch=amd64`; `PROCESSOR_ARCHITECTURE=AMD64`; JDK `OS_ARCH=x86_64`; test JVM `os.arch=amd64` |
 | Target release | `maven.compiler.release=25` | class-file `major=69` read from every production class by the guard test |
 | Preview features | disabled (no `--enable-preview` anywhere) | class-file `minor=0`, JVM input args, pom element text, `.mvn/*.config` |

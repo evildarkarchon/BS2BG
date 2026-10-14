@@ -10,7 +10,7 @@
       1. Loads tools/java25/toolchain-lock.json, cross-checks the committed Maven Wrapper pins against it, and
          asserts that pom.xml compiles every production source with full lint enforcement (no include list,
          no sourcepath override), so a source-filtered build cannot be invoked as the gate.
-      2. Checksum-provisions Eclipse Temurin 25 (JDK) and the Gluon JavaFX 25 Windows x64 JMODs into a
+      2. Checksum-provisions Eclipse Temurin 25 (JDK) and the Gluon JavaFX 27 Windows x64 JMODs into a
          versioned cache, verifying SHA-256 before extraction and the JDK release metadata / jmod versions after.
       3. Exports BS2BG_JDK25_HOME for .mvn/toolchains.xml and runs the committed Maven Wrapper (which verifies
          the pinned Apache Maven distribution itself) so maven-toolchains-plugin forks the provisioned JDK for
@@ -142,7 +142,7 @@ if (-not $osArchLine -or $Matches[1] -ne $lock.architecture.javaOsArch) {
 Write-Host "JDK verified: $($release['IMPLEMENTOR']) $($release['IMPLEMENTOR_VERSION']) os.arch=$($lock.architecture.javaOsArch) at $jdkHome"
 
 # ---------------------------------------------------------------------------------------------------------------
-# 3. Provision and verify JavaFX 25 JMODs
+# 3. Provision and verify JavaFX JMODs
 # ---------------------------------------------------------------------------------------------------------------
 Write-Step "Provisioning JavaFX $($lock.javafx.version) JMODs (Windows x64)"
 $javafxJmods = Install-LockedArchive -Url $lock.javafx.url -Sha256 $lock.javafx.sha256 -Destination (Join-Path $CacheRoot $lock.javafx.id) -ExpectedRootDirectory $lock.javafx.archiveRootDirectory -Label 'JavaFX JMODs'
