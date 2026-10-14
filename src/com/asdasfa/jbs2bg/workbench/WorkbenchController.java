@@ -562,10 +562,12 @@ public final class WorkbenchController {
     private SliderPresetCell activeRenameCell;
     private boolean resetTemplatesOnNextProjectFrame;
     private boolean resetMorphsOnNextProjectFrame;
-    private boolean sliderPresetListInitialized;
-    private boolean customMorphTargetListInitialized;
-    private boolean npcMorphAssignmentListInitialized;
-    private boolean assignedMorphSliderPresetListInitialized;
+    // The shared UIA list workarounds; each refilling list is bound once its owner pane has been injected.
+    private final UiaListHelper uiaLists = new UiaListHelper(WorkbenchFocusPolicy::ownsSceneFocus);
+    private UiaListHelper.RefillingList<SliderPresetSnapshot> sliderPresetItems;
+    private UiaListHelper.RefillingList<CustomMorphTargetSnapshot> customMorphTargetItems;
+    private UiaListHelper.RefillingList<NpcMorphAssignmentSnapshot> npcMorphAssignmentItems;
+    private UiaListHelper.RefillingList<SliderPresetSnapshot> assignedMorphSliderPresetItems;
     private Optional<NameIdentity> renderedMorphTargetSelection = Optional.empty();
     private Optional<NpcMorphAssignmentIdentity> renderedNpcSelection = Optional.empty();
     // Satellite surfaces registered with the shell's appearance; built in attach, before the appearance first renders.
@@ -858,6 +860,9 @@ public final class WorkbenchController {
         sliderPresetSort.setValue(templatesFeature.frame().sortOrder());
         sliderPresetProfile.getItems().setAll(TemplatesFeature.Profile.values());
         configureSliderPresetList();
+        sliderPresetItems = uiaLists.refilling(() -> sliderPresetList, templatesPrimaryContent,
+                "Templates primary content no longer owns the Slider Preset list",
+                this::newSliderPresetList, this::adoptSliderPresetList);
         sliderPresetFilter.textProperty().addListener((observable, previous, current) -> {
             if (!renderingTemplates)
                 dispatchTemplates(new TemplatesFeature.ChangeFilter(current));
@@ -895,9 +900,15 @@ public final class WorkbenchController {
         customMorphTargetSort.getItems().setAll(MorphsFeature.SortOrder.values());
         customMorphTargetSort.setValue(morphsFeature.frame().sortOrder());
         configureCustomMorphTargetList();
+        customMorphTargetItems = uiaLists.refilling(() -> customMorphTargetList, morphsPrimaryContent,
+                "Morphs primary content no longer owns the Custom Morph Target list",
+                this::newCustomMorphTargetList, this::adoptCustomMorphTargetList);
         npcMorphAssignmentSort.getItems().setAll(MorphsFeature.NpcSortOrder.values());
         npcMorphAssignmentSort.setValue(morphsFeature.frame().npcSortOrder());
         configureNpcMorphAssignmentList();
+        npcMorphAssignmentItems = uiaLists.refilling(() -> npcMorphAssignmentList, morphsPrimaryContent,
+                "Morphs primary content no longer owns the NPC Morph Assignment list",
+                this::newNpcMorphAssignmentList, this::adoptNpcMorphAssignmentList);
         customMorphTargetFilter.textProperty().addListener((observable, previous, current) -> {
             if (!renderingMorphs)
                 dispatchMorphs(new MorphsFeature.ChangeFilter(current));
@@ -931,6 +942,9 @@ public final class WorkbenchController {
         // openNpcPortraitViewerButton is wired by its portrait thumbnail (see attach).
 
         configureAssignedMorphSliderPresetList();
+        assignedMorphSliderPresetItems = uiaLists.refilling(() -> assignedMorphSliderPresetList,
+                morphsInspectorContent, "Morphs inspector no longer owns the assigned Slider Preset list",
+                this::newAssignedMorphSliderPresetList, this::adoptAssignedMorphSliderPresetList);
         availableMorphSliderPreset.setCellFactory(list -> new SliderPresetDisplayCell());
         availableMorphSliderPreset.setButtonCell(new SliderPresetDisplayCell());
         availableMorphSliderPreset.setOnAction(event -> assignMorphSliderPresetButton.setDisable(
@@ -1618,8 +1632,7 @@ public final class WorkbenchController {
     private void renderNpcDatabase(NpcDatabaseFeature.Frame frame) {
         renderingNpcDatabase = true;
         try {
-            if (!npcSourceList.getItems().equals(frame.sources()))
-                npcSourceList.getItems().setAll(frame.sources());
+            UiaListHelper.setAllIfChanged(npcSourceList.getItems(), frame.sources());
             NpcDatabaseFeature.Source selectedSource = npcSourceList.getSelectionModel().getSelectedItem();
             Optional<Path> currentSource = selectedSource == null ? Optional.empty()
                     : Optional.of(selectedSource.path());
@@ -1629,8 +1642,7 @@ public final class WorkbenchController {
                         .filter(source -> source.path().equals(path)).findFirst()
                         .ifPresent(npcSourceList.getSelectionModel()::select));
             }
-            if (!npcCatalogTable.getItems().equals(frame.visibleRows()))
-                npcCatalogTable.getItems().setAll(frame.visibleRows());
+            UiaListHelper.setAllIfChanged(npcCatalogTable.getItems(), frame.visibleRows());
             List<TableColumn<NPC, ?>> sortedColumns = new ArrayList<>();
             for (SortKey key : frame.sortOrder()) {
                 TableColumn<NPC, ?> column = npcCatalogTable.getColumns().stream()
@@ -1640,8 +1652,7 @@ public final class WorkbenchController {
                         ? TableColumn.SortType.DESCENDING : TableColumn.SortType.ASCENDING);
                 sortedColumns.add(column);
             }
-            if (!npcCatalogTable.getSortOrder().equals(sortedColumns))
-                npcCatalogTable.getSortOrder().setAll(sortedColumns);
+            UiaListHelper.setAllIfChanged(npcCatalogTable.getSortOrder(), sortedColumns);
             String sortLabel = npcSortChoices.entrySet().stream()
                     .filter(entry -> entry.getValue().equals(frame.sortOrder()))
                     .map(Map.Entry::getKey).findFirst().orElse("Multiple columns");
@@ -1866,13 +1877,13 @@ public final class WorkbenchController {
             frame.generatedOutput().ifPresentOrElse(output -> {
                 templatesOutputText.setText(output.getTemplatesText());
                 morphsOutputText.setText(output.getMorphsText());
-                bosArtifactChoice.getItems().setAll(frame.bosArtifactNames());
+                UiaListHelper.setAllIfChanged(bosArtifactChoice.getItems(), frame.bosArtifactNames());
                 bosArtifactChoice.setValue(frame.selectedBosArtifact().orElse(null));
                 bosOutputText.setText(frame.selectedBosText());
             }, () -> {
                 templatesOutputText.setText(emptyText);
                 morphsOutputText.setText(emptyText);
-                bosArtifactChoice.getItems().clear();
+                UiaListHelper.setAllIfChanged(bosArtifactChoice.getItems(), List.of());
                 bosArtifactChoice.setValue(null);
                 bosOutputText.setText(emptyText);
             });
@@ -2282,8 +2293,7 @@ public final class WorkbenchController {
         renderingSettings = true;
         try {
             settingsProfileChoice.setValue(frame.profile());
-            if (!List.copyOf(settingsEntryList.getItems()).equals(frame.entries()))
-                settingsEntryList.getItems().setAll(frame.entries());
+            UiaListHelper.setAllIfChanged(settingsEntryList.getItems(), frame.entries());
             SettingsFeature.EntryFrame selected = settingsEntryList.getSelectionModel().getSelectedItem();
             String selectedName = selected == null ? null : selected.name();
             if (!Objects.equals(selectedName, frame.selection().orElse(null))) {
@@ -2650,10 +2660,10 @@ public final class WorkbenchController {
             }
             customMorphTargetFilter.setText(frame.filterText());
             customMorphTargetSort.setValue(frame.sortOrder());
-            reconcileCustomMorphTargetItems(frame.visibleTargets());
+            customMorphTargetItems.reconcile(frame.visibleTargets());
             npcMorphAssignmentFilter.setText(frame.npcFilterText());
             npcMorphAssignmentSort.setValue(frame.npcSortOrder());
-            reconcileNpcMorphAssignmentItems(frame.visibleNpcs());
+            npcMorphAssignmentItems.reconcile(frame.visibleNpcs());
             CustomMorphTargetSnapshot selectedTarget = customMorphTargetList.getSelectionModel().getSelectedItem();
             Optional<NameIdentity> currentTarget = selectedTarget == null ? Optional.empty()
                     : Optional.of(NameIdentity.of(selectedTarget.getName()));
@@ -2773,13 +2783,13 @@ public final class WorkbenchController {
                 morphTargetOutputStatusText.setText(outputStatus);
                 morphTargetOutputStatusText.setAccessibleText(outputStatus);
             }
-            reconcileAssignedMorphSliderPresetItems(assignedPresets);
+            assignedMorphSliderPresetItems.reconcile(assignedPresets);
             assignedMorphSliderPresetList.getSelectionModel().clearSelection();
             assignedPresetSelection.ifPresent(identity -> assignedMorphSliderPresetList.getItems().stream()
                     .filter(preset -> NameIdentity.of(preset.getName()).equals(identity))
                     .findFirst().ifPresent(assignedMorphSliderPresetList.getSelectionModel()::select));
             SliderPresetSnapshot availableSelection = availableMorphSliderPreset.getValue();
-            availableMorphSliderPreset.getItems().setAll(availablePresets);
+            UiaListHelper.setAllIfChanged(availableMorphSliderPreset.getItems(), availablePresets);
             if (availableSelection == null || availablePresets.stream()
                     .noneMatch(preset -> preset.getName().equalsIgnoreCase(availableSelection.getName())))
                 availableMorphSliderPreset.setValue(null);
@@ -2808,7 +2818,7 @@ public final class WorkbenchController {
         try {
             sliderPresetFilter.setText(frame.filterText());
             sliderPresetSort.setValue(frame.sortOrder());
-            reconcileSliderPresetItems(frame.visiblePresets());
+            sliderPresetItems.reconcile(frame.visiblePresets());
             reconcileSliderPresetSelection(frame.selection());
             boolean validationVisible = !frame.diagnostics().isEmpty();
             templatesInfoBar.setManaged(validationVisible);
@@ -2885,8 +2895,7 @@ public final class WorkbenchController {
         }).toList();
         sliderChoiceRowsByName.clear();
         sliderChoiceRowsByName.putAll(next);
-        if (!List.copyOf(sliderChoiceRows.getChildren()).equals(ordered))
-            sliderChoiceRows.getChildren().setAll(ordered);
+        UiaListHelper.setAllIfChanged(sliderChoiceRows.getChildren(), ordered);
     }
 
     /**
@@ -2926,95 +2935,40 @@ public final class WorkbenchController {
     }
 
     /**
-     * Replaces an empty target ListView only when a later frame refills it, preserving JavaFX 25+ UIA child discovery.
+     * Builds the assigned-relationship ListView that replaces an empty one on refill (see {@link UiaListHelper}).
      */
-    private void reconcileCustomMorphTargetItems(List<CustomMorphTargetSnapshot> visibleTargets) {
-        boolean refill = customMorphTargetListInitialized && customMorphTargetList.getItems().isEmpty()
-                && !visibleTargets.isEmpty();
-        if (refill)
-            replaceEmptyCustomMorphTargetList();
-        if (!List.copyOf(customMorphTargetList.getItems()).equals(visibleTargets))
-            customMorphTargetList.getItems().setAll(visibleTargets);
-        customMorphTargetListInitialized = true;
-    }
-
-    /** Replaces an empty NPC ListView before refill so Windows UIA discovers the new virtualized rows. */
-    private void reconcileNpcMorphAssignmentItems(List<NpcMorphAssignmentSnapshot> visibleNpcs) {
-        boolean refill = npcMorphAssignmentListInitialized && npcMorphAssignmentList.getItems().isEmpty()
-                && !visibleNpcs.isEmpty();
-        if (refill)
-            replaceEmptyNpcMorphAssignmentList();
-        if (!List.copyOf(npcMorphAssignmentList.getItems()).equals(visibleNpcs))
-            npcMorphAssignmentList.getItems().setAll(visibleNpcs);
-        npcMorphAssignmentListInitialized = true;
-    }
-
-    /** Replaces an empty assigned-preset ListView when a Custom Morph Target or NPC Morph Assignment refills it. */
-    private void reconcileAssignedMorphSliderPresetItems(List<SliderPresetSnapshot> assignedPresets) {
-        boolean refill = assignedMorphSliderPresetListInitialized
-                && assignedMorphSliderPresetList.getItems().isEmpty() && !assignedPresets.isEmpty();
-        if (refill)
-            replaceEmptyAssignedMorphSliderPresetList();
-        if (!List.copyOf(assignedMorphSliderPresetList.getItems()).equals(assignedPresets))
-            assignedMorphSliderPresetList.getItems().setAll(assignedPresets);
-        assignedMorphSliderPresetListInitialized = true;
-    }
-
-    /** Replaces only the assigned-relationship JavaFX node while retaining its label and semantic focus. */
-    private void replaceEmptyAssignedMorphSliderPresetList() {
-        boolean restoreFocus = ownsSceneFocus(assignedMorphSliderPresetList);
+    private ListView<SliderPresetSnapshot> newAssignedMorphSliderPresetList() {
         ListView<SliderPresetSnapshot> replacement = new ListView<>();
         replacement.setId("assignedMorphSliderPresetList");
         replacement.setAccessibleText("Assigned Slider Presets");
         replacement.setFixedCellSize(MORPH_TARGET_CELL_HEIGHT);
         replacement.setFocusTraversable(true);
         replacement.setPrefHeight(120.0);
-        int index = morphsInspectorContent.getChildren().indexOf(assignedMorphSliderPresetList);
-        if (index < 0)
-            throw new IllegalStateException("Morphs inspector no longer owns the assigned Slider Preset list");
-        morphsInspectorContent.getChildren().set(index, replacement);
+        return replacement;
+    }
+
+    /** Adopts the swapped-in assigned-relationship node, re-pointing its label so UIA LabeledBy follows it. */
+    private void adoptAssignedMorphSliderPresetList(ListView<SliderPresetSnapshot> replacement) {
         assignedMorphSliderPresetList = replacement;
         assignedMorphSliderPresetLabel.setLabelFor(replacement);
         configureAssignedMorphSliderPresetList();
-        if (restoreFocus) {
-            // Relationship reconciliation may refill while the list owns focus; the UIA node swap must preserve it.
-            replacement.requestFocus();
-        }
     }
 
-    /** Replaces only the JavaFX adapter node after an empty-to-populated target transition. */
-    private void replaceEmptyCustomMorphTargetList() {
-        boolean restoreFocus = ownsSceneFocus(customMorphTargetList);
+    /** Builds the Custom Morph Target ListView that replaces an empty one on refill (see {@link UiaListHelper}). */
+    private ListView<CustomMorphTargetSnapshot> newCustomMorphTargetList() {
         ListView<CustomMorphTargetSnapshot> replacement = new ListView<>();
         replacement.setId("customMorphTargetList");
         replacement.setAccessibleText("Custom Morph Targets");
         replacement.setFixedCellSize(MORPH_TARGET_CELL_HEIGHT);
         replacement.setFocusTraversable(true);
         VBox.setVgrow(replacement, javafx.scene.layout.Priority.ALWAYS);
-        int index = morphsPrimaryContent.getChildren().indexOf(customMorphTargetList);
-        if (index < 0)
-            throw new IllegalStateException("Morphs primary content no longer owns the Custom Morph Target list");
-        morphsPrimaryContent.getChildren().set(index, replacement);
-        customMorphTargetList = replacement;
-        configureCustomMorphTargetList();
-        if (restoreFocus) {
-            // A filter clear can refill the list while it owns focus; the UIA node swap must retain that focus.
-            replacement.requestFocus();
-        }
+        return replacement;
     }
 
-    /**
-     * Avoids replacing an unchanged ListView collection because JavaFX 25+ UI Automation can drop every virtualized
-     * cell after a no-op empty/refill notification sequence. Changed membership or values still replace atomically.
-     */
-    private void reconcileSliderPresetItems(List<SliderPresetSnapshot> visiblePresets) {
-        boolean refill = sliderPresetListInitialized && sliderPresetList.getItems().isEmpty()
-                && !visiblePresets.isEmpty();
-        if (refill)
-            replaceEmptySliderPresetList();
-        if (!List.copyOf(sliderPresetList.getItems()).equals(visiblePresets))
-            sliderPresetList.getItems().setAll(visiblePresets);
-        sliderPresetListInitialized = true;
+    /** Adopts the swapped-in Custom Morph Target node as the catalog control. */
+    private void adoptCustomMorphTargetList(ListView<CustomMorphTargetSnapshot> replacement) {
+        customMorphTargetList = replacement;
+        configureCustomMorphTargetList();
     }
 
     /**
@@ -3039,50 +2993,42 @@ public final class WorkbenchController {
         list.maxHeightProperty().bind(height);
     }
 
-    /** Replaces only the NPC catalog adapter node after an empty-to-populated transition. */
-    private void replaceEmptyNpcMorphAssignmentList() {
-        boolean restoreFocus = ownsSceneFocus(npcMorphAssignmentList);
+    /** Builds the NPC Morph Assignment ListView that replaces an empty one on refill (see {@link UiaListHelper}). */
+    private ListView<NpcMorphAssignmentSnapshot> newNpcMorphAssignmentList() {
         ListView<NpcMorphAssignmentSnapshot> replacement = new ListView<>();
         replacement.setId("npcMorphAssignmentList");
         replacement.setAccessibleText("NPC Morph Assignments");
         replacement.setFixedCellSize(MORPH_TARGET_CELL_HEIGHT);
         replacement.setFocusTraversable(true);
         VBox.setVgrow(replacement, javafx.scene.layout.Priority.ALWAYS);
-        int index = morphsPrimaryContent.getChildren().indexOf(npcMorphAssignmentList);
-        if (index < 0)
-            throw new IllegalStateException("Morphs primary content no longer owns the NPC Morph Assignment list");
-        morphsPrimaryContent.getChildren().set(index, replacement);
-        npcMorphAssignmentList = replacement;
-        configureNpcMorphAssignmentList();
-        if (restoreFocus) {
-            // Refilling the catalog must keep keyboard focus on its fresh accessible node.
-            replacement.requestFocus();
-        }
+        return replacement;
     }
 
-    /**
-     * Replaces only an empty ListView before refill because the JavaFX 25+ Windows UIA provider otherwise keeps an empty
-     * virtualized accessibility subtree for the lifetime of that control.
-     */
-    private void replaceEmptySliderPresetList() {
-        boolean restoreFocus = ownsSceneFocus(sliderPresetList);
+    /** Adopts the swapped-in NPC Morph Assignment node as the catalog control. */
+    private void adoptNpcMorphAssignmentList(ListView<NpcMorphAssignmentSnapshot> replacement) {
+        npcMorphAssignmentList = replacement;
+        configureNpcMorphAssignmentList();
+    }
+
+    /** Builds the Slider Preset ListView that replaces an empty one on refill (see {@link UiaListHelper}). */
+    private ListView<SliderPresetSnapshot> newSliderPresetList() {
         ListView<SliderPresetSnapshot> replacement = new ListView<>();
         replacement.setId("sliderPresetList");
         replacement.setAccessibleText("Slider Presets");
         replacement.setFocusTraversable(true);
         VBox.setVgrow(replacement, javafx.scene.layout.Priority.ALWAYS);
-        int index = templatesPrimaryContent.getChildren().indexOf(sliderPresetList);
-        if (index < 0)
-            throw new IllegalStateException("Templates primary content no longer owns the Slider Preset list");
-        templatesPrimaryContent.getChildren().set(index, replacement);
+        return replacement;
+    }
+
+    /**
+     * Adopts the swapped-in Slider Preset node. Any rename editor belonged to a cell of the stale node, so the active
+     * rename references are dropped with it.
+     */
+    private void adoptSliderPresetList(ListView<SliderPresetSnapshot> replacement) {
         sliderPresetList = replacement;
         activeRenameCell = null;
         activeRenameField = null;
         configureSliderPresetList();
-        if (restoreFocus) {
-            // Import can refill an empty list while it owns semantic focus; the UIA node swap must retain that focus.
-            replacement.requestFocus();
-        }
     }
 
     /**
@@ -4095,14 +4041,15 @@ public final class WorkbenchController {
             infoBar.setAccessibleText("Workbench notification");
             infoBar.setAccessibleHelp(value.cue() + ": " + value.message());
             setSeverityStyle(infoBar, value.severity());
-            infoBarIconHost.getChildren().setAll(SemanticIcons.create(value.icon(), true));
+            UiaListHelper.setKeyedChildIfChanged(infoBarIconHost.getChildren(), value.icon(),
+                    icon -> SemanticIcons.create(icon, true));
             infoBar.setManaged(true);
             infoBar.setVisible(true);
         }, () -> {
             infoBar.setManaged(false);
             infoBar.setVisible(false);
         });
-        activityList.getItems().setAll(frame.activities());
+        UiaListHelper.setAllIfChanged(activityList.getItems(), frame.activities());
         WorkbenchFeedback.StatusProjection status = frame.status();
         boolean initialReady = frame.activities().isEmpty() && status.message().equals("Ready");
         statusText.setText(initialReady
@@ -4111,7 +4058,8 @@ public final class WorkbenchController {
         statusText.setAccessibleText("Workbench status");
         statusText.setAccessibleHelp(status.severity().cue() + ", "
                 + status.dispositionText() + ", " + status.message());
-        statusIconHost.getChildren().setAll(SemanticIcons.create(status.severity().icon(), true));
+        UiaListHelper.setKeyedChildIfChanged(statusIconHost.getChildren(), status.severity().icon(),
+                icon -> SemanticIcons.create(icon, true));
         setSeverityStyle(statusText, status.severity());
     }
 

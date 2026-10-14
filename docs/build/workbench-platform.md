@@ -106,9 +106,15 @@ Each accessibility workaround and contract is proven twice
 ([#128](https://github.com/evildarkarchon/BS2BG/issues/128)). Headless Tiers 1-2 never activate accessibility, so
 they cannot show that a workaround is needed or enough:
 
-- **Tier 1 proves the mechanism** as plain JavaFX logic in `WorkbenchAccessibilityContractTest`, plus the older
-  refill checks in `WorkbenchControllerTest`. It covers node replacement on an empty-to-full refill (all four lists),
-  no list-change event on a membership-preserving re-render (every guarded list), the rename edit lifecycle and
+- **The shared workarounds live in one place.** `UiaListHelper` owns the empty-to-full ListView node replacement
+  (with its focus capture and initialised flag) and the no-op `setAll` guard, including the keyed guard for the
+  InfoBar and status icon hosts ([#147](https://github.com/evildarkarchon/BS2BG/issues/147)). Every guarded
+  collection goes through it, so retiring a workaround is a one-place deletion. The single-Area workarounds (rename
+  edit lifecycle, slider-row reuse, NPC Database HelpText mirror) stay with their Area.
+- **Tier 1 proves the mechanism** as plain JavaFX logic in `UiaListHelperTest` and
+  `WorkbenchAccessibilityContractTest`, plus the older refill checks in `WorkbenchControllerTest`. It covers node
+  replacement on an empty-to-full refill (all four lists), no list-change event on a membership-preserving re-render
+  (every guarded list, the Activity list and both severity icon hosts), the rename edit lifecycle and
   in-place cell update, slider-row identity across edits, `labelFor` re-pointing after the Assigned Slider Presets
   swap, mnemonic stripping from accessible names, and the NPC Database label and portrait-status HelpText values.
   Each test fails if its workaround or contract is removed.
