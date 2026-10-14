@@ -24,7 +24,9 @@ import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
+import com.asdasfa.jbs2bg.workbench.morphs.MorphsArea;
 import com.asdasfa.jbs2bg.workbench.templates.SliderChoiceRow;
+import com.asdasfa.jbs2bg.workbench.templates.TemplatesArea;
 
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -72,6 +74,16 @@ class WorkbenchFocusTest {
             return (T) LoadedWorkbench.node(loader, id);
         }
 
+        /** @return the Templates Area the shell loaded, for its current list and rename-field views */
+        TemplatesArea templates() {
+            return LoadedWorkbench.templates(controller);
+        }
+
+        /** @return the Morphs Area the shell loaded, for its current list views */
+        MorphsArea morphs() {
+            return LoadedWorkbench.morphs(controller);
+        }
+
         /** @return the main scene */
         Scene scene() {
             return stage.getScene();
@@ -117,9 +129,9 @@ class WorkbenchFocusTest {
         try {
             FxTestToolkit.runOnFxThread(() -> {
                 shown.set(show(flow, new RecordingPlatform()));
-                assertSame(shown.get().controller().sliderPresetListNode(), shown.get().scene().getFocusOwner());
+                assertSame(shown.get().templates().sliderPresetListNode(), shown.get().scene().getFocusOwner());
             });
-            FxTestToolkit.runOnFxThread(() -> assertSame(shown.get().controller().sliderPresetListNode(),
+            FxTestToolkit.runOnFxThread(() -> assertSame(shown.get().templates().sliderPresetListNode(),
                     shown.get().scene().getFocusOwner()));
         } finally {
             close(shown);
@@ -140,7 +152,8 @@ class WorkbenchFocusTest {
                 stage.show();
                 controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
 
-                assertSame(controller.sliderPresetListNode(), stage.getScene().getFocusOwner());
+                assertSame(LoadedWorkbench.templates(controller).sliderPresetListNode(),
+                        stage.getScene().getFocusOwner());
             } finally {
                 stage.close();
             }
@@ -154,14 +167,14 @@ class WorkbenchFocusTest {
         FxTestToolkit.runOnFxThread(() -> {
             Shown shown = show(flow, new RecordingPlatform());
             try {
-                ListView<?> initial = shown.controller().sliderPresetListNode();
+                ListView<?> initial = shown.templates().sliderPresetListNode();
                 initial.requestFocus();
                 shown.<TextField>node("sliderPresetNameInput").setText("Alpha");
 
                 shown.<Button>node("createSliderPresetButton").fire();
 
-                assertNotSame(initial, shown.controller().sliderPresetListNode());
-                assertSame(shown.controller().sliderPresetListNode(), shown.scene().getFocusOwner());
+                assertNotSame(initial, shown.templates().sliderPresetListNode());
+                assertSame(shown.templates().sliderPresetListNode(), shown.scene().getFocusOwner());
             } finally {
                 shown.stage().close();
             }
@@ -176,14 +189,14 @@ class WorkbenchFocusTest {
             Shown shown = show(flow, new RecordingPlatform());
             try {
                 shown.<ToggleButton>node("morphsAreaButton").fire();
-                ListView<?> initial = shown.controller().customMorphTargetListNode();
+                ListView<?> initial = shown.morphs().customMorphTargetListNode();
                 initial.requestFocus();
                 shown.<TextField>node("customMorphTargetNameInput").setText("All|Female");
 
                 shown.<Button>node("createCustomMorphTargetButton").fire();
 
-                assertNotSame(initial, shown.controller().customMorphTargetListNode());
-                assertSame(shown.controller().customMorphTargetListNode(), shown.scene().getFocusOwner());
+                assertNotSame(initial, shown.morphs().customMorphTargetListNode());
+                assertSame(shown.morphs().customMorphTargetListNode(), shown.scene().getFocusOwner());
             } finally {
                 shown.stage().close();
             }
@@ -201,14 +214,14 @@ class WorkbenchFocusTest {
                 shown.<ToggleButton>node("morphsAreaButton").fire();
                 TextField filter = shown.node("npcMorphAssignmentFilter");
                 filter.setText("no match");
-                ListView<?> initial = shown.controller().npcMorphAssignmentListNode();
+                ListView<?> initial = shown.morphs().npcMorphAssignmentListNode();
                 assertTrue(initial.getItems().isEmpty());
                 initial.requestFocus();
 
                 filter.setText("");
 
-                assertNotSame(initial, shown.controller().npcMorphAssignmentListNode());
-                assertSame(shown.controller().npcMorphAssignmentListNode(), shown.scene().getFocusOwner());
+                assertNotSame(initial, shown.morphs().npcMorphAssignmentListNode());
+                assertSame(shown.morphs().npcMorphAssignmentListNode(), shown.scene().getFocusOwner());
             } finally {
                 shown.stage().close();
             }
@@ -225,13 +238,13 @@ class WorkbenchFocusTest {
             Shown shown = show(flow, new RecordingPlatform());
             try {
                 shown.<ToggleButton>node("morphsAreaButton").fire();
-                ListView<?> initial = shown.controller().assignedMorphSliderPresetListNode();
+                ListView<?> initial = shown.morphs().assignedMorphSliderPresetListNode();
                 initial.requestFocus();
 
-                shown.controller().customMorphTargetListNode().getSelectionModel().selectFirst();
+                shown.morphs().customMorphTargetListNode().getSelectionModel().selectFirst();
 
-                assertNotSame(initial, shown.controller().assignedMorphSliderPresetListNode());
-                assertSame(shown.controller().assignedMorphSliderPresetListNode(), shown.scene().getFocusOwner());
+                assertNotSame(initial, shown.morphs().assignedMorphSliderPresetListNode());
+                assertSame(shown.morphs().assignedMorphSliderPresetListNode(), shown.scene().getFocusOwner());
             } finally {
                 shown.stage().close();
             }
@@ -251,7 +264,7 @@ class WorkbenchFocusTest {
         FxTestToolkit.runOnFxThread(() -> {
             Shown shown = show(flow, platform);
             try {
-                shown.controller().sliderPresetListNode().getSelectionModel().select(0);
+                shown.templates().sliderPresetListNode().getSelectionModel().select(0);
                 SliderChoiceRow waist = (SliderChoiceRow) shown.<VBox>node("sliderChoiceRows")
                         .getChildren().getFirst();
                 CheckBox enabled = waist.enabledControl();
@@ -285,7 +298,7 @@ class WorkbenchFocusTest {
         FxTestToolkit.runOnFxThread(() -> {
             Shown shown = show(flow, platform);
             try {
-                shown.controller().sliderPresetListNode().getSelectionModel().select(0);
+                shown.templates().sliderPresetListNode().getSelectionModel().select(0);
                 Button fiftyAll = shown.node("fiftyAllSliderChoicesButton");
                 fiftyAll.requestFocus();
                 session.refuseEdits(true);
@@ -318,7 +331,7 @@ class WorkbenchFocusTest {
         FxTestToolkit.runOnFxThread(() -> {
             Shown shown = show(flow, platform);
             try {
-                shown.controller().sliderPresetListNode().getSelectionModel().select(0);
+                shown.templates().sliderPresetListNode().getSelectionModel().select(0);
                 shown.<TextField>node("sliderPresetFilter").requestFocus();
                 session.refuseEdits(true);
                 // While the dialog is up, something else in the main scene takes focus.
@@ -327,7 +340,7 @@ class WorkbenchFocusTest {
 
                 shown.<Button>node("fiftyAllSliderChoicesButton").fire();
 
-                assertSame(shown.controller().sliderPresetListNode(), shown.scene().getFocusOwner(),
+                assertSame(shown.templates().sliderPresetListNode(), shown.scene().getFocusOwner(),
                         "the filter sits in the primary content, whose landmark node is the Slider Preset list");
             } finally {
                 shown.stage().close();
@@ -344,7 +357,7 @@ class WorkbenchFocusTest {
         try {
             FxTestToolkit.runOnFxThread(() -> {
                 shown.set(show(flow, new RecordingPlatform()));
-                ListView<?> presets = shown.get().controller().sliderPresetListNode();
+                ListView<?> presets = shown.get().templates().sliderPresetListNode();
                 presets.getSelectionModel().select(0);
                 presets.requestFocus();
 
@@ -352,11 +365,11 @@ class WorkbenchFocusTest {
                 shown.get().root().applyCss();
                 shown.get().root().layout();
 
-                assertSame(shown.get().controller().activeRenameField().orElseThrow(),
+                assertSame(shown.get().templates().activeRenameField().orElseThrow(),
                         shown.get().scene().getFocusOwner());
             });
             FxTestToolkit.runOnFxThread(() -> assertSame(
-                    shown.get().controller().activeRenameField().orElseThrow(), shown.get().scene().getFocusOwner()));
+                    shown.get().templates().activeRenameField().orElseThrow(), shown.get().scene().getFocusOwner()));
         } finally {
             close(shown);
         }
@@ -370,7 +383,7 @@ class WorkbenchFocusTest {
         FxTestToolkit.runOnFxThread(() -> {
             Shown shown = show(flow, new RecordingPlatform());
             try {
-                shown.controller().sliderPresetListNode().getSelectionModel().select(0);
+                shown.templates().sliderPresetListNode().getSelectionModel().select(0);
                 Button rename = shown.node("renameSliderPresetButton");
                 rename.requestFocus();
 
@@ -378,7 +391,7 @@ class WorkbenchFocusTest {
                 shown.root().applyCss();
                 shown.root().layout();
 
-                assertSame(shown.controller().activeRenameField().orElseThrow(), shown.scene().getFocusOwner());
+                assertSame(shown.templates().activeRenameField().orElseThrow(), shown.scene().getFocusOwner());
             } finally {
                 shown.stage().close();
             }
@@ -394,7 +407,7 @@ class WorkbenchFocusTest {
         try {
             FxTestToolkit.runOnFxThread(() -> {
                 shown.set(show(flow, new RecordingPlatform()));
-                ListView<?> presets = shown.get().controller().sliderPresetListNode();
+                ListView<?> presets = shown.get().templates().sliderPresetListNode();
                 presets.getSelectionModel().select(0);
                 presets.requestFocus();
                 sendKey(shown.get().root(), KeyCode.F2, false);
@@ -421,7 +434,7 @@ class WorkbenchFocusTest {
             try {
                 shown.<ToggleButton>node("morphsAreaButton").fire();
                 Button launcher = shown.node("fillEmptyNpcMorphAssignmentsButton");
-                shown.controller().npcMorphAssignmentListNode().requestFocus();
+                shown.morphs().npcMorphAssignmentListNode().requestFocus();
 
                 launcher.fire();
 
@@ -456,7 +469,7 @@ class WorkbenchFocusTest {
 
                 ((Button) popup.getScene().getRoot().lookup("#fillEmptyCancelButton")).fire();
 
-                assertSame(shown.controller().sliderPresetListNode(), shown.scene().getFocusOwner());
+                assertSame(shown.templates().sliderPresetListNode(), shown.scene().getFocusOwner());
             } finally {
                 shown.stage().close();
             }
@@ -523,7 +536,7 @@ class WorkbenchFocusTest {
                         thumbnailLoaded.countDown();
                 });
                 shown.get().<ToggleButton>node("morphsAreaButton").fire();
-                controller.npcMorphAssignmentListNode().getSelectionModel().selectFirst();
+                LoadedWorkbench.morphs(controller).npcMorphAssignmentListNode().getSelectionModel().selectFirst();
                 if (!launcher.isDisabled())
                     thumbnailLoaded.countDown();
             });
@@ -531,7 +544,7 @@ class WorkbenchFocusTest {
             AtomicReference<Stage> viewer = new AtomicReference<>();
             FxTestToolkit.runOnFxThread(() -> {
                 Button launcher = shown.get().node("openNpcPortraitViewerButton");
-                shown.get().controller().npcMorphAssignmentListNode().requestFocus();
+                shown.get().morphs().npcMorphAssignmentListNode().requestFocus();
 
                 launcher.fire();
 

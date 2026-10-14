@@ -1,8 +1,5 @@
 package com.asdasfa.jbs2bg.workbench;
 
-import static com.asdasfa.jbs2bg.workbench.WorkbenchFocusPolicy.canRestoreFocus;
-import static com.asdasfa.jbs2bg.workbench.WorkbenchFocusPolicy.ownsSceneFocus;
-
 import java.io.IOException;
 import java.time.Clock;
 import java.util.EnumMap;
@@ -10,18 +7,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 
-import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.presentation.ProjectDiagnosticFormatter;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
-import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
 import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
 import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
-import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
-import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.workbench.morphs.MorphsArea;
 import com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseFeature;
@@ -38,10 +30,8 @@ import com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunner;
 
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
-import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -50,7 +40,6 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
@@ -186,7 +175,7 @@ public final class WorkbenchController {
     private WorkbenchNavigation.FocusTarget pendingCloseSaveTarget;
     // Settings publication may beat a competing shutdown gate; derived refresh waits until admission resumes.
     private boolean settingsRefreshDeferred;
-    // The Area modules loaded from their own FXML, keyed by the Area they render; the rest still live in this graph.
+    // The four Area modules, each loaded from its own FXML in attach and keyed by the Area it renders.
     private final Map<WorkbenchNavigation.Area, WorkbenchArea> areaModules =
             new EnumMap<>(WorkbenchNavigation.Area.class);
     // Each loaded Area FXML's fx:id namespace; read only by tests that drive the whole loaded Workbench.
@@ -200,8 +189,8 @@ public final class WorkbenchController {
     private OutputDrawer outputDrawer;
     // The Output drawer FXML's fx:id namespace; read only by tests that drive the whole loaded Workbench.
     private Map<String, Object> outputDrawerNamespace = Map.of();
-    private boolean templatesOwnProjectDiagnostics;
-    private boolean morphsOwnProjectDiagnostics;
+    // Which feature presents the Project change being rendered with its own diagnostics; NONE outside such a change.
+    private DiagnosticsOwner diagnosticsOwner = DiagnosticsOwner.NONE;
     private boolean resetTemplatesOnNextProjectFrame;
     private boolean resetMorphsOnNextProjectFrame;
     // The shared UIA list workarounds; the Templates and Morphs Areas are handed this one helper for their
@@ -382,15 +371,12 @@ public final class WorkbenchController {
             @Override
             public void render(long sequence, WorkbenchFeature.Update<?> update) {
                 renderedProjectSequence = sequence;
-                boolean previousTemplates = templatesOwnProjectDiagnostics;
-                boolean previousMorphs = morphsOwnProjectDiagnostics;
-                templatesOwnProjectDiagnostics = previousTemplates || update instanceof TemplatesFeature.Update;
-                morphsOwnProjectDiagnostics = previousMorphs || update instanceof MorphsFeature.Update;
+                DiagnosticsOwner previous = diagnosticsOwner;
+                diagnosticsOwner = previous.and(DiagnosticsOwner.of(update));
                 try {
                     WorkbenchController.this.render(projectFlow.frame());
                 } finally {
-                    templatesOwnProjectDiagnostics = previousTemplates;
-                    morphsOwnProjectDiagnostics = previousMorphs;
+                    diagnosticsOwner = previous;
                 }
             }
         });
@@ -569,8 +555,7 @@ public final class WorkbenchController {
      * Exposes one Area FXML's namespace to tests that look up Area controls through the whole loaded Workbench.
      *
      * @param area the Area
-     * @return the Area FXML's read-only {@code fx:id} namespace, or an empty map while the Area still lives in this
-     *         controller's own graph
+     * @return the Area FXML's read-only {@code fx:id} namespace, or an empty map before the shell is attached
      */
     Map<String, Object> areaNamespace(WorkbenchNavigation.Area area) {
         return areaNamespaces.getOrDefault(area, Map.of());
@@ -588,7 +573,7 @@ public final class WorkbenchController {
 
     /**
      * @param area the Area to look up
-     * @return the Area's module, or null while the Area still lives in this controller's own graph
+     * @return the Area's module; attach loads all four before any key, navigation or focus request can ask
      */
     private WorkbenchArea areaModule(WorkbenchNavigation.Area area) {
         return areaModules.get(area);
@@ -664,15 +649,13 @@ public final class WorkbenchController {
             Objects.requireNonNull(update, "update");
             // NPC Database owns these diagnostics and task wording. Suppress the generic lifecycle feedback while
             // Project chrome and other Areas reconcile the final snapshot after promotion has published.
-            templatesOwnProjectDiagnostics = true;
-            morphsOwnProjectDiagnostics = true;
+            diagnosticsOwner = DiagnosticsOwner.ANOTHER_AREA;
             try {
                 WorkbenchProjectFlow.Frame projectFrame = projectFlow.frame();
                 renderedProjectSequence = projectFrame.sequence();
                 render(projectFrame, ownsDiagnostics ? List.of() : projectFrame.diagnostics());
             } finally {
-                templatesOwnProjectDiagnostics = false;
-                morphsOwnProjectDiagnostics = false;
+                diagnosticsOwner = DiagnosticsOwner.NONE;
             }
         }
 
@@ -756,53 +739,6 @@ public final class WorkbenchController {
         templatesFeature.refreshSettings();
         templatesArea.render(context);
         outputDrawer.refreshGenerationSettings();
-    }
-
-    /**
-     * @return current immutable Templates frame for package-local adapter verification
-     */
-    TemplatesFeature.Frame templatesFrame() {
-        return templatesFeature.frame();
-    }
-
-    /**
-     * @return the Templates Area's currently materialized inline rename field, when its virtualized row is visible,
-     *         for tests that drive the whole loaded Workbench
-     */
-    Optional<TextField> activeRenameField() {
-        return templatesArea.activeRenameField();
-    }
-
-    /**
-     * @return the Templates Area's current Slider Preset ListView, including an accessibility-driven empty/refill
-     *         replacement, for tests that drive the whole loaded Workbench
-     */
-    ListView<SliderPresetSnapshot> sliderPresetListNode() {
-        return templatesArea.sliderPresetListNode();
-    }
-
-    /**
-     * @return the Morphs Area's current Custom Morph Target ListView, including an accessibility-driven refill
-     *         replacement, for tests that drive the whole loaded Workbench
-     */
-    ListView<CustomMorphTargetSnapshot> customMorphTargetListNode() {
-        return morphsArea.customMorphTargetListNode();
-    }
-
-    /**
-     * @return the Morphs Area's current NPC Morph Assignment ListView, including an accessibility-driven refill
-     *         replacement, for tests that drive the whole loaded Workbench
-     */
-    ListView<NpcMorphAssignmentSnapshot> npcMorphAssignmentListNode() {
-        return morphsArea.npcMorphAssignmentListNode();
-    }
-
-    /**
-     * @return the Morphs Area's current assigned Slider Preset ListView, including an accessibility-driven refill
-     *         replacement, for tests that drive the whole loaded Workbench
-     */
-    ListView<SliderPresetSnapshot> assignedMorphSliderPresetListNode() {
-        return morphsArea.assignedMorphSliderPresetListNode();
     }
 
     /**
@@ -978,11 +914,11 @@ public final class WorkbenchController {
         WorkbenchArea activeModule = areaModule(navigationFrame.activeArea());
         // The active Area's own keys (Templates' F2 and Escape while renaming) win over navigation, so an Escape
         // cancels an open rename before it would dismiss the overlay or drawer around it.
-        if (activeModule != null && activeModule.handleKey(event)) {
+        if (activeModule.handleKey(event)) {
             event.consume();
             return;
         }
-        if (activeModule != null && event.isControlDown() && event.getCode() == KeyCode.K) {
+        if (event.isControlDown() && event.getCode() == KeyCode.K) {
             activeModule.focusSearch();
             event.consume();
             return;
@@ -1017,7 +953,7 @@ public final class WorkbenchController {
         if (transition != null) {
             applyNavigation(transition);
             event.consume();
-        } else if (event.getCode() == KeyCode.ESCAPE && activeModule != null && activeModule.escape()) {
+        } else if (event.getCode() == KeyCode.ESCAPE && activeModule.escape()) {
             event.consume();
         }
     }
@@ -1039,9 +975,8 @@ public final class WorkbenchController {
         if (leftModule != null)
             leftModule.leave();
         renderNavigation(navigationFrame);
-        WorkbenchArea activeModule = areaModule(navigationFrame.activeArea());
-        if (activeModule != null && navigationFrame.overlay() == WorkbenchNavigation.Overlay.INSPECTOR)
-            activeModule.resetInspectorScroll();
+        if (navigationFrame.overlay() == WorkbenchNavigation.Overlay.INSPECTOR)
+            areaModule(navigationFrame.activeArea()).resetInspectorScroll();
         transition.focusTarget().ifPresent(this::requestFocus);
     }
 
@@ -1166,12 +1101,7 @@ public final class WorkbenchController {
      * Returns an Area's last-resort focus node: its first editable control for the current Area state.
      */
     private Node areaDefaultFocusNode(WorkbenchNavigation.Area area) {
-        return switch (area) {
-            case TEMPLATES -> templatesArea.defaultFocusNode();
-            case MORPHS -> morphsArea.defaultFocusNode();
-            case SETTINGS -> settingsArea.defaultFocusNode();
-            case NPC_DATABASE -> npcDatabaseArea.defaultFocusNode();
-        };
+        return areaModule(area).defaultFocusNode();
     }
 
     /**
@@ -1182,25 +1112,9 @@ public final class WorkbenchController {
             case RAIL -> areaButton(target.area());
             case NPC_DATABASE_LAUNCHER -> morphsArea.focusNode(WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER);
             case PRIMARY_LAUNCHER -> showPrimaryOverlayButton;
-            case PRIMARY_CONTENT -> switch (target.area()) {
-                case TEMPLATES -> templatesArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
-                case MORPHS -> morphsArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
-                case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
-                case NPC_DATABASE -> npcDatabaseArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
-            };
-            case EDITOR -> switch (target.area()) {
-                case TEMPLATES -> templatesArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
-                case MORPHS -> morphsArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
-                case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
-                case NPC_DATABASE -> npcDatabaseArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
-            };
+            // The three Area landmarks resolve to the target Area's own state-dependent node.
+            case PRIMARY_CONTENT, EDITOR, INSPECTOR -> areaModule(target.area()).focusNode(target.landmark());
             case INSPECTOR_LAUNCHER -> showInspectorOverlayButton;
-            case INSPECTOR -> switch (target.area()) {
-                case TEMPLATES -> templatesArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
-                case MORPHS -> morphsArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
-                case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
-                case NPC_DATABASE -> npcDatabaseArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
-            };
             case OUTPUT_LAUNCHER -> outputAreaButton;
             case OUTPUT -> outputDrawer.focusNode(WorkbenchNavigation.Landmark.OUTPUT);
             case ACTIVITY -> activityList;
@@ -1348,20 +1262,21 @@ public final class WorkbenchController {
         // Area is handed it first, as it renders its own updates against the last context it received.
         context = buildContext(frame, resetTemplatesOnNextProjectFrame || lifecycleReset,
                 resetMorphsOnNextProjectFrame || lifecycleReset);
-        if (lifecycleReset && npcDatabaseArea != null) {
+        // Every feature and Area exists here: render runs only after attach has loaded them all (renderAreas below
+        // writes to each of them unconditionally).
+        if (lifecycleReset) {
             navigation.clearNpcDatabaseReturn();
             npcDatabaseArea.render(context);
             npcDatabaseArea.dispatch(new NpcDatabaseFeature.ClearAllSelections());
         }
-        if (templatesFeature != null && templatesFeature.frame().projectSequence() != frame.sequence()) {
+        if (templatesFeature.frame().projectSequence() != frame.sequence()) {
             templatesFeature.acceptProjectFrame(frame, context.resetTemplates(),
-                    morphsOwnProjectDiagnostics ? List.of() : frame.diagnostics());
+                    diagnosticsOwner.keepsDiagnosticsFromTemplates() ? List.of() : frame.diagnostics());
         }
-        if (morphsFeature != null && morphsFeature.frame().projectSequence() != frame.sequence())
+        if (morphsFeature.frame().projectSequence() != frame.sequence())
             morphsFeature.acceptProjectFrame(frame, context.resetMorphs(),
-                    templatesOwnProjectDiagnostics ? List.of() : frame.diagnostics());
-        if (outputFeature != null)
-            outputFeature.acceptProjectFrame(frame, context.resetOutput());
+                    diagnosticsOwner.keepsDiagnosticsFromMorphs() ? List.of() : frame.diagnostics());
+        outputFeature.acceptProjectFrame(frame, context.resetOutput());
         resetTemplatesOnNextProjectFrame = false;
         resetMorphsOnNextProjectFrame = false;
         renderAreas();
@@ -1641,6 +1556,60 @@ public final class WorkbenchController {
         UiaListHelper.setKeyedChildIfChanged(statusIconHost.getChildren(), status.severity().icon(),
                 icon -> SemanticIcons.create(icon, true));
         SeverityStyle.apply(statusText, status.severity());
+    }
+
+    /**
+     * The shell's diagnostics arbitration: which feature presents the Project change being rendered with its own
+     * diagnostics, so the shell keeps them out of the other Area's projection of the same Project frame. Templates and
+     * Morphs are the two Areas that project a frame's diagnostics.
+     */
+    private enum DiagnosticsOwner {
+        /** No change owns them: Templates and Morphs both project the frame's diagnostics. */
+        NONE,
+        /** A Templates edit presents them; Morphs projects none. */
+        TEMPLATES,
+        /** A Morphs edit presents them; Templates projects none. */
+        MORPHS,
+        /**
+         * Another Area presents them (the NPC Database through {@code projectChanged}), or a Templates and a Morphs
+         * change render nested; neither Templates nor Morphs projects them.
+         */
+        ANOTHER_AREA;
+
+        /**
+         * @param update the feature update whose Project change the chrome is rendering
+         * @return the owner the update's feature makes: Templates or Morphs for their own updates, else none
+         */
+        static DiagnosticsOwner of(WorkbenchFeature.Update<?> update) {
+            if (update instanceof TemplatesFeature.Update)
+                return TEMPLATES;
+            if (update instanceof MorphsFeature.Update)
+                return MORPHS;
+            return NONE;
+        }
+
+        /**
+         * Combines an enclosing owner with a nested one, so a nested render keeps every suppression the enclosing
+         * render already made.
+         *
+         * @param nested the owner of the nested render
+         * @return the owner that suppresses what either one suppresses
+         */
+        DiagnosticsOwner and(DiagnosticsOwner nested) {
+            if (this == NONE || this == nested)
+                return nested;
+            return nested == NONE ? this : ANOTHER_AREA;
+        }
+
+        /** @return whether the Templates projection of the frame must stay clear of its diagnostics */
+        boolean keepsDiagnosticsFromTemplates() {
+            return this == MORPHS || this == ANOTHER_AREA;
+        }
+
+        /** @return whether the Morphs projection of the frame must stay clear of its diagnostics */
+        boolean keepsDiagnosticsFromMorphs() {
+            return this == TEMPLATES || this == ANOTHER_AREA;
+        }
     }
 
     /**

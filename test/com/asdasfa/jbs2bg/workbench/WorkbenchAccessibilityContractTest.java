@@ -102,7 +102,8 @@ class WorkbenchAccessibilityContractTest {
 
             createNpc(loader, "Lyra", "Lyra01");
 
-            ListView<NpcMorphAssignmentSnapshot> replacement = controller.npcMorphAssignmentListNode();
+            ListView<NpcMorphAssignmentSnapshot> replacement =
+                    LoadedWorkbench.morphs(controller).npcMorphAssignmentListNode();
             assertNotSame(initial, replacement);
             assertNull(initial.getParent(), "the stale empty node must leave the scene graph");
             assertSame(owner, replacement.getParent());
@@ -146,20 +147,23 @@ class WorkbenchAccessibilityContractTest {
             stage.setScene(new Scene(root, 1300.0, 800.0));
             controller.attach(flow, stage, new UnusedPlatform(List.of(source)), fixture().environment());
             stage.show();
-            controller.sliderPresetListNode().getSelectionModel().select(0);
+            LoadedWorkbench.templates(controller).sliderPresetListNode().getSelectionModel().select(0);
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-            controller.customMorphTargetListNode().getSelectionModel().select(0);
+            LoadedWorkbench.morphs(controller).customMorphTargetListNode().getSelectionModel().select(0);
             ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
             ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
             ((Button) LoadedWorkbench.node(loader, "generateOutputButton")).fire();
 
             Map<String, ObservableList<?>> guarded = new LinkedHashMap<>();
-            guarded.put("Slider Presets", controller.sliderPresetListNode().getItems());
+            guarded.put("Slider Presets", LoadedWorkbench.templates(controller).sliderPresetListNode().getItems());
             guarded.put("Slider choice rows",
                     ((VBox) LoadedWorkbench.node(loader, "sliderChoiceRows")).getChildren());
-            guarded.put("Custom Morph Targets", controller.customMorphTargetListNode().getItems());
-            guarded.put("NPC Morph Assignments", controller.npcMorphAssignmentListNode().getItems());
-            guarded.put("Assigned Slider Presets", controller.assignedMorphSliderPresetListNode().getItems());
+            guarded.put("Custom Morph Targets",
+                    LoadedWorkbench.morphs(controller).customMorphTargetListNode().getItems());
+            guarded.put("NPC Morph Assignments",
+                    LoadedWorkbench.morphs(controller).npcMorphAssignmentListNode().getItems());
+            guarded.put("Assigned Slider Presets",
+                    LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode().getItems());
             guarded.put("Available Slider Presets",
                     ((ComboBox<?>) LoadedWorkbench.node(loader, "availableMorphSliderPreset")).getItems());
             guarded.put("BoS artifacts", ((ComboBox<?>) LoadedWorkbench.node(loader, "bosArtifactChoice")).getItems());
@@ -269,20 +273,20 @@ class WorkbenchAccessibilityContractTest {
                 stage.show();
                 stageHolder.set(stage);
                 controllerHolder.set(controller);
-                controller.sliderPresetListNode().getSelectionModel().select(0);
+                LoadedWorkbench.templates(controller).sliderPresetListNode().getSelectionModel().select(0);
             });
             // Let the virtualized Slider Preset cells materialize before the edit lifecycle addresses them.
             FxTestToolkit.awaitLayoutPulses(stageHolder.get().getScene(), 2);
             FxTestToolkit.runOnFxThread(() -> {
                 WorkbenchController controller = controllerHolder.get();
                 Parent root = stageHolder.get().getScene().getRoot();
-                ListView<SliderPresetSnapshot> presets = controller.sliderPresetListNode();
+                ListView<SliderPresetSnapshot> presets = LoadedWorkbench.templates(controller).sliderPresetListNode();
                 assertEquals(-1, presets.getEditingIndex());
 
                 sendKey(root, KeyCode.F2);
 
                 assertEquals(0, presets.getEditingIndex());
-                TextField rename = controller.activeRenameField().orElseThrow();
+                TextField rename = LoadedWorkbench.templates(controller).activeRenameField().orElseThrow();
                 ListCell<?> cell = owningCell(rename);
                 assertEquals("Enter commits the name. Escape cancels and restores the Slider Preset row.",
                         rename.getAccessibleHelp());
@@ -293,7 +297,7 @@ class WorkbenchAccessibilityContractTest {
                 String rejection = rename.getAccessibleHelp();
                 assertTrue(rejection.contains("SLIDER_PRESET_NAME_DUPLICATE"), rejection);
                 assertEquals(0, presets.getEditingIndex(), "a rejected commit must keep the edit open");
-                assertSame(rename, controller.activeRenameField().orElseThrow(),
+                assertSame(rename, LoadedWorkbench.templates(controller).activeRenameField().orElseThrow(),
                         "the rejected draft must update the existing editor, not a recreated cell");
                 assertSame(cell, owningCell(rename));
                 assertEquals("Rename Slider Preset Alpha", cell.getAccessibleText());
@@ -303,19 +307,19 @@ class WorkbenchAccessibilityContractTest {
                         false, false, false, false));
 
                 assertEquals(-1, presets.getEditingIndex());
-                assertTrue(controller.activeRenameField().isEmpty());
+                assertTrue(LoadedWorkbench.templates(controller).activeRenameField().isEmpty());
                 assertNull(cell.getGraphic());
                 assertEquals("Alpha", cell.getText());
                 assertEquals("Alpha", cell.getAccessibleText());
 
                 sendKey(root, KeyCode.F2);
                 assertEquals(0, presets.getEditingIndex());
-                TextField retry = controller.activeRenameField().orElseThrow();
+                TextField retry = LoadedWorkbench.templates(controller).activeRenameField().orElseThrow();
                 retry.setText("Gamma");
                 retry.fireEvent(new ActionEvent());
 
                 assertEquals(-1, presets.getEditingIndex());
-                assertTrue(controller.activeRenameField().isEmpty());
+                assertTrue(LoadedWorkbench.templates(controller).activeRenameField().isEmpty());
                 assertEquals("Gamma", presets.getSelectionModel().getSelectedItem().getName());
             });
         } finally {
@@ -347,7 +351,7 @@ class WorkbenchAccessibilityContractTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
             controller.attach(flow, stage, new UnusedPlatform(), fixture().environment());
-            controller.sliderPresetListNode().getSelectionModel().select(0);
+            LoadedWorkbench.templates(controller).sliderPresetListNode().getSelectionModel().select(0);
             VBox rows = (VBox) LoadedWorkbench.node(loader, "sliderChoiceRows");
             List<Node> before = List.copyOf(rows.getChildren());
             assertEquals(List.of("Arms", "Waist"), before.stream()
@@ -399,13 +403,16 @@ class WorkbenchAccessibilityContractTest {
             controller.attach(flow, stage, new UnusedPlatform(), fixture().environment());
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
             Label label = (Label) LoadedWorkbench.node(loader, "assignedMorphSliderPresetLabel");
-            ListView<CustomMorphTargetSnapshot> targets = controller.customMorphTargetListNode();
-            ListView<SliderPresetSnapshot> initial = controller.assignedMorphSliderPresetListNode();
+            ListView<CustomMorphTargetSnapshot> targets =
+                    LoadedWorkbench.morphs(controller).customMorphTargetListNode();
+            ListView<SliderPresetSnapshot> initial =
+                    LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode();
             assertTrue(initial.getItems().isEmpty());
 
             targets.getSelectionModel().select(0);
 
-            ListView<SliderPresetSnapshot> first = controller.assignedMorphSliderPresetListNode();
+            ListView<SliderPresetSnapshot> first =
+                    LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode();
             assertNotSame(initial, first);
             assertSame(first, label.getLabelFor());
             assertSame(label, first.queryAccessibleAttribute(AccessibleAttribute.LABELED_BY));
@@ -413,10 +420,11 @@ class WorkbenchAccessibilityContractTest {
             assertSame(inspector, first.getParent());
 
             targets.getSelectionModel().clearSelection();
-            assertTrue(controller.assignedMorphSliderPresetListNode().getItems().isEmpty());
+            assertTrue(LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode().getItems().isEmpty());
             targets.getSelectionModel().select(0);
 
-            ListView<SliderPresetSnapshot> second = controller.assignedMorphSliderPresetListNode();
+            ListView<SliderPresetSnapshot> second =
+                    LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode();
             assertNotSame(first, second);
             assertNull(first.getParent(), "the first replacement must have left the scene graph");
             assertSame(inspector, second.getParent());
