@@ -35,7 +35,6 @@ import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature;
-import com.asdasfa.jbs2bg.workbench.morphs.NpcPortraitFiles;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseFeature;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseImporter;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
@@ -84,7 +83,6 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
-import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -537,6 +535,9 @@ public final class WorkbenchController {
     private WorkbenchPlatform platform;
     // Built in attach once the platform and Stage exist; owns the job gate and the dialog round-trip.
     private DispatchPipeline pipeline;
+    // The latest context the shell fanned out; rebuilt on each Project frame and each job frame. Area renders read
+    // cross-Area inputs (job admission, live Settings) only from here, so each of their controls has one writer.
+    private WorkbenchContext context;
     // Built in attach with the Stage; classifies the focus owner and realizes semantic focus targets.
     private WorkbenchFocusPolicy focusPolicy;
     private JavaFxWorkbenchAppearance appearanceAdapter;
@@ -569,21 +570,13 @@ public final class WorkbenchController {
     private UiaListHelper.RefillingList<SliderPresetSnapshot> assignedMorphSliderPresetItems;
     private Optional<NameIdentity> renderedMorphTargetSelection = Optional.empty();
     private Optional<NpcMorphAssignmentIdentity> renderedNpcSelection = Optional.empty();
-    private NpcMorphAssignmentIdentity renderedPortraitIdentity;
-    private String renderedPortraitDisplayName;
-    private Path renderedPortraitPath;
-    private Image renderedPortraitImage;
-    private NpcMorphAssignmentIdentity renderedDatabasePortraitIdentity;
-    private String renderedDatabasePortraitDisplayName;
-    private Path renderedDatabasePortraitPath;
-    private Image renderedDatabasePortraitImage;
+    // Satellite surfaces registered with the shell's appearance; built in attach, before the appearance first renders.
+    private SatelliteRegistry satellites;
+    // The shared portrait viewer's thumbnail loaders for the Morphs and NPC Database inspectors.
+    private NpcPortraitViewer.Thumbnail morphsPortrait;
+    private NpcPortraitViewer.Thumbnail npcDatabasePortrait;
     private Popup fillEmptyPopup;
     private Parent fillEmptyPopupRoot;
-    private Stage npcPortraitViewer;
-    private Parent npcPortraitViewerRoot;
-    private Path npcPortraitViewerPath;
-    /** Directory searched for NPC portraits; relative to the working directory, like the legacy application. */
-    private Path portraitDirectory = Path.of("images");
     private Popup npcFilterPopup;
     private Parent npcFilterPopupRoot;
     private String npcFilterExpandedColumn;
@@ -768,7 +761,18 @@ public final class WorkbenchController {
                 WorkbenchController.this.render(projectFlow.frame());
             }
         });
+        // The configure* steps render their Areas, so they need a context before the first Project or job frame.
+        context = buildContext(projectFlow.frame(), false, false);
         focusPolicy = createFocusPolicy();
+        // Read only when a satellite registers, which is after configureAppearance has built the adapter.
+        satellites = new SatelliteRegistry(() -> appearanceAdapter.frame());
+        NpcPortraitViewer portraits = new NpcPortraitViewer(environment.portraitDirectory(), stage, satellites,
+                launcher -> focusPolicy.restoreAfterSatellite(launcher,
+                        WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
+        morphsPortrait = portraits.thumbnail(npcPortraitImage, npcPortraitStatus, openNpcPortraitViewerButton,
+                "Select an NPC Morph Assignment to inspect its portrait.");
+        npcDatabasePortrait = portraits.thumbnail(npcDatabasePortraitImage, npcDatabasePortraitStatus,
+                openNpcDatabasePortraitViewerButton, "Select an NPC Database entry to inspect its portrait.");
         configureProjectCommands();
         configureTemplates();
         configureMorphs();
@@ -794,19 +798,15 @@ public final class WorkbenchController {
                 fillEmptyPopup.hide();
             if (npcFilterPopup != null)
                 npcFilterPopup.hide();
-            if (npcPortraitViewer != null)
-                npcPortraitViewer.close();
+            satellites.dismissAll();
             appearanceAdapter.close();
             jobSubscription.close();
             outputSubscription.close();
         });
         renderedProjectSequence = projectFlow.frame().sequence();
         renderNavigation(navigationFrame);
+        // The first Project frame fans out to every Area.
         render(projectFlow.frame());
-        renderTemplates(templatesFeature.frame());
-        renderMorphs(morphsFeature.frame());
-        renderNpcDatabase(npcDatabaseFeature.frame());
-        renderOutput(outputFeature.frame());
         renderFeedback(feedback.frame());
         if (workbenchRoot.getWidth() > 0.0)
             applyNavigation(navigation.resize(workbenchRoot.getWidth(), currentSemanticFocus()));
@@ -939,7 +939,7 @@ public final class WorkbenchController {
                 dispatchMorphs(new MorphsFeature.RequestFillEmpty()));
         addNpcsFromDatabaseButton.setOnAction(event -> openNpcDatabaseFromMorphs());
         dismissMorphsInfoBarButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.DismissDiagnostics()));
-        openNpcPortraitViewerButton.setOnAction(event -> showNpcPortraitViewer());
+        // openNpcPortraitViewerButton is wired by its portrait thumbnail (see attach).
 
         configureAssignedMorphSliderPresetList();
         assignedMorphSliderPresetItems = uiaLists.refilling(() -> assignedMorphSliderPresetList,
@@ -948,7 +948,7 @@ public final class WorkbenchController {
         availableMorphSliderPreset.setCellFactory(list -> new SliderPresetDisplayCell());
         availableMorphSliderPreset.setButtonCell(new SliderPresetDisplayCell());
         availableMorphSliderPreset.setOnAction(event -> assignMorphSliderPresetButton.setDisable(
-                pipeline.mutationsBlocked() || availableMorphSliderPreset.getValue() == null));
+                context.projectMutationsBlocked() || availableMorphSliderPreset.getValue() == null));
         assignMorphSliderPresetButton.setOnAction(event -> {
             SliderPresetSnapshot preset = availableMorphSliderPreset.getValue();
             if (preset != null)
@@ -1079,241 +1079,25 @@ public final class WorkbenchController {
     }
 
     /**
-     * Resolves the portrait for the stable selected NPC and starts decoding away from the JavaFX lane. Old load
-     * callbacks compare image identity before touching the inspector so rapid selection cannot show a stale portrait.
+     * Shows the selected NPC Morph Assignment's portrait in the Morphs inspector through the shared viewer's
+     * thumbnail loader.
      *
      * @param npc selected immutable NPC Morph Assignment, or null when no NPC is selected
      */
     private void renderNpcPortrait(NpcMorphAssignmentSnapshot npc) {
-        NpcMorphAssignmentIdentity identity = npc == null ? null
-                : new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId());
-        String displayName = npc == null ? null : npc.getDisplayName();
-        if (Objects.equals(identity, renderedPortraitIdentity)
-                && Objects.equals(displayName, renderedPortraitDisplayName))
-            return;
-        renderedPortraitIdentity = identity;
-        renderedPortraitDisplayName = displayName;
-        renderedPortraitPath = null;
-        renderedPortraitImage = null;
-        npcPortraitImage.setImage(null);
-        openNpcPortraitViewerButton.setDisable(true);
-        if (npc == null) {
-            npcPortraitStatus.setText("No NPC portrait selected");
-            npcPortraitStatus.setAccessibleHelp("Select an NPC Morph Assignment to inspect its portrait.");
-            return;
-        }
-        // The selected NPC is already named by the catalog and inspector; only the dedicated viewer names its image.
-        Optional<Path> file = NpcPortraitFiles.find(portraitDirectory, npc);
-        if (file.isEmpty()) {
-            String expected = "images/" + npc.getDisplayName() + " (" + npc.getEditorId() + ").jpg";
-            String status = "No portrait found. Expected " + expected
-                    + " (or .jpeg, .png, .bmp), then a display-name-only image.";
-            npcPortraitStatus.setText(status);
-            npcPortraitStatus.setAccessibleHelp(status);
-            return;
-        }
-        renderedPortraitPath = file.orElseThrow();
-        String filename = renderedPortraitPath.getFileName().toString();
-        Image image = new Image(renderedPortraitPath.toUri().toString(), 200.0, 180.0,
-                true, true, true);
-        renderedPortraitImage = image;
-        npcPortraitImage.setImage(image);
-        String loading = "Loading portrait: " + filename;
-        npcPortraitStatus.setText(loading);
-        npcPortraitStatus.setAccessibleHelp(loading);
-        image.progressProperty().addListener((observable, previous, current) ->
-                finishNpcPortraitLoad(image, filename));
-        image.errorProperty().addListener((observable, previous, current) ->
-                finishNpcPortraitLoad(image, filename));
-        finishNpcPortraitLoad(image, filename);
+        if (npc == null)
+            morphsPortrait.clear();
+        else
+            morphsPortrait.show(new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId()),
+                    npc.getDisplayName());
     }
 
-    /** Enables the viewer only after the current asynchronous thumbnail decoded successfully. */
-    private void finishNpcPortraitLoad(Image image, String filename) {
-        if (renderedPortraitImage != image)
-            return;
-        if (image.isError()) {
-            npcPortraitImage.setImage(null);
-            String status = "Could not load portrait: " + filename;
-            npcPortraitStatus.setText(status);
-            npcPortraitStatus.setAccessibleHelp(status);
-        } else if (image.getProgress() >= 1.0 && image.getWidth() > 0.0) {
-            String status = "Portrait file: " + filename;
-            npcPortraitStatus.setText(status);
-            npcPortraitStatus.setAccessibleHelp(status);
-            openNpcPortraitViewerButton.setDisable(false);
-        }
-    }
-
-    /** Follows stable NPC Database selection without allowing a prior asynchronous thumbnail to replace it. */
+    /** Follows stable NPC Database selection through the shared viewer's thumbnail loader. */
     private void renderNpcDatabasePortrait(NPC npc) {
-        NpcMorphAssignmentIdentity identity = npc == null ? null : ProjectIdentities.npcDatabaseEntry(npc);
-        String displayName = npc == null ? null : npc.getName();
-        if (Objects.equals(identity, renderedDatabasePortraitIdentity)
-                && Objects.equals(displayName, renderedDatabasePortraitDisplayName))
-            return;
-        renderedDatabasePortraitIdentity = identity;
-        renderedDatabasePortraitDisplayName = displayName;
-        renderedDatabasePortraitPath = null;
-        renderedDatabasePortraitImage = null;
-        npcDatabasePortraitImage.setImage(null);
-        openNpcDatabasePortraitViewerButton.setDisable(true);
-        if (npc == null) {
-            npcDatabasePortraitStatus.setText("No NPC portrait selected");
-            npcDatabasePortraitStatus.setAccessibleHelp("Select an NPC Database entry to inspect its portrait.");
-            return;
-        }
-        Optional<Path> file = NpcPortraitFiles.find(portraitDirectory, npc.getName(), npc.getEditorId());
-        if (file.isEmpty()) {
-            String expected = "images/" + npc.getName() + " (" + npc.getEditorId() + ").jpg";
-            String status = "No portrait found. Expected " + expected
-                    + " (or .jpeg, .png, .bmp), then a display-name-only image.";
-            npcDatabasePortraitStatus.setText(status);
-            npcDatabasePortraitStatus.setAccessibleHelp(status);
-            return;
-        }
-        renderedDatabasePortraitPath = file.orElseThrow();
-        String filename = renderedDatabasePortraitPath.getFileName().toString();
-        Image image = new Image(renderedDatabasePortraitPath.toUri().toString(), 200.0, 180.0,
-                true, true, true);
-        renderedDatabasePortraitImage = image;
-        npcDatabasePortraitImage.setImage(image);
-        String loading = "Loading portrait: " + filename;
-        npcDatabasePortraitStatus.setText(loading);
-        npcDatabasePortraitStatus.setAccessibleHelp(loading);
-        image.progressProperty().addListener((observable, previous, current) ->
-                finishNpcDatabasePortraitLoad(image, filename));
-        image.errorProperty().addListener((observable, previous, current) ->
-                finishNpcDatabasePortraitLoad(image, filename));
-        finishNpcDatabasePortraitLoad(image, filename);
-    }
-
-    /** Enables the database viewer only for the current successfully decoded portrait. */
-    private void finishNpcDatabasePortraitLoad(Image image, String filename) {
-        if (renderedDatabasePortraitImage != image)
-            return;
-        if (image.isError()) {
-            npcDatabasePortraitImage.setImage(null);
-            String status = "Could not load portrait: " + filename;
-            npcDatabasePortraitStatus.setText(status);
-            npcDatabasePortraitStatus.setAccessibleHelp(status);
-        } else if (image.getProgress() >= 1.0 && image.getWidth() > 0.0) {
-            String status = "Portrait file: " + filename;
-            npcDatabasePortraitStatus.setText(status);
-            npcDatabasePortraitStatus.setAccessibleHelp(status);
-            openNpcDatabasePortraitViewerButton.setDisable(false);
-        }
-    }
-
-    /**
-     * Opens the selected portrait in a keyboard-closeable, zoomable owned viewer while a full-resolution image loads
-     * in the background. The filename and dimensions remain available as text for assistive technology.
-     */
-    private void showNpcPortraitViewer() {
-        if (renderedPortraitPath == null || renderedPortraitIdentity == null || renderedPortraitImage == null
-                || renderedPortraitImage.isError() || renderedPortraitImage.getProgress() < 1.0)
-            return;
-        showPortraitViewer(renderedPortraitPath, renderedPortraitDisplayName, renderedPortraitIdentity,
-                openNpcPortraitViewerButton);
-    }
-
-    /** Opens the selected NPC Database portrait through the same accessible viewer used by Morphs. */
-    private void showNpcDatabasePortraitViewer() {
-        if (renderedDatabasePortraitPath == null || renderedDatabasePortraitIdentity == null
-                || renderedDatabasePortraitImage == null || renderedDatabasePortraitImage.isError()
-                || renderedDatabasePortraitImage.getProgress() < 1.0)
-            return;
-        showPortraitViewer(renderedDatabasePortraitPath, renderedDatabasePortraitDisplayName,
-                renderedDatabasePortraitIdentity, openNpcDatabasePortraitViewerButton);
-    }
-
-    /** Builds one owned portrait window and restores focus to the visible launching Area when it closes. */
-    private void showPortraitViewer(Path file, String displayName, NpcMorphAssignmentIdentity identity,
-                                    Button launcher) {
-        if (npcPortraitViewer != null && npcPortraitViewer.isShowing()) {
-            if (file.equals(npcPortraitViewerPath)) {
-                npcPortraitViewer.toFront();
-                npcPortraitViewer.requestFocus();
-                return;
-            }
-            // A different selected NPC needs its own image; the old viewer cannot be reused with stale content.
-            npcPortraitViewer.close();
-        }
-        VBox content = new VBox(10.0);
-        content.setId("workbenchRoot");
-        content.getStyleClass().add("npc-portrait-viewer");
-        content.setAccessibleText("NPC portrait viewer");
-        Label title = new Label("NPC portrait: " + displayName);
-        title.getStyleClass().add("title");
-        Label filename = new Label("File: " + file.getFileName());
-        filename.setWrapText(true);
-        Label dimensions = new Label("Loading image dimensions…");
-        dimensions.setAccessibleText("NPC portrait dimensions: loading");
-        ImageView fullView = new ImageView();
-        fullView.setAccessibleText("NPC portrait: " + displayName + ", plugin "
-                + identity.getPluginName() + ", editor ID " + identity.getEditorId());
-        fullView.setPreserveRatio(true);
-        fullView.setSmooth(true);
-        Image fullImage = new Image(file.toUri().toString(), true);
-        fullView.setImage(fullImage);
-        Runnable updateDimensions = () -> {
-            if (fullImage.isError()) {
-                dimensions.setText("Could not load portrait dimensions.");
-                dimensions.setAccessibleText("NPC portrait dimensions unavailable");
-            } else if (fullImage.getProgress() >= 1.0) {
-                String size = (int) fullImage.getWidth() + " × " + (int) fullImage.getHeight() + " pixels";
-                dimensions.setText(size);
-                dimensions.setAccessibleText("NPC portrait dimensions: " + size);
-            }
-        };
-        fullImage.progressProperty().addListener((observable, previous, current) -> updateDimensions.run());
-        fullImage.errorProperty().addListener((observable, previous, current) -> updateDimensions.run());
-        updateDimensions.run();
-        ScrollPane imageScroll = new ScrollPane(fullView);
-        imageScroll.setAccessibleText("NPC portrait image scroll area");
-        imageScroll.setPannable(true);
-        VBox.setVgrow(imageScroll, javafx.scene.layout.Priority.ALWAYS);
-        Label zoomLabel = new Label("Zoom: 100%");
-        Slider zoom = new Slider(0.25, 4.0, 1.0);
-        zoom.setAccessibleText("NPC portrait zoom");
-        zoom.setBlockIncrement(0.25);
-        fullView.fitWidthProperty().bind(zoom.valueProperty().multiply(500.0));
-        zoom.valueProperty().addListener((observable, previous, current) ->
-                zoomLabel.setText("Zoom: " + Math.round(current.doubleValue() * 100.0) + "%"));
-        Button close = new Button("Close");
-        close.setAccessibleText("Close NPC portrait viewer");
-        content.getChildren().setAll(title, filename, dimensions, imageScroll, zoomLabel, zoom, close);
-        Stage viewer = new Stage();
-        viewer.initOwner(stage);
-        viewer.getIcons().setAll(stage.getIcons());
-        viewer.setTitle("NPC Portrait — " + displayName);
-        Scene scene = new Scene(content, 640.0, 560.0);
-        scene.getStylesheets().add(WorkbenchController.class
-                .getResource("/com/asdasfa/jbs2bg/workbench.css").toExternalForm());
-        scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (event.getCode() == KeyCode.ESCAPE) {
-                viewer.close();
-                event.consume();
-            }
-        });
-        viewer.setScene(scene);
-        viewer.setMinWidth(360.0);
-        viewer.setMinHeight(300.0);
-        close.setOnAction(event -> viewer.close());
-        npcPortraitViewer = viewer;
-        npcPortraitViewerRoot = content;
-        npcPortraitViewerPath = file;
-        applySatelliteAppearance(content);
-        viewer.setOnHidden(event -> {
-            if (npcPortraitViewer == viewer) {
-                npcPortraitViewer = null;
-                npcPortraitViewerRoot = null;
-                npcPortraitViewerPath = null;
-            }
-            focusPolicy.restoreAfterSatellite(launcher, WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
-        });
-        viewer.show();
-        close.requestFocus();
+        if (npc == null)
+            npcDatabasePortrait.clear();
+        else
+            npcDatabasePortrait.show(ProjectIdentities.npcDatabaseEntry(npc), npc.getName());
     }
 
     /** Configures the current assigned-relationship ListView, including identity selection dispatch. */
@@ -1514,7 +1298,7 @@ public final class WorkbenchController {
             if (!renderingNpcDatabase)
                 dispatchNpcDatabase(new NpcDatabaseFeature.SetAssignRandom(assignRandomNpcPresetCheck.isSelected()));
         });
-        openNpcDatabasePortraitViewerButton.setOnAction(event -> showNpcDatabasePortraitViewer());
+        // openNpcDatabasePortraitViewerButton is wired by its portrait thumbnail (see attach).
         renderNpcDatabase(npcDatabaseFeature.frame());
     }
 
@@ -1841,7 +1625,10 @@ public final class WorkbenchController {
         }
     }
 
-    /** Renders the immutable catalog frame while suppressing selection echoes from JavaFX list replacements. */
+    /**
+     * Renders the immutable catalog frame while suppressing selection echoes from JavaFX list replacements. This is
+     * the only writer of the source-management buttons; whether a job blocks them comes from the shell's context.
+     */
     private void renderNpcDatabase(NpcDatabaseFeature.Frame frame) {
         renderingNpcDatabase = true;
         try {
@@ -1888,7 +1675,7 @@ public final class WorkbenchController {
                     + " NPC Database entries visible; " + frame.criteria().size() + " filtered columns.";
             renderNpcDatabaseLabel(npcCatalogSummary, summary);
             npcCatalogTable.setAccessibleHelp(summary + " Select a row to inspect its details.");
-            boolean blocked = projectFlow.jobs().frame().active() || projectFlow.jobs().frame().shutdownRequested();
+            boolean blocked = context.anyJobActive();
             assignRandomNpcPresetCheck.setSelected(frame.assignRandom());
             importNpcSourcesButton.setDisable(blocked);
             removeNpcSourceButton.setDisable(blocked || frame.selectedSource().isEmpty());
@@ -2034,7 +1821,7 @@ public final class WorkbenchController {
 
     /** Dispatches one Output task and renders synchronous selection updates; Generate completes via observation. */
     private void dispatchOutput(OutputFeature.Intent intent) {
-        if (intent instanceof OutputFeature.Generate && !settingsFeature.frame().liveAvailable()) {
+        if (intent instanceof OutputFeature.Generate && !context.settingsLiveAvailable()) {
             // Keyboard generation bypasses the disabled button, so enforce the same Settings prerequisite here.
             return;
         }
@@ -2079,7 +1866,10 @@ public final class WorkbenchController {
         renderFeedback(feedback.publish(notification));
     }
 
-    /** Renders accepted generated bytes and feature-owned tab/BoS identity without listener command loops. */
+    /**
+     * Renders accepted generated bytes and feature-owned tab/BoS identity without listener command loops. This is the
+     * only writer of Generate, whose job and live-Settings prerequisites come from the shell's context.
+     */
     private void renderOutput(OutputFeature.Frame frame) {
         renderingOutput = true;
         try {
@@ -2104,8 +1894,8 @@ public final class WorkbenchController {
             });
             bosArtifactChoice.setDisable(frame.bosArtifactNames().isEmpty());
             boolean accepted = frame.freshness() == OutputFeature.Freshness.FRESH;
-            boolean jobBlocked = projectFlow.jobs().frame().active()
-                    || projectFlow.jobs().frame().shutdownRequested();
+            boolean jobBlocked = context.anyJobActive();
+            generateOutputButton.setDisable(jobBlocked || !context.settingsLiveAvailable());
             copyOutputButton.setDisable(!accepted || frame.displayedArtifact().isEmpty());
             exportOutputButton.setDisable(!accepted || jobBlocked);
             exportSelectedBosButton.setDisable(!accepted || jobBlocked
@@ -2534,21 +2324,19 @@ public final class WorkbenchController {
                     ? frame.dirty() ? "Unsaved Settings changes." : "Standard and UUNP Settings are saved together."
                     : settingsNoticeSummary(frame));
             omitRedundantSlidersCheck.setSelected(frame.omitRedundantSliders());
-            boolean backgroundJobBlocked = projectFlow.jobs().frame().active()
-                    || projectFlow.jobs().frame().shutdownRequested();
-            omitRedundantSlidersCheck.setDisable(pipeline.mutationsBlocked() || backgroundJobBlocked);
-            boolean editable = frame.editor().isPresent() && !pipeline.mutationsBlocked();
+            boolean mutationsBlocked = context.projectMutationsBlocked();
+            boolean backgroundJobBlocked = context.anyJobActive();
+            omitRedundantSlidersCheck.setDisable(mutationsBlocked || backgroundJobBlocked);
+            boolean editable = frame.editor().isPresent() && !mutationsBlocked;
             for (javafx.scene.control.Control control : List.of(settingsEntryNameInput, settingsSmallInput,
                     settingsBigInput, settingsMultiplierInput, settingsInvertedCheck, applySettingsEntryButton,
                     removeSettingsEntryButton))
                 control.setDisable(!editable);
-            newSettingsEntryName.setDisable(pipeline.mutationsBlocked());
-            addSettingsEntryButton.setDisable(pipeline.mutationsBlocked());
-            saveSettingsButton.setDisable(pipeline.mutationsBlocked() || backgroundJobBlocked || !frame.dirty()
+            newSettingsEntryName.setDisable(mutationsBlocked);
+            addSettingsEntryButton.setDisable(mutationsBlocked);
+            saveSettingsButton.setDisable(mutationsBlocked || backgroundJobBlocked || !frame.dirty()
                     || !frame.validation().isEmpty());
-            reloadSettingsButton.setDisable(pipeline.mutationsBlocked() || backgroundJobBlocked);
-            importBodySlideButton.setDisable(pipeline.mutationsBlocked() || projectFlow.jobs().frame().active()
-                    || projectFlow.jobs().frame().shutdownRequested() || !frame.liveAvailable());
+            reloadSettingsButton.setDisable(mutationsBlocked || backgroundJobBlocked);
         } finally {
             renderingSettings = false;
         }
@@ -2912,13 +2700,15 @@ public final class WorkbenchController {
 
             boolean selected = frame.editor().isPresent();
             boolean npcSelected = frame.npcEditor().isPresent();
-            createCustomMorphTargetButton.setDisable(pipeline.mutationsBlocked());
-            removeCustomMorphTargetButton.setDisable(pipeline.mutationsBlocked() || !selected);
-            clearCustomMorphTargetsButton.setDisable(pipeline.mutationsBlocked() || frame.visibleTargets().isEmpty());
-            createNpcMorphAssignmentButton.setDisable(pipeline.mutationsBlocked());
-            removeNpcMorphAssignmentButton.setDisable(pipeline.mutationsBlocked() || !npcSelected);
-            clearNpcMorphAssignmentsButton.setDisable(pipeline.mutationsBlocked() || frame.visibleNpcs().isEmpty());
-            fillEmptyNpcMorphAssignmentsButton.setDisable(pipeline.mutationsBlocked());
+            createCustomMorphTargetButton.setDisable(context.projectMutationsBlocked());
+            removeCustomMorphTargetButton.setDisable(context.projectMutationsBlocked() || !selected);
+            clearCustomMorphTargetsButton.setDisable(context.projectMutationsBlocked()
+                    || frame.visibleTargets().isEmpty());
+            createNpcMorphAssignmentButton.setDisable(context.projectMutationsBlocked());
+            removeNpcMorphAssignmentButton.setDisable(context.projectMutationsBlocked() || !npcSelected);
+            clearNpcMorphAssignmentsButton.setDisable(context.projectMutationsBlocked()
+                    || frame.visibleNpcs().isEmpty());
+            fillEmptyNpcMorphAssignmentsButton.setDisable(context.projectMutationsBlocked());
             long visibleEmptyCount = frame.visibleNpcs().stream()
                     .filter(npc -> npc.getSliderPresetNames().isEmpty()).count();
             fillEmptyNpcMorphAssignmentsButton.setAccessibleHelp(visibleEmptyCount +
@@ -3006,12 +2796,12 @@ public final class WorkbenchController {
             boolean assignedSelected = assignedPresetSelection.isPresent();
             boolean hasAssignments = !assignedPresets.isEmpty();
             boolean hasAvailable = !availablePresets.isEmpty();
-            availableMorphSliderPreset.setDisable(pipeline.mutationsBlocked() || !hasAvailable);
-            assignMorphSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !hasAvailable
+            availableMorphSliderPreset.setDisable(context.projectMutationsBlocked() || !hasAvailable);
+            assignMorphSliderPresetButton.setDisable(context.projectMutationsBlocked() || !hasAvailable
                     || availableMorphSliderPreset.getValue() == null);
-            assignAllMorphSliderPresetsButton.setDisable(pipeline.mutationsBlocked() || !hasAvailable);
-            removeMorphSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !assignedSelected);
-            clearMorphSliderPresetsButton.setDisable(pipeline.mutationsBlocked() || !hasAssignments);
+            assignAllMorphSliderPresetsButton.setDisable(context.projectMutationsBlocked() || !hasAvailable);
+            removeMorphSliderPresetButton.setDisable(context.projectMutationsBlocked() || !assignedSelected);
+            clearMorphSliderPresetsButton.setDisable(context.projectMutationsBlocked() || !hasAssignments);
             renderedMorphTargetSelection = frame.selection();
             renderedNpcSelection = frame.npcSelection();
         } finally {
@@ -3021,6 +2811,7 @@ public final class WorkbenchController {
 
     /**
      * Renders one immutable Templates frame while suppressing control listeners from becoming a second command path.
+     * Job admission and live Settings come only from the shell's context.
      */
     private void renderTemplates(TemplatesFeature.Frame frame) {
         renderingTemplates = true;
@@ -3043,11 +2834,15 @@ public final class WorkbenchController {
                 setSeverityStyle(templatesInfoBar, severity);
             }
             boolean selected = frame.selection().isPresent();
-            createSliderPresetButton.setDisable(pipeline.mutationsBlocked());
-            duplicateSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !selected);
-            renameSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !selected);
-            removeSliderPresetButton.setDisable(pipeline.mutationsBlocked() || !selected);
-            clearSliderPresetsButton.setDisable(pipeline.mutationsBlocked() || frame.visiblePresets().isEmpty());
+            createSliderPresetButton.setDisable(context.projectMutationsBlocked());
+            duplicateSliderPresetButton.setDisable(context.projectMutationsBlocked() || !selected);
+            renameSliderPresetButton.setDisable(context.projectMutationsBlocked() || !selected);
+            removeSliderPresetButton.setDisable(context.projectMutationsBlocked() || !selected);
+            clearSliderPresetsButton.setDisable(context.projectMutationsBlocked() || frame.visiblePresets().isEmpty());
+            // BodySlide import is a Project command that lives in the Templates pane; this is its only writer, and
+            // it waits on any job and on live Settings so an import never consumes fallback Settings values.
+            importBodySlideButton.setDisable(context.projectMutationsBlocked() || context.anyJobActive()
+                    || !context.settingsLiveAvailable());
             Optional<SliderPresetSnapshot> selectedPreset = frame.selection().flatMap(identity ->
                     frame.visiblePresets().stream()
                             .filter(candidate -> NameIdentity.of(candidate.getName()).equals(identity))
@@ -3086,7 +2881,7 @@ public final class WorkbenchController {
             return;
         }
         TemplatesFeature.EditorFrame editorFrame = editor.orElseThrow();
-        sliderPresetProfile.setDisable(pipeline.mutationsBlocked());
+        sliderPresetProfile.setDisable(context.projectMutationsBlocked());
         sliderPresetProfile.setValue(editorFrame.profile());
         Map<String, SliderChoiceRow> next = new LinkedHashMap<>();
         List<SliderChoiceRow> ordered = editorFrame.choices().stream().map(choice -> {
@@ -3094,7 +2889,7 @@ public final class WorkbenchController {
             SliderChoiceRow row = sliderChoiceRowsByName.get(key);
             if (row == null)
                 row = new SliderChoiceRow(this::dispatchTemplates, settings::snapshot);
-            row.render(editorFrame, choice, pipeline.mutationsBlocked());
+            row.render(editorFrame, choice, context.projectMutationsBlocked());
             next.put(key, row);
             return row;
         }).toList();
@@ -3108,7 +2903,7 @@ public final class WorkbenchController {
      * owns admission.
      */
     private void renderGangControls(Optional<TemplatesFeature.EditorFrame> editor) {
-        boolean available = editor.isPresent() && !pipeline.mutationsBlocked();
+        boolean available = editor.isPresent() && !context.projectMutationsBlocked();
         TemplatesFeature.GangFrame gang = editor.map(TemplatesFeature.EditorFrame::gang).orElse(null);
         Optional<TemplatesFeature.GangMode> active = gang == null ? Optional.empty() : gang.activeMode();
         gangAllCheck.setSelected(active.equals(Optional.of(TemplatesFeature.GangMode.ALL)));
@@ -3324,16 +3119,6 @@ public final class WorkbenchController {
     }
 
     /**
-     * Points portrait lookup at another directory, so package-local tests can supply a real portrait without
-     * writing into the working directory. Call it before the first NPC selection renders.
-     *
-     * @param directory directory holding {@code <name> (<editor ID>).<ext>} portrait files
-     */
-    void usePortraitDirectory(Path directory) {
-        portraitDirectory = Objects.requireNonNull(directory, "directory");
-    }
-
-    /**
      * Connects rail gestures, accepted keyboard commands, and responsive width changes to typed navigation.
      */
     private void configureNavigation() {
@@ -3479,8 +3264,7 @@ public final class WorkbenchController {
             JavaFxWorkbenchAppearance.applyTo(fillEmptyPopupRoot, frame);
         if (npcFilterPopupRoot != null)
             JavaFxWorkbenchAppearance.applyTo(npcFilterPopupRoot, frame);
-        if (npcPortraitViewerRoot != null)
-            JavaFxWorkbenchAppearance.applyTo(npcPortraitViewerRoot, frame);
+        satellites.retheme(frame);
         String theme = switch (frame.effectiveTheme()) {
             case LIGHT -> "Light theme";
             case DARK -> "Dark theme";
@@ -3969,7 +3753,11 @@ public final class WorkbenchController {
         render(frame, frame.diagnostics());
     }
 
-    /** Renders the Project snapshot with diagnostics chosen by the operation that owns the current report. */
+    /**
+     * Renders the Project snapshot with diagnostics chosen by the operation that owns the current report, then builds
+     * this frame's context (with its reset-on-Open decisions), lets the Project-consuming features accept the frame,
+     * and fans the context out to every Area.
+     */
     private void render(WorkbenchProjectFlow.Frame frame, List<ProjectDiagnostic> diagnostics) {
         stage.setTitle(frame.title());
         projectStatusText.setText(projectStatus(frame));
@@ -3978,24 +3766,25 @@ public final class WorkbenchController {
         boolean lifecycleReset = lifecyclePublication
                 && (activeOperation == WorkbenchProjectFlow.Intent.NEW
                 || activeOperation == WorkbenchProjectFlow.Intent.OPEN);
-        boolean resetTemplates = resetTemplatesOnNextProjectFrame || lifecycleReset;
-        boolean resetMorphs = resetMorphsOnNextProjectFrame || lifecycleReset;
-        boolean resetOutput = resetTemplatesOnNextProjectFrame || resetMorphsOnNextProjectFrame || lifecycleReset;
+        // Built before the NPC Database reset below, because that dispatch already renders against this context.
+        context = buildContext(frame, resetTemplatesOnNextProjectFrame || lifecycleReset,
+                resetMorphsOnNextProjectFrame || lifecycleReset);
         if (lifecycleReset && npcDatabaseFeature != null) {
             navigation.clearNpcDatabaseReturn();
             dispatchNpcDatabase(new NpcDatabaseFeature.ClearAllSelections());
         }
         if (templatesFeature != null && templatesFeature.frame().projectSequence() != frame.sequence()) {
-            renderTemplates(templatesFeature.acceptProjectFrame(frame, resetTemplates,
-                    morphsOwnProjectDiagnostics ? List.of() : frame.diagnostics()).frame());
+            templatesFeature.acceptProjectFrame(frame, context.resetTemplates(),
+                    morphsOwnProjectDiagnostics ? List.of() : frame.diagnostics());
         }
         if (morphsFeature != null && morphsFeature.frame().projectSequence() != frame.sequence())
-            renderMorphs(morphsFeature.acceptProjectFrame(frame, resetMorphs,
-                    templatesOwnProjectDiagnostics ? List.of() : frame.diagnostics()).frame());
+            morphsFeature.acceptProjectFrame(frame, context.resetMorphs(),
+                    templatesOwnProjectDiagnostics ? List.of() : frame.diagnostics());
         if (outputFeature != null)
-            renderOutput(outputFeature.acceptProjectFrame(frame, resetOutput).frame());
+            outputFeature.acceptProjectFrame(frame, context.resetOutput());
         resetTemplatesOnNextProjectFrame = false;
         resetMorphsOnNextProjectFrame = false;
+        renderAreas();
         if (!frame.closed() && frame.sequence() != renderedProjectSequence) {
             renderedProjectSequence = frame.sequence();
             publishProjectFeedback(frame);
@@ -4003,7 +3792,39 @@ public final class WorkbenchController {
     }
 
     /**
-     * Projects one coordinator frame into global admission, progress, cancellation, Activity, and shutdown UI.
+     * Builds the context the Areas render against from the shell's current sources. The Project-mutation flag is the
+     * pipeline's gate, which follows rendered job frames; the any-job flag reads the coordinator, as the Area renders
+     * did before they took the context. Settings live availability changes only when a Save or Reload job completes,
+     * and that job's terminal frame rebuilds the context.
+     *
+     * @param project        the Project frame the context describes
+     * @param resetTemplates whether accepting {@code project} resets Templates browsing state
+     * @param resetMorphs    whether accepting {@code project} resets Morphs browsing state
+     * @return a new immutable context
+     */
+    private WorkbenchContext buildContext(WorkbenchProjectFlow.Frame project, boolean resetTemplates,
+                                          boolean resetMorphs) {
+        JobCoordinator.Frame jobs = projectFlow.jobs().frame();
+        return new WorkbenchContext(project, resetTemplates, resetMorphs, pipeline.mutationsBlocked(),
+                jobs.active() || jobs.shutdownRequested(), settingsFeature.frame().liveAvailable(),
+                Optional.ofNullable(activeOperation));
+    }
+
+    /**
+     * Fans the current context out to every Area: each renders its own feature's current frame against
+     * {@link #context} and writes only its own controls. Renders are idempotent, so the repeat on every frame is safe.
+     */
+    private void renderAreas() {
+        renderTemplates(templatesFeature.frame());
+        renderMorphs(morphsFeature.frame());
+        renderNpcDatabase(npcDatabaseFeature.frame());
+        renderSettings(settingsFeature.frame());
+        renderOutput(outputFeature.frame());
+    }
+
+    /**
+     * Projects one coordinator frame into global admission, progress, cancellation, Activity, and shutdown UI, and
+     * fans a fresh context out to every Area.
      */
     private void renderJobFrame(JobCoordinator.Frame frame) {
         Objects.requireNonNull(frame, "frame");
@@ -4014,16 +3835,10 @@ public final class WorkbenchController {
         saveProjectMenuItem.setDisable(blocked);
         themeChoice.setDisable(blocked);
         saveAsProjectMenuItem.setDisable(blocked);
-        importBodySlideButton.setDisable(blocked);
-        importNpcSourcesButton.setDisable(blocked);
-        removeNpcSourceButton.setDisable(blocked || npcDatabaseFeature.frame().selectedSource().isEmpty());
-        clearNpcDatabaseButton.setDisable(blocked || npcDatabaseFeature.frame().visibleRows().isEmpty());
-        generateOutputButton.setDisable(blocked || !settingsFeature.frame().liveAvailable());
-        renderTemplates(templatesFeature.frame());
-        renderMorphs(morphsFeature.frame());
-        renderNpcDatabase(npcDatabaseFeature.frame());
-        renderSettings(settingsFeature.frame());
-        renderOutput(outputFeature.frame());
+        // A job frame resets nothing: resets belong to the Project frame that consumes them, rendered below for an
+        // Open Project terminal.
+        context = buildContext(projectFlow.frame(), false, false);
+        renderAreas();
         updateActivityRetry(activityList.getSelectionModel().getSelectedItem());
 
         Optional<JobCoordinator.Attempt> current = frame.attempt();

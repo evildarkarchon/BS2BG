@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -144,6 +145,74 @@ class WorkbenchControllerTest {
                 stage.close();
             }
         });
+    }
+
+    /**
+     * The NPC Database inspector finds its portrait in the environment's image directory and opens the shared
+     * viewer, which the Workbench closes when its own window is hidden.
+     */
+    @Test
+    void npcDatabasePortraitComesFromTheEnvironmentImageDirectoryAndItsViewerClosesWithTheWorkbench()
+            throws Exception {
+        Path images = Files.createDirectories(temporaryDirectory.resolve("portraits"));
+        Files.copy(Path.of("assets", "res", "icon.png"), images.resolve("Alpha (Alpha01).png"));
+        Path source = temporaryDirectory.resolve("npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        AtomicReference<FXMLLoader> loaded = new AtomicReference<>();
+        AtomicReference<Stage> shown = new AtomicReference<>();
+        AtomicReference<Stage> viewer = new AtomicReference<>();
+        CountDownLatch thumbnailLoaded = new CountDownLatch(1);
+        try {
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+                Parent root = loader.load();
+                WorkbenchController controller = loader.getController();
+                Stage stage = new Stage();
+                stage.setScene(new Scene(root, 1300.0, 800.0));
+                loaded.set(loader);
+                shown.set(stage);
+                controller.attach(flow, stage, platform, fixture().environment().withPortraitDirectory(images));
+                stage.show();
+                Button launcher = (Button) loader.getNamespace().get("openNpcDatabasePortraitViewerButton");
+                // The thumbnail decodes in the background; the launcher enables once it has loaded.
+                launcher.disableProperty().addListener((observable, previous, disabled) -> {
+                    if (!disabled)
+                        thumbnailLoaded.countDown();
+                });
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                catalog.getSelectionModel().selectFirst();
+                if (!launcher.isDisabled())
+                    thumbnailLoaded.countDown();
+            });
+            assertTrue(thumbnailLoaded.await(30, TimeUnit.SECONDS), "portrait thumbnail never loaded");
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = loaded.get();
+                assertEquals("Portrait file: Alpha (Alpha01).png",
+                        ((Label) loader.getNamespace().get("npcDatabasePortraitStatus")).getText());
+                ((Button) loader.getNamespace().get("openNpcDatabasePortraitViewerButton")).fire();
+                viewer.set(FxTestToolkit.showingOwnedStage(shown.get(), ".npc-portrait-viewer"));
+                assertEquals("NPC Portrait — Alpha", viewer.get().getTitle());
+            });
+            // The viewer's background full-image load holds the portrait open; let it finish so the @TempDir can be
+            // deleted on Windows.
+            PortraitTestSupport.awaitFullImage(viewer.get());
+            FxTestToolkit.runOnFxThread(() -> {
+                shown.get().close();
+
+                assertFalse(viewer.get().isShowing(), "the viewer closes with the Workbench window");
+            });
+        } finally {
+            FxTestToolkit.runOnFxThread(() -> {
+                if (shown.get() != null)
+                    shown.get().close();
+            });
+        }
     }
 
     /** The Morphs launcher returns to its focus and newly promoted identity after a selected Add. */
@@ -1979,6 +2048,87 @@ class WorkbenchControllerTest {
             assertEquals(1, activity.getItems().size());
             stage.close();
         });
+    }
+
+    /**
+     * The controls that several Areas used to race on (BodySlide import, the NPC Database source buttons and
+     * Generate) each have one writer fed by the shared Workbench context, so a job frame followed by a Project frame
+     * leaves them exactly as the reverse order does, with live or rejected Settings.
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void crossAreaControlsSettleTheSameWhetherTheJobFrameOrTheProjectFrameComesLast(boolean liveSettings)
+            throws Exception {
+        Path source = temporaryDirectory.resolve("ordered-npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        WorkbenchTestEnvironment environment = fixture();
+        if (!liveSettings) {
+            Files.writeString(temporaryDirectory.resolve("settings.json"), "{\"Defaults\":");
+            Settings.InitializationResult rejected = fixture().settings().reload();
+            assertFalse(rejected.isSuccessful());
+            environment = fixture().withStartup(rejected);
+        }
+        // Imported sources are loaded but none is selected, so only Remove stays disabled once the import settles;
+        // rejected Settings keep BodySlide import and Generate from consuming fallback values.
+        Map<String, Boolean> expected = Map.of(
+                "importNpcSourcesButton", false,
+                "removeNpcSourceButton", true,
+                "clearNpcDatabaseButton", false,
+                "importBodySlideButton", !liveSettings,
+                "generateOutputButton", !liveSettings);
+
+        assertEquals(expected, crossAreaControlsAfter(true, source, environment));
+        assertEquals(expected, crossAreaControlsAfter(false, source, environment));
+    }
+
+    /**
+     * Attaches a fresh Workbench, then settles an NPC Database import (its job frames) and a Slider Preset creation
+     * (a Project frame) in the requested order.
+     *
+     * @param jobFrameFirst true to import before creating, so the Project frame renders last
+     * @return the disabled state of each cross-Area control, keyed by FXML id
+     */
+    private Map<String, Boolean> crossAreaControlsAfter(boolean jobFrameFirst, Path source,
+                                                         WorkbenchTestEnvironment environment) throws Exception {
+        ProjectSession session = environment.newSession();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        AtomicReference<Map<String, Boolean>> disabled = new AtomicReference<>();
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, environment.environment());
+                Runnable importSources = () -> ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                Runnable createPreset = () -> {
+                    ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Ordered");
+                    ((Button) loader.getNamespace().get("createSliderPresetButton")).fire();
+                };
+                (jobFrameFirst ? importSources : createPreset).run();
+                (jobFrameFirst ? createPreset : importSources).run();
+
+                assertEquals(1, session.getSnapshot().getSliderPresets().size());
+                assertEquals(1, ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getItems().size());
+                disabled.set(Map.of(
+                        "importNpcSourcesButton", isDisabled(loader, "importNpcSourcesButton"),
+                        "removeNpcSourceButton", isDisabled(loader, "removeNpcSourceButton"),
+                        "clearNpcDatabaseButton", isDisabled(loader, "clearNpcDatabaseButton"),
+                        "importBodySlideButton", isDisabled(loader, "importBodySlideButton"),
+                        "generateOutputButton", isDisabled(loader, "generateOutputButton")));
+            } finally {
+                stage.close();
+            }
+        });
+        return disabled.get();
+    }
+
+    /** @return whether the named FXML button is disabled */
+    private static boolean isDisabled(FXMLLoader loader, String id) {
+        return ((Button) loader.getNamespace().get(id)).isDisabled();
     }
 
     /**

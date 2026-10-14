@@ -47,6 +47,8 @@ class ProductionPlatformBanGateTest {
 
     private static final String WORKBENCH_CONTROLLER = "com/asdasfa/jbs2bg/workbench/WorkbenchController";
 
+    private static final String PORTRAIT_VIEWER = "com/asdasfa/jbs2bg/workbench/NpcPortraitViewer";
+
     private static final String PLATFORM = "javafx/application/Platform";
 
     private static final String APPEARANCE_SOURCE =
@@ -65,7 +67,7 @@ class ProductionPlatformBanGateTest {
                             && isOrExtends(call.owner(), "javafx/stage/"),
                     // The portrait viewer raise when it is already open: synchronous, directly commanded by the
                     // user, and the application is already in the foreground.
-                    Set.of(new MethodKey(WORKBENCH_CONTROLLER, "showPortraitViewer"))),
+                    Set.of(new MethodKey(PORTRAIT_VIEWER, "openViewer"))),
             Rule.invocations("3", "no Platform.getPreferences outside the appearance-preferences source",
                     call -> call.owner().equals(PLATFORM) && call.name().equals("getPreferences"),
                     // The one JavaFX appearance-preferences source. Everything else receives a source through
