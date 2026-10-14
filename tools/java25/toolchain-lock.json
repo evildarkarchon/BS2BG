@@ -1,5 +1,5 @@
 {
-  "$comment": "Pinned inputs for the Java 25 application verification run (issues #94 and #96, parent #81). Every value is an explicit reviewed lock; tools/java25/verify-java25.ps1 fails closed when an artifact hash, version string, or architecture differs. Update sources: Adoptium publishes the Temurin SHA-256 as a release asset; Gluon publishes no checksum, so the JavaFX value was recorded from the official artifact on 2026-08-28 (see docs/research/windows-portable-release-policy.md).",
+  "$comment": "Pinned inputs for the Java 25 application verification run (issues #94 and #96, parent #81). Every value is an explicit reviewed lock; tools/java25/verify-java25.ps1 fails closed when an artifact hash, version string, or architecture differs. Update sources: Adoptium publishes the Temurin SHA-256 as a release asset; the JavaFX 27 value (issue #135, ADR-0007) was computed from the official Gluon artifact on 2026-10-13 and matches the openjfx-27_windows-x64_bin-jmods.zip.sha256 file Gluon serves beside it.",
   "targetRelease": 25,
   "architecture": {
     "os": "Windows",
@@ -30,13 +30,13 @@
     }
   },
   "javafx": {
-    "id": "openjfx-25.0.4-windows-x64-jmods",
-    "version": "25.0.4",
-    "url": "https://download2.gluonhq.com/openjfx/25.0.4/openjfx-25.0.4_windows-x64_bin-jmods.zip",
-    "sha256": "c5471e71d3f66db340c1e59d8b4924487ab4917aaf641fc1e4e0fa1a174f79e1",
-    "sourceUrl": "https://github.com/openjdk/jfx25u/archive/refs/tags/25.0.4%2B3.zip",
-    "sourceRevision": "96aaf07f6404c4d7ccad1aa75498ec7d2196047a",
-    "archiveRootDirectory": "javafx-jmods-25.0.4",
+    "id": "openjfx-27-windows-x64-jmods",
+    "version": "27",
+    "url": "https://download2.gluonhq.com/openjfx/27/openjfx-27_windows-x64_bin-jmods.zip",
+    "sha256": "0ad5830f31608363e1e239b84bb1ce875f5edf834f0ceda67feead9cfbaf2b41",
+    "sourceUrl": "https://github.com/openjdk/jfx/archive/refs/tags/27%2B30.zip",
+    "sourceRevision": "e77ca96ebc30a05356082cd56e19bcadccf7dcae",
+    "archiveRootDirectory": "javafx-jmods-27",
     "requiredModules": [
       "javafx.base",
       "javafx.graphics",

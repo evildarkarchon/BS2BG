@@ -10,7 +10,7 @@
     <name>jBS2BG</name>
 
     <!--
-        Java 25 / JavaFX 25 application build (issues #94 and #96, parent #81).
+        Java 25 / JavaFX 27 application build (issues #94 and #96, parent #81; JavaFX 27 baseline per ADR-0007, #135).
 
         This POM is the complete application gate: every production source under src/ compiles for release 25
         with full lint enforcement, every resource under src/ and assets/ is packaged, and the test phase loads
@@ -22,7 +22,7 @@
     -->
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <javafx.version>25.0.4</javafx.version>
+        <javafx.version>27</javafx.version>
         <maven.compiler.release>25</maven.compiler.release>
         <junit.version>5.11.4</junit.version>
         <jackson-core.version>3.1.5</jackson-core.version>
@@ -226,7 +226,7 @@
                                 <dependencyConvergence>
                                     <message>Every resolved dependency must converge on one reviewed version.</message>
                                 </dependencyConvergence>
-                                <!-- JavaFX incubator modules are not part of the accepted JavaFX 25 surface. -->
+                                <!-- JavaFX incubator modules are not part of the accepted JavaFX 27 surface (ADR-0007). -->
                                 <bannedDependencies>
                                     <excludes>
                                         <exclude>org.openjfx:javafx-incubator-*</exclude>

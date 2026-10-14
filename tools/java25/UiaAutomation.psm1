@@ -634,7 +634,7 @@ function Invoke-UiaPointerClick {
         if ($null -eq $fallbackBounds -or $fallbackBounds.IsEmpty -or $fallbackBounds.Width -le 0.0 -or $fallbackBounds.Height -le 0.0) {
             throw "Element '$elementName' exposed neither a clickable point nor usable provider bounds."
         }
-        # JavaFX 25 may omit a clickable point; visible descendant content is reliably inside the semantic control.
+        # JavaFX 25+ may omit a clickable point; visible descendant content is reliably inside the semantic control.
         $point = [System.Windows.Point]::new(
             $fallbackBounds.Left + ($fallbackBounds.Width / 2.0),
             $fallbackBounds.Top + ($fallbackBounds.Height / 2.0))
@@ -897,7 +897,7 @@ function Set-UiaNativeDialogText {
 .SYNOPSIS
     Reads editable Value text; for read-only controls prefers descendant document text, then TextPattern/Value/name.
 .NOTES
-    JavaFX 25 read-only TextArea can expose its accessibility label through both ValuePattern and TextPattern while
+    A JavaFX 25+ read-only TextArea can expose its accessibility label through both ValuePattern and TextPattern while
     its actual document is exposed by a descendant Text element. Editable controls still prefer ValuePattern;
     read-only controls therefore inspect the owned descendant first so packaged checks read the displayed bytes.
 #>
