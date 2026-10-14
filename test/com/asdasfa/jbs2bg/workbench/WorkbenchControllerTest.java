@@ -6,14 +6,15 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,25 +30,13 @@ import com.asdasfa.jbs2bg.Main;
 import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
-import com.asdasfa.jbs2bg.data.SettingsLockHolderProbe;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
-import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
-import com.asdasfa.jbs2bg.project.FailedOutcome;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentSnapshot;
-import com.asdasfa.jbs2bg.project.NpcPromotionOutcome;
-import com.asdasfa.jbs2bg.project.ProjectDiagnostic;
-import com.asdasfa.jbs2bg.project.ProjectEdit;
-import com.asdasfa.jbs2bg.project.ProjectOperationContext;
-import com.asdasfa.jbs2bg.project.ProjectOutcome;
 import com.asdasfa.jbs2bg.project.ProjectSession;
-import com.asdasfa.jbs2bg.project.ProjectSnapshot;
-import com.asdasfa.jbs2bg.project.RejectedOutcome;
-import com.asdasfa.jbs2bg.project.SliderPresetImportOutcome;
-import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.ProjectLifecycleStatus;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
@@ -55,7 +44,9 @@ import com.asdasfa.jbs2bg.project.SliderChoiceSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
+import com.asdasfa.jbs2bg.workbench.templates.SliderChoiceRow;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
+import com.asdasfa.jbs2bg.workbench.templates.TemplatesArea;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
 import javafx.css.PseudoClass;
@@ -91,7 +82,6 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.Popup;
-import javafx.stage.Window;
 import javafx.stage.WindowEvent;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -100,40 +90,85 @@ class WorkbenchControllerTest {
 
     @TempDir
     Path temporaryDirectory;
+    // The test's one Settings store, environment, and session source; see fixture().
+    private WorkbenchTestEnvironment fixture;
 
-    /** Imported NPC sources populate the independent catalog and its selection-following inspector. */
+    /**
+     * Returns this test's Workbench fixture, creating and reloading its store in the temporary directory on first
+     * use. Tests that seed custom Settings files write them before the first call.
+     */
+    private WorkbenchTestEnvironment fixture() {
+        if (fixture == null)
+            fixture = WorkbenchTestEnvironment.initialized(temporaryDirectory);
+        return fixture;
+    }
+
+    /**
+     * The NPC Database inspector finds its portrait in the environment's image directory and opens the shared
+     * viewer, which the Workbench closes when its own window is hidden.
+     */
     @Test
-    void npcDatabaseImportsSourcesAndInspectsSelectedCatalogRow() throws Exception {
+    void npcDatabasePortraitComesFromTheEnvironmentImageDirectoryAndItsViewerClosesWithTheWorkbench()
+            throws Exception {
+        Path images = Files.createDirectories(temporaryDirectory.resolve("portraits"));
+        Files.copy(Path.of("assets", "res", "icon.png"), images.resolve("Alpha (Alpha01).png"));
         Path source = temporaryDirectory.resolve("npcs.txt");
-        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n"
-                + "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondNpcSourcesWith(Optional.of(List.of(source)));
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, platform);
+        AtomicReference<FXMLLoader> loaded = new AtomicReference<>();
+        AtomicReference<Stage> shown = new AtomicReference<>();
+        AtomicReference<Stage> viewer = new AtomicReference<>();
+        CountDownLatch thumbnailLoaded = new CountDownLatch(1);
+        try {
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+                Parent root = loader.load();
+                WorkbenchController controller = loader.getController();
+                Stage stage = new Stage();
+                stage.setScene(new Scene(root, 1300.0, 800.0));
+                loaded.set(loader);
+                shown.set(stage);
+                controller.attach(flow, stage, platform, fixture().environment().withPortraitDirectory(images));
                 stage.show();
+                Button launcher = (Button) LoadedWorkbench.node(loader, "openNpcDatabasePortraitViewerButton");
+                // The thumbnail decodes in the background; the launcher enables once it has loaded.
+                launcher.disableProperty().addListener((observable, previous, disabled) -> {
+                    if (!disabled)
+                        thumbnailLoaded.countDown();
+                });
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
-
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
-                assertEquals(List.of("Alpha", "Beta"), catalog.getItems().stream().map(NPC::getName).toList());
-                assertEquals(1, ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems().size());
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
-                assertTrue(((Label) loader.getNamespace().get("npcInspectorName")).getText().contains("Alpha"));
-                assertTrue(((Label) loader.getNamespace().get("npcDatabasePortraitStatus")).getText()
-                        .contains("No portrait found"));
-            } finally {
-                stage.close();
-            }
-        });
+                if (!launcher.isDisabled())
+                    thumbnailLoaded.countDown();
+            });
+            assertTrue(thumbnailLoaded.await(30, TimeUnit.SECONDS), "portrait thumbnail never loaded");
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = loaded.get();
+                assertEquals("Portrait file: Alpha (Alpha01).png",
+                        ((Label) LoadedWorkbench.node(loader, "npcDatabasePortraitStatus")).getText());
+                ((Button) LoadedWorkbench.node(loader, "openNpcDatabasePortraitViewerButton")).fire();
+                viewer.set(FxTestToolkit.showingOwnedStage(shown.get(), ".npc-portrait-viewer"));
+                assertEquals("NPC Portrait — Alpha", viewer.get().getTitle());
+            });
+            // The viewer's background full-image load holds the portrait open; let it finish so the @TempDir can be
+            // deleted on Windows.
+            PortraitTestSupport.awaitFullImage(viewer.get());
+            FxTestToolkit.runOnFxThread(() -> {
+                shown.get().close();
+
+                assertFalse(viewer.get().isShowing(), "the viewer closes with the Workbench window");
+            });
+        } finally {
+            FxTestToolkit.runOnFxThread(() -> {
+                if (shown.get() != null)
+                    shown.get().close();
+            });
+        }
     }
 
     /** The Morphs launcher returns to its focus and newly promoted identity after a selected Add. */
@@ -141,7 +176,7 @@ class WorkbenchControllerTest {
     void npcDatabaseAddReturnsToMorphsLauncherAndPromotedAssignment() throws Exception {
         Path source = temporaryDirectory.resolve("promote-npcs.txt");
         Files.writeString(source, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = fixture().newSession();
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(SliderPresetEdits.create("Shape"));
         RecordingPlatform platform = new RecordingPlatform();
@@ -154,35 +189,154 @@ class WorkbenchControllerTest {
             Scene scene = new Scene(root, 1300.0, 800.0);
             stage.setScene(scene);
             try {
-                controller.attach(flow, stage, platform);
+                controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                Button launcher = (Button) loader.getNamespace().get("addNpcsFromDatabaseButton");
+                Button launcher = (Button) LoadedWorkbench.node(loader, "addNpcsFromDatabaseButton");
                 launcher.requestFocus();
                 launcher.fire();
                 assertTrue(((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).isSelected());
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
-                ((CheckBox) loader.getNamespace().get("assignRandomNpcPresetCheck")).fire();
+                ((CheckBox) LoadedWorkbench.node(loader, "assignRandomNpcPresetCheck")).fire();
 
-                ((Button) loader.getNamespace().get("addNpcToProjectButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "addNpcToProjectButton")).fire();
 
                 assertEquals("Amber", catalog.getSelectionModel().getSelectedItem().getName());
                 assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
                 assertEquals(List.of("Shape"), session.getSnapshot().getNpcMorphAssignments().getFirst()
                         .getSliderPresetNames());
-                ((Button) loader.getNamespace().get("addNpcToProjectButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "addNpcToProjectButton")).fire();
                 assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
                 @SuppressWarnings("unchecked")
                 ListView<NpcMorphAssignmentSnapshot> assignments = (ListView<NpcMorphAssignmentSnapshot>)
                         root.lookup("#npcMorphAssignmentList");
                 assertEquals(1, assignments.getItems().size());
-                ((Button) loader.getNamespace().get("backToMorphsButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
                 assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
                 assertSame(launcher, scene.getFocusOwner());
                 assertEquals("Amber", assignments.getSelectionModel().getSelectedItem().getDisplayName());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /**
+     * Back to Morphs dispatches its return selection through the gated pipeline rather than straight into the
+     * feature. Selecting an NPC is browsing, not a Project mutation, so a job that blocks mutations still lets the
+     * user land on the assignment they just promoted.
+     */
+    @Test
+    void backToMorphsSelectsThePromotedAssignmentThroughTheGateWhileAJobBlocksMutations() throws Exception {
+        Path npcSource = temporaryDirectory.resolve("gated-return.txt");
+        Files.writeString(npcSource, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        Path presetSource = temporaryDirectory.resolve("blocking-import.xml").toAbsolutePath().normalize();
+        Files.writeString(presetSource, "<SliderPresets><Preset name=\"Blocking Import\"/></SliderPresets>");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Each job is settled by the test before prolonged feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        ProjectSession session = fixture().newSession();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session, jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(npcSource)));
+        platform.respondWith(WorkbenchProjectFlow.Response.selectedSources(List.of(presetSource)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, fixture().environment());
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "addNpcsFromDatabaseButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
+                worker.runNext();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
+                catalog.getSelectionModel().selectFirst();
+                ((Button) LoadedWorkbench.node(loader, "addNpcToProjectButton")).fire();
+                assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
+                ((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).fire();
+                assertTrue(jobs.frame().projectMutationsBlocked());
+
+                ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
+
+                assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
+                ListView<NpcMorphAssignmentSnapshot> assignments =
+                        LoadedWorkbench.morphs(controller).npcMorphAssignmentListNode();
+                assertEquals("Amber", assignments.getSelectionModel().getSelectedItem().getDisplayName());
+                worker.runNext();
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /**
+     * Enter on the catalog reaches Add even though the job disables the Add button, so the dispatch pipeline's job
+     * gate is what refuses the promotion while a job blocks Project mutations. Once the job settles, the same key
+     * promotes the row.
+     */
+    @Test
+    void npcDatabasePromotionIsRefusedWhileAJobBlocksProjectMutations() throws Exception {
+        Path npcSource = temporaryDirectory.resolve("gated-promotion.txt");
+        Files.writeString(npcSource, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        Path presetSource = temporaryDirectory.resolve("blocking-import.xml").toAbsolutePath().normalize();
+        Files.writeString(presetSource, "<SliderPresets><Preset name=\"Blocking Import\"/></SliderPresets>");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // Each job is settled by the test before prolonged feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        ProjectSession session = fixture().newSession();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session, jobs);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(npcSource)));
+        platform.respondWith(WorkbenchProjectFlow.Response.selectedSources(List.of(presetSource)));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, fixture().environment());
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
+                worker.runNext();
+                @SuppressWarnings("unchecked")
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
+                catalog.getSelectionModel().selectFirst();
+                ((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).fire();
+                assertTrue(jobs.frame().projectMutationsBlocked());
+
+                catalog.requestFocus();
+                sendKey(catalog, KeyCode.ENTER);
+
+                assertTrue(session.getSnapshot().getNpcMorphAssignments().isEmpty());
+                assertFalse(((Label) LoadedWorkbench.node(loader, "npcPromotionInfoBarMessage")).getText()
+                        .contains("Amber"));
+                assertEquals("Amber", catalog.getSelectionModel().getSelectedItem().getName());
+                worker.runNext();
+                assertFalse(jobs.frame().projectMutationsBlocked());
+
+                sendKey(catalog, KeyCode.ENTER);
+
+                assertEquals(1, session.getSnapshot().getNpcMorphAssignments().size());
             } finally {
                 stage.close();
             }
@@ -197,7 +351,7 @@ class WorkbenchControllerTest {
                 + "Skyrim.esm | Good | Good01 | NordRace | 00000B\n"
                 + "Skyrim.esm | Invalid | Invalid01 | NordRace | XYZ\n"
                 + "Skyrim.esm | Hidden | Hidden01 | NordRace | 00000C\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = fixture().newSession();
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(NpcMorphAssignmentEdits.create("Existing", "Skyrim.esm", "Existing01", "NordRace", "A"));
         RecordingPlatform platform = new RecordingPlatform();
@@ -209,30 +363,30 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
             try {
-                controller.attach(flow, stage, platform);
+                controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
                 hideNpcColumnValue(loader, "Name", "Hidden");
 
-                ((Button) loader.getNamespace().get("addAllNpcsToProjectButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "addAllNpcsToProjectButton")).fire();
 
                 assertEquals(2, session.getSnapshot().getNpcMorphAssignments().size());
                 assertEquals("Existing", catalog.getSelectionModel().getSelectedItem().getName());
                 assertEquals(3, catalog.getItems().size());
-                String summary = ((Label) loader.getNamespace().get("npcPromotionInfoBarMessage")).getText();
+                String summary = ((Label) LoadedWorkbench.node(loader, "npcPromotionInfoBarMessage")).getText();
                 assertTrue(summary.contains("Added 1"));
                 assertTrue(summary.contains("1 already"));
                 assertTrue(summary.contains("1 rejected"));
-                String details = ((TextArea) loader.getNamespace().get("npcPromotionDetails")).getText();
+                String details = ((TextArea) LoadedWorkbench.node(loader, "npcPromotionDetails")).getText();
                 assertTrue(details.contains("Existing01"));
                 assertTrue(details.contains("Invalid01"));
                 assertFalse(details.contains("Hidden01"));
                 assertEquals("", ((TextArea) loader.getNamespace().get("diagnosticsText")).getText());
-                assertTrue(((HBox) loader.getNamespace().get("npcPromotionInfoBar")).isVisible());
+                assertTrue(((HBox) LoadedWorkbench.node(loader, "npcPromotionInfoBar")).isVisible());
                 assertFalse(((HBox) loader.getNamespace().get("infoBar")).isVisible());
                 WorkbenchFeedback.ActivityRecord activity = (WorkbenchFeedback.ActivityRecord)
                         ((ListView<?>) loader.getNamespace().get("activityList")).getItems().getLast();
@@ -242,7 +396,7 @@ class WorkbenchControllerTest {
                 catalog.requestFocus();
                 sendKey(catalog, KeyCode.ENTER);
                 assertEquals(2, session.getSnapshot().getNpcMorphAssignments().size());
-                assertTrue(((Label) loader.getNamespace().get("npcPromotionInfoBarMessage")).getText()
+                assertTrue(((Label) LoadedWorkbench.node(loader, "npcPromotionInfoBarMessage")).getText()
                         .contains("Already in the Project"));
             } finally {
                 stage.close();
@@ -255,7 +409,7 @@ class WorkbenchControllerTest {
     void npcDatabaseRailExitDiscardsEarlierPromotionReturnContext() throws Exception {
         Path source = temporaryDirectory.resolve("return-context.txt");
         Files.writeString(source, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = fixture().newSession();
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondNpcSourcesWith(Optional.of(List.of(source)));
@@ -266,22 +420,22 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
             try {
-                controller.attach(flow, stage, platform);
+                controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.getSelectionModel().selectFirst();
-                Button add = (Button) loader.getNamespace().get("addNpcToProjectButton");
+                Button add = (Button) LoadedWorkbench.node(loader, "addNpcToProjectButton");
                 add.fire();
                 add.fire();
-                assertTrue(((HBox) loader.getNamespace().get("npcPromotionInfoBar")).isVisible());
+                assertTrue(((HBox) LoadedWorkbench.node(loader, "npcPromotionInfoBar")).isVisible());
 
                 ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                assertFalse(((HBox) loader.getNamespace().get("npcPromotionInfoBar")).isVisible());
-                ((Button) loader.getNamespace().get("backToMorphsButton")).fire();
+                assertFalse(((HBox) LoadedWorkbench.node(loader, "npcPromotionInfoBar")).isVisible());
+                ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
 
                 @SuppressWarnings("unchecked")
                 ListView<NpcMorphAssignmentSnapshot> assignments = (ListView<NpcMorphAssignmentSnapshot>)
@@ -294,118 +448,13 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Column filters clear hidden selection, sorting changes order, and Clear freezes only visible identities. */
-    @Test
-    void npcDatabaseClearUsesFilteredVisibleScope() throws Exception {
-        Path source = temporaryDirectory.resolve("filter-npcs.txt");
-        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n"
-                + "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
-        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, platform);
-                stage.show();
-                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
-                @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
-                catalog.getSelectionModel().selectFirst();
-
-                ToggleButton raceFilter = (ToggleButton) loader.getNamespace().get("npcRaceFilterButton");
-                raceFilter.fire();
-                Popup cancelledFilter = (Popup) Window.getWindows().stream()
-                        .filter(window -> window instanceof Popup && window.isShowing()
-                                && window.getScene().getRoot().lookup("#npcColumnFilterChoices") != null)
-                        .findFirst().orElseThrow();
-                sendKey(cancelledFilter.getScene().getRoot(), KeyCode.ESCAPE);
-                assertFalse(cancelledFilter.isShowing());
-                assertEquals(2, catalog.getItems().size());
-                hideNpcColumnValue(loader, "Race", "NordRace");
-                assertEquals(List.of("Beta"), catalog.getItems().stream().map(NPC::getName).toList());
-                assertNull(catalog.getSelectionModel().getSelectedItem());
-                assertTrue(((ToggleButton) loader.getNamespace().get("npcRaceFilterButton"))
-                        .getAccessibleHelp().contains("active, collapsed"));
-
-                ((Button) loader.getNamespace().get("clearNpcFiltersButton")).fire();
-                @SuppressWarnings("unchecked")
-                ComboBox<String> sort = (ComboBox<String>) loader.getNamespace().get("npcSortChoice");
-                sort.getSelectionModel().select("Name descending");
-                assertEquals(List.of("Beta", "Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
-
-                hideNpcColumnValue(loader, "Name", "Beta");
-                assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
-                ((Button) loader.getNamespace().get("clearNpcDatabaseButton")).fire();
-                assertTrue(catalog.getItems().isEmpty());
-                ((Button) loader.getNamespace().get("clearNpcFiltersButton")).fire();
-                assertEquals(List.of("Beta"), catalog.getItems().stream().map(NPC::getName).toList());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /** A malformed file publishes no rows from that file while earlier and later sources remain inspectable. */
-    @Test
-    void npcDatabaseMixedImportKeepsValidSourcesAndReportsRejectedLine() throws Exception {
-        Path first = temporaryDirectory.resolve("first-npcs.txt");
-        Path malformed = temporaryDirectory.resolve("malformed-npcs.txt");
-        Path last = temporaryDirectory.resolve("last-npcs.txt");
-        Files.writeString(first, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
-        Files.writeString(malformed, "Skyrim.esm | Ghost | Ghost01 | NordRace | 00012346\n"
-                + "not an NPC row\n");
-        Files.writeString(last, "Skyrim.esm | Gamma | Gamma01 | BretonRace | 00012347\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondNpcSourcesWith(Optional.of(List.of(first, malformed, last)));
-        platform.respondNpcSourcesWith(Optional.of(List.of(malformed)));
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, platform);
-                stage.show();
-                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                Button importButton = (Button) loader.getNamespace().get("importNpcSourcesButton");
-                importButton.fire();
-                @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
-                assertEquals(List.of("Alpha", "Gamma"), catalog.getItems().stream().map(NPC::getName).toList());
-                assertEquals(2, ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems().size());
-                String diagnostics = ((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText();
-                assertTrue(diagnostics.contains("NPC_DATABASE_SOURCE_MALFORMED"));
-                assertTrue(diagnostics.contains("malformed-npcs.txt:2"));
-                assertTrue(flow.frame().snapshot().getNpcMorphAssignments().isEmpty());
-
-                Files.writeString(malformed, "Skyrim.esm | Ghost | Ghost01 | NordRace | 00012346\n");
-                importButton.fire();
-                assertEquals(List.of("Alpha", "Gamma", "Ghost"),
-                        catalog.getItems().stream().map(NPC::getName).toList());
-                assertEquals("No source diagnostics",
-                        ((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
     /** A failed source keeps an earlier catalog and Activity Retry reads repaired bytes as a linked attempt. */
     @Test
     void npcDatabaseFailedImportCanRetryWithoutLosingCommittedSource() throws Exception {
         Path good = temporaryDirectory.resolve("committed-npcs.txt");
         Path missing = temporaryDirectory.resolve("missing-npcs.txt");
         Files.writeString(good, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondNpcSourcesWith(Optional.of(List.of(good)));
         platform.respondNpcSourcesWith(Optional.of(List.of(missing)));
@@ -416,16 +465,16 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
             try {
-                controller.attach(flow, stage, platform);
+                controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                Button importButton = (Button) loader.getNamespace().get("importNpcSourcesButton");
+                Button importButton = (Button) LoadedWorkbench.node(loader, "importNpcSourcesButton");
                 importButton.fire();
                 importButton.fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
-                assertTrue(((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText()
+                assertTrue(((Label) LoadedWorkbench.node(loader, "npcDatabaseDiagnostics")).getText()
                         .contains("NPC_DATABASE_SOURCE_READ_FAILED"));
 
                 Files.writeString(missing, "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
@@ -439,7 +488,7 @@ class WorkbenchControllerTest {
                 assertEquals(List.of("Alpha", "Beta"), catalog.getItems().stream().map(NPC::getName).toList());
                 assertTrue(activity.getItems().getLast().jobDetails().orElseThrow().retryOf().isPresent());
                 assertEquals("No source diagnostics",
-                        ((Label) loader.getNamespace().get("npcDatabaseDiagnostics")).getText());
+                        ((Label) LoadedWorkbench.node(loader, "npcDatabaseDiagnostics")).getText());
             } finally {
                 stage.close();
             }
@@ -462,7 +511,7 @@ class WorkbenchControllerTest {
             throw new AssertionError("Unexpected callback failure", failure);
         });
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondNpcSourcesWith(Optional.of(List.of(first)));
         platform.respondNpcSourcesWith(Optional.of(List.of(cancelled)));
@@ -474,14 +523,14 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
             try {
-                controller.attach(flow, stage, platform);
+                controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                Button importButton = (Button) loader.getNamespace().get("importNpcSourcesButton");
+                Button importButton = (Button) LoadedWorkbench.node(loader, "importNpcSourcesButton");
                 importButton.fire();
                 worker.runNext();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
                 catalog.getSelectionModel().selectFirst();
 
@@ -489,8 +538,8 @@ class WorkbenchControllerTest {
                 assertTrue(importButton.isDisabled());
                 assertTrue(((ProgressBar) loader.getNamespace().get("operationProgress")).isVisible());
                 ((ToggleButton) loader.getNamespace().get("templatesAreaButton")).fire();
-                ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Edited during NPC import");
-                Button createPreset = (Button) loader.getNamespace().get("createSliderPresetButton");
+                ((TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput")).setText("Edited during NPC import");
+                Button createPreset = (Button) LoadedWorkbench.node(loader, "createSliderPresetButton");
                 assertFalse(createPreset.isDisabled());
                 createPreset.fire();
                 assertEquals(1, flow.frame().snapshot().getSliderPresets().size());
@@ -498,7 +547,7 @@ class WorkbenchControllerTest {
                 ((Button) loader.getNamespace().get("cancelOperationButton")).fire();
                 assertEquals(JobCoordinator.Lifecycle.CANCELLED, jobs.frame().attempt().orElseThrow().lifecycle());
                 assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
-                ListView<?> sources = (ListView<?>) loader.getNamespace().get("npcSourceList");
+                ListView<?> sources = (ListView<?>) LoadedWorkbench.node(loader, "npcSourceList");
                 assertEquals(1, sources.getItems().size());
                 sources.getSelectionModel().selectFirst();
 
@@ -535,7 +584,7 @@ class WorkbenchControllerTest {
                 jobs.requestCancel();
         }));
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondNpcSourcesWith(Optional.of(List.of(first, second)));
         FxTestToolkit.runOnFxThread(() -> {
@@ -545,12 +594,12 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
             try {
-                controller.attach(flow, stage, platform);
+                controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 assertTrue(cancelledAtBoundary.get());
                 assertEquals(JobCoordinator.Lifecycle.CANCELLED, jobs.frame().attempt().orElseThrow().lifecycle());
                 assertEquals(List.of("Alpha"), catalog.getItems().stream().map(NPC::getName).toList());
@@ -574,7 +623,7 @@ class WorkbenchControllerTest {
         Files.writeString(source, "Master.esm | Amber | Amber01 | NordRace | 000001\n"
                 + "Master.esm | Azure | Azure01 | NordRace | 000002\n"
                 + "Master.esm | Beta | Beta01 | NordRace | 000003\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondNpcSourcesWith(Optional.of(List.of(source)));
         FxTestToolkit.runOnFxThread(() -> {
@@ -585,19 +634,19 @@ class WorkbenchControllerTest {
             Scene scene = new Scene(root, 1300.0, 800.0);
             stage.setScene(scene);
             try {
-                controller.attach(flow, stage, platform);
+                controller.attach(flow, stage, platform, fixture().environment());
                 stage.show();
                 ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
-                ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
                 @SuppressWarnings("unchecked")
-                TableView<NPC> catalog = (TableView<NPC>) loader.getNamespace().get("npcCatalogTable");
+                TableView<NPC> catalog = (TableView<NPC>) LoadedWorkbench.node(loader, "npcCatalogTable");
                 catalog.requestFocus();
                 for (int index = 0; index < 2; index++)
                     catalog.fireEvent(new KeyEvent(KeyEvent.KEY_TYPED, "a", "a", KeyCode.UNDEFINED,
                             false, false, false, false));
                 assertEquals("Azure", catalog.getSelectionModel().getSelectedItem().getName());
                 sendControlKey(root, KeyCode.K);
-                assertSame(loader.getNamespace().get("npcNameFilterButton"), scene.getFocusOwner());
+                assertSame(LoadedWorkbench.node(loader, "npcNameFilterButton"), scene.getFocusOwner());
                 sendKey(root, KeyCode.ESCAPE);
                 assertNull(catalog.getSelectionModel().getSelectedItem());
             } finally {
@@ -606,12 +655,27 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** The Fill Empty flyout requires a chosen preset and cancellation preserves every NPC assignment. */
+    /**
+     * Fill Empty Apply goes through the gated dispatch pipeline: once a job blocks Project mutations, applying an
+     * offer opened before the job leaves every NPC Morph Assignment untouched and closes the flyout.
+     */
     @Test
-    void fillEmptyFlyoutCancelsAndAppliesOnlyChosenPresets() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+    void fillEmptyApplyIsRefusedWhileAJobBlocksProjectMutations() throws Exception {
+        Path source = temporaryDirectory.resolve("blocking-import.xml").toAbsolutePath().normalize();
+        Files.writeString(source, "<SliderPresets><Preset name=\"Blocking Import\"/></SliderPresets>");
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The import is settled by the test before prolonged feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         flow.apply(SliderPresetEdits.create("Alpha"));
         flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondWith(WorkbenchProjectFlow.Response.selectedSources(List.of(source)));
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
             Parent root = loader.load();
@@ -619,70 +683,27 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
             try {
-                controller.attach(flow, stage, new RecordingPlatform());
+                controller.attach(flow, stage, platform, fixture().environment());
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
                 stage.show();
-                Button launcher = (Button) loader.getNamespace().get("fillEmptyNpcMorphAssignmentsButton");
-                launcher.fire();
-                Popup first = (Popup) Window.getWindows().stream()
-                        .filter(window -> window instanceof Popup && window.isShowing())
-                        .findFirst().orElseThrow();
-                Button firstApply = (Button) first.getScene().getRoot().lookup("#fillEmptyApplyButton");
-                assertTrue(firstApply.isDisabled());
-                ((Button) first.getScene().getRoot().lookup("#fillEmptyCancelButton")).fire();
-                assertFalse(first.isShowing());
+                ((Button) LoadedWorkbench.node(loader, "fillEmptyNpcMorphAssignmentsButton")).fire();
+                Popup flyout = FxTestToolkit.showingPopup(stage, "#fillEmptyApplyButton");
+                @SuppressWarnings("unchecked")
+                ListView<SliderPresetSnapshot> choices = (ListView<SliderPresetSnapshot>) flyout.getScene()
+                        .getRoot().lookup("#fillEmptySliderPresetList");
+                choices.getSelectionModel().selectFirst();
+                ((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).fire();
+                assertTrue(jobs.frame().projectMutationsBlocked());
+
+                ((Button) flyout.getScene().getRoot().lookup("#fillEmptyApplyButton")).fire();
+
+                assertFalse(flyout.isShowing());
                 assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst()
                         .getSliderPresetNames().isEmpty());
-
-                launcher.fire();
-                Popup second = (Popup) Window.getWindows().stream()
-                        .filter(window -> window instanceof Popup && window.isShowing())
-                        .findFirst().orElseThrow();
-                @SuppressWarnings("unchecked")
-                ListView<SliderPresetSnapshot> choices =
-                        (ListView<SliderPresetSnapshot>) second.getScene().getRoot()
-                                .lookup("#fillEmptySliderPresetList");
-                choices.getSelectionModel().selectFirst();
-                Button apply = (Button) second.getScene().getRoot().lookup("#fillEmptyApplyButton");
-                assertEquals("Fill 1 NPC from 1 preset", apply.getText());
-                apply.fire();
-                assertFalse(second.isShowing());
-                assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().getFirst()
-                        .getSliderPresetNames());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /** The inspector portrait follows logical NPC selection and explains the missing-file fallback. */
-    @Test
-    void npcPortraitInspectorClearsWithSelectionAndDescribesMissingImage() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        flow.apply(NpcMorphAssignmentEdits.create("NoPortraitFixture", "Skyrim.esm", "HousecarlWhiterun",
-                "NordRace", "000A2C94"));
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, new RecordingPlatform());
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                ListView<NpcMorphAssignmentSnapshot> npcs = controller.npcMorphAssignmentListNode();
-                npcs.getSelectionModel().selectFirst();
-                ImageView portrait = (ImageView) loader.getNamespace().get("npcPortraitImage");
-                Label status = (Label) loader.getNamespace().get("npcPortraitStatus");
-                Button viewer = (Button) loader.getNamespace().get("openNpcPortraitViewerButton");
-                assertEquals(AccessibleRole.NODE, portrait.getAccessibleRole());
-                assertNull(portrait.getAccessibleText(),
-                        "the named NPC inspector makes its adjacent thumbnail decorative");
-                assertTrue(status.getText().contains("NoPortraitFixture (HousecarlWhiterun).jpg"));
-                assertTrue(viewer.isDisabled());
-                ((TextField) loader.getNamespace().get("npcMorphAssignmentFilter")).setText("no match");
-                assertNull(portrait.getAccessibleText());
-                assertNull(portrait.getImage());
+                worker.runNext();
+                assertFalse(jobs.frame().projectMutationsBlocked());
+                assertTrue(flow.frame().snapshot().getNpcMorphAssignments().getFirst()
+                        .getSliderPresetNames().isEmpty());
             } finally {
                 stage.close();
             }
@@ -692,7 +713,7 @@ class WorkbenchControllerTest {
     /** Opening the narrow NPC inspector reveals its portrait rather than retaining a prior relationship scroll. */
     @Test
     void narrowNpcInspectorOpensAtPortraitAfterEarlierRelationshipScroll() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         flow.apply(SliderPresetEdits.create("Alpha"));
         flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "HousecarlWhiterun",
                 "NordRace", "000A2C94"));
@@ -704,12 +725,12 @@ class WorkbenchControllerTest {
             Scene scene = new Scene(root, 900.0, 700.0);
             stage.setScene(scene);
             try {
-                controller.attach(flow, stage, new RecordingPlatform());
+                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                controller.npcMorphAssignmentListNode().getSelectionModel().selectFirst();
+                LoadedWorkbench.morphs(controller).npcMorphAssignmentListNode().getSelectionModel().selectFirst();
                 stage.show();
                 root.resize(900.0, 700.0);
-                ScrollPane inspector = (ScrollPane) loader.getNamespace().get("morphsInspectorScroll");
+                ScrollPane inspector = (ScrollPane) LoadedWorkbench.node(loader, "morphsInspectorScroll");
                 inspector.setVvalue(1.0);
 
                 sendKey(root, KeyCode.F7);
@@ -721,64 +742,137 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Short catalogs remain fully visible as pixel snapping changes, without redundant accessible scrollbars. */
-    @ParameterizedTest
-    @CsvSource({"1.0,false", "1.25,false", "1.5,false", "1.75,false",
-            "1.0,true", "1.25,true", "1.5,true", "1.75,true"})
-    void shortCatalogsFitAllRowsAtFractionalRenderScales(double renderScale, boolean morphs) throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(SliderPresetEdits.create("Beta"));
-        flow.apply(CustomMorphTargetEdits.create("First"));
-        flow.apply(CustomMorphTargetEdits.create("Second"));
+    /**
+     * In narrow mode Ctrl+K in Morphs first opens the primary-content overlay, where both Morphs filters live, then
+     * focuses the filter of the catalog in use (#152: the Morphs Area asks the shell to reveal its primary content).
+     */
+    @Test
+    void narrowMorphsSearchOpensThePrimaryOverlayBeforeFocusingTheFilter() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
             Parent root = loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            stage.getScene().getStylesheets().add(Main.class.getResource("workbench.css").toExternalForm());
-            stage.setForceIntegerRenderScale(false);
-            stage.setRenderScaleX(renderScale);
-            stage.setRenderScaleY(renderScale);
-            controller.attach(flow, stage, new RecordingPlatform());
-            if (morphs)
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-            ListView<?> catalog = morphs ? controller.customMorphTargetListNode() : controller.sliderPresetListNode();
+            Scene scene = new Scene(root, 900.0, 700.0);
+            stage.setScene(scene);
             try {
+                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
                 stage.show();
-                stage.setRenderScaleX(renderScale);
-                stage.setRenderScaleY(renderScale);
-                settleCatalogLayout(root);
-                assertShortCatalogHasNoVerticalScrollbar(catalog);
-                // A displayed window can move to another monitor without any Project frame changing.
-                stage.setRenderScaleX(1.5);
-                stage.setRenderScaleY(1.5);
-                settleCatalogLayout(root);
-                assertShortCatalogHasNoVerticalScrollbar(catalog);
+                root.resize(900.0, 700.0);
+                StackPane overlay = (StackPane) loader.getNamespace().get("overlayLayer");
+                // Entering narrow mode may open the primary overlay; dismiss it so Ctrl+K has to reopen it.
+                if (!overlay.getChildren().isEmpty())
+                    sendKey(root, KeyCode.ESCAPE);
+                assertFalse(overlay.getChildren().contains(loader.getNamespace().get("primaryPane")));
+
+                sendControlKey(root, KeyCode.K);
+
+                assertTrue(overlay.getChildren().contains(loader.getNamespace().get("primaryPane")));
+                assertSame(LoadedWorkbench.node(loader, "customMorphTargetFilter"), scene.getFocusOwner());
             } finally {
                 stage.close();
             }
         });
     }
 
-    /** Waits for CSS/navigation and VirtualFlow's deferred cell metrics to finish real layout pulses. */
-    private static void settleCatalogLayout(Parent root) {
-        Object loop = new Object();
-        int[] pulses = {0};
-        Runnable listener = () -> {
-            if (++pulses[0] == 2)
-                Platform.runLater(() -> Platform.exitNestedEventLoop(loop, null));
-            else
-                Platform.requestNextPulse();
-        };
-        root.getScene().addPostLayoutPulseListener(listener);
+    /**
+     * Add NPCs hands the shell its own launcher as the NPC Database return target, so Back to Morphs returns there
+     * even when the launcher fired without holding focus (as a mnemonic can).
+     */
+    @Test
+    void backToMorphsReturnsToTheAddNpcsLauncherThatFiredWithoutFocus() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(CustomMorphTargetEdits.create("All|Female"));
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300.0, 800.0);
+            stage.setScene(scene);
+            try {
+                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+                stage.show();
+                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                LoadedWorkbench.morphs(controller).customMorphTargetListNode().requestFocus();
+                Button launcher = (Button) LoadedWorkbench.node(loader, "addNpcsFromDatabaseButton");
+
+                launcher.fire();
+                assertTrue(((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).isSelected());
+                ((Button) LoadedWorkbench.node(loader, "backToMorphsButton")).fire();
+
+                assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
+                assertSame(launcher, scene.getFocusOwner());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /** Short catalogs remain fully visible as pixel snapping changes, without redundant accessible scrollbars. */
+    @ParameterizedTest
+    @CsvSource({"1.0,false", "1.25,false", "1.5,false", "1.75,false",
+            "1.0,true", "1.25,true", "1.5,true", "1.75,true"})
+    void shortCatalogsFitAllRowsAtFractionalRenderScales(double renderScale, boolean morphs) throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(SliderPresetEdits.create("Beta"));
+        flow.apply(CustomMorphTargetEdits.create("First"));
+        flow.apply(CustomMorphTargetEdits.create("Second"));
+        AtomicReference<Stage> shown = new AtomicReference<>();
+        AtomicReference<ListView<?>> shownCatalog = new AtomicReference<>();
+        // Multi-block test: the shown Stage stays live on the FX thread while the test thread waits for real
+        // layout pulses between the bodies (FxTestToolkit.awaitLayoutPulses), instead of a nested event loop.
         try {
-            Platform.requestNextPulse();
-            Platform.enterNestedEventLoop(loop);
+            FxTestToolkit.runOnFxThread(() -> {
+                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+                Parent root = loader.load();
+                WorkbenchController controller = loader.getController();
+                Stage stage = new Stage();
+                stage.setScene(new Scene(root, 1300.0, 800.0));
+                stage.getScene().getStylesheets().add(Main.class.getResource("workbench.css").toExternalForm());
+                stage.setForceIntegerRenderScale(false);
+                stage.setRenderScaleX(renderScale);
+                stage.setRenderScaleY(renderScale);
+                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+                if (morphs)
+                    ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+                shownCatalog.set(morphs ? LoadedWorkbench.morphs(controller).customMorphTargetListNode()
+                        : LoadedWorkbench.templates(controller).sliderPresetListNode());
+                shown.set(stage);
+                stage.show();
+                // Showing a window resets its render scale to the screen's output scale, so force it again.
+                stage.setRenderScaleX(renderScale);
+                stage.setRenderScaleY(renderScale);
+            });
+            FxTestToolkit.awaitLayoutPulses(shown.get().getScene(), 2);
+            FxTestToolkit.runOnFxThread(() -> {
+                assertRenderScale(renderScale, shown.get());
+                assertShortCatalogHasNoVerticalScrollbar(shownCatalog.get());
+                // A displayed window can move to another monitor without any Project frame changing.
+                shown.get().setRenderScaleX(1.5);
+                shown.get().setRenderScaleY(1.5);
+            });
+            FxTestToolkit.awaitLayoutPulses(shown.get().getScene(), 2);
+            FxTestToolkit.runOnFxThread(() -> {
+                assertRenderScale(1.5, shown.get());
+                assertShortCatalogHasNoVerticalScrollbar(shownCatalog.get());
+            });
         } finally {
-            root.getScene().removePostLayoutPulseListener(listener);
+            if (shown.get() != null)
+                FxTestToolkit.runOnFxThread(() -> shown.get().close());
         }
+    }
+
+    /**
+     * Proves a forced render scale actually reached the shown window, so the scrollbar assertions that follow
+     * really ran at the fractional scale rather than at the headless screen's own scale.
+     */
+    private static void assertRenderScale(double expected, Stage stage) {
+        assertEquals(expected, stage.getRenderScaleX(), "renderScaleX override was not applied");
+        assertEquals(expected, stage.getRenderScaleY(), "renderScaleY override was not applied");
     }
 
     /** Asserts user-visible list overflow through JavaFX's public accessibility surface. */
@@ -792,90 +886,12 @@ class WorkbenchControllerTest {
     }
 
     /**
-     * The Morphs JavaFX adapter renders immutable target frames and translates catalog and relationship controls into
-     * typed intents without retaining control-local Project state.
-     */
-    @Test
-    void morphsControlsCreateFilterAndAssignThroughTheAuthoritativeProjectFlow() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(SliderPresetEdits.create("Beta"));
-        flow.apply(CustomMorphTargetEdits.create("Existing"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new RecordingPlatform());
-            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-            @SuppressWarnings("unchecked")
-            ListView<CustomMorphTargetSnapshot> targets =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-            TextField name = (TextField) loader.getNamespace().get("customMorphTargetNameInput");
-            TextField filter = (TextField) loader.getNamespace().get("customMorphTargetFilter");
-            Button create = (Button) loader.getNamespace().get("createCustomMorphTargetButton");
-            @SuppressWarnings("unchecked")
-            ComboBox<SliderPresetSnapshot> available =
-                    (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
-            Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
-            Label condition = (Label) loader.getNamespace().get("morphTargetConditionText");
-            Label selection = (Label) loader.getNamespace().get("morphTargetSelectionText");
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> assigned =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
-            Set<Character> inspectorMnemonics = List.<Labeled>of(
-                            (Label) loader.getNamespace().get("assignedMorphSliderPresetLabel"),
-                            (Button) loader.getNamespace().get("removeMorphSliderPresetButton"),
-                            (Button) loader.getNamespace().get("clearMorphSliderPresetsButton"),
-                            (Label) loader.getNamespace().get("availableMorphSliderPresetLabel"),
-                            assign,
-                            (Button) loader.getNamespace().get("assignAllMorphSliderPresetsButton"))
-                    .stream().map(Labeled::getText).filter(text -> text.contains("_"))
-                    .map(text -> Character.toUpperCase(text.charAt(text.indexOf('_') + 1)))
-                    .collect(java.util.stream.Collectors.toSet());
-
-            assertTrue(targets.isVisible());
-            assertEquals(Set.of('A', 'R', 'C', 'V', 'I', 'L'), inspectorMnemonics);
-            assertEquals(List.of("Existing"), targets.getItems().stream()
-                    .map(CustomMorphTargetSnapshot::getName).toList());
-            name.setText("  All|Female  ");
-            create.fire();
-            assertEquals("All|Female", targets.getSelectionModel().getSelectedItem().getName());
-
-            targets.getSelectionModel().select(targets.getItems().stream()
-                    .filter(target -> target.getName().equals("Existing")).findFirst().orElseThrow());
-            available.setValue(available.getItems().stream()
-                    .filter(preset -> preset.getName().equals("Alpha")).findFirst().orElseThrow());
-            available.fireEvent(new ActionEvent());
-            assign.fire();
-            assigned = controller.assignedMorphSliderPresetListNode();
-
-            assertEquals(List.of("Alpha"), assigned.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertEquals(List.of("Alpha"), flow.frame().snapshot().getCustomMorphTargets().stream()
-                    .filter(target -> target.getName().equals("Existing")).findFirst().orElseThrow()
-                    .getSliderPresetNames());
-            assertEquals("BodyGen condition: Existing", condition.getAccessibleText());
-            assertEquals("Selected Custom Morph Target Existing", selection.getAccessibleText());
-            filter.setText("all");
-            assertNull(targets.getSelectionModel().getSelectedItem());
-            assertTrue(assigned.getItems().isEmpty());
-            assertEquals("Morphs inspector: no selection", selection.getAccessibleText());
-            assertEquals("Select a Custom Morph Target or NPC Morph Assignment to inspect it.",
-                    condition.getAccessibleText());
-            stage.close();
-        });
-    }
-
-    /**
      * Morphs validation stays pane-local, relationship removal is immediate, and destructive relationship/catalog
      * clears consume the correctly named confirmation actions without retargeting selection.
      */
     @Test
     void morphsValidationAndDestructiveActionsUseSafeTypedFeedback() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         flow.apply(SliderPresetEdits.create("Alpha"));
         flow.apply(CustomMorphTargetEdits.create("Another"));
         flow.apply(CustomMorphTargetEdits.create("Existing"));
@@ -886,30 +902,30 @@ class WorkbenchControllerTest {
             loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, platform);
+            controller.attach(flow, stage, platform, fixture().environment());
             ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ListView<CustomMorphTargetSnapshot> targets =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-            TextField name = (TextField) loader.getNamespace().get("customMorphTargetNameInput");
-            Button create = (Button) loader.getNamespace().get("createCustomMorphTargetButton");
+                    (ListView<CustomMorphTargetSnapshot>) LoadedWorkbench.node(loader, "customMorphTargetList");
+            TextField name = (TextField) LoadedWorkbench.node(loader, "customMorphTargetNameInput");
+            Button create = (Button) LoadedWorkbench.node(loader, "createCustomMorphTargetButton");
             @SuppressWarnings("unchecked")
             ComboBox<SliderPresetSnapshot> available =
-                    (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
-            Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
+                    (ComboBox<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "availableMorphSliderPreset");
+            Button assign = (Button) LoadedWorkbench.node(loader, "assignMorphSliderPresetButton");
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> assigned =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
-            Button removeAssignment = (Button) loader.getNamespace().get("removeMorphSliderPresetButton");
-            Button clearAssignments = (Button) loader.getNamespace().get("clearMorphSliderPresetsButton");
-            Button removeTarget = (Button) loader.getNamespace().get("removeCustomMorphTargetButton");
-            Button clearTargets = (Button) loader.getNamespace().get("clearCustomMorphTargetsButton");
-            TextField filter = (TextField) loader.getNamespace().get("customMorphTargetFilter");
+                    (ListView<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "assignedMorphSliderPresetList");
+            Button removeAssignment = (Button) LoadedWorkbench.node(loader, "removeMorphSliderPresetButton");
+            Button clearAssignments = (Button) LoadedWorkbench.node(loader, "clearMorphSliderPresetsButton");
+            Button removeTarget = (Button) LoadedWorkbench.node(loader, "removeCustomMorphTargetButton");
+            Button clearTargets = (Button) LoadedWorkbench.node(loader, "clearCustomMorphTargetsButton");
+            TextField filter = (TextField) LoadedWorkbench.node(loader, "customMorphTargetFilter");
 
             name.setText("existing");
             create.fire();
-            assertTrue(((HBox) loader.getNamespace().get("morphsInfoBar")).isVisible());
-            assertFalse(((HBox) loader.getNamespace().get("templatesInfoBar")).isVisible());
+            assertTrue(((HBox) LoadedWorkbench.node(loader, "morphsInfoBar")).isVisible());
+            assertFalse(((HBox) LoadedWorkbench.node(loader, "templatesInfoBar")).isVisible());
             assertTrue(((ListView<?>) loader.getNamespace().get("activityList")).getItems().isEmpty());
 
             targets.getSelectionModel().select(targets.getItems().stream()
@@ -917,20 +933,20 @@ class WorkbenchControllerTest {
             available.setValue(available.getItems().getFirst());
             available.fireEvent(new ActionEvent());
             assign.fire();
-            assigned = controller.assignedMorphSliderPresetListNode();
+            assigned = LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode();
             assigned.getSelectionModel().selectFirst();
             assigned.getSelectionModel().clearSelection();
             assertTrue(removeAssignment.isDisabled());
             assigned.getSelectionModel().selectFirst();
             platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
             removeAssignment.fire();
-            assigned = controller.assignedMorphSliderPresetListNode();
+            assigned = LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode();
             assertTrue(assigned.getItems().isEmpty());
 
             available.setValue(available.getItems().getFirst());
             available.fireEvent(new ActionEvent());
             assign.fire();
-            assigned = controller.assignedMorphSliderPresetListNode();
+            assigned = LoadedWorkbench.morphs(controller).assignedMorphSliderPresetListNode();
             platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
             clearAssignments.fire();
             assertTrue(assigned.getItems().isEmpty());
@@ -956,7 +972,7 @@ class WorkbenchControllerTest {
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void confirmedMorphsRemovalReportsRejectedAndFailedOutcomes(boolean failed) throws Exception {
-        RefusingEditSession session = new RefusingEditSession(ProjectSessions.create());
+        RefusingEditSession session = new RefusingEditSession(fixture().newSession());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(CustomMorphTargetEdits.create("Existing"));
         session.refuseEdits(failed);
@@ -971,13 +987,13 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             try {
-                controller.attach(flow, stage, platform);
+                controller.attach(flow, stage, platform, fixture().environment());
                 ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                ListView<?> targets = (ListView<?>) loader.getNamespace().get("customMorphTargetList");
+                ListView<?> targets = (ListView<?>) LoadedWorkbench.node(loader, "customMorphTargetList");
                 targets.getSelectionModel().selectFirst();
-                ((Button) loader.getNamespace().get("removeCustomMorphTargetButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "removeCustomMorphTargetButton")).fire();
 
-                assertTrue(((Label) loader.getNamespace().get("morphsInfoBarMessage")).getText()
+                assertTrue(((Label) LoadedWorkbench.node(loader, "morphsInfoBarMessage")).getText()
                         .contains("The target could not be removed."));
                 assertTrue(((Label) loader.getNamespace().get("statusText")).getText()
                         .contains("The target could not be removed."));
@@ -992,238 +1008,13 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Empty target and NPC entries are emitted as Morphs lines even without Slider Preset assignments. */
-    @Test
-    void unassignedMorphEntriesDescribeTheirEmittedOutput() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        flow.apply(CustomMorphTargetEdits.create("Unassigned"));
-        flow.apply(NpcMorphAssignmentEdits.create("Guard", "Skyrim.esm", "Guard01", "NordRace", "000123"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            try {
-                controller.attach(flow, stage, new RecordingPlatform());
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                @SuppressWarnings("unchecked")
-                ListView<CustomMorphTargetSnapshot> targets =
-                        (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-                @SuppressWarnings("unchecked")
-                ListView<NpcMorphAssignmentSnapshot> npcs =
-                        (ListView<NpcMorphAssignmentSnapshot>) loader.getNamespace().get("npcMorphAssignmentList");
-                Label status = (Label) loader.getNamespace().get("morphTargetOutputStatusText");
-
-                targets.getSelectionModel().selectFirst();
-                assertEquals("Included in Morphs output without Slider Preset assignments.", status.getText());
-                npcs.getSelectionModel().selectFirst();
-                assertEquals("Included in Morphs output without Slider Preset assignments.", status.getText());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /**
-     * The Morphs controls author an NPC through the Project flow and keep its selection separate from a Custom
-     * Morph Target while the shared editor exposes the NPC's complete output identity.
-     */
-    @Test
-    void morphsNpcControlsCreateInspectAndSelectWithoutRetargeting() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(CustomMorphTargetEdits.create("All|Female"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, new RecordingPlatform());
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                @SuppressWarnings("unchecked")
-                ListView<CustomMorphTargetSnapshot> targets =
-                        (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-                @SuppressWarnings("unchecked")
-                ListView<NpcMorphAssignmentSnapshot> npcs =
-                        (ListView<NpcMorphAssignmentSnapshot>) loader.getNamespace().get("npcMorphAssignmentList");
-                targets.getSelectionModel().selectFirst();
-                @SuppressWarnings("unchecked")
-                ComboBox<SliderPresetSnapshot> available =
-                        (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
-                Button assign = (Button) loader.getNamespace().get("assignMorphSliderPresetButton");
-                available.setValue(available.getItems().getFirst());
-
-                ((TextField) loader.getNamespace().get("npcDisplayNameInput")).setText("Lyra");
-                ((TextField) loader.getNamespace().get("npcPluginNameInput")).setText("People.esp");
-                ((TextField) loader.getNamespace().get("npcEditorIdInput")).setText("Lyra01");
-                ((TextField) loader.getNamespace().get("npcRaceInput")).setText("NordRace");
-                ((TextField) loader.getNamespace().get("npcFormIdInput")).setText("000A12B3");
-                ((Button) loader.getNamespace().get("createNpcMorphAssignmentButton")).fire();
-
-                npcs = controller.npcMorphAssignmentListNode();
-                NpcMorphAssignmentSnapshot npc = npcs.getSelectionModel().getSelectedItem();
-                assertNotNull(npc);
-                assertNull(targets.getSelectionModel().getSelectedItem());
-                assertNull(available.getValue(), "a pending target preset must not carry to the selected NPC");
-                assertTrue(assign.isDisabled());
-                assertEquals("Lyra", npc.getDisplayName());
-                assertEquals("People.esp", npc.getPluginName());
-                assertEquals("Lyra01", npc.getEditorId());
-                assertEquals("NordRace", npc.getRace());
-                assertEquals("A12B3", npc.getFormId());
-                assertEquals("Lyra", ((Label) loader.getNamespace().get("morphTargetEditorFocusTarget")).getText());
-                assertEquals("Plugin: People.esp; Editor ID: Lyra01",
-                        ((Label) loader.getNamespace().get("npcIdentityText")).getText());
-                assertEquals("Race: NordRace", ((Label) loader.getNamespace().get("npcRaceText")).getText());
-                assertEquals("Form ID: A12B3", ((Label) loader.getNamespace().get("npcFormIdText")).getText());
-
-                available.setValue(available.getItems().getFirst());
-                targets.getSelectionModel().selectFirst();
-                assertNull(npcs.getSelectionModel().getSelectedItem());
-                assertNull(available.getValue(), "a pending NPC preset must not carry to the selected target");
-                assertTrue(assign.isDisabled());
-                assertEquals("BodyGen condition: All|Female",
-                        ((Label) loader.getNamespace().get("morphTargetConditionText")).getText());
-                npcs.getSelectionModel().selectFirst();
-                assertNull(targets.getSelectionModel().getSelectedItem());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /** NPC filtering and sorting retain logical selection, and a confirmed clear removes only the frozen visible set. */
-    @Test
-    void morphsNpcControlsEditRelationshipsAndClearOnlyVisibleAssignments() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
-                "Lyra", "People.esp", "Lyra01", "NordRace", "A12B3", List.of())));
-        flow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
-                "Mira", "Other.esp", "Mira01", "BretonRace", "B45C6", List.of())));
-        RecordingPlatform platform = new RecordingPlatform();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            try {
-                controller.attach(flow, stage, platform);
-                ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
-                ListView<NpcMorphAssignmentSnapshot> npcs = controller.npcMorphAssignmentListNode();
-                npcs.getSelectionModel().select(npcs.getItems().stream()
-                        .filter(npc -> npc.getEditorId().equals("Mira01")).findFirst().orElseThrow());
-                @SuppressWarnings("unchecked")
-                ComboBox<SliderPresetSnapshot> available =
-                        (ComboBox<SliderPresetSnapshot>) loader.getNamespace().get("availableMorphSliderPreset");
-                available.setValue(available.getItems().getFirst());
-                available.fireEvent(new ActionEvent());
-                ((Button) loader.getNamespace().get("assignMorphSliderPresetButton")).fire();
-                assertEquals(List.of("Alpha"), flow.frame().snapshot().getNpcMorphAssignments().stream()
-                        .filter(npc -> npc.getEditorId().equals("Mira01"))
-                        .findFirst().orElseThrow().getSliderPresetNames());
-
-                @SuppressWarnings("unchecked")
-                ComboBox<com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature.NpcSortOrder> sort =
-                        (ComboBox<com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature.NpcSortOrder>)
-                                loader.getNamespace().get("npcMorphAssignmentSort");
-                sort.setValue(com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature.NpcSortOrder.PLUGIN_DESCENDING);
-                sort.fireEvent(new ActionEvent());
-                assertEquals("Mira01", npcs.getSelectionModel().getSelectedItem().getEditorId());
-
-                TextField filter = (TextField) loader.getNamespace().get("npcMorphAssignmentFilter");
-                filter.setText("lyra");
-                assertNull(npcs.getSelectionModel().getSelectedItem());
-                assertEquals(List.of("Lyra"), npcs.getItems().stream()
-                        .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
-                platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
-                ((Button) loader.getNamespace().get("clearNpcMorphAssignmentsButton")).fire();
-                assertEquals(List.of("Mira"), flow.frame().snapshot().getNpcMorphAssignments().stream()
-                        .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
-                filter.clear();
-                assertEquals(List.of("Mira"), controller.npcMorphAssignmentListNode().getItems().stream()
-                        .map(NpcMorphAssignmentSnapshot::getDisplayName).toList());
-                assertNull(controller.npcMorphAssignmentListNode().getSelectionModel().getSelectedItem());
-            } finally {
-                stage.close();
-            }
-        });
-    }
-
-    /**
-     * Refilling an empty Morphs list replaces only its JavaFX adapter so the Windows UIA provider receives a fresh
-     * virtualized child subtree without changing feature identity state.
-     */
-    @Test
-    void morphsEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            controller.attach(flow, stage, new RecordingPlatform());
-            @SuppressWarnings("unchecked")
-            ListView<CustomMorphTargetSnapshot> initial =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-            TextField name = (TextField) loader.getNamespace().get("customMorphTargetNameInput");
-
-            name.setText("All|Female");
-            ((Button) loader.getNamespace().get("createCustomMorphTargetButton")).fire();
-
-            assertNotSame(initial, controller.customMorphTargetListNode());
-            assertEquals(List.of("All|Female"), controller.customMorphTargetListNode().getItems().stream()
-                    .map(CustomMorphTargetSnapshot::getName).toList());
-            stage.close();
-        });
-    }
-
-    /**
-     * Refilling an empty assigned-relationship list replaces only its JavaFX adapter so Windows UIA exposes the
-     * immutable relationships selected from a later target frame.
-     */
-    @Test
-    void morphsAssignedRelationshipsEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            controller.attach(flow, stage, new RecordingPlatform());
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> initial =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("assignedMorphSliderPresetList");
-            @SuppressWarnings("unchecked")
-            ListView<CustomMorphTargetSnapshot> targets =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-
-            targets.getSelectionModel().selectFirst();
-
-            assertNotSame(initial, controller.assignedMorphSliderPresetListNode());
-            assertEquals(List.of("Alpha"), controller.assignedMorphSliderPresetListNode().getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            stage.close();
-        });
-    }
-
     /**
      * The Settings Area edits both profiles through immutable feature frames, persists them as one pair, and records
      * one durable save result without routing through a legacy controller.
      */
     @Test
     void settingsAreaEditsAndPersistsBothProfilesThroughTheWorkbench() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -1234,7 +1025,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         flow.apply(SliderPresetEdits.create("Settings Refresh"));
         AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
         AtomicReference<Stage> stageReference = new AtomicReference<>();
@@ -1245,20 +1036,20 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             publication.runNext();
             loaderReference.set(loader);
             stageReference.set(stage);
             ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ComboBox<SettingsFeature.Profile> profiles =
-                    (ComboBox<SettingsFeature.Profile>) loader.getNamespace().get("settingsProfileChoice");
+                    (ComboBox<SettingsFeature.Profile>) LoadedWorkbench.node(loader, "settingsProfileChoice");
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
-            TextField small = (TextField) loader.getNamespace().get("settingsSmallInput");
-            TextField multiplier = (TextField) loader.getNamespace().get("settingsMultiplierInput");
-            Button apply = (Button) loader.getNamespace().get("applySettingsEntryButton");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
+            TextField small = (TextField) LoadedWorkbench.node(loader, "settingsSmallInput");
+            TextField multiplier = (TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput");
+            Button apply = (Button) LoadedWorkbench.node(loader, "applySettingsEntryButton");
 
             profiles.setValue(SettingsFeature.Profile.STANDARD);
             profiles.fireEvent(new ActionEvent());
@@ -1274,21 +1065,21 @@ class WorkbenchControllerTest {
                     .filter(entry -> entry.name().equals("Arms")).findFirst().orElseThrow());
             multiplier.setText("3");
             apply.fire();
-            ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).fire();
             multiplier.setText("9");
             apply.fire();
 
             assertTrue(jobs.frame().active());
-            assertEquals(1f, Settings.getMultiplier("Waist"));
-            assertEquals(1f, Settings.getMultiplierUUNP("Arms"));
+            assertEquals(1f, fixture().settings().getMultiplier("Waist"));
+            assertEquals(1f, fixture().settings().getMultiplierUUNP("Arms"));
             assertEquals("3.0", multiplier.getText());
             assertTrue(((ListView<?>) loader.getNamespace().get("activityList")).getItems().isEmpty());
         });
 
         Thread settingsWorker = worker.runNextAsync();
         settingsWorker.join();
-        assertEquals(2f, Settings.getMultiplier("Waist"));
-        assertEquals(3f, Settings.getMultiplierUUNP("Arms"));
+        assertEquals(2f, fixture().settings().getMultiplier("Waist"));
+        assertEquals(3f, fixture().settings().getMultiplierUUNP("Arms"));
 
         FxTestToolkit.runOnFxThread(() -> {
             publication.runNext();
@@ -1307,30 +1098,18 @@ class WorkbenchControllerTest {
             stageReference.get().close();
         });
 
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
-        assertEquals(2f, Settings.getMultiplier("Waist"));
-        assertEquals(3f, Settings.getMultiplierUUNP("Arms"));
+        assertTrue(fixture().settings().reload().isSuccessful());
+        assertEquals(2f, fixture().settings().getMultiplier("Waist"));
+        assertEquals(3f, fixture().settings().getMultiplierUUNP("Arms"));
     }
 
-    /** The generation preference remains unchanged until its JavaFX-captured worker operation executes. */
+    /**
+     * The shell mounts the Settings Area's own panes into its landmark containers at the positions they held in the
+     * single Workbench FXML, and shows them only while Settings is the active Area (#149).
+     */
     @Test
-    void generationPreferenceToggleRunsOnTheApplicationWorker() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
-        assertTrue(initialized.isSuccessful());
-        GenerationPreferencesStore store = new GenerationPreferencesStore(temporaryDirectory);
-        store.save(false);
-        ManualExecutor worker = new ManualExecutor();
-        ManualExecutor publication = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, publication,
-                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // The deterministic preference write settles before prolonged cancellation is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
-        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
-        AtomicReference<Stage> stageReference = new AtomicReference<>();
+    void settingsAreaPanesMountIntoTheShellLandmarksAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -1338,39 +1117,461 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
-            publication.runNext();
-            loaderReference.set(loader);
-            stageReference.set(stage);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
 
-            ((CheckBox) loader.getNamespace().get("omitRedundantSlidersCheck")).fire();
+            assertEquals(List.of("templatesPrimaryScroll", "morphsPrimaryScroll", "settingsPrimaryScroll",
+                    "npcDatabasePrimaryScroll"), childIds(loader, "primaryPane"));
+            assertEquals(List.of("templatesEditorContent", "morphsEditorContent", "settingsEditorContent",
+                    "npcDatabaseEditorContent"), childIds(loader, "editorPane"));
+            assertEquals(List.of("templatesInspectorScroll", "morphsInspectorScroll", "settingsInspectorContent",
+                    "npcDatabaseInspectorScroll"), childIds(loader, "inspectorPane"));
+            javafx.scene.Node settingsEditor = (javafx.scene.Node) LoadedWorkbench.node(loader, "settingsEditorContent");
+            assertFalse(settingsEditor.isVisible() || settingsEditor.isManaged());
 
-            assertTrue(jobs.frame().active());
-            assertEquals("omitRedundantSliders=false" + System.lineSeparator(),
-                    Files.readString(temporaryDirectory.resolve("workbench-generation.properties")));
+            ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
+
+            assertTrue(settingsEditor.isVisible() && settingsEditor.isManaged());
+            assertFalse(((javafx.scene.Node) LoadedWorkbench.node(loader, "templatesEditorContent")).isVisible());
+            stage.close();
         });
+    }
 
-        Thread preferenceWorker = worker.runNextAsync();
-        preferenceWorker.join();
+    /**
+     * The shell mounts the NPC Database Area's own panes last in its landmark containers, where they sat in the single
+     * Workbench FXML, declares no {@code @FXML} field for any NPC Database control, and shows the panes only while the
+     * NPC Database is the active Area (#151).
+     */
+    @Test
+    void npcDatabaseAreaPanesMountIntoTheShellLandmarksAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
-            publication.runNext();
-            publication.runNext();
-            publication.runNext();
-            assertFalse(jobs.frame().active());
-            assertTrue(((CheckBox) loaderReference.get().getNamespace()
-                    .get("omitRedundantSlidersCheck")).isSelected());
-            stageReference.get().close();
-        });
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
 
-        assertEquals("omitRedundantSliders=true" + System.lineSeparator(),
-                Files.readString(temporaryDirectory.resolve("workbench-generation.properties")));
+            assertEquals("npcDatabasePrimaryScroll", childIds(loader, "primaryPane").getLast());
+            assertEquals("npcDatabaseEditorContent", childIds(loader, "editorPane").getLast());
+            assertEquals("npcDatabaseInspectorScroll", childIds(loader, "inspectorPane").getLast());
+            Map<String, Object> npcDatabase = controller.areaNamespace(WorkbenchNavigation.Area.NPC_DATABASE);
+            assertTrue(npcDatabase.containsKey("npcCatalogTable"), "the NPC Database Area FXML must be loaded");
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields())
+                assertFalse(field.isAnnotationPresent(javafx.fxml.FXML.class)
+                                && npcDatabase.containsKey(field.getName()),
+                        "the shell must not declare the NPC Database control " + field.getName());
+            javafx.scene.Node editor = (javafx.scene.Node) LoadedWorkbench.node(loader, "npcDatabaseEditorContent");
+            assertFalse(editor.isVisible() || editor.isManaged());
+
+            ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+
+            assertTrue(editor.isVisible() && editor.isManaged());
+            assertFalse(((javafx.scene.Node) LoadedWorkbench.node(loader, "settingsEditorContent")).isVisible());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell mounts the Morphs Area's own panes right after the Templates panes in its landmark containers, where
+     * they sat in the single Workbench FXML, declares no {@code @FXML} field for any Morphs control, and shows the
+     * panes only while Morphs is the active Area (#152).
+     */
+    @Test
+    void morphsAreaPanesMountIntoTheShellLandmarksAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            assertEquals("morphsPrimaryScroll", childIds(loader, "primaryPane").get(1));
+            assertEquals("morphsEditorContent", childIds(loader, "editorPane").get(1));
+            assertEquals("morphsInspectorScroll", childIds(loader, "inspectorPane").get(1));
+            Map<String, Object> morphs = controller.areaNamespace(WorkbenchNavigation.Area.MORPHS);
+            assertTrue(morphs.containsKey("customMorphTargetList"), "the Morphs Area FXML must be loaded");
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields())
+                assertFalse(field.isAnnotationPresent(javafx.fxml.FXML.class) && morphs.containsKey(field.getName()),
+                        "the shell must not declare the Morphs control " + field.getName());
+            javafx.scene.Node editor = (javafx.scene.Node) LoadedWorkbench.node(loader, "morphsEditorContent");
+            assertFalse(editor.isVisible() || editor.isManaged());
+            // The shell hands the Area its window's render scale, which the Morphs catalog heights track.
+            AtomicBoolean catalogResized = new AtomicBoolean();
+            LoadedWorkbench.morphs(controller).customMorphTargetListNode().prefHeightProperty().addListener(
+                    (javafx.beans.Observable observable) -> catalogResized.set(true));
+            LoadedWorkbench.morphs(controller).customMorphTargetListNode().getPrefHeight();
+            stage.setRenderScaleY(stage.getRenderScaleY() + 0.5);
+            assertTrue(catalogResized.get(), "the Morphs catalog must re-evaluate its height on a render-scale change");
+
+            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+
+            assertTrue(editor.isVisible() && editor.isManaged());
+            assertFalse(((javafx.scene.Node) LoadedWorkbench.node(loader, "templatesEditorContent")).isVisible());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell mounts the Templates Area's own panes first in its landmark containers, where they sat in the single
+     * Workbench FXML, declares no {@code @FXML} field for any Templates control, hands the Area its window's render
+     * scale, and shows the panes only while Templates is the active Area (#153).
+     */
+    @Test
+    void templatesAreaPanesMountIntoTheShellLandmarksAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            assertEquals("templatesPrimaryScroll", childIds(loader, "primaryPane").getFirst());
+            assertEquals("templatesEditorContent", childIds(loader, "editorPane").getFirst());
+            assertEquals("templatesInspectorScroll", childIds(loader, "inspectorPane").getFirst());
+            Map<String, Object> templates = controller.areaNamespace(WorkbenchNavigation.Area.TEMPLATES);
+            assertTrue(templates.containsKey("sliderPresetList"), "the Templates Area FXML must be loaded");
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields())
+                assertFalse(field.isAnnotationPresent(javafx.fxml.FXML.class) && templates.containsKey(field.getName()),
+                        "the shell must not declare the Templates control " + field.getName());
+            javafx.scene.Node editor = (javafx.scene.Node) LoadedWorkbench.node(loader, "templatesEditorContent");
+            assertTrue(editor.isVisible() && editor.isManaged(), "Templates is the first active Area");
+            // The shell hands the Area its window's render scale, which the Slider Preset catalog height tracks.
+            AtomicBoolean catalogResized = new AtomicBoolean();
+            LoadedWorkbench.templates(controller).sliderPresetListNode().prefHeightProperty().addListener(
+                    (javafx.beans.Observable observable) -> catalogResized.set(true));
+            LoadedWorkbench.templates(controller).sliderPresetListNode().getPrefHeight();
+            stage.setRenderScaleY(stage.getRenderScaleY() + 0.5);
+            assertTrue(catalogResized.get(),
+                    "the Templates catalog must re-evaluate its height on a render-scale change");
+
+            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+
+            assertFalse(editor.isVisible() || editor.isManaged());
+            ((ToggleButton) loader.getNamespace().get("templatesAreaButton")).fire();
+            assertTrue(editor.isVisible() && editor.isManaged());
+            stage.close();
+        });
+    }
+
+    /**
+     * With every Area and the Output drawer extracted, the shell holds only its chrome: every control it keeps a field
+     * for is an injected {@code workbench.fxml} control, no module FXML declares one of them, and each of the four
+     * Areas and the drawer is loaded from its own FXML with its own controller (#154).
+     */
+    @Test
+    void shellHoldsOnlyItsChromeControlsAndEveryModuleLoadsFromItsOwnFxml() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            assertEquals(List.of("TemplatesArea", "MorphsArea", "NpcDatabaseArea", "SettingsArea"),
+                    LoadedWorkbench.areas(loader).stream().map(area -> area.getClass().getSimpleName()).toList());
+            assertNotNull(LoadedWorkbench.outputDrawer(loader), "the Output drawer FXML must be loaded");
+            Map<String, Object> modules = new java.util.HashMap<>();
+            for (WorkbenchNavigation.Area area : WorkbenchNavigation.Area.values())
+                modules.putAll(controller.areaNamespace(area));
+            modules.putAll(controller.outputDrawerNamespace());
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields()) {
+                boolean control = javafx.scene.Node.class.isAssignableFrom(field.getType())
+                        || javafx.scene.control.MenuItem.class.isAssignableFrom(field.getType());
+                if (!control)
+                    continue;
+                assertTrue(field.isAnnotationPresent(javafx.fxml.FXML.class),
+                        "the shell holds no control it did not load: " + field.getName());
+                assertTrue(loader.getNamespace().containsKey(field.getName()),
+                        "the shell's control " + field.getName() + " must be declared in workbench.fxml");
+                assertFalse(modules.containsKey(field.getName()),
+                        "the shell must not declare the module control " + field.getName());
+            }
+            stage.close();
+        });
+    }
+
+    /**
+     * When a semantic target's node cannot take focus, the shell falls back to the target Area's own default node,
+     * which the Area may override (the NPC Database's is its catalog table, not its primary source list) (#154).
+     */
+    @Test
+    void focusFallbackLandsOnEachAreasOwnDefaultNode() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            stage.show();
+            Map<WorkbenchNavigation.Area, String> railButtons = Map.of(
+                    WorkbenchNavigation.Area.TEMPLATES, "templatesAreaButton",
+                    WorkbenchNavigation.Area.MORPHS, "morphsAreaButton",
+                    WorkbenchNavigation.Area.NPC_DATABASE, "npcDatabaseAreaButton",
+                    WorkbenchNavigation.Area.SETTINGS, "settingsAreaButton");
+            List<WorkbenchArea> areas = LoadedWorkbench.areas(loader);
+            for (WorkbenchNavigation.Area area : WorkbenchNavigation.Area.values()) {
+                WorkbenchArea module = areas.get(area.ordinal());
+                ToggleButton railButton = (ToggleButton) loader.getNamespace().get(railButtons.get(area));
+                railButton.fire();
+                javafx.scene.Node inspector = module.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
+                inspector.setVisible(false);
+                railButton.requestFocus();
+
+                controller.focusPolicy().request(
+                        new WorkbenchNavigation.FocusTarget(area, WorkbenchNavigation.Landmark.INSPECTOR));
+
+                assertSame(module.defaultFocusNode(), stage.getScene().getFocusOwner(), area.displayName());
+                inspector.setVisible(true);
+            }
+            assertSame(LoadedWorkbench.node(loader, "npcCatalogTable"),
+                    areas.get(WorkbenchNavigation.Area.NPC_DATABASE.ordinal()).defaultFocusNode());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell's diagnostics arbitration lasts only for the change that owns it. An NPC Database promotion's
+     * diagnostics stay out of the Templates and Morphs projections of the promoted Project frame. Neither that
+     * promotion nor a later Templates edit leaves an owner behind, so a malformed Open after them, which no Area owns,
+     * shows its diagnostics in both projections (#154).
+     */
+    @Test
+    void diagnosticsArbitrationLastsOnlyForTheChangeThatOwnsIt() throws Exception {
+        Path source = temporaryDirectory.resolve("promotion-with-rejection.txt");
+        Files.writeString(source, "Skyrim.esm | Good | Good01 | NordRace | 00000B\n"
+                + "Skyrim.esm | Invalid | Invalid01 | NordRace | XYZ\n");
+        Path malformed = temporaryDirectory.resolve("malformed-project.jbs2bg");
+        Files.copy(Path.of("test-resources", "json-oracles", "project", "malformed-syntax.jbs2bg"), malformed);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, fixture().environment());
+                ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
+                ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
+
+                ((Button) LoadedWorkbench.node(loader, "addAllNpcsToProjectButton")).fire();
+
+                assertFalse(flow.frame().diagnostics().isEmpty(), "the promoted Project frame carries diagnostics");
+                assertFalse(((HBox) LoadedWorkbench.node(loader, "templatesInfoBar")).isVisible());
+                assertFalse(((HBox) LoadedWorkbench.node(loader, "morphsInfoBar")).isVisible());
+                ((ToggleButton) loader.getNamespace().get("templatesAreaButton")).fire();
+                ((TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput")).setText("Alpha");
+                ((Button) LoadedWorkbench.node(loader, "createSliderPresetButton")).fire();
+                assertEquals(1, flow.frame().snapshot().getSliderPresets().size(), "the Templates edit publishes");
+
+                // The edits left the Project dirty, so Open first asks to discard it.
+                platform.respondWith(WorkbenchProjectFlow.Response.discard());
+                platform.respondWith(WorkbenchProjectFlow.Response.selected(malformed));
+                ((MenuItem) loader.getNamespace().get("openProjectMenuItem")).fire();
+
+                assertTrue(((TextArea) loader.getNamespace().get("diagnosticsText")).getText()
+                        .contains("PROJECT_JSON_MALFORMED"));
+                assertTrue(((HBox) LoadedWorkbench.node(loader, "templatesInfoBar")).isVisible());
+                assertTrue(((HBox) LoadedWorkbench.node(loader, "morphsInfoBar")).isVisible());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    /**
+     * The Templates Area's own keys reach it through the shell's key map before navigation: in narrow mode, Escape in
+     * an inline rename inside the primary overlay cancels the rename and leaves the overlay open, and only the next
+     * Escape dismisses the overlay; Ctrl+K and the final Escape tier go through the Area's search and Escape (#153).
+     */
+    @Test
+    void templatesRenameEscapeWinsOverTheNarrowOverlayAndSelectionClearComesLast() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300, 720);
+            stage.setScene(scene);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            stage.show();
+            root.resize(1199, 720);
+            StackPane overlay = (StackPane) loader.getNamespace().get("overlayLayer");
+            VBox primaryPane = (VBox) loader.getNamespace().get("primaryPane");
+
+            sendControlKey(root, KeyCode.K);
+            assertEquals(List.of(primaryPane), overlay.getChildren(), "Ctrl+K opens the narrow primary content");
+            assertSame(LoadedWorkbench.node(loader, "sliderPresetFilter"), scene.getFocusOwner());
+            TemplatesArea templates = LoadedWorkbench.templates(controller);
+            templates.sliderPresetListNode().getSelectionModel().select(0);
+            templates.sliderPresetListNode().requestFocus();
+            sendKey(root, KeyCode.F2);
+            root.applyCss();
+            root.layout();
+            assertSame(templates.activeRenameField().orElseThrow(), scene.getFocusOwner());
+
+            sendKey(root, KeyCode.ESCAPE);
+
+            assertEquals(-1, templates.sliderPresetListNode().getEditingIndex(), "the rename Escape ends the edit");
+            assertTrue(templates.activeRenameField().isEmpty());
+            assertEquals(List.of(primaryPane), overlay.getChildren(), "the rename Escape leaves the overlay open");
+            sendKey(root, KeyCode.ESCAPE);
+            assertTrue(overlay.getChildren().isEmpty());
+            assertNotNull(templates.sliderPresetListNode().getSelectionModel().getSelectedItem(),
+                    "dismissing the overlay keeps the selection");
+            sendKey(root, KeyCode.ESCAPE);
+            assertNull(templates.sliderPresetListNode().getSelectionModel().getSelectedItem());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell keeps the Project diagnostics of a Templates edit with Templates: a rejected Slider Preset create
+     * publishes a Project frame whose diagnostic shows in the Templates InfoBar, while the Morphs projection of the
+     * same frame stays clear (#153).
+     */
+    @Test
+    void templatesValidationDiagnosticsStayOutOfTheMorphsProjection() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            long before = flow.frame().sequence();
+
+            ((TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput")).setText("alpha");
+            ((Button) LoadedWorkbench.node(loader, "createSliderPresetButton")).fire();
+
+            assertTrue(flow.frame().sequence() > before, "the rejected create publishes a Project frame");
+            assertFalse(flow.frame().diagnostics().isEmpty());
+            assertTrue(((HBox) LoadedWorkbench.node(loader, "templatesInfoBar")).isVisible());
+            assertFalse(((HBox) LoadedWorkbench.node(loader, "morphsInfoBar")).isVisible());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell places the Output drawer's two parts where they sat in the single Workbench FXML (Generate in the Area
+     * header before the Project status, the drawer last in the content stack), declares no {@code @FXML} field for any
+     * drawer control, and shows the drawer only while navigation reveals it (#150).
+     */
+    @Test
+    void outputDrawerPartsMountIntoTheShellAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            assertEquals(Arrays.asList("areaTitle", "showPrimaryOverlayButton", "showInspectorOverlayButton", null,
+                    "generateOutputButton", "projectStatusText"), childIds(loader, "areaHeader"));
+            assertEquals(List.of("areaSurface", "outputDrawer"), childIds(loader, "contentStack"));
+            for (java.lang.reflect.Field field : WorkbenchController.class.getDeclaredFields())
+                assertFalse(field.isAnnotationPresent(javafx.fxml.FXML.class)
+                                && controller.outputDrawerNamespace().containsKey(field.getName()),
+                        "the shell must not declare the drawer control " + field.getName());
+            VBox drawer = (VBox) LoadedWorkbench.node(loader, "outputDrawer");
+            assertFalse(drawer.isVisible() || drawer.isManaged());
+
+            ((ToggleButton) loader.getNamespace().get("outputAreaButton")).fire();
+
+            assertTrue(drawer.isVisible() && drawer.isManaged());
+            stage.close();
+        });
+    }
+
+    /**
+     * The shell's Ctrl+G and Ctrl+E reach the Output drawer: a successful Generate reveals the drawer through
+     * navigation, and neither the reveal nor the export moves focus out of the active Area (#150).
+     */
+    @Test
+    void outputShortcutsGenerateAndExportThroughTheDrawerWithoutMovingAreaFocus() throws Exception {
+        assertTrue(fixture().startup().isSuccessful());
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // This small generated Project settles before prolonged cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected coordinator callback failure", failure);
+        });
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
+        flow.apply(SliderPresetEdits.create("Shortcut UI"));
+        RecordingPlatform platform = new RecordingPlatform();
+        Path exportDirectory = Files.createDirectory(temporaryDirectory.resolve("shortcut-output"));
+        platform.respondOutputDirectoryWith(Optional.of(exportDirectory));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            Scene scene = new Scene(root, 1300, 720);
+            stage.setScene(scene);
+            controller.attach(flow, stage, platform, fixture().environment());
+            stage.show();
+            Label editor = (Label) LoadedWorkbench.node(loader, "templateEditorFocusTarget");
+            editor.requestFocus();
+
+            sendControlKey(root, KeyCode.G);
+            assertTrue(jobs.frame().active());
+            worker.runNext();
+
+            assertTrue(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
+            assertTrue(((ToggleButton) loader.getNamespace().get("outputAreaButton")).isSelected());
+            TextArea templates = (TextArea) LoadedWorkbench.node(loader, "templatesOutputText");
+            assertTrue(templates.getText().startsWith("Shortcut UI="));
+            assertSame(editor, scene.getFocusOwner());
+
+            sendControlKey(root, KeyCode.E);
+            assertTrue(jobs.frame().active());
+            worker.runNext();
+            assertArrayEquals(templates.getText().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    Files.readAllBytes(exportDirectory.resolve("templates.ini")));
+            assertSame(editor, scene.getFocusOwner());
+            stage.close();
+        });
+    }
+
+    /** @return the {@code fx:id}s of one shell container's children, in order */
+    private static List<String> childIds(FXMLLoader loader, String containerId) {
+        return ((javafx.scene.layout.Pane) loader.getNamespace().get(containerId)).getChildren().stream()
+                .map(javafx.scene.Node::getId).toList();
     }
 
     /** Reload returns immediately on JavaFX and applies the recovered pair only after worker and publication lanes. */
     @Test
     void settingsReloadRunsOnTheApplicationWorkerBeforePublishingItsFrame() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -1381,7 +1582,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         flow.apply(SliderPresetEdits.create("Reload Refresh"));
         AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
         AtomicReference<Stage> stageReference = new AtomicReference<>();
@@ -1392,7 +1593,7 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             publication.runNext();
             loaderReference.set(loader);
             stageReference.set(stage);
@@ -1404,15 +1605,15 @@ class WorkbenchControllerTest {
                 "{\"Defaults\":{},\"Multipliers\":{},\"Inverted\":[]}");
 
         FxTestToolkit.runOnFxThread(() -> {
-            ((Button) loaderReference.get().getNamespace().get("reloadSettingsButton")).fire();
+            ((Button) LoadedWorkbench.node(loaderReference.get(), "reloadSettingsButton")).fire();
 
             assertTrue(jobs.frame().active());
-            assertEquals(1f, Settings.getMultiplier("Waist"));
+            assertEquals(1f, fixture().settings().getMultiplier("Waist"));
         });
 
         Thread settingsWorker = worker.runNextAsync();
         settingsWorker.join();
-        assertEquals(4f, Settings.getMultiplier("Waist"));
+        assertEquals(4f, fixture().settings().getMultiplier("Waist"));
 
         FxTestToolkit.runOnFxThread(() -> {
             publication.runNext();
@@ -1421,7 +1622,7 @@ class WorkbenchControllerTest {
             FXMLLoader loader = loaderReference.get();
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             assertEquals(4f, entries.getItems().stream().filter(entry -> entry.name().equals("Waist"))
                     .findFirst().orElseThrow().multiplier().orElseThrow());
             assertEquals(50, flow.frame().snapshot().getSliderPresets().getFirst().getSliderChoices().stream()
@@ -1433,267 +1634,10 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** Reload cancellation while another process owns the lock keeps the Settings draft and feedback unchanged. */
-    @Test
-    void settingsReloadCanBeCancelledWhileWaitingForTheDirectoryLock() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
-        byte[] standardBefore = Files.readAllBytes(temporaryDirectory.resolve("settings.json"));
-        byte[] uunpBefore = Files.readAllBytes(temporaryDirectory.resolve("settings_UUNP.json"));
-        Path ready = temporaryDirectory.resolve("holder.ready");
-        Path release = temporaryDirectory.resolve("holder.release");
-        String javaName = System.getProperty("os.name", "").startsWith("Windows") ? "java.exe" : "java";
-        String javaExecutable = Path.of(System.getProperty("java.home"), "bin", javaName).toString();
-        String testClassPath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
-        Process holder = new ProcessBuilder(javaExecutable, "-cp", testClassPath,
-                SettingsLockHolderProbe.class.getName(), temporaryDirectory.toString(),
-                ready.toString(), release.toString()).redirectErrorStream(true).start();
-        Thread reloadWorker = null;
-        try {
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-            while (!Files.exists(ready) && System.nanoTime() < deadline)
-                Thread.sleep(10);
-            assertTrue(Files.exists(ready), "child process did not acquire the Settings lock");
-            ManualExecutor worker = new ManualExecutor();
-            JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
-                    Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
-                    (delay, action) -> () -> {
-                        // The test observes prompt cancellation before prolonged feedback is relevant.
-                    }, failure -> { throw new AssertionError("Unexpected callback failure", failure); });
-            SettingsFeature feature = new SettingsFeature(temporaryDirectory, Settings.publishedState());
-            assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
-                    "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
-            SettingsFeature.ReloadConfirmationEffect confirmation = assertInstanceOf(
-                    SettingsFeature.ReloadConfirmationEffect.class,
-                    feature.dispatch(new SettingsFeature.Reload()).effect().orElseThrow());
-            SettingsFeature.ReloadEffect effect = assertInstanceOf(SettingsFeature.ReloadEffect.class,
-                    feature.respondReload(confirmation.token(), SettingsFeature.ReloadDecision.DISCARD)
-                            .effect().orElseThrow());
-            AtomicReference<SettingsFeature.Frame> settledFrame = new AtomicReference<>();
-            JobCoordinator.Operation operation = new JobCoordinator.Operation("Reload Settings",
-                    List.of(temporaryDirectory.toString()), List.of(), Optional.empty());
-            assertTrue(jobs.submit(new JobCoordinator.Submission<>(operation,
-                    context -> WorkbenchController.runSettingsEffect(effect, context),
-                    (attempt, result) -> settledFrame.set(
-                            WorkbenchController.applySettingsCompletion(feature, effect, result).frame()),
-                    Optional.empty())).admitted());
-            reloadWorker = worker.runNextAsync();
-            long workerDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-            boolean waitingForLock = false;
-            while (!waitingForLock && reloadWorker.isAlive() && System.nanoTime() < workerDeadline) {
-                for (StackTraceElement frame : reloadWorker.getStackTrace()) {
-                    if (frame.getClassName().equals("com.asdasfa.jbs2bg.data.SettingsDirectoryLock")
-                            && frame.getMethodName().equals("acquire")) {
-                        waitingForLock = true;
-                        break;
-                    }
-                }
-                if (!waitingForLock)
-                    Thread.sleep(10);
-            }
-            assertTrue(waitingForLock, "Reload worker did not reach the blocking directory lock");
-
-            AtomicReference<JobCoordinator.CancelResponse> cancelResponse = new AtomicReference<>();
-            Thread canceller = new Thread(() -> cancelResponse.set(jobs.requestCancel()),
-                    "settings-reload-canceller");
-            canceller.start();
-            canceller.join(TimeUnit.SECONDS.toMillis(2));
-            boolean promptCancellation = !canceller.isAlive();
-            if (!promptCancellation) {
-                // Release the child lock so an interrupted Windows file-lock call cannot strand the test process.
-                Files.writeString(release, "release");
-                canceller.join(TimeUnit.SECONDS.toMillis(5));
-            }
-            assertTrue(promptCancellation, "requestCancel blocked while another process held the Settings lock");
-            assertEquals(JobCoordinator.CancelResponse.ACCEPTED, cancelResponse.get());
-            reloadWorker.join(TimeUnit.SECONDS.toMillis(5));
-            assertFalse(reloadWorker.isAlive(), "cancelled Reload remained blocked on the directory lock");
-            assertTrue(holder.isAlive(), "Reload only cancelled after the other process released its lock");
-            assertEquals(JobCoordinator.Lifecycle.CANCELLED,
-                    jobs.frame().attempt().orElseThrow().lifecycle());
-            SettingsFeature.Frame frame = settledFrame.get();
-            assertNotNull(frame);
-            assertTrue(frame.dirty());
-            assertEquals("2.0", frame.editor().orElseThrow().multiplier());
-            assertTrue(frame.notices().stream().noneMatch(notice ->
-                    notice.code().equals("SETTINGS_LOCK_FAILED")));
-            assertArrayEquals(standardBefore, Files.readAllBytes(temporaryDirectory.resolve("settings.json")));
-            assertArrayEquals(uunpBefore, Files.readAllBytes(temporaryDirectory.resolve("settings_UUNP.json")));
-        } finally {
-            if (reloadWorker != null && reloadWorker.isAlive()) {
-                reloadWorker.interrupt();
-                reloadWorker.join(TimeUnit.SECONDS.toMillis(5));
-            }
-            Files.writeString(release, "release");
-            if (!holder.waitFor(10, TimeUnit.SECONDS)) {
-                holder.destroyForcibly();
-                holder.waitFor(10, TimeUnit.SECONDS);
-            }
-        }
-    }
-
-    /** Dirty Reload cancellation retains the draft, while Save persists it before the original Reload continues. */
-    @Test
-    void dirtySettingsReloadConfirmsAndSavesBeforeReloading() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
-        assertTrue(initialized.isSuccessful());
-        ManualExecutor worker = new ManualExecutor();
-        ManualExecutor publication = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, publication,
-                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // The deterministic Reload settles before prolonged cancellation is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
-        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
-        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
-        AtomicReference<Stage> stageReference = new AtomicReference<>();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
-            publication.runNext();
-            loaderReference.set(loader);
-            stageReference.set(stage);
-            @SuppressWarnings("unchecked")
-            ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
-            entries.getSelectionModel().select(entries.getItems().stream()
-                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-        });
-        Files.writeString(temporaryDirectory.resolve("settings.json"),
-                "{\"Defaults\":{\"Waist\":{\"valueSmall\":0.5,\"valueBig\":1}},"
-                        + "\"Multipliers\":{\"Waist\":4},\"Inverted\":[]}");
-        Files.writeString(temporaryDirectory.resolve("settings_UUNP.json"),
-                "{\"Defaults\":{},\"Multipliers\":{},\"Inverted\":[]}");
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = loaderReference.get();
-            Button reload = (Button) loader.getNamespace().get("reloadSettingsButton");
-            reload.fire();
-
-            assertFalse(jobs.frame().active());
-            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
-            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
-
-            reload.fire();
-
-            assertTrue(jobs.frame().active());
-            assertEquals("Save Settings", jobs.frame().attempt().orElseThrow().operation().name());
-            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
-        });
-
-        Thread saveWorker = worker.runNextAsync();
-        saveWorker.join();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            publication.runNext();
-            publication.runNext();
-            publication.runNext();
-            assertTrue(jobs.frame().active());
-            assertEquals("Reload Settings", jobs.frame().attempt().orElseThrow().operation().name());
-            assertEquals(2f, Settings.getMultiplier("Waist"));
-        });
-
-        Thread reloadWorker = worker.runNextAsync();
-        reloadWorker.join();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            publication.runNext();
-            publication.runNext();
-            publication.runNext();
-            FXMLLoader loader = loaderReference.get();
-            assertFalse(jobs.frame().active());
-            assertEquals(2f, Settings.getMultiplier("Waist"));
-            assertTrue(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
-            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
-            stageReference.get().close();
-        });
-    }
-
-    /** Dirty Reload Discard admits Reload directly and replaces the retained draft only after worker completion. */
-    @Test
-    void dirtySettingsReloadDiscardAdmitsReloadWithoutSaving() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
-        assertTrue(initialized.isSuccessful());
-        ManualExecutor worker = new ManualExecutor();
-        ManualExecutor publication = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, publication,
-                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // The deterministic Reload settles before prolonged cancellation is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.DISCARD);
-        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
-        AtomicReference<Stage> stageReference = new AtomicReference<>();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
-            publication.runNext();
-            loaderReference.set(loader);
-            stageReference.set(stage);
-            @SuppressWarnings("unchecked")
-            ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
-            entries.getSelectionModel().select(entries.getItems().stream()
-                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-        });
-        Files.writeString(temporaryDirectory.resolve("settings.json"),
-                "{\"Defaults\":{\"Waist\":{\"valueSmall\":0.5,\"valueBig\":1}},"
-                        + "\"Multipliers\":{\"Waist\":4},\"Inverted\":[]}");
-        Files.writeString(temporaryDirectory.resolve("settings_UUNP.json"),
-                "{\"Defaults\":{},\"Multipliers\":{},\"Inverted\":[]}");
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = loaderReference.get();
-            ((Button) loader.getNamespace().get("reloadSettingsButton")).fire();
-
-            assertTrue(jobs.frame().active());
-            assertEquals("Reload Settings", jobs.frame().attempt().orElseThrow().operation().name());
-            assertEquals(1f, Settings.getMultiplier("Waist"));
-            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
-        });
-
-        Thread reloadWorker = worker.runNextAsync();
-        reloadWorker.join();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            publication.runNext();
-            publication.runNext();
-            publication.runNext();
-            FXMLLoader loader = loaderReference.get();
-            assertFalse(jobs.frame().active());
-            assertEquals(4f, Settings.getMultiplier("Waist"));
-            assertTrue(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
-            assertEquals("4.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
-            stageReference.get().close();
-        });
-    }
-
     /** A shutdown request racing Save completion cancels the chained Reload without a callback failure. */
     @Test
     void shutdownRaceCancelsChainedSettingsReloadWithoutCallbackFailure() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -1703,7 +1647,7 @@ class WorkbenchControllerTest {
                 (delay, action) -> () -> {
                     // The Save reaches commit before shutdown races its chained Reload admission.
                 }, callbackFailure::set);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
         AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
@@ -1715,18 +1659,18 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            controller.attach(flow, stage, platform, fixture().environment());
             publication.runNext();
             loaderReference.set(loader);
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            ((Button) loader.getNamespace().get("reloadSettingsButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "reloadSettingsButton")).fire();
 
             assertTrue(jobs.frame().active());
             assertEquals("Save Settings", jobs.frame().attempt().orElseThrow().operation().name());
@@ -1761,7 +1705,7 @@ class WorkbenchControllerTest {
      */
     @Test
     void bodySlideImportLauncherUsesTheCentralJobWithoutStealingFocus() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         Path source = temporaryDirectory.resolve("workbench-import.xml").toAbsolutePath().normalize();
         Files.writeString(source, "<SliderPresets><Preset name=\"Workbench Import\"/></SliderPresets>");
         ManualExecutor worker = new ManualExecutor();
@@ -1773,7 +1717,7 @@ class WorkbenchControllerTest {
             throw new AssertionError("Unexpected coordinator callback failure", failure);
         });
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondWith(WorkbenchProjectFlow.Response.selectedSources(List.of(source)));
 
@@ -1784,12 +1728,12 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             Scene scene = new Scene(root, 1300, 720);
             stage.setScene(scene);
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            controller.attach(flow, stage, platform, fixture().environment());
             stage.show();
-            Button importButton = (Button) loader.getNamespace().get("importBodySlideButton");
+            Button importButton = (Button) LoadedWorkbench.node(loader, "importBodySlideButton");
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+                    (ListView<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "sliderPresetList");
             importButton.requestFocus();
 
             importButton.fire();
@@ -1799,7 +1743,8 @@ class WorkbenchControllerTest {
             assertSame(presets, scene.getFocusOwner());
             worker.runNext();
 
-            ListView<SliderPresetSnapshot> importedPresets = controller.sliderPresetListNode();
+            ListView<SliderPresetSnapshot> importedPresets =
+                    LoadedWorkbench.templates(controller).sliderPresetListNode();
             assertEquals(List.of("Workbench Import"), importedPresets.getItems().stream()
                     .map(SliderPresetSnapshot::getName).toList());
             assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
@@ -1811,11 +1756,11 @@ class WorkbenchControllerTest {
     /** Startup Settings failure stays visible and blocks import and generation from consuming fallback values. */
     @Test
     void invalidStartupSettingsAreVisibleAndBlockBodySlideImport() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         Files.writeString(temporaryDirectory.resolve("settings.json"), "{\"Defaults\":");
-        Settings.InitializationResult rejected = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult rejected = fixture().settings().reload();
         assertFalse(rejected.isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -1823,10 +1768,10 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, rejected);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().withStartup(rejected).environment());
 
-            assertTrue(((Button) loader.getNamespace().get("importBodySlideButton")).isDisabled());
-            assertTrue(((Button) loader.getNamespace().get("generateOutputButton")).isDisabled());
+            assertTrue(((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).isDisabled());
+            assertTrue(((Button) LoadedWorkbench.node(loader, "generateOutputButton")).isDisabled());
             @SuppressWarnings("unchecked")
             ListView<WorkbenchFeedback.ActivityRecord> activity =
                     (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
@@ -1839,107 +1784,84 @@ class WorkbenchControllerTest {
     }
 
     /**
-     * The Templates JavaFX adapter renders immutable feature frames and translates controls into typed feature intents
-     * without retaining a row-index selection.
+     * The controls that several Areas used to race on (BodySlide import, the NPC Database source buttons and
+     * Generate) each have one writer fed by the shared Workbench context, so a job frame followed by a Project frame
+     * leaves them exactly as the reverse order does, with live or rejected Settings.
      */
-    @Test
-    void templatesControlsCreateAndFilterThroughTheAuthoritativeProjectFlow() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        flow.apply(SliderPresetEdits.create("Alpha"));
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void crossAreaControlsSettleTheSameWhetherTheJobFrameOrTheProjectFrameComesLast(boolean liveSettings)
+            throws Exception {
+        Path source = temporaryDirectory.resolve("ordered-npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        WorkbenchTestEnvironment environment = fixture();
+        if (!liveSettings) {
+            Files.writeString(temporaryDirectory.resolve("settings.json"), "{\"Defaults\":");
+            Settings.InitializationResult rejected = fixture().settings().reload();
+            assertFalse(rejected.isSuccessful());
+            environment = fixture().withStartup(rejected);
+        }
+        // Imported sources are loaded but none is selected, so only Remove stays disabled once the import settles;
+        // rejected Settings keep BodySlide import and Generate from consuming fallback values.
+        Map<String, Boolean> expected = Map.of(
+                "importNpcSourcesButton", false,
+                "removeNpcSourceButton", true,
+                "clearNpcDatabaseButton", false,
+                "importBodySlideButton", !liveSettings,
+                "generateOutputButton", !liveSettings);
 
+        assertEquals(expected, crossAreaControlsAfter(true, source, environment));
+        assertEquals(expected, crossAreaControlsAfter(false, source, environment));
+    }
+
+    /**
+     * Attaches a fresh Workbench, then settles an NPC Database import (its job frames) and a Slider Preset creation
+     * (a Project frame) in the requested order.
+     *
+     * @param jobFrameFirst true to import before creating, so the Project frame renders last
+     * @return the disabled state of each cross-Area control, keyed by FXML id
+     */
+    private Map<String, Boolean> crossAreaControlsAfter(boolean jobFrameFirst, Path source,
+                                                         WorkbenchTestEnvironment environment) throws Exception {
+        ProjectSession session = environment.newSession();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        RecordingPlatform platform = new RecordingPlatform();
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        AtomicReference<Map<String, Boolean>> disabled = new AtomicReference<>();
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
             Parent root = loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, new RecordingPlatform());
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            TextField name = (TextField) loader.getNamespace().get("sliderPresetNameInput");
-            TextField filter = (TextField) loader.getNamespace().get("sliderPresetFilter");
-            Button create = (Button) loader.getNamespace().get("createSliderPresetButton");
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            try {
+                controller.attach(flow, stage, platform, environment.environment());
+                Runnable importSources = () -> ((Button) LoadedWorkbench.node(loader, "importNpcSourcesButton")).fire();
+                Runnable createPreset = () -> {
+                    ((TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput")).setText("Ordered");
+                    ((Button) LoadedWorkbench.node(loader, "createSliderPresetButton")).fire();
+                };
+                (jobFrameFirst ? importSources : createPreset).run();
+                (jobFrameFirst ? createPreset : importSources).run();
 
-            assertEquals(List.of("Alpha"), presets.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            name.setText(" Beta ");
-            create.fire();
-            assertEquals(List.of("Alpha", "Beta"), presets.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertEquals("Beta", presets.getSelectionModel().getSelectedItem().getName());
-
-            filter.setText("alp");
-            assertEquals(List.of("Alpha"), presets.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertNull(presets.getSelectionModel().getSelectedItem());
-            filter.clear();
-            assertEquals(List.of("Alpha", "Beta"), presets.getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertNull(presets.getSelectionModel().getSelectedItem());
-            assertEquals(flow.frame().sequence(), controller.templatesFrame().projectSequence());
-            assertSame(root, loader.getRoot());
-            stage.close();
+                assertEquals(1, session.getSnapshot().getSliderPresets().size());
+                assertEquals(1, ((TableView<?>) LoadedWorkbench.node(loader, "npcCatalogTable")).getItems().size());
+                disabled.set(Map.of(
+                        "importNpcSourcesButton", isDisabled(loader, "importNpcSourcesButton"),
+                        "removeNpcSourceButton", isDisabled(loader, "removeNpcSourceButton"),
+                        "clearNpcDatabaseButton", isDisabled(loader, "clearNpcDatabaseButton"),
+                        "importBodySlideButton", isDisabled(loader, "importBodySlideButton"),
+                        "generateOutputButton", isDisabled(loader, "generateOutputButton")));
+            } finally {
+                stage.close();
+            }
         });
+        return disabled.get();
     }
 
-    /**
-     * The in-place Templates editor renders one accessible group per immutable Slider choice, keeps focus on a row
-     * through its authoritative edit, and switches profile without losing the selected Slider Preset identity.
-     */
-    @Test
-    void templatesEditorRendersAccessibleRowsAndPreservesFocusAcrossEdits() throws Exception {
-        SettingsTestSupport.installDefaults(
-                Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)),
-                Map.of("Arms", new DefaultSliderValue(0.1f, 0.5f)));
-        try {
-            WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-            flow.apply(SliderPresetEdits.create("Alpha"));
-
-            FxTestToolkit.runOnFxThread(() -> {
-                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-                Parent root = loader.load();
-                WorkbenchController controller = loader.getController();
-                Stage stage = new Stage();
-                Scene scene = new Scene(root, 1300.0, 800.0);
-                stage.setScene(scene);
-                controller.attach(flow, stage, new RecordingPlatform());
-                stage.show();
-                @SuppressWarnings("unchecked")
-                ListView<SliderPresetSnapshot> presets =
-                        (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-                presets.getSelectionModel().select(0);
-                VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
-                SliderChoiceRow waist = (SliderChoiceRow) rows.getChildren().getFirst();
-
-                assertEquals("Slider choice Waist in Slider Preset Alpha", waist.getAccessibleText());
-                assertEquals("Waist@0.8", waist.previewControl().getText());
-                assertEquals("Waist Minimum in Slider Preset Alpha", waist.minimumControl().getAccessibleText());
-                waist.minimumControl().requestFocus();
-                assertEquals(SliderChoiceRow.FocusControl.MINIMUM,
-                        waist.focusedControl(scene.getFocusOwner()).orElseThrow());
-                assertSame(waist.minimumControl(), waist.control(SliderChoiceRow.FocusControl.MINIMUM));
-                CheckBox enabled = waist.enabledControl();
-                enabled.requestFocus();
-                enabled.fire();
-
-                assertSame(enabled, scene.getFocusOwner());
-                assertFalse(flow.frame().snapshot().getSliderPresets().getFirst().getSliderChoices().getFirst().isEnabled());
-                assertEquals(0, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
-                assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("changed"));
-
-                @SuppressWarnings("unchecked")
-                ComboBox<TemplatesFeature.Profile> profile =
-                        (ComboBox<TemplatesFeature.Profile>) loader.getNamespace().get("sliderPresetProfile");
-                profile.setValue(TemplatesFeature.Profile.UUNP);
-                profile.fireEvent(new ActionEvent());
-
-                assertEquals("Alpha", presets.getSelectionModel().getSelectedItem().getName());
-                assertEquals("Arms", ((SliderChoiceRow) rows.getChildren().getFirst()).choiceName());
-                stage.close();
-            });
-        } finally {
-            SettingsTestSupport.restoreRepositorySettings();
-        }
+    /** @return whether the named FXML button, from the shell or any module graph, is disabled */
+    private static boolean isDisabled(FXMLLoader loader, String id) {
+        return ((Button) LoadedWorkbench.node(loader, id)).isDisabled();
     }
 
     /**
@@ -1948,193 +1870,56 @@ class WorkbenchControllerTest {
      */
     @Test
     void templatesGangControlsAreAtomicExclusiveAndKeyboardReachable() throws Exception {
-        SettingsTestSupport.installDefaults(
+        fixture = WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(temporaryDirectory,
                 Map.of("Arms", new DefaultSliderValue(0.1f, 0.9f),
                         "Waist", new DefaultSliderValue(0.2f, 0.8f)),
-                Map.of());
-        try {
-            WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-            flow.apply(SliderPresetEdits.create("Alpha"));
-
-            FxTestToolkit.runOnFxThread(() -> {
-                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-                Parent root = loader.load();
-                WorkbenchController controller = loader.getController();
-                Stage stage = new Stage();
-                Scene scene = new Scene(root, 1300.0, 800.0);
-                stage.setScene(scene);
-                controller.attach(flow, stage, new RecordingPlatform());
-                stage.show();
-                @SuppressWarnings("unchecked")
-                ListView<SliderPresetSnapshot> presets =
-                        (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-                presets.getSelectionModel().select(0);
-                VBox rows = (VBox) loader.getNamespace().get("sliderChoiceRows");
-                Button fiftyAll = (Button) loader.getNamespace().get("fiftyAllSliderChoicesButton");
-                CheckBox minimumGang = (CheckBox) loader.getNamespace().get("gangMinimumCheck");
-                CheckBox maximumGang = (CheckBox) loader.getNamespace().get("gangMaximumCheck");
-
-                fiftyAll.requestFocus();
-                fiftyAll.fire();
-
-                assertSame(fiftyAll, scene.getFocusOwner());
-                assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().getFirst()
-                        .getSliderChoices().stream().map(choice -> choice.getPercentageMinimum()).toList());
-                assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().getFirst()
-                        .getSliderChoices().stream().map(choice -> choice.getPercentageMaximum()).toList());
-                assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
-
-                minimumGang.fire();
-                assertTrue(minimumGang.isSelected());
-                assertTrue(((SliderChoiceRow) rows.getChildren().getFirst()).enabledControl().isDisabled());
-                maximumGang.fire();
-
-                assertFalse(minimumGang.isSelected());
-                assertTrue(maximumGang.isSelected());
-                assertTrue(((SliderChoiceRow) rows.getChildren().getFirst()).minimumControl().isDisabled());
-                maximumGang.fire();
-                assertFalse(maximumGang.isSelected());
-                assertFalse(((SliderChoiceRow) rows.getChildren().getFirst()).enabledControl().isDisabled());
-                assertEquals("Gang all minimum Slider choice values", minimumGang.getAccessibleText());
-                minimumGang.requestFocus();
-                sendKey(root, KeyCode.F6);
-                assertSame(loader.getNamespace().get("activityList"), scene.getFocusOwner());
-                stage.close();
-            });
-        } finally {
-            SettingsTestSupport.restoreRepositorySettings();
-        }
-    }
-
-    /**
-     * F2 exposes one inline row editor whose rejected diagnostics retain the draft; a valid retry restores focusable
-     * selection to the renamed identity and the final Esc tier clears it without retargeting.
-     */
-    @Test
-    void templatesInlineRenameIsKeyboardCompleteAcrossRejectionAndSelectionClear() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+                Map.of()));
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(SliderPresetEdits.create("Beta"));
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
             Parent root = loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new RecordingPlatform());
+            Scene scene = new Scene(root, 1300.0, 800.0);
+            stage.setScene(scene);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             stage.show();
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
+                    (ListView<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "sliderPresetList");
             presets.getSelectionModel().select(0);
+            VBox rows = (VBox) LoadedWorkbench.node(loader, "sliderChoiceRows");
+            Button fiftyAll = (Button) LoadedWorkbench.node(loader, "fiftyAllSliderChoicesButton");
+            CheckBox minimumGang = (CheckBox) LoadedWorkbench.node(loader, "gangMinimumCheck");
+            CheckBox maximumGang = (CheckBox) LoadedWorkbench.node(loader, "gangMaximumCheck");
 
-            sendKey(root, KeyCode.F2);
-            root.applyCss();
-            root.layout();
-            TextField rename = controller.activeRenameField().orElseThrow();
-            rename.setText("Beta");
-            rename.fireEvent(new ActionEvent());
+            fiftyAll.requestFocus();
+            fiftyAll.fire();
 
-            assertEquals("Beta", controller.templatesFrame().rename().orElseThrow().draft());
-            assertFalse(controller.templatesFrame().rename().orElseThrow().diagnostics().isEmpty());
-            assertEquals("Alpha", presets.getSelectionModel().getSelectedItem().getName());
-            assertTrue(((HBox) loader.getNamespace().get("templatesInfoBar")).isVisible());
-            assertFalse(((HBox) loader.getNamespace().get("infoBar")).isVisible());
+            assertSame(fiftyAll, scene.getFocusOwner());
+            assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().getFirst()
+                    .getSliderChoices().stream().map(choice -> choice.getPercentageMinimum()).toList());
+            assertEquals(List.of(50, 50), flow.frame().snapshot().getSliderPresets().getFirst()
+                    .getSliderChoices().stream().map(choice -> choice.getPercentageMaximum()).toList());
             assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
-            assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("Validation"));
 
-            rename.setText("Gamma");
-            rename.fireEvent(new ActionEvent());
+            minimumGang.fire();
+            assertTrue(minimumGang.isSelected());
+            assertTrue(((SliderChoiceRow) rows.getChildren().getFirst()).enabledControl().isDisabled());
+            maximumGang.fire();
 
-            assertTrue(controller.templatesFrame().rename().isEmpty());
-            assertEquals("Gamma", presets.getSelectionModel().getSelectedItem().getName());
-            sendKey(root, KeyCode.ESCAPE);
-            assertNull(presets.getSelectionModel().getSelectedItem());
-            assertTrue(controller.templatesFrame().selection().isEmpty());
-            stage.close();
-        });
-    }
-
-    /**
-     * Templates destructive commands publish typed confirmations first, honor Cancel, and apply the captured selected
-     * or visible identity set only after the matching named action.
-     */
-    @Test
-    void templatesRemoveAndClearVisibleRequireSafeTypedConfirmation() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(SliderPresetEdits.create("Beta"));
-        flow.apply(SliderPresetEdits.create("Gamma"));
-        RecordingPlatform platform = new RecordingPlatform();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            controller.attach(flow, stage, platform);
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> presets =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            Button remove = (Button) loader.getNamespace().get("removeSliderPresetButton");
-            Button clear = (Button) loader.getNamespace().get("clearSliderPresetsButton");
-            TextField filter = (TextField) loader.getNamespace().get("sliderPresetFilter");
-            presets.getSelectionModel().select(0);
-
-            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
-            remove.fire();
-            assertEquals(List.of("Alpha", "Beta", "Gamma"), flow.frame().snapshot().getSliderPresets().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-
-            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
-            remove.fire();
-            assertEquals(List.of("Beta", "Gamma"), flow.frame().snapshot().getSliderPresets().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertNull(presets.getSelectionModel().getSelectedItem());
-
-            filter.setText("bet");
-            platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CLEAR);
-            clear.fire();
-            assertEquals(List.of("Gamma"), flow.frame().snapshot().getSliderPresets().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            assertTrue(controller.templatesFrame().visiblePresets().isEmpty());
-            stage.close();
-        });
-    }
-
-    /**
-     * Refilling a genuinely empty Templates list replaces its JavaFX node so Windows UI Automation receives a fresh
-     * virtualized child subtree instead of retaining the provider's stale empty tree.
-     */
-    @Test
-    void templatesEmptyToNonEmptyTransitionReplacesOnlyTheListViewAdapter() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new RecordingPlatform());
-            @SuppressWarnings("unchecked")
-            ListView<SliderPresetSnapshot> initial =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            TextField name = (TextField) loader.getNamespace().get("sliderPresetNameInput");
-            Button create = (Button) loader.getNamespace().get("createSliderPresetButton");
-
-            name.setText("Alpha");
-            create.fire();
-
-            assertNotSame(initial, controller.sliderPresetListNode());
-            assertEquals(List.of("Alpha"), controller.sliderPresetListNode().getItems().stream()
-                    .map(SliderPresetSnapshot::getName).toList());
-            root.applyCss();
-            assertTrue(controller.sliderPresetListNode().getPrefHeight() >= 28.0);
-            assertTrue(controller.sliderPresetListNode().getPrefHeight() < 56.0);
-            assertEquals(28.0, controller.sliderPresetListNode().getFixedCellSize());
-            assertSame(name.getParent(), controller.sliderPresetListNode().getParent());
+            assertFalse(minimumGang.isSelected());
+            assertTrue(maximumGang.isSelected());
+            assertTrue(((SliderChoiceRow) rows.getChildren().getFirst()).minimumControl().isDisabled());
+            maximumGang.fire();
+            assertFalse(maximumGang.isSelected());
+            assertFalse(((SliderChoiceRow) rows.getChildren().getFirst()).enabledControl().isDisabled());
+            assertEquals("Gang all minimum Slider choice values", minimumGang.getAccessibleText());
+            minimumGang.requestFocus();
+            sendKey(root, KeyCode.F6);
+            assertSame(loader.getNamespace().get("activityList"), scene.getFocusOwner());
             stage.close();
         });
     }
@@ -2162,12 +1947,9 @@ class WorkbenchControllerTest {
             case "Race" -> "npcRaceFilterButton";
             default -> throw new IllegalArgumentException("Unsupported test column: " + column);
         };
-        ToggleButton launcher = (ToggleButton) loader.getNamespace().get(buttonId);
+        ToggleButton launcher = (ToggleButton) LoadedWorkbench.node(loader, buttonId);
         launcher.fire();
-        Popup popup = (Popup) Window.getWindows().stream()
-                .filter(window -> window instanceof Popup && window.isShowing()
-                        && window.getScene().getRoot().lookup("#npcColumnFilterChoices") != null)
-                .findFirst().orElseThrow();
+        Popup popup = FxTestToolkit.showingPopup(launcher.getScene().getWindow(), "#npcColumnFilterChoices");
         assertTrue(launcher.getAccessibleHelp().contains("expanded"));
         ListView<?> choices = (ListView<?>) popup.getScene().getRoot().lookup("#npcColumnFilterChoices");
         int index = java.util.stream.IntStream.range(0, choices.getItems().size())
@@ -2184,11 +1966,11 @@ class WorkbenchControllerTest {
      */
     @Test
     void openCommandRendersTheAuthoritativeRecoveredFrame() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondWith(WorkbenchProjectFlow.Response.selected(source));
 
@@ -2197,7 +1979,7 @@ class WorkbenchControllerTest {
             loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, platform);
+            controller.attach(flow, stage, platform, fixture().environment());
 
             ((MenuItem) loader.getNamespace().get("openProjectMenuItem")).fire();
 
@@ -2231,11 +2013,11 @@ class WorkbenchControllerTest {
      */
     @Test
     void dirtyExitCanBeCancelledBeforeDiscardClosesTheWindow() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         Path source = temporaryDirectory.resolve("recovery-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "recovery-ordered-diagnostics.jbs2bg"),
                 source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondWith(WorkbenchProjectFlow.Response.selected(source));
         platform.respondWith(WorkbenchProjectFlow.Response.cancelled());
@@ -2246,7 +2028,7 @@ class WorkbenchControllerTest {
             loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, platform);
+            controller.attach(flow, stage, platform, fixture().environment());
             MenuItem open = (MenuItem) loader.getNamespace().get("openProjectMenuItem");
             MenuItem exit = (MenuItem) loader.getNamespace().get("exitMenuItem");
             open.fire();
@@ -2265,8 +2047,8 @@ class WorkbenchControllerTest {
     /** Cancelling a platform chooser records a truthful terminal outcome and restores the semantic launcher focus. */
     @Test
     void cancelledProjectChooserPublishesFeedbackAndRestoresFocus() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        assertTrue(fixture().startup().isSuccessful());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondWith(WorkbenchProjectFlow.Response.cancelled());
 
@@ -2276,7 +2058,7 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform);
+            controller.attach(flow, stage, platform, fixture().environment());
             ToggleButton launcher = (ToggleButton) loader.getNamespace().get("templatesAreaButton");
             stage.show();
             launcher.requestFocus();
@@ -2300,9 +2082,9 @@ class WorkbenchControllerTest {
     /** Window close and File Exit confirm dirty Settings before allowing the ordinary clean-Project close. */
     @Test
     void dirtySettingsCloseCanBeCancelledBeforeDiscardClosesTheWindow() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
         platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.DISCARD);
@@ -2313,21 +2095,21 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            controller.attach(flow, stage, platform, fixture().environment());
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
 
             WindowEvent closeRequest = new WindowEvent(stage, WindowEvent.WINDOW_CLOSE_REQUEST);
             stage.getOnCloseRequest().handle(closeRequest);
 
             assertTrue(closeRequest.isConsumed());
             assertEquals(0, platform.closeCount);
-            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertFalse(((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).isDisabled());
             ListView<?> activity = (ListView<?>) loader.getNamespace().get("activityList");
             assertEquals(WorkbenchFeedback.Disposition.CANCELLED,
                     assertInstanceOf(WorkbenchFeedback.ActivityRecord.class,
@@ -2344,7 +2126,7 @@ class WorkbenchControllerTest {
     /** Saving dirty Settings on close completes asynchronously before the dirty Project receives its own decision. */
     @Test
     void dirtySettingsSaveCompletesBeforeDirtyProjectCloseConfirmation() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -2355,7 +2137,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         flow.apply(SliderPresetEdits.create("Dirty Project"));
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
@@ -2368,16 +2150,16 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            controller.attach(flow, stage, platform, fixture().environment());
             publication.runNext();
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
 
             ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
 
@@ -2396,7 +2178,7 @@ class WorkbenchControllerTest {
             publication.runNext();
             publication.runNext();
 
-            assertEquals(2f, Settings.getMultiplier("Waist"));
+            assertEquals(2f, fixture().settings().getMultiplier("Waist"));
             assertTrue(flow.frame().closed());
             assertEquals(1, platform.closeCount);
             stageReference.get().close();
@@ -2406,7 +2188,7 @@ class WorkbenchControllerTest {
     /** An inline coordinator observes the close continuation before Save completion and closes exactly once. */
     @Test
     void dirtySettingsCloseSaveSurvivesInlineWorkerAndPublicationCompletion() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         JobCoordinator jobs = new JobCoordinator(new InlineExecutorService(), Runnable::run,
                 Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
@@ -2415,7 +2197,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
 
@@ -2425,18 +2207,18 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            controller.attach(flow, stage, platform, fixture().environment());
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
 
             ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
 
-            assertEquals(2f, Settings.getMultiplier("Waist"));
+            assertEquals(2f, fixture().settings().getMultiplier("Waist"));
             assertTrue(flow.frame().closed());
             assertEquals(1, platform.closeCount);
             stage.close();
@@ -2446,7 +2228,7 @@ class WorkbenchControllerTest {
     /** A failed Settings close-save retains both the dirty draft and the Workbench window. */
     @Test
     void failedDirtySettingsCloseSaveKeepsTheDraftAndWindowOpen() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -2457,7 +2239,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
         AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
@@ -2469,17 +2251,17 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            controller.attach(flow, stage, platform, fixture().environment());
             publication.runNext();
             loaderReference.set(loader);
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
             ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
         });
         Files.deleteIfExists(temporaryDirectory.resolve("settings.json"));
@@ -2498,7 +2280,7 @@ class WorkbenchControllerTest {
 
             assertFalse(flow.frame().closed());
             assertEquals(0, platform.closeCount);
-            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertFalse(((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).isDisabled());
             assertEquals(JobCoordinator.Lifecycle.FAILED,
                     jobs.frame().attempt().orElseThrow().lifecycle());
             stageReference.get().setOnCloseRequest(null);
@@ -2509,7 +2291,7 @@ class WorkbenchControllerTest {
     /** A close-save rejected during the shutdown/render gap cannot arm a later ordinary Settings Save to close. */
     @Test
     void rejectedSettingsAdmissionDoesNotLeaveAPhantomCloseContinuation() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -2520,7 +2302,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
         AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
@@ -2532,17 +2314,17 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            controller.attach(flow, stage, platform, fixture().environment());
             publication.runNext();
             loaderReference.set(loader);
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
             assertEquals(JobCoordinator.ShutdownResponse.READY, jobs.requestShutdown());
 
             ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
@@ -2553,7 +2335,7 @@ class WorkbenchControllerTest {
             assertTrue(jobs.resumeAfterShutdown());
             publication.runNext();
             publication.runNext();
-            ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).fire();
             assertTrue(jobs.frame().active());
         });
 
@@ -2575,7 +2357,7 @@ class WorkbenchControllerTest {
     /** A failed close-save Retry recaptures its token, restores semantic focus, and closes only after retry success. */
     @Test
     void failedDirtySettingsCloseSaveRetryPreservesTheCloseIntentAndFocus() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -2586,7 +2368,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
         platform.respondFailureWith(WorkbenchFeedback.DialogAction.RETRY,
@@ -2601,7 +2383,7 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            controller.attach(flow, stage, platform, fixture().environment());
             publication.runNext();
             loaderReference.set(loader);
             stageReference.set(stage);
@@ -2609,12 +2391,12 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            TextField editor = (TextField) loader.getNamespace().get("settingsEntryNameInput");
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            TextField editor = (TextField) LoadedWorkbench.node(loader, "settingsEntryNameInput");
             editor.requestFocus();
             assertSame(editor, stage.getScene().getFocusOwner());
             returnFocus.set(editor);
@@ -2644,7 +2426,7 @@ class WorkbenchControllerTest {
             publication.runNext();
             publication.runNext();
 
-            assertEquals(2f, Settings.getMultiplier("Waist"));
+            assertEquals(2f, fixture().settings().getMultiplier("Waist"));
             assertTrue(flow.frame().closed());
             assertEquals(1, platform.closeCount);
             stageReference.get().close();
@@ -2654,7 +2436,7 @@ class WorkbenchControllerTest {
     /** A failed Save retry becomes ordinarily unavailable after the draft returns clean, without callback failure. */
     @Test
     void cleanSettingsDraftMakesFailedSaveRetryUnavailableWithoutTechnicalFailure() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -2665,7 +2447,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
         AtomicReference<Stage> stageReference = new AtomicReference<>();
 
@@ -2675,18 +2457,18 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             publication.runNext();
             loaderReference.set(loader);
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).fire();
         });
         Files.deleteIfExists(temporaryDirectory.resolve("settings.json"));
         Files.deleteIfExists(temporaryDirectory.resolve("settings_UUNP.json"));
@@ -2700,9 +2482,9 @@ class WorkbenchControllerTest {
             publication.runNext();
             publication.runNext();
             FXMLLoader loader = loaderReference.get();
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).clear();
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            assertTrue(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).clear();
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            assertTrue(((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).isDisabled());
             @SuppressWarnings("unchecked")
             ListView<WorkbenchFeedback.ActivityRecord> activity =
                     (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
@@ -2723,7 +2505,7 @@ class WorkbenchControllerTest {
     /** Cancelling a queued Settings close-save retains the draft/window and restores its semantic return focus. */
     @Test
     void cancelledDirtySettingsCloseSaveRestoresFocusWithoutClosing() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -2734,7 +2516,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
         AtomicReference<Stage> stageReference = new AtomicReference<>();
@@ -2746,19 +2528,19 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
+            controller.attach(flow, stage, platform, fixture().environment());
             publication.runNext();
             stageReference.set(stage);
             stage.show();
             ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            TextField editor = (TextField) loader.getNamespace().get("settingsEntryNameInput");
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            TextField editor = (TextField) LoadedWorkbench.node(loader, "settingsEntryNameInput");
             editor.requestFocus();
             assertSame(editor, stage.getScene().getFocusOwner());
             returnFocus.set(editor);
@@ -2773,7 +2555,7 @@ class WorkbenchControllerTest {
                     jobs.frame().attempt().orElseThrow().lifecycle());
             assertFalse(flow.frame().closed());
             assertEquals(0, platform.closeCount);
-            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertFalse(((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).isDisabled());
             assertSame(returnFocus.get(), stage.getScene().getFocusOwner());
             stageReference.get().setOnCloseRequest(null);
             stageReference.get().close();
@@ -2786,7 +2568,7 @@ class WorkbenchControllerTest {
      */
     @Test
     void dirtyExitWaitsForTheApplicationWorkerSaveBeforeClosingTheWindow() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
                 Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
@@ -2796,7 +2578,7 @@ class WorkbenchControllerTest {
             throw new AssertionError("Unexpected callback failure", failure);
         });
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", fixture().newSession(), jobs);
         Path target = temporaryDirectory.resolve("close-after-save.jbs2bg").toAbsolutePath().normalize();
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
                 .effect().orElseThrow();
@@ -2811,7 +2593,7 @@ class WorkbenchControllerTest {
             loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, platform);
+            controller.attach(flow, stage, platform, fixture().environment());
 
             ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
 
@@ -2834,7 +2616,7 @@ class WorkbenchControllerTest {
      */
     @Test
     void closeDuringAnActiveJobCanSaveAfterThatJobSettles() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
                 Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
@@ -2844,7 +2626,7 @@ class WorkbenchControllerTest {
             throw new AssertionError("Unexpected callback failure", failure);
         });
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", fixture().newSession(), jobs);
         Path target = temporaryDirectory.resolve("active-job-close-save.jbs2bg").toAbsolutePath().normalize();
         WorkbenchProjectFlow.Effect chooser = flow.request(WorkbenchProjectFlow.Intent.SAVE_AS)
                 .effect().orElseThrow();
@@ -2859,7 +2641,7 @@ class WorkbenchControllerTest {
             loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, platform);
+            controller.attach(flow, stage, platform, fixture().environment());
             JobCoordinator.Submission<String> existingJob = new JobCoordinator.Submission<>(
                     new JobCoordinator.Operation("Existing Job", List.of(), List.of(), Optional.empty()),
                     context -> JobCoordinator.Result.completed("done", "Existing job completed.", List.of(),
@@ -2889,53 +2671,10 @@ class WorkbenchControllerTest {
         });
     }
 
-    /** A persistent preview diagnostic must not turn a successful Duplicate into failed Activity validation. */
-    @Test
-    void templatesDuplicateWithUnavailablePreviewRecordsTheMutation() throws Exception {
-        SettingsTestSupport.installStandardOutput(Map.of("Overflow", Float.valueOf(Float.MAX_VALUE)), List.of());
-        try {
-            WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
-            flow.apply(SliderPresetEdits.create("Alpha"));
-            flow.apply(SliderPresetEdits.setSliderChoice("Alpha", new SliderChoiceSnapshot(
-                    "Overflow", false, Integer.valueOf(10), Integer.valueOf(200),
-                    10, 200, 100, 100, false)));
-
-            FxTestToolkit.runOnFxThread(() -> {
-                FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-                loader.load();
-                WorkbenchController controller = loader.getController();
-                Stage stage = new Stage();
-                try {
-                    controller.attach(flow, stage, new RecordingPlatform());
-                    controller.sliderPresetListNode().getSelectionModel().selectFirst();
-                    ((TextField) loader.getNamespace().get("sliderPresetNameInput")).setText("Beta");
-                    ((Button) loader.getNamespace().get("duplicateSliderPresetButton")).fire();
-
-                    assertEquals(List.of("Alpha", "Beta"), flow.frame().snapshot().getSliderPresets().stream()
-                            .map(SliderPresetSnapshot::getName).toList());
-                    assertEquals("TEMPLATE_PREVIEW_NON_FINITE",
-                            controller.templatesFrame().diagnostics().getFirst().getCode());
-                    @SuppressWarnings("unchecked")
-                    ListView<WorkbenchFeedback.ActivityRecord> activity =
-                            (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
-                    assertEquals(1, activity.getItems().size(), activity.getItems().stream()
-                            .map(item -> item.operation() + ": " + item.message()).toList().toString());
-                    assertEquals("Duplicate Slider Preset", activity.getItems().getFirst().operation());
-                    assertEquals(WorkbenchFeedback.Disposition.COMPLETED,
-                            activity.getItems().getFirst().disposition());
-                } finally {
-                    stage.close();
-                }
-            });
-        } finally {
-            SettingsTestSupport.restoreRepositorySettings();
-        }
-    }
-
     /** A failure during a pending Close cannot offer Retry while coordinator admission remains shut down. */
     @Test
     void pendingShutdownFailureDialogDoesNotOfferUnadmittableRetry() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
                 Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
@@ -2944,7 +2683,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
 
         FxTestToolkit.runOnFxThread(() -> {
@@ -2953,7 +2692,7 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             try {
-                controller.attach(flow, stage, platform);
+                controller.attach(flow, stage, platform, fixture().environment());
                 AtomicReference<JobCoordinator.Submission<String>> retryable = new AtomicReference<>();
                 JobCoordinator.Submission<String> failing = new JobCoordinator.Submission<>(
                         new JobCoordinator.Operation("Synthetic export", List.of(), List.of(), Optional.empty()),
@@ -2984,10 +2723,10 @@ class WorkbenchControllerTest {
      */
     @Test
     void malformedOpenRendersCompleteSourceCoordinates() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         Path source = temporaryDirectory.resolve("malformed-project.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "malformed-syntax.jbs2bg"), source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondWith(WorkbenchProjectFlow.Response.selected(source));
 
@@ -2996,7 +2735,7 @@ class WorkbenchControllerTest {
             loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, platform);
+            controller.attach(flow, stage, platform, fixture().environment());
             ((MenuItem) loader.getNamespace().get("openProjectMenuItem")).fire();
 
             String diagnostics = ((TextArea) loader.getNamespace().get("diagnosticsText")).getText();
@@ -3014,10 +2753,10 @@ class WorkbenchControllerTest {
      */
     @Test
     void failedOpenActivityCanRetryWithFreshlyCapturedInputs() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         Path source = temporaryDirectory.resolve("retry-source.jbs2bg");
         Files.copy(Path.of("test-resources", "json-oracles", "project", "malformed-syntax.jbs2bg"), source);
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondWith(WorkbenchProjectFlow.Response.selected(source));
 
@@ -3026,7 +2765,7 @@ class WorkbenchControllerTest {
             loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, platform);
+            controller.attach(flow, stage, platform, fixture().environment());
             ((MenuItem) loader.getNamespace().get("openProjectMenuItem")).fire();
             @SuppressWarnings("unchecked")
             ListView<WorkbenchFeedback.ActivityRecord> activity =
@@ -3052,7 +2791,7 @@ class WorkbenchControllerTest {
     /** Activity's historical retry flag cannot enable Retry or imply current availability after factory eviction. */
     @Test
     void evictedActivityRetryIsDisabled() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
                 Clock.fixed(Instant.parse("2026-08-29T20:00:00Z"), ZoneOffset.UTC),
@@ -3061,7 +2800,7 @@ class WorkbenchControllerTest {
                 }, failure -> {
             throw new AssertionError("Unexpected callback failure", failure);
         });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -3070,7 +2809,7 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
             try {
-                controller.attach(flow, stage, new RecordingPlatform());
+                controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
                 stage.show();
                 AtomicReference<JobCoordinator.Submission<String>> retryable = new AtomicReference<>();
                 JobCoordinator.Submission<String> failing = new JobCoordinator.Submission<>(
@@ -3122,7 +2861,7 @@ class WorkbenchControllerTest {
      */
     @Test
     void activeJobOwnsAdmissionProgressAndCancelControls() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
+        assertTrue(fixture().startup().isSuccessful());
         Path source = temporaryDirectory.resolve("queued-source.jbs2bg");
         Files.copy(Path.of("test-resources", "projects", "legacy-project-semantics.jbs2bg"), source);
         ManualExecutor worker = new ManualExecutor();
@@ -3134,7 +2873,7 @@ class WorkbenchControllerTest {
             throw new AssertionError("Unexpected callback failure", failure);
         });
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", fixture().newSession(), jobs);
         RecordingPlatform platform = new RecordingPlatform();
         platform.respondWith(WorkbenchProjectFlow.Response.selected(source));
 
@@ -3143,7 +2882,7 @@ class WorkbenchControllerTest {
             loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
-            controller.attach(flow, stage, platform);
+            controller.attach(flow, stage, platform, fixture().environment());
             MenuItem open = (MenuItem) loader.getNamespace().get("openProjectMenuItem");
             MenuItem create = (MenuItem) loader.getNamespace().get("newProjectMenuItem");
             MenuItem save = (MenuItem) loader.getNamespace().get("saveProjectMenuItem");
@@ -3186,7 +2925,7 @@ class WorkbenchControllerTest {
      */
     @Test
     void keyboardNavigationPreservesTheActiveAreaWhenOutputToggles() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -3194,7 +2933,7 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, new RecordingPlatform());
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             stage.show();
 
             sendControlKey(root, KeyCode.DIGIT2);
@@ -3205,8 +2944,8 @@ class WorkbenchControllerTest {
             assertEquals("Morphs", ((Label) loader.getNamespace().get("areaTitle")).getText());
             assertTrue(((ToggleButton) loader.getNamespace().get("morphsAreaButton")).isSelected());
             assertTrue(((ToggleButton) loader.getNamespace().get("outputAreaButton")).isSelected());
-            VBox outputDrawer = (VBox) loader.getNamespace().get("outputDrawer");
-            Slider outputHeight = (Slider) loader.getNamespace().get("outputDrawerHeight");
+            VBox outputDrawer = (VBox) LoadedWorkbench.node(loader, "outputDrawer");
+            Slider outputHeight = (Slider) LoadedWorkbench.node(loader, "outputDrawerHeight");
             assertTrue(outputDrawer.isVisible());
             outputHeight.setValue(260.0);
             assertEquals(260.0, outputDrawer.getPrefHeight());
@@ -3214,7 +2953,7 @@ class WorkbenchControllerTest {
 
             sendControlKey(root, KeyCode.BACK_QUOTE);
             assertEquals("Morphs", ((Label) loader.getNamespace().get("areaTitle")).getText());
-            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
+            assertFalse(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
 
             ToggleButton outputLauncher = (ToggleButton) loader.getNamespace().get("outputAreaButton");
             outputLauncher.requestFocus();
@@ -3230,7 +2969,7 @@ class WorkbenchControllerTest {
      */
     @Test
     void semanticFocusTraversalAndOutputFocusRestorationArePredictable() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -3239,16 +2978,16 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             Scene scene = new Scene(root, 1300, 720);
             stage.setScene(scene);
-            controller.attach(flow, stage, new RecordingPlatform());
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             stage.show();
 
             sendControlKey(root, KeyCode.DIGIT2);
             @SuppressWarnings("unchecked")
             ListView<CustomMorphTargetSnapshot> primary =
-                    (ListView<CustomMorphTargetSnapshot>) loader.getNamespace().get("customMorphTargetList");
-            Label editor = (Label) loader.getNamespace().get("morphTargetEditorFocusTarget");
-            Label inspector = (Label) loader.getNamespace().get("morphTargetSelectionText");
-            Label output = (Label) loader.getNamespace().get("outputFocusTarget");
+                    (ListView<CustomMorphTargetSnapshot>) LoadedWorkbench.node(loader, "customMorphTargetList");
+            Label editor = (Label) LoadedWorkbench.node(loader, "morphTargetEditorFocusTarget");
+            Label inspector = (Label) LoadedWorkbench.node(loader, "morphTargetSelectionText");
+            Label output = (Label) LoadedWorkbench.node(loader, "outputFocusTarget");
             assertSame(primary, scene.getFocusOwner());
 
             sendKey(root, KeyCode.F6);
@@ -3262,130 +3001,7 @@ class WorkbenchControllerTest {
 
             sendKey(root, KeyCode.ESCAPE);
             assertSame(inspector, scene.getFocusOwner());
-            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
-            stage.close();
-        });
-    }
-
-    /** Ctrl+G publishes all captured Output tabs through the central job without moving editor focus. */
-    @Test
-    void generateRendersReadOnlyOutputTabsWithoutStealingFocus() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
-        assertTrue(initialized.isSuccessful());
-        ManualExecutor worker = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
-                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // This small generated Project settles before prolonged cancellation feedback is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected coordinator callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
-        flow.apply(SliderPresetEdits.create("Generated UI"));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            Scene scene = new Scene(root, 1300, 720);
-            stage.setScene(scene);
-            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
-            stage.show();
-
-            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
-            editor.requestFocus();
-            sendControlKey(root, KeyCode.G);
-
-            Button generate = (Button) loader.getNamespace().get("generateOutputButton");
-            assertTrue(jobs.frame().active());
-            assertTrue(generate.isDisabled());
-            worker.runNext();
-
-            assertTrue(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
-            TabPane tabs = (TabPane) loader.getNamespace().get("outputTabs");
-            TextArea templates = (TextArea) loader.getNamespace().get("templatesOutputText");
-            TextArea morphs = (TextArea) loader.getNamespace().get("morphsOutputText");
-            TextArea bos = (TextArea) loader.getNamespace().get("bosOutputText");
-            assertEquals(3, tabs.getTabs().size());
-            assertTrue(templates.getText().startsWith("Generated UI="));
-            assertEquals("", morphs.getText());
-            assertFalse(bos.getText().isEmpty());
-            for (TextArea output : List.of(templates, morphs, bos)) {
-                assertFalse(output.isEditable());
-                assertTrue(output.isFocusTraversable());
-            }
-            assertSame(editor, scene.getFocusOwner());
-            stage.close();
-        });
-    }
-
-    /** Output controls realize accepted copy and complete/selected export effects without reading editable UI state. */
-    @Test
-    void copyAndExportOutputUseThePlatformAdapterAndCentralJobPath() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
-        assertTrue(initialized.isSuccessful());
-        ManualExecutor worker = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
-                Clock.fixed(Instant.parse("2026-08-31T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // These small export batches settle before prolonged cancellation feedback is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected coordinator callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
-        flow.apply(SliderPresetEdits.create("Platform Output"));
-        RecordingPlatform platform = new RecordingPlatform();
-        Path completeDirectory = Files.createDirectory(temporaryDirectory.resolve("complete-output"));
-        Path selectedFile = temporaryDirectory.resolve("selected.JSON");
-        platform.respondOutputDirectoryWith(Optional.of(completeDirectory));
-        platform.respondOutputFileWith(Optional.of(selectedFile));
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            Scene scene = new Scene(root, 1300, 720);
-            stage.setScene(scene);
-            controller.attach(flow, stage, platform, temporaryDirectory, initialized);
-            stage.show();
-            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
-            editor.requestFocus();
-            ((Button) loader.getNamespace().get("generateOutputButton")).fire();
-            worker.runNext();
-
-            TextArea templates = (TextArea) loader.getNamespace().get("templatesOutputText");
-            Button copy = (Button) loader.getNamespace().get("copyOutputButton");
-            Button exportAll = (Button) loader.getNamespace().get("exportOutputButton");
-            assertFalse(copy.isDisabled());
-            assertFalse(exportAll.isDisabled());
-            copy.fire();
-            assertEquals(List.of(templates.getText()), platform.clipboardTexts);
-            assertEquals("templates.ini copied to the clipboard.",
-                    ((Label) loader.getNamespace().get("infoBarMessage")).getText());
-            assertSame(editor, scene.getFocusOwner());
-
-            sendControlKey(root, KeyCode.E);
-            assertTrue(jobs.frame().active());
-            assertTrue(exportAll.isDisabled());
-            worker.runNext();
-            assertArrayEquals(templates.getText().getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                    Files.readAllBytes(completeDirectory.resolve("templates.ini")));
-            assertSame(editor, scene.getFocusOwner());
-
-            TabPane tabs = (TabPane) loader.getNamespace().get("outputTabs");
-            tabs.getSelectionModel().select((javafx.scene.control.Tab) loader.getNamespace().get("bosOutputTab"));
-            Button selectedExport = (Button) loader.getNamespace().get("exportSelectedBosButton");
-            assertFalse(selectedExport.isDisabled());
-            String bos = ((TextArea) loader.getNamespace().get("bosOutputText")).getText();
-            selectedExport.fire();
-            worker.runNext();
-            assertArrayEquals(bos.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                    Files.readAllBytes(selectedFile));
-            assertSame(editor, scene.getFocusOwner());
+            assertFalse(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
             stage.close();
         });
     }
@@ -3393,7 +3009,7 @@ class WorkbenchControllerTest {
     /** A Templates edit remains available during Generate and makes its captured completion stale and invisible. */
     @Test
     void projectEditDuringGenerateProducesStaleActivityWithoutRevealingOutput() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
@@ -3404,7 +3020,7 @@ class WorkbenchControllerTest {
             throw new AssertionError("Unexpected coordinator callback failure", failure);
         });
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", fixture().newSession(), jobs);
         flow.apply(SliderPresetEdits.create("Captured UI"));
 
         FxTestToolkit.runOnFxThread(() -> {
@@ -3414,23 +3030,23 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             Scene scene = new Scene(root, 1300, 720);
             stage.setScene(scene);
-            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             stage.show();
-            Label editor = (Label) loader.getNamespace().get("templateEditorFocusTarget");
+            Label editor = (Label) LoadedWorkbench.node(loader, "templateEditorFocusTarget");
             editor.requestFocus();
 
             sendControlKey(root, KeyCode.G);
-            TextField name = (TextField) loader.getNamespace().get("sliderPresetNameInput");
-            Button create = (Button) loader.getNamespace().get("createSliderPresetButton");
+            TextField name = (TextField) LoadedWorkbench.node(loader, "sliderPresetNameInput");
+            Button create = (Button) LoadedWorkbench.node(loader, "createSliderPresetButton");
             assertFalse(create.isDisabled());
-            assertTrue(((Button) loader.getNamespace().get("importBodySlideButton")).isDisabled());
+            assertTrue(((Button) LoadedWorkbench.node(loader, "importBodySlideButton")).isDisabled());
             name.setText("Newer UI");
             create.fire();
             worker.runNext();
 
-            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
+            assertFalse(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
             assertEquals("Generate Project output to inspect it here.",
-                    ((TextArea) loader.getNamespace().get("templatesOutputText")).getText());
+                    ((TextArea) LoadedWorkbench.node(loader, "templatesOutputText")).getText());
             JobCoordinator.Attempt stale = jobs.frame().attempt().orElseThrow();
             assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, stale.lifecycle());
             assertEquals(List.of("STALE_RESULT"), stale.diagnostics().stream()
@@ -3443,7 +3059,7 @@ class WorkbenchControllerTest {
     /** Cancel honours a queued Generate before work starts and never reveals or populates Output. */
     @Test
     void cancelledGeneratePublishesActivityWithoutOutput() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
@@ -3454,7 +3070,7 @@ class WorkbenchControllerTest {
             throw new AssertionError("Unexpected coordinator callback failure", failure);
         });
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow(
-                "BS2BG Preview", ProjectSessions.create(), jobs);
+                "BS2BG Preview", fixture().newSession(), jobs);
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -3462,7 +3078,7 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, new RecordingPlatform(), temporaryDirectory, initialized);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             stage.show();
 
             sendControlKey(root, KeyCode.G);
@@ -3473,9 +3089,9 @@ class WorkbenchControllerTest {
 
             assertEquals(JobCoordinator.Lifecycle.CANCELLED,
                     jobs.frame().attempt().orElseThrow().lifecycle());
-            assertFalse(((VBox) loader.getNamespace().get("outputDrawer")).isVisible());
+            assertFalse(((VBox) LoadedWorkbench.node(loader, "outputDrawer")).isVisible());
             assertEquals("Generate Project output to inspect it here.",
-                    ((TextArea) loader.getNamespace().get("templatesOutputText")).getText());
+                    ((TextArea) LoadedWorkbench.node(loader, "templatesOutputText")).getText());
             @SuppressWarnings("unchecked")
             ListView<WorkbenchFeedback.ActivityRecord> activity =
                     (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
@@ -3489,16 +3105,18 @@ class WorkbenchControllerTest {
      */
     @Test
     void themeChoiceAndSemanticIconsRenderThroughTheLoadedWorkbench() throws Exception {
-        assertTrue(Settings.initialize(temporaryDirectory).isSuccessful());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        assertTrue(fixture().startup().isSuccessful());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
+            // Explicitly not High Contrast: High Contrast would override the Light choice asserted below.
+            fixture().appearancePreferences().publish(WorkbenchAppearance.PlatformPreferences.light());
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
             BorderPane root = loader.load();
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, new RecordingPlatform());
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
 
             @SuppressWarnings("unchecked")
             ComboBox<WorkbenchAppearance.ThemeChoice> themeChoice =
@@ -3516,10 +3134,105 @@ class WorkbenchControllerTest {
         });
     }
 
+    /** OS High Contrast at startup wins over the chosen theme, and ending it restores that unchanged choice. */
+    @Test
+    void highContrastPreferenceOverridesTheThemeChoiceThroughTheLoadedWorkbench() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        FakeAppearancePreferencesSource os = fixture().appearancePreferences();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            os.publish(WorkbenchAppearance.PlatformPreferences.light().withHighContrast(true));
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            Label appearance = (Label) loader.getNamespace().get("appearanceStateText");
+
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-high-contrast")));
+            assertEquals("High Contrast theme", appearance.getText());
+
+            @SuppressWarnings("unchecked")
+            ComboBox<WorkbenchAppearance.ThemeChoice> themeChoice =
+                    (ComboBox<WorkbenchAppearance.ThemeChoice>) loader.getNamespace().get("themeChoice");
+            themeChoice.setValue(WorkbenchAppearance.ThemeChoice.DARK);
+            themeChoice.fireEvent(new ActionEvent());
+            assertEquals("High Contrast theme", appearance.getText());
+
+            os.publish(WorkbenchAppearance.PlatformPreferences.light());
+            assertFalse(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-high-contrast")));
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-dark")));
+            assertEquals("Dark theme", appearance.getText());
+            stage.close();
+        });
+    }
+
+    /** A dark OS color scheme renders the Dark theme when the persisted choice follows the System. */
+    @Test
+    void darkSystemPreferenceRendersTheDarkThemeThroughTheLoadedWorkbench() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            fixture().appearancePreferences().publish(WorkbenchAppearance.PlatformPreferences.dark());
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+
+            @SuppressWarnings("unchecked")
+            ComboBox<WorkbenchAppearance.ThemeChoice> themeChoice =
+                    (ComboBox<WorkbenchAppearance.ThemeChoice>) loader.getNamespace().get("themeChoice");
+            assertEquals(WorkbenchAppearance.ThemeChoice.SYSTEM, themeChoice.getValue());
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-dark")));
+            assertFalse(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-light")));
+            assertEquals("Dark theme", ((Label) loader.getNamespace().get("appearanceStateText")).getText());
+            stage.close();
+        });
+    }
+
+    /**
+     * A live OS preference change re-renders the shown Workbench, and hiding the window releases the subscription so
+     * a later change no longer reaches it.
+     */
+    @Test
+    void livePreferenceChangesRefreshTheLoadedWorkbenchUntilItIsHidden() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        FakeAppearancePreferencesSource os = fixture().appearancePreferences();
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            BorderPane root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300, 720));
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
+            stage.show();
+            Label appearance = (Label) loader.getNamespace().get("appearanceStateText");
+            Label motion = (Label) loader.getNamespace().get("motionStateText");
+            assertEquals("Light theme", appearance.getText());
+            assertEquals("Standard motion", motion.getText());
+            assertEquals(1, os.subscriberCount());
+
+            os.publish(WorkbenchAppearance.PlatformPreferences.dark().withReducedMotion(true));
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-dark")));
+            assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-reduced-motion")));
+            assertEquals("Dark theme", appearance.getText());
+            assertEquals("Reduced motion", motion.getText());
+
+            stage.close();
+            assertEquals(0, os.subscriberCount());
+            os.publish(WorkbenchAppearance.PlatformPreferences.light());
+            assertEquals("Dark theme", appearance.getText());
+        });
+    }
+
     /** Theme selection updates the live appearance before its profile write runs on the application worker. */
     @Test
     void themePersistenceRunsAfterVisualSelectionOnTheWorker() throws Exception {
-        Settings.InitializationResult initialized = Settings.initialize(temporaryDirectory);
+        Settings.InitializationResult initialized = fixture().startup();
         assertTrue(initialized.isSuccessful());
         ManualExecutor worker = new ManualExecutor();
         ManualExecutor publication = new ManualExecutor();
@@ -3528,9 +3241,10 @@ class WorkbenchControllerTest {
                 (delay, action) -> () -> {
                     // The controlled theme save settles before prolonged cancellation is relevant.
                 }, failure -> { throw new AssertionError("Unexpected callback failure", failure); });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create(), jobs);
-        AtomicReference<Boolean> savedOnFxThread = new AtomicReference<>();
-        AtomicReference<WorkbenchAppearance.ThemeChoice> savedChoice = new AtomicReference<>();
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
+        // The environment's preferences directory owns the theme choice, so the saved file is the observable write.
+        WorkbenchAppearanceStore themeStore = new WorkbenchAppearanceStore(temporaryDirectory);
+        Path themeFile = temporaryDirectory.resolve(WorkbenchAppearanceStore.FILE_NAME);
         AtomicReference<Stage> stageReference = new AtomicReference<>();
 
         FxTestToolkit.runOnFxThread(() -> {
@@ -3539,12 +3253,7 @@ class WorkbenchControllerTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, new RecordingPlatform(), WorkbenchAppearance.ThemeChoice.SYSTEM,
-                    choice -> {
-                        savedChoice.set(choice);
-                        savedOnFxThread.set(Platform.isFxApplicationThread());
-                    }, temporaryDirectory, initialized,
-                    GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             publication.runNext();
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
@@ -3556,13 +3265,12 @@ class WorkbenchControllerTest {
             assertTrue(root.getPseudoClassStates().contains(PseudoClass.getPseudoClass("workbench-light")));
             assertEquals("Light theme", ((Label) loader.getNamespace().get("appearanceStateText")).getText());
             assertTrue(jobs.frame().active());
-            assertNull(savedChoice.get());
+            assertFalse(Files.exists(themeFile));
         });
 
         Thread themeWorker = worker.runNextAsync();
         themeWorker.join();
-        assertEquals(WorkbenchAppearance.ThemeChoice.LIGHT, savedChoice.get());
-        assertEquals(Boolean.FALSE, savedOnFxThread.get());
+        assertEquals(WorkbenchAppearance.ThemeChoice.LIGHT, themeStore.load());
         FxTestToolkit.runOnFxThread(() -> {
             for (int index = 0; index < 6 && jobs.frame().active(); index++)
                 publication.runNext();
@@ -3576,7 +3284,7 @@ class WorkbenchControllerTest {
      */
     @Test
     void narrowLayoutKeepsTheEditorInlineAndUsesFocusRestoringSideOverlays() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", ProjectSessions.create());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -3585,7 +3293,7 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             Scene scene = new Scene(root, 1300, 720);
             stage.setScene(scene);
-            controller.attach(flow, stage, new RecordingPlatform());
+            controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
             stage.show();
 
             root.resize(1199, 720);
@@ -3598,8 +3306,8 @@ class WorkbenchControllerTest {
             Button inspectorLauncher = (Button) loader.getNamespace().get("showInspectorOverlayButton");
             @SuppressWarnings("unchecked")
             ListView<SliderPresetSnapshot> primary =
-                    (ListView<SliderPresetSnapshot>) loader.getNamespace().get("sliderPresetList");
-            Label inspector = (Label) loader.getNamespace().get("templateSelectionText");
+                    (ListView<SliderPresetSnapshot>) LoadedWorkbench.node(loader, "sliderPresetList");
+            Label inspector = (Label) LoadedWorkbench.node(loader, "templateSelectionText");
 
             assertEquals(java.util.List.of(editorPane), areaPanes.getChildren());
             assertTrue(listLauncher.isVisible());
@@ -3626,12 +3334,12 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
             root.resize(1199, 720);
             listLauncher.fire();
-            assertSame(loader.getNamespace().get("npcSourceList"), scene.getFocusOwner());
+            assertSame(LoadedWorkbench.node(loader, "npcSourceList"), scene.getFocusOwner());
             sendKey(root, KeyCode.ESCAPE);
             sendKey(root, KeyCode.F7);
-            assertSame(loader.getNamespace().get("npcInspectorName"), scene.getFocusOwner());
+            assertSame(LoadedWorkbench.node(loader, "npcInspectorName"), scene.getFocusOwner());
             assertEquals("NPC Database catalog",
-                    ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getAccessibleText());
+                    ((TableView<?>) LoadedWorkbench.node(loader, "npcCatalogTable")).getAccessibleText());
             stage.close();
         });
     }
@@ -3678,197 +3386,6 @@ class WorkbenchControllerTest {
             if (shutdown)
                 throw new java.util.concurrent.RejectedExecutionException("inline executor is shut down");
             Objects.requireNonNull(command, "command").run();
-        }
-    }
-
-    /** Delegates lifecycle operations while supplying deterministic Project edit rejection or failure. */
-    private static final class RefusingEditSession implements ProjectSession {
-        private final ProjectSession delegate;
-        private boolean refuse;
-        private boolean failed;
-
-        /** Wraps a real session so fixture setup and snapshots retain production semantics. */
-        private RefusingEditSession(ProjectSession delegate) {
-            this.delegate = delegate;
-        }
-
-        /** Arms the requested outcome only after fixture creation through the public Project seam. */
-        private void refuseEdits(boolean failure) {
-            refuse = true;
-            failed = failure;
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public ProjectSnapshot getSnapshot() {
-            return delegate.getSnapshot();
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public ProjectOutcome newProject() {
-            return delegate.newProject();
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public ProjectOutcome open(Path source, ProjectOperationContext context) {
-            return delegate.open(source, context);
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public ProjectOutcome save(ProjectOperationContext context) {
-            return delegate.save(context);
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public ProjectOutcome saveAs(Path target, ProjectOperationContext context) {
-            return delegate.saveAs(target, context);
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public SliderPresetImportOutcome importSliderPresets(List<Path> sources, ProjectOperationContext context) {
-            return delegate.importSliderPresets(sources, context);
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public ProjectOutcome refreshSettings() {
-            return delegate.refreshSettings();
-        }
-
-        /** Preserves the Project while returning a structured diagnostic after rejection is armed. */
-        @Override
-        public ProjectOutcome apply(ProjectEdit edit) {
-            if (!refuse)
-                return delegate.apply(edit);
-            List<ProjectDiagnostic> diagnostics = List.of(new ProjectDiagnostic("TEST_MORPH_REMOVE",
-                    DiagnosticSeverity.ERROR, new SourceLocation(Optional.empty(), Optional.of("custom-target"),
-                    OptionalInt.empty(), OptionalInt.empty()), "The target could not be removed."));
-            return failed ? new FailedOutcome(delegate.getSnapshot(), diagnostics)
-                    : new RejectedOutcome(delegate.getSnapshot(), diagnostics);
-        }
-
-        /** Preserves the armed refusal for bulk NPC edits as well as single edits. */
-        @Override
-        public NpcPromotionOutcome promoteNpcs(List<NpcMorphAssignmentSnapshot> sources) {
-            if (!refuse)
-                return delegate.promoteNpcs(sources);
-            ProjectOutcome refusal = apply(NpcMorphAssignmentEdits.addNpcs(sources));
-            return new NpcPromotionOutcome(refusal, java.util.Collections.nCopies(sources.size(), refusal));
-        }
-    }
-
-    /**
-     * Test adapter for modal platform effects; responses are consumed in user-interaction order.
-     */
-    private static final class RecordingPlatform implements WorkbenchPlatform {
-        private final Deque<WorkbenchProjectFlow.Response> responses = new ArrayDeque<>();
-        private final Deque<WorkbenchFeedback.DialogAction> confirmationResponses = new ArrayDeque<>();
-        private final Deque<WorkbenchFeedback.DialogAction> failureResponses = new ArrayDeque<>();
-        private final Deque<Runnable> failureHooks = new ArrayDeque<>();
-        private final Deque<Optional<Path>> outputDirectoryResponses = new ArrayDeque<>();
-        private final Deque<Optional<Path>> outputFileResponses = new ArrayDeque<>();
-        private final Deque<Optional<List<Path>>> npcSourceResponses = new ArrayDeque<>();
-        private final List<String> clipboardTexts = new java.util.ArrayList<>();
-        private WorkbenchFeedback.DialogSpec failureSpec;
-        private int closeCount;
-
-        /**
-         * Adds the next chooser or confirmation result.
-         */
-        void respondWith(WorkbenchProjectFlow.Response response) {
-            responses.addLast(response);
-        }
-
-        /**
-         * Adds the next destructive feature confirmation action.
-         */
-        void respondConfirmationWith(WorkbenchFeedback.DialogAction action) {
-            confirmationResponses.addLast(action);
-        }
-
-        /** Adds the next failure-dialog action and a hook run immediately before that response is returned. */
-        void respondFailureWith(WorkbenchFeedback.DialogAction action, Runnable beforeResponse) {
-            failureResponses.addLast(action);
-            failureHooks.addLast(beforeResponse);
-        }
-
-        /** Adds the next Output directory-chooser result. */
-        void respondOutputDirectoryWith(Optional<Path> response) {
-            outputDirectoryResponses.addLast(response);
-        }
-
-        /** Adds the next selected-BoS save-chooser result. */
-        void respondOutputFileWith(Optional<Path> response) {
-            outputFileResponses.addLast(response);
-        }
-
-        /** Adds the next NPC Database multi-file chooser result. */
-        void respondNpcSourcesWith(Optional<List<Path>> response) {
-            npcSourceResponses.addLast(response);
-        }
-
-        /** Returns the next scripted NPC Database source selection. */
-        @Override
-        public Optional<List<Path>> chooseNpcSources(Stage owner) {
-            return npcSourceResponses.removeFirst();
-        }
-
-        /**
-         * Returns the next scripted real-platform result.
-         */
-        @Override
-        public WorkbenchProjectFlow.Response complete(WorkbenchProjectFlow.Effect effect, Stage owner) {
-            return responses.removeFirst();
-        }
-
-        /**
-         * Returns the next scripted destructive feature confirmation.
-         */
-        @Override
-        public WorkbenchFeedback.DialogAction completeConfirmation(WorkbenchFeedback.DialogSpec spec, Stage owner) {
-            return confirmationResponses.removeFirst();
-        }
-
-        /** Records the offered failure actions and runs the scripted hook before returning a response. */
-        @Override
-        public WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
-            failureSpec = spec;
-            if (failureResponses.isEmpty())
-                return WorkbenchFeedback.DialogAction.CLOSE;
-            failureHooks.removeFirst().run();
-            return failureResponses.removeFirst();
-        }
-
-        /** Records accepted clipboard text without consulting a JavaFX TextArea. */
-        @Override
-        public boolean copyOutputText(String text) {
-            clipboardTexts.add(text);
-            return true;
-        }
-
-        /** Returns the next scripted complete-batch directory. */
-        @Override
-        public Optional<Path> chooseOutputDirectory(Stage owner) {
-            return outputDirectoryResponses.removeFirst();
-        }
-
-        /** Returns the next scripted selected-BoS destination. */
-        @Override
-        public Optional<Path> chooseOutputFile(String suggestedFileName, Stage owner) {
-            return outputFileResponses.removeFirst();
-        }
-
-        /**
-         * Records the at-most-once final close effect without closing the test Stage.
-         */
-        @Override
-        public void closeWindow(Stage owner) {
-            closeCount++;
         }
     }
 

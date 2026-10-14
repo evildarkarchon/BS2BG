@@ -10,7 +10,7 @@
       1. Requires a clean committed Git checkout, then reads the payload the Maven Wrapper staged
          (target/app-image-input: the application jar plus lib/ with every runtime-scoped dependency; JavaFX is
          deliberately absent because the runtime supplies it).
-      2. Measures the module closure with jdeps against the pinned JavaFX 25 JMODs (extracted to exploded modules,
+      2. Measures the module closure with jdeps against the pinned JavaFX 27 JMODs (extracted to exploded modules,
          since jdeps reads jars and directories but not JMOD archives) and widens it only with documented explicit
          additions that static analysis cannot see.
       3. Links a zip-6-compressed runtime with jlink from the pinned Temurin 25 jmods and the pinned JavaFX JMODs,

@@ -20,6 +20,7 @@ import com.asdasfa.jbs2bg.project.ProjectSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.project.UnchangedOutcome;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -43,7 +44,7 @@ class VisibleScopeCommandsTest {
      * and Delta (Dawnguard, [Beta]) with Slider Presets Alpha and Beta.
      */
     private static ProjectSession seededSession() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.create("Beta"));

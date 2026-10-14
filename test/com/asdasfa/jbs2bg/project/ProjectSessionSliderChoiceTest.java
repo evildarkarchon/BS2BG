@@ -8,7 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -28,6 +27,8 @@ class ProjectSessionSliderChoiceTest {
 
     @TempDir
     Path tempDirectory;
+    // One isolated store per test, seeded by the @BeforeEach fixture.
+    private Settings settings;
 
     /**
      * Builds an explicit choice with both stored values present.
@@ -119,15 +120,7 @@ class ProjectSessionSliderChoiceTest {
         uunp.put("Arms", new DefaultSliderValue(1f, 1f));
         uunp.put("Breasts", new DefaultSliderValue(1f, 1f));
         uunp.put("Legs", new DefaultSliderValue(1f, 1f));
-        SettingsTestSupport.installDefaults(standard, uunp);
-    }
-
-    /**
-     * Restores process-wide Slider settings after each test.
-     */
-    @AfterEach
-    void restoreSliderSettings() {
-        SettingsTestSupport.restoreRepositorySettings();
+        settings = SettingsTestSupport.installDefaults(tempDirectory.resolve("settings"), standard, uunp);
     }
 
     /**
@@ -136,7 +129,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void fullUpdateRejectsCaseInsensitiveDuplicateSliderChoices() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         ProjectSnapshot before = session.apply(SliderPresetEdits.create("Alpha")).getSnapshot();
         SliderChoiceSnapshot waist = explicit("Waist", 20, 80, 10, 90);
@@ -156,7 +149,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void sliderChoiceEditsRejectPercentagesOutsideBoundsOrReversed() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         ProjectSnapshot before = session.apply(SliderPresetEdits.create("Alpha")).getSnapshot();
         List<SliderChoiceSnapshot> invalidChoices = Arrays.asList(
@@ -195,7 +188,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void sliderChoiceEditsRejectBlankNames() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         ProjectSnapshot before = session.apply(SliderPresetEdits.create("Alpha")).getSnapshot();
 
@@ -221,7 +214,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void creatingSliderPresetSynthesizesStandardDefaultsMatchingReopen() throws Exception {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
 
         ProjectOutcome created = session.apply(SliderPresetEdits.create("Alpha"));
@@ -236,7 +229,7 @@ class ProjectSessionSliderChoiceTest {
 
         Path savedFile = tempDirectory.resolve("created.jbs2bg");
         assertInstanceOf(ChangedOutcome.class, session.saveAs(savedFile));
-        SliderPresetSnapshot reopened = ProjectSessions.create().open(savedFile).getSnapshot()
+        SliderPresetSnapshot reopened = ProjectSessions.create(settings::snapshot).open(savedFile).getSnapshot()
                 .getSliderPresets().getFirst();
 
         assertEquals(names(preset), names(reopened));
@@ -254,8 +247,8 @@ class ProjectSessionSliderChoiceTest {
         Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
         standard.put("Waist", new DefaultSliderValue(0f, 1f));
         standard.put("waist", new DefaultSliderValue(0.25f, 0.75f));
-        SettingsTestSupport.installDefaults(standard, Map.of());
-        ProjectSession session = ProjectSessions.create();
+        SettingsTestSupport.replaceDefaults(settings, standard, Map.of());
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
 
         SliderPresetSnapshot preset = session.apply(SliderPresetEdits.create("Alpha"))
@@ -272,7 +265,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void togglingUunpRebuildsSynthesizedDefaultsForRequestedMode() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.setSliderChoice("Alpha", explicit("Breasts", 30, 90, 10, 90)));
@@ -322,7 +315,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void refreshSettingsRebuildsChoicesWithoutDirtyingACleanProject() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         session.apply(SliderPresetEdits.setSliderChoice("Alpha",
@@ -332,7 +325,7 @@ class ProjectSessionSliderChoiceTest {
         Map<String, DefaultSliderValue> changedDefaults = new LinkedHashMap<>();
         changedDefaults.put("Breasts", new DefaultSliderValue(0.4f, 0.8f));
         changedDefaults.put("Hips", new DefaultSliderValue(0.3f, 0.7f));
-        SettingsTestSupport.installDefaults(changedDefaults, Map.of());
+        SettingsTestSupport.replaceDefaults(settings, changedDefaults, Map.of());
 
         ProjectOutcome refreshed = session.refreshSettings();
         SliderPresetSnapshot preset = refreshed.getSnapshot().getSliderPresets().getFirst();
@@ -365,7 +358,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void refreshSettingsPreservesDirtyFileBackedState() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         Path identity = tempDirectory.resolve("settings-refresh-dirty.jbs2bg").toAbsolutePath().normalize();
@@ -373,7 +366,7 @@ class ProjectSessionSliderChoiceTest {
         ProjectSnapshot dirty = session.apply(SliderPresetEdits.create("Beta")).getSnapshot();
         Map<String, DefaultSliderValue> changedDefaults = new LinkedHashMap<>();
         changedDefaults.put("Breasts", new DefaultSliderValue(0.6f, 0.9f));
-        SettingsTestSupport.installDefaults(changedDefaults, Map.of());
+        SettingsTestSupport.replaceDefaults(settings, changedDefaults, Map.of());
 
         ProjectOutcome refreshed = session.refreshSettings();
 
@@ -393,12 +386,12 @@ class ProjectSessionSliderChoiceTest {
         Map<String, DefaultSliderValue> generationADefaults = new LinkedHashMap<>();
         generationADefaults.put("Alpha", new DefaultSliderValue(0.1f, 0.2f));
         generationADefaults.put("Shared", new DefaultSliderValue(0.3f, 0.4f));
-        SettingsTestSupport.installDefaults(generationADefaults, Map.of());
-        Settings.Snapshot generationA = Settings.snapshot();
+        SettingsTestSupport.replaceDefaults(settings, generationADefaults, Map.of());
+        Settings.Snapshot generationA = settings.snapshot();
         Map<String, DefaultSliderValue> generationBDefaults = new LinkedHashMap<>();
         generationBDefaults.put("Beta", new DefaultSliderValue(0.5f, 0.6f));
         generationBDefaults.put("Shared", new DefaultSliderValue(0.7f, 0.8f));
-        SettingsTestSupport.installDefaults(generationBDefaults, Map.of());
+        SettingsTestSupport.replaceDefaults(settings, generationBDefaults, Map.of());
         SliderChoiceSnapshot explicitNull = new SliderChoiceSnapshot(
                 "Shared", true, null, null, 99, 99, 10, 90, false);
 
@@ -421,7 +414,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void fullUpdateThatChangesUunpRebuildsSynthesizedDefaults() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         SliderChoiceSnapshot breasts = explicit("Breasts", 30, 90, 10, 90);
@@ -453,7 +446,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void singleChoiceEditRederivesEffectiveValuesFromStoredEndpoints() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         SliderChoiceSnapshot divergentWaist = new SliderChoiceSnapshot("Waist", true, Integer.valueOf(20),
@@ -491,7 +484,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void sameModeFullUpdateRederivesEffectiveValuesFromStoredEndpoints() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         SliderChoiceSnapshot divergentWaist = new SliderChoiceSnapshot("Waist", true, Integer.valueOf(20),
@@ -514,7 +507,7 @@ class ProjectSessionSliderChoiceTest {
      */
     @Test
     void sliderChoiceEditsPreservePreviewAndCanonicalOmissionAcrossSaveReopen() throws Exception {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Alpha"));
         SliderPresetSnapshot created = session.getSnapshot().getSliderPresets().getFirst();
@@ -523,12 +516,13 @@ class ProjectSessionSliderChoiceTest {
         session.apply(SliderPresetEdits.setSliderChoice("Alpha",
                 find(session.getSnapshot().getSliderPresets().getFirst(), "Waist").withEnabled(false)));
         SliderPresetSnapshot edited = session.getSnapshot().getSliderPresets().getFirst();
-        String legsPreview = ProjectOutputFormatter.formatSliderChoicePreview(find(edited, "Legs"), false);
+        String legsPreview = ProjectOutputFormatter.formatSliderChoicePreview(find(edited, "Legs"), false,
+                settings.snapshot());
 
         Path savedFile = tempDirectory.resolve("edited-choices.jbs2bg");
         session.saveAs(savedFile);
         String canonical = Files.readString(savedFile);
-        SliderPresetSnapshot reopened = ProjectSessions.create().open(savedFile).getSnapshot()
+        SliderPresetSnapshot reopened = ProjectSessions.create(settings::snapshot).open(savedFile).getSnapshot()
                 .getSliderPresets().getFirst();
 
         assertFalse(canonical.contains("\"Breasts\""));
@@ -539,6 +533,6 @@ class ProjectSessionSliderChoiceTest {
         assertEquals(75, find(reopened, "Legs").getPercentageMaximum());
         assertFalse(find(reopened, "Waist").isEnabled());
         assertEquals(legsPreview,
-                ProjectOutputFormatter.formatSliderChoicePreview(find(reopened, "Legs"), false));
+                ProjectOutputFormatter.formatSliderChoicePreview(find(reopened, "Legs"), false, settings.snapshot()));
     }
 }

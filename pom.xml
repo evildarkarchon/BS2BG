@@ -10,7 +10,8 @@
     <name>jBS2BG</name>
 
     <!--
-        Java 25 / JavaFX 25 application build (issues #94 and #96, parent #81).
+        Application build on Java 25 (Temurin) and JavaFX 27, versioned independently (issues #94 and #96, parent
+        #81; the JDK pin per ADR-0003, the JavaFX pin per ADR-0007, #135).
 
         This POM is the complete application gate: every production source under src/ compiles for release 25
         with full lint enforcement, every resource under src/ and assets/ is packaged, and the test phase loads
@@ -22,12 +23,15 @@
     -->
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <javafx.version>25.0.4</javafx.version>
+        <javafx.version>27</javafx.version>
         <maven.compiler.release>25</maven.compiler.release>
         <junit.version>5.11.4</junit.version>
         <jackson-core.version>3.1.5</jackson-core.version>
 
-        <!-- Pinned build inputs; tools/java25/toolchain-lock.json mirrors the Maven distribution and JDK pins. -->
+        <!--
+            Pinned build inputs; tools/java25/toolchain-lock.json mirrors the Maven distribution and JDK pins, and
+            its javafx block mirrors javafx.version above. The JDK and JavaFX pins are independent (ADR-0007).
+        -->
         <bs2bg.maven.version>3.9.16</bs2bg.maven.version>
         <bs2bg.toolchain.jdk.version>25</bs2bg.toolchain.jdk.version>
         <bs2bg.toolchain.jdk.vendor>temurin</bs2bg.toolchain.jdk.vendor>
@@ -226,7 +230,7 @@
                                 <dependencyConvergence>
                                     <message>Every resolved dependency must converge on one reviewed version.</message>
                                 </dependencyConvergence>
-                                <!-- JavaFX incubator modules are not part of the accepted JavaFX 25 surface. -->
+                                <!-- JavaFX incubator modules are not part of the accepted JavaFX 27 surface (ADR-0007). -->
                                 <bannedDependencies>
                                     <excludes>
                                         <exclude>org.openjfx:javafx-incubator-*</exclude>
@@ -301,6 +305,12 @@
                     for the tests, and Java25ToolchainGuardTest asserts it never reaches the JVM.
                     The two timeouts keep a hung JavaFX toolkit (or a modal dialog opened by mistake) from hanging
                     the build: the fork is killed after the first bound and its exit is forced after the second.
+                    glass.platform and prism.order put every test JVM on JavaFX 27's built-in headless platform with
+                    the software pipeline (ADR-0008), so Tiers 1-2 never show a window on the user's desktop. They
+                    live here, not in the argLine or .mvn/jvm.config (which configures Maven's JVM, not the fork);
+                    ProductionSourceGateTest pins both, and FxTestToolkit refuses to start the toolkit without them.
+                    A command-line -D overrides these entries, which is why that guard exists. The desktop-fx
+                    profile below is the only supported way back to Windows glass.
                 -->
                 <configuration>
                     <argLine>--enable-native-access=ALL-UNNAMED</argLine>
@@ -309,6 +319,8 @@
                     <systemPropertyVariables>
                         <bs2bg.toolchain.jdk.runtimeVersion>${bs2bg.toolchain.jdk.runtimeVersion}</bs2bg.toolchain.jdk.runtimeVersion>
                         <bs2bg.app.version>${bs2bg.app.version}</bs2bg.app.version>
+                        <glass.platform>headless</glass.platform>
+                        <prism.order>sw</prism.order>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -360,6 +372,32 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>desktop-fx</id>
+            <build>
+                <plugins>
+                    <!--
+                        Debugging opt-in only (ADR-0008): `mvnw.cmd test -Pdesktop-fx` runs the tests on Windows glass
+                        and D3D, so real Stages appear on the desktop. There is no <activation> on purpose, and
+                        verify-java25.ps1 rejects this profile, so the gate can never run on the desktop.
+                        combine.self="remove" drops the two inherited headless entries (rather than blanking them, which
+                        would hand JavaFX an empty platform name); bs2bg.test.desktop tells FxTestToolkit the desktop
+                        run is deliberate.
+                    -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <systemPropertyVariables>
+                                <glass.platform combine.self="remove"/>
+                                <prism.order combine.self="remove"/>
+                                <bs2bg.test.desktop>true</bs2bg.test.desktop>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>openrewrite</id>
             <build>

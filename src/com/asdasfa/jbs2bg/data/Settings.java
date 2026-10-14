@@ -15,53 +15,72 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 
 /**
- * Owns the one validated Standard/UUNP Settings value consumed by the application.
+ * Settings store bound to one Settings directory. It owns the current validated Standard/UUNP pair loaded from or
+ * persisted to that directory's {@code settings.json} and {@code settings_UUNP.json}.
+ *
+ * <p>Readers take the immutable {@link Snapshot}; only the Workbench publishes, through {@link #persist(Snapshot)}
+ * and {@link #reload()}. Writers on one store are serialized by the store; readers observe either the prior or the
+ * replacement pair, never a mix.
+ *
+ * <p>Contract: create at most one store per Settings directory per process. This is documented rather than enforced
+ * by a registry, because a second writer to the same directory already fails loudly on {@link SettingsDirectoryLock}
+ * ("already held by this process").
  */
 public final class Settings {
-    private static volatile LiveSettings liveSettings = LiveSettings.empty();
-
-    private Settings() {
-    }
+    private final Path directory;
+    private final LockClose lockClose;
+    private volatile LiveSettings liveSettings = LiveSettings.empty();
 
     /**
-     * Recovers, loads, and validates the Standard and UUNP Settings documents before publishing either profile.
-     * This startup operation serializes writers; readers observe the prior or replacement immutable value.
+     * Creates a store bound to one Settings directory. The store holds an empty pair until its first
+     * {@link #reload()}; construction performs no I/O.
      *
-     * @param workingDirectory directory containing {@code settings.json} and {@code settings_UUNP.json}
-     * @return success with ordered warnings, or one stable failure without partial live-state mutation
+     * @param directory directory containing {@code settings.json} and {@code settings_UUNP.json}
+     * @throws NullPointerException when the directory is null
      */
-    public static synchronized InitializationResult initialize(Path workingDirectory) {
-        return initialize(workingDirectory, () -> true);
+    public Settings(Path directory) {
+        this(directory, SettingsDirectoryLock::close);
     }
 
     /**
-     * Initializes Settings with a worker-owned commit callback. The callback runs after lock acquisition and normal
-     * existing-pair reads, but before recovery, first-run publication, or live publication can change state.
+     * Creates a store whose directory-lock release is injected, so tests can fault the release after a commit with
+     * real files instead of adding overloads to {@link #reload()} and {@link #persist(Snapshot)}.
      *
-     * @param workingDirectory directory containing the paired Settings files
+     * @param directory Settings pair directory
+     * @param lockClose release action for every lock this store acquires
+     */
+    Settings(Path directory, LockClose lockClose) {
+        this.directory = Objects.requireNonNull(directory, "directory").toAbsolutePath().normalize();
+        this.lockClose = Objects.requireNonNull(lockClose, "lockClose");
+    }
+
+    /**
+     * @return normalized absolute directory this store reads and writes
+     */
+    public Path directory() {
+        return directory;
+    }
+
+    /**
+     * Recovers, loads, and validates the Standard and UUNP Settings documents before making either profile current.
+     * Startup and the Workbench's Reload both use this operation.
+     *
+     * @return success with ordered warnings, or one stable failure without partial current-pair mutation
+     */
+    public synchronized InitializationResult reload() {
+        return reload(() -> true);
+    }
+
+    /**
+     * Reloads with a worker-owned commit callback. The callback runs after lock acquisition and normal existing-pair
+     * reads, but before recovery, first-run publication, or current-pair publication can change state.
+     *
      * @param commitAdmission callback invoked at most once to enter a non-cancellable commit phase
-     * @return initialized Settings and warnings, or a classified failure with the prior live pair retained
+     * @return reloaded Settings and warnings, or a classified failure with the prior current pair retained
      * @throws CancellationException when commit admission rejects an accepted cancellation
      */
-    public static synchronized InitializationResult initialize(Path workingDirectory,
-                                                               BooleanSupplier commitAdmission) {
-        return initialize(workingDirectory, commitAdmission, SettingsDirectoryLock::close);
-    }
-
-    /**
-     * Runs the same initialization through an injected lock release for deterministic post-commit fault coverage.
-     *
-     * @param workingDirectory Settings pair directory
-     * @param commitAdmission one-time callback guarding recovery and publication
-     * @param lockClose release action for the acquired directory lock
-     * @return initialized Settings or a classified failure
-     */
-    static synchronized InitializationResult initialize(Path workingDirectory, BooleanSupplier commitAdmission,
-                                                        LockClose lockClose) {
-        Objects.requireNonNull(workingDirectory, "workingDirectory");
+    public synchronized InitializationResult reload(BooleanSupplier commitAdmission) {
         Objects.requireNonNull(commitAdmission, "commitAdmission");
-        Objects.requireNonNull(lockClose, "lockClose");
-        Path directory = workingDirectory.toAbsolutePath().normalize();
         Path standardSource = directory.resolve("settings.json");
         Path uunpSource = directory.resolve("settings_UUNP.json");
         AtomicBoolean commitStarted = new AtomicBoolean();
@@ -184,57 +203,31 @@ public final class Settings {
     }
 
     /**
-     * Constructs the entire replacement value before one volatile assignment makes the pair live.
+     * Constructs the entire replacement value before one volatile assignment makes the pair current.
      */
-    private static void publish(SettingsJacksonAdapter.SettingsCandidate candidate) {
+    private void publish(SettingsJacksonAdapter.SettingsCandidate candidate) {
         liveSettings = LiveSettings.from(candidate);
     }
 
     /**
-     * Returns the complete immutable Standard/UUNP Settings value currently used by Project editing and output.
+     * Returns this store's complete immutable Standard/UUNP Settings value. Callers pin one snapshot per operation
+     * so a concurrent publication cannot mix two pairs inside it.
      *
      * @return detached immutable Settings snapshot in canonical encounter order
      */
-    public static Snapshot snapshot() {
+    public Snapshot snapshot() {
         return liveSettings.snapshot();
     }
 
     /**
-     * Returns a successful no-diagnostic initialization view for adapters that attach after another composition root
-     * has already published the live pair. Startup callers should pass the original result when recovery evidence
-     * must be rendered.
-     *
-     * @return successful view of the currently published pair
-     */
-    public static InitializationResult publishedState() {
-        return InitializationResult.success(List.of());
-    }
-
-    /**
      * Atomically persists and publishes one complete Workbench-authored Settings pair. Readers observe either the
-     * prior live pair or the fully installed replacement, and a failed write never partially changes live state.
+     * prior current pair or the fully installed replacement, and a failed write never partially changes it.
      *
-     * @param workingDirectory directory containing {@code settings.json} and {@code settings_UUNP.json}
-     * @param replacement      complete immutable replacement pair
+     * @param replacement complete immutable replacement pair
      * @return success with non-blocking diagnostics, or a failure before the replacement pair was committed
      */
-    public static synchronized PersistenceResult persist(Path workingDirectory, Snapshot replacement) {
-        return persist(workingDirectory, replacement, SettingsDirectoryLock::close);
-    }
-
-    /**
-     * Persists through an injected lock-release seam so a post-commit release failure can be verified with real files.
-     *
-     * @param workingDirectory Settings pair directory
-     * @param replacement      complete immutable replacement pair
-     * @param lockClose        release action for the acquired directory lock
-     * @return success with non-blocking diagnostics, or a classified pre-commit failure
-     */
-    static synchronized PersistenceResult persist(Path workingDirectory, Snapshot replacement, LockClose lockClose) {
-        Objects.requireNonNull(workingDirectory, "workingDirectory");
+    public synchronized PersistenceResult persist(Snapshot replacement) {
         Objects.requireNonNull(replacement, "replacement");
-        Objects.requireNonNull(lockClose, "lockClose");
-        Path directory = workingDirectory.toAbsolutePath().normalize();
         Path standardSource = directory.resolve("settings.json");
         Path uunpSource = directory.resolve("settings_UUNP.json");
         SettingsJacksonAdapter.SettingsCandidate candidate = replacement.toCandidate();
@@ -300,7 +293,7 @@ public final class Settings {
      * @param sliderName exact dynamic Slider key
      * @return configured multiplier, or {@code 1f} when absent
      */
-    public static float getMultiplier(String sliderName) {
+    public float getMultiplier(String sliderName) {
         return liveSettings.standardMultipliers.getOrDefault(sliderName, Float.valueOf(1f));
     }
 
@@ -310,21 +303,21 @@ public final class Settings {
      * @param sliderName exact dynamic Slider key
      * @return configured multiplier, or {@code 1f} when absent
      */
-    public static float getMultiplierUUNP(String sliderName) {
+    public float getMultiplierUUNP(String sliderName) {
         return liveSettings.uunpMultipliers.getOrDefault(sliderName, Float.valueOf(1f));
     }
 
     /**
      * @return immutable Standard defaults in source encounter order
      */
-    public static Map<String, DefaultSliderValue> getDefaultsMap() {
+    public Map<String, DefaultSliderValue> getDefaultsMap() {
         return liveSettings.standardDefaults;
     }
 
     /**
      * @return immutable UUNP defaults in source encounter order
      */
-    public static Map<String, DefaultSliderValue> getDefaultsMapUUNP() {
+    public Map<String, DefaultSliderValue> getDefaultsMapUUNP() {
         return liveSettings.uunpDefaults;
     }
 
@@ -334,7 +327,7 @@ public final class Settings {
      * @param name exact dynamic Slider key
      * @return truncated percentage, or zero when absent
      */
-    public static int getDefaultValueSmall(String name) {
+    public int getDefaultValueSmall(String name) {
         return percentage(liveSettings.standardDefaults.get(name), true);
     }
 
@@ -344,7 +337,7 @@ public final class Settings {
      * @param name exact dynamic Slider key
      * @return truncated percentage, or zero when absent
      */
-    public static int getDefaultValueSmallUUNP(String name) {
+    public int getDefaultValueSmallUUNP(String name) {
         return percentage(liveSettings.uunpDefaults.get(name), true);
     }
 
@@ -354,7 +347,7 @@ public final class Settings {
      * @param name exact dynamic Slider key
      * @return truncated percentage, or zero when absent
      */
-    public static int getDefaultValueBig(String name) {
+    public int getDefaultValueBig(String name) {
         return percentage(liveSettings.standardDefaults.get(name), false);
     }
 
@@ -364,7 +357,7 @@ public final class Settings {
      * @param name exact dynamic Slider key
      * @return truncated percentage, or zero when absent
      */
-    public static int getDefaultValueBigUUNP(String name) {
+    public int getDefaultValueBigUUNP(String name) {
         return percentage(liveSettings.uunpDefaults.get(name), false);
     }
 
@@ -383,7 +376,7 @@ public final class Settings {
      * @param sliderName Slider name to classify
      * @return true when the configured Standard inversion list contains the name
      */
-    public static boolean isInverted(String sliderName) {
+    public boolean isInverted(String sliderName) {
         return containsIgnoreCase(liveSettings.standardInverted, sliderName);
     }
 
@@ -393,7 +386,7 @@ public final class Settings {
      * @param sliderName Slider name to classify
      * @return true when the configured UUNP inversion list contains the name
      */
-    public static boolean isInvertedUUNP(String sliderName) {
+    public boolean isInvertedUUNP(String sliderName) {
         return containsIgnoreCase(liveSettings.uunpInverted, sliderName);
     }
 
@@ -439,7 +432,7 @@ public final class Settings {
                     new Profile(uunpDefaults, uunpMultipliers, uunpInverted));
         }
 
-        /** Creates the pre-initialization empty value used before application startup. */
+        /** Creates the empty value a store holds before its first reload. */
         private static LiveSettings empty () {
             return new LiveSettings(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyList(),
                     Collections.emptyMap(), Collections.emptyMap(), Collections.emptyList());

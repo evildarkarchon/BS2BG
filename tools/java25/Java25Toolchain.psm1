@@ -544,6 +544,38 @@ function Assert-RequiredSurefireSuites {
 
 <#
 .SYNOPSIS
+    Rejects Maven arguments that would turn the verification run into something other than the complete,
+    headless application gate.
+.PARAMETER Arguments
+    The Maven goals and options the gate would pass to the wrapper (verify-java25.ps1 -MavenGoals).
+.PARAMETER Source
+    Where the arguments came from, for the failure message (e.g. 'MAVEN_ARGS').
+.NOTES
+    Two classes are refused. Arguments that skip, filter, or ignore tests: the gate is the complete run. And,
+    per ADR-0008, any argument that would move the tests off JavaFX's built-in headless platform: the desktop-fx
+    profile (however it is spelled, so a bare 'desktop-fx' token after -P counts) and any glass.platform,
+    prism.order, or bs2bg.test.desktop property. A command-line -D overrides Surefire's systemPropertyVariables,
+    so these must be stopped here; FxTestToolkit's startup guard is the backstop for runs outside the gate.
+#>
+function Assert-GateMavenArguments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]]$Arguments,
+        [string]$Source = 'Maven argument'
+    )
+
+    foreach ($argument in $Arguments) {
+        if ($argument -match 'skipTests|maven\.test\.skip|maven\.test\.failure\.ignore|testFailureIgnore|^-Dtest=|failIfNoSpecifiedTests') {
+            throw "$Source '$argument' would skip or filter the test phase; the application gate runs every suite."
+        }
+        if ($argument -match 'desktop-fx|glass\.platform|prism\.order|bs2bg\.test\.desktop') {
+            throw "$Source '$argument' would move the tests off the headless platform; Tiers 1-2 run headless (ADR-0008) and the desktop-fx profile is a '.\mvnw.cmd test' debugging opt-in only."
+        }
+    }
+}
+
+<#
+.SYNOPSIS
     Reads a <properties> value from the repository pom.xml.
 .NOTES
     Used to cross-check that the pin Surefire forwards to Java25ToolchainGuardTest (bs2bg.toolchain.jdk.runtimeVersion)
@@ -672,5 +704,6 @@ Export-ModuleMember -Function @(
     'Install-LockedArchive',
     'Assert-CompleteSourceScope',
     'Assert-JarContainsProductionResources',
-    'Assert-RequiredSurefireSuites'
+    'Assert-RequiredSurefireSuites',
+    'Assert-GateMavenArguments'
 )

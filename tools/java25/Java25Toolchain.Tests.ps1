@@ -36,9 +36,9 @@ Describe 'Get-ToolchainLock' {
         $lock.jdk.sourceUrl | Should -Match '^https://github\.com/openjdk/jdk25u/'
         $lock.jdk.sourceRevision | Should -Match '^[0-9a-f]{40}$'
         $lock.jdk.release.IMPLEMENTOR_VERSION | Should -Be 'Temurin-25.0.4.1+1'
-        $lock.javafx.version | Should -Be '25.0.4'
+        $lock.javafx.version | Should -Be '27'
         $lock.javafx.sha256 | Should -Match '^[0-9a-f]{64}$'
-        $lock.javafx.sourceUrl | Should -Match '^https://github\.com/openjdk/jfx25u/'
+        $lock.javafx.sourceUrl | Should -Match '^https://github\.com/openjdk/jfx/'
         $lock.javafx.sourceRevision | Should -Match '^[0-9a-f]{40}$'
         $lock.javafx.requiredModules | Should -Contain 'javafx.base'
         $lock.architecture.processorArchitecture | Should -Be 'AMD64'
@@ -151,28 +151,37 @@ Describe 'Assert-JdkRelease' {
 }
 
 Describe 'Assert-JmodDescribeOutput' {
+    BeforeAll {
+        # Read the pin from the lock, so these cases keep describing the pinned JavaFX version across bumps.
+        $script:JavaFxPin = (Get-ToolchainLock -Path $script:LockPath).javafx.version
+    }
+
     It 'accepts the pinned module@version header' {
-        $output = @('javafx.base@25.0.4', 'exports javafx.beans', 'requires java.base mandated')
-        { Assert-JmodDescribeOutput -Output $output -ModuleName 'javafx.base' -Version '25.0.4' } | Should -Not -Throw
+        $output = @("javafx.base@$script:JavaFxPin", 'exports javafx.beans', 'requires java.base mandated')
+        { Assert-JmodDescribeOutput -Output $output -ModuleName 'javafx.base' -Version $script:JavaFxPin } |
+            Should -Not -Throw
     }
 
     It 'rejects a different patch version' {
-        { Assert-JmodDescribeOutput -Output @('javafx.base@25.0.3') -ModuleName 'javafx.base' -Version '25.0.4' } |
-            Should -Throw -ExpectedMessage '*javafx.base@25.0.4*'
+        { Assert-JmodDescribeOutput -Output @("javafx.base@$script:JavaFxPin.99") -ModuleName 'javafx.base' `
+                -Version $script:JavaFxPin } |
+            Should -Throw -ExpectedMessage "*expected 'javafx.base@$script:JavaFxPin'*"
     }
 
     It 'rejects a different module name' {
-        { Assert-JmodDescribeOutput -Output @('javafx.web@25.0.4') -ModuleName 'javafx.base' -Version '25.0.4' } |
+        { Assert-JmodDescribeOutput -Output @("javafx.web@$script:JavaFxPin") -ModuleName 'javafx.base' `
+                -Version $script:JavaFxPin } |
             Should -Throw -ExpectedMessage '*javafx.base*'
     }
 
     It 'skips blank lines before the header (jmod describe emits one)' {
-        $output = @('', 'javafx.controls@25.0.4', '', 'requires javafx.base')
-        { Assert-JmodDescribeOutput -Output $output -ModuleName 'javafx.controls' -Version '25.0.4' } | Should -Not -Throw
+        $output = @('', "javafx.controls@$script:JavaFxPin", '', 'requires javafx.base')
+        { Assert-JmodDescribeOutput -Output $output -ModuleName 'javafx.controls' -Version $script:JavaFxPin } |
+            Should -Not -Throw
     }
 
     It 'rejects empty output' {
-        { Assert-JmodDescribeOutput -Output @() -ModuleName 'javafx.base' -Version '25.0.4' } | Should -Throw
+        { Assert-JmodDescribeOutput -Output @() -ModuleName 'javafx.base' -Version $script:JavaFxPin } | Should -Throw
     }
 }
 
@@ -423,6 +432,66 @@ Describe 'Assert-RequiredSurefireSuites' {
             Should -Throw -ExpectedMessage '*0 tests*'
         { Assert-RequiredSurefireSuites -RepoRoot $script:RequiredRoot -Suites @('a.Red') } |
             Should -Throw -ExpectedMessage '*1 failure*'
+    }
+}
+
+Describe 'Assert-GateMavenArguments' {
+    It 'accepts the complete gate lifecycle' {
+        { Assert-GateMavenArguments -Arguments @('clean', 'verify') } | Should -Not -Throw
+        { Assert-GateMavenArguments -Arguments @() } | Should -Not -Throw
+    }
+
+    It 'rejects every argument that skips, filters, or ignores tests' {
+        foreach ($argument in @('-DskipTests', '-Dmaven.test.skip=true', '-Dmaven.test.failure.ignore=true', '-Dtest=ProjectTest', '-Dsurefire.failIfNoSpecifiedTests=false')) {
+            { Assert-GateMavenArguments -Arguments @('clean', 'verify', $argument) } |
+                Should -Throw -ExpectedMessage "*'$argument'*skip or filter*"
+        }
+    }
+
+    It 'rejects the desktop-fx profile however it is activated' {
+        foreach ($arguments in @(@('-Pdesktop-fx'), @('-P', 'desktop-fx'), @('--activate-profiles=openrewrite,desktop-fx'))) {
+            { Assert-GateMavenArguments -Arguments (@('clean', 'verify') + $arguments) } |
+                Should -Throw -ExpectedMessage '*desktop-fx*headless*'
+        }
+    }
+
+    It 'rejects any override of the headless test platform or the desktop opt-in flag' {
+        foreach ($argument in @('-Dglass.platform=win', '-Dglass.platform=headless', '-Dprism.order=d3d', '-Dbs2bg.test.desktop=true')) {
+            { Assert-GateMavenArguments -Arguments @('clean', 'verify', $argument) } |
+                Should -Throw -ExpectedMessage "*'$argument'*headless*"
+        }
+    }
+}
+
+Describe 'verify-java25.ps1 argument gate' {
+    BeforeAll {
+        $script:VerifyScript = Join-Path $PSScriptRoot 'verify-java25.ps1'
+    }
+
+    AfterEach {
+        Remove-Item Env:\MAVEN_ARGS -ErrorAction SilentlyContinue
+    }
+
+    # The rejection happens in the host preflight, before any download or Maven run, so -SkipMaven keeps a
+    # regression from provisioning anything beyond the cached toolchain.
+    It 'fails closed on <Arguments> before provisioning anything' -ForEach @(
+        @{ Arguments = '-Pdesktop-fx' },
+        @{ Arguments = '-Dglass.platform=win' },
+        @{ Arguments = '-Dprism.order=d3d' },
+        @{ Arguments = '-Dbs2bg.test.desktop=true' }
+    ) {
+        $output = & $script:VerifyScript -SkipMaven -MavenGoals @('clean', 'verify', $Arguments) *>&1 | Out-String
+        $LASTEXITCODE | Should -Be 1
+        $output | Should -BeLike "*VERIFICATION FAILED*'$Arguments'*headless*"
+        $output | Should -Not -BeLike '*Provisioning*'
+    }
+
+    It 'fails closed when MAVEN_ARGS activates the desktop-fx profile' {
+        # Maven 3.9 prepends MAVEN_ARGS to the command line, so it would bypass a check of -MavenGoals alone.
+        $env:MAVEN_ARGS = '--batch-mode -Pdesktop-fx'
+        $output = & $script:VerifyScript -SkipMaven *>&1 | Out-String
+        $LASTEXITCODE | Should -Be 1
+        $output | Should -BeLike '*MAVEN_ARGS*desktop-fx*headless*'
     }
 }
 

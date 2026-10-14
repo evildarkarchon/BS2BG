@@ -4,16 +4,16 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.function.Consumer;
+import java.util.OptionalLong;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.filtering.ColumnCriterion;
 import com.asdasfa.jbs2bg.filtering.FilterColumn;
 import com.asdasfa.jbs2bg.filtering.FilteredView;
@@ -33,20 +33,21 @@ import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.project.SourceLocation;
 import com.asdasfa.jbs2bg.project.UnchangedOutcome;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
+import com.asdasfa.jbs2bg.workbench.WorkbenchFeature;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 /**
  * JavaFX-independent Templates Area state machine. It renders immutable Slider Preset frames and translates
  * task-oriented intents into edits submitted only through the authoritative Workbench Project flow.
  */
-public final class TemplatesFeature {
+public final class TemplatesFeature
+        implements WorkbenchFeature<TemplatesFeature.Intent, TemplatesFeature.Update, TemplatesFeature.Effect> {
     private static final String NAME_COLUMN = "name";
     private static final Duration TYPE_AHEAD_TIMEOUT = Duration.ofMillis(750);
 
     private final WorkbenchProjectFlow projectFlow;
+    private final Supplier<Settings.Snapshot> currentSettings;
     private final Clock clock;
-    private final Consumer<Throwable> observerFailureSink;
-    private final Map<Long, Consumer<Frame>> observers = new LinkedHashMap<>();
     private final FilteredView<SliderPresetSnapshot, NameIdentity> view = new FilteredView<>(
             List.of(FilterColumn.of(NAME_COLUMN, preset -> preset.getName().toLowerCase(Locale.ROOT))),
             ProjectIdentities::sliderPreset);
@@ -59,36 +60,22 @@ public final class TemplatesFeature {
     private GangFrame gang = GangFrame.inactive();
     private OutcomeKind lastOutcomeKind = OutcomeKind.NONE;
     private long revision;
-    private long nextObserverId = 1;
     private long nextEffectToken = 1;
     private Frame frame;
     private Effect pendingEffect;
-    private boolean publishing;
 
     /**
      * Creates the window-scoped Templates feature from the latest coherent Project publication.
      *
-     * @param projectFlow sole authoritative Project command path
-     * @param clock       deterministic source for later type-ahead timing
+     * @param projectFlow     sole authoritative Project command path
+     * @param currentSettings read-only view of the current Settings pair used for Slider choice previews
+     * @param clock           deterministic source for later type-ahead timing
      */
-    public TemplatesFeature(WorkbenchProjectFlow projectFlow, Clock clock) {
-        this(projectFlow, clock, failure -> {
-            // Production adapters may supply technical diagnostics; the default keeps a renderer failure isolated.
-        });
-    }
-
-    /**
-     * Creates the Templates feature with an explicit technical-diagnostics sink for isolated observer failures.
-     *
-     * @param projectFlow         sole authoritative Project command path
-     * @param clock               deterministic type-ahead clock
-     * @param observerFailureSink receives observer failures after frame state commits
-     */
-    public TemplatesFeature(WorkbenchProjectFlow projectFlow, Clock clock,
-                            Consumer<Throwable> observerFailureSink) {
+    public TemplatesFeature(WorkbenchProjectFlow projectFlow, Supplier<Settings.Snapshot> currentSettings,
+                            Clock clock) {
         this.projectFlow = Objects.requireNonNull(projectFlow, "projectFlow");
+        this.currentSettings = Objects.requireNonNull(currentSettings, "currentSettings");
         this.clock = Objects.requireNonNull(clock, "clock");
-        this.observerFailureSink = Objects.requireNonNull(observerFailureSink, "observerFailureSink");
         reconcile(projectFlow.frame(), List.of());
     }
 
@@ -100,27 +87,14 @@ public final class TemplatesFeature {
     }
 
     /**
-     * Observes subsequent immutable frame publications until the returned subscription is closed.
-     *
-     * @param observer frame callback invoked after state commit
-     * @return idempotent subscription handle
-     */
-    public Subscription observe(Consumer<Frame> observer) {
-        long id = nextObserverId++;
-        observers.put(id, Objects.requireNonNull(observer, "observer"));
-        return () -> observers.remove(id);
-    }
-
-    /**
      * Applies one feature-specific task intent on the serialized presentation lane.
      *
      * @param intent immutable user task
      * @return whether the task was accepted and the resulting immutable frame
      */
+    @Override
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
-        if (publishing)
-            throw new IllegalStateException("Templates intents cannot be dispatched during frame publication");
         if (pendingEffect != null)
             return new Update(false, frame);
         return switch (intent) {
@@ -145,6 +119,38 @@ public final class TemplatesFeature {
             case CancelRename ignored -> cancelRename();
             case ClearSelection ignored -> clearSelection();
             case DismissDiagnostics ignored -> dismissDiagnostics();
+        };
+    }
+
+    /**
+     * Distinguishes Project mutations from local browsing so an active job blocks writes without freezing the
+     * surface. Rename drafting counts as a mutation because it leads straight to a committed rename.
+     *
+     * @param intent intent about to be dispatched
+     * @return true for intents that create, rename, remove or edit Slider Presets
+     */
+    @Override
+    public boolean isMutation(Intent intent) {
+        return switch (Objects.requireNonNull(intent, "intent")) {
+            case Create ignored -> true;
+            case Duplicate ignored -> true;
+            case BeginRename ignored -> true;
+            case ChangeRename ignored -> true;
+            case CommitRename ignored -> true;
+            case RequestRemove ignored -> true;
+            case RequestClearVisible ignored -> true;
+            case ChangeProfile ignored -> true;
+            case SetChoiceEnabled ignored -> true;
+            case SetChoiceRange ignored -> true;
+            case ApplyBulkValue ignored -> true;
+            case ToggleGang ignored -> true;
+            case Select ignored -> false;
+            case ChangeFilter ignored -> false;
+            case ChangeSort ignored -> false;
+            case TypeAhead ignored -> false;
+            case CancelRename ignored -> false;
+            case ClearSelection ignored -> false;
+            case DismissDiagnostics ignored -> false;
         };
     }
 
@@ -675,18 +681,6 @@ public final class TemplatesFeature {
         Optional<EditorFrame> editor = editorFrame(visibleDiagnostics);
         frame = new Frame(++revision, projectSequence, view.visibleSet().getRows(), view.getSelection(), filterText,
                 sortOrder, Optional.ofNullable(rename), editor, lastOutcomeKind, visibleDiagnostics);
-        publishing = true;
-        try {
-            for (Consumer<Frame> observer : List.copyOf(observers.values())) {
-                try {
-                    observer.accept(frame);
-                } catch (RuntimeException failure) {
-                    reportObserverFailure(failure);
-                }
-            }
-        } finally {
-            publishing = false;
-        }
     }
 
     /**
@@ -699,26 +693,29 @@ public final class TemplatesFeature {
         Optional<NameIdentity> selected = view.getSelection();
         if (selected.isEmpty())
             return Optional.empty();
+        // One pinned Settings pair keeps every row preview of this frame consistent.
+        Settings.Snapshot settings = currentSettings.get();
         return sourcePresets.stream()
                 .filter(preset -> ProjectIdentities.sliderPreset(preset).equals(selected.orElseThrow()))
                 .findFirst()
                 .map(preset -> new EditorFrame(ProjectIdentities.sliderPreset(preset),
                         preset.isUunp() ? Profile.UUNP : Profile.STANDARD,
                         preset.getSliderChoices().stream().map(choice -> choiceFrame(choice, preset.isUunp(),
-                                diagnostics))
+                                settings, diagnostics))
                                 .toList(), gang));
     }
 
     /**
      * Projects one immutable Slider choice through the shared exact-output formatter, reporting unavailable previews.
      *
+     * @param settings    Settings pair pinned for the whole editor frame
      * @param diagnostics receives a structured diagnostic when the current Settings overflow the preview
      */
-    private static ChoiceFrame choiceFrame(SliderChoiceSnapshot choice, boolean uunp,
+    private static ChoiceFrame choiceFrame(SliderChoiceSnapshot choice, boolean uunp, Settings.Snapshot settings,
                                            List<ProjectDiagnostic> diagnostics) {
         String preview;
         try {
-            preview = ProjectOutputFormatter.formatSliderChoicePreview(choice, uunp);
+            preview = ProjectOutputFormatter.formatSliderChoicePreview(choice, uunp, settings);
         } catch (ProjectOutputFormatter.SliderChoicePreviewException exception) {
             preview = "Preview unavailable";
             diagnostics.add(new ProjectDiagnostic(ProjectOutputFormatter.SliderChoicePreviewException.CODE,
@@ -730,19 +727,10 @@ public final class TemplatesFeature {
                 choice.getPercentageMaximum(), preview,
                 choice.isMissingDefault(), choice.isMissingDefault() && choice.isEnabled()
                 && choice.getPercentageMinimum() == 100 && choice.getPercentageMaximum() == 100,
-                choice.isEnabled() && ProjectOutputFormatter.isSliderChoiceRedundant(choice, uunp), choice);
+                choice.isEnabled() && ProjectOutputFormatter.isSliderChoiceRedundant(choice, uunp, settings),
+                choice);
     }
 
-    /**
-     * Keeps both an observer and an optional technical-diagnostics adapter from breaking publication.
-     */
-    private void reportObserverFailure(RuntimeException failure) {
-        try {
-            observerFailureSink.accept(failure);
-        } catch (RuntimeException sinkFailure) {
-            // A technical-diagnostics sink is observational and must never become a second publication failure.
-        }
-    }
 
     /**
      * Distinguishes usable domain outcomes from typed cancellation, failure, and validation rejection.
@@ -1207,10 +1195,17 @@ public final class TemplatesFeature {
      * @param effect   tokenized platform effect, when requested
      * @param outcomeKind exact Project outcome classification, or NONE for local-only intents
      */
-    public record Update(boolean accepted, Frame frame, Optional<Effect> effect, OutcomeKind outcomeKind) {
+    public record Update(boolean accepted, Frame frame, Optional<Effect> effect, OutcomeKind outcomeKind)
+            implements WorkbenchFeature.Update<Effect> {
         /** Creates an update without a platform effect. */
         private Update(boolean accepted, Frame frame) {
             this(accepted, frame, Optional.empty(), OutcomeKind.NONE);
+        }
+
+        /** @return the Project sequence the frame was reconciled against, so the pipeline can refresh chrome */
+        @Override
+        public OptionalLong projectSequence() {
+            return OptionalLong.of(frame.projectSequence());
         }
 
         /** Creates a local update with one tokenized platform effect. */
@@ -1224,15 +1219,5 @@ public final class TemplatesFeature {
             Objects.requireNonNull(effect, "effect");
             Objects.requireNonNull(outcomeKind, "outcomeKind");
         }
-    }
-
-    /**
-     * Idempotent lifetime handle for one Templates frame observer.
-     */
-    @FunctionalInterface
-    public interface Subscription extends AutoCloseable {
-        /** Stops later callbacks; repeated closure is harmless. */
-        @Override
-        void close();
     }
 }

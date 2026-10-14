@@ -1,13 +1,21 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import com.asdasfa.jbs2bg.testing.ManualExecutor;
+import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
 class WorkbenchAppearanceTest {
 
@@ -121,6 +129,43 @@ class WorkbenchAppearanceTest {
 
         WorkbenchAppearanceStore restarted = new WorkbenchAppearanceStore(temporaryDirectory);
         assertEquals(WorkbenchAppearance.ThemeChoice.DARK, restarted.load());
+    }
+
+    /**
+     * The theme save job writes the choice only on the worker, and a write that fails leaves the applied theme
+     * as a completed-with-issues job instead of a failure that would offer a modal retry.
+     */
+    @Test
+    void themeSaveJobPersistsOnTheWorkerAndReportsAFailedWriteAsAnIssue() throws Exception {
+        ManualExecutor worker = new ManualExecutor();
+        JobCoordinator jobs = new JobCoordinator(worker, Runnable::run,
+                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
+                (delay, action) -> () -> {
+                    // The theme save settles before prolonged cancellation feedback is relevant.
+                }, failure -> {
+            throw new AssertionError("Unexpected callback failure", failure);
+        });
+        WorkbenchAppearanceStore store = new WorkbenchAppearanceStore(temporaryDirectory);
+
+        assertTrue(jobs.submit(store.saveSubmission(WorkbenchAppearance.ThemeChoice.DARK)).admitted());
+        assertEquals(WorkbenchAppearance.ThemeChoice.SYSTEM, store.load());
+        worker.runNextAsync().join();
+
+        JobCoordinator.Attempt saved = jobs.frame().attempt().orElseThrow();
+        assertEquals("Save Theme Preference", saved.operation().name());
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED, saved.lifecycle());
+        assertEquals(WorkbenchAppearance.ThemeChoice.DARK, store.load());
+
+        Path blocked = Files.writeString(temporaryDirectory.resolve("not-a-directory"), "file");
+        assertTrue(jobs.submit(new WorkbenchAppearanceStore(blocked)
+                .saveSubmission(WorkbenchAppearance.ThemeChoice.LIGHT)).admitted());
+        worker.runNextAsync().join();
+
+        JobCoordinator.Attempt failedWrite = jobs.frame().attempt().orElseThrow();
+        assertEquals(JobCoordinator.Lifecycle.COMPLETED_WITH_ISSUES, failedWrite.lifecycle());
+        assertEquals("The selected theme could not be saved.", failedWrite.summary());
+        assertEquals(List.of("THEME_PREFERENCE_SAVE_FAILED"), failedWrite.diagnostics().stream()
+                .map(JobCoordinator.Diagnostic::code).toList());
     }
 
     /**

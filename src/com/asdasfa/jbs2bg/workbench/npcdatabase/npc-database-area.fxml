@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import com.asdasfa.jbs2bg.workbench.AreaPanes?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+    The NPC Database Area: three panes the shell mounts into its primary, editor and inspector landmark containers.
+    The root is a non-Node holder, so this file has no layout of its own. Accessible text, visible text and nesting
+    are exactly what they were in workbench.fxml; the packaged smoke run finds these controls by name, role and
+    region.
+-->
+<AreaPanes fx:id="panes" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1"
+        fx:controller="com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseArea">
+    <primary>
+        <ScrollPane fx:id="npcDatabasePrimaryScroll"
+                accessibleText="NPC Database source management"
+                fitToWidth="true" focusTraversable="false"
+                hbarPolicy="NEVER" managed="false" visible="false"
+                VBox.vgrow="ALWAYS">
+            <content>
+                <VBox spacing="8.0">
+                    <children>
+                        <Label styleClass="title" text="Sources" />
+                        <Label fx:id="npcSourceCountText"
+                                accessibleText="NPC Database source count"
+                                text="No sources loaded" wrapText="true" />
+                        <ListView fx:id="npcSourceList"
+                                accessibleText="NPC Database sources"
+                                prefHeight="210.0" VBox.vgrow="ALWAYS" />
+                        <Button fx:id="importNpcSourcesButton"
+                                accessibleText="Import NPC Database sources"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Import sources…" />
+                        <Button fx:id="removeNpcSourceButton"
+                                accessibleText="Remove selected NPC Database source"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Remove source" />
+                        <Button fx:id="clearNpcDatabaseButton"
+                                accessibleText="Clear visible NPC Database entries"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Clear visible entries" />
+                    </children>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </primary>
+    <editor>
+        <VBox fx:id="npcDatabaseEditorContent" managed="false"
+                spacing="8.0" visible="false">
+            <children>
+                <Button fx:id="backToMorphsButton"
+                        accessibleText="Back to Morphs"
+                        maxWidth="Infinity" mnemonicParsing="true"
+                        text="← _Back to Morphs" />
+                <HBox fx:id="npcPromotionInfoBar"
+                        accessibleText="NPC Database promotion notification"
+                        alignment="CENTER_LEFT" focusTraversable="false"
+                        managed="false" spacing="6.0"
+                        styleClass="info-bar npc-promotion-info-bar"
+                        visible="false">
+                    <padding>
+                        <Insets bottom="6.0" left="8.0" right="8.0" top="6.0" />
+                    </padding>
+                    <children>
+                        <VBox spacing="2.0" HBox.hgrow="ALWAYS">
+                            <children>
+                                <Label fx:id="npcPromotionInfoBarCue"
+                                        styleClass="feedback-cue"
+                                        text="Validation" />
+                                <Label fx:id="npcPromotionInfoBarMessage"
+                                        text="Promotion message" wrapText="true" />
+                            </children>
+                        </VBox>
+                        <Button fx:id="dismissNpcPromotionInfoBarButton"
+                                accessibleText="Dismiss NPC Database promotion notification"
+                                mnemonicParsing="true" text="_Dismiss" />
+                    </children>
+                </HBox>
+                <Label styleClass="title" text="NPC catalog" />
+                <Label fx:id="npcCatalogSummary"
+                        accessibleText="NPC Database catalog summary"
+                        text="No NPC Database entries" wrapText="true" />
+                <HBox alignment="CENTER_LEFT" spacing="6.0">
+                    <children>
+                        <Label labelFor="$npcSortChoice" mnemonicParsing="true"
+                                text="_Sort NPC catalog:" />
+                        <ComboBox fx:id="npcSortChoice"
+                                accessibleText="NPC Database sort"
+                                maxWidth="Infinity" HBox.hgrow="ALWAYS" />
+                    </children>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="6.0">
+                    <children>
+                        <ToggleButton fx:id="npcNameFilterButton"
+                                accessibleText="Filter Name column" text="Name" />
+                        <ToggleButton fx:id="npcMasterFilterButton"
+                                accessibleText="Filter Master column" text="Master" />
+                        <ToggleButton fx:id="npcRaceFilterButton"
+                                accessibleText="Filter Race column" text="Race" />
+                        <ToggleButton fx:id="npcEditorIdFilterButton"
+                                accessibleText="Filter EditorID column" text="EditorID" />
+                        <ToggleButton fx:id="npcFormIdFilterButton"
+                                accessibleText="Filter FormID column" text="FormID" />
+                        <Button fx:id="clearNpcFiltersButton"
+                                accessibleText="Clear NPC Database filters"
+                                mnemonicParsing="true" text="Reset _filters" />
+                    </children>
+                </HBox>
+                <TableView fx:id="npcCatalogTable"
+                        accessibleText="NPC Database catalog"
+                        focusTraversable="true" VBox.vgrow="ALWAYS">
+                    <columns>
+                        <TableColumn fx:id="npcNameColumn" prefWidth="150.0" text="Name" />
+                        <TableColumn fx:id="npcMasterColumn" prefWidth="125.0" text="Master" />
+                        <TableColumn fx:id="npcRaceColumn" prefWidth="110.0" text="Race" />
+                        <TableColumn fx:id="npcEditorIdColumn" prefWidth="135.0" text="EditorID" />
+                        <TableColumn fx:id="npcFormIdColumn" prefWidth="105.0" text="FormID" />
+                    </columns>
+                </TableView>
+                <Button fx:id="addAllNpcsToProjectButton"
+                        accessibleText="Add all visible NPCs to Project"
+                        maxWidth="Infinity" mnemonicParsing="true"
+                        text="Add _all visible NPCs to Project" />
+                <TextArea fx:id="npcPromotionDetails"
+                        accessibleText="NPC Database promotion details"
+                        editable="false" focusTraversable="true"
+                        managed="false" prefRowCount="3"
+                        visible="false" wrapText="true" />
+            </children>
+        </VBox>
+    </editor>
+    <inspector>
+        <ScrollPane fx:id="npcDatabaseInspectorScroll"
+                accessibleText="NPC Database inspector controls"
+                fitToWidth="true" focusTraversable="false"
+                hbarPolicy="NEVER" managed="false" visible="false"
+                VBox.vgrow="ALWAYS">
+            <content>
+                <VBox spacing="8.0">
+                    <children>
+                        <Label styleClass="title" text="NPC inspector" />
+                        <Label fx:id="npcInspectorName"
+                                accessibleText="Selected NPC Database entry"
+                                focusTraversable="true"
+                                text="No NPC selected" wrapText="true" />
+                        <Label fx:id="npcInspectorSource"
+                                accessibleText="NPC Database source"
+                                text="Source: none" wrapText="true" />
+                        <Label fx:id="npcInspectorMaster"
+                                accessibleText="NPC plugin"
+                                text="Plugin: none" wrapText="true" />
+                        <Label fx:id="npcInspectorEditorId"
+                                accessibleText="NPC editor ID"
+                                text="Editor ID: none" wrapText="true" />
+                        <Label fx:id="npcInspectorRace"
+                                accessibleText="NPC race"
+                                text="Race: none" wrapText="true" />
+                        <Label fx:id="npcInspectorFormId"
+                                accessibleText="NPC Form ID"
+                                text="Form ID: none" wrapText="true" />
+                        <VBox spacing="6.0" styleClass="npc-portrait-section">
+                            <children>
+                                <Label styleClass="title" text="NPC portrait" />
+                                <ImageView fx:id="npcDatabasePortraitImage"
+                                        accessibleRole="NODE" mouseTransparent="true"
+                                        fitHeight="180.0" fitWidth="200.0"
+                                        preserveRatio="true" smooth="true" />
+                                <Label fx:id="npcDatabasePortraitStatus"
+                                        accessibleText="NPC Database portrait status"
+                                        accessibleHelp="Select an NPC Database entry to inspect its portrait."
+                                        text="No NPC portrait selected"
+                                        wrapText="true" />
+                                <Button fx:id="openNpcDatabasePortraitViewerButton"
+                                        accessibleText="Open NPC Database portrait viewer"
+                                        disable="true" maxWidth="Infinity" mnemonicParsing="true"
+                                        text="_Open portrait viewer" />
+                            </children>
+                        </VBox>
+                        <Button fx:id="addNpcToProjectButton"
+                                accessibleText="Add selected NPC to Project"
+                                disable="true" maxWidth="Infinity"
+                                mnemonicParsing="true"
+                                text="_Add to Project" />
+                        <CheckBox fx:id="assignRandomNpcPresetCheck"
+                                accessibleText="Assign random Slider Preset to promoted NPCs"
+                                mnemonicParsing="true"
+                                text="Assign _random Slider Preset" />
+                        <Label fx:id="npcDatabaseDiagnostics"
+                                accessibleText="NPC Database diagnostics"
+                                text="No source diagnostics" wrapText="true" />
+                    </children>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </inspector>
+</AreaPanes>

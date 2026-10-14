@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import com.asdasfa.jbs2bg.workbench.AreaPanes?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+    The Settings Area: three panes the shell mounts into its primary, editor and inspector landmark containers. The
+    root is a non-Node holder, so this file has no layout of its own. Accessible text, visible text and nesting are
+    exactly what they were in workbench.fxml; the packaged smoke run finds these controls by name, role and region.
+-->
+<AreaPanes fx:id="panes" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1"
+        fx:controller="com.asdasfa.jbs2bg.workbench.settings.SettingsArea">
+    <primary>
+        <ScrollPane fx:id="settingsPrimaryScroll"
+                accessibleText="Settings profiles and entries"
+                fitToWidth="true" focusTraversable="false"
+                hbarPolicy="NEVER" managed="false" visible="false"
+                VBox.vgrow="ALWAYS">
+            <content>
+                <VBox fx:id="settingsPrimaryContent" spacing="8.0">
+                    <children>
+                        <Label labelFor="$settingsProfileChoice"
+                                mnemonicParsing="true"
+                                text="Settings _profile:" />
+                        <ComboBox fx:id="settingsProfileChoice"
+                                accessibleText="Settings profile"
+                                maxWidth="Infinity" />
+                        <Label text="Settings entries" />
+                        <ListView fx:id="settingsEntryList"
+                                accessibleText="Settings entries"
+                                focusTraversable="true"
+                                VBox.vgrow="ALWAYS" />
+                        <Label labelFor="$newSettingsEntryName"
+                                mnemonicParsing="true"
+                                text="_New entry name:" />
+                        <TextField fx:id="newSettingsEntryName"
+                                accessibleText="New Settings entry name"
+                                promptText="Slider name" />
+                        <Button fx:id="addSettingsEntryButton"
+                                accessibleText="Add Settings entry"
+                                maxWidth="Infinity"
+                                mnemonicParsing="true"
+                                text="_Add Settings entry" />
+                    </children>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </primary>
+    <editor>
+        <VBox fx:id="settingsEditorContent" alignment="TOP_LEFT"
+                managed="false" spacing="8.0" visible="false">
+            <children>
+                <Label styleClass="title" text="Settings entry" />
+                <Label fx:id="settingsValidationText"
+                        accessibleText="Settings validation"
+                        styleClass="validation-message"
+                        text="Select an entry to edit." wrapText="true" />
+                <Label labelFor="$settingsEntryNameInput"
+                        mnemonicParsing="true" text="_Name:" />
+                <TextField fx:id="settingsEntryNameInput"
+                        accessibleText="Settings entry name" />
+                <Label labelFor="$settingsSmallInput"
+                        mnemonicParsing="true"
+                        text="Default _small (blank means absent):" />
+                <TextField fx:id="settingsSmallInput"
+                        accessibleText="Settings small default" />
+                <Label labelFor="$settingsBigInput"
+                        mnemonicParsing="true"
+                        text="Default _big (blank means absent):" />
+                <TextField fx:id="settingsBigInput"
+                        accessibleText="Settings big default" />
+                <Label labelFor="$settingsMultiplierInput"
+                        mnemonicParsing="true"
+                        text="_Multiplier (blank means absent):" />
+                <TextField fx:id="settingsMultiplierInput"
+                        accessibleText="Settings multiplier" />
+                <CheckBox fx:id="settingsInvertedCheck"
+                        accessibleText="Invert Settings entry"
+                        mnemonicParsing="true" text="_Inverted" />
+                <Button fx:id="applySettingsEntryButton"
+                        accessibleText="Apply Settings entry draft"
+                        maxWidth="Infinity" mnemonicParsing="true"
+                        text="_Apply entry" />
+                <Button fx:id="removeSettingsEntryButton"
+                        accessibleText="Remove Settings entry"
+                        maxWidth="Infinity" mnemonicParsing="true"
+                        text="_Remove entry" />
+            </children>
+        </VBox>
+    </editor>
+    <inspector>
+        <VBox fx:id="settingsInspectorContent" managed="false"
+                spacing="8.0" visible="false">
+            <children>
+                <Label styleClass="title" text="Settings pair" />
+                <Label text="Standard and UUNP are saved together. Arbitrary finite float values are accepted."
+                        wrapText="true" />
+                <Label fx:id="settingsNoticeText"
+                        accessibleText="Settings persistence diagnostics"
+                        focusTraversable="true"
+                        text="No Settings diagnostics." wrapText="true" />
+                <CheckBox fx:id="omitRedundantSlidersCheck"
+                        accessibleText="Omit redundant sliders"
+                        mnemonicParsing="true"
+                        text="_Omit redundant sliders in Templates output" />
+                <Button fx:id="saveSettingsButton"
+                        accessibleText="Save Standard and UUNP Settings"
+                        maxWidth="Infinity" mnemonicParsing="true"
+                        text="_Save Settings" />
+                <Button fx:id="reloadSettingsButton"
+                        accessibleText="Reload and recover Settings"
+                        maxWidth="Infinity" mnemonicParsing="true"
+                        text="_Reload Settings" />
+            </children>
+        </VBox>
+    </inspector>
+</AreaPanes>

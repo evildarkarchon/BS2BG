@@ -164,7 +164,7 @@ public final class WorkbenchFeedback {
     /**
      * Current inline feedback for the initiating pane.
      */
-    public record InfoBar(Severity severity, String cue, SemanticIcons.IconKey icon, String message) {
+    public record InfoBar(Severity severity, String cue, IconKey icon, String message) {
         /** Rejects a partially projected inline message. */
         public InfoBar {
             Objects.requireNonNull(severity, "severity");
@@ -197,7 +197,7 @@ public final class WorkbenchFeedback {
      * Durable session-scoped record of one user-visible operation outcome.
      */
     public record ActivityRecord(long id, String operation, Severity severity, String cue,
-                                 SemanticIcons.IconKey icon, String message, Disposition disposition, Instant occurredAt,
+                                 IconKey icon, String message, Disposition disposition, Instant occurredAt,
                                  Optional<JobDetails> jobDetails, Optional<String> details) {
         /** Rejects incomplete or non-positive Activity identities. */
         public ActivityRecord {
@@ -334,7 +334,7 @@ public final class WorkbenchFeedback {
         Optional<JobDetails> details = Objects.requireNonNull(jobDetails, "jobDetails");
         Optional<String> retainedDetails = Objects.requireNonNull(activityDetails, "activityDetails");
         String cue = value.severity().cue();
-        SemanticIcons.IconKey icon = value.severity().icon();
+        IconKey icon = value.severity().icon();
         activities.add(new ActivityRecord(nextActivityId++, value.operation(), value.severity(), cue, icon,
                 value.message(), value.disposition(), clock.instant(), details, retainedDetails));
         StatusProjection status = new StatusProjection(value.severity(), value.message(),
@@ -394,16 +394,16 @@ public final class WorkbenchFeedback {
      * Semantic outcome severity; every value supplies a non-color cue and icon.
      */
     public enum Severity {
-        INFORMATION("Information", SemanticIcons.IconKey.INFORMATION),
-        VALIDATION("Validation", SemanticIcons.IconKey.VALIDATION),
-        SUCCESS("Success", SemanticIcons.IconKey.SUCCESS),
-        WARNING("Warning", SemanticIcons.IconKey.WARNING),
-        FAILURE("Failure", SemanticIcons.IconKey.FAILURE);
+        INFORMATION("Information", IconKey.INFORMATION),
+        VALIDATION("Validation", IconKey.VALIDATION),
+        SUCCESS("Success", IconKey.SUCCESS),
+        WARNING("Warning", IconKey.WARNING),
+        FAILURE("Failure", IconKey.FAILURE);
 
         private final String cue;
-        private final SemanticIcons.IconKey icon;
+        private final IconKey icon;
 
-        Severity(String cue, SemanticIcons.IconKey icon) {
+        Severity(String cue, IconKey icon) {
             this.cue = cue;
             this.icon = icon;
         }
@@ -418,7 +418,7 @@ public final class WorkbenchFeedback {
         /**
          * @return semantic bundled-vector request paired with this severity
          */
-        public SemanticIcons.IconKey icon() {
+        public IconKey icon() {
             return icon;
         }
     }

@@ -10,7 +10,7 @@
       1. Loads tools/java25/toolchain-lock.json, cross-checks the committed Maven Wrapper pins against it, and
          asserts that pom.xml compiles every production source with full lint enforcement (no include list,
          no sourcepath override), so a source-filtered build cannot be invoked as the gate.
-      2. Checksum-provisions Eclipse Temurin 25 (JDK) and the Gluon JavaFX 25 Windows x64 JMODs into a
+      2. Checksum-provisions Eclipse Temurin 25 (JDK) and the Gluon JavaFX 27 Windows x64 JMODs into a
          versioned cache, verifying SHA-256 before extraction and the JDK release metadata / jmod versions after.
       3. Exports BS2BG_JDK25_HOME for .mvn/toolchains.xml and runs the committed Maven Wrapper (which verifies
          the pinned Apache Maven distribution itself) so maven-toolchains-plugin forks the provisioned JDK for
@@ -37,7 +37,10 @@
     Lifecycle goals to run. Defaults to 'clean verify'. 'clean' is deliberate: stale class files from a previous
     release target would otherwise survive Maven's incremental compilation and pollute the evidence. Arguments
     that skip, filter, or ignore tests (skipTests, maven.test.skip, maven.test.failure.ignore, -Dtest=) are rejected:
-    the gate is the complete run.
+    the gate is the complete run. So is anything that would move the tests off JavaFX's built-in headless platform
+    (ADR-0008): the desktop-fx profile and any glass.platform, prism.order, or bs2bg.test.desktop property, whether
+    passed here or through MAVEN_ARGS. The headless platform itself comes from pom.xml (Surefire
+    systemPropertyVariables), so this script runs no test window on the desktop.
 
 .PARAMETER SkipMaven
     Provision and verify the toolchain inputs only; do not run the Maven build.
@@ -104,10 +107,11 @@ Write-Host "pom.xml pins release $pomRelease and toolchain runtime $pomRuntimeVe
 # this script would be reporting a partial build, which is exactly what it must never do.
 $scope = Assert-CompleteSourceScope -RepoRoot $repoRoot
 Write-Host "pom.xml compiles all $($scope.ProductionSources.Count) production sources ($($scope.CompilerArgs -join ' '))"
-foreach ($goal in $MavenGoals) {
-    if ($goal -match 'skipTests|maven\.test\.skip|maven\.test\.failure\.ignore|testFailureIgnore|^-Dtest=|failIfNoSpecifiedTests') {
-        throw "Maven argument '$goal' would skip or filter the test phase; the application gate runs every suite."
-    }
+Assert-GateMavenArguments -Arguments $MavenGoals
+# Maven 3.9 prepends MAVEN_ARGS to every command line, so a desktop-fx or skip flag there would bypass the check
+# above just as surely as one in -MavenGoals.
+if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_ARGS)) {
+    Assert-GateMavenArguments -Arguments ($env:MAVEN_ARGS.Trim() -split '\s+') -Source 'MAVEN_ARGS argument'
 }
 if (-not $SkipMaven) {
     if ($MavenGoals -cnotcontains 'clean' -or $MavenGoals -cnotcontains 'verify') {
@@ -142,7 +146,7 @@ if (-not $osArchLine -or $Matches[1] -ne $lock.architecture.javaOsArch) {
 Write-Host "JDK verified: $($release['IMPLEMENTOR']) $($release['IMPLEMENTOR_VERSION']) os.arch=$($lock.architecture.javaOsArch) at $jdkHome"
 
 # ---------------------------------------------------------------------------------------------------------------
-# 3. Provision and verify JavaFX 25 JMODs
+# 3. Provision and verify JavaFX JMODs
 # ---------------------------------------------------------------------------------------------------------------
 Write-Step "Provisioning JavaFX $($lock.javafx.version) JMODs (Windows x64)"
 $javafxJmods = Install-LockedArchive -Url $lock.javafx.url -Sha256 $lock.javafx.sha256 -Destination (Join-Path $CacheRoot $lock.javafx.id) -ExpectedRootDirectory $lock.javafx.archiveRootDirectory -Label 'JavaFX JMODs'
@@ -191,12 +195,16 @@ $requiredSuiteCounts = $null
 $artifact = $null
 
 # Suites whose presence and green result the gate requires, beyond the Surefire totals: the toolchain witness,
-# the structural source/pom gate, the FXML/controller harness, the Preview profile contract,
-# the packaged-launcher and app-image staging contracts (#97), and the ProjectSession, Project, filtering-seam, and
-# persistence-compatibility contracts, plus the centralized job coordinator race and shutdown contract.
+# the structural source/pom gate, the headless-platform startup guard (ADR-0008), the FXML/controller harness,
+# the Preview profile contract, the packaged-launcher and app-image staging contracts (#97), and the ProjectSession,
+# Project, filtering-seam, and persistence-compatibility contracts, plus the centralized job coordinator race and
+# shutdown contract.
 $requiredSuites = @(
     'com.asdasfa.jbs2bg.build.Java25ToolchainGuardTest',
     'com.asdasfa.jbs2bg.build.ProductionSourceGateTest',
+    'com.asdasfa.jbs2bg.build.ProductionPlatformBanGateTest',
+    'com.asdasfa.jbs2bg.fx.FxTestToolkitTest',
+    'com.asdasfa.jbs2bg.fx.FxTestHarnessTest',
     'com.asdasfa.jbs2bg.build.FxmlGraphLoadingTest',
     'com.asdasfa.jbs2bg.build.LauncherTest',
     'com.asdasfa.jbs2bg.build.WindowsAppImageGateTest',
@@ -222,10 +230,22 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.workbench.jobs.JobCoordinatorTest',
     'com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlowTest',
     'com.asdasfa.jbs2bg.workbench.WorkbenchControllerTest',
+    'com.asdasfa.jbs2bg.workbench.WorkbenchFocusTest',
+    'com.asdasfa.jbs2bg.workbench.WorkbenchFocusPolicyTest',
+    'com.asdasfa.jbs2bg.workbench.WorkbenchAccessibilityContractTest',
+    'com.asdasfa.jbs2bg.workbench.UiaListHelperTest',
+    'com.asdasfa.jbs2bg.workbench.DispatchPipelineTest',
+    'com.asdasfa.jbs2bg.workbench.NpcPortraitViewerTest',
     'com.asdasfa.jbs2bg.workbench.templates.TemplatesFeatureTest',
+    'com.asdasfa.jbs2bg.workbench.templates.TemplatesAreaTest',
     'com.asdasfa.jbs2bg.workbench.morphs.MorphsFeatureTest',
+    'com.asdasfa.jbs2bg.workbench.morphs.MorphsAreaTest',
+    'com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseAreaTest',
     'com.asdasfa.jbs2bg.workbench.settings.SettingsFeatureTest',
-    'com.asdasfa.jbs2bg.workbench.output.OutputFeatureTest'
+    'com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunnerTest',
+    'com.asdasfa.jbs2bg.workbench.settings.SettingsAreaTest',
+    'com.asdasfa.jbs2bg.workbench.output.OutputFeatureTest',
+    'com.asdasfa.jbs2bg.workbench.output.OutputDrawerTest'
 )
 
 if (-not $SkipMaven) {
@@ -339,7 +359,7 @@ $evidence = [ordered]@{
             }
         } else { $null })
         structuralGate          = 'ProductionSourceGateTest (sources, resources, pom) and Java25ToolchainGuardTest (every emitted class file)'
-        fxmlHarness             = 'FxmlGraphLoadingTest (sole Workbench root graph on the pinned toolkit)'
+        fxmlHarness             = 'FxmlGraphLoadingTest (Workbench root graph and the Area graphs it loads, on the pinned toolkit)'
         workbenchLifecycle      = 'JobCoordinatorTest + WorkbenchProjectFlowTest + WorkbenchControllerTest + TemplatesFeatureTest + MorphsFeatureTest + SettingsFeatureTest + OutputFeatureTest (central admission, imports, Templates and Morphs authoring, Settings persistence, captured generation, progress, cancellation, retry, stale refusal, shutdown, and JavaFX adapter)'
     }
     targetRelease           = [ordered]@{

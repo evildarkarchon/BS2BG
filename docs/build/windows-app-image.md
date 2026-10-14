@@ -7,7 +7,7 @@ responsive/minimum geometry, live themes, High Contrast, reduced motion, feedbac
 failure preservation, pointer-free Slider Preset choice editing and catalog management, keyboard and pointer Custom Morph
 Target and NPC Morph Assignment authoring, NPC Database import and Project promotion, Preview profile isolation,
 and dirty shutdown, and exits cleanly.
-ADR-0003 records the Java 25 baseline this checkpoint ships.
+ADR-0003 records the Java 25 baseline this checkpoint ships (JavaFX: ADR-0007).
 The [2026-09-27 Workbench parity checkpoint](evidence/windows-app-image-2026-09-27-workbench-parity/README.md)
 retains the exact tested Preview ZIP, complete 100/125/150 packaged reports, and six mixed-monitor landings.
 
@@ -111,7 +111,7 @@ The script:
    requires exactly `tools.jackson.core:jackson-core:3.1.5`, requires the Jackson Core classes to occur only in
    that jar, and rejects minimal-json or every other reviewed production codec family even when shaded.
 3. Measures the runtime module closure with `jdeps --print-module-deps` over the staged jars against the pinned
-   JavaFX 25 JMODs. `jdeps` reads jars and exploded modules but not JMOD archives, so the pinned JMODs are first
+   JavaFX 27 JMODs. `jdeps` reads jars and exploded modules but not JMOD archives, so the pinned JMODs are first
    extracted with `jmod extract` into `target/app-image-measure/`. The measured closure is widened only by the
    explicit additions listed in the script, each with a recorded reason (currently `jdk.charsets`: the extended
    charsets that the owned Project reader may resolve at runtime from a juniversalchardet detection).
@@ -384,7 +384,7 @@ focused window.
 - `sourceCheckout`: whether clean checkout was required, the observed result, and the exact checkpoint commit.
 - `application`: name, version, main class, main jar, description, vendor.
 - `gate`: how the gate was obtained (this run or reused), its test count, Maven version and `--version` output.
-- `toolchain`: Temurin implementor/full build/`JAVA_VERSION`/`JAVA_RUNTIME_VERSION`, JavaFX patch, archive
+- `toolchain`: Temurin implementor/full build/`JAVA_VERSION`/`JAVA_RUNTIME_VERSION`, JavaFX version, archive
   hashes, architecture (`PROCESSOR_ARCHITECTURE`, JDK `OS_ARCH`, `os.arch`), and
   `jdeps`/`jimage`/`jlink`/`jpackage` versions.
 - `payload`: every staged artifact with SHA-256 and size; pointer to `dependency-tree.txt`; the selected Jackson

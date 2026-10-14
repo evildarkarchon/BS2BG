@@ -16,13 +16,13 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.stream.Stream;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 
@@ -34,25 +34,19 @@ final class ProjectJacksonCompatibilityTest {
     private static final Path FIXTURE_ROOT = Path.of("test-resources", "json-oracles", "project");
     @TempDir
     Path temporaryDirectory;
+    // One isolated store per test, seeded by the @BeforeEach fixture.
+    private Settings settings;
 
     /**
      * Seeds profile-distinct defaults so an order-dependent parser cannot pass accidentally.
      */
-    @BeforeAll
-    static void seedSliderDefaults() {
+    @BeforeEach
+    void seedSliderDefaults() {
         Map<String, DefaultSliderValue> standard = new LinkedHashMap<>();
         standard.put("Waist", new DefaultSliderValue(0.2f, 1f));
         Map<String, DefaultSliderValue> uunp = new LinkedHashMap<>();
         uunp.put("Arms", new DefaultSliderValue(1f, 1f));
-        SettingsTestSupport.installDefaults(standard, uunp);
-    }
-
-    /**
-     * Restores the checked-in Settings pair after the compatibility oracle runs.
-     */
-    @AfterAll
-    static void restoreSliderDefaults() {
-        SettingsTestSupport.restoreRepositorySettings();
+        settings = SettingsTestSupport.installDefaults(temporaryDirectory.resolve("settings"), standard, uunp);
     }
 
     /**
@@ -205,14 +199,14 @@ final class ProjectJacksonCompatibilityTest {
     void semanticFixtureMatchesExpectedProjectAndRoundTripsCanonicalBytes() throws Exception {
         Path fixture = FIXTURE_ROOT.resolve("semantic-equivalence.jbs2bg");
 
-        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture);
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture, settings.snapshot());
 
         assertSemanticFixture(candidate.snapshot());
         assertTrue(candidate.diagnostics().isEmpty());
 
         Path canonical = temporaryDirectory.resolve("semantic-canonical.jbs2bg");
         Files.write(canonical, ProjectJacksonAdapter.write(candidate.snapshot()));
-        ProjectJacksonAdapter.Candidate reopened = ProjectJacksonAdapter.read(canonical);
+        ProjectJacksonAdapter.Candidate reopened = ProjectJacksonAdapter.read(canonical, settings.snapshot());
         assertProjectContentEquals(candidate.snapshot(), reopened.snapshot());
         assertTrue(reopened.diagnostics().isEmpty());
     }
@@ -223,7 +217,7 @@ final class ProjectJacksonCompatibilityTest {
     @Test
     void canonicalWriterUsesDomainOrderIndependentOfEncounterOrder() {
         ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(
-                FIXTURE_ROOT.resolve("canonical-ordering.jbs2bg"));
+                FIXTURE_ROOT.resolve("canonical-ordering.jbs2bg"), settings.snapshot());
 
         String canonical = new String(ProjectJacksonAdapter.write(candidate.snapshot()), StandardCharsets.UTF_8);
 
@@ -245,7 +239,7 @@ final class ProjectJacksonCompatibilityTest {
     void fixedSchemaMemberOrderDoesNotChangeProjectMeaning() {
         Path fixture = FIXTURE_ROOT.resolve("member-order-uunp.jbs2bg");
 
-        ProjectSnapshot snapshot = ProjectJacksonAdapter.read(fixture).snapshot();
+        ProjectSnapshot snapshot = ProjectJacksonAdapter.read(fixture, settings.snapshot()).snapshot();
         SliderPresetSnapshot preset = snapshot.getSliderPresets().getFirst();
         SliderChoiceSnapshot choice = preset.getSliderChoices().getFirst();
 
@@ -266,7 +260,7 @@ final class ProjectJacksonCompatibilityTest {
     void recoveryFixtureRetainsExpectedProjectAndOrderedDiagnostics() {
         Path fixture = FIXTURE_ROOT.resolve("recovery-ordered-diagnostics.jbs2bg");
 
-        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture);
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture, settings.snapshot());
 
         assertEquals(List.of("Alpha", "Beta"), candidate.snapshot().getSliderPresets().stream()
                 .map(SliderPresetSnapshot::getName).toList());
@@ -288,14 +282,15 @@ final class ProjectJacksonCompatibilityTest {
     void repeatedNpcDisplayNamesRemainVisibleAndRoundTrip() throws Exception {
         Path fixture = FIXTURE_ROOT.resolve("legal-repeated-npc-display-name.jbs2bg");
 
-        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture);
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture, settings.snapshot());
         byte[] canonical = ProjectJacksonAdapter.write(candidate.snapshot());
         Path written = temporaryDirectory.resolve("repeated-npcs.jbs2bg");
         Files.write(written, canonical);
 
         assertEquals(2, candidate.snapshot().getNpcMorphAssignments().size());
         assertEquals(2, countOccurrences(new String(canonical, StandardCharsets.UTF_8), "\"Guard\""));
-        assertEquals(2, ProjectJacksonAdapter.read(written).snapshot().getNpcMorphAssignments().size());
+        assertEquals(2, ProjectJacksonAdapter.read(written,
+                settings.snapshot()).snapshot().getNpcMorphAssignments().size());
     }
 
     /**
@@ -304,7 +299,7 @@ final class ProjectJacksonCompatibilityTest {
     @Test
     void explicitNullAndOmittedDefaultsRemainDistinct() {
         ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(
-                FIXTURE_ROOT.resolve("semantic-equivalence.jbs2bg"));
+                FIXTURE_ROOT.resolve("semantic-equivalence.jbs2bg"), settings.snapshot());
 
         String canonical = new String(ProjectJacksonAdapter.write(candidate.snapshot()), StandardCharsets.UTF_8);
 
@@ -320,7 +315,7 @@ final class ProjectJacksonCompatibilityTest {
     @Test
     void omittedLegacySliderFieldsUseHistoricalDefaults() {
         ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(
-                FIXTURE_ROOT.resolve("legacy-omitted-slider-defaults.jbs2bg"));
+                FIXTURE_ROOT.resolve("legacy-omitted-slider-defaults.jbs2bg"), settings.snapshot());
 
         SliderPresetSnapshot preset = candidate.snapshot().getSliderPresets().getFirst();
         SliderChoiceSnapshot choice = preset.getSliderChoices().getFirst();
@@ -425,11 +420,11 @@ final class ProjectJacksonCompatibilityTest {
     @Test
     void unicodeContentRoundTripsWithoutIdentityOrPathDrift() throws Exception {
         Path fixture = FIXTURE_ROOT.resolve("unicode-content.jbs2bg");
-        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture);
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture, settings.snapshot());
         Path written = temporaryDirectory.resolve("unicode-written.jbs2bg");
         Files.write(written, ProjectJacksonAdapter.write(candidate.snapshot()));
 
-        ProjectJacksonAdapter.Candidate reopened = ProjectJacksonAdapter.read(written);
+        ProjectJacksonAdapter.Candidate reopened = ProjectJacksonAdapter.read(written, settings.snapshot());
 
         assertProjectContentEquals(candidate.snapshot(), reopened.snapshot());
         assertEquals("İstanbul/˜😀", reopened.snapshot().getSliderPresets().getFirst().getName());
@@ -444,7 +439,8 @@ final class ProjectJacksonCompatibilityTest {
         Path source = FIXTURE_ROOT.resolve(fixture.fileName());
 
         ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
-                ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source));
+                ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source,
+                        settings.snapshot()));
 
         assertEquals(fixture.code(), exception.code());
         assertEquals(fixture.path(), exception.path());
@@ -468,7 +464,8 @@ final class ProjectJacksonCompatibilityTest {
             Files.writeString(source, valid.replace(sample[0], sample[1]));
 
             ProjectJacksonAdapter.ProjectFormatException failure = assertThrows(
-                    ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source));
+                    ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source,
+                            settings.snapshot()));
 
             assertEquals(ProjectDiagnosticCodes.SLIDER_CHOICE_PERCENTAGE_INVALID, failure.code());
             assertEquals("/SliderPresets/CBBE.Curvy/SetSliders/0" + sample[2], failure.path());
@@ -482,7 +479,7 @@ final class ProjectJacksonCompatibilityTest {
     void integerBoundsAndNegativeZeroMatchThePermanentExpectedValues() {
         Path fixture = FIXTURE_ROOT.resolve("integer-bounds-valid.jbs2bg");
 
-        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture);
+        ProjectJacksonAdapter.Candidate candidate = ProjectJacksonAdapter.read(fixture, settings.snapshot());
 
         SliderChoiceSnapshot choice = candidate.snapshot().getSliderPresets().getFirst().getSliderChoices().getFirst();
         assertEquals(Integer.MIN_VALUE, choice.getStoredSmallValue().getAsInt());
@@ -499,7 +496,8 @@ final class ProjectJacksonCompatibilityTest {
         Path source = FIXTURE_ROOT.resolve(fixture.fileName());
 
         ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
-                ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source));
+                ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source,
+                        settings.snapshot()));
 
         assertEquals(ProjectDiagnosticCodes.PROJECT_VALUE_TYPE_INVALID, exception.code());
         assertEquals("/SliderPresets/Bounds/SetSliders/0/valueSmall", exception.path());
@@ -513,7 +511,8 @@ final class ProjectJacksonCompatibilityTest {
         Path source = FIXTURE_ROOT.resolve("resource-number-too-long.jbs2bg");
 
         ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
-                ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source));
+                ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source,
+                        settings.snapshot()));
 
         assertEquals(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, exception.code());
         assertEquals("/SliderPresets/Bounds/SetSliders/0/valueSmall", exception.path());
@@ -540,7 +539,8 @@ final class ProjectJacksonCompatibilityTest {
                         + "\"CustomMorphTargets\":{},\"MorphedNPCs\":{}}");
 
         ProjectJacksonAdapter.ProjectFormatException exception = assertThrows(
-                ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source));
+                ProjectJacksonAdapter.ProjectFormatException.class, () -> ProjectJacksonAdapter.read(source,
+                        settings.snapshot()));
 
         assertEquals(ProjectDiagnosticCodes.PROJECT_JSON_RESOURCE_LIMIT, exception.code());
         assertEquals("/SliderPresets/Wide/SetSliders/0/name", exception.path());

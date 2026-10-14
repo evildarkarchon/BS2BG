@@ -16,7 +16,9 @@ import java.util.logging.Logger;
 import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.project.ProjectSession;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
+import com.asdasfa.jbs2bg.workbench.GenerationPreferencesStore;
 import com.asdasfa.jbs2bg.workbench.WorkbenchController;
+import com.asdasfa.jbs2bg.workbench.WorkbenchEnvironment;
 import com.asdasfa.jbs2bg.workbench.WorkbenchGeometry;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
@@ -46,9 +48,12 @@ public class Main extends Application {
 
     public final Image icon = new Image(getClass().getResourceAsStream("/res/icon.png"));
     public final String workbenchStyle = getClass().getResource("workbench.css").toExternalForm();
-    public final Settings.InitializationResult settingsInitialization;
+    // Package-private: only the same-package startup probe reads the startup result.
+    final Settings.InitializationResult settingsInitialization;
     final WorkbenchProjectFlow workbenchProjectFlow;
     private final Path profileDirectory;
+    // The one production Settings store; the session sees only its read-only snapshot view.
+    private final Settings settings;
     private final ExecutorService jobWorker;
     private final JobCoordinator jobCoordinator;
     public Stage primaryStage;
@@ -65,8 +70,9 @@ public class Main extends Application {
         } catch (IOException exception) {
             throw new IllegalStateException("Could not prepare the BS2BG Preview profile", exception);
         }
-        settingsInitialization = Settings.initialize(profileDirectory);
-        ProjectSession projectSession = ProjectSessions.create();
+        settings = new Settings(profileDirectory);
+        settingsInitialization = settings.reload();
+        ProjectSession projectSession = ProjectSessions.create(settings::snapshot);
         jobWorker = Executors.newSingleThreadExecutor(
                 Thread.ofPlatform().name("bs2bg-job-worker").factory());
         jobCoordinator = new JobCoordinator(jobWorker, Platform::runLater, Clock.systemUTC(),
@@ -181,7 +187,8 @@ public class Main extends Application {
             primaryStage.setScene(scene);
             primaryStage.setResizable(true);
             WorkbenchController controller = loader.getController();
-            controller.attach(workbenchProjectFlow, primaryStage, profileDirectory, settingsInitialization);
+            controller.attach(workbenchProjectFlow, primaryStage, WorkbenchEnvironment.of(settings,
+                    settingsInitialization, profileDirectory, GenerationPreferencesStore.MigrationPolicy.MIGRATE));
             primaryStage.show();
             applyMeasuredClientMinimum(primaryStage, scene);
             // Windows monitor scaling is uniform on both axes; one callback avoids two competing native resets.

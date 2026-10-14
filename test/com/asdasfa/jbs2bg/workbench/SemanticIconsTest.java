@@ -22,7 +22,7 @@ class SemanticIconsTest {
     @Test
     void everySemanticKeyRendersAsAnApplicationOwnedVector() throws Exception {
         FxTestToolkit.runOnFxThread(() -> {
-            for (SemanticIcons.IconKey key : SemanticIcons.IconKey.values()) {
+            for (IconKey key : IconKey.values()) {
                 Node icon = SemanticIcons.create(key, true);
 
                 assertInstanceOf(SVGPath.class, icon, key.name());

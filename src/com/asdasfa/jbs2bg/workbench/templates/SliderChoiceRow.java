@@ -1,11 +1,13 @@
-package com.asdasfa.jbs2bg.workbench;
+package com.asdasfa.jbs2bg.workbench.templates;
 
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import com.asdasfa.jbs2bg.data.Settings;
 
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
-import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 
 import javafx.geometry.Pos;
 import javafx.scene.AccessibleRole;
@@ -19,10 +21,13 @@ import javafx.scene.layout.VBox;
 
 /**
  * JavaFX adapter for one immutable Slider choice row. It owns only control-local drag coalescing and translates each
- * completed gesture into a typed Templates intent; durable choice state remains in {@link TemplatesFeature}.
+ * completed gesture into a typed Templates intent; durable choice state remains in {@link TemplatesFeature}. The
+ * Templates Area builds and reuses the rows; its read-only accessors are public for tests that drive the whole
+ * loaded Workbench.
  */
-final class SliderChoiceRow extends VBox {
+public final class SliderChoiceRow extends VBox {
     private final Consumer<TemplatesFeature.Intent> dispatcher;
+    private final Supplier<Settings.Snapshot> currentSettings;
     private final CheckBox enabled = new CheckBox();
     private final Label preview = new Label();
     private final Label defaultState = new Label();
@@ -37,10 +42,12 @@ final class SliderChoiceRow extends VBox {
     /**
      * Creates one reusable row and wires its controls to the typed intent dispatcher.
      *
-     * @param dispatcher serialized Workbench Templates dispatcher
+     * @param dispatcher      serialized Workbench Templates dispatcher
+     * @param currentSettings read-only view of the current Settings pair used for drag-draft previews
      */
-    SliderChoiceRow(Consumer<TemplatesFeature.Intent> dispatcher) {
+    SliderChoiceRow(Consumer<TemplatesFeature.Intent> dispatcher, Supplier<Settings.Snapshot> currentSettings) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+        this.currentSettings = Objects.requireNonNull(currentSettings, "currentSettings");
         getStyleClass().add("slider-choice-row");
         setAccessibleRole(AccessibleRole.PARENT);
         setSpacing(6.0);
@@ -133,7 +140,7 @@ final class SliderChoiceRow extends VBox {
         try {
             previewText = ProjectOutputFormatter.formatSliderChoicePreview(
                     choice.snapshot().withPercentageRange(lower, upper),
-                    editor.profile() == TemplatesFeature.Profile.UUNP);
+                    editor.profile() == TemplatesFeature.Profile.UUNP, currentSettings.get());
         } catch (ProjectOutputFormatter.SliderChoicePreviewException exception) {
             // A pointer draft has no committed feature frame for diagnostics; the completed range intent supplies it.
             previewText = "Preview unavailable";
@@ -207,27 +214,27 @@ final class SliderChoiceRow extends VBox {
     }
 
     /** @return stable case-preserving Slider choice name */
-    String choiceName() {
+    public String choiceName() {
         return choice.name();
     }
 
     /** @return first editable control used by semantic editor focus */
-    CheckBox enabledControl() {
+    public CheckBox enabledControl() {
         return enabled;
     }
 
     /** @return exact BodyGen preview label for adapter and accessibility verification */
-    Label previewControl() {
+    public Label previewControl() {
         return preview;
     }
 
     /** @return independently reachable Minimum Slider */
-    Slider minimumControl() {
+    public Slider minimumControl() {
         return minimum;
     }
 
     /** @return independently reachable Maximum Slider */
-    Slider maximumControl() {
+    public Slider maximumControl() {
         return maximum;
     }
 
@@ -237,7 +244,7 @@ final class SliderChoiceRow extends VBox {
     }
 
     /** @return semantic row control currently focused, when the focus owner is editable */
-    Optional<FocusControl> focusedControl(Node focusOwner) {
+    public Optional<FocusControl> focusedControl(Node focusOwner) {
         if (focusOwner == enabled)
             return Optional.of(FocusControl.ENABLED);
         if (focusOwner == minimum)
@@ -248,7 +255,7 @@ final class SliderChoiceRow extends VBox {
     }
 
     /** @return current JavaFX control for one semantic row-control identity */
-    Node control(FocusControl control) {
+    public Node control(FocusControl control) {
         return switch (Objects.requireNonNull(control, "control")) {
             case ENABLED -> enabled;
             case MINIMUM -> minimum;
@@ -259,7 +266,7 @@ final class SliderChoiceRow extends VBox {
     /**
      * Stable editable control families used to restore exact row focus after a modal failure.
      */
-    enum FocusControl {
+    public enum FocusControl {
         ENABLED,
         MINIMUM,
         MAXIMUM

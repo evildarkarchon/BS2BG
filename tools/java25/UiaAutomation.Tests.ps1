@@ -166,6 +166,102 @@ Describe 'UI Automation native dialog process ownership' {
     }
 }
 
+Describe 'UI Automation strict element lookup' {
+    BeforeEach {
+        InModuleScope UiaAutomation {
+            Mock Start-Sleep { throw 'Strict lookups must not poll.' }
+            $script:liveElement = [pscustomobject]@{ Current = [pscustomobject]@{ Name = 'UUNP Athletic' } }
+            $script:liveElement | Add-Member ScriptMethod GetRuntimeId { return [int[]]@(42, 7) }
+        }
+    }
+
+    It 'returns the single element it finds without polling' {
+        InModuleScope UiaAutomation {
+            Mock Find-UiaElement { return $script:liveElement }
+            $found = Find-UiaElementStrict -Root 'root' -Condition 'condition' -Description 'Slider Preset row'
+            $found | Should -Be $script:liveElement
+            Should -Invoke Find-UiaElement -Times 1 -Exactly
+        }
+    }
+
+    It 'fails immediately when the element is missing' {
+        InModuleScope UiaAutomation {
+            Mock Find-UiaElement { return $null }
+            { Find-UiaElementStrict -Root 'root' -Condition 'condition' -Description 'Slider Preset row' } |
+                Should -Throw '*did not find Slider Preset row*'
+            Should -Invoke Find-UiaElement -Times 1 -Exactly
+        }
+    }
+
+    It 'fails on an element-unavailable error instead of swallowing it' {
+        InModuleScope UiaAutomation {
+            Mock Find-UiaElement { throw [System.Windows.Automation.ElementNotAvailableException]::new('gone') }
+            { Find-UiaElementStrict -Root 'root' -Condition 'condition' -Description 'Slider Preset row' } |
+                Should -Throw '*element-unavailable*Slider Preset row*'
+            Should -Invoke Find-UiaElement -Times 1 -Exactly
+        }
+    }
+
+    It 'passes other UIA failures through unchanged' {
+        InModuleScope UiaAutomation {
+            Mock Find-UiaElement { throw 'provider crashed' }
+            $failure = $null
+            try { Find-UiaElementStrict -Root 'root' -Condition 'condition' -Description 'Slider Preset row' }
+            catch { $failure = $_.Exception.Message }
+            $failure | Should -BeExactly 'provider crashed'
+        }
+    }
+
+    It 'recognizes element-unavailable errors wrapped by PowerShell or raised as the native UIA HRESULT' {
+        InModuleScope UiaAutomation {
+            $native = [System.Runtime.InteropServices.COMException]::new('gone', -2147220991)
+            $wrapped = [System.Management.Automation.MethodInvocationException]::new('call failed', $native)
+            Test-UiaElementUnavailableError -Exception $wrapped | Should -BeTrue
+            Test-UiaElementUnavailableError -Exception (
+                [System.Windows.Automation.ElementNotAvailableException]::new('gone')) | Should -BeTrue
+            Test-UiaElementUnavailableError -Exception (
+                [System.Runtime.InteropServices.COMException]::new('other', -2147467259)) | Should -BeFalse
+            Test-UiaElementUnavailableError -Exception ([System.InvalidOperationException]::new('x')) |
+                Should -BeFalse
+        }
+    }
+
+    It 'accepts a held element that is still live with the same RuntimeId' {
+        InModuleScope UiaAutomation {
+            Mock Find-UiaElement { return $script:liveElement }
+            $id = Assert-UiaElementStable -Element $script:liveElement -ExpectedRuntimeId @(42, 7) -Root 'root' `
+                -Condition 'condition' -Description 'Slider Preset row'
+            $id | Should -BeExactly '42.7'
+        }
+    }
+
+    It 'fails when the held element has become unavailable' {
+        InModuleScope UiaAutomation {
+            $dead = [pscustomobject]@{}
+            $dead | Add-Member ScriptMethod GetRuntimeId {
+                throw [System.Windows.Automation.ElementNotAvailableException]::new('gone')
+            }
+            Mock Find-UiaElement { return $script:liveElement }
+            {
+                Assert-UiaElementStable -Element $dead -ExpectedRuntimeId @(42, 7) -Root 'root' `
+                    -Condition 'condition' -Description 'Slider Preset row'
+            } | Should -Throw '*held Slider Preset row*element-unavailable*'
+        }
+    }
+
+    It 'fails when a fresh lookup finds a different RuntimeId' {
+        InModuleScope UiaAutomation {
+            $replacement = [pscustomobject]@{ Current = [pscustomobject]@{ Name = 'UUNP Athletic' } }
+            $replacement | Add-Member ScriptMethod GetRuntimeId { return [int[]]@(42, 9) }
+            Mock Find-UiaElement { return $replacement }
+            {
+                Assert-UiaElementStable -Element $script:liveElement -ExpectedRuntimeId @(42, 7) -Root 'root' `
+                    -Condition 'condition' -Description 'Slider Preset row'
+            } | Should -Throw '*Slider Preset row*RuntimeId 42.7*42.9*'
+        }
+    }
+}
+
 Describe 'UI Automation pointer provider retries' {
     BeforeEach {
         InModuleScope UiaAutomation {

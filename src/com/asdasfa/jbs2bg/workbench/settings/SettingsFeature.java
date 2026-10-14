@@ -14,12 +14,15 @@ import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.json.JacksonJson;
 import com.asdasfa.jbs2bg.workbench.GenerationPreferencesStore;
+import com.asdasfa.jbs2bg.workbench.WorkbenchFeature;
 
 /**
  * Owns Workbench Settings drafts, validation, paired persistence, and immutable presentation frames.
  */
-public final class SettingsFeature {
-    private final Path directory;
+public final class SettingsFeature
+        implements WorkbenchFeature<SettingsFeature.Intent, SettingsFeature.Update, SettingsFeature.Effect> {
+    private final Settings settings;
+    private final Path preferencesDirectory;
     private final GenerationPreferencesStore generationPreferences;
     private MutableProfile standard;
     private MutableProfile uunp;
@@ -41,29 +44,34 @@ public final class SettingsFeature {
     private Frame frame;
 
     /**
-     * Creates a Settings feature from the pair currently published by application startup.
+     * Creates a Settings feature over one store whose generation preference lives beside its Settings pair and is
+     * read without migration.
      *
-     * @param workingDirectory directory owning the paired Settings files
-     * @param initialization   startup recovery, warning, or failure evidence
+     * @param settings       Settings store whose current pair seeds the drafts
+     * @param initialization startup recovery, warning, or failure evidence
      */
-    public SettingsFeature(Path workingDirectory, Settings.InitializationResult initialization) {
-        this(workingDirectory, initialization,
+    public SettingsFeature(Settings settings, Settings.InitializationResult initialization) {
+        this(settings, initialization, Objects.requireNonNull(settings, "settings").directory(),
                 GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK);
     }
 
     /**
      * Creates a Settings feature and optionally completes the one-time packaged generation-preference migration.
      *
-     * @param workingDirectory application profile directory
-     * @param initialization   paired Settings startup result
-     * @param migrationPolicy explicit production migration or embedded read-only fallback policy
+     * @param settings             Settings store whose current pair seeds the drafts and whose directory Save and
+     *                             Reload target
+     * @param initialization       paired Settings startup result
+     * @param preferencesDirectory directory owning the generation-preference document
+     * @param migrationPolicy      explicit production migration or embedded read-only fallback policy
      */
-    public SettingsFeature(Path workingDirectory, Settings.InitializationResult initialization,
-                           GenerationPreferencesStore.MigrationPolicy migrationPolicy) {
-        directory = Objects.requireNonNull(workingDirectory, "workingDirectory").toAbsolutePath().normalize();
-        generationPreferences = new GenerationPreferencesStore(directory);
+    public SettingsFeature(Settings settings, Settings.InitializationResult initialization,
+                           Path preferencesDirectory, GenerationPreferencesStore.MigrationPolicy migrationPolicy) {
+        this.settings = Objects.requireNonNull(settings, "settings");
+        this.preferencesDirectory = Objects.requireNonNull(preferencesDirectory, "preferencesDirectory")
+                .toAbsolutePath().normalize();
+        generationPreferences = new GenerationPreferencesStore(this.preferencesDirectory);
         Objects.requireNonNull(initialization, "initialization");
-        baseline = Settings.snapshot();
+        baseline = settings.snapshot();
         liveAvailable = initialization.isSuccessful();
         standard = MutableProfile.from(baseline.standard());
         uunp = MutableProfile.from(baseline.uunp());
@@ -75,7 +83,7 @@ public final class SettingsFeature {
                     == GenerationPreferencesStore.MigrationPolicy.MIGRATE
                     ? generationPreferences.loadOrMigrate() : generationPreferences.loadLegacyFallback();
         } catch (IOException exception) {
-            startupNotices.add(Notice.preferenceFailure(directory, exception));
+            startupNotices.add(Notice.preferenceFailure(preferencesDirectory, exception));
         }
         notices = List.copyOf(startupNotices);
         publish();
@@ -113,6 +121,7 @@ public final class SettingsFeature {
      * @param intent immutable user task
      * @return whether the task was accepted and the resulting immutable frame
      */
+    @Override
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
         if (pendingEffect != null && isMutation(intent))
@@ -130,10 +139,27 @@ public final class SettingsFeature {
         };
     }
 
-    /** Reports whether an intent could invalidate a captured persistence input or perform another disk mutation. */
-    private static boolean isMutation(Intent intent) {
-        return intent instanceof AddEntry || intent instanceof EditEntry || intent instanceof RemoveEntry
-                || intent instanceof ChangeOmitRedundantSliders || intent instanceof Save || intent instanceof Reload;
+    /**
+     * Reports whether an intent could invalidate a captured persistence input or perform another disk mutation. The
+     * feature rejects these while its own worker effect is pending; the dispatch pipeline also pauses them while a job
+     * blocks mutations.
+     *
+     * @param intent intent about to be dispatched
+     * @return true for intents that can change live or on-disk Settings
+     */
+    @Override
+    public boolean isMutation(Intent intent) {
+        return switch (Objects.requireNonNull(intent, "intent")) {
+            case AddEntry ignored -> true;
+            case EditEntry ignored -> true;
+            case RemoveEntry ignored -> true;
+            case ChangeOmitRedundantSliders ignored -> true;
+            case Save ignored -> true;
+            case Reload ignored -> true;
+            case SelectProfile ignored -> false;
+            case SelectEntry ignored -> false;
+            case DismissNotice ignored -> false;
+        };
     }
 
     /** Selects one profile without discarding either profile's draft or logical selection. */
@@ -235,7 +261,7 @@ public final class SettingsFeature {
 
     /** Captures one generation-preference value for retryable worker persistence. */
     private Update capturePreference(boolean selected) {
-        PreferenceEffect effect = new PreferenceEffect(nextEffectToken++, directory, selected);
+        PreferenceEffect effect = new PreferenceEffect(nextEffectToken++, preferencesDirectory, selected);
         pendingEffect = effect;
         return accepted(effect);
     }
@@ -259,7 +285,7 @@ public final class SettingsFeature {
             publish();
             return accepted();
         }
-        SaveEffect effect = new SaveEffect(nextEffectToken++, directory, replacement);
+        SaveEffect effect = new SaveEffect(nextEffectToken++, settings.directory(), replacement);
         pendingEffect = effect;
         return accepted(effect);
     }
@@ -271,7 +297,8 @@ public final class SettingsFeature {
         // A fresh Reload decision supersedes any abandoned Save continuation from an earlier attempt.
         reloadAfterSaveToken = null;
         if (frame.dirty()) {
-            ReloadConfirmationEffect effect = new ReloadConfirmationEffect(nextEffectToken++, directory,
+            ReloadConfirmationEffect effect = new ReloadConfirmationEffect(nextEffectToken++,
+                    settings.directory(),
                     "Save Settings before reloading?",
                     "Reloading now would discard unsaved Standard and UUNP Settings changes.");
             pendingEffect = effect;
@@ -282,7 +309,7 @@ public final class SettingsFeature {
 
     /** Captures a worker-owned Reload after a clean request, confirmed discard, or explicit failed-job retry. */
     private Update captureReload() {
-        ReloadEffect effect = new ReloadEffect(nextEffectToken++, directory);
+        ReloadEffect effect = new ReloadEffect(nextEffectToken++, settings.directory());
         pendingEffect = effect;
         return accepted(effect);
     }
@@ -404,7 +431,7 @@ public final class SettingsFeature {
             publish();
             return new Update(false, frame);
         }
-        baseline = Settings.snapshot();
+        baseline = settings.snapshot();
         liveAvailable = true;
         standard = MutableProfile.from(baseline.standard());
         uunp = MutableProfile.from(baseline.uunp());
@@ -428,7 +455,7 @@ public final class SettingsFeature {
             publish();
             return new Update(false, frame);
         }
-        baseline = Settings.snapshot();
+        baseline = settings.snapshot();
         liveAvailable = true;
         standard = MutableProfile.from(baseline.standard());
         uunp = MutableProfile.from(baseline.uunp());
@@ -444,7 +471,7 @@ public final class SettingsFeature {
     /** Commits one worker-persisted generation preference or retains the prior value after failure. */
     private Update completePreference(boolean selected, PreferenceCompletion completion) {
         if (completion.failureMessage().isPresent()) {
-            notices = List.of(Notice.preferenceFailure(directory,
+            notices = List.of(Notice.preferenceFailure(preferencesDirectory,
                     completion.failureMessage().orElseThrow()));
             outcome = OutcomeKind.FAILED;
             publish();
@@ -783,7 +810,10 @@ public final class SettingsFeature {
         /** @return presentation-owned token used to reject stale completion callbacks */
         long token();
 
-        /** @return normalized directory that owns the Settings and generation-preference documents */
+        /**
+         * @return normalized directory the effect targets: the Settings store's directory for Save and Reload, the
+         *         preferences directory for a generation-preference write
+         */
         Path directory();
     }
 
@@ -989,7 +1019,8 @@ public final class SettingsFeature {
     }
 
     /** Result of one task intent and its committed immutable frame, with optional worker-bound persistence. */
-    public record Update(boolean accepted, Frame frame, Optional<Effect> effect) {
+    public record Update(boolean accepted, Frame frame, Optional<Effect> effect)
+            implements WorkbenchFeature.Update<Effect> {
         /** Creates an update without a worker-bound effect. */
         public Update(boolean accepted, Frame frame) {
             this(accepted, frame, Optional.empty());

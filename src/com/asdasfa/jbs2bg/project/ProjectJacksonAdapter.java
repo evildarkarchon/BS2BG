@@ -23,6 +23,7 @@ import java.util.TreeSet;
 
 import org.mozilla.universalchardet.UniversalDetector;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.json.JacksonJson;
 
 import tools.jackson.core.JacksonException;
@@ -60,24 +61,27 @@ final class ProjectJacksonAdapter {
      * detached candidate after the final {@link Project#from(ProjectSnapshot)}
      * integrity check.
      *
-     * @param source Project fixture or source file
+     * @param source   Project fixture or source file
+     * @param settings Settings generation pinned for synthesizing every preset's default choices
      * @return immutable candidate and ordered recovery diagnostics
      * @throws ProjectFormatException for I/O, syntax, schema, domain, or limit failure
      */
-    static Candidate read(Path source) {
-        return read(source, ProjectOperationContext.nonCancellable());
+    static Candidate read(Path source, Settings.Snapshot settings) {
+        return read(source, settings, ProjectOperationContext.nonCancellable());
     }
 
     /**
      * Reads one candidate with cooperative cancellation and measured byte progress.
      *
-     * @param source  Project fixture or source file
-     * @param context operation context retained only for this synchronous parse
+     * @param source   Project fixture or source file
+     * @param settings Settings generation pinned for synthesizing every preset's default choices
+     * @param context  operation context retained only for this synchronous parse
      * @return immutable candidate and ordered recovery diagnostics
      * @throws ProjectFormatException for I/O, syntax, schema, domain, or limit failure
      */
-    static Candidate read(Path source, ProjectOperationContext context) {
+    static Candidate read(Path source, Settings.Snapshot settings, ProjectOperationContext context) {
         Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(settings, "settings");
         ProjectOperationContext operation = Objects.requireNonNull(context, "context");
         Path normalizedSource = source.toAbsolutePath().normalize();
         long sourceSize;
@@ -147,7 +151,7 @@ final class ProjectJacksonAdapter {
         // Parse detected text directly so the 64 MiB source limit is not applied again after UTF-8 expansion.
         try (JsonParser parser = JacksonJson.projectReaderFactory()
                 .createParser(ObjectReadContext.empty(), decoded)) {
-            reader = new Reader(parser, normalizedSource.toString(), operation);
+            reader = new Reader(parser, normalizedSource.toString(), settings, operation);
             ParsedProject parsed = readDocument(reader);
             operation.report(ProjectOperationProgress.indeterminate("Validating Project"));
             operation.checkCancellation();
@@ -287,7 +291,8 @@ final class ProjectJacksonAdapter {
                 explicitChoices = readSliderChoices(reader, value, fieldPath);
         }
         requirePresent(explicitChoices, reader, child(path, "SetSliders"), "SetSliders");
-        return new SliderPresetSnapshot(name, uunp.booleanValue(), explicitChoices.withDefaults(uunp.booleanValue()));
+        return new SliderPresetSnapshot(name, uunp.booleanValue(), explicitChoices.withDefaults(uunp.booleanValue(),
+                reader.settings()));
     }
 
     /**
@@ -956,17 +961,17 @@ final class ProjectJacksonAdapter {
      * Explicit choices plus their represented identities, used while applying defaults.
      */
     private record ExplicitChoices(List<RawChoice> choices, Set<String> representedNames) {
-        /** Returns explicit choices plus synthesized defaults for the selected Settings profile. */
-        List<SliderChoiceSnapshot> withDefaults ( boolean uunp){
+        /** Returns explicit choices plus synthesized defaults for the selected profile of one pinned pair. */
+        List<SliderChoiceSnapshot> withDefaults(boolean uunp, Settings.Snapshot settings) {
             List<SliderChoiceSnapshot> completed = new ArrayList<>();
             for (RawChoice choice : choices) {
                 completed.add(new SliderChoiceSnapshot(choice.name(), choice.enabled(), choice.storedSmall(),
                         choice.storedBig(),
-                        SliderChoiceDefaults.effectiveSmall(choice.name(), choice.storedSmall(), uunp),
-                        SliderChoiceDefaults.effectiveBig(choice.name(), choice.storedBig(), uunp),
+                        SliderChoiceDefaults.effectiveSmall(choice.name(), choice.storedSmall(), uunp, settings),
+                        SliderChoiceDefaults.effectiveBig(choice.name(), choice.storedBig(), uunp, settings),
                         choice.percentageMinimum(), choice.percentageMaximum(), false));
             }
-            completed.addAll(SliderChoiceDefaults.synthesizeMissing(representedNames, uunp));
+            completed.addAll(SliderChoiceDefaults.synthesizeMissing(representedNames, uunp, settings));
             completed.sort(Comparator.comparing(SliderChoiceSnapshot::getName, CASE_INSENSITIVE_ORDER));
             return Collections.unmodifiableList(completed);
         }
@@ -1037,20 +1042,30 @@ final class ProjectJacksonAdapter {
     private static final class Reader {
         private final JsonParser parser;
         private final String source;
+        private final Settings.Snapshot settings;
         private final ProjectOperationContext context;
         private String path = "/";
 
         /**
          * Wraps one parser with the stable source description used for every translated failure.
          *
-         * @param parser  Jackson cursor contained within this adapter
-         * @param source  normalized source-file description
-         * @param context operation context checked before every parser advance
+         * @param parser   Jackson cursor contained within this adapter
+         * @param source   normalized source-file description
+         * @param settings Settings generation pinned for the whole read
+         * @param context  operation context checked before every parser advance
          */
-        Reader(JsonParser parser, String source, ProjectOperationContext context) {
+        Reader(JsonParser parser, String source, Settings.Snapshot settings, ProjectOperationContext context) {
             this.parser = parser;
             this.source = source;
+            this.settings = settings;
             this.context = context;
+        }
+
+        /**
+         * @return the Settings generation pinned for this read
+         */
+        Settings.Snapshot settings() {
+            return settings;
         }
 
         /**

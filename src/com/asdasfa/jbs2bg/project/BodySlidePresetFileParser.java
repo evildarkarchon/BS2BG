@@ -25,6 +25,8 @@ import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 import org.xml.sax.helpers.DefaultHandler;
 
+import com.asdasfa.jbs2bg.data.Settings;
+
 /**
  * Parses one BodySlide XML file into detached immutable Slider Preset values.
  * No Project state is changed until the caller accepts the complete result.
@@ -38,32 +40,35 @@ final class BodySlidePresetFileParser {
     /**
      * Parses a complete BodySlide source using a hardened, per-call DOM builder.
      *
-     * @param source XML file to parse
+     * @param source   XML file to parse
+     * @param settings Settings generation pinned for synthesizing every preset's default choices
      * @return detached Slider Presets and name locations in canonical name order
      * @throws IOException                     when the source cannot be read
      * @throws SAXException                    when XML syntax is malformed
      * @throws ParserConfigurationException    when secure XML parsing is unavailable
      * @throws InvalidBodySlidePresetException when input exceeds resource limits or parsed XML violates import rules
      */
-    static List<ParsedPreset> parse(Path source)
+    static List<ParsedPreset> parse(Path source, Settings.Snapshot settings)
             throws IOException, SAXException, ParserConfigurationException {
-        return parse(source, ProjectOperationContext.nonCancellable());
+        return parse(source, settings, ProjectOperationContext.nonCancellable());
     }
 
     /**
      * Parses a complete BodySlide source while checking cancellation during byte consumption and DOM traversal.
      *
-     * @param source  XML file to parse
-     * @param context owning Project operation context
+     * @param source   XML file to parse
+     * @param settings Settings generation pinned for synthesizing every preset's default choices
+     * @param context  owning Project operation context
      * @return detached Slider Presets and name locations in canonical name order
      * @throws IOException                     when the source cannot be read
      * @throws SAXException                    when XML syntax is malformed
      * @throws ParserConfigurationException    when secure XML parsing is unavailable
      * @throws InvalidBodySlidePresetException when input exceeds resource limits or parsed XML violates import rules
      */
-    static List<ParsedPreset> parse(Path source, ProjectOperationContext context)
+    static List<ParsedPreset> parse(Path source, Settings.Snapshot settings, ProjectOperationContext context)
             throws IOException, SAXException, ParserConfigurationException {
         Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(settings, "settings");
         ProjectOperationContext operation = Objects.requireNonNull(context, "context");
         long sourceSize = Files.size(source);
         // DOM expansion costs substantially more memory than the source bytes, so
@@ -104,7 +109,7 @@ final class BodySlidePresetFileParser {
             if (node.getNodeType() != Node.ELEMENT_NODE)
                 continue;
             String presetElement = "/SliderPresets/Preset[" + (index + 1) + "]";
-            ParsedPreset candidate = parsePreset((Element) node, presetElement, operation);
+            ParsedPreset candidate = parsePreset((Element) node, presetElement, settings, operation);
             ParsedPreset previous = presets.get(candidate.getPreset().getName());
             if (previous != null) {
                 // Legacy import treats repeated logical names as later payloads for the
@@ -142,12 +147,13 @@ final class BodySlidePresetFileParser {
      *
      * @param element       Preset element
      * @param presetElement stable diagnostic element path
+     * @param settings      Settings generation pinned for the whole parse
      * @param context       owning operation context checked between Slider elements
      * @return detached, canonically ordered Slider Preset with its name location
      * @throws InvalidBodySlidePresetException when a slider choice is invalid
      * @throws java.util.concurrent.CancellationException when cancellation is accepted during traversal
      */
-    private static ParsedPreset parsePreset(Element element, String presetElement,
+    private static ParsedPreset parsePreset(Element element, String presetElement, Settings.Snapshot settings,
                                             ProjectOperationContext context) {
         String name = element.getAttribute("name").replace('.', ' ').trim();
 
@@ -161,7 +167,7 @@ final class BodySlidePresetFileParser {
             String choiceElement = presetElement + "/SetSlider[" + (index + 1) + "]";
             parseChoice((Element) node, choiceElement, choices);
         }
-        return new ParsedPreset(new SliderPresetSnapshot(name, false, completeChoices(choices)),
+        return new ParsedPreset(new SliderPresetSnapshot(name, false, completeChoices(choices, settings)),
                 presetElement + "/@name");
     }
 
@@ -260,19 +266,22 @@ final class BodySlidePresetFileParser {
      * compatible effective values and canonical ordering.
      *
      * @param explicit parsed explicit endpoints keyed by logical slider identity
+     * @param settings Settings generation pinned for the whole parse
      * @return complete immutable choice list
      */
-    private static List<SliderChoiceSnapshot> completeChoices(Map<String, MutableChoice> explicit) {
+    private static List<SliderChoiceSnapshot> completeChoices(Map<String, MutableChoice> explicit,
+                                                              Settings.Snapshot settings) {
         // BodySlide XML has no UUNP marker, so imported presets always start in the
         // non-UUNP mode; a later UUNP edit rebuilds the synthesized defaults.
         Map<String, SliderChoiceSnapshot> choices = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (MutableChoice choice : explicit.values()) {
             choices.put(choice.name, new SliderChoiceSnapshot(choice.name, true, choice.small, choice.big,
-                    SliderChoiceDefaults.effectiveSmall(choice.name, choice.small, false),
-                    SliderChoiceDefaults.effectiveBig(choice.name, choice.big, false),
+                    SliderChoiceDefaults.effectiveSmall(choice.name, choice.small, false, settings),
+                    SliderChoiceDefaults.effectiveBig(choice.name, choice.big, false, settings),
                     100, 100, false));
         }
-        for (SliderChoiceSnapshot synthesized : SliderChoiceDefaults.synthesizeMissing(choices.keySet(), false))
+        for (SliderChoiceSnapshot synthesized : SliderChoiceDefaults.synthesizeMissing(choices.keySet(), false,
+                settings))
             choices.put(synthesized.getName(), synthesized);
         return new ArrayList<>(choices.values());
     }

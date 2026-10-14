@@ -1,13 +1,17 @@
 package com.asdasfa.jbs2bg.workbench.npcdatabase;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -28,19 +32,40 @@ class NpcDatabasePromotionTest {
     @TempDir
     Path temporaryDirectory;
 
+    /** Creates a catalog that promotes into the given Project flow. */
+    private static NpcDatabaseFeature feature(WorkbenchProjectFlow flow) {
+        return new NpcDatabaseFeature(flow, Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC));
+    }
+
+    /** Dispatches Add for the selected row and returns the promotion report it produced. */
+    private static NpcDatabaseFeature.PromotionReport addSelected(NpcDatabaseFeature feature) {
+        return feature.dispatch(new NpcDatabaseFeature.AddSelected()).promotion().orElseThrow();
+    }
+
+    /** Dispatches Add All for the visible rows and returns the promotion report it produced. */
+    private static NpcDatabaseFeature.PromotionReport addAllVisible(NpcDatabaseFeature feature) {
+        return feature.dispatch(new NpcDatabaseFeature.AddAllVisible()).promotion().orElseThrow();
+    }
+
+    /** Dispatches Back to Morphs and returns the promoted identity its effect selects, if any. */
+    private static Optional<NpcMorphAssignmentIdentity> returnAssignment(NpcDatabaseFeature feature) {
+        return ((NpcDatabaseFeature.ReturnToMorphs) feature.dispatch(new NpcDatabaseFeature.BackToMorphs())
+                .effect().orElseThrow()).assignment();
+    }
+
     /** Add copies the selected catalog row into the Project and leaves catalog selection intact. */
     @Test
     void addSelectedCreatesIndependentAssignmentAndKeepsDatabaseSelection() throws Exception {
         Path source = temporaryDirectory.resolve("catalog.txt");
         Files.writeString(source, "Master.esm | Amber | First | NordRace | 00000A\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
-        NpcDatabaseFeature feature = new NpcDatabaseFeature();
+        NpcDatabaseFeature feature = feature(flow);
         feature.commitSource(NpcDatabaseSourceReader.read(source));
         NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity("master.esm", "first");
-        assertTrue(feature.selectRow(identity));
+        assertTrue(feature.dispatch(new NpcDatabaseFeature.SelectRow(identity)).accepted());
 
-        NpcDatabaseFeature.PromotionReport report = feature.promoteSelected(flow);
+        NpcDatabaseFeature.PromotionReport report = addSelected(feature);
 
         assertEquals(1, report.addedCount());
         assertEquals(0, report.duplicateCount());
@@ -48,12 +73,12 @@ class NpcDatabasePromotionTest {
                 .map(row -> new NpcMorphAssignmentIdentity(row.getMod(), row.getEditorId())).orElseThrow());
         assertEquals(1, feature.frame().rows().size());
         assertEquals("Amber", session.getSnapshot().getNpcMorphAssignments().getFirst().getDisplayName());
-        assertEquals(1, feature.promoteSelected(flow).duplicateCount());
-        assertEquals(identity, feature.consumeReturnAssignment().orElseThrow());
-        assertFalse(feature.consumeReturnAssignment().isPresent());
+        assertEquals(1, addSelected(feature).duplicateCount());
+        assertEquals(Optional.of(identity), returnAssignment(feature));
+        assertEquals(Optional.empty(), returnAssignment(feature));
         Path saved = temporaryDirectory.resolve("promoted.jbs2bg");
         assertInstanceOf(ChangedOutcome.class, session.saveAs(saved));
-        ProjectSession reopened = ProjectSessions.create();
+        ProjectSession reopened = ProjectSessions.create(emptySettings());
         assertInstanceOf(ChangedOutcome.class, reopened.open(saved));
         assertEquals("Amber", reopened.getSnapshot().getNpcMorphAssignments().getFirst().getDisplayName());
         assertEquals("A", reopened.getSnapshot().getNpcMorphAssignments().getFirst().getFormId());
@@ -68,16 +93,16 @@ class NpcDatabasePromotionTest {
                 + " | Blank plugin | Invalid01 | NordRace | 00000C\n"
                 + "Master.esm | Bad form | Invalid02 | NordRace | XYZ\n"
                 + "Master.esm | Hidden | Hidden01 | NordRace | 00000D\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(NpcMorphAssignmentEdits.create("Existing", "Master.esm", "Existing01", "NordRace", "A"));
-        NpcDatabaseFeature feature = new NpcDatabaseFeature();
+        NpcDatabaseFeature feature = feature(flow);
         feature.commitSource(NpcDatabaseSourceReader.read(source));
-        feature.setCriterion(ColumnCriterion.hiding("Name", List.of("Hidden")));
+        feature.dispatch(new NpcDatabaseFeature.SetCriterion(ColumnCriterion.hiding("Name", List.of("Hidden"))));
         NpcMorphAssignmentIdentity selected = new NpcMorphAssignmentIdentity("Master.esm", "Existing01");
-        assertTrue(feature.selectRow(selected));
+        assertTrue(feature.dispatch(new NpcDatabaseFeature.SelectRow(selected)).accepted());
 
-        NpcDatabaseFeature.PromotionReport report = feature.promoteVisible(flow);
+        NpcDatabaseFeature.PromotionReport report = addAllVisible(feature);
 
         assertEquals(4, report.entries().size());
         assertEquals(1, report.addedCount());
@@ -106,13 +131,13 @@ class NpcDatabasePromotionTest {
                 + "Master.esm | Broken | Broken01 | NordRace | XYZ\n"
                 + "Master.esm | Beta | Beta01 | NordRace | 00000B\n"
                 + "Master.esm | Gamma | Gamma01 | NordRace | 00000C\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
-        NpcDatabaseFeature feature = new NpcDatabaseFeature();
+        NpcDatabaseFeature feature = feature(flow);
         feature.commitSource(NpcDatabaseSourceReader.read(source));
         long beforeSequence = flow.frame().sequence();
 
-        NpcDatabaseFeature.PromotionReport report = feature.promoteVisible(flow);
+        NpcDatabaseFeature.PromotionReport report = addAllVisible(feature);
 
         assertEquals(beforeSequence + 1, flow.frame().sequence());
         assertEquals(List.of(NpcDatabaseFeature.PromotionStatus.ADDED,
@@ -130,15 +155,15 @@ class NpcDatabasePromotionTest {
     void addSelectedCanAssignOneProjectSliderPreset() throws Exception {
         Path source = temporaryDirectory.resolve("random.txt");
         Files.writeString(source, "Master.esm | Amber | First | NordRace | 00000A\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(SliderPresetEdits.create("Shape"));
-        NpcDatabaseFeature feature = new NpcDatabaseFeature();
+        NpcDatabaseFeature feature = feature(flow);
         feature.commitSource(NpcDatabaseSourceReader.read(source));
-        feature.selectRow(new NpcMorphAssignmentIdentity("Master.esm", "First"));
-        feature.setAssignRandom(true);
+        feature.dispatch(new NpcDatabaseFeature.SelectRow(new NpcMorphAssignmentIdentity("Master.esm", "First")));
+        feature.dispatch(new NpcDatabaseFeature.SetAssignRandom(true));
 
-        NpcDatabaseFeature.PromotionReport report = feature.promoteSelected(flow);
+        NpcDatabaseFeature.PromotionReport report = addSelected(feature);
 
         assertEquals(1, report.addedCount());
         assertTrue(feature.frame().assignRandom());
@@ -151,14 +176,14 @@ class NpcDatabasePromotionTest {
     void promotionRejectsNonHexSourceFormIdBeforeCatalogNormalization() throws Exception {
         Path source = temporaryDirectory.resolve("invalid-form.txt");
         Files.writeString(source, "Master.esm | Broken | Bad01 | NordRace | ZZ00000A\n");
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
-        NpcDatabaseFeature feature = new NpcDatabaseFeature();
+        NpcDatabaseFeature feature = feature(flow);
         feature.commitSource(NpcDatabaseSourceReader.read(source));
         NpcMorphAssignmentIdentity identity = new NpcMorphAssignmentIdentity("Master.esm", "Bad01");
-        assertTrue(feature.selectRow(identity));
+        assertTrue(feature.dispatch(new NpcDatabaseFeature.SelectRow(identity)).accepted());
 
-        NpcDatabaseFeature.PromotionReport report = feature.promoteSelected(flow);
+        NpcDatabaseFeature.PromotionReport report = addSelected(feature);
 
         assertEquals(0, report.addedCount());
         assertEquals(1, report.rejectedCount());

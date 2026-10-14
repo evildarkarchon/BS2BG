@@ -12,9 +12,11 @@
     live themes, High Contrast, reduced motion in a final accessibility phase after authoring,
     accessibility semantics, notifications, typed dialogs, startup, New, Open, Save, Save As, Project recovery,
     centralized admission, measured progress, cancellation, linked retry, stale-safe Activity evidence,
-    malformed/failed operation preservation, complete pointer-free Slider Preset choice editing and management,
+    malformed/failed operation preservation, complete pointer-free Slider Preset choice editing and management
+    (including RuntimeId-stable Slider Preset rows across a membership-preserving re-render),
     keyboard and semantic-pointer Custom Morph Target authoring, visible-set Fill Empty actions, portrait inspection,
-    transactional NPC Database import, source management, catalog inspection, filtering, sorting, Project promotion,
+    transactional NPC Database import, source management, catalog inspection, filtering (including outside-click
+    dismissal of the column filter), sorting, Project promotion,
     lifecycle independence, accessibility, coordinated dirty shutdown, and bounded exit.
 #>
 [CmdletBinding()]
@@ -694,7 +696,7 @@ function Wait-NpcDatabaseText {
 .SYNOPSIS
     Locates the keyboard sort ComboBox by its owned description or one of its domain choices.
 .NOTES
-    JavaFX 25's Windows provider can expose a ComboBox with an empty UIA Name despite its JavaFX accessibleText;
+    The JavaFX 25+ Windows provider can expose a ComboBox with an empty UIA Name despite its JavaFX accessibleText;
     the bound label and HelpText still describe it, and its ValuePattern exposes the selected sort choice.
 #>
 function Wait-NpcDatabaseSort {
@@ -870,7 +872,7 @@ function Select-CurrentThemeChoice {
 .PARAMETER Description
     Bounded-wait description used in diagnostics.
 .NOTES
-    JavaFX 25 exposes the selected TextArea as an unnamed Edit, so the locator combines its Edit role with the
+    JavaFX 25+ exposes the selected TextArea as an unnamed Edit, so the locator combines its Edit role with the
     named TabItem selection and named parent-region ownership instead of relying on an unavailable AutomationId.
 #>
 function Get-SelectedOutputText {
@@ -1450,6 +1452,14 @@ try {
             New-UiaCondition -ControlType 'ListItem' -Name 'Delta Created') `
             -Description 'created Slider Preset' -TimeoutSeconds $StepTimeoutSeconds | Out-Null
 
+        # Outcome check for the no-op setAll guard (#128): hold an uninvolved row, re-render Templates through a
+        # selection change that keeps list membership, then prove the held element and a fresh lookup still share one
+        # RuntimeId. The strict helper fails on element-unavailable errors that Wait-UiaCondition would swallow.
+        $heldPresetCondition = New-UiaCondition -ControlType 'ListItem' -Name 'UUNP Athletic'
+        $heldPreset = Find-UiaElementStrict -Root $presetList -Condition $heldPresetCondition `
+            -Description "held 'UUNP Athletic' Slider Preset row"
+        $heldPresetRuntimeId = [int[]]@($heldPreset.GetRuntimeId())
+
         Send-UiaKeysToElement -Element $presetList -Keys '{HOME}' -TimeoutSeconds $StepTimeoutSeconds
         $cbbe = Wait-UiaElement -Root $presetList -Condition (
             New-UiaCondition -ControlType 'ListItem' -Name 'CBBE Curvy') `
@@ -1457,6 +1467,13 @@ try {
         Wait-UiaCondition -Description 'CBBE identity selected by keyboard' -TimeoutSeconds $StepTimeoutSeconds -Test {
             if (Get-UiaSelectionState -Element $cbbe) { $cbbe }
         } | Out-Null
+        $stablePresetRuntimeId = Assert-UiaElementStable -Element $heldPreset -ExpectedRuntimeId $heldPresetRuntimeId `
+            -Root $presetList -Condition $heldPresetCondition -Description "'UUNP Athletic' Slider Preset row"
+        $observations['sliderPresetRuntimeIdStable'] = [ordered]@{
+            heldRow = 'UUNP Athletic'
+            reRender = 'keyboard selection of CBBE Curvy; membership unchanged'
+            runtimeId = $stablePresetRuntimeId
+        }
 
         $waistEnabled = Wait-UiaElement -Root $script:mainWindow -Condition (
             New-UiaCondition -ControlType 'CheckBox' -Name 'Enable Waist in Slider Preset CBBE Curvy') `
@@ -3042,6 +3059,30 @@ try {
         Wait-NpcFilterPopupClosed -Column 'Name'
         Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
             -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+
+        # Light dismissal (#128): BS2BG shows the filter popup with autoHide and consumeAutoHidingEvents, so a pointer
+        # click outside it must close the popup and discard the pending choice without reaching the clicked control.
+        $nameFilter = Find-OuterControl -ControlType 'Button' -Name 'Filter Name column'
+        Send-UiaKeysToElement -Element $nameFilter -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
+        $namePopup = Wait-NpcFilterPopup -Column 'Name'
+        $nameChoices = Wait-UiaElement -Root $namePopup -Condition (
+            New-UiaCondition -ControlType 'List' -Name 'Name NPC Database filter choices') `
+            -Description 'Name filter choices before outside click' -TimeoutSeconds $StepTimeoutSeconds
+        $seranaChoice = Wait-NpcFilterChoice -List $nameChoices -Value 'Serana'
+        Select-UiaElement -Element $seranaChoice
+        Send-UiaKeysToElement -Element $nameChoices -Keys ' ' -TimeoutSeconds $StepTimeoutSeconds
+        $npcAreaTitle = Find-OuterControl -ControlType 'Text' -Name 'NPC Database Area'
+        Invoke-UiaPointerClick -Element $npcAreaTitle -RefreshRoot $script:mainWindow `
+            -RefreshCondition (New-UiaCondition -ControlType 'Text' -Name 'NPC Database Area') | Out-Null
+        Wait-NpcFilterPopupClosed -Column 'Name'
+        Wait-NpcDatabaseText -Name 'NPC Database catalog summary' `
+            -Expected '3 of 3 NPC Database entries visible; 0 filtered columns.' | Out-Null
+        $observations['npcColumnFilterOutsideClick'] = [ordered]@{
+            column = 'Name'
+            pendingChoiceDiscarded = 'Serana'
+            target = 'NPC Database Area title'
+        }
+
         $nameFilter = Find-OuterControl -ControlType 'Button' -Name 'Filter Name column'
         Send-UiaKeysToElement -Element $nameFilter -Keys '{ENTER}' -TimeoutSeconds $StepTimeoutSeconds
         $namePopup = Wait-NpcFilterPopup -Column 'Name'

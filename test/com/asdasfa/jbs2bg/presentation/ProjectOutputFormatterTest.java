@@ -1,5 +1,7 @@
 package com.asdasfa.jbs2bg.presentation;
 
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySettings;
+import static com.asdasfa.jbs2bg.data.SettingsTestSupport.emptySnapshot;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -8,16 +10,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import com.asdasfa.jbs2bg.data.Settings;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
@@ -35,6 +38,10 @@ import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
  */
 class ProjectOutputFormatterTest {
 
+    // Owns the Settings store of each test that needs non-empty output Settings.
+    @TempDir
+    Path temporaryDirectory;
+
     /**
      * Resolves one generated artifact by its already-mapped filename.
      */
@@ -49,7 +56,7 @@ class ProjectOutputFormatterTest {
      * Builds canonical Project state through the external session seam used by presentation.
      */
     private static ProjectSession populatedSession() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Zulu"));
         session.apply(SliderPresetEdits.create("Alpha"));
@@ -78,22 +85,6 @@ class ProjectOutputFormatterTest {
     }
 
     /**
-     * Publishes empty profiles so formatter fixtures contain only their explicit Slider choices.
-     */
-    @BeforeEach
-    void initializeEmptySettings() {
-        SettingsTestSupport.installDefaults(Collections.emptyMap(), Collections.emptyMap());
-    }
-
-    /**
-     * Restores the checked-in Settings pair after each formatter test.
-     */
-    @AfterEach
-    void restoreSettings() {
-        SettingsTestSupport.restoreRepositorySettings();
-    }
-
-    /**
      * A formatter that reads live session state or reorders snapshot values would
      * change this output after the pinned snapshot is captured.
      */
@@ -103,7 +94,7 @@ class ProjectOutputFormatterTest {
         ProjectSnapshot pinned = session.getSnapshot();
 
         session.apply(SliderPresetEdits.rename("Alpha", "Changed"));
-        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(pinned, false);
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(pinned, emptySnapshot(), false);
 
         String newLine = "\r\n";
         assertEquals("Alpha=Scale@0.35:0.65" + newLine + "Zulu=Active@0.2, Zero@0.0",
@@ -132,7 +123,7 @@ class ProjectOutputFormatterTest {
     void reportsCustomAndNpcMorphAssignmentsWithoutPresets() {
         ProjectSnapshot pinned = populatedSession().getSnapshot();
 
-        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(pinned, false);
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(pinned, emptySnapshot(), false);
 
         assertEquals(1, output.getCustomMorphTargetsWithoutPresets().size());
         assertEquals("ZuluTarget", output.getCustomMorphTargetsWithoutPresets().getFirst().getName());
@@ -147,7 +138,7 @@ class ProjectOutputFormatterTest {
      */
     @Test
     void omitsDisabledAndRedundantNonInvertedSliders() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Preset"));
         session.apply(SliderPresetEdits.setSliderChoice("Preset",
@@ -157,7 +148,7 @@ class ProjectOutputFormatterTest {
         session.apply(SliderPresetEdits.setSliderChoice("Preset",
                 choice("Disabled", false, 40, 60, 100, 100)));
 
-        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(session.getSnapshot(), true);
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(session.getSnapshot(), emptySnapshot(), true);
         String bos = artifactNamed(output, "Preset.json").getText();
 
         assertEquals("Preset=Active@0.2", output.getTemplatesText());
@@ -172,19 +163,21 @@ class ProjectOutputFormatterTest {
      */
     @Test
     void omitsRedundantInvertedSlidersAtTheirLegacyNeutralEndpoint() {
-        SettingsTestSupport.installStandardOutput(Collections.emptyMap(), List.of("Inverted"));
-        ProjectSession session = ProjectSessions.create();
+        Settings settings = SettingsTestSupport.installStandardOutput(temporaryDirectory, Collections.emptyMap(),
+                List.of("Inverted"));
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Preset"));
         SliderChoiceSnapshot inverted = choice("Inverted", true, 100, 100, 100, 100);
         session.apply(SliderPresetEdits.setSliderChoice("Preset", inverted));
 
-        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(session.getSnapshot(), true);
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(session.getSnapshot(), settings.snapshot(),
+                true);
         String bos = artifactNamed(output, "Preset.json").getText();
 
         assertEquals("Preset=", output.getTemplatesText());
         assertTrue(bos.contains("\"slidersnumber\": 0"));
-        assertTrue(ProjectOutputFormatter.isSliderChoiceRedundant(inverted, false));
+        assertTrue(ProjectOutputFormatter.isSliderChoiceRedundant(inverted, false, settings.snapshot()));
     }
 
     /**
@@ -193,18 +186,19 @@ class ProjectOutputFormatterTest {
      */
     @Test
     void singleChoicePreviewMatchesGeneratedInvertedTemplateValue() {
-        SettingsTestSupport.installStandardOutput(Map.of("Inverted", Float.valueOf(2f)), List.of("Inverted"));
+        Settings settings = SettingsTestSupport.installStandardOutput(temporaryDirectory, Map.of("Inverted",
+                Float.valueOf(2f)), List.of("Inverted"));
         SliderChoiceSnapshot inverted = choice("Inverted", true, 20, 80, 25, 75);
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(settings::snapshot);
         session.newProject();
         session.apply(SliderPresetEdits.create("Preset"));
         session.apply(SliderPresetEdits.setSliderChoice("Preset", inverted));
 
-        String preview = ProjectOutputFormatter.formatSliderChoicePreview(inverted, false);
+        String preview = ProjectOutputFormatter.formatSliderChoicePreview(inverted, false, settings.snapshot());
 
         assertEquals("Inverted@1.3:0.7", preview);
         assertEquals("Preset=" + preview,
-                ProjectOutputFormatter.generate(session.getSnapshot(), false).getTemplatesText());
+                ProjectOutputFormatter.generate(session.getSnapshot(), settings.snapshot(), false).getTemplatesText());
     }
 
     /**
@@ -212,7 +206,7 @@ class ProjectOutputFormatterTest {
      */
     @Test
     void groupsBosHighValuesBeforeLowValues() {
-        ProjectSession session = ProjectSessions.create();
+        ProjectSession session = ProjectSessions.create(emptySettings());
         session.newProject();
         session.apply(SliderPresetEdits.create("Preset"));
         session.apply(SliderPresetEdits.setSliderChoice("Preset",
@@ -220,7 +214,7 @@ class ProjectOutputFormatterTest {
         session.apply(SliderPresetEdits.setSliderChoice("Preset",
                 choice("Beta", true, 30, 40, 100, 100)));
 
-        String json = artifactNamed(ProjectOutputFormatter.generate(session.getSnapshot(), false),
+        String json = artifactNamed(ProjectOutputFormatter.generate(session.getSnapshot(), emptySnapshot(), false),
                 "Preset.json").getText();
         int secondHighValueIndex = json.indexOf("\"highvalue2\"");
         int firstLowValueIndex = json.indexOf("\"lowvalue1\"");
@@ -242,7 +236,7 @@ class ProjectOutputFormatterTest {
                 Collections.emptyList(), Collections.emptyList(), Optional.empty(), true,
                 ProjectLifecycleStatus.UNTITLED);
 
-        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(snapshot, false);
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(snapshot, emptySnapshot(), false);
 
         assertEquals(Arrays.asList("Safe Name.json", "%43ON.json", "100%25 %3CBody%3E.json"),
                 output.getBosJsonArtifacts().stream().map(BosJsonArtifact::getFileName).toList());
@@ -266,7 +260,8 @@ class ProjectOutputFormatterTest {
                 Collections.emptyList(), Collections.emptyList(), Optional.empty(), true,
                 ProjectLifecycleStatus.UNTITLED);
 
-        List<String> fileNames = ProjectOutputFormatter.generate(snapshot, false).getBosJsonArtifacts().stream()
+        List<String> fileNames = ProjectOutputFormatter.generate(snapshot, emptySnapshot(),
+                false).getBosJsonArtifacts().stream()
                 .map(BosJsonArtifact::getFileName).toList();
 
         assertEquals("%43ON.txt.json", fileNames.getFirst());
@@ -292,7 +287,7 @@ class ProjectOutputFormatterTest {
                 ProjectLifecycleStatus.UNTITLED);
 
         BosOutputException exception = assertThrows(BosOutputException.class,
-                () -> ProjectOutputFormatter.generate(snapshot, false));
+                () -> ProjectOutputFormatter.generate(snapshot, emptySnapshot(), false));
 
         assertEquals(2, exception.getFileNameMappings().size());
         assertEquals("Safe.json", exception.getFileNameMappings().getFirst().getFileName().orElseThrow());
@@ -313,7 +308,7 @@ class ProjectOutputFormatterTest {
                 ProjectLifecycleStatus.UNTITLED);
 
         BosOutputException exception = assertThrows(BosOutputException.class,
-                () -> ProjectOutputFormatter.generate(snapshot, false));
+                () -> ProjectOutputFormatter.generate(snapshot, emptySnapshot(), false));
 
         assertEquals(3, exception.getFileNameMappings().size());
         assertEquals("Alpha.json", exception.getFileNameMappings().getFirst().getFileName().orElseThrow());
@@ -329,7 +324,8 @@ class ProjectOutputFormatterTest {
      */
     @Test
     void exposesOnlyUnmodifiableGeneratedCollections() {
-        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(populatedSession().getSnapshot(), false);
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(populatedSession().getSnapshot(),
+                emptySnapshot(), false);
 
         assertThrows(UnsupportedOperationException.class, () -> output.getArtifacts().clear());
         assertThrows(UnsupportedOperationException.class,
@@ -345,7 +341,8 @@ class ProjectOutputFormatterTest {
     /** Templates, Morphs, and BoS previews decode from the same defensively owned bytes used for export. */
     @Test
     void generatedArtifactsDefensivelyOwnTheExactDisplayedUtf8Bytes() {
-        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(populatedSession().getSnapshot(), false);
+        ProjectGeneratedOutput output = ProjectOutputFormatter.generate(populatedSession().getSnapshot(),
+                emptySnapshot(), false);
 
         assertEquals("templates.ini", output.getTemplatesArtifact().getFileName());
         assertEquals("morphs.ini", output.getMorphsArtifact().getFileName());

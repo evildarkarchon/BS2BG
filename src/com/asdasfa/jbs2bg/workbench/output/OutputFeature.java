@@ -18,6 +18,7 @@ import com.asdasfa.jbs2bg.presentation.OutputArtifactPublisher;
 import com.asdasfa.jbs2bg.presentation.ProjectGeneratedOutput;
 import com.asdasfa.jbs2bg.presentation.ProjectOutputFormatter;
 import com.asdasfa.jbs2bg.project.ProjectSnapshot;
+import com.asdasfa.jbs2bg.workbench.WorkbenchFeature;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
@@ -25,7 +26,8 @@ import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
  * JavaFX-independent Output state machine. It captures one immutable output basis per attempt and publishes
  * generated artifacts only through the application-wide job coordinator's serialized completion lane.
  */
-public final class OutputFeature {
+public final class OutputFeature
+        implements WorkbenchFeature<OutputFeature.Intent, OutputFeature.Update, OutputFeature.Effect> {
     private static final String STALE_MESSAGE = "Project changed—Generate again.";
 
     private final WorkbenchProjectFlow projectFlow;
@@ -138,6 +140,7 @@ public final class OutputFeature {
      * @param intent immutable user task
      * @return whether the task was accepted and the resulting immutable frame
      */
+    @Override
     public Update dispatch(Intent intent) {
         Objects.requireNonNull(intent, "intent");
         return switch (intent) {
@@ -148,6 +151,19 @@ public final class OutputFeature {
             case Export ignored -> requestExport();
             case ExportSelected ignored -> requestSelectedExport();
         };
+    }
+
+    /**
+     * No Output intent edits the Project or Settings. Generate and Export submit their own jobs, so the job
+     * coordinator's admission, not the dispatch pipeline's mutation gate, is what refuses them during another job.
+     *
+     * @param intent intent about to be dispatched
+     * @return always false
+     */
+    @Override
+    public boolean isMutation(Intent intent) {
+        Objects.requireNonNull(intent, "intent");
+        return false;
     }
 
     /** Captures the selected accepted artifact as a tokenized clipboard effect. */
@@ -676,7 +692,8 @@ public final class OutputFeature {
     }
 
     /** Result of one Output intent. */
-    public record Update(boolean accepted, Frame frame, Optional<Effect> effect) {
+    public record Update(boolean accepted, Frame frame, Optional<Effect> effect)
+            implements WorkbenchFeature.Update<Effect> {
         /** Requires the latest coherent Output frame. */
         public Update {
             Objects.requireNonNull(frame, "frame");

@@ -6,12 +6,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Optional;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.asdasfa.jbs2bg.data.Settings;
-import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.workbench.GenerationPreferencesStore;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -21,10 +19,31 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 final class SettingsFeatureTest {
 
-    /** Restores process-wide output settings after every isolated feature publication. */
-    @AfterEach
-    void restoreRepositorySettings() {
-        SettingsTestSupport.restoreRepositorySettings();
+    /**
+     * The feature declares which intents can change live or on-disk Settings, so the dispatch pipeline pauses only
+     * those while a job blocks mutations and profile browsing stays available.
+     *
+     * @param directory isolated Settings directory
+     */
+    @Test
+    void declaresSettingsChangesAsMutationsAndBrowsingAsLocal(@TempDir Path directory) {
+        Settings store = new Settings(directory);
+        SettingsFeature feature = new SettingsFeature(store, store.reload());
+
+        for (SettingsFeature.Intent mutation : java.util.List.of(
+                new SettingsFeature.AddEntry("Waist"),
+                new SettingsFeature.EditEntry("Waist", "Waist", Optional.of("0"), Optional.of("1"),
+                        Optional.of("1"), false),
+                new SettingsFeature.RemoveEntry("Waist"),
+                new SettingsFeature.ChangeOmitRedundantSliders(true),
+                new SettingsFeature.Save(),
+                new SettingsFeature.Reload()))
+            assertTrue(feature.isMutation(mutation), mutation.toString());
+        for (SettingsFeature.Intent local : java.util.List.of(
+                new SettingsFeature.SelectProfile(SettingsFeature.Profile.UUNP),
+                new SettingsFeature.SelectEntry("Waist"),
+                new SettingsFeature.DismissNotice()))
+            assertFalse(feature.isMutation(local), local.toString());
     }
 
     /**
@@ -36,12 +55,13 @@ final class SettingsFeatureTest {
      */
     @Test
     void validatesDraftsAndPersistsBothProfilesTogether(@TempDir Path directory) throws Exception {
+        Settings store = new Settings(directory);
         Path fixtures = Path.of("test-resources", "json-oracles", "settings");
         Files.copy(fixtures.resolve("standard.json"), directory.resolve("settings.json"));
         Files.copy(fixtures.resolve("uunp.json"), directory.resolve("settings_UUNP.json"));
-        Settings.InitializationResult initialized = Settings.initialize(directory);
+        Settings.InitializationResult initialized = store.reload();
         assertTrue(initialized.isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, initialized);
+        SettingsFeature feature = new SettingsFeature(store, initialized);
 
         SettingsFeature.Update rejected = feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("not-a-number"), Optional.of("1"), Optional.of("2"), true));
@@ -50,7 +70,7 @@ final class SettingsFeatureTest {
         assertEquals(SettingsFeature.OutcomeKind.REJECTED, rejected.frame().outcome());
         assertEquals("not-a-number", rejected.frame().editor().orElseThrow().small());
         assertFalse(rejected.frame().validation().isEmpty());
-        assertEquals(2f, Settings.getMultiplier("Exponent"));
+        assertEquals(2f, store.getMultiplier("Exponent"));
 
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), true)).accepted());
@@ -66,25 +86,28 @@ final class SettingsFeatureTest {
                 requested.effect().orElseThrow());
         assertTrue(requested.frame().dirty());
         assertEquals(2f, save.replacement().standard().multipliers().get("Waist"));
-        assertFalse(Settings.snapshot().standard().multipliers().containsKey("Waist"));
+        assertFalse(store.snapshot().standard().multipliers().containsKey("Waist"));
 
-        Settings.PersistenceResult persistence = Settings.persist(save.directory(), save.replacement());
+        Settings.PersistenceResult persistence = store.persist(save.replacement());
         SettingsFeature.Update saved = feature.complete(new SettingsFeature.SaveCompletion(save.token(), persistence));
 
         assertTrue(saved.accepted());
         assertEquals(SettingsFeature.OutcomeKind.SAVED, saved.frame().outcome());
         assertFalse(saved.frame().dirty());
-        assertEquals(2f, Settings.snapshot().standard().multipliers().get("Waist"));
-        assertEquals(0.25f, Settings.snapshot().uunp().defaults().get("New Slider").getValueSmall());
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        assertEquals(0.75f, Settings.snapshot().uunp().defaults().get("New Slider").getValueBig());
+        assertEquals(2f, store.snapshot().standard().multipliers().get("Waist"));
+        assertEquals(0.25f, store.snapshot().uunp().defaults().get("New Slider").getValueSmall());
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        assertEquals(0.75f, store.snapshot().uunp().defaults().get("New Slider").getValueBig());
     }
 
     /** Names beyond the Settings reader's UTF-8 token limit are rejected before they can dirty either draft. */
     @Test
     void rejectsEntryNamesBeyondTheReaderUtf8Limit(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         String oversizedName = "😀".repeat(262_145);
 
         SettingsFeature.Update rejected = feature.dispatch(new SettingsFeature.AddEntry(oversizedName));
@@ -98,8 +121,10 @@ final class SettingsFeatureTest {
     /** A failed Save clears its token so an explicit retry captures the latest draft rather than stale inputs. */
     @Test
     void failedSaveRetryRecapturesTheLatestDraft(@TempDir Path directory) throws Exception {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
         SettingsFeature.SaveEffect first = assertInstanceOf(SettingsFeature.SaveEffect.class,
@@ -108,7 +133,7 @@ final class SettingsFeatureTest {
         Files.deleteIfExists(directory.resolve("settings_UUNP.json"));
         Files.deleteIfExists(directory.resolve(".bs2bg-settings.lock"));
         Files.delete(directory);
-        Settings.PersistenceResult failedPersistence = Settings.persist(first.directory(), first.replacement());
+        Settings.PersistenceResult failedPersistence = store.persist(first.replacement());
 
         SettingsFeature.Update failed = feature.complete(
                 new SettingsFeature.SaveCompletion(first.token(), failedPersistence));
@@ -132,8 +157,10 @@ final class SettingsFeatureTest {
     /** A captured persistence effect freezes every draft mutation while allowing profile and entry browsing. */
     @Test
     void pendingSaveRejectsDraftMutationsUntilCompletion(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
         SettingsFeature.Update requested = feature.dispatch(new SettingsFeature.Save());
@@ -154,8 +181,10 @@ final class SettingsFeatureTest {
     /** Cancelling dirty Reload confirmation retains both drafts and admits no worker operation. */
     @Test
     void dirtyReloadCancellationRetainsTheDraft(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
 
@@ -169,14 +198,16 @@ final class SettingsFeatureTest {
         assertTrue(cancelled.effect().isEmpty());
         assertTrue(cancelled.frame().dirty());
         assertEquals("2.0", cancelled.frame().editor().orElseThrow().multiplier());
-        assertEquals(1f, Settings.getMultiplier("Waist"));
+        assertEquals(1f, store.getMultiplier("Waist"));
     }
 
     /** Removing one exact case variant retains inversion for the other visible Settings row. */
     @Test
     void removingCaseDistinctEntryRetainsInversionForRemainingEntry(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        Settings.Snapshot loaded = Settings.snapshot();
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        Settings.Snapshot loaded = store.snapshot();
         LinkedHashMap<String, Float> multipliers = new LinkedHashMap<>(loaded.standard().multipliers());
         multipliers.put("Foo", 2f);
         multipliers.put("foo", 3f);
@@ -184,8 +215,8 @@ final class SettingsFeatureTest {
         inverted.add("Foo");
         Settings.Snapshot prepared = new Settings.Snapshot(new Settings.Profile(
                 loaded.standard().defaults(), multipliers, inverted), loaded.uunp());
-        assertTrue(Settings.persist(directory, prepared).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        assertTrue(store.persist(prepared).isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
 
         SettingsFeature.Update removed = feature.dispatch(new SettingsFeature.RemoveEntry("Foo"));
 
@@ -204,16 +235,18 @@ final class SettingsFeatureTest {
     /** Editing Inverted off clears the shared case-insensitive family even when another exact row remains. */
     @Test
     void editingCaseDistinctEntryCanClearSharedInversion(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        Settings.Snapshot loaded = Settings.snapshot();
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        Settings.Snapshot loaded = store.snapshot();
         LinkedHashMap<String, Float> multipliers = new LinkedHashMap<>(loaded.standard().multipliers());
         multipliers.put("Foo", 2f);
         multipliers.put("foo", 3f);
         ArrayList<String> inverted = new ArrayList<>(loaded.standard().inverted());
         inverted.add("Foo");
-        assertTrue(Settings.persist(directory, new Settings.Snapshot(new Settings.Profile(
+        assertTrue(store.persist(new Settings.Snapshot(new Settings.Profile(
                 loaded.standard().defaults(), multipliers, inverted), loaded.uunp())).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        SettingsFeature feature = new SettingsFeature(store, startup);
 
         SettingsFeature.Update edited = feature.dispatch(new SettingsFeature.EditEntry(
                 "Foo", "Foo", Optional.empty(), Optional.empty(), Optional.of("2"), false));
@@ -232,16 +265,18 @@ final class SettingsFeatureTest {
     /** Removing an exact row preserves a different exact inversion-only row in the same lookup family. */
     @Test
     void removingCaseDistinctEntryPreservesDifferentInversionToken(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        Settings.Snapshot loaded = Settings.snapshot();
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        Settings.Snapshot loaded = store.snapshot();
         LinkedHashMap<String, Float> multipliers = new LinkedHashMap<>(loaded.standard().multipliers());
         multipliers.put("Foo", 2f);
         multipliers.put("foo", 3f);
         ArrayList<String> inverted = new ArrayList<>(loaded.standard().inverted());
         inverted.add("FOO");
-        assertTrue(Settings.persist(directory, new Settings.Snapshot(new Settings.Profile(
+        assertTrue(store.persist(new Settings.Snapshot(new Settings.Profile(
                 loaded.standard().defaults(), multipliers, inverted), loaded.uunp())).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        SettingsFeature feature = new SettingsFeature(store, startup);
 
         SettingsFeature.Update removed = feature.dispatch(new SettingsFeature.RemoveEntry("Foo"));
 
@@ -258,8 +293,10 @@ final class SettingsFeatureTest {
     /** Discarding dirty Reload confirmation admits disk reload and replaces the draft only after success. */
     @Test
     void dirtyReloadDiscardReplacesTheDraftAfterCompletion(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
         SettingsFeature.ReloadConfirmationEffect confirmation = assertInstanceOf(
@@ -273,7 +310,7 @@ final class SettingsFeatureTest {
 
         assertTrue(discarded.frame().dirty());
         SettingsFeature.Update reloaded = feature.complete(new SettingsFeature.ReloadCompletion(
-                reload.token(), Settings.initialize(reload.directory())));
+                reload.token(), store.reload()));
         assertTrue(reloaded.accepted());
         assertFalse(reloaded.frame().dirty());
         assertEquals(SettingsFeature.OutcomeKind.RELOADED, reloaded.frame().outcome());
@@ -284,8 +321,10 @@ final class SettingsFeatureTest {
     @Test
     void failedConfirmedReloadRetryRequiresFreshConfirmationForNewDrafts(@TempDir Path directory)
             throws Exception {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
         SettingsFeature.ReloadConfirmationEffect confirmation = assertInstanceOf(
@@ -297,7 +336,7 @@ final class SettingsFeatureTest {
         Files.writeString(directory.resolve("settings.json"), "{");
 
         SettingsFeature.Update failed = feature.complete(new SettingsFeature.ReloadCompletion(
-                reload.token(), Settings.initialize(reload.directory())));
+                reload.token(), store.reload()));
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("3"), false)).accepted());
         SettingsFeature.Update retried = feature.retry(reload);
@@ -314,8 +353,10 @@ final class SettingsFeatureTest {
     /** Saving dirty Reload confirmation persists the draft before continuing the original Reload intent. */
     @Test
     void dirtyReloadSavePersistsTheDraftBeforeReloading(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
         SettingsFeature.ReloadConfirmationEffect confirmation = assertInstanceOf(
@@ -329,16 +370,16 @@ final class SettingsFeatureTest {
 
         assertEquals(2f, save.replacement().standard().multipliers().get("Waist"));
         SettingsFeature.Update saved = feature.complete(new SettingsFeature.SaveCompletion(
-                save.token(), Settings.persist(save.directory(), save.replacement())));
+                save.token(), store.persist(save.replacement())));
         SettingsFeature.ReloadEffect reload = assertInstanceOf(
                 SettingsFeature.ReloadEffect.class, saved.effect().orElse(null));
         assertTrue(saved.accepted());
         assertFalse(saved.frame().dirty());
         assertEquals(SettingsFeature.OutcomeKind.SAVED, saved.frame().outcome());
-        assertEquals(2f, Settings.getMultiplier("Waist"));
+        assertEquals(2f, store.getMultiplier("Waist"));
 
         SettingsFeature.Update reloaded = feature.complete(new SettingsFeature.ReloadCompletion(
-                reload.token(), Settings.initialize(reload.directory())));
+                reload.token(), store.reload()));
 
         assertTrue(reloaded.accepted());
         assertTrue(reloaded.effect().isEmpty());
@@ -350,8 +391,10 @@ final class SettingsFeatureTest {
     /** A failed Save during dirty Reload retains both the draft and the Save-then-Reload retry continuation. */
     @Test
     void failedDirtyReloadSaveRetryStillContinuesToReload(@TempDir Path directory) throws Exception {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
         SettingsFeature.ReloadConfirmationEffect confirmation = assertInstanceOf(
@@ -366,12 +409,12 @@ final class SettingsFeatureTest {
         Files.delete(directory);
 
         SettingsFeature.Update failed = feature.complete(new SettingsFeature.SaveCompletion(
-                first.token(), Settings.persist(first.directory(), first.replacement())));
+                first.token(), store.persist(first.replacement())));
         Files.createDirectories(directory);
         SettingsFeature.SaveEffect retry = assertInstanceOf(SettingsFeature.SaveEffect.class,
                 feature.retry(first).effect().orElseThrow());
         SettingsFeature.Update saved = feature.complete(new SettingsFeature.SaveCompletion(
-                retry.token(), Settings.persist(retry.directory(), retry.replacement())));
+                retry.token(), store.persist(retry.replacement())));
 
         assertFalse(failed.accepted());
         assertTrue(failed.frame().dirty());
@@ -382,8 +425,10 @@ final class SettingsFeatureTest {
     /** Cancelling the Save worker retains the dirty Reload continuation for an explicit retry. */
     @Test
     void cancelledDirtyReloadSaveRetryStillContinuesToReload(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
         SettingsFeature.ReloadConfirmationEffect confirmation = assertInstanceOf(
@@ -397,7 +442,7 @@ final class SettingsFeatureTest {
         SettingsFeature.SaveEffect retry = assertInstanceOf(SettingsFeature.SaveEffect.class,
                 feature.retry(first).effect().orElseThrow());
         SettingsFeature.Update saved = feature.complete(new SettingsFeature.SaveCompletion(
-                retry.token(), Settings.persist(retry.directory(), retry.replacement())));
+                retry.token(), store.persist(retry.replacement())));
 
         assertTrue(cancelled.accepted());
         assertTrue(cancelled.frame().dirty());
@@ -408,8 +453,10 @@ final class SettingsFeatureTest {
     /** An ordinary Save after failed Reload-triggered Save abandons that old Reload instead of inheriting it. */
     @Test
     void freshSaveAfterFailedReloadSaveDoesNotContinueTheReload(@TempDir Path directory) throws Exception {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
         SettingsFeature.ReloadConfirmationEffect confirmation = assertInstanceOf(
@@ -423,13 +470,13 @@ final class SettingsFeatureTest {
         Files.deleteIfExists(directory.resolve(".bs2bg-settings.lock"));
         Files.delete(directory);
         SettingsFeature.Update failed = feature.complete(new SettingsFeature.SaveCompletion(
-                first.token(), Settings.persist(first.directory(), first.replacement())));
+                first.token(), store.persist(first.replacement())));
         Files.createDirectories(directory);
 
         SettingsFeature.SaveEffect fresh = assertInstanceOf(SettingsFeature.SaveEffect.class,
                 feature.dispatch(new SettingsFeature.Save()).effect().orElseThrow());
         SettingsFeature.Update saved = feature.complete(new SettingsFeature.SaveCompletion(
-                fresh.token(), Settings.persist(fresh.directory(), fresh.replacement())));
+                fresh.token(), store.persist(fresh.replacement())));
 
         assertFalse(failed.accepted());
         assertTrue(failed.frame().dirty());
@@ -442,8 +489,10 @@ final class SettingsFeatureTest {
     /** An ordinary Save after cancelled Reload-triggered Save does not act as Activity retry for the old token. */
     @Test
     void freshSaveAfterCancelledReloadSaveDoesNotContinueTheReload(@TempDir Path directory) {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        SettingsFeature feature = new SettingsFeature(store, startup);
         assertTrue(feature.dispatch(new SettingsFeature.EditEntry(
                 "Waist", "Waist", Optional.of("0"), Optional.of("1"), Optional.of("2"), false)).accepted());
         SettingsFeature.ReloadConfirmationEffect confirmation = assertInstanceOf(
@@ -457,7 +506,7 @@ final class SettingsFeatureTest {
         SettingsFeature.SaveEffect fresh = assertInstanceOf(SettingsFeature.SaveEffect.class,
                 feature.dispatch(new SettingsFeature.Save()).effect().orElseThrow());
         SettingsFeature.Update saved = feature.complete(new SettingsFeature.SaveCompletion(
-                fresh.token(), Settings.persist(fresh.directory(), fresh.replacement())));
+                fresh.token(), store.persist(fresh.replacement())));
 
         assertTrue(cancelled.accepted());
         assertTrue(cancelled.frame().dirty());
@@ -472,13 +521,14 @@ final class SettingsFeatureTest {
      */
     @Test
     void reloadRecoversInterruptedPairAndPublishesTheWarning(@TempDir Path directory) throws Exception {
+        Settings store = new Settings(directory);
         Path fixtures = Path.of("test-resources", "json-oracles", "settings");
         Path standard = directory.resolve("settings.json");
         Path uunp = directory.resolve("settings_UUNP.json");
         Files.copy(fixtures.resolve("standard.json"), standard);
         Files.copy(fixtures.resolve("uunp.json"), uunp);
-        Settings.InitializationResult initialized = Settings.initialize(directory);
-        SettingsFeature feature = new SettingsFeature(directory, initialized);
+        Settings.InitializationResult initialized = store.reload();
+        SettingsFeature feature = new SettingsFeature(store, initialized);
         byte[] priorStandard = Files.readAllBytes(standard);
         byte[] priorUunp = Files.readAllBytes(uunp);
         Path transaction = Files.createDirectory(directory.resolve(".bs2bg-settings-stage-workbench"));
@@ -493,7 +543,7 @@ final class SettingsFeatureTest {
                 requested.effect().orElseThrow());
         assertTrue(Files.exists(transaction));
 
-        Settings.InitializationResult initialization = Settings.initialize(reload.directory());
+        Settings.InitializationResult initialization = store.reload();
         SettingsFeature.Update recovered = feature.complete(
                 new SettingsFeature.ReloadCompletion(reload.token(), initialization));
 
@@ -510,10 +560,12 @@ final class SettingsFeatureTest {
     /** The migrated output omission choice is captured for worker persistence before its frame commits. */
     @Test
     void omitRedundantSlidersPersistsInTheProfileLocalGenerationStore(@TempDir Path directory) throws Exception {
-        assertTrue(Settings.initialize(directory).isSuccessful());
-        GenerationPreferencesStore store = new GenerationPreferencesStore(directory);
-        store.save(false);
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
+        GenerationPreferencesStore preferences = new GenerationPreferencesStore(directory);
+        preferences.save(false);
+        SettingsFeature feature = new SettingsFeature(store, startup);
 
         SettingsFeature.Update requested = feature.dispatch(
                 new SettingsFeature.ChangeOmitRedundantSliders(true));
@@ -522,16 +574,16 @@ final class SettingsFeatureTest {
 
         assertTrue(requested.accepted());
         assertFalse(requested.frame().omitRedundantSliders());
-        assertFalse(store.loadOrMigrate());
+        assertFalse(preferences.loadOrMigrate());
 
-        store.save(preference.selected());
+        preferences.save(preference.selected());
         SettingsFeature.Update changed = feature.complete(
                 SettingsFeature.PreferenceCompletion.successful(preference.token()));
 
         assertTrue(changed.accepted());
         assertTrue(changed.frame().omitRedundantSliders());
-        assertTrue(store.loadOrMigrate());
-        SettingsFeature reopened = new SettingsFeature(directory, Settings.publishedState());
+        assertTrue(preferences.loadOrMigrate());
+        SettingsFeature reopened = new SettingsFeature(store, startup);
         assertTrue(reopened.frame().omitRedundantSliders());
     }
 
@@ -549,11 +601,13 @@ final class SettingsFeatureTest {
     /** An oversized preference is rejected during attach and reports the existing profile failure notice. */
     @Test
     void oversizedGenerationPreferenceFallsBackWithNotice(@TempDir Path directory) throws Exception {
-        assertTrue(Settings.initialize(directory).isSuccessful());
+        Settings store = new Settings(directory);
+        Settings.InitializationResult startup = store.reload();
+        assertTrue(startup.isSuccessful());
         Files.writeString(directory.resolve("workbench-generation.properties"),
                 "omitRedundantSliders=true" + " ".repeat(4096));
 
-        SettingsFeature feature = new SettingsFeature(directory, Settings.publishedState());
+        SettingsFeature feature = new SettingsFeature(store, startup);
 
         assertFalse(feature.frame().omitRedundantSliders());
         assertTrue(feature.frame().notices().stream()

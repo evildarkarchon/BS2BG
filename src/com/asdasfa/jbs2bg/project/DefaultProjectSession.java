@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
+import java.util.function.Supplier;
 
 import javax.xml.parsers.ParserConfigurationException;
 
@@ -36,6 +37,11 @@ final class DefaultProjectSession implements ProjectSession {
 
     private final Object operationLock = new Object();
     /**
+     * Read-only view of the current Settings pair. The session never holds the store, so it cannot persist or
+     * reload Settings; each operation reads this view once and passes that pinned snapshot down.
+     */
+    private final Supplier<Settings.Snapshot> currentSettings;
+    /**
      * Published view for lock-free readers; volatile so {@link #getSnapshot()} sees
      * a complete snapshot without taking the operation lock.
      */
@@ -50,10 +56,25 @@ final class DefaultProjectSession implements ProjectSession {
 
     /**
      * Creates one independent content-version scope and its coherent pre-lifecycle snapshot.
+     *
+     * @param currentSettings read-only view of the current Settings pair, read once per session operation
+     * @throws NullPointerException when the view is null
      */
-    DefaultProjectSession() {
+    DefaultProjectSession(Supplier<Settings.Snapshot> currentSettings) {
+        this.currentSettings = Objects.requireNonNull(currentSettings, "currentSettings");
         contentVersion = ProjectContentVersion.initial(new Object());
         snapshot = ProjectSnapshot.noProject(contentVersion);
+    }
+
+    /**
+     * Reads the current Settings view once for one session operation. Callers keep the returned snapshot for the
+     * whole operation so a concurrent Workbench publication cannot mix two Settings pairs inside it.
+     *
+     * @return the current immutable Settings pair
+     * @throws NullPointerException when the view returns null
+     */
+    private Settings.Snapshot pinnedSettings() {
+        return Objects.requireNonNull(currentSettings.get(), "current Settings");
     }
 
     /**
@@ -162,8 +183,8 @@ final class DefaultProjectSession implements ProjectSession {
     }
 
     /**
-     * Re-derives every preset from the already-published global Settings value while retaining Project lifecycle
-     * metadata exactly. Settings draft and persistence ownership remains outside this session.
+     * Re-derives every preset from the current Settings view while retaining Project lifecycle metadata exactly.
+     * Settings draft and persistence ownership remains outside this session.
      *
      * @return changed or unchanged outcome preserving the current lifecycle metadata
      */
@@ -172,7 +193,7 @@ final class DefaultProjectSession implements ProjectSession {
         synchronized (operationLock) {
             // One pinned generation prevents a concurrent Settings publication from
             // mixing Standard/UUNP membership or endpoints across Project presets.
-            Settings.Snapshot settings = Settings.snapshot();
+            Settings.Snapshot settings = pinnedSettings();
             Project refreshed = project;
             for (SliderPresetSnapshot preset : project.getSliderPresets()) {
                 SliderPresetSnapshot rebuilt = new SliderPresetSnapshot(preset.getName(), preset.isUunp(),
@@ -198,7 +219,7 @@ final class DefaultProjectSession implements ProjectSession {
         ProjectFileLoader.LoadedProject loaded;
         Project opened;
         try {
-            loaded = ProjectFileLoader.load(source, operation);
+            loaded = ProjectFileLoader.load(source, pinnedSettings(), operation);
             ProjectSnapshot loadedSnapshot = loaded.getSnapshot();
             // Constructing the aggregate re-validates name uniqueness and dangling
             // Slider Preset references at the session publication boundary. The
@@ -317,6 +338,8 @@ final class DefaultProjectSession implements ProjectSession {
             }
 
             Project before = project;
+            // One pinned generation keeps every selected source's synthesized defaults consistent.
+            Settings.Snapshot settings = pinnedSettings();
             List<ProjectOutcome> sourceOutcomes = new ArrayList<>();
             List<ProjectDiagnostic> diagnostics = new ArrayList<>();
             boolean rejected = false;
@@ -335,7 +358,7 @@ final class DefaultProjectSession implements ProjectSession {
                         sourceOutcomes.add(new CancelledOutcome(snapshot));
                     break;
                 }
-                ProjectOutcome sourceOutcome = importSliderPresetSource(source, operation);
+                ProjectOutcome sourceOutcome = importSliderPresetSource(source, settings, operation);
                 sourceOutcomes.add(sourceOutcome);
                 diagnostics.addAll(sourceOutcome.getDiagnostics());
                 ImportOutcomeKind outcomeKind = importOutcomeKind(sourceOutcome);
@@ -380,7 +403,8 @@ final class DefaultProjectSession implements ProjectSession {
      * @param source selected BodySlide XML source
      * @return one typed source outcome at the latest coherent snapshot
      */
-    private ProjectOutcome importSliderPresetSource(Path source, ProjectOperationContext context) {
+    private ProjectOutcome importSliderPresetSource(Path source, Settings.Snapshot settings,
+                                                    ProjectOperationContext context) {
         Path normalizedSource;
         try {
             normalizedSource = source.toAbsolutePath().normalize();
@@ -393,7 +417,7 @@ final class DefaultProjectSession implements ProjectSession {
         try {
             context.checkCancellation();
             List<BodySlidePresetFileParser.ParsedPreset> imported = BodySlidePresetFileParser.parse(
-                    normalizedSource, context);
+                    normalizedSource, settings, context);
             context.checkCancellation();
             return upsertImportedSliderPresets(imported, normalizedSource);
         } catch (CancellationException exception) {
@@ -1121,7 +1145,8 @@ final class DefaultProjectSession implements ProjectSession {
         if (rejection != null)
             return rejection;
         SliderPresetSnapshot created = new SliderPresetSnapshot(edit.getName().trim(), false,
-                SliderChoiceDefaults.rebuildForMode(Collections.<SliderChoiceSnapshot>emptyList(), false));
+                SliderChoiceDefaults.rebuildForMode(Collections.<SliderChoiceSnapshot>emptyList(), false,
+                        pinnedSettings()));
         return outcome(project.addSliderPreset(created));
     }
 
@@ -1180,12 +1205,15 @@ final class DefaultProjectSession implements ProjectSession {
         // than trusted, keeping full updates and SetUunp observably equivalent.
         // A same-mode replacement keeps its choices but still re-derives their
         // effective endpoints from the stored ones (see SliderChoiceDefaults.resolveEffective).
+        Settings.Snapshot settings = pinnedSettings();
         if (current.isUunp() != replacement.isUunp())
             replacement = new SliderPresetSnapshot(replacement.getName(), replacement.isUunp(),
-                    SliderChoiceDefaults.rebuildForMode(replacement.getSliderChoices(), replacement.isUunp()));
+                    SliderChoiceDefaults.rebuildForMode(replacement.getSliderChoices(), replacement.isUunp(),
+                            settings));
         else
             replacement = new SliderPresetSnapshot(replacement.getName(), replacement.isUunp(),
-                    SliderChoiceDefaults.resolveEffective(replacement.getSliderChoices(), replacement.isUunp()));
+                    SliderChoiceDefaults.resolveEffective(replacement.getSliderChoices(), replacement.isUunp(),
+                            settings));
         return outcome(renamed.getProject().replaceSliderPreset(normalizedName, replacement));
     }
 
@@ -1272,7 +1300,7 @@ final class DefaultProjectSession implements ProjectSession {
         if (current.isUunp() == edit.isUunp())
             return outcome(project);
         SliderPresetSnapshot changed = new SliderPresetSnapshot(current.getName(), edit.isUunp(),
-                SliderChoiceDefaults.rebuildForMode(current.getSliderChoices(), edit.isUunp()));
+                SliderChoiceDefaults.rebuildForMode(current.getSliderChoices(), edit.isUunp(), pinnedSettings()));
         return outcome(project.replaceSliderPreset(current.getName(), changed));
     }
 
@@ -1301,7 +1329,8 @@ final class DefaultProjectSession implements ProjectSession {
         // The caller's effective endpoints are not trusted: only the stored endpoints
         // survive a save/reopen cycle, so the published choice must carry the values
         // the loader would derive from them under this Slider Preset's mode.
-        SliderChoiceSnapshot choice = SliderChoiceDefaults.resolveEffective(edit.getChoice(), current.isUunp());
+        SliderChoiceSnapshot choice = SliderChoiceDefaults.resolveEffective(edit.getChoice(), current.isUunp(),
+                pinnedSettings());
         SliderPresetSnapshot changed = new SliderPresetSnapshot(current.getName(), current.isUunp(),
                 SliderChoiceDefaults.withChoice(current.getSliderChoices(), choice));
         // An identical choice yields a value-equal preset, which the aggregate

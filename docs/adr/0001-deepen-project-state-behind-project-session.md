@@ -8,7 +8,8 @@ amended: 2026-09-26
 
 > This ADR predates the Java 25 modernization. Wherever it conflicts with the Java 25 baseline it is superseded by
 > [ADR-0003](0003-java-25-baseline-for-the-packaged-application.md): the application baseline is stable, pinned
-> Java 25 LTS with JavaFX 25 and no preview or incubator use, delivered as a self-contained Windows app-image.
+> Java 25 LTS with no preview or incubator use, delivered as a self-contained Windows app-image. JavaFX is a separate
+> pin, versioned independently of the JDK; [ADR-0007](0007-javafx-27-is-the-javafx-baseline.md) records it.
 > Today the only such conflict is the "preserving Java 8" clause below; no other sentence here names a Java or
 > JavaFX version, a toolchain, or a delivery format, and the rejected options and consequences (JavaFX kept out of
 > the `ProjectSession` interface, a Maven and JUnit 5 foundation) point the same way as the Java 25 work. Every
