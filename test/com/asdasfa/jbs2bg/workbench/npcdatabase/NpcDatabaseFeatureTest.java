@@ -231,6 +231,27 @@ class NpcDatabaseFeatureTest {
     }
 
     /**
+     * The prefix expires only once the injected clock moves more than 750 ms past the previous key: at exactly 750 ms
+     * a letter still extends the prefix, and one nanosecond later it starts a new one.
+     */
+    @Test
+    void typeAheadPrefixExpiresOnlyAfterTheTimeoutOnTheInjectedClock() throws Exception {
+        Path source = temporaryDirectory.resolve("names.txt");
+        Files.writeString(source, "Master.esm | Alina | First | NordRace | 000001\n"
+                + "Master.esm | Amber | Second | NordRace | 000002\n"
+                + "Master.esm | Beryl | Third | NordRace | 000003\n");
+        MutableClock clock = new MutableClock(START);
+        NpcDatabaseFeature feature = feature(clock);
+        feature.commitSource(NpcDatabaseSourceReader.read(source));
+
+        assertEquals("Alina", typeAhead(feature, 'a'));
+        clock.advance(Duration.ofMillis(750));
+        assertEquals("Amber", typeAhead(feature, 'm'));
+        clock.advance(Duration.ofMillis(750).plusNanos(1));
+        assertEquals("Beryl", typeAhead(feature, 'b'));
+    }
+
+    /**
      * Under a fixed clock no keystroke ever expires the prefix, so the same keys always select the same rows: letters
      * extend the prefix, a repeated single letter cycles, and an unmatched extension restarts from that letter.
      */
