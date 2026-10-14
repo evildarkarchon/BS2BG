@@ -1,5 +1,8 @@
 package com.asdasfa.jbs2bg.workbench;
 
+import static com.asdasfa.jbs2bg.workbench.WorkbenchFocusPolicy.canRestoreFocus;
+import static com.asdasfa.jbs2bg.workbench.WorkbenchFocusPolicy.ownsSceneFocus;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -158,6 +161,10 @@ public final class WorkbenchController {
     private TextArea diagnosticsText;
     @FXML
     private ListView<WorkbenchFeedback.ActivityRecord> activityList;
+    @FXML
+    private VBox activitySection;
+    @FXML
+    private HBox statusBar;
     @FXML
     private Button retryActivityButton;
     @FXML
@@ -528,6 +535,8 @@ public final class WorkbenchController {
     private WorkbenchPlatform platform;
     // Built in attach once the platform and Stage exist; owns the job gate and the dialog round-trip.
     private DispatchPipeline pipeline;
+    // Built in attach with the Stage; classifies the focus owner and realizes semantic focus targets.
+    private WorkbenchFocusPolicy focusPolicy;
     private JavaFxWorkbenchAppearance appearanceAdapter;
     private boolean finalClose;
     private long renderedProjectSequence;
@@ -747,10 +756,12 @@ public final class WorkbenchController {
                 WorkbenchController.this.render(projectFlow.frame());
             }
         });
+        focusPolicy = createFocusPolicy();
         // Read only when a satellite registers, which is after configureAppearance has built the adapter.
         satellites = new SatelliteRegistry(() -> appearanceAdapter.frame());
         NpcPortraitViewer portraits = new NpcPortraitViewer(environment.portraitDirectory(), stage, satellites,
-                this::restorePortraitLauncherFocus);
+                launcher -> focusPolicy.restoreAfterSatellite(launcher,
+                        WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
         morphsPortrait = portraits.thumbnail(npcPortraitImage, npcPortraitStatus, openNpcPortraitViewerButton,
                 "Select an NPC Morph Assignment to inspect its portrait.");
         npcDatabasePortrait = portraits.thumbnail(npcDatabasePortraitImage, npcDatabasePortraitStatus,
@@ -1042,45 +1053,13 @@ public final class WorkbenchController {
             fillEmptyPopupRoot = null;
             // Restored synchronously: this sets the main scene's focus owner, which JavaFX realizes whenever the
             // window is active, so no deferral is needed even if another window holds OS focus right now.
-            if (stage.isShowing())
-                restoreFillEmptyLauncherFocus();
+            focusPolicy.restoreAfterSatellite(fillEmptyNpcMorphAssignmentsButton,
+                    WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
         });
         Bounds anchor = fillEmptyNpcMorphAssignmentsButton.localToScreen(
                 fillEmptyNpcMorphAssignmentsButton.getBoundsInLocal());
         popup.show(stage, anchor.getMinX(), anchor.getMaxY());
         choices.requestFocus();
-    }
-
-    /** Restores focus by semantic role when a responsive transition has hidden the former flyout launcher. */
-    private void restoreFillEmptyLauncherFocus() {
-        if (canRestoreFocus(fillEmptyNpcMorphAssignmentsButton))
-            fillEmptyNpcMorphAssignmentsButton.requestFocus();
-        else
-            requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
-                    WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
-    }
-
-    /**
-     * Reports whether {@code node} is its scene's focus owner. This is the Workbench's only focus check: unlike
-     * {@code Node.isFocused()}, it does not depend on the OS window being active, so a refill or async completion
-     * while another window has focus still preserves the focus owner that JavaFX realizes when the user returns.
-     *
-     * @param node node to test; may be detached
-     * @return true when the node is attached and owns its scene's focus
-     */
-    private static boolean ownsSceneFocus(Node node) {
-        return node.getScene() != null && node.getScene().getFocusOwner() == node;
-    }
-
-    /** An overlay or Area change can hide an ancestor while leaving the launcher's own visible bit unchanged. */
-    private static boolean canRestoreFocus(Node node) {
-        if (node.getScene() == null || node.isDisabled())
-            return false;
-        for (Node current = node; current != null; current = current.getParent()) {
-            if (!current.isVisible())
-                return false;
-        }
-        return true;
     }
 
     /**
@@ -1103,18 +1082,6 @@ public final class WorkbenchController {
             npcDatabasePortrait.clear();
         else
             npcDatabasePortrait.show(ProjectIdentities.npcDatabaseEntry(npc), npc.getName());
-    }
-
-    /**
-     * Restores focus to the portrait viewer's launcher as the viewer closes, or to the active Area's primary
-     * content when the launching Area is no longer visible.
-     */
-    private void restorePortraitLauncherFocus(Node launcher) {
-        if (canRestoreFocus(launcher))
-            launcher.requestFocus();
-        else
-            requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
-                    WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
     }
 
     /** Configures the current assigned-relationship ListView, including identity selection dispatch. */
@@ -1581,13 +1548,7 @@ public final class WorkbenchController {
             npcFilterPopupRoot = null;
             npcFilterExpandedColumn = null;
             renderNpcFilterButtons(npcDatabaseFeature.frame());
-            if (stage.isShowing()) {
-                if (canRestoreFocus(launcher))
-                    launcher.requestFocus();
-                else
-                    requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
-                            WorkbenchNavigation.Landmark.EDITOR));
-            }
+            focusPolicy.restoreAfterSatellite(launcher, WorkbenchNavigation.Landmark.EDITOR);
         });
         Bounds anchor = launcher.localToScreen(launcher.getBoundsInLocal());
         popup.show(stage, anchor.getMinX(), anchor.getMaxY());
@@ -3450,7 +3411,7 @@ public final class WorkbenchController {
                 default -> null;
             };
         } else if (event.getCode() == KeyCode.F6) {
-            transition = navigation.cycleFocus(currentSemanticFocus());
+            transition = focusPolicy.cycle(navigation);
         } else if (event.getCode() == KeyCode.F7) {
             transition = navigation.openInspector(navigationFrame.narrowMode()
                     ? new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
@@ -3607,93 +3568,69 @@ public final class WorkbenchController {
     }
 
     /**
+     * Builds the shell's focus policy and registers every landmark container from the FXML. The focus owner
+     * classifies into its nearest registered ancestor; anything outside them (the rail, the Area header, the
+     * Workbench notification and Project diagnostics) is on the rail. The launchers are registered as their own
+     * landmarks, and Morphs' Add NPCs launcher is the one registration inside an Area pane: it keeps its distinct
+     * NPC_DATABASE_LAUNCHER token so Back to Morphs can return to it.
+     */
+    private WorkbenchFocusPolicy createFocusPolicy() {
+        return new WorkbenchFocusPolicy(stage, () -> navigationFrame.activeArea(),
+                new WorkbenchFocusPolicy.AreaFocus() {
+                    /** Resolves shell landmarks and each Area's state-dependent landmark nodes. */
+                    @Override
+                    public Node focusNode(WorkbenchNavigation.FocusTarget target) {
+                        return resolveFocusNode(target);
+                    }
+
+                    /** Each Area's first editable control. */
+                    @Override
+                    public Node defaultNode(WorkbenchNavigation.Area area) {
+                        return areaDefaultFocusNode(area);
+                    }
+                })
+                .landmark(primaryPane, WorkbenchNavigation.Landmark.PRIMARY_CONTENT)
+                .landmark(editorPane, WorkbenchNavigation.Landmark.EDITOR)
+                .landmark(inspectorPane, WorkbenchNavigation.Landmark.INSPECTOR)
+                .landmark(outputDrawer, WorkbenchNavigation.Landmark.OUTPUT)
+                .landmark(activitySection, WorkbenchNavigation.Landmark.ACTIVITY)
+                .landmark(statusBar, WorkbenchNavigation.Landmark.STATUS)
+                .landmark(showPrimaryOverlayButton, WorkbenchNavigation.Landmark.PRIMARY_LAUNCHER)
+                .landmark(showInspectorOverlayButton, WorkbenchNavigation.Landmark.INSPECTOR_LAUNCHER)
+                .landmark(outputAreaButton, WorkbenchNavigation.Landmark.OUTPUT_LAUNCHER)
+                .landmark(addNpcsFromDatabaseButton, WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER);
+    }
+
+    /** @return the shell's focus policy, for tests that pin the landmark classification */
+    WorkbenchFocusPolicy focusPolicy() {
+        return focusPolicy;
+    }
+
+    /**
      * Resolves current JavaFX focus back into a semantic target safe to retain across re-rendering.
      */
     private WorkbenchNavigation.FocusTarget currentSemanticFocus() {
-        Node focusOwner = stage != null && stage.getScene() != null ? stage.getScene().getFocusOwner() : null;
-        WorkbenchNavigation.Landmark landmark;
-        if (focusOwner == addNpcsFromDatabaseButton) {
-            landmark = WorkbenchNavigation.Landmark.NPC_DATABASE_LAUNCHER;
-        } else if (focusOwner == sliderPresetFilter || focusOwner == sliderPresetList
-                || focusOwner == sliderPresetNameInput || focusOwner == importBodySlideButton
-                || focusOwner == customMorphTargetFilter || focusOwner == customMorphTargetSort
-                || focusOwner == customMorphTargetList || focusOwner == customMorphTargetNameInput
-                || focusOwner == createCustomMorphTargetButton || focusOwner == removeCustomMorphTargetButton
-                || focusOwner == clearCustomMorphTargetsButton
-                || focusOwner == npcMorphAssignmentFilter || focusOwner == npcMorphAssignmentSort
-                || focusOwner == npcMorphAssignmentList || focusOwner == npcDisplayNameInput
-                || focusOwner == npcPluginNameInput || focusOwner == npcEditorIdInput
-                || focusOwner == npcRaceInput || focusOwner == npcFormIdInput
-                || focusOwner == createNpcMorphAssignmentButton || focusOwner == removeNpcMorphAssignmentButton
-                || focusOwner == clearNpcMorphAssignmentsButton
-                || focusOwner == npcSourceList || focusOwner == importNpcSourcesButton
-                || focusOwner == removeNpcSourceButton || focusOwner == clearNpcDatabaseButton
-                || focusOwner == settingsProfileChoice || focusOwner == settingsEntryList
-                || focusOwner == newSettingsEntryName || focusOwner == addSettingsEntryButton) {
-            landmark = WorkbenchNavigation.Landmark.PRIMARY_CONTENT;
-        } else if (focusOwner == templateEditorFocusTarget || focusOwner == sliderPresetProfile
-                || focusOwner == morphTargetEditorFocusTarget
-                || focusOwner == npcCatalogTable || focusOwner == npcSortChoice
-                || focusOwner == backToMorphsButton || focusOwner == addAllNpcsToProjectButton
-                || focusOwner == npcPromotionDetails
-                || npcFilterButtons.containsValue(focusOwner)
-                || focusOwner == clearNpcFiltersButton
-                || sliderChoiceRowsByName.values().stream().anyMatch(row -> row.contains(focusOwner))
-                || focusOwner == settingsEntryNameInput || focusOwner == settingsSmallInput
-                || focusOwner == settingsBigInput || focusOwner == settingsMultiplierInput
-                || focusOwner == settingsInvertedCheck || focusOwner == applySettingsEntryButton
-                || focusOwner == removeSettingsEntryButton) {
-            landmark = WorkbenchNavigation.Landmark.EDITOR;
-        } else if (focusOwner == templateSelectionText
-                || focusOwner == morphTargetSelectionText || focusOwner == assignedMorphSliderPresetList
-                || focusOwner == npcInspectorName || focusOwner == npcInspectorSource
-                || focusOwner == openNpcDatabasePortraitViewerButton
-                || focusOwner == addNpcToProjectButton || focusOwner == assignRandomNpcPresetCheck
-                || focusOwner == availableMorphSliderPreset || focusOwner == assignMorphSliderPresetButton
-                || focusOwner == assignAllMorphSliderPresetsButton || focusOwner == removeMorphSliderPresetButton
-                || focusOwner == clearMorphSliderPresetsButton
-                || templatesFocusNodes().entrySet().stream()
-                .anyMatch(entry -> entry.getKey() != TemplatesControlFocus.PROFILE
-                        && entry.getValue() == focusOwner)
-                || focusOwner == settingsNoticeText || focusOwner == saveSettingsButton
-                || focusOwner == reloadSettingsButton || focusOwner == omitRedundantSlidersCheck) {
-            landmark = WorkbenchNavigation.Landmark.INSPECTOR;
-        } else if (focusOwner == showPrimaryOverlayButton) {
-            landmark = WorkbenchNavigation.Landmark.PRIMARY_LAUNCHER;
-        } else if (focusOwner == showInspectorOverlayButton) {
-            landmark = WorkbenchNavigation.Landmark.INSPECTOR_LAUNCHER;
-        } else if (focusOwner == outputAreaButton) {
-            landmark = WorkbenchNavigation.Landmark.OUTPUT_LAUNCHER;
-        } else if (focusOwner == outputFocusTarget || focusOwner == outputTabs
-                || focusOwner == templatesOutputText || focusOwner == morphsOutputText
-                || focusOwner == bosArtifactChoice || focusOwner == bosOutputText
-                || focusOwner == outputDrawerHeight) {
-            landmark = WorkbenchNavigation.Landmark.OUTPUT;
-        } else if (focusOwner == activityList) {
-            landmark = WorkbenchNavigation.Landmark.ACTIVITY;
-        } else if (focusOwner == statusText) {
-            landmark = WorkbenchNavigation.Landmark.STATUS;
-        } else {
-            landmark = WorkbenchNavigation.Landmark.RAIL;
-        }
-        return new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(), landmark);
+        return focusPolicy.current();
     }
 
     /**
      * Applies one semantic focus effect, falling back to the active Area's first editable control.
      */
     private void requestFocus(WorkbenchNavigation.FocusTarget target) {
-        Node node = resolveFocusNode(target);
-        if (node == null || !node.isVisible() || node.isDisabled() || node.getParent() == null) {
-            node = switch (target.area()) {
-                case TEMPLATES -> sliderPresetList;
-                case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
-                        ? npcMorphAssignmentList : customMorphTargetList;
-                case SETTINGS -> settingsEntryList;
-                case NPC_DATABASE -> npcCatalogTable;
-            };
-        }
-        node.requestFocus();
+        focusPolicy.request(target);
+    }
+
+    /**
+     * Returns an Area's last-resort focus node: its first editable control for the current Area state.
+     */
+    private Node areaDefaultFocusNode(WorkbenchNavigation.Area area) {
+        return switch (area) {
+            case TEMPLATES -> sliderPresetList;
+            case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
+                    ? npcMorphAssignmentList : customMorphTargetList;
+            case SETTINGS -> settingsEntryList;
+            case NPC_DATABASE -> npcCatalogTable;
+        };
     }
 
     /**

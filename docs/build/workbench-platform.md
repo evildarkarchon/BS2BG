@@ -52,9 +52,16 @@ Focus intent lives in the scene's focus owner
 ([#123](https://github.com/evildarkarchon/BS2BG/issues/123)). Production never reads window activation and never
 activates a window to deliver focus. Refills, async completions and dialog returns set the scene's focus owner, and
 JavaFX gives focus to it when the user returns to the window. The only focus check is
-`ownsSceneFocus(node)` (`node.getScene() != null && node.getScene().getFocusOwner() == node`), and focus is requested
-once, synchronously. Satellite windows (the Fill Empty and NPC filter popups, the portrait viewer) request focus right
-after `show()` and restore it inside `onHidden`.
+`WorkbenchFocusPolicy.ownsSceneFocus(node)` (`node.getScene() != null && node.getScene().getFocusOwner() == node`), and
+focus is requested once, synchronously. Satellite windows (the Fill Empty and NPC filter popups, the portrait viewer)
+request focus right after `show()` and restore it inside `onHidden` through `WorkbenchFocusPolicy.restoreAfterSatellite`.
+
+`WorkbenchFocusPolicy` is the shell's shared focus module ([#127](https://github.com/evildarkarchon/BS2BG/issues/127)).
+It classifies the focus owner into an F6 landmark by walking up to the nearest landmark container the shell
+registered (the three Area panes, the Output drawer, the Activity section, the status bar and the launchers); a
+control outside every container is on the rail. Morphs' Add NPCs launcher is the one registration inside an Area
+pane, so it keeps its `NPC_DATABASE_LAUNCHER` token. `WorkbenchFocusPolicyTest` pins the landmark of every
+keyboard-reachable control in `workbench.fxml`, so a new control needs a deliberate classification.
 
 `ProductionPlatformBanGateTest` reads every production class file with `java.lang.classfile` and enforces these rules
 (rules 1, 2 and 4 keep focus off window activation; rule 3 keeps OS appearance behind its seam).
