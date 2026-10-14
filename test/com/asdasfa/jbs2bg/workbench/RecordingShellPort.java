@@ -98,6 +98,18 @@ public final class RecordingShellPort implements ShellPort {
         requests.add("returnToMorphs(" + assignment.map(NpcMorphAssignmentIdentity::getEditorId).orElse("none") + ")");
     }
 
+    /** Records the request with its return target. */
+    @Override
+    public void openNpcDatabase(WorkbenchNavigation.FocusTarget returnTarget) {
+        requests.add("openNpcDatabase(" + returnTarget.area() + ", " + returnTarget.landmark() + ")");
+    }
+
+    /** Records the request. */
+    @Override
+    public void revealPrimaryContent() {
+        requests.add("revealPrimaryContent()");
+    }
+
     /** Records the request with whether the Area owns the change's diagnostics. */
     @Override
     public void projectChanged(WorkbenchFeature.Update<?> update, boolean ownsDiagnostics) {

@@ -201,7 +201,7 @@ public final class DispatchPipeline {
         // The feature owns task wording and inline validation, so the chrome re-render must not replay the
         // lifecycle-only generic projection; the shell's ProjectChrome records the sequence before rendering.
         if (sequence.isPresent() && sequence.getAsLong() != chrome.renderedSequence())
-            chrome.render(sequence.getAsLong());
+            chrome.render(sequence.getAsLong(), update);
         callbacks.render(update);
     }
 
@@ -256,11 +256,13 @@ public final class DispatchPipeline {
 
         /**
          * Records the sequence as rendered, then re-renders the chrome from the latest Project frame without
-         * publishing lifecycle feedback for it.
+         * publishing lifecycle feedback for it. The update says which feature published the change, so the shell can
+         * keep that change's diagnostics with the feature that presents them.
          *
          * @param sequence Project sequence an update was reconciled against
+         * @param update   the update (a dispatched update or a confirmation response) that reached the sequence
          */
-        void render(long sequence);
+        void render(long sequence, WorkbenchFeature.Update<?> update);
     }
 
     /**

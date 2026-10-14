@@ -29,7 +29,8 @@ public interface WorkbenchArea {
      * Resolves one of the Area's landmarks to the node that should take focus for it now.
      *
      * @param landmark a landmark inside the Area's panes ({@code PRIMARY_CONTENT}, {@code EDITOR} or
-     *                 {@code INSPECTOR})
+     *                 {@code INSPECTOR}, or a launcher an Area declares in them, such as Morphs'
+     *                 {@code NPC_DATABASE_LAUNCHER})
      * @return the state-dependent node for that landmark, or null when the Area does not own the landmark
      */
     Node focusNode(WorkbenchNavigation.Landmark landmark);

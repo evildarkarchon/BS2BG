@@ -178,7 +178,7 @@ public abstract class ModuleTest<M> {
 
             /** Records the sequence and re-renders the module against a fresh context, as the shell's chrome does. */
             @Override
-            public void render(long sequence) {
+            public void render(long sequence, WorkbenchFeature.Update<?> update) {
                 renderedSequence[0] = sequence;
                 self.get().renderContext();
             }

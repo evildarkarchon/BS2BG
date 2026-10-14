@@ -203,7 +203,8 @@ class DispatchPipelineTest {
 
     /**
      * The Project chrome re-renders before the feature's own render only when an update reaches a Project sequence
-     * the chrome has not rendered; features without a Project sequence never touch it.
+     * the chrome has not rendered, and it is handed that update so the shell can tell which feature published the
+     * change; features without a Project sequence never touch it.
      */
     @Test
     void projectChromeReRendersOnlyOnANewProjectSequence() {
@@ -218,12 +219,15 @@ class DispatchPipelineTest {
             pipeline.dispatch(feature, callbacks(), intent);
 
         assertEquals(List.of("render same", "report Browse[] same->same",
-                "chrome 5", "render changed", "report Edit[] changed->changed",
+                "chrome 5 for changed", "render changed", "report Edit[] changed->changed",
                 "render local", "report Browse[] local->local",
                 "render again", "report Browse[] again->again"), log);
     }
 
-    /** A confirmation response that commits a Project edit re-renders the chrome before its own render. */
+    /**
+     * A confirmation response that commits a Project edit re-renders the chrome before its own render, handing the
+     * chrome the response rather than the request.
+     */
     @Test
     void confirmationResponseOnANewProjectSequenceReRendersTheChrome() {
         chrome.rendered = 7;
@@ -236,7 +240,7 @@ class DispatchPipelineTest {
         pipeline.dispatch(feature, callbacks(effect -> DispatchPipeline.Realization.confirm(spec,
                 action -> new FakeUpdate("cleared", OptionalLong.of(8), Optional.empty()))), new Remove());
 
-        assertEquals(List.of("render requested", "confirm Clear visible? pending=true", "chrome 8",
+        assertEquals(List.of("render requested", "confirm Clear visible? pending=true", "chrome 8 for cleared",
                 "render cleared", "report Remove[] requested->cleared"), log);
     }
 
@@ -361,11 +365,11 @@ class DispatchPipelineTest {
             return rendered;
         }
 
-        /** Records the sequence and logs the chrome render. */
+        /** Records the sequence and logs the chrome render with the update that reached it. */
         @Override
-        public void render(long sequence) {
+        public void render(long sequence, WorkbenchFeature.Update<?> update) {
             rendered = sequence;
-            log.add("chrome " + sequence);
+            log.add("chrome " + sequence + " for " + ((FakeUpdate) update).label());
         }
     }
 }

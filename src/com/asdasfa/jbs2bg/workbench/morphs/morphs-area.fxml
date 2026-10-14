@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import com.asdasfa.jbs2bg.workbench.AreaPanes?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+    The Morphs Area: three panes the shell mounts into its primary, editor and inspector landmark containers. The root
+    is a non-Node holder, so this file has no layout of its own. Accessible text, visible text and nesting are exactly
+    what they were in workbench.fxml; the packaged smoke run finds these controls by name, role and region.
+-->
+<AreaPanes fx:id="panes" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1"
+        fx:controller="com.asdasfa.jbs2bg.workbench.morphs.MorphsArea">
+    <primary>
+        <ScrollPane fx:id="morphsPrimaryScroll"
+                accessibleText="Morphs management"
+                fitToWidth="true" focusTraversable="false"
+                hbarPolicy="NEVER" managed="false" visible="false"
+                VBox.vgrow="ALWAYS">
+            <content>
+                <VBox fx:id="morphsPrimaryContent" spacing="6.0">
+                    <children>
+                        <HBox fx:id="morphsInfoBar"
+                                accessibleText="Morphs notification"
+                                alignment="CENTER_LEFT"
+                                focusTraversable="false" managed="false"
+                                spacing="6.0" styleClass="info-bar morphs-info-bar"
+                                visible="false">
+                            <padding>
+                                <Insets bottom="6.0" left="8.0" right="8.0" top="6.0" />
+                            </padding>
+                            <children>
+                                <VBox spacing="2.0" HBox.hgrow="ALWAYS">
+                                    <children>
+                                        <Label fx:id="morphsInfoBarCue"
+                                                styleClass="feedback-cue"
+                                                text="Validation" />
+                                        <Label fx:id="morphsInfoBarMessage"
+                                                text="Validation message"
+                                                wrapText="true" />
+                                    </children>
+                                </VBox>
+                                <Button fx:id="dismissMorphsInfoBarButton"
+                                        accessibleText="Dismiss Morphs validation"
+                                        mnemonicParsing="true" text="_Dismiss" />
+                            </children>
+                        </HBox>
+                        <Label labelFor="$customMorphTargetFilter"
+                                mnemonicParsing="true"
+                                text="_Filter Custom Morph Targets:" />
+                        <TextField fx:id="customMorphTargetFilter"
+                                accessibleText="Filter Custom Morph Targets"
+                                promptText="Filter by condition or name" />
+                        <Label labelFor="$customMorphTargetSort"
+                                mnemonicParsing="true"
+                                text="_Sort Custom Morph Targets:" />
+                        <ComboBox fx:id="customMorphTargetSort"
+                                accessibleText="Custom Morph Target sort"
+                                maxWidth="Infinity" />
+                        <ListView fx:id="customMorphTargetList"
+                                accessibleText="Custom Morph Targets"
+                                fixedCellSize="28.0"
+                                focusTraversable="true"
+                                VBox.vgrow="ALWAYS" />
+                        <Label labelFor="$customMorphTargetNameInput"
+                                mnemonicParsing="true"
+                                text="Custom Morph Target _name:" />
+                        <TextField fx:id="customMorphTargetNameInput"
+                                accessibleHelp="BodyGen condition syntax such as All|Female is preserved."
+                                accessibleText="Custom Morph Target name"
+                                promptText="All|Female" />
+                        <Button fx:id="createCustomMorphTargetButton"
+                                accessibleText="Create Custom Morph Target"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Create Custom Morph Target" />
+                        <Button fx:id="removeCustomMorphTargetButton"
+                                accessibleText="Remove selected Custom Morph Target"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Remove Custom Morph Target" />
+                        <Button fx:id="clearCustomMorphTargetsButton"
+                                accessibleText="Clear visible Custom Morph Targets"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="C_lear visible Custom Morph Targets" />
+                        <Label styleClass="title" text="NPC Morph Assignments" />
+                        <Button fx:id="addNpcsFromDatabaseButton"
+                                accessibleText="Add NPCs from NPC Database"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Add NPCs…" />
+                        <Label labelFor="$npcMorphAssignmentFilter"
+                                mnemonicParsing="true"
+                                text="_Filter NPC Morph Assignments:" />
+                        <TextField fx:id="npcMorphAssignmentFilter"
+                                accessibleText="Filter NPC Morph Assignments"
+                                promptText="Filter by name, plugin, ID, race, or Form ID" />
+                        <Label labelFor="$npcMorphAssignmentSort"
+                                mnemonicParsing="true"
+                                text="_Sort NPC Morph Assignments:" />
+                        <ComboBox fx:id="npcMorphAssignmentSort"
+                                accessibleText="NPC Morph Assignment sort"
+                                maxWidth="Infinity" />
+                        <ListView fx:id="npcMorphAssignmentList"
+                                accessibleText="NPC Morph Assignments"
+                                fixedCellSize="28.0"
+                                focusTraversable="true"
+                                VBox.vgrow="ALWAYS" />
+                        <Label labelFor="$npcDisplayNameInput"
+                                mnemonicParsing="true"
+                                text="NPC _display name:" />
+                        <TextField fx:id="npcDisplayNameInput"
+                                accessibleHelp="An empty display name uses Unnamed (editor ID)."
+                                accessibleText="NPC display name"
+                                promptText="Optional display name" />
+                        <Label labelFor="$npcPluginNameInput"
+                                mnemonicParsing="true"
+                                text="NPC _plugin name:" />
+                        <TextField fx:id="npcPluginNameInput"
+                                accessibleText="NPC plugin name"
+                                promptText="Example.esp" />
+                        <Label labelFor="$npcEditorIdInput"
+                                mnemonicParsing="true"
+                                text="NPC _editor ID:" />
+                        <TextField fx:id="npcEditorIdInput"
+                                accessibleText="NPC editor ID"
+                                promptText="ActorEditorID" />
+                        <Label labelFor="$npcRaceInput"
+                                mnemonicParsing="true"
+                                text="NPC _race:" />
+                        <TextField fx:id="npcRaceInput"
+                                accessibleText="NPC race"
+                                promptText="Race" />
+                        <Label labelFor="$npcFormIdInput"
+                                mnemonicParsing="true"
+                                text="NPC _Form ID:" />
+                        <TextField fx:id="npcFormIdInput"
+                                accessibleHelp="Load order prefixes and leading zeroes normalize to the final Form ID."
+                                accessibleText="NPC Form ID"
+                                promptText="000ABC" />
+                        <Button fx:id="createNpcMorphAssignmentButton"
+                                accessibleText="Create NPC Morph Assignment"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Create NPC Morph Assignment" />
+                        <Button fx:id="removeNpcMorphAssignmentButton"
+                                accessibleText="Remove selected NPC Morph Assignment"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Remove NPC Morph Assignment" />
+                        <Button fx:id="clearNpcMorphAssignmentsButton"
+                                accessibleText="Clear visible NPC Morph Assignments"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="C_lear visible NPC Morph Assignments" />
+                        <Button fx:id="fillEmptyNpcMorphAssignmentsButton"
+                                accessibleText="Fill Empty NPC Morph Assignments"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Fill Empty…" />
+                    </children>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </primary>
+    <editor>
+        <VBox fx:id="morphsEditorContent" alignment="TOP_LEFT"
+                managed="false" spacing="8.0" visible="false">
+            <children>
+                <Label fx:id="morphTargetEditorFocusTarget"
+                        accessibleText="Morphs editor"
+                        focusTraversable="true" styleClass="title"
+                        text="No Morphs selection" />
+                <Label fx:id="morphTargetConditionText"
+                        text="Select a Custom Morph Target or NPC Morph Assignment to inspect it."
+                        wrapText="true" />
+                <Label fx:id="npcIdentityText" managed="false"
+                        text="" visible="false" wrapText="true" />
+                <Label fx:id="npcRaceText" managed="false"
+                        text="" visible="false" wrapText="true" />
+                <Label fx:id="npcFormIdText" managed="false"
+                        text="" visible="false" wrapText="true" />
+                <Label fx:id="morphTargetAssignmentCountText"
+                        text="No Slider Presets assigned" wrapText="true" />
+                <Label fx:id="morphTargetOutputStatusText"
+                        styleClass="validation-message"
+                        text="A Morphs entry needs at least one Slider Preset to appear in output."
+                        wrapText="true" />
+                <Region VBox.vgrow="ALWAYS" />
+                <Label text="Use the inspector to manage Slider Preset relationships."
+                        wrapText="true" />
+            </children>
+        </VBox>
+    </editor>
+    <inspector>
+        <ScrollPane fx:id="morphsInspectorScroll"
+                accessibleText="Slider Preset relationship editor"
+                fitToWidth="true" focusTraversable="false"
+                hbarPolicy="NEVER" managed="false" visible="false"
+                VBox.vgrow="ALWAYS">
+            <content>
+                <VBox fx:id="morphsInspectorContent" spacing="8.0">
+                    <children>
+                        <Label styleClass="title" text="Slider Preset relationships" />
+                        <Label fx:id="morphTargetSelectionText"
+                                accessibleText="Morphs inspector: no selection"
+                                focusTraversable="true"
+                                text="No Morphs selection"
+                                wrapText="true" />
+                        <VBox fx:id="npcPortraitSection" spacing="6.0"
+                                styleClass="npc-portrait-section">
+                            <children>
+                                <Label styleClass="title" text="NPC portrait" />
+                                <ImageView fx:id="npcPortraitImage"
+                                        accessibleRole="NODE" mouseTransparent="true"
+                                        fitHeight="180.0" fitWidth="200.0"
+                                        preserveRatio="true" smooth="true" />
+                                <Label fx:id="npcPortraitStatus"
+                                        accessibleText="NPC portrait status"
+                                        text="No NPC portrait selected"
+                                        wrapText="true" />
+                                <Button fx:id="openNpcPortraitViewerButton"
+                                        accessibleText="Open NPC portrait viewer"
+                                        disable="true" maxWidth="Infinity" mnemonicParsing="true"
+                                        text="_Open portrait viewer" />
+                            </children>
+                        </VBox>
+                        <Label fx:id="assignedMorphSliderPresetLabel"
+                                labelFor="$assignedMorphSliderPresetList"
+                                mnemonicParsing="true"
+                                text="_Assigned Slider Presets:" />
+                        <ListView fx:id="assignedMorphSliderPresetList"
+                                accessibleText="Assigned Slider Presets"
+                                fixedCellSize="28.0" focusTraversable="true"
+                                prefHeight="120.0" />
+                        <Button fx:id="removeMorphSliderPresetButton"
+                                accessibleText="Remove selected Slider Preset relationship"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Remove assigned Slider Preset" />
+                        <Button fx:id="clearMorphSliderPresetsButton"
+                                accessibleText="Clear assigned Slider Presets"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="_Clear assigned Slider Presets" />
+                        <Label fx:id="availableMorphSliderPresetLabel"
+                                labelFor="$availableMorphSliderPreset"
+                                mnemonicParsing="true"
+                                text="A_vailable Slider Preset:" />
+                        <ComboBox fx:id="availableMorphSliderPreset"
+                                accessibleText="Available Slider Preset"
+                                maxWidth="Infinity" />
+                        <Button fx:id="assignMorphSliderPresetButton"
+                                accessibleText="Assign selected Slider Preset"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="Ass_ign Slider Preset" />
+                        <Button fx:id="assignAllMorphSliderPresetsButton"
+                                accessibleText="Assign all Slider Presets"
+                                maxWidth="Infinity" mnemonicParsing="true"
+                                text="Assign A_ll Slider Presets" />
+                    </children>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </inspector>
+</AreaPanes>
