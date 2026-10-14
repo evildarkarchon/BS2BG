@@ -475,10 +475,10 @@ class WorkbenchFocusTest {
                 FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
                 Parent root = loader.load();
                 WorkbenchController controller = loader.getController();
-                controller.usePortraitDirectory(images);
                 Stage stage = new Stage();
                 stage.setScene(new Scene(root, 1300.0, 800.0));
-                controller.attach(flow, stage, new WorkbenchControllerTest.RecordingPlatform(), fixture().environment());
+                controller.attach(flow, stage, new WorkbenchControllerTest.RecordingPlatform(),
+                        fixture().environment().withPortraitDirectory(images));
                 stage.show();
                 shown.set(new Shown(loader, controller, stage));
                 Button launcher = shown.get().node("openNpcPortraitViewerButton");

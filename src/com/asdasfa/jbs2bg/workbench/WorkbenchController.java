@@ -32,7 +32,6 @@ import com.asdasfa.jbs2bg.project.DiagnosticSeverity;
 import com.asdasfa.jbs2bg.project.CustomMorphTargetSnapshot;
 import com.asdasfa.jbs2bg.project.SliderPresetSnapshot;
 import com.asdasfa.jbs2bg.workbench.morphs.MorphsFeature;
-import com.asdasfa.jbs2bg.workbench.morphs.NpcPortraitFiles;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseFeature;
 import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseImporter;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
@@ -81,7 +80,6 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
-import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -558,21 +556,13 @@ public final class WorkbenchController {
     private boolean assignedMorphSliderPresetListInitialized;
     private Optional<NameIdentity> renderedMorphTargetSelection = Optional.empty();
     private Optional<NpcMorphAssignmentIdentity> renderedNpcSelection = Optional.empty();
-    private NpcMorphAssignmentIdentity renderedPortraitIdentity;
-    private String renderedPortraitDisplayName;
-    private Path renderedPortraitPath;
-    private Image renderedPortraitImage;
-    private NpcMorphAssignmentIdentity renderedDatabasePortraitIdentity;
-    private String renderedDatabasePortraitDisplayName;
-    private Path renderedDatabasePortraitPath;
-    private Image renderedDatabasePortraitImage;
+    // Satellite surfaces registered with the shell's appearance; built in attach, before the appearance first renders.
+    private SatelliteRegistry satellites;
+    // The shared portrait viewer's thumbnail loaders for the Morphs and NPC Database inspectors.
+    private NpcPortraitViewer.Thumbnail morphsPortrait;
+    private NpcPortraitViewer.Thumbnail npcDatabasePortrait;
     private Popup fillEmptyPopup;
     private Parent fillEmptyPopupRoot;
-    private Stage npcPortraitViewer;
-    private Parent npcPortraitViewerRoot;
-    private Path npcPortraitViewerPath;
-    /** Directory searched for NPC portraits; relative to the working directory, like the legacy application. */
-    private Path portraitDirectory = Path.of("images");
     private Popup npcFilterPopup;
     private Parent npcFilterPopupRoot;
     private String npcFilterExpandedColumn;
@@ -757,6 +747,14 @@ public final class WorkbenchController {
                 WorkbenchController.this.render(projectFlow.frame());
             }
         });
+        // Read only when a satellite registers, which is after configureAppearance has built the adapter.
+        satellites = new SatelliteRegistry(() -> appearanceAdapter.frame());
+        NpcPortraitViewer portraits = new NpcPortraitViewer(environment.portraitDirectory(), stage, satellites,
+                this::restorePortraitLauncherFocus);
+        morphsPortrait = portraits.thumbnail(npcPortraitImage, npcPortraitStatus, openNpcPortraitViewerButton,
+                "Select an NPC Morph Assignment to inspect its portrait.");
+        npcDatabasePortrait = portraits.thumbnail(npcDatabasePortraitImage, npcDatabasePortraitStatus,
+                openNpcDatabasePortraitViewerButton, "Select an NPC Database entry to inspect its portrait.");
         configureProjectCommands();
         configureTemplates();
         configureMorphs();
@@ -782,8 +780,7 @@ public final class WorkbenchController {
                 fillEmptyPopup.hide();
             if (npcFilterPopup != null)
                 npcFilterPopup.hide();
-            if (npcPortraitViewer != null)
-                npcPortraitViewer.close();
+            satellites.dismissAll();
             appearanceAdapter.close();
             jobSubscription.close();
             outputSubscription.close();
@@ -918,7 +915,7 @@ public final class WorkbenchController {
                 dispatchMorphs(new MorphsFeature.RequestFillEmpty()));
         addNpcsFromDatabaseButton.setOnAction(event -> openNpcDatabaseFromMorphs());
         dismissMorphsInfoBarButton.setOnAction(event -> dispatchMorphs(new MorphsFeature.DismissDiagnostics()));
-        openNpcPortraitViewerButton.setOnAction(event -> showNpcPortraitViewer());
+        // openNpcPortraitViewerButton is wired by its portrait thumbnail (see attach).
 
         configureAssignedMorphSliderPresetList();
         availableMorphSliderPreset.setCellFactory(list -> new SliderPresetDisplayCell());
@@ -1087,247 +1084,37 @@ public final class WorkbenchController {
     }
 
     /**
-     * Resolves the portrait for the stable selected NPC and starts decoding away from the JavaFX lane. Old load
-     * callbacks compare image identity before touching the inspector so rapid selection cannot show a stale portrait.
+     * Shows the selected NPC Morph Assignment's portrait in the Morphs inspector through the shared viewer's
+     * thumbnail loader.
      *
      * @param npc selected immutable NPC Morph Assignment, or null when no NPC is selected
      */
     private void renderNpcPortrait(NpcMorphAssignmentSnapshot npc) {
-        NpcMorphAssignmentIdentity identity = npc == null ? null
-                : new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId());
-        String displayName = npc == null ? null : npc.getDisplayName();
-        if (Objects.equals(identity, renderedPortraitIdentity)
-                && Objects.equals(displayName, renderedPortraitDisplayName))
-            return;
-        renderedPortraitIdentity = identity;
-        renderedPortraitDisplayName = displayName;
-        renderedPortraitPath = null;
-        renderedPortraitImage = null;
-        npcPortraitImage.setImage(null);
-        openNpcPortraitViewerButton.setDisable(true);
-        if (npc == null) {
-            npcPortraitStatus.setText("No NPC portrait selected");
-            npcPortraitStatus.setAccessibleHelp("Select an NPC Morph Assignment to inspect its portrait.");
-            return;
-        }
-        // The selected NPC is already named by the catalog and inspector; only the dedicated viewer names its image.
-        Optional<Path> file = NpcPortraitFiles.find(portraitDirectory, npc);
-        if (file.isEmpty()) {
-            String expected = "images/" + npc.getDisplayName() + " (" + npc.getEditorId() + ").jpg";
-            String status = "No portrait found. Expected " + expected
-                    + " (or .jpeg, .png, .bmp), then a display-name-only image.";
-            npcPortraitStatus.setText(status);
-            npcPortraitStatus.setAccessibleHelp(status);
-            return;
-        }
-        renderedPortraitPath = file.orElseThrow();
-        String filename = renderedPortraitPath.getFileName().toString();
-        Image image = new Image(renderedPortraitPath.toUri().toString(), 200.0, 180.0,
-                true, true, true);
-        renderedPortraitImage = image;
-        npcPortraitImage.setImage(image);
-        String loading = "Loading portrait: " + filename;
-        npcPortraitStatus.setText(loading);
-        npcPortraitStatus.setAccessibleHelp(loading);
-        image.progressProperty().addListener((observable, previous, current) ->
-                finishNpcPortraitLoad(image, filename));
-        image.errorProperty().addListener((observable, previous, current) ->
-                finishNpcPortraitLoad(image, filename));
-        finishNpcPortraitLoad(image, filename);
+        if (npc == null)
+            morphsPortrait.clear();
+        else
+            morphsPortrait.show(new NpcMorphAssignmentIdentity(npc.getPluginName(), npc.getEditorId()),
+                    npc.getDisplayName());
     }
 
-    /** Enables the viewer only after the current asynchronous thumbnail decoded successfully. */
-    private void finishNpcPortraitLoad(Image image, String filename) {
-        if (renderedPortraitImage != image)
-            return;
-        if (image.isError()) {
-            npcPortraitImage.setImage(null);
-            String status = "Could not load portrait: " + filename;
-            npcPortraitStatus.setText(status);
-            npcPortraitStatus.setAccessibleHelp(status);
-        } else if (image.getProgress() >= 1.0 && image.getWidth() > 0.0) {
-            String status = "Portrait file: " + filename;
-            npcPortraitStatus.setText(status);
-            npcPortraitStatus.setAccessibleHelp(status);
-            openNpcPortraitViewerButton.setDisable(false);
-        }
-    }
-
-    /** Follows stable NPC Database selection without allowing a prior asynchronous thumbnail to replace it. */
+    /** Follows stable NPC Database selection through the shared viewer's thumbnail loader. */
     private void renderNpcDatabasePortrait(NPC npc) {
-        NpcMorphAssignmentIdentity identity = npc == null ? null : ProjectIdentities.npcDatabaseEntry(npc);
-        String displayName = npc == null ? null : npc.getName();
-        if (Objects.equals(identity, renderedDatabasePortraitIdentity)
-                && Objects.equals(displayName, renderedDatabasePortraitDisplayName))
-            return;
-        renderedDatabasePortraitIdentity = identity;
-        renderedDatabasePortraitDisplayName = displayName;
-        renderedDatabasePortraitPath = null;
-        renderedDatabasePortraitImage = null;
-        npcDatabasePortraitImage.setImage(null);
-        openNpcDatabasePortraitViewerButton.setDisable(true);
-        if (npc == null) {
-            npcDatabasePortraitStatus.setText("No NPC portrait selected");
-            npcDatabasePortraitStatus.setAccessibleHelp("Select an NPC Database entry to inspect its portrait.");
-            return;
-        }
-        Optional<Path> file = NpcPortraitFiles.find(portraitDirectory, npc.getName(), npc.getEditorId());
-        if (file.isEmpty()) {
-            String expected = "images/" + npc.getName() + " (" + npc.getEditorId() + ").jpg";
-            String status = "No portrait found. Expected " + expected
-                    + " (or .jpeg, .png, .bmp), then a display-name-only image.";
-            npcDatabasePortraitStatus.setText(status);
-            npcDatabasePortraitStatus.setAccessibleHelp(status);
-            return;
-        }
-        renderedDatabasePortraitPath = file.orElseThrow();
-        String filename = renderedDatabasePortraitPath.getFileName().toString();
-        Image image = new Image(renderedDatabasePortraitPath.toUri().toString(), 200.0, 180.0,
-                true, true, true);
-        renderedDatabasePortraitImage = image;
-        npcDatabasePortraitImage.setImage(image);
-        String loading = "Loading portrait: " + filename;
-        npcDatabasePortraitStatus.setText(loading);
-        npcDatabasePortraitStatus.setAccessibleHelp(loading);
-        image.progressProperty().addListener((observable, previous, current) ->
-                finishNpcDatabasePortraitLoad(image, filename));
-        image.errorProperty().addListener((observable, previous, current) ->
-                finishNpcDatabasePortraitLoad(image, filename));
-        finishNpcDatabasePortraitLoad(image, filename);
-    }
-
-    /** Enables the database viewer only for the current successfully decoded portrait. */
-    private void finishNpcDatabasePortraitLoad(Image image, String filename) {
-        if (renderedDatabasePortraitImage != image)
-            return;
-        if (image.isError()) {
-            npcDatabasePortraitImage.setImage(null);
-            String status = "Could not load portrait: " + filename;
-            npcDatabasePortraitStatus.setText(status);
-            npcDatabasePortraitStatus.setAccessibleHelp(status);
-        } else if (image.getProgress() >= 1.0 && image.getWidth() > 0.0) {
-            String status = "Portrait file: " + filename;
-            npcDatabasePortraitStatus.setText(status);
-            npcDatabasePortraitStatus.setAccessibleHelp(status);
-            openNpcDatabasePortraitViewerButton.setDisable(false);
-        }
+        if (npc == null)
+            npcDatabasePortrait.clear();
+        else
+            npcDatabasePortrait.show(ProjectIdentities.npcDatabaseEntry(npc), npc.getName());
     }
 
     /**
-     * Opens the selected portrait in a keyboard-closeable, zoomable owned viewer while a full-resolution image loads
-     * in the background. The filename and dimensions remain available as text for assistive technology.
+     * Restores focus to the portrait viewer's launcher as the viewer closes, or to the active Area's primary
+     * content when the launching Area is no longer visible.
      */
-    private void showNpcPortraitViewer() {
-        if (renderedPortraitPath == null || renderedPortraitIdentity == null || renderedPortraitImage == null
-                || renderedPortraitImage.isError() || renderedPortraitImage.getProgress() < 1.0)
-            return;
-        showPortraitViewer(renderedPortraitPath, renderedPortraitDisplayName, renderedPortraitIdentity,
-                openNpcPortraitViewerButton);
-    }
-
-    /** Opens the selected NPC Database portrait through the same accessible viewer used by Morphs. */
-    private void showNpcDatabasePortraitViewer() {
-        if (renderedDatabasePortraitPath == null || renderedDatabasePortraitIdentity == null
-                || renderedDatabasePortraitImage == null || renderedDatabasePortraitImage.isError()
-                || renderedDatabasePortraitImage.getProgress() < 1.0)
-            return;
-        showPortraitViewer(renderedDatabasePortraitPath, renderedDatabasePortraitDisplayName,
-                renderedDatabasePortraitIdentity, openNpcDatabasePortraitViewerButton);
-    }
-
-    /** Builds one owned portrait window and restores focus to the visible launching Area when it closes. */
-    private void showPortraitViewer(Path file, String displayName, NpcMorphAssignmentIdentity identity,
-                                    Button launcher) {
-        if (npcPortraitViewer != null && npcPortraitViewer.isShowing()) {
-            if (file.equals(npcPortraitViewerPath)) {
-                npcPortraitViewer.toFront();
-                npcPortraitViewer.requestFocus();
-                return;
-            }
-            // A different selected NPC needs its own image; the old viewer cannot be reused with stale content.
-            npcPortraitViewer.close();
-        }
-        VBox content = new VBox(10.0);
-        content.setId("workbenchRoot");
-        content.getStyleClass().add("npc-portrait-viewer");
-        content.setAccessibleText("NPC portrait viewer");
-        Label title = new Label("NPC portrait: " + displayName);
-        title.getStyleClass().add("title");
-        Label filename = new Label("File: " + file.getFileName());
-        filename.setWrapText(true);
-        Label dimensions = new Label("Loading image dimensions…");
-        dimensions.setAccessibleText("NPC portrait dimensions: loading");
-        ImageView fullView = new ImageView();
-        fullView.setAccessibleText("NPC portrait: " + displayName + ", plugin "
-                + identity.getPluginName() + ", editor ID " + identity.getEditorId());
-        fullView.setPreserveRatio(true);
-        fullView.setSmooth(true);
-        Image fullImage = new Image(file.toUri().toString(), true);
-        fullView.setImage(fullImage);
-        Runnable updateDimensions = () -> {
-            if (fullImage.isError()) {
-                dimensions.setText("Could not load portrait dimensions.");
-                dimensions.setAccessibleText("NPC portrait dimensions unavailable");
-            } else if (fullImage.getProgress() >= 1.0) {
-                String size = (int) fullImage.getWidth() + " × " + (int) fullImage.getHeight() + " pixels";
-                dimensions.setText(size);
-                dimensions.setAccessibleText("NPC portrait dimensions: " + size);
-            }
-        };
-        fullImage.progressProperty().addListener((observable, previous, current) -> updateDimensions.run());
-        fullImage.errorProperty().addListener((observable, previous, current) -> updateDimensions.run());
-        updateDimensions.run();
-        ScrollPane imageScroll = new ScrollPane(fullView);
-        imageScroll.setAccessibleText("NPC portrait image scroll area");
-        imageScroll.setPannable(true);
-        VBox.setVgrow(imageScroll, javafx.scene.layout.Priority.ALWAYS);
-        Label zoomLabel = new Label("Zoom: 100%");
-        Slider zoom = new Slider(0.25, 4.0, 1.0);
-        zoom.setAccessibleText("NPC portrait zoom");
-        zoom.setBlockIncrement(0.25);
-        fullView.fitWidthProperty().bind(zoom.valueProperty().multiply(500.0));
-        zoom.valueProperty().addListener((observable, previous, current) ->
-                zoomLabel.setText("Zoom: " + Math.round(current.doubleValue() * 100.0) + "%"));
-        Button close = new Button("Close");
-        close.setAccessibleText("Close NPC portrait viewer");
-        content.getChildren().setAll(title, filename, dimensions, imageScroll, zoomLabel, zoom, close);
-        Stage viewer = new Stage();
-        viewer.initOwner(stage);
-        viewer.getIcons().setAll(stage.getIcons());
-        viewer.setTitle("NPC Portrait — " + displayName);
-        Scene scene = new Scene(content, 640.0, 560.0);
-        scene.getStylesheets().add(WorkbenchController.class
-                .getResource("/com/asdasfa/jbs2bg/workbench.css").toExternalForm());
-        scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (event.getCode() == KeyCode.ESCAPE) {
-                viewer.close();
-                event.consume();
-            }
-        });
-        viewer.setScene(scene);
-        viewer.setMinWidth(360.0);
-        viewer.setMinHeight(300.0);
-        close.setOnAction(event -> viewer.close());
-        npcPortraitViewer = viewer;
-        npcPortraitViewerRoot = content;
-        npcPortraitViewerPath = file;
-        applySatelliteAppearance(content);
-        viewer.setOnHidden(event -> {
-            if (npcPortraitViewer == viewer) {
-                npcPortraitViewer = null;
-                npcPortraitViewerRoot = null;
-                npcPortraitViewerPath = null;
-            }
-            if (stage.isShowing()) {
-                if (canRestoreFocus(launcher))
-                    launcher.requestFocus();
-                else
-                    requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
-                            WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
-            }
-        });
-        viewer.show();
-        close.requestFocus();
+    private void restorePortraitLauncherFocus(Node launcher) {
+        if (canRestoreFocus(launcher))
+            launcher.requestFocus();
+        else
+            requestFocus(new WorkbenchNavigation.FocusTarget(navigationFrame.activeArea(),
+                    WorkbenchNavigation.Landmark.PRIMARY_CONTENT));
     }
 
     /** Configures the current assigned-relationship ListView, including identity selection dispatch. */
@@ -1528,7 +1315,7 @@ public final class WorkbenchController {
             if (!renderingNpcDatabase)
                 dispatchNpcDatabase(new NpcDatabaseFeature.SetAssignRandom(assignRandomNpcPresetCheck.isSelected()));
         });
-        openNpcDatabasePortraitViewerButton.setOnAction(event -> showNpcDatabasePortraitViewer());
+        // openNpcDatabasePortraitViewerButton is wired by its portrait thumbnail (see attach).
         renderNpcDatabase(npcDatabaseFeature.frame());
     }
 
@@ -3412,16 +3199,6 @@ public final class WorkbenchController {
     }
 
     /**
-     * Points portrait lookup at another directory, so package-local tests can supply a real portrait without
-     * writing into the working directory. Call it before the first NPC selection renders.
-     *
-     * @param directory directory holding {@code <name> (<editor ID>).<ext>} portrait files
-     */
-    void usePortraitDirectory(Path directory) {
-        portraitDirectory = Objects.requireNonNull(directory, "directory");
-    }
-
-    /**
      * Connects rail gestures, accepted keyboard commands, and responsive width changes to typed navigation.
      */
     private void configureNavigation() {
@@ -3567,8 +3344,7 @@ public final class WorkbenchController {
             JavaFxWorkbenchAppearance.applyTo(fillEmptyPopupRoot, frame);
         if (npcFilterPopupRoot != null)
             JavaFxWorkbenchAppearance.applyTo(npcFilterPopupRoot, frame);
-        if (npcPortraitViewerRoot != null)
-            JavaFxWorkbenchAppearance.applyTo(npcPortraitViewerRoot, frame);
+        satellites.retheme(frame);
         String theme = switch (frame.effectiveTheme()) {
             case LIGHT -> "Light theme";
             case DARK -> "Dark theme";

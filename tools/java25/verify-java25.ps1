@@ -233,6 +233,7 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.workbench.WorkbenchFocusTest',
     'com.asdasfa.jbs2bg.workbench.WorkbenchAccessibilityContractTest',
     'com.asdasfa.jbs2bg.workbench.DispatchPipelineTest',
+    'com.asdasfa.jbs2bg.workbench.NpcPortraitViewerTest',
     'com.asdasfa.jbs2bg.workbench.templates.TemplatesFeatureTest',
     'com.asdasfa.jbs2bg.workbench.morphs.MorphsFeatureTest',
     'com.asdasfa.jbs2bg.workbench.settings.SettingsFeatureTest',

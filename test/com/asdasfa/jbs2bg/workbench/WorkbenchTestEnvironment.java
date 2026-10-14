@@ -110,13 +110,16 @@ public final class WorkbenchTestEnvironment {
 
     /**
      * @return environment over the store with the store's directory as preferences directory, the read-only
-     *         generation-preference fallback that tests and embedded adapters use, and this fixture's fake
-     *         appearance preferences
+     *         generation-preference fallback that tests and embedded adapters use, this fixture's fake
+     *         appearance preferences, and an {@code images} portrait directory inside the store's directory, so no
+     *         test reads portraits from the working directory; tests that need a portrait use
+     *         {@link WorkbenchEnvironment#withPortraitDirectory}
      */
     public WorkbenchEnvironment environment() {
         return WorkbenchEnvironment.of(settings, startup, settings.directory(),
                 GenerationPreferencesStore.MigrationPolicy.READ_ONLY_FALLBACK)
-                .withAppearancePreferences(appearancePreferences);
+                .withAppearancePreferences(appearancePreferences)
+                .withPortraitDirectory(settings.directory().resolve("images"));
     }
 
     /** @return a new session reading the same store through its read-only snapshot view */
