@@ -27,6 +27,7 @@ import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsArea;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunner;
+import com.asdasfa.jbs2bg.workbench.settings.SettingsShellPort;
 
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
@@ -317,9 +318,12 @@ public final class WorkbenchController {
         }
         projectFlow = Objects.requireNonNull(flow, "flow");
         settings = environment.settings();
-        templatesFeature = new TemplatesFeature(projectFlow, settings::snapshot, Clock.systemUTC());
-        morphsFeature = new MorphsFeature(projectFlow, Clock.systemUTC());
-        npcDatabaseFeature = new NpcDatabaseFeature(projectFlow, Clock.systemUTC());
+        // The three features read their clock only to time type-ahead gaps, so they get monotonic ticker time: a
+        // wall-clock adjustment between two keys must not expire or extend a prefix.
+        Clock typeAheadClock = MonotonicClock.system();
+        templatesFeature = new TemplatesFeature(projectFlow, settings::snapshot, typeAheadClock);
+        morphsFeature = new MorphsFeature(projectFlow, typeAheadClock);
+        npcDatabaseFeature = new NpcDatabaseFeature(projectFlow, typeAheadClock);
         settingsFeature = new SettingsFeature(settings, environment.settingsStartup(),
                 environment.preferencesDirectory(), environment.migrationPolicy());
         settingsJobs = new SettingsJobRunner(settingsFeature, settings, projectFlow.jobs(),
@@ -484,7 +488,7 @@ public final class WorkbenchController {
      *                  inspector thumbnails
      */
     private void loadAreas(NpcPortraitViewer portraits) {
-        ShellPort shell = new AreaShell();
+        SettingsShellPort shell = new AreaShell();
         AreaLoader.Loaded<TemplatesArea> templates = TemplatesArea.load(templatesFeature, pipeline, shell, uiaLists,
                 settings::snapshot, stage.renderScaleYProperty());
         templatesArea = templates.area();
@@ -580,10 +584,11 @@ public final class WorkbenchController {
     }
 
     /**
-     * The shell side of the {@link ShellPort}: Areas and the Output drawer reach shell-owned work (feedback, the
-     * Settings job runner, the close continuation, navigation) and other Areas' refreshes only through these requests.
+     * The shell side of the {@link ShellPort} and its Settings extension ({@link SettingsShellPort}): Areas and the
+     * Output drawer reach shell-owned work (feedback, the Settings job runner, the close continuation, navigation) and
+     * other Areas' refreshes only through these requests.
      */
-    private final class AreaShell implements ShellPort {
+    private final class AreaShell implements SettingsShellPort {
         /** Applies an Area-worded publication to the one feedback model and renders the frame it returns. */
         @Override
         public void publishFeedback(Function<WorkbenchFeedback, WorkbenchFeedback.Frame> publication) {
@@ -620,7 +625,7 @@ public final class WorkbenchController {
          */
         @Override
         public void settingsPublished(boolean pair) {
-            if (projectFlow.jobs().frame().shutdownRequested())
+            if (jobFrame().shutdownRequested())
                 settingsRefreshDeferred = true;
             else if (!pair)
                 outputDrawer.refreshGenerationSettings();
@@ -808,8 +813,8 @@ public final class WorkbenchController {
         boolean available = selected != null
                 && selected.jobDetails().stream().anyMatch(details -> projectFlow.jobs().isRetryAvailable(
                         new JobCoordinator.AttemptId(details.attemptId())))
-                && !projectFlow.jobs().frame().active()
-                && !projectFlow.jobs().frame().shutdownRequested();
+                && !jobFrame().active()
+                && !jobFrame().shutdownRequested();
         retryActivityButton.setDisable(!available);
         retryActivityButton.setAccessibleHelp(available
                 ? "Starts a new attempt linked to attempt "
@@ -984,10 +989,8 @@ public final class WorkbenchController {
      * Renders active Area, responsive panes, and Output visibility from one immutable navigation frame.
      */
     private void renderNavigation(WorkbenchNavigation.Frame frame) {
-        templatesAreaButton.setSelected(frame.activeArea() == WorkbenchNavigation.Area.TEMPLATES);
-        morphsAreaButton.setSelected(frame.activeArea() == WorkbenchNavigation.Area.MORPHS);
-        npcDatabaseAreaButton.setSelected(frame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE);
-        settingsAreaButton.setSelected(frame.activeArea() == WorkbenchNavigation.Area.SETTINGS);
+        for (WorkbenchNavigation.Area railArea : WorkbenchNavigation.Area.values())
+            areaButton(railArea).setSelected(railArea == frame.activeArea());
         outputAreaButton.setSelected(frame.outputDrawerVisible());
 
         String area = frame.activeArea().displayName();
@@ -1135,10 +1138,18 @@ public final class WorkbenchController {
     }
 
     /**
+     * @return the shared job coordinator's latest frame, read fresh on every call because a job can start, settle or
+     *         request shutdown between two shell callbacks
+     */
+    private JobCoordinator.Frame jobFrame() {
+        return projectFlow.jobs().frame();
+    }
+
+    /**
      * Dispatches one Project intent, renders its frame, and completes any chained tokenized platform effects.
      */
     private void dispatch(WorkbenchProjectFlow.Intent intent) {
-        if (intent == WorkbenchProjectFlow.Intent.CLOSE && projectFlow.jobs().frame().active()) {
+        if (intent == WorkbenchProjectFlow.Intent.CLOSE && jobFrame().active()) {
             closeAfterActiveJob = true;
             projectFlow.jobs().requestShutdown();
             return;
@@ -1202,7 +1213,7 @@ public final class WorkbenchController {
             render(current.frame());
             if (current.effect().isEmpty()) {
                 if (activeOperation == WorkbenchProjectFlow.Intent.CLOSE
-                        && projectFlow.jobs().frame().shutdownRequested()
+                        && jobFrame().shutdownRequested()
                         && !current.frame().closed()) {
                     closeAfterActiveJob = false;
                     projectFlow.jobs().resumeAfterShutdown();
@@ -1299,7 +1310,7 @@ public final class WorkbenchController {
      */
     private WorkbenchContext buildContext(WorkbenchProjectFlow.Frame project, boolean resetTemplates,
                                           boolean resetMorphs) {
-        JobCoordinator.Frame jobs = projectFlow.jobs().frame();
+        JobCoordinator.Frame jobs = jobFrame();
         return new WorkbenchContext(project, resetTemplates, resetMorphs, pipeline.mutationsBlocked(),
                 jobs.active() || jobs.shutdownRequested(), settingsFeature.frame().liveAvailable(),
                 Optional.ofNullable(activeOperation));
@@ -1489,7 +1500,7 @@ public final class WorkbenchController {
                         + diagnostic.details().map(value -> System.lineSeparator() + value).orElse(""))
                 .toList());
         boolean retryable = attempt.retryAvailable() && projectFlow.jobs().isRetryAvailable(attempt.id())
-                && !projectFlow.jobs().frame().shutdownRequested();
+                && !jobFrame().shutdownRequested();
         WorkbenchFeedback.DialogSpec spec = WorkbenchFeedback.DialogSpec.failure(
                 attempt.operation().name() + " failed", attempt.summary(), details, retryable);
         WorkbenchFeedback.DialogAction action = pipeline.fail(spec);

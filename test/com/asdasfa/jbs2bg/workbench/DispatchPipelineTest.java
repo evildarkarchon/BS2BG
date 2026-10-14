@@ -162,6 +162,38 @@ class DispatchPipelineTest {
     }
 
     /**
+     * A destructive confirmation shows the safe-default dialog that offers its named action beside Cancel, and tells
+     * the feature only whether that action was chosen: Cancel declines, the named action accepts.
+     */
+    @Test
+    void destructiveConfirmationRespondsWithWhetherItsNamedActionWasChosen() {
+        dialogs.confirmations.add(WorkbenchFeedback.DialogAction.CANCEL);
+        dialogs.confirmations.add(WorkbenchFeedback.DialogAction.CLEAR);
+        List<Boolean> accepted = new ArrayList<>();
+        DispatchPipeline.Callbacks<FakeIntent, FakeUpdate, FakeEffect> clear = callbacks(effect ->
+                DispatchPipeline.Realization.confirmDestructive("Clear visible?", "Clear 2 visible entries?",
+                        WorkbenchFeedback.DialogAction.CLEAR, answer -> {
+                            accepted.add(answer);
+                            return new FakeUpdate(answer ? "cleared" : "kept", OptionalLong.empty(),
+                                    Optional.empty());
+                        }));
+
+        DispatchPipeline.Outcome<FakeIntent, FakeUpdate> declined = pipeline.dispatch(new FakeFeature(
+                new FakeUpdate("asked", OptionalLong.empty(), Optional.of(new FakeEffect("confirm-clear")))),
+                clear, new Remove()).orElseThrow();
+        DispatchPipeline.Outcome<FakeIntent, FakeUpdate> confirmed = pipeline.dispatch(new FakeFeature(
+                new FakeUpdate("asked", OptionalLong.empty(), Optional.of(new FakeEffect("confirm-clear")))),
+                clear, new Remove()).orElseThrow();
+
+        assertEquals(List.of(false, true), accepted);
+        assertEquals("kept", declined.settled().label());
+        assertEquals(Optional.of(WorkbenchFeedback.DialogAction.CANCEL), declined.answer());
+        assertEquals("cleared", confirmed.settled().label());
+        assertEquals(WorkbenchFeedback.DialogSpec.destructiveAction("Clear visible?", "Clear 2 visible entries?",
+                WorkbenchFeedback.DialogAction.CLEAR), renderedFeedback.getFirst().pendingDialog().orElseThrow().spec());
+    }
+
+    /**
      * A confirmation response that requests another effect is realized too, as a dirty Reload answered Save chains
      * into a worker Save.
      */

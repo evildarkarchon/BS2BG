@@ -108,6 +108,10 @@ implementation refined the shapes above. The decision itself is unchanged.*
     Templates edit's diagnostics out of the Morphs projection, and a Morphs edit's out of Templates.
   - `ShellPort.projectChanged(update, ownsDiagnostics)` keeps them out of both, for the NPC Database.
   - One diagnostics owner in the shell replaces the two `…OwnProjectDiagnostics` flags.
+- **An Area-typed request extends the port in that Area's package.** Settings' job submission takes a
+  `SettingsFeature.Effect`, so it lives in `workbench.settings.SettingsShellPort extends ShellPort`, which the Settings
+  Area injects. The shell implements it once and hands every other module the same object as a `ShellPort`. The
+  contract types in `workbench` name no Area package; `WorkbenchContractDependencyTest` pins that.
 - **Mounting appends.** The shell mounts the Areas in their former FXML order (Templates, Morphs, Settings, NPC
   Database) and appends each pane to its landmark container.
 - **The test fixture is `ModuleTest<M>`, with `AreaTest<A>` on top.** `OutputDrawerTest` extends `ModuleTest`

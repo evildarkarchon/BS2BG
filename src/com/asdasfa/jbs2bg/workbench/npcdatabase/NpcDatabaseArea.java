@@ -443,13 +443,13 @@ public final class NpcDatabaseArea implements WorkbenchArea {
     private DispatchPipeline.Realization<NpcDatabaseFeature.Update> realize(NpcDatabaseFeature.Effect effect) {
         return switch (Objects.requireNonNull(effect, "effect")) {
             case NpcDatabaseFeature.ConfirmRemoveSource remove -> confirm(remove.token(),
-                    WorkbenchFeedback.DialogSpec.destructiveAction("Remove NPC Database source?",
-                            "Remove " + remove.source().getFileName() + " from this session's catalog?",
-                            WorkbenchFeedback.DialogAction.REMOVE), WorkbenchFeedback.DialogAction.REMOVE);
+                    "Remove NPC Database source?",
+                    "Remove " + remove.source().getFileName() + " from this session's catalog?",
+                    WorkbenchFeedback.DialogAction.REMOVE);
             case NpcDatabaseFeature.ConfirmClearVisible clear -> confirm(clear.token(),
-                    WorkbenchFeedback.DialogSpec.destructiveAction("Clear visible NPC Database entries?",
-                            "Clear " + clear.identities().size() + " visible entries from this session's catalog?",
-                            WorkbenchFeedback.DialogAction.CLEAR), WorkbenchFeedback.DialogAction.CLEAR);
+                    "Clear visible NPC Database entries?",
+                    "Clear " + clear.identities().size() + " visible entries from this session's catalog?",
+                    WorkbenchFeedback.DialogAction.CLEAR);
             case NpcDatabaseFeature.ReturnToMorphs returning -> {
                 shell.returnToMorphs(returning.assignment());
                 yield DispatchPipeline.Realization.done();
@@ -463,11 +463,11 @@ public final class NpcDatabaseArea implements WorkbenchArea {
      * or exactly the identities visible when the clear was requested.
      */
     private DispatchPipeline.Realization<NpcDatabaseFeature.Update> confirm(
-            long token, WorkbenchFeedback.DialogSpec spec, WorkbenchFeedback.DialogAction acceptance) {
+            long token, String title, String message, WorkbenchFeedback.DialogAction acceptance) {
         WorkbenchNavigation.FocusTarget returnTarget = shell.currentFocus();
-        return DispatchPipeline.Realization.confirm(spec, action -> {
+        return DispatchPipeline.Realization.confirmDestructive(title, message, acceptance, accepted -> {
             shell.requestFocus(returnTarget);
-            return feature.respond(token, action == acceptance);
+            return feature.respond(token, accepted);
         });
     }
 

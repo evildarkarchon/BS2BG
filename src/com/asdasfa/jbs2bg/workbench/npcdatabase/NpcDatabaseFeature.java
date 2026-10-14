@@ -110,7 +110,8 @@ public final class NpcDatabaseFeature
      * Starts with an empty source catalog and no selected or filtered row.
      *
      * @param projectFlow authoritative Project operation boundary that Add and Add All promote through
-     * @param clock       deterministic source for type-ahead timing
+     * @param clock       deterministic source for type-ahead timing; only gaps between its instants are read, so
+     *                    production passes a monotonic {@link com.asdasfa.jbs2bg.workbench.MonotonicClock}
      * @throws NullPointerException when an argument is null
      */
     public NpcDatabaseFeature(WorkbenchProjectFlow projectFlow, Clock clock) {

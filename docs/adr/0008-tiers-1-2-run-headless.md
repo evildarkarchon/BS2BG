@@ -28,7 +28,8 @@ provider. So the tiers prove different things:
   Focus preservation follows
   [Focus preservation semantics without the OS-active window](https://github.com/evildarkarchon/BS2BG/issues/123):
   production must not depend on `isFocused()` or deferred focus requests, so that Tier 1 can check focus
-  headless. The focus fix removes the coupling that is still in production today.
+  headless. The focus fix ([#138](https://github.com/evildarkarchon/BS2BG/issues/138)) removed that coupling from
+  production; `WorkbenchFocusPolicy.ownsSceneFocus` is the only focus check left.
 - Tier 3 proves the UI Automation *outcome* on the real desktop, in the packaged image.
 - Narrator speech stays human release evidence; neither tier claims it.
 
@@ -45,11 +46,13 @@ The headless split must not drift back silently. These mechanisms are decided in
 - **The `FxTestToolkit` guard.** Before `Platform.startup`, it asserts both properties unless
   `bs2bg.test.desktop=true`, and fails with an error that names `desktop-fx`. This catches a command-line `-D`,
   which overrides Surefire's entries. It reads public system properties only: no glass-class check and no screen
-  fingerprint. An accessibility tripwire after each test (`Platform.isAccessibilityActive()` must stay false
-  headless) lands with the test-harness hardening.
-- **The class-file production-ban gate.** A gate test reads production class files and bans desktop-dependent
-  calls such as `isFocused()` and deferred focus requests. It lands with the focus fix and the appearance-source
-  seam.
+  fingerprint. After each test, its accessibility tripwire (`FxTestToolkit.checkAccessibilityTripwire`, pinned by
+  `FxTestToolkitTest`) fails the run if `Platform.isAccessibilityActive()` is true on the headless platform.
+- **The class-file production-ban gate.** `ProductionPlatformBanGateTest` reads every production class file with
+  `java.lang.classfile` and bans desktop-dependent calls: `isFocused()`/`focusedProperty()`, window activation
+  through `Stage` `requestFocus`/`toFront`, `Platform.getPreferences` outside the appearance-preferences source,
+  and deferred `requestFocus` through `Platform.runLater`. Each allowed exception is keyed by class and method and
+  is listed in `docs/build/workbench-platform.md`.
 - **No skipped tests.** A test that does not fit headless is rewritten to be deterministic or deleted from Tier 1.
   It is never skipped, because the gate forbids skipped tests. A Tier 3 counterpart is added only when it proves a
   decision BS2BG made.

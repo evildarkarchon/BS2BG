@@ -355,6 +355,27 @@ public final class DispatchPipeline {
         }
 
         /**
+         * Asks the pipeline for the safe-default destructive confirmation (the named action beside Cancel, Cancel on
+         * Enter and Escape), then tells the feature only whether the user chose the named action. This is the one
+         * shape every Area's Remove and Clear confirmations share.
+         *
+         * @param title      concise destructive question
+         * @param message    complete non-color consequence description
+         * @param acceptance the named destructive action (REMOVE or CLEAR); every other answer declines
+         * @param respond    tokenized feature response, given true when the user chose {@code acceptance}
+         * @param <U>        update type
+         * @return confirmation realization
+         */
+        static <U> Realization<U> confirmDestructive(String title, String message,
+                                                     WorkbenchFeedback.DialogAction acceptance,
+                                                     Function<Boolean, U> respond) {
+            Objects.requireNonNull(acceptance, "acceptance");
+            Objects.requireNonNull(respond, "respond");
+            return confirm(WorkbenchFeedback.DialogSpec.destructiveAction(title, message, acceptance),
+                    action -> respond.apply(action == acceptance));
+        }
+
+        /**
          * Reports the effect fully handled by the caller; the latest update stays settled.
          *
          * @param <U> update type

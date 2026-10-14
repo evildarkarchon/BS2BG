@@ -24,6 +24,14 @@ Open-source JavaFX feature releases get public updates only until the next featu
 whereas Gluon's JavaFX 25 line is an LTS. The project accepts that cost in exchange for the built-in headless
 platform.
 
+## The JavaFX version is independent of the JDK
+
+The JavaFX version is versioned independently of the JDK (Temurin 25 LTS). The two are separate pins: nothing ties
+`javafx.version` in `pom.xml`, or the `javafx` block of `toolchain-lock.json`, to the JDK version, and no check that
+keeps them in step should be added. A JavaFX bump does not touch the JDK pin, and a JDK update does not touch the
+JavaFX pin. The only consistency that matters for JavaFX is between `javafx.version` in `pom.xml`, the lock's
+`javafx` block and the Pester version assert, which move together in one reviewed bump (below).
+
 ## Policy for later JavaFX feature releases
 
 - Each JavaFX feature release (28, 29, ...) is adopted as an explicit, reviewed lock bump: `javafx.version` in
@@ -51,5 +59,7 @@ platform.
 - Tier 1 and Tier 2 can move to the built-in headless platform without extra jars or `--add-exports`.
 - JavaFX feature releases must be adopted on roughly a six-month cadence to stay on a publicly updated line; each
   is a reviewed lock change gated by Tiers 1–3, as above.
-- The JavaFX 25 UI Automation workarounds in `WorkbenchController` and `tools/java25` stay in place. The Windows
-  UIA provider did not change through JavaFX 27; removing any of them needs a Tier 3 check first.
+- The JavaFX 25 UI Automation workarounds stay in place: the shared ones in `UiaListHelper`, the single-Area ones
+  (the rename edit lifecycle, slider-row reuse, the NPC Database HelpText mirror) in their Areas, as
+  `docs/build/workbench-platform.md` lists, and the smoke-side ones in `tools/java25`. The Windows UIA provider did
+  not change through JavaFX 27; removing any of them needs a Tier 3 check first.

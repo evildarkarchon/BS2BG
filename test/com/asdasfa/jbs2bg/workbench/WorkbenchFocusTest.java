@@ -1,15 +1,12 @@
 package com.asdasfa.jbs2bg.workbench;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -21,11 +18,9 @@ import com.asdasfa.jbs2bg.Main;
 import com.asdasfa.jbs2bg.data.Settings.DefaultSliderValue;
 import com.asdasfa.jbs2bg.data.SettingsTestSupport;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
-import com.asdasfa.jbs2bg.project.CustomMorphTargetEdits;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentEdits;
 import com.asdasfa.jbs2bg.project.SliderPresetEdits;
 import com.asdasfa.jbs2bg.workbench.morphs.MorphsArea;
-import com.asdasfa.jbs2bg.workbench.templates.SliderChoiceRow;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesArea;
 
 import javafx.fxml.FXMLLoader;
@@ -33,13 +28,10 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
-import javafx.scene.layout.VBox;
 import javafx.stage.Popup;
 import javafx.stage.Stage;
 
@@ -48,6 +40,10 @@ import javafx.stage.Stage;
  * window activation, so each holds on the headless platform where windows never lose OS focus. Deferred focus is
  * asserted in a second {@link FxTestToolkit#runOnFxThread} call, which FX queue order places after the controller's
  * deferral; synchronous focus is asserted in the same body that caused it.
+ * <p>
+ * This suite keeps the focus cases that need the whole loaded Workbench: initial focus, the shell's semantic and
+ * landmark fallbacks, and the shared portrait viewer. Each Area's own focus restores (list refills, rename, failure
+ * dialogs, its satellites) are tested in that Area's {@code <Area>AreaTest}.
  */
 class WorkbenchFocusTest {
 
@@ -160,160 +156,6 @@ class WorkbenchFocusTest {
         });
     }
 
-    /** The empty-to-populated Slider Preset swap moves focus to the replacement list. */
-    @Test
-    void sliderPresetRefillKeepsFocusOnTheReplacementList() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new RecordingPlatform());
-            try {
-                ListView<?> initial = shown.templates().sliderPresetListNode();
-                initial.requestFocus();
-                shown.<TextField>node("sliderPresetNameInput").setText("Alpha");
-
-                shown.<Button>node("createSliderPresetButton").fire();
-
-                assertNotSame(initial, shown.templates().sliderPresetListNode());
-                assertSame(shown.templates().sliderPresetListNode(), shown.scene().getFocusOwner());
-            } finally {
-                shown.stage().close();
-            }
-        });
-    }
-
-    /** The empty-to-populated Custom Morph Target swap moves focus to the replacement list. */
-    @Test
-    void customMorphTargetRefillKeepsFocusOnTheReplacementList() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new RecordingPlatform());
-            try {
-                shown.<ToggleButton>node("morphsAreaButton").fire();
-                ListView<?> initial = shown.morphs().customMorphTargetListNode();
-                initial.requestFocus();
-                shown.<TextField>node("customMorphTargetNameInput").setText("All|Female");
-
-                shown.<Button>node("createCustomMorphTargetButton").fire();
-
-                assertNotSame(initial, shown.morphs().customMorphTargetListNode());
-                assertSame(shown.morphs().customMorphTargetListNode(), shown.scene().getFocusOwner());
-            } finally {
-                shown.stage().close();
-            }
-        });
-    }
-
-    /** Clearing a filter that emptied the NPC catalog refills it without losing the list's focus. */
-    @Test
-    void npcMorphAssignmentRefillKeepsFocusOnTheReplacementList() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
-        FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new RecordingPlatform());
-            try {
-                shown.<ToggleButton>node("morphsAreaButton").fire();
-                TextField filter = shown.node("npcMorphAssignmentFilter");
-                filter.setText("no match");
-                ListView<?> initial = shown.morphs().npcMorphAssignmentListNode();
-                assertTrue(initial.getItems().isEmpty());
-                initial.requestFocus();
-
-                filter.setText("");
-
-                assertNotSame(initial, shown.morphs().npcMorphAssignmentListNode());
-                assertSame(shown.morphs().npcMorphAssignmentListNode(), shown.scene().getFocusOwner());
-            } finally {
-                shown.stage().close();
-            }
-        });
-    }
-
-    /** Selecting a target with relationships refills the focused assigned-preset list on its replacement. */
-    @Test
-    void assignedSliderPresetRefillKeepsFocusOnTheReplacementList() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
-        FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new RecordingPlatform());
-            try {
-                shown.<ToggleButton>node("morphsAreaButton").fire();
-                ListView<?> initial = shown.morphs().assignedMorphSliderPresetListNode();
-                initial.requestFocus();
-
-                shown.morphs().customMorphTargetListNode().getSelectionModel().selectFirst();
-
-                assertNotSame(initial, shown.morphs().assignedMorphSliderPresetListNode());
-                assertSame(shown.morphs().assignedMorphSliderPresetListNode(), shown.scene().getFocusOwner());
-            } finally {
-                shown.stage().close();
-            }
-        });
-    }
-
-    /** A Slider choice row control regains focus after the failure dialog its edit raised. */
-    @Test
-    void sliderChoiceFocusReturnsAfterTheFailureDialog() throws Exception {
-        fixture = WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(temporaryDirectory,
-                Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)), Map.of()));
-        WorkbenchControllerTest.RefusingEditSession session =
-                new WorkbenchControllerTest.RefusingEditSession(fixture().newSession());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        RecordingPlatform platform = new RecordingPlatform();
-        FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, platform);
-            try {
-                shown.templates().sliderPresetListNode().getSelectionModel().select(0);
-                SliderChoiceRow waist = (SliderChoiceRow) shown.<VBox>node("sliderChoiceRows")
-                        .getChildren().getFirst();
-                CheckBox enabled = waist.enabledControl();
-                enabled.requestFocus();
-                session.refuseEdits(true);
-                // While the dialog is up, something else in the main scene takes focus.
-                platform.respondFailureWith(WorkbenchFeedback.DialogAction.CLOSE,
-                        () -> shown.<TextField>node("sliderPresetFilter").requestFocus());
-
-                enabled.fire();
-
-                SliderChoiceRow restored = (SliderChoiceRow) shown.<VBox>node("sliderChoiceRows")
-                        .getChildren().getFirst();
-                assertSame(restored.enabledControl(), shown.scene().getFocusOwner());
-            } finally {
-                shown.stage().close();
-            }
-        });
-    }
-
-    /** A bulk-action button regains focus after the failure dialog its edit raised. */
-    @Test
-    void templatesControlFocusReturnsAfterTheFailureDialog() throws Exception {
-        fixture = WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(temporaryDirectory,
-                Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)), Map.of()));
-        WorkbenchControllerTest.RefusingEditSession session =
-                new WorkbenchControllerTest.RefusingEditSession(fixture().newSession());
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        RecordingPlatform platform = new RecordingPlatform();
-        FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, platform);
-            try {
-                shown.templates().sliderPresetListNode().getSelectionModel().select(0);
-                Button fiftyAll = shown.node("fiftyAllSliderChoicesButton");
-                fiftyAll.requestFocus();
-                session.refuseEdits(true);
-                platform.respondFailureWith(WorkbenchFeedback.DialogAction.CLOSE,
-                        () -> shown.<TextField>node("sliderPresetFilter").requestFocus());
-
-                fiftyAll.fire();
-
-                assertSame(fiftyAll, shown.scene().getFocusOwner());
-            } finally {
-                shown.stage().close();
-            }
-        });
-    }
-
     /**
      * When the control that had focus before the failure dialog is neither a Slider choice row control nor a
      * Templates profile, gang or bulk control, the Templates Area hands the restore to the shell, which focuses the
@@ -323,8 +165,8 @@ class WorkbenchFocusTest {
     void templatesFailureFocusFallsBackToTheShellsSemanticTarget() throws Exception {
         fixture = WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(temporaryDirectory,
                 Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)), Map.of()));
-        WorkbenchControllerTest.RefusingEditSession session =
-                new WorkbenchControllerTest.RefusingEditSession(fixture().newSession());
+        RefusingEditSession session =
+                new RefusingEditSession(fixture().newSession());
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
         flow.apply(SliderPresetEdits.create("Alpha"));
         RecordingPlatform platform = new RecordingPlatform();
@@ -342,110 +184,6 @@ class WorkbenchFocusTest {
 
                 assertSame(shown.templates().sliderPresetListNode(), shown.scene().getFocusOwner(),
                         "the filter sits in the primary content, whose landmark node is the Slider Preset list");
-            } finally {
-                shown.stage().close();
-            }
-        });
-    }
-
-    /** F2 puts focus on the inline rename field as editing starts, and it stays there. */
-    @Test
-    void renameFromTheListFocusesTheRenameField() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        AtomicReference<Shown> shown = new AtomicReference<>();
-        try {
-            FxTestToolkit.runOnFxThread(() -> {
-                shown.set(show(flow, new RecordingPlatform()));
-                ListView<?> presets = shown.get().templates().sliderPresetListNode();
-                presets.getSelectionModel().select(0);
-                presets.requestFocus();
-
-                sendKey(shown.get().root(), KeyCode.F2, false);
-                shown.get().root().applyCss();
-                shown.get().root().layout();
-
-                assertSame(shown.get().templates().activeRenameField().orElseThrow(),
-                        shown.get().scene().getFocusOwner());
-            });
-            FxTestToolkit.runOnFxThread(() -> assertSame(
-                    shown.get().templates().activeRenameField().orElseThrow(), shown.get().scene().getFocusOwner()));
-        } finally {
-            close(shown);
-        }
-    }
-
-    /** The Rename button moves focus into the editor even though the list never owned focus. */
-    @Test
-    void renameFromTheInspectorButtonFocusesTheRenameField() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new RecordingPlatform());
-            try {
-                shown.templates().sliderPresetListNode().getSelectionModel().select(0);
-                Button rename = shown.node("renameSliderPresetButton");
-                rename.requestFocus();
-
-                rename.fire();
-                shown.root().applyCss();
-                shown.root().layout();
-
-                assertSame(shown.templates().activeRenameField().orElseThrow(), shown.scene().getFocusOwner());
-            } finally {
-                shown.stage().close();
-            }
-        });
-    }
-
-    /** The rename deferral applies only while the list or its cell owns focus, so it never steals focus back. */
-    @Test
-    void renameDeferralDoesNotTakeFocusFromAControlTheUserMovedTo() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        AtomicReference<Shown> shown = new AtomicReference<>();
-        try {
-            FxTestToolkit.runOnFxThread(() -> {
-                shown.set(show(flow, new RecordingPlatform()));
-                ListView<?> presets = shown.get().templates().sliderPresetListNode();
-                presets.getSelectionModel().select(0);
-                presets.requestFocus();
-                sendKey(shown.get().root(), KeyCode.F2, false);
-                shown.get().root().applyCss();
-                shown.get().root().layout();
-
-                shown.get().<TextField>node("sliderPresetFilter").requestFocus();
-            });
-            FxTestToolkit.runOnFxThread(() -> assertSame(shown.get().node("sliderPresetFilter"),
-                    shown.get().scene().getFocusOwner()));
-        } finally {
-            close(shown);
-        }
-    }
-
-    /** Fill Empty focuses its choices as it opens and returns focus to its launcher as it closes. */
-    @Test
-    void fillEmptyFlyoutTakesFocusOnOpenAndReturnsItToTheLauncherOnClose() throws Exception {
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        flow.apply(SliderPresetEdits.create("Alpha"));
-        flow.apply(NpcMorphAssignmentEdits.create("Lydia", "Skyrim.esm", "Lydia01", "NordRace", "000001"));
-        FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, new RecordingPlatform());
-            try {
-                shown.<ToggleButton>node("morphsAreaButton").fire();
-                Button launcher = shown.node("fillEmptyNpcMorphAssignmentsButton");
-                shown.morphs().npcMorphAssignmentListNode().requestFocus();
-
-                launcher.fire();
-
-                Popup popup = FxTestToolkit.showingPopup(shown.stage(), "#fillEmptyApplyButton");
-                assertSame(popup.getScene().getRoot().lookup("#fillEmptySliderPresetList"),
-                        popup.getScene().getFocusOwner());
-
-                ((Button) popup.getScene().getRoot().lookup("#fillEmptyCancelButton")).fire();
-
-                assertFalse(popup.isShowing());
-                assertSame(launcher, shown.scene().getFocusOwner());
             } finally {
                 shown.stage().close();
             }
@@ -470,38 +208,6 @@ class WorkbenchFocusTest {
                 ((Button) popup.getScene().getRoot().lookup("#fillEmptyCancelButton")).fire();
 
                 assertSame(shown.templates().sliderPresetListNode(), shown.scene().getFocusOwner());
-            } finally {
-                shown.stage().close();
-            }
-        });
-    }
-
-    /** An NPC column filter focuses its checklist as it opens and returns focus to its launcher on Escape. */
-    @Test
-    void npcColumnFilterTakesFocusOnOpenAndReturnsItToTheLauncherOnClose() throws Exception {
-        Path source = temporaryDirectory.resolve("npcs.txt");
-        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
-        FxTestToolkit.runOnFxThread(() -> {
-            Shown shown = show(flow, platform);
-            try {
-                shown.<ToggleButton>node("npcDatabaseAreaButton").fire();
-                shown.<Button>node("importNpcSourcesButton").fire();
-                ToggleButton launcher = shown.node("npcNameFilterButton");
-                shown.<Node>node("npcCatalogTable").requestFocus();
-
-                launcher.fire();
-
-                Popup popup = FxTestToolkit.showingPopup(shown.stage(), "#npcColumnFilterChoices");
-                assertSame(popup.getScene().getRoot().lookup("#npcColumnFilterChoices"),
-                        popup.getScene().getFocusOwner());
-
-                sendKey(popup.getScene().getRoot(), KeyCode.ESCAPE, false);
-
-                assertFalse(popup.isShowing());
-                assertSame(launcher, shown.scene().getFocusOwner());
             } finally {
                 shown.stage().close();
             }

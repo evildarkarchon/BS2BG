@@ -6,7 +6,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -20,11 +22,13 @@ import com.asdasfa.jbs2bg.workbench.AreaPanes;
 import com.asdasfa.jbs2bg.workbench.AreaTest;
 import com.asdasfa.jbs2bg.workbench.NpcPortraitViewer;
 import com.asdasfa.jbs2bg.workbench.WorkbenchFeedback;
+import com.asdasfa.jbs2bg.workbench.WorkbenchNavigation;
 import com.asdasfa.jbs2bg.workbench.WorkbenchNavigation.Landmark;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 import com.asdasfa.jbs2bg.workbench.WorkbenchSatellites;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 
+import javafx.scene.AccessibleAttribute;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
@@ -381,6 +385,66 @@ class NpcDatabaseAreaTest extends AreaTest<NpcDatabaseArea> {
     }
 
     /**
+     * A source-removal confirmation captures the focus target before its dialog and asks the shell to restore it once
+     * the dialog answers, whether the user declined or confirmed, before the feature acts on the answer.
+     */
+    @Test
+    void sourceRemovalConfirmationRestoresTheFocusItCapturedBeforeTheDialog() throws Exception {
+        Path first = temporaryDirectory.resolve("first-npcs.txt");
+        Path second = temporaryDirectory.resolve("second-npcs.txt");
+        Files.writeString(first, "Skyrim.esm | Amber | Amber01 | NordRace | 00012345\n");
+        Files.writeString(second, "Skyrim.esm | Beta | Beta01 | NordRace | 00012346\n");
+        platform.respondNpcSourcesWith(Optional.of(List.of(first, second)));
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
+        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.REMOVE);
+        FxTestToolkit.runOnFxThread(() -> {
+            host();
+            hosted().<Button>node("importNpcSourcesButton").fire();
+            ListView<?> sources = hosted().node("npcSourceList");
+            sources.getSelectionModel().selectFirst();
+            shell.focusTargetIs(new WorkbenchNavigation.FocusTarget(WorkbenchNavigation.Area.NPC_DATABASE,
+                    Landmark.PRIMARY_CONTENT));
+            Button remove = hosted().node("removeNpcSourceButton");
+
+            int declined = shell.requests().size();
+            remove.fire();
+
+            assertEquals(List.of("currentFocus()", "requestFocus(NPC_DATABASE, PRIMARY_CONTENT)"),
+                    shell.requests().subList(declined, shell.requests().size()));
+            assertEquals(2, sources.getItems().size());
+
+            int confirmed = shell.requests().size();
+            remove.fire();
+
+            List<String> requests = shell.requests().subList(confirmed, shell.requests().size());
+            assertEquals(List.of("currentFocus()", "requestFocus(NPC_DATABASE, PRIMARY_CONTENT)"),
+                    requests.subList(0, 2), "focus is restored before the removal is reported");
+            assertEquals(1, sources.getItems().size());
+        });
+    }
+
+    /**
+     * Opening the narrow inspector overlay scrolls the inspector to the top at once, and again after the overlay's
+     * layout, which can restore the old position.
+     */
+    @Test
+    void inspectorScrollResetsNowAndAgainAfterTheOverlayLaysOut() throws Exception {
+        FxTestToolkit.runOnFxThread(() -> {
+            NpcDatabaseArea area = host().module();
+            ScrollPane inspector = hosted().node("npcDatabaseInspectorScroll");
+            inspector.setVvalue(1.0);
+
+            area.resetInspectorScroll();
+
+            assertEquals(0.0, inspector.getVvalue(), "reset before the overlay lays out");
+            // Stands in for the overlay's layout restoring the old position after the call.
+            inspector.setVvalue(1.0);
+        });
+        FxTestToolkit.runOnFxThread(() -> assertEquals(0.0,
+                hosted().<ScrollPane>node("npcDatabaseInspectorScroll").getVvalue(), "reset again after layout"));
+    }
+
+    /**
      * The column-filter popup registers with the shell's appearance while it shows; leaving the Area hides it, which
      * closes the registration and asks the shell to restore focus to its launcher, and ends the visit's promotion
      * report.
@@ -416,6 +480,106 @@ class NpcDatabaseAreaTest extends AreaTest<NpcDatabaseArea> {
                     shell.requests().subList(before, shell.requests().size()));
             assertFalse(hosted().<HBox>node("npcPromotionInfoBar").isVisible());
         });
+    }
+
+    /** An NPC column filter focuses its checklist as it opens and returns focus to its launcher on Escape. */
+    @Test
+    void npcColumnFilterTakesFocusOnOpenAndReturnsItToTheLauncherOnClose() throws Exception {
+        Path source = temporaryDirectory.resolve("npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Alpha | Alpha01 | NordRace | 00012345\n");
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+        FxTestToolkit.runOnFxThread(() -> {
+            host();
+            try {
+                hosted().show();
+                hosted().<Button>node("importNpcSourcesButton").fire();
+                ToggleButton launcher = hosted().node("npcNameFilterButton");
+                hosted().<Node>node("npcCatalogTable").requestFocus();
+
+                launcher.fire();
+
+                Popup popup = FxTestToolkit.showingPopup(hosted().stage(), "#npcColumnFilterChoices");
+                assertSame(popup.getScene().getRoot().lookup("#npcColumnFilterChoices"),
+                        popup.getScene().getFocusOwner());
+                int before = shell.requests().size();
+
+                sendKey(popup.getScene().getRoot(), KeyCode.ESCAPE);
+
+                assertFalse(popup.isShowing());
+                // The Area hands its launcher to the shell, whose focus policy focuses it while it can take focus
+                // (WorkbenchFocusPolicyTest.satelliteCloseRestoresFocusToItsLauncher).
+                assertEquals(List.of("restoreFocusAfterSatellite(npcNameFilterButton, EDITOR)"),
+                        shell.requests().subList(before, shell.requests().size()));
+            } finally {
+                hosted().stage().close();
+            }
+        });
+    }
+
+    /**
+     * NPC Database labels keep a stable accessible name for UIA lookup and publish their changing value as HelpText;
+     * the portrait status does the same, with its own guidance before any entry is selected.
+     */
+    @Test
+    void npcDatabaseLabelsAndPortraitStatusPublishTheirValueAsHelpText() throws Exception {
+        Path source = temporaryDirectory.resolve("npcs.txt");
+        Files.writeString(source, "Skyrim.esm | Zq Portraitless | ZqNone01 | NordRace | 00012345\n"
+                + "Skyrim.esm | Zq Second | ZqNone02 | BretonRace | 00012346\n");
+        platform.respondNpcSourcesWith(Optional.of(List.of(source)));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            host();
+
+            Map<String, String> empty = new LinkedHashMap<>();
+            empty.put("NPC Database source count", "0 sources loaded");
+            empty.put("NPC Database catalog summary", "0 of 0 NPC Database entries visible; 0 filtered columns.");
+            empty.put("Selected NPC Database entry", "No NPC selected");
+            empty.put("NPC Database source", "Source: none");
+            empty.put("NPC plugin", "Plugin: none");
+            empty.put("NPC editor ID", "Editor ID: none");
+            empty.put("NPC race", "Race: none");
+            empty.put("NPC Form ID", "Form ID: none");
+            empty.put("NPC Database diagnostics", "No source diagnostics");
+            empty.put("NPC Database portrait status", "Select an NPC Database entry to inspect its portrait.");
+            assertEquals(empty, npcDatabaseHelpText());
+
+            hosted().<Button>node("importNpcSourcesButton").fire();
+            TableView<NPC> catalog = hosted().node("npcCatalogTable");
+            catalog.getSelectionModel().select(catalog.getItems().stream()
+                    .filter(npc -> npc.getName().equals("Zq Portraitless")).findFirst().orElseThrow());
+
+            Map<String, String> selected = new LinkedHashMap<>();
+            selected.put("NPC Database source count", "1 source loaded");
+            selected.put("NPC Database catalog summary", "2 of 2 NPC Database entries visible; 0 filtered columns.");
+            selected.put("Selected NPC Database entry", "Zq Portraitless");
+            selected.put("NPC Database source", "Source: " + source);
+            selected.put("NPC plugin", "Plugin: Skyrim.esm");
+            selected.put("NPC editor ID", "Editor ID: ZqNone01");
+            selected.put("NPC race", "Race: NordRace");
+            selected.put("NPC Form ID", "Form ID: 12345");
+            selected.put("NPC Database diagnostics", "No source diagnostics");
+            selected.put("NPC Database portrait status", "No portrait found. Expected images/Zq Portraitless "
+                    + "(ZqNone01).jpg (or .jpeg, .png, .bmp), then a display-name-only image.");
+            assertEquals(selected, npcDatabaseHelpText());
+        });
+    }
+
+    /**
+     * Reads each NPC Database label the way UIA does: its stable accessible name (TEXT) mapped to its HelpText
+     * (HELP). Fails if a label's displayed text and HelpText disagree, except for the portrait guidance.
+     */
+    private Map<String, String> npcDatabaseHelpText() {
+        Map<String, String> values = new LinkedHashMap<>();
+        for (String id : List.of("npcSourceCountText", "npcCatalogSummary", "npcInspectorName",
+                "npcInspectorSource", "npcInspectorMaster", "npcInspectorEditorId", "npcInspectorRace",
+                "npcInspectorFormId", "npcDatabaseDiagnostics", "npcDatabasePortraitStatus")) {
+            Label label = hosted().node(id);
+            String help = (String) label.queryAccessibleAttribute(AccessibleAttribute.HELP);
+            if (!id.equals("npcDatabasePortraitStatus") || !label.getText().equals("No NPC portrait selected"))
+                assertEquals(label.getText(), help, id + " HelpText must mirror its displayed value");
+            values.put((String) label.queryAccessibleAttribute(AccessibleAttribute.TEXT), help);
+        }
+        return values;
     }
 
     /** Delivers one unmodified key press to a node through the same key-event seam as JavaFX. */

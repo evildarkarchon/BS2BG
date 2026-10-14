@@ -10,7 +10,8 @@
     <name>jBS2BG</name>
 
     <!--
-        Java 25 / JavaFX 27 application build (issues #94 and #96, parent #81; JavaFX 27 baseline per ADR-0007, #135).
+        Application build on Java 25 (Temurin) and JavaFX 27, versioned independently (issues #94 and #96, parent
+        #81; the JDK pin per ADR-0003, the JavaFX pin per ADR-0007, #135).
 
         This POM is the complete application gate: every production source under src/ compiles for release 25
         with full lint enforcement, every resource under src/ and assets/ is packaged, and the test phase loads
@@ -27,7 +28,10 @@
         <junit.version>5.11.4</junit.version>
         <jackson-core.version>3.1.5</jackson-core.version>
 
-        <!-- Pinned build inputs; tools/java25/toolchain-lock.json mirrors the Maven distribution and JDK pins. -->
+        <!--
+            Pinned build inputs; tools/java25/toolchain-lock.json mirrors the Maven distribution and JDK pins, and
+            its javafx block mirrors javafx.version above. The JDK and JavaFX pins are independent (ADR-0007).
+        -->
         <bs2bg.maven.version>3.9.16</bs2bg.maven.version>
         <bs2bg.toolchain.jdk.version>25</bs2bg.toolchain.jdk.version>
         <bs2bg.toolchain.jdk.vendor>temurin</bs2bg.toolchain.jdk.vendor>

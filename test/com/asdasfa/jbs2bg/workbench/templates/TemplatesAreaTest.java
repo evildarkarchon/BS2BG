@@ -20,6 +20,7 @@ import com.asdasfa.jbs2bg.testing.ManualExecutor;
 import com.asdasfa.jbs2bg.workbench.AreaLoader;
 import com.asdasfa.jbs2bg.workbench.AreaPanes;
 import com.asdasfa.jbs2bg.workbench.AreaTest;
+import com.asdasfa.jbs2bg.workbench.RefusingEditSession;
 import com.asdasfa.jbs2bg.workbench.UiaListHelper;
 import com.asdasfa.jbs2bg.workbench.WorkbenchFeedback;
 import com.asdasfa.jbs2bg.workbench.WorkbenchFocusPolicy;
@@ -36,8 +37,10 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Control;
 import javafx.scene.control.Labeled;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Slider;
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -616,6 +619,279 @@ class TemplatesAreaTest extends AreaTest<TemplatesArea> {
         });
     }
 
+    /** The empty-to-populated Slider Preset swap moves focus to the replacement list. */
+    @Test
+    void sliderPresetRefillKeepsFocusOnTheReplacementList() throws Exception {
+        FxTestToolkit.runOnFxThread(() -> {
+            TemplatesArea area = host().module();
+            try {
+                hosted().show();
+                ListView<?> initial = area.sliderPresetListNode();
+                initial.requestFocus();
+                hosted().<TextField>node("sliderPresetNameInput").setText("Alpha");
+
+                hosted().<Button>node("createSliderPresetButton").fire();
+
+                assertNotSame(initial, area.sliderPresetListNode());
+                assertSame(area.sliderPresetListNode(), hosted().stage().getScene().getFocusOwner());
+            } finally {
+                hosted().stage().close();
+            }
+        });
+    }
+
+    /** A Slider choice row control regains focus after the failure dialog its edit raised. */
+    @Test
+    void sliderChoiceFocusReturnsAfterTheFailureDialog() throws Exception {
+        useFixture(WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(temporaryDirectory,
+                Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)), Map.of())));
+        RefusingEditSession session = new RefusingEditSession(fixture().newSession());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        FxTestToolkit.runOnFxThread(() -> {
+            TemplatesArea area = host(flow).module();
+            try {
+                hosted().show();
+                area.sliderPresetListNode().getSelectionModel().select(0);
+                SliderChoiceRow waist = (SliderChoiceRow) hosted().<VBox>node("sliderChoiceRows")
+                        .getChildren().getFirst();
+                CheckBox enabled = waist.enabledControl();
+                enabled.requestFocus();
+                session.refuseEdits(true);
+                // While the dialog is up, something else in the main scene takes focus.
+                platform.respondFailureWith(WorkbenchFeedback.DialogAction.CLOSE,
+                        () -> hosted().<TextField>node("sliderPresetFilter").requestFocus());
+
+                enabled.fire();
+
+                SliderChoiceRow restored = (SliderChoiceRow) hosted().<VBox>node("sliderChoiceRows")
+                        .getChildren().getFirst();
+                assertSame(restored.enabledControl(), hosted().stage().getScene().getFocusOwner());
+            } finally {
+                hosted().stage().close();
+            }
+        });
+    }
+
+    /** A bulk-action button regains focus after the failure dialog its edit raised. */
+    @Test
+    void templatesControlFocusReturnsAfterTheFailureDialog() throws Exception {
+        useFixture(WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(temporaryDirectory,
+                Map.of("Waist", new DefaultSliderValue(0.2f, 0.8f)), Map.of())));
+        RefusingEditSession session = new RefusingEditSession(fixture().newSession());
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", session);
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        FxTestToolkit.runOnFxThread(() -> {
+            TemplatesArea area = host(flow).module();
+            try {
+                hosted().show();
+                area.sliderPresetListNode().getSelectionModel().select(0);
+                Button fiftyAll = hosted().node("fiftyAllSliderChoicesButton");
+                fiftyAll.requestFocus();
+                session.refuseEdits(true);
+                platform.respondFailureWith(WorkbenchFeedback.DialogAction.CLOSE,
+                        () -> hosted().<TextField>node("sliderPresetFilter").requestFocus());
+
+                fiftyAll.fire();
+
+                assertSame(fiftyAll, hosted().stage().getScene().getFocusOwner());
+            } finally {
+                hosted().stage().close();
+            }
+        });
+    }
+
+    /** F2 puts focus on the inline rename field as editing starts, and it stays there. */
+    @Test
+    void renameFromTheListFocusesTheRenameField() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        try {
+            FxTestToolkit.runOnFxThread(() -> {
+                TemplatesArea area = host(flow).module();
+                hosted().show();
+                Parent root = hosted().stage().getScene().getRoot();
+                ListView<?> presets = area.sliderPresetListNode();
+                presets.getSelectionModel().select(0);
+                presets.requestFocus();
+
+                // The shell's key map offers F2 to the active Area before its own navigation keys.
+                assertTrue(area.handleKey(key(KeyCode.F2)));
+                root.applyCss();
+                root.layout();
+
+                assertSame(area.activeRenameField().orElseThrow(), hosted().stage().getScene().getFocusOwner());
+            });
+            FxTestToolkit.runOnFxThread(() -> assertSame(hosted().module().activeRenameField().orElseThrow(),
+                    hosted().stage().getScene().getFocusOwner()));
+        } finally {
+            FxTestToolkit.runOnFxThread(() -> hosted().stage().close());
+        }
+    }
+
+    /** The Rename button moves focus into the editor even though the list never owned focus. */
+    @Test
+    void renameFromTheInspectorButtonFocusesTheRenameField() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        FxTestToolkit.runOnFxThread(() -> {
+            TemplatesArea area = host(flow).module();
+            try {
+                hosted().show();
+                Parent root = hosted().stage().getScene().getRoot();
+                area.sliderPresetListNode().getSelectionModel().select(0);
+                Button rename = hosted().node("renameSliderPresetButton");
+                rename.requestFocus();
+
+                rename.fire();
+                root.applyCss();
+                root.layout();
+
+                assertSame(area.activeRenameField().orElseThrow(), hosted().stage().getScene().getFocusOwner());
+            } finally {
+                hosted().stage().close();
+            }
+        });
+    }
+
+    /** The rename deferral applies only while the list or its cell owns focus, so it never steals focus back. */
+    @Test
+    void renameDeferralDoesNotTakeFocusFromAControlTheUserMovedTo() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        try {
+            FxTestToolkit.runOnFxThread(() -> {
+                TemplatesArea area = host(flow).module();
+                hosted().show();
+                Parent root = hosted().stage().getScene().getRoot();
+                ListView<?> presets = area.sliderPresetListNode();
+                presets.getSelectionModel().select(0);
+                presets.requestFocus();
+                assertTrue(area.handleKey(key(KeyCode.F2)));
+                root.applyCss();
+                root.layout();
+
+                hosted().<TextField>node("sliderPresetFilter").requestFocus();
+            });
+            FxTestToolkit.runOnFxThread(() -> assertSame(hosted().node("sliderPresetFilter"),
+                    hosted().stage().getScene().getFocusOwner()));
+        } finally {
+            FxTestToolkit.runOnFxThread(() -> hosted().stage().close());
+        }
+    }
+
+    /**
+     * Inline rename drives ListView's edit lifecycle instead of {@code refresh()}: F2 moves {@code getEditingIndex()}
+     * to the renamed row, a rejected commit updates the same editor cell in place, and Escape or a valid commit ends
+     * the edit so the same cell shows the ordinary accessible row again.
+     */
+    @Test
+    void inlineRenameMovesTheEditingIndexAndUpdatesTheRenameCellInPlace() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+        flow.apply(SliderPresetEdits.create("Beta"));
+
+        try {
+            FxTestToolkit.runOnFxThread(() -> {
+                TemplatesArea area = host(flow).module();
+                hosted().show();
+                area.sliderPresetListNode().getSelectionModel().select(0);
+            });
+            // Let the virtualized Slider Preset cells materialize before the edit lifecycle addresses them.
+            FxTestToolkit.awaitLayoutPulses(hosted().stage().getScene(), 2);
+            FxTestToolkit.runOnFxThread(() -> {
+                TemplatesArea area = hosted().module();
+                ListView<SliderPresetSnapshot> presets = area.sliderPresetListNode();
+                assertEquals(-1, presets.getEditingIndex());
+
+                // The shell's key map offers F2, and Escape while renaming, to the active Area first.
+                area.handleKey(key(KeyCode.F2));
+
+                assertEquals(0, presets.getEditingIndex());
+                TextField rename = area.activeRenameField().orElseThrow();
+                ListCell<?> cell = owningCell(rename);
+                assertEquals("Enter commits the name. Escape cancels and restores the Slider Preset row.",
+                        rename.getAccessibleHelp());
+
+                rename.setText("Beta");
+                rename.fireEvent(new ActionEvent());
+
+                String rejection = rename.getAccessibleHelp();
+                assertTrue(rejection.contains("SLIDER_PRESET_NAME_DUPLICATE"), rejection);
+                assertEquals(0, presets.getEditingIndex(), "a rejected commit must keep the edit open");
+                assertSame(rename, area.activeRenameField().orElseThrow(),
+                        "the rejected draft must update the existing editor, not a recreated cell");
+                assertSame(cell, owningCell(rename));
+                assertEquals("Rename Slider Preset Alpha", cell.getAccessibleText());
+                assertEquals(rejection, cell.getAccessibleHelp());
+
+                area.handleKey(key(KeyCode.ESCAPE));
+
+                assertEquals(-1, presets.getEditingIndex());
+                assertTrue(area.activeRenameField().isEmpty());
+                assertNull(cell.getGraphic());
+                assertEquals("Alpha", cell.getText());
+                assertEquals("Alpha", cell.getAccessibleText());
+
+                area.handleKey(key(KeyCode.F2));
+                assertEquals(0, presets.getEditingIndex());
+                TextField retry = area.activeRenameField().orElseThrow();
+                retry.setText("Gamma");
+                retry.fireEvent(new ActionEvent());
+
+                assertEquals(-1, presets.getEditingIndex());
+                assertTrue(area.activeRenameField().isEmpty());
+                assertEquals("Gamma", presets.getSelectionModel().getSelectedItem().getName());
+            });
+        } finally {
+            FxTestToolkit.runOnFxThread(() -> hosted().stage().close());
+        }
+    }
+
+    /**
+     * Editing a Slider choice reuses its row adapter, so the UIA subtree (and with it focus and the RangeValue
+     * providers) survives the re-render instead of being rebuilt for every Project edit.
+     */
+    @Test
+    void sliderChoiceEditsKeepTheSameRowNode() throws Exception {
+        useFixture(WorkbenchTestEnvironment.reloaded(SettingsTestSupport.installDefaults(
+                temporaryDirectory.resolve("settings"),
+                Map.of("Arms", new DefaultSliderValue(0.1f, 0.9f),
+                        "Waist", new DefaultSliderValue(0.2f, 0.8f)),
+                Map.of())));
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+        flow.apply(SliderPresetEdits.create("Alpha"));
+
+        FxTestToolkit.runOnFxThread(() -> {
+            TemplatesArea area = host(flow).module();
+            area.sliderPresetListNode().getSelectionModel().select(0);
+            VBox rows = hosted().node("sliderChoiceRows");
+            List<Node> before = List.copyOf(rows.getChildren());
+            assertEquals(List.of("Arms", "Waist"), before.stream()
+                    .map(row -> ((SliderChoiceRow) row).choiceName()).toList());
+            SliderChoiceRow waist = (SliderChoiceRow) before.get(1);
+            CheckBox enabled = waist.enabledControl();
+            Slider minimum = waist.minimumControl();
+
+            enabled.fire();
+            hosted().<Button>node("fiftyAllSliderChoicesButton").fire();
+
+            SliderPresetSnapshot edited = flow.frame().snapshot().getSliderPresets().getFirst();
+            assertFalse(edited.getSliderChoices().stream()
+                    .filter(choice -> choice.getName().equals("Waist")).findFirst().orElseThrow().isEnabled());
+            // The bulk action edits only enabled rows, so Arms changes while the disabled Waist keeps its value.
+            assertEquals(50, edited.getSliderChoices().stream()
+                    .filter(choice -> choice.getName().equals("Arms")).findFirst().orElseThrow()
+                    .getPercentageMinimum());
+            assertEquals(before, List.copyOf(rows.getChildren()));
+            for (int index = 0; index < before.size(); index++)
+                assertSame(before.get(index), rows.getChildren().get(index), "row " + index + " was rebuilt");
+            assertSame(enabled, waist.enabledControl());
+            assertSame(minimum, waist.minimumControl());
+            assertFalse(enabled.isSelected());
+        });
+    }
+
     /** @return the status line the shell would render from the latest feedback frame */
     private String statusText() {
         WorkbenchFeedback.StatusProjection status = shell.feedbackFrame().status();
@@ -625,6 +901,15 @@ class TemplatesAreaTest extends AreaTest<TemplatesArea> {
     /** @return an unmodified key press, as the shell's key map hands it to the active Area */
     private static KeyEvent key(KeyCode code) {
         return new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code, false, false, false, false);
+    }
+
+    /** Returns the virtualized ListCell whose graphic currently contains {@code node}. */
+    private static ListCell<?> owningCell(Node node) {
+        for (Node current = node; current != null; current = current.getParent()) {
+            if (current instanceof ListCell<?> cell)
+                return cell;
+        }
+        throw new AssertionError("No ListCell owns " + node);
     }
 
     /** Lists a pane's nodes depth-first as type, id, Labeled text and accessible name, one line each. */

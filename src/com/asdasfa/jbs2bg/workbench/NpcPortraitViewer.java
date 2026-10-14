@@ -194,6 +194,10 @@ public final class NpcPortraitViewer {
     private void openViewer(Path file, String displayName, NpcMorphAssignmentIdentity identity, Button launcher) {
         if (viewer != null && viewer.isShowing()) {
             if (file.equals(viewerPath)) {
+                // The one allowlisted window activation (ProductionPlatformBanGateTest rule 2, see
+                // docs/build/workbench-platform.md "Production platform bans"): the user just commanded this
+                // viewer open again, the application is already in the foreground, and the raise is synchronous,
+                // so it cannot steal focus from another application or arrive after the user moved on.
                 viewer.toFront();
                 viewer.requestFocus();
                 return;

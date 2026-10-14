@@ -7,7 +7,6 @@ import java.util.Optional;
 import com.asdasfa.jbs2bg.workbench.AreaLoader;
 import com.asdasfa.jbs2bg.workbench.AreaPanes;
 import com.asdasfa.jbs2bg.workbench.DispatchPipeline;
-import com.asdasfa.jbs2bg.workbench.ShellPort;
 import com.asdasfa.jbs2bg.workbench.UiaListHelper;
 import com.asdasfa.jbs2bg.workbench.WorkbenchArea;
 import com.asdasfa.jbs2bg.workbench.WorkbenchContext;
@@ -29,14 +28,14 @@ import javafx.scene.control.TextField;
  * The Settings Area: the Settings profile and entry list, the entry editor, and the Settings pair inspector. It
  * translates its controls into {@link SettingsFeature} intents through the shared {@link DispatchPipeline}, renders
  * only committed immutable frames, and words its own feedback. Worker effects and every cross-Area consequence go
- * through the {@link ShellPort}; the shell keeps the Settings job runner and the dirty-Settings close lifecycle.
+ * through the {@link SettingsShellPort}; the shell keeps the Settings job runner and the dirty-Settings close lifecycle.
  * <p>
  * Loaded from {@code settings-area.fxml} by {@link #load}; every method runs on the JavaFX Application Thread.
  */
 public final class SettingsArea implements WorkbenchArea {
     private final SettingsFeature feature;
     private final DispatchPipeline pipeline;
-    private final ShellPort shell;
+    private final SettingsShellPort shell;
     @FXML
     private AreaPanes panes;
     @FXML
@@ -83,7 +82,7 @@ public final class SettingsArea implements WorkbenchArea {
      * @param shell    the shell port for worker effects, feedback and cross-Area refreshes
      * @throws NullPointerException when an argument is null
      */
-    public SettingsArea(SettingsFeature feature, DispatchPipeline pipeline, ShellPort shell) {
+    public SettingsArea(SettingsFeature feature, DispatchPipeline pipeline, SettingsShellPort shell) {
         this.feature = Objects.requireNonNull(feature, "feature");
         this.pipeline = Objects.requireNonNull(pipeline, "pipeline");
         this.shell = Objects.requireNonNull(shell, "shell");
@@ -99,7 +98,7 @@ public final class SettingsArea implements WorkbenchArea {
      * @return the loaded Area and its FXML namespace
      */
     public static AreaLoader.Loaded<SettingsArea> load(SettingsFeature feature, DispatchPipeline pipeline,
-                                                       ShellPort shell) {
+                                                       SettingsShellPort shell) {
         return AreaLoader.load(SettingsArea.class, "settings-area.fxml",
                 () -> new SettingsArea(feature, pipeline, shell));
     }

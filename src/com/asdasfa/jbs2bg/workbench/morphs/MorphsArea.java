@@ -423,8 +423,8 @@ public final class MorphsArea implements WorkbenchArea {
     private void dispatch(MorphsFeature.Intent intent) {
         pipeline.dispatch(feature, DispatchPipeline.Callbacks.of(
                 update -> renderMorphs(update.frame()),
-                effect -> DispatchPipeline.Realization.confirm(morphsConfirmation(effect),
-                        action -> feature.respond(effect.token(), action == morphsDestructiveAction(effect))),
+                effect -> DispatchPipeline.Realization.confirmDestructive(effect.title(), effect.message(),
+                        morphsDestructiveAction(effect), accepted -> feature.respond(effect.token(), accepted)),
                 this::report), Objects.requireNonNull(intent, "intent"));
     }
 
@@ -435,12 +435,6 @@ public final class MorphsArea implements WorkbenchArea {
                 || effect.kind() == MorphsFeature.EffectKind.CONFIRM_REMOVE_ASSIGNMENT
                 ? WorkbenchFeedback.DialogAction.REMOVE
                 : WorkbenchFeedback.DialogAction.CLEAR;
-    }
-
-    /** Builds the safe-default destructive confirmation for one tokenized Morphs effect. */
-    private static WorkbenchFeedback.DialogSpec morphsConfirmation(MorphsFeature.Effect effect) {
-        return WorkbenchFeedback.DialogSpec.destructiveAction(effect.title(), effect.message(),
-                morphsDestructiveAction(effect));
     }
 
     /**

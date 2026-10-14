@@ -16,6 +16,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -26,6 +27,7 @@ import com.asdasfa.jbs2bg.filtering.SortKey;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
 import com.asdasfa.jbs2bg.testing.JavaFxFreeTypeGraph;
+import com.asdasfa.jbs2bg.workbench.MonotonicClock;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 /** Verifies the window-scoped source catalog through its intents and immutable feature frames. */
@@ -249,6 +251,27 @@ class NpcDatabaseFeatureTest {
         clock.advance(Duration.ofMillis(750));
         assertEquals("Amber", typeAhead(feature, 'm'));
         clock.advance(Duration.ofMillis(750).plusNanos(1));
+        assertEquals("Beryl", typeAhead(feature, 'b'));
+    }
+
+    /**
+     * The production clock is monotonic ticker time: the 750 ms boundary holds on the ticker exactly as on the test
+     * clock, so a wall-clock adjustment between keys can neither expire nor extend a prefix.
+     */
+    @Test
+    void typeAheadExpiryHoldsOnTheMonotonicProductionClock() throws Exception {
+        Path source = temporaryDirectory.resolve("names.txt");
+        Files.writeString(source, "Master.esm | Alina | First | NordRace | 000001\n"
+                + "Master.esm | Amber | Second | NordRace | 000002\n"
+                + "Master.esm | Beryl | Third | NordRace | 000003\n");
+        AtomicLong ticker = new AtomicLong(Long.MAX_VALUE - Duration.ofMillis(100).toNanos());
+        NpcDatabaseFeature feature = feature(MonotonicClock.of(ticker::get));
+        feature.commitSource(NpcDatabaseSourceReader.read(source));
+
+        assertEquals("Alina", typeAhead(feature, 'a'));
+        ticker.addAndGet(Duration.ofMillis(750).toNanos());
+        assertEquals("Amber", typeAhead(feature, 'm'));
+        ticker.addAndGet(Duration.ofMillis(750).plusNanos(1).toNanos());
         assertEquals("Beryl", typeAhead(feature, 'b'));
     }
 
