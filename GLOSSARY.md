@@ -18,5 +18,9 @@ A named BodyGen target authored directly within a Project. Its name is trimmed, 
 An NPC selected for BodyGen output together with its assigned Slider Presets. Its identity is the NPC's mod or plugin name plus editor ID, compared without regard to case.
 _Avoid_: Morphed NPC, Project NPC
 
+**Settings**:
+The paired Standard and UUNP slider defaults, multipliers, and inversions that determine Slider Preset editing endpoints and generated output. One pair is current at a time; Save and Reload replace both together.
+_Avoid_: Config, preferences (generation and theme preferences are separate)
+
 **NPC Database**:
 A session-scoped source catalog of NPCs that may be copied into a Project for morph assignment. Its entries remain independent from the Project.
