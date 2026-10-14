@@ -25,6 +25,7 @@ import com.asdasfa.jbs2bg.filtering.ColumnCriterion;
 import com.asdasfa.jbs2bg.filtering.SortKey;
 import com.asdasfa.jbs2bg.project.NpcMorphAssignmentIdentity;
 import com.asdasfa.jbs2bg.project.ProjectSessions;
+import com.asdasfa.jbs2bg.testing.JavaFxFreeTypeGraph;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 
 /** Verifies the window-scoped source catalog through its intents and immutable feature frames. */
@@ -304,6 +305,15 @@ class NpcDatabaseFeatureTest {
                 new NpcDatabaseFeature.LeaveArea(),
                 new NpcDatabaseFeature.BackToMorphs()))
             assertFalse(feature.isMutation(local), local.toString());
+    }
+
+    /**
+     * The feature stays JavaFX-free through its intents, effects and the Project flow it promotes through, so an
+     * Area can drive it and tests can run it without a toolkit.
+     */
+    @Test
+    void featureReachesNoJavaFxType() {
+        JavaFxFreeTypeGraph.assertJavaFxFree(NpcDatabaseFeature.class);
     }
 
     /** Types one character and returns the selected row's name. */
