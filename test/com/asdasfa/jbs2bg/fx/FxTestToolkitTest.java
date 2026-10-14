@@ -65,4 +65,22 @@ class FxTestToolkitTest {
         assertThrows(AssertionError.class, () -> FxTestToolkit.checkTestPlatform(
                 properties("bs2bg.test.desktop", "yes", "glass.platform", "win")));
     }
+
+    @Test
+    void activeAccessibilityOnTheHeadlessPlatformTripsTheAfterEachTripwire() {
+        AssertionError failure = assertThrows(AssertionError.class, () -> FxTestToolkit.checkAccessibilityTripwire(
+                properties("glass.platform", "headless", "prism.order", "sw"), true));
+        assertTrue(failure.getMessage().contains("accessibility"), failure.getMessage());
+    }
+
+    @Test
+    void inactiveAccessibilityOnTheHeadlessPlatformPassesTheTripwire() {
+        FxTestToolkit.checkAccessibilityTripwire(properties("glass.platform", "headless", "prism.order", "sw"), false);
+    }
+
+    @Test
+    void aDeliberateDesktopRunMayHaveAccessibilityActive() {
+        // A screen reader on the developer's desktop legitimately activates it under -Pdesktop-fx.
+        FxTestToolkit.checkAccessibilityTripwire(properties("bs2bg.test.desktop", "true"), true);
+    }
 }
