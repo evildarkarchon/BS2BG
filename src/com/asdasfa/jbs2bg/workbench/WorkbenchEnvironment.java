@@ -11,12 +11,13 @@ import com.asdasfa.jbs2bg.data.Settings;
  * nothing on the Workbench path reaches for process-wide state.
  *
  * <p>It carries the Settings store and its startup result, the preferences directory holding the generation
- * preference and theme choice, the generation-preference migration policy, and the operating-system
- * appearance-preferences source. The name avoids "profile", which already means the Standard/UUNP Settings profiles.
+ * preference and theme choice, the generation-preference migration policy, the operating-system
+ * appearance-preferences source, and the NPC portrait image directory. The name avoids "profile", which already
+ * means the Standard/UUNP Settings profiles.
  *
  * <p>Adding a slot: give the new field a default in {@link #of} and add a {@code withX} copy method that returns a
- * new environment, so existing callers keep compiling. The appearance-preferences source is such a slot; the NPC
- * portrait image directory is a planned one.
+ * new environment, so existing callers keep compiling. The appearance-preferences source and the portrait image
+ * directory are such slots.
  */
 public final class WorkbenchEnvironment {
     private final Settings settings;
@@ -24,25 +25,31 @@ public final class WorkbenchEnvironment {
     private final Path preferencesDirectory;
     private final GenerationPreferencesStore.MigrationPolicy migrationPolicy;
     private final AppearancePreferencesSource appearancePreferences;
+    private final Path portraitDirectory;
 
     /**
-     * Creates one immutable environment; see {@link #of} and {@link #withAppearancePreferences} for the parameter
-     * contract.
+     * Creates one immutable environment; see {@link #of}, {@link #withAppearancePreferences} and
+     * {@link #withPortraitDirectory} for the parameter contract.
      */
     private WorkbenchEnvironment(Settings settings, Settings.InitializationResult settingsStartup,
                                  Path preferencesDirectory, GenerationPreferencesStore.MigrationPolicy migrationPolicy,
-                                 AppearancePreferencesSource appearancePreferences) {
+                                 AppearancePreferencesSource appearancePreferences, Path portraitDirectory) {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.settingsStartup = Objects.requireNonNull(settingsStartup, "settingsStartup");
         this.preferencesDirectory = Objects.requireNonNull(preferencesDirectory, "preferencesDirectory")
                 .toAbsolutePath().normalize();
         this.migrationPolicy = Objects.requireNonNull(migrationPolicy, "migrationPolicy");
         this.appearancePreferences = Objects.requireNonNull(appearancePreferences, "appearancePreferences");
+        // Kept as given, not made absolute: the production default stays relative to the working directory, exactly
+        // as the legacy application resolved it on every lookup.
+        this.portraitDirectory = Objects.requireNonNull(portraitDirectory, "portraitDirectory");
     }
 
     /**
      * Creates an environment around one Settings store. Appearance preferences default to the live JavaFX
-     * platform preferences; tests replace them with {@link #withAppearancePreferences}.
+     * platform preferences; tests replace them with {@link #withAppearancePreferences}. The NPC portrait image
+     * directory defaults to {@code images} relative to the working directory, like the legacy application; tests
+     * replace it with {@link #withPortraitDirectory}.
      *
      * @param settings             the one Settings store the Workbench reads, saves, and reloads
      * @param settingsStartup      the store's startup result, rendered as durable Settings evidence
@@ -55,7 +62,7 @@ public final class WorkbenchEnvironment {
                                           Path preferencesDirectory,
                                           GenerationPreferencesStore.MigrationPolicy migrationPolicy) {
         return new WorkbenchEnvironment(settings, settingsStartup, preferencesDirectory, migrationPolicy,
-                new JavaFxAppearancePreferencesSource());
+                new JavaFxAppearancePreferencesSource(), Path.of("images"));
     }
 
     /**
@@ -66,7 +73,20 @@ public final class WorkbenchEnvironment {
      * @throws NullPointerException when {@code replacement} is null
      */
     public WorkbenchEnvironment withAppearancePreferences(AppearancePreferencesSource replacement) {
-        return new WorkbenchEnvironment(settings, settingsStartup, preferencesDirectory, migrationPolicy, replacement);
+        return new WorkbenchEnvironment(settings, settingsStartup, preferencesDirectory, migrationPolicy, replacement,
+                portraitDirectory);
+    }
+
+    /**
+     * Copies this environment with a different NPC portrait image directory.
+     *
+     * @param replacement directory holding {@code <name> (<editor ID>).<ext>} portrait files; it need not exist
+     * @return new environment; this one is unchanged
+     * @throws NullPointerException when {@code replacement} is null
+     */
+    public WorkbenchEnvironment withPortraitDirectory(Path replacement) {
+        return new WorkbenchEnvironment(settings, settingsStartup, preferencesDirectory, migrationPolicy,
+                appearancePreferences, replacement);
     }
 
     /** @return the one Settings store on the Workbench path */
@@ -92,5 +112,10 @@ public final class WorkbenchEnvironment {
     /** @return the source of operating-system appearance preferences the Workbench renders */
     public AppearancePreferencesSource appearancePreferences() {
         return appearancePreferences;
+    }
+
+    /** @return the directory the NPC portrait viewer looks up portraits in */
+    public Path portraitDirectory() {
+        return portraitDirectory;
     }
 }
