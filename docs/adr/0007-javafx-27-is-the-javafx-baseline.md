@@ -24,6 +24,14 @@ Open-source JavaFX feature releases get public updates only until the next featu
 whereas Gluon's JavaFX 25 line is an LTS. The project accepts that cost in exchange for the built-in headless
 platform.
 
+## The JavaFX version is independent of the JDK
+
+The JavaFX version is versioned independently of the JDK (Temurin 25 LTS). The two are separate pins: nothing ties
+`javafx.version` in `pom.xml`, or the `javafx` block of `toolchain-lock.json`, to the JDK version, and no check that
+keeps them in step should be added. A JavaFX bump does not touch the JDK pin, and a JDK update does not touch the
+JavaFX pin. The only consistency that matters for JavaFX is between `javafx.version` in `pom.xml`, the lock's
+`javafx` block and the Pester version assert, which move together in one reviewed bump (below).
+
 ## Policy for later JavaFX feature releases
 
 - Each JavaFX feature release (28, 29, ...) is adopted as an explicit, reviewed lock bump: `javafx.version` in

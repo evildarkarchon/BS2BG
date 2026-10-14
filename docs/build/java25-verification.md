@@ -1,8 +1,8 @@
 # Java 25 application verification run
 
 Status: complete application gate (issue #96, parent #81; the pinned runner was introduced by #94). A green run
-proves that every production source and resource builds, packages, and links on the pinned Java 25 / JavaFX 27
-toolchain. A source-filtered build can no longer be reported or invoked through this command.
+proves that every production source and resource builds, packages, and links on the pinned Java 25 (Temurin) and
+JavaFX 27, versioned independently ([ADR-0007](../adr/0007-javafx-27-is-the-javafx-baseline.md)). A source-filtered build can no longer be reported or invoked through this command.
 
 ## One command
 
@@ -180,7 +180,7 @@ on the pinned JDK 25 because Rewrite chooses its parser from the Maven JVM, not 
 - `dependency-tree.txt` — the resolved dependency graph (shows the JavaFX `win` classifier).
 - `test-classpath.txt` / `test-classpath-sha256.txt` — every resolved jar on the test classpath and its SHA-256.
 
-ADR-0003 records the Java 25 baseline and supersedes ADR-0001 wherever it conflicts with it (today, its
+ADR-0003 records the Java 25 baseline (JavaFX: ADR-0007) and supersedes ADR-0001 wherever it conflicts with it (today, its
 "preserving Java 8" clause); the
 `--release 25` target here is that decision. The packaging checkpoint that builds and smoke-tests the Windows
 app-image on top of this gate is described in [windows-app-image.md](windows-app-image.md); since #97 the jar
@@ -195,8 +195,9 @@ Every change is an explicit, reviewed lock edit — never a "latest" download:
    file), set `bs2bg.toolchain.jdk.runtimeVersion` in `pom.xml` to the new `JAVA_RUNTIME_VERSION` (the script
    fails closed if they differ), and update `Java25ToolchainGuardTest` only if the feature version changes.
 2. JavaFX: Gluon publishes no checksum. Download the official archive, record `Get-FileHash -Algorithm SHA256`,
-   and update `javafx.url`, `javafx.sha256`, `javafx.sourceUrl`, `javafx.sourceRevision`, `javafx.archiveRootDirectory`, `javafx.version`, and
-   `javafx.version` in `pom.xml` together.
+   and update the lock's `javafx.url`, `javafx.sha256`, `javafx.sourceUrl`, `javafx.sourceRevision`,
+   `javafx.archiveRootDirectory` and `javafx.version`, `javafx.version` in `pom.xml`, and the Pester version assert
+   together. A JavaFX bump does not touch the JDK pin: the two are versioned independently (ADR-0007).
 3. Maven: update `distributionUrl` and `distributionSha256Sum` in `.mvn/wrapper/maven-wrapper.properties`
    (derive SHA-256 from a download whose SHA-512 matches Apache's published value), `bs2bg.maven.version` in
    `pom.xml`, and `maven.version` / `maven.distributionSha256` in the lock.

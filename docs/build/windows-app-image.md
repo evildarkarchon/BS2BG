@@ -7,7 +7,7 @@ responsive/minimum geometry, live themes, High Contrast, reduced motion, feedbac
 failure preservation, pointer-free Slider Preset choice editing and catalog management, keyboard and pointer Custom Morph
 Target and NPC Morph Assignment authoring, NPC Database import and Project promotion, Preview profile isolation,
 and dirty shutdown, and exits cleanly.
-ADR-0003 records the Java 25 baseline this checkpoint ships.
+ADR-0003 records the Java 25 baseline this checkpoint ships (JavaFX: ADR-0007).
 The [2026-09-27 Workbench parity checkpoint](evidence/windows-app-image-2026-09-27-workbench-parity/README.md)
 retains the exact tested Preview ZIP, complete 100/125/150 packaged reports, and six mixed-monitor landings.
 
@@ -384,7 +384,7 @@ focused window.
 - `sourceCheckout`: whether clean checkout was required, the observed result, and the exact checkpoint commit.
 - `application`: name, version, main class, main jar, description, vendor.
 - `gate`: how the gate was obtained (this run or reused), its test count, Maven version and `--version` output.
-- `toolchain`: Temurin implementor/full build/`JAVA_VERSION`/`JAVA_RUNTIME_VERSION`, JavaFX patch, archive
+- `toolchain`: Temurin implementor/full build/`JAVA_VERSION`/`JAVA_RUNTIME_VERSION`, JavaFX version, archive
   hashes, architecture (`PROCESSOR_ARCHITECTURE`, JDK `OS_ARCH`, `os.arch`), and
   `jdeps`/`jimage`/`jlink`/`jpackage` versions.
 - `payload`: every staged artifact with SHA-256 and size; pointer to `dependency-tree.txt`; the selected Jackson

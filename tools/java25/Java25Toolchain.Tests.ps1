@@ -151,28 +151,37 @@ Describe 'Assert-JdkRelease' {
 }
 
 Describe 'Assert-JmodDescribeOutput' {
+    BeforeAll {
+        # Read the pin from the lock, so these cases keep describing the pinned JavaFX version across bumps.
+        $script:JavaFxPin = (Get-ToolchainLock -Path $script:LockPath).javafx.version
+    }
+
     It 'accepts the pinned module@version header' {
-        $output = @('javafx.base@25.0.4', 'exports javafx.beans', 'requires java.base mandated')
-        { Assert-JmodDescribeOutput -Output $output -ModuleName 'javafx.base' -Version '25.0.4' } | Should -Not -Throw
+        $output = @("javafx.base@$script:JavaFxPin", 'exports javafx.beans', 'requires java.base mandated')
+        { Assert-JmodDescribeOutput -Output $output -ModuleName 'javafx.base' -Version $script:JavaFxPin } |
+            Should -Not -Throw
     }
 
     It 'rejects a different patch version' {
-        { Assert-JmodDescribeOutput -Output @('javafx.base@25.0.3') -ModuleName 'javafx.base' -Version '25.0.4' } |
-            Should -Throw -ExpectedMessage '*javafx.base@25.0.4*'
+        { Assert-JmodDescribeOutput -Output @("javafx.base@$script:JavaFxPin.99") -ModuleName 'javafx.base' `
+                -Version $script:JavaFxPin } |
+            Should -Throw -ExpectedMessage "*expected 'javafx.base@$script:JavaFxPin'*"
     }
 
     It 'rejects a different module name' {
-        { Assert-JmodDescribeOutput -Output @('javafx.web@25.0.4') -ModuleName 'javafx.base' -Version '25.0.4' } |
+        { Assert-JmodDescribeOutput -Output @("javafx.web@$script:JavaFxPin") -ModuleName 'javafx.base' `
+                -Version $script:JavaFxPin } |
             Should -Throw -ExpectedMessage '*javafx.base*'
     }
 
     It 'skips blank lines before the header (jmod describe emits one)' {
-        $output = @('', 'javafx.controls@25.0.4', '', 'requires javafx.base')
-        { Assert-JmodDescribeOutput -Output $output -ModuleName 'javafx.controls' -Version '25.0.4' } | Should -Not -Throw
+        $output = @('', "javafx.controls@$script:JavaFxPin", '', 'requires javafx.base')
+        { Assert-JmodDescribeOutput -Output $output -ModuleName 'javafx.controls' -Version $script:JavaFxPin } |
+            Should -Not -Throw
     }
 
     It 'rejects empty output' {
-        { Assert-JmodDescribeOutput -Output @() -ModuleName 'javafx.base' -Version '25.0.4' } | Should -Throw
+        { Assert-JmodDescribeOutput -Output @() -ModuleName 'javafx.base' -Version $script:JavaFxPin } | Should -Throw
     }
 }
 

@@ -24,7 +24,8 @@ import org.w3c.dom.NodeList;
 /**
  * Structural gate over the production source tree and the build definition.
  * It rejects, before any of it can reach a class file, every dependency the
- * Java 25 / JavaFX 27 baseline forbids: private JDK or JavaFX packages,
+ * Java 25 (Temurin) and JavaFX 27 pins, versioned independently (ADR-0003,
+ * ADR-0007), forbid: private JDK or JavaFX packages,
  * private Modena resources, reflective or skin-level access, preview features,
  * and JavaFX incubator modules. It also pins the build definition so a
  * source-filtered compile can never again be presented as the verification
