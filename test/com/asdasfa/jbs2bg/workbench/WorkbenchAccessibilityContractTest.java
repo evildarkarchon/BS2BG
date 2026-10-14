@@ -167,7 +167,7 @@ class WorkbenchAccessibilityContractTest {
             guarded.put("NPC Database catalog",
                     ((TableView<?>) loader.getNamespace().get("npcCatalogTable")).getItems());
             guarded.put("Settings entries",
-                    ((ListView<?>) loader.getNamespace().get("settingsEntryList")).getItems());
+                    ((ListView<?>) LoadedWorkbench.node(loader, "settingsEntryList")).getItems());
             List<String> changed = new ArrayList<>();
             guarded.forEach((name, items) -> {
                 assertFalse(items.isEmpty(), name + " must be populated for a no-op re-render to be observable");

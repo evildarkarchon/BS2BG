@@ -14,9 +14,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.asdasfa.jbs2bg.Main;
 import com.asdasfa.jbs2bg.fx.FxTestToolkit;
+import com.asdasfa.jbs2bg.workbench.LoadedWorkbench;
+import com.asdasfa.jbs2bg.workbench.WorkbenchArea;
 import com.asdasfa.jbs2bg.workbench.WorkbenchController;
 import com.asdasfa.jbs2bg.workbench.WorkbenchProjectFlow;
 import com.asdasfa.jbs2bg.workbench.WorkbenchTestEnvironment;
+import com.asdasfa.jbs2bg.workbench.settings.SettingsArea;
 
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -72,10 +75,14 @@ class FxmlGraphLoadingTest {
         }
     }
 
+    /**
+     * Lists every FXML graph under {@link #FXML_DIRECTORY}, including Area graphs beside their controllers in
+     * subpackages, as '/'-separated paths relative to it.
+     */
     private static List<String> fxmlFiles(String prefix) throws IOException {
         List<String> names = new ArrayList<>();
-        try (Stream<Path> files = Files.list(FXML_DIRECTORY)) {
-            files.map(path -> path.getFileName().toString())
+        try (Stream<Path> files = Files.walk(FXML_DIRECTORY)) {
+            files.map(path -> FXML_DIRECTORY.relativize(path).toString().replace('\\', '/'))
                     .filter(name -> name.startsWith(prefix) && name.endsWith(".fxml"))
                     .sorted()
                     .forEach(names::add);
@@ -132,12 +139,37 @@ class FxmlGraphLoadingTest {
     }
 
     /**
-     * The sole FXML graph on disk is served from the build artifact.
+     * Every Area graph the shell loads in code binds its constructor-injected controller, with every {@code @FXML}
+     * field injected (#149). The Areas load only through an attached shell, so this attaches one.
+     */
+    @Test
+    void everyAreaGraphLoadsThroughTheShellWithItsController() throws Exception {
+        WorkbenchTestEnvironment fixture = WorkbenchTestEnvironment.initialized(temporaryDirectory);
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture.newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = load("workbench.fxml");
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            controller.attach(flow, stage, fixture.environment());
+
+            List<WorkbenchArea> areas = LoadedWorkbench.areas(loader);
+            assertEquals(List.of(SettingsArea.class), areas.stream().map(Object::getClass).toList());
+            for (WorkbenchArea area : areas)
+                assertEveryFxmlFieldInjected(area);
+            stage.close();
+        });
+    }
+
+    /**
+     * The Workbench root graph and the Area graphs it loads are the only FXML on disk, and each is served from the
+     * build artifact.
      */
     @Test
     void everyFxmlGraphOnDiskIsServedFromTheClasspath() throws IOException {
         List<String> graphs = fxmlFiles("");
-        assertEquals(List.of("workbench.fxml"), graphs, "only the Workbench graph may ship");
+        assertEquals(List.of("workbench.fxml", "workbench/settings/settings-area.fxml"), graphs,
+                "only the Workbench graph and its Area graphs may ship");
         assertTrue(graphs.contains("workbench.fxml"), "the Workbench must be the packaged root graph");
         assertFalse(graphs.contains("main.fxml"), "the replaced legacy root graph must not ship");
         assertFalse(graphs.contains("popup_bosview.fxml"), "the replaced BoS popup must not ship");

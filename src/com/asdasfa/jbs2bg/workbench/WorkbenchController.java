@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -15,6 +16,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 
 import com.asdasfa.jbs2bg.data.NPC;
 import com.asdasfa.jbs2bg.data.Settings;
@@ -40,6 +42,7 @@ import com.asdasfa.jbs2bg.workbench.npcdatabase.NpcDatabaseImporter;
 import com.asdasfa.jbs2bg.workbench.templates.TemplatesFeature;
 import com.asdasfa.jbs2bg.workbench.jobs.JobCoordinator;
 import com.asdasfa.jbs2bg.workbench.output.OutputFeature;
+import com.asdasfa.jbs2bg.workbench.settings.SettingsArea;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsFeature;
 import com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunner;
 
@@ -86,6 +89,7 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -448,46 +452,6 @@ public final class WorkbenchController {
     @FXML
     private Button assignAllMorphSliderPresetsButton;
     @FXML
-    private ScrollPane settingsPrimaryScroll;
-    @FXML
-    private VBox settingsPrimaryContent;
-    @FXML
-    private ComboBox<SettingsFeature.Profile> settingsProfileChoice;
-    @FXML
-    private ListView<SettingsFeature.EntryFrame> settingsEntryList;
-    @FXML
-    private TextField newSettingsEntryName;
-    @FXML
-    private Button addSettingsEntryButton;
-    @FXML
-    private VBox settingsEditorContent;
-    @FXML
-    private Label settingsValidationText;
-    @FXML
-    private TextField settingsEntryNameInput;
-    @FXML
-    private TextField settingsSmallInput;
-    @FXML
-    private TextField settingsBigInput;
-    @FXML
-    private TextField settingsMultiplierInput;
-    @FXML
-    private javafx.scene.control.CheckBox settingsInvertedCheck;
-    @FXML
-    private Button applySettingsEntryButton;
-    @FXML
-    private Button removeSettingsEntryButton;
-    @FXML
-    private VBox settingsInspectorContent;
-    @FXML
-    private Label settingsNoticeText;
-    @FXML
-    private javafx.scene.control.CheckBox omitRedundantSlidersCheck;
-    @FXML
-    private Button saveSettingsButton;
-    @FXML
-    private Button reloadSettingsButton;
-    @FXML
     private Button showPrimaryOverlayButton;
     @FXML
     private Button showInspectorOverlayButton;
@@ -549,12 +513,20 @@ public final class WorkbenchController {
     private long renderedTerminalAttemptId;
     private boolean closeAfterActiveJob;
     private SettingsCloseContinuation settingsCloseContinuation;
+    // Set only while the close lifecycle dispatches its Save; the first Settings job admitted meanwhile carries it.
+    private WorkbenchNavigation.FocusTarget pendingCloseSaveTarget;
     // Settings publication may beat a competing shutdown gate; derived refresh waits until admission resumes.
     private boolean settingsRefreshDeferred;
+    // The Area modules loaded from their own FXML, keyed by the Area they render; the rest still live in this graph.
+    private final Map<WorkbenchNavigation.Area, WorkbenchArea> areaModules =
+            new EnumMap<>(WorkbenchNavigation.Area.class);
+    // Each loaded Area FXML's fx:id namespace; read only by tests that drive the whole loaded Workbench.
+    private final Map<WorkbenchNavigation.Area, Map<String, Object>> areaNamespaces =
+            new EnumMap<>(WorkbenchNavigation.Area.class);
+    private SettingsArea settingsArea;
     private boolean renderingTemplates;
     private boolean renderingMorphs;
     private boolean renderingNpcDatabase;
-    private boolean renderingSettings;
     private boolean renderingOutput;
     private boolean templatesOwnProjectDiagnostics;
     private boolean morphsOwnProjectDiagnostics;
@@ -719,10 +691,14 @@ public final class WorkbenchController {
                 environment.preferencesDirectory(), environment.migrationPolicy());
         settingsJobs = new SettingsJobRunner(settingsFeature, settings, projectFlow.jobs(),
                 new SettingsJobRunner.Listener() {
-                    /** Renders the settled job and continues any close waiting on it. */
+                    /**
+                     * Lets the Settings Area render the settled job (refresh, then chain any follow-up), and only
+                     * then continues any close waiting on it.
+                     */
                     @Override
                     public void completed(SettingsFeature.Effect effect, SettingsFeature.Update update) {
-                        completeSettingsEffect(effect, update);
+                        settingsArea.completeJob(effect, update);
+                        continueSettingsClose(effect, update);
                     }
 
                     /** Keeps a pending close attached to the retried Save. */
@@ -773,11 +749,12 @@ public final class WorkbenchController {
                 "Select an NPC Morph Assignment to inspect its portrait.");
         npcDatabasePortrait = portraits.thumbnail(npcDatabasePortraitImage, npcDatabasePortraitStatus,
                 openNpcDatabasePortraitViewerButton, "Select an NPC Database entry to inspect its portrait.");
+        // Every feature exists by now, so the Areas load next, before any configure step can render.
+        loadAreas();
         configureProjectCommands();
         configureTemplates();
         configureMorphs();
         configureNpcDatabase();
-        configureSettings();
         configureOutput();
         configureNavigation();
         configureDrawerGeometry();
@@ -792,7 +769,7 @@ public final class WorkbenchController {
         });
         jobSubscription = projectFlow.jobs().observe(this::renderJobFrame);
         outputSubscription = outputFeature.observe(this::renderOutputUpdate);
-        publishInitialSettingsEvidence();
+        settingsArea.publishStartupEvidence();
         stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> {
             if (fillEmptyPopup != null)
                 fillEmptyPopup.hide();
@@ -1763,33 +1740,67 @@ public final class WorkbenchController {
     }
 
     /**
-     * Translates Settings controls into task-oriented feature intents and renders only committed immutable frames.
+     * Loads every extracted Area from its own FXML with constructor-injected collaborators, mounts its three panes
+     * into this shell's landmark containers, and renders it against the current context. Each pane is inserted where
+     * the Area's panes sat in the single Workbench FXML (Templates, Morphs, Settings, NPC Database), so the containers
+     * keep their child order.
      */
-    private void configureSettings() {
-        settingsProfileChoice.getItems().setAll(SettingsFeature.Profile.values());
-        settingsEntryList.setCellFactory(list -> new SettingsEntryCell());
-        settingsProfileChoice.setOnAction(event -> {
-            if (!renderingSettings && settingsProfileChoice.getValue() != null)
-                dispatchSettings(new SettingsFeature.SelectProfile(settingsProfileChoice.getValue()));
-        });
-        settingsEntryList.getSelectionModel().selectedItemProperty().addListener(
-                (observable, previous, selected) -> {
-                    if (!renderingSettings && selected != null)
-                        dispatchSettings(new SettingsFeature.SelectEntry(selected.name()));
-                });
-        addSettingsEntryButton.setOnAction(event ->
-                dispatchSettings(new SettingsFeature.AddEntry(newSettingsEntryName.getText())));
-        applySettingsEntryButton.setOnAction(event -> settingsFeature.frame().editor().ifPresent(editor ->
-                dispatchSettings(new SettingsFeature.EditEntry(editor.originalName(), settingsEntryNameInput.getText(),
-                        Optional.of(settingsSmallInput.getText()), Optional.of(settingsBigInput.getText()),
-                        Optional.of(settingsMultiplierInput.getText()), settingsInvertedCheck.isSelected()))));
-        removeSettingsEntryButton.setOnAction(event -> settingsFeature.frame().selection().ifPresent(name ->
-                dispatchSettings(new SettingsFeature.RemoveEntry(name))));
-        omitRedundantSlidersCheck.setOnAction(event -> dispatchSettings(
-                new SettingsFeature.ChangeOmitRedundantSliders(omitRedundantSlidersCheck.isSelected())));
-        saveSettingsButton.setOnAction(event -> dispatchSettings(new SettingsFeature.Save()));
-        reloadSettingsButton.setOnAction(event -> dispatchSettings(new SettingsFeature.Reload()));
-        renderSettings(settingsFeature.frame());
+    private void loadAreas() {
+        ShellPort shell = new AreaShell();
+        AreaLoader.Loaded<SettingsArea> settings = SettingsArea.load(settingsFeature, pipeline, shell);
+        settingsArea = settings.area();
+        mountArea(WorkbenchNavigation.Area.SETTINGS, settings,
+                npcDatabasePrimaryScroll, npcDatabaseEditorContent, npcDatabaseInspectorScroll);
+    }
+
+    /**
+     * Registers one loaded Area and places each of its panes into the matching landmark container, immediately before
+     * the given sibling from the next Area in FXML order. The Area renders the current context at once, as each Area's
+     * configure step did before it had its own FXML.
+     *
+     * @param area            the Area the module renders
+     * @param loaded          the loaded module and its namespace
+     * @param primaryBefore   the primary-content sibling the primary pane goes before
+     * @param editorBefore    the editor sibling the editor pane goes before
+     * @param inspectorBefore the inspector sibling the inspector pane goes before
+     */
+    private void mountArea(WorkbenchNavigation.Area area, AreaLoader.Loaded<? extends WorkbenchArea> loaded,
+                           Node primaryBefore, Node editorBefore, Node inspectorBefore) {
+        WorkbenchArea module = loaded.area();
+        AreaPanes panes = module.panes();
+        insertBefore(primaryPane, panes.getPrimary(), primaryBefore);
+        insertBefore(editorPane, panes.getEditor(), editorBefore);
+        insertBefore(inspectorPane, panes.getInspector(), inspectorBefore);
+        areaModules.put(area, module);
+        areaNamespaces.put(area, loaded.namespace());
+        module.render(context);
+    }
+
+    /** Inserts one pane into a landmark container directly before an existing child. */
+    private static void insertBefore(Pane container, Node pane, Node before) {
+        int index = container.getChildren().indexOf(before);
+        if (index < 0)
+            throw new IllegalStateException("Landmark container does not hold " + before.getId());
+        container.getChildren().add(index, pane);
+    }
+
+    /**
+     * Exposes one Area FXML's namespace to tests that look up Area controls through the whole loaded Workbench.
+     *
+     * @param area the Area
+     * @return the Area FXML's read-only {@code fx:id} namespace, or an empty map while the Area still lives in this
+     *         controller's own graph
+     */
+    Map<String, Object> areaNamespace(WorkbenchNavigation.Area area) {
+        return areaNamespaces.getOrDefault(area, Map.of());
+    }
+
+    /**
+     * @param area the Area to look up
+     * @return the Area's module, or null while the Area still lives in this controller's own graph
+     */
+    private WorkbenchArea areaModule(WorkbenchNavigation.Area area) {
+        return areaModules.get(area);
     }
 
     /** Connects Generate, Output tabs, and BoS identity selection to the JavaFX-independent Output feature. */
@@ -2061,117 +2072,54 @@ public final class WorkbenchController {
         requestFocus(returnTarget);
     }
 
-    /** Commits one Settings intent and admits any captured persistence effect to the application worker. */
-    private SettingsFeature.Update dispatchSettings(SettingsFeature.Intent intent) {
-        return dispatchSettings(intent, Optional.empty());
-    }
-
     /**
-     * Commits one Settings intent, installing an optional token-keyed close continuation before worker admission.
-     *
-     * @param intent requested Settings task
-     * @param closeReturnTarget semantic focus to restore while continuing a close-save, otherwise empty
-     * @return settled feature update, or a rejected update when the job gate refused the intent or coordinator
-     * admission failed
+     * The shell side of the {@link ShellPort}: Areas reach shell-owned work (feedback, the Settings job runner, the
+     * close continuation) and other Areas' refreshes only through these requests.
      */
-    private SettingsFeature.Update dispatchSettings(SettingsFeature.Intent intent,
-                                                     Optional<WorkbenchNavigation.FocusTarget> closeReturnTarget) {
-        return pipeline.dispatch(settingsFeature, DispatchPipeline.Callbacks.of(
-                        update -> renderSettings(update.frame()),
-                        effect -> realizeSettingsEffect(effect, closeReturnTarget),
-                        this::reportSettingsOutcome), Objects.requireNonNull(intent, "intent"))
-                .map(DispatchPipeline.Outcome::settled)
-                .orElseGet(() -> new SettingsFeature.Update(false, settingsFeature.frame()));
-    }
-
-    /**
-     * Realizes one Settings effect: a dirty-Reload confirmation goes back to the pipeline's dialog round-trip, and a
-     * worker effect is admitted to the coordinator, installing the close continuation first when one is requested.
-     *
-     * @param effect            effect requested by the latest Settings update
-     * @param closeReturnTarget semantic focus to restore while continuing a close-save, otherwise empty
-     * @return the confirmation for the pipeline, or a handled realization that is rejected when admission failed
-     */
-    private DispatchPipeline.Realization<SettingsFeature.Update> realizeSettingsEffect(
-            SettingsFeature.Effect effect, Optional<WorkbenchNavigation.FocusTarget> closeReturnTarget) {
-        if (effect instanceof SettingsFeature.ReloadConfirmationEffect confirmation)
-            return DispatchPipeline.Realization.confirm(
-                    WorkbenchFeedback.DialogSpec.unsavedClose(confirmation.title(), confirmation.message()),
-                    action -> settingsFeature.respondReload(confirmation.token(), reloadDecision(action)));
-        closeReturnTarget.ifPresent(target ->
-                settingsCloseContinuation = new SettingsCloseContinuation(effect.token(), target));
-        if (!submitSettingsEffect(effect)) {
-            if (settingsCloseContinuation != null && settingsCloseContinuation.effectToken() == effect.token())
-                settingsCloseContinuation = null;
-            return DispatchPipeline.Realization.settledBy(new SettingsFeature.Update(false, settingsFeature.frame()));
+    private final class AreaShell implements ShellPort {
+        /** Applies an Area-worded publication to the one feedback model and renders the frame it returns. */
+        @Override
+        public void publishFeedback(Function<WorkbenchFeedback, WorkbenchFeedback.Frame> publication) {
+            renderFeedback(publication.apply(feedback));
         }
-        return DispatchPipeline.Realization.done();
-    }
 
-    /** Maps the dirty-Reload dialog answer to the feature's explicit Save, Discard or Cancel decision. */
-    private static SettingsFeature.ReloadDecision reloadDecision(WorkbenchFeedback.DialogAction action) {
-        return switch (action) {
-            case SAVE -> SettingsFeature.ReloadDecision.SAVE;
-            case DISCARD -> SettingsFeature.ReloadDecision.DISCARD;
-            case CANCEL -> SettingsFeature.ReloadDecision.CANCEL;
-            case COPY_DETAILS, RETRY, REMOVE, CLEAR, CLOSE -> throw new IllegalArgumentException(
-                    "Dirty Settings Reload returned an unsupported dialog action: " + action);
-        };
-    }
+        /**
+         * Admits one Settings worker effect through the runner, attaching the close continuation first when the
+         * close lifecycle is dispatching its Save, so even an inline completion finds it. A refused admission drops
+         * that continuation again.
+         */
+        @Override
+        public boolean submitSettingsEffect(SettingsFeature.Effect effect) {
+            if (pendingCloseSaveTarget != null) {
+                settingsCloseContinuation = new SettingsCloseContinuation(effect.token(), pendingCloseSaveTarget);
+                pendingCloseSaveTarget = null;
+            }
+            boolean admitted = settingsJobs.submit(effect);
+            if (!admitted && settingsCloseContinuation != null
+                    && settingsCloseContinuation.effectToken() == effect.token())
+                settingsCloseContinuation = null;
+            return admitted;
+        }
 
-    /**
-     * Reports a Settings dispatch that completed without an effect and refreshes Output's generation settings when it
-     * was accepted. Worker effects report through their job terminal records instead.
-     */
-    private void reportSettingsOutcome(
-            DispatchPipeline.Outcome<SettingsFeature.Intent, SettingsFeature.Update> outcome) {
-        SettingsFeature.Update update = outcome.update();
-        if (update.effect().isPresent())
-            return;
-        publishSettingsOutcome(update);
-        if (update.accepted())
+        /** Re-renders Output against its refreshed generation settings. */
+        @Override
+        public void generationSettingsChanged() {
             renderOutput(outputFeature.refreshGenerationSettings().frame());
-    }
+        }
 
-    /**
-     * Admits one Settings worker effect through the runner. A refused admission has already cancelled the feature's
-     * pending effect, so the Settings draft is re-rendered free for the next intent.
-     *
-     * @param effect captured Save, Reload, or generation-preference effect
-     * @return whether the coordinator admitted the job
-     */
-    private boolean submitSettingsEffect(SettingsFeature.Effect effect) {
-        boolean admitted = settingsJobs.submit(effect);
-        if (!admitted)
-            renderSettings(settingsFeature.frame());
-        return admitted;
-    }
-
-    /**
-     * Renders one settled Settings job on the publication lane, refreshes Settings-dependent features after a
-     * publication, realizes any follow-up effect, and then lets the close lifecycle continue.
-     *
-     * @param effect the worker effect that settled
-     * @param update the feature update after completion or cancellation
-     */
-    private void completeSettingsEffect(SettingsFeature.Effect effect, SettingsFeature.Update update) {
-        renderSettings(update.frame());
-        boolean published = update.accepted() && (update.frame().outcome() == SettingsFeature.OutcomeKind.SAVED
-                || update.frame().outcome() == SettingsFeature.OutcomeKind.RELOADED
-                || update.frame().outcome() == SettingsFeature.OutcomeKind.RECOVERED);
-        boolean preferencePublished = effect instanceof SettingsFeature.PreferenceEffect
-                && update.accepted() && update.frame().outcome() == SettingsFeature.OutcomeKind.CHANGED;
-        if (published || preferencePublished) {
+        /**
+         * Refreshes every Settings-dependent feature after a publication, or defers the refresh while a shutdown
+         * holds admission; a preference-only publication refreshes Output alone.
+         */
+        @Override
+        public void settingsPublished(boolean pair) {
             if (projectFlow.jobs().frame().shutdownRequested())
                 settingsRefreshDeferred = true;
-            else if (preferencePublished)
+            else if (!pair)
                 renderOutput(outputFeature.refreshGenerationSettings().frame());
             else
                 refreshPublishedSettings();
         }
-        // Rejected admission already cancels the feature effect; shutdown races are an ordinary abandoned continuation.
-        update.effect().ifPresent(this::submitSettingsEffect);
-        continueSettingsClose(effect, update);
     }
 
     /**
@@ -2214,132 +2162,6 @@ public final class WorkbenchController {
         render(projectFrame);
         renderTemplates(templatesFeature.refreshSettings().frame());
         renderOutput(outputFeature.refreshGenerationSettings().frame());
-    }
-
-    /** Projects Settings outcomes through inline validation, status-only drafts, and durable bulk Activity. */
-    private void publishSettingsOutcome(SettingsFeature.Update update) {
-        SettingsFeature.OutcomeKind kind = update.frame().outcome();
-        if (kind == SettingsFeature.OutcomeKind.NONE || kind == SettingsFeature.OutcomeKind.REJECTED)
-            return;
-        WorkbenchFeedback.Notification notification = null;
-        boolean durable = false;
-        switch (kind) {
-            case CHANGED -> {
-                notification = new WorkbenchFeedback.Notification("Edit Settings",
-                        WorkbenchFeedback.Severity.INFORMATION, "Settings draft changed.",
-                        WorkbenchFeedback.Disposition.COMPLETED);
-                durable = false;
-            }
-            case UNCHANGED -> {
-                notification = new WorkbenchFeedback.Notification("Edit Settings",
-                        WorkbenchFeedback.Severity.INFORMATION, "Settings are unchanged.",
-                        WorkbenchFeedback.Disposition.COMPLETED);
-                durable = false;
-            }
-            case SAVED -> {
-                notification = new WorkbenchFeedback.Notification("Save Settings",
-                        WorkbenchFeedback.Severity.SUCCESS, "Settings saved.",
-                        WorkbenchFeedback.Disposition.COMPLETED);
-                durable = true;
-            }
-            case RELOADED -> {
-                notification = new WorkbenchFeedback.Notification("Reload Settings",
-                        WorkbenchFeedback.Severity.SUCCESS, "Settings reloaded.",
-                        WorkbenchFeedback.Disposition.COMPLETED);
-                durable = true;
-            }
-            case RECOVERED -> {
-                notification = new WorkbenchFeedback.Notification("Reload Settings",
-                        WorkbenchFeedback.Severity.WARNING, "Settings recovered and reloaded.",
-                        WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES);
-                durable = true;
-            }
-            case FAILED -> {
-                notification = new WorkbenchFeedback.Notification("Settings",
-                        WorkbenchFeedback.Severity.FAILURE, settingsNoticeSummary(update.frame()),
-                        WorkbenchFeedback.Disposition.FAILED);
-                durable = true;
-            }
-            case NONE, REJECTED -> throw new AssertionError("Non-reportable Settings outcomes returned early");
-        }
-        if (notification == null)
-            throw new IllegalStateException("Settings outcome did not produce feedback");
-        renderFeedback(durable ? feedback.publishActivity(notification) : feedback.publishStatus(notification));
-    }
-
-    /** Publishes startup recovery and failure evidence once into durable Activity. */
-    private void publishInitialSettingsEvidence() {
-        if (settingsFeature.frame().notices().isEmpty())
-            return;
-        boolean failed = settingsFeature.frame().notices().stream().anyMatch(SettingsFeature.Notice::failure);
-        WorkbenchFeedback.Notification notification = new WorkbenchFeedback.Notification("Load Settings",
-                failed ? WorkbenchFeedback.Severity.FAILURE : WorkbenchFeedback.Severity.WARNING,
-                settingsNoticeSummary(settingsFeature.frame()), failed
-                ? WorkbenchFeedback.Disposition.FAILED : WorkbenchFeedback.Disposition.COMPLETED_WITH_ISSUES);
-        renderFeedback(feedback.publishActivity(notification));
-    }
-
-    /** Formats complete Settings diagnostic codes and paths without losing structured feature state. */
-    private static String settingsNoticeSummary(SettingsFeature.Frame frame) {
-        if (frame.notices().isEmpty())
-            return "Settings operation failed.";
-        return String.join("; ", frame.notices().stream()
-                .map(notice -> notice.code() + " " + notice.path() + ": " + notice.message())
-                .toList());
-    }
-
-    /** Renders one complete Settings frame while suppressing control-listener command loops. */
-    private void renderSettings(SettingsFeature.Frame frame) {
-        renderingSettings = true;
-        try {
-            settingsProfileChoice.setValue(frame.profile());
-            UiaListHelper.setAllIfChanged(settingsEntryList.getItems(), frame.entries());
-            SettingsFeature.EntryFrame selected = settingsEntryList.getSelectionModel().getSelectedItem();
-            String selectedName = selected == null ? null : selected.name();
-            if (!Objects.equals(selectedName, frame.selection().orElse(null))) {
-                settingsEntryList.getSelectionModel().clearSelection();
-                frame.selection().ifPresent(name -> settingsEntryList.getItems().stream()
-                        .filter(entry -> entry.name().equals(name)).findFirst()
-                        .ifPresent(entry -> settingsEntryList.getSelectionModel().select(entry)));
-            }
-            frame.editor().ifPresentOrElse(editor -> {
-                settingsEntryNameInput.setText(editor.name());
-                settingsSmallInput.setText(editor.small());
-                settingsBigInput.setText(editor.big());
-                settingsMultiplierInput.setText(editor.multiplier());
-                settingsInvertedCheck.setSelected(editor.inverted());
-            }, () -> {
-                settingsEntryNameInput.clear();
-                settingsSmallInput.clear();
-                settingsBigInput.clear();
-                settingsMultiplierInput.clear();
-                settingsInvertedCheck.setSelected(false);
-            });
-            settingsValidationText.setText(frame.validation().isEmpty()
-                    ? frame.editor().isPresent() ? "Edit finite float values; blank leaves that category absent."
-                    : "Select an entry to edit."
-                    : String.join(System.lineSeparator(), frame.validation().stream()
-                    .map(SettingsFeature.Validation::message).toList()));
-            settingsNoticeText.setText(frame.notices().isEmpty()
-                    ? frame.dirty() ? "Unsaved Settings changes." : "Standard and UUNP Settings are saved together."
-                    : settingsNoticeSummary(frame));
-            omitRedundantSlidersCheck.setSelected(frame.omitRedundantSliders());
-            boolean mutationsBlocked = context.projectMutationsBlocked();
-            boolean backgroundJobBlocked = context.anyJobActive();
-            omitRedundantSlidersCheck.setDisable(mutationsBlocked || backgroundJobBlocked);
-            boolean editable = frame.editor().isPresent() && !mutationsBlocked;
-            for (javafx.scene.control.Control control : List.of(settingsEntryNameInput, settingsSmallInput,
-                    settingsBigInput, settingsMultiplierInput, settingsInvertedCheck, applySettingsEntryButton,
-                    removeSettingsEntryButton))
-                control.setDisable(!editable);
-            newSettingsEntryName.setDisable(mutationsBlocked);
-            addSettingsEntryButton.setDisable(mutationsBlocked);
-            saveSettingsButton.setDisable(mutationsBlocked || backgroundJobBlocked || !frame.dirty()
-                    || !frame.validation().isEmpty());
-            reloadSettingsButton.setDisable(mutationsBlocked || backgroundJobBlocked);
-        } finally {
-            renderingSettings = false;
-        }
     }
 
     /**
@@ -3354,6 +3176,12 @@ public final class WorkbenchController {
             event.consume();
             return;
         }
+        WorkbenchArea activeModule = areaModule(navigationFrame.activeArea());
+        if (activeModule != null && event.isControlDown() && event.getCode() == KeyCode.K) {
+            activeModule.focusSearch();
+            event.consume();
+            return;
+        }
         WorkbenchNavigation.Transition transition = null;
         if (event.isControlDown()) {
             transition = switch (event.getCode()) {
@@ -3400,6 +3228,8 @@ public final class WorkbenchController {
                 && npcDatabaseFeature.frame().selectedRow().isPresent()) {
             dispatchNpcDatabase(new NpcDatabaseFeature.ClearSelection());
             event.consume();
+        } else if (event.getCode() == KeyCode.ESCAPE && activeModule != null && activeModule.escape()) {
+            event.consume();
         }
     }
 
@@ -3416,7 +3246,11 @@ public final class WorkbenchController {
     private void applyNavigation(WorkbenchNavigation.Transition transition) {
         boolean leavingNpcDatabase = navigationFrame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE
                 && transition.frame().activeArea() != WorkbenchNavigation.Area.NPC_DATABASE;
+        WorkbenchArea leftModule = navigationFrame.activeArea() != transition.frame().activeArea()
+                ? areaModule(navigationFrame.activeArea()) : null;
         navigationFrame = transition.frame();
+        if (leftModule != null)
+            leftModule.leave();
         if (leavingNpcDatabase) {
             // Promotion feedback and return selection are visit-scoped; rail navigation must not revive them later.
             dispatchNpcDatabase(new NpcDatabaseFeature.LeaveArea());
@@ -3437,6 +3271,9 @@ public final class WorkbenchController {
             npcDatabaseInspectorScroll.setVvalue(0.0);
             Platform.runLater(() -> npcDatabaseInspectorScroll.setVvalue(0.0));
         }
+        WorkbenchArea activeModule = areaModule(navigationFrame.activeArea());
+        if (activeModule != null && navigationFrame.overlay() == WorkbenchNavigation.Overlay.INSPECTOR)
+            activeModule.resetInspectorScroll();
         transition.focusTarget().ifPresent(this::requestFocus);
     }
 
@@ -3454,7 +3291,6 @@ public final class WorkbenchController {
         boolean templatesActive = frame.activeArea() == WorkbenchNavigation.Area.TEMPLATES;
         boolean morphsActive = frame.activeArea() == WorkbenchNavigation.Area.MORPHS;
         boolean npcDatabaseActive = frame.activeArea() == WorkbenchNavigation.Area.NPC_DATABASE;
-        boolean settingsActive = frame.activeArea() == WorkbenchNavigation.Area.SETTINGS;
         templatesPrimaryScroll.setManaged(templatesActive);
         templatesPrimaryScroll.setVisible(templatesActive);
         templatesEditorContent.setManaged(templatesActive);
@@ -3473,12 +3309,7 @@ public final class WorkbenchController {
         npcDatabaseEditorContent.setVisible(npcDatabaseActive);
         npcDatabaseInspectorScroll.setManaged(npcDatabaseActive);
         npcDatabaseInspectorScroll.setVisible(npcDatabaseActive);
-        settingsPrimaryScroll.setManaged(settingsActive);
-        settingsPrimaryScroll.setVisible(settingsActive);
-        settingsEditorContent.setManaged(settingsActive);
-        settingsEditorContent.setVisible(settingsActive);
-        settingsInspectorContent.setManaged(settingsActive);
-        settingsInspectorContent.setVisible(settingsActive);
+        areaModules.forEach((moduleArea, module) -> showAreaPanes(module.panes(), moduleArea == frame.activeArea()));
         areaTitle.setText(area);
         areaTitle.setAccessibleText(area + " Area");
         primaryPane.setAccessibleText(area + " primary content");
@@ -3496,6 +3327,14 @@ public final class WorkbenchController {
         outputDrawer.setVisible(frame.outputDrawerVisible());
         if (frame.outputDrawerVisible())
             outputDrawer.toFront();
+    }
+
+    /** Shows or hides one Area module's three panes together; a hidden pane also leaves its container's layout. */
+    private static void showAreaPanes(AreaPanes panes, boolean shown) {
+        for (Node pane : List.of(panes.getPrimary(), panes.getEditor(), panes.getInspector())) {
+            pane.setManaged(shown);
+            pane.setVisible(shown);
+        }
     }
 
     /**
@@ -3587,7 +3426,7 @@ public final class WorkbenchController {
             case TEMPLATES -> sliderPresetList;
             case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
                     ? npcMorphAssignmentList : customMorphTargetList;
-            case SETTINGS -> settingsEntryList;
+            case SETTINGS -> settingsArea.defaultFocusNode();
             case NPC_DATABASE -> npcCatalogTable;
         };
     }
@@ -3604,13 +3443,13 @@ public final class WorkbenchController {
                 case TEMPLATES -> sliderPresetList;
                 case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
                         ? npcMorphAssignmentList : customMorphTargetList;
-                case SETTINGS -> settingsEntryList;
+                case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.PRIMARY_CONTENT);
                 case NPC_DATABASE -> npcSourceList;
             };
             case EDITOR -> switch (target.area()) {
                 case TEMPLATES -> firstSliderChoiceControl().orElse(templateEditorFocusTarget);
                 case MORPHS -> morphTargetEditorFocusTarget;
-                case SETTINGS -> settingsEntryNameInput;
+                case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.EDITOR);
                 case NPC_DATABASE -> npcCatalogTable;
             };
             case INSPECTOR_LAUNCHER -> showInspectorOverlayButton;
@@ -3620,7 +3459,7 @@ public final class WorkbenchController {
                 case MORPHS -> morphsFeature.frame().npcSelection().isPresent()
                         ? morphTargetSelectionText : availableMorphSliderPreset.isDisabled()
                         ? morphTargetSelectionText : availableMorphSliderPreset;
-                case SETTINGS -> saveSettingsButton.isDisabled() ? settingsNoticeText : saveSettingsButton;
+                case SETTINGS -> settingsArea.focusNode(WorkbenchNavigation.Landmark.INSPECTOR);
                 case NPC_DATABASE -> npcInspectorName;
             };
             case OUTPUT_LAUNCHER -> outputAreaButton;
@@ -3693,7 +3532,15 @@ public final class WorkbenchController {
             dispatchProject(WorkbenchProjectFlow.Intent.CLOSE);
             return;
         }
-        SettingsFeature.Update save = dispatchSettings(new SettingsFeature.Save(), Optional.of(returnTarget));
+        // The Save goes through the Settings Area like any other; the shell port attaches the close continuation to
+        // the job it admits, before an inline completion could look for it.
+        SettingsFeature.Update save;
+        pendingCloseSaveTarget = returnTarget;
+        try {
+            save = settingsArea.dispatch(new SettingsFeature.Save());
+        } finally {
+            pendingCloseSaveTarget = null;
+        }
         if (!save.accepted() || save.effect().isEmpty()) {
             requestFocus(returnTarget);
             return;
@@ -3818,7 +3665,7 @@ public final class WorkbenchController {
         renderTemplates(templatesFeature.frame());
         renderMorphs(morphsFeature.frame());
         renderNpcDatabase(npcDatabaseFeature.frame());
-        renderSettings(settingsFeature.frame());
+        settingsArea.render(context);
         renderOutput(outputFeature.frame());
     }
 
@@ -4279,29 +4126,6 @@ public final class WorkbenchController {
                 setAccessibleText(preset.getName());
                 setAccessibleHelp("Slider Preset relationship " + preset.getName());
             }
-        }
-    }
-
-    /** List cell exposing complete Settings category membership through stable accessible text. */
-    private static final class SettingsEntryCell extends ListCell<SettingsFeature.EntryFrame> {
-        /** Renders one exact Settings identity without depending on list position. */
-        @Override
-        protected void updateItem(SettingsFeature.EntryFrame entry, boolean empty) {
-            super.updateItem(entry, empty);
-            if (empty || entry == null) {
-                setText(null);
-                setAccessibleText(null);
-                setAccessibleHelp(null);
-                return;
-            }
-            setText(entry.name());
-            setAccessibleText(entry.name());
-            String defaults = entry.small().isPresent()
-                    ? "defaults " + entry.small().orElseThrow() + " to " + entry.big().orElseThrow()
-                    : "defaults absent";
-            String multiplier = entry.multiplier().map(value -> "multiplier " + value)
-                    .orElse("multiplier absent");
-            setAccessibleHelp(defaults + "; " + multiplier + "; inverted " + entry.inverted() + ".");
         }
     }
 

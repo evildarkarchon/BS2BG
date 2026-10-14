@@ -240,6 +240,7 @@ $requiredSuites = @(
     'com.asdasfa.jbs2bg.workbench.morphs.MorphsFeatureTest',
     'com.asdasfa.jbs2bg.workbench.settings.SettingsFeatureTest',
     'com.asdasfa.jbs2bg.workbench.settings.SettingsJobRunnerTest',
+    'com.asdasfa.jbs2bg.workbench.settings.SettingsAreaTest',
     'com.asdasfa.jbs2bg.workbench.output.OutputFeatureTest'
 )
 
@@ -354,7 +355,7 @@ $evidence = [ordered]@{
             }
         } else { $null })
         structuralGate          = 'ProductionSourceGateTest (sources, resources, pom) and Java25ToolchainGuardTest (every emitted class file)'
-        fxmlHarness             = 'FxmlGraphLoadingTest (sole Workbench root graph on the pinned toolkit)'
+        fxmlHarness             = 'FxmlGraphLoadingTest (Workbench root graph and the Area graphs it loads, on the pinned toolkit)'
         workbenchLifecycle      = 'JobCoordinatorTest + WorkbenchProjectFlowTest + WorkbenchControllerTest + TemplatesFeatureTest + MorphsFeatureTest + SettingsFeatureTest + OutputFeatureTest (central admission, imports, Templates and Morphs authoring, Settings persistence, captured generation, progress, cancellation, retry, stale refusal, shutdown, and JavaFX adapter)'
     }
     targetRelease           = [ordered]@{

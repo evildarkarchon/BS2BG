@@ -61,7 +61,9 @@ It classifies the focus owner into an F6 landmark by walking up to the nearest l
 registered (the three Area panes, the Output drawer, the Activity section, the status bar and the launchers); a
 control outside every container is on the rail. Morphs' Add NPCs launcher is the one registration inside an Area
 pane, so it keeps its `NPC_DATABASE_LAUNCHER` token. `WorkbenchFocusPolicyTest` pins the landmark of every
-keyboard-reachable control in `workbench.fxml`, so a new control needs a deliberate classification.
+keyboard-reachable control in `workbench.fxml` and in each Area FXML the shell mounts into those containers
+([ADR-0009](../adr/0009-workbench-areas-as-per-area-fxml-modules.md)), so a new control needs a deliberate
+classification.
 
 `ProductionPlatformBanGateTest` reads every production class file with `java.lang.classfile` and enforces these rules
 (rules 1, 2 and 4 keep focus off window activation; rule 3 keeps OS appearance behind its seam).

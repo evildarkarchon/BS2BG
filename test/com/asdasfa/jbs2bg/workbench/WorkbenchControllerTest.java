@@ -1562,13 +1562,13 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ComboBox<SettingsFeature.Profile> profiles =
-                    (ComboBox<SettingsFeature.Profile>) loader.getNamespace().get("settingsProfileChoice");
+                    (ComboBox<SettingsFeature.Profile>) LoadedWorkbench.node(loader, "settingsProfileChoice");
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
-            TextField small = (TextField) loader.getNamespace().get("settingsSmallInput");
-            TextField multiplier = (TextField) loader.getNamespace().get("settingsMultiplierInput");
-            Button apply = (Button) loader.getNamespace().get("applySettingsEntryButton");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
+            TextField small = (TextField) LoadedWorkbench.node(loader, "settingsSmallInput");
+            TextField multiplier = (TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput");
+            Button apply = (Button) LoadedWorkbench.node(loader, "applySettingsEntryButton");
 
             profiles.setValue(SettingsFeature.Profile.STANDARD);
             profiles.fireEvent(new ActionEvent());
@@ -1584,7 +1584,7 @@ class WorkbenchControllerTest {
                     .filter(entry -> entry.name().equals("Arms")).findFirst().orElseThrow());
             multiplier.setText("3");
             apply.fire();
-            ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).fire();
             multiplier.setText("9");
             apply.fire();
 
@@ -1622,25 +1622,13 @@ class WorkbenchControllerTest {
         assertEquals(3f, fixture().settings().getMultiplierUUNP("Arms"));
     }
 
-    /** The generation preference remains unchanged until its JavaFX-captured worker operation executes. */
+    /**
+     * The shell mounts the Settings Area's own panes into its landmark containers at the positions they held in the
+     * single Workbench FXML, and shows them only while Settings is the active Area (#149).
+     */
     @Test
-    void generationPreferenceToggleRunsOnTheApplicationWorker() throws Exception {
-        Settings.InitializationResult initialized = fixture().startup();
-        assertTrue(initialized.isSuccessful());
-        GenerationPreferencesStore store = new GenerationPreferencesStore(temporaryDirectory);
-        store.save(false);
-        ManualExecutor worker = new ManualExecutor();
-        ManualExecutor publication = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, publication,
-                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // The deterministic preference write settles before prolonged cancellation is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
-        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
-        AtomicReference<Stage> stageReference = new AtomicReference<>();
+    void settingsAreaPanesMountIntoTheShellLandmarksAtTheirFxmlPositions() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
 
         FxTestToolkit.runOnFxThread(() -> {
             FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
@@ -1649,32 +1637,28 @@ class WorkbenchControllerTest {
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300, 720));
             controller.attach(flow, stage, new RecordingPlatform(), fixture().environment());
-            publication.runNext();
-            loaderReference.set(loader);
-            stageReference.set(stage);
 
-            ((CheckBox) loader.getNamespace().get("omitRedundantSlidersCheck")).fire();
+            assertEquals(List.of("templatesPrimaryScroll", "morphsPrimaryScroll", "settingsPrimaryScroll",
+                    "npcDatabasePrimaryScroll"), childIds(loader, "primaryPane"));
+            assertEquals(List.of("templatesEditorContent", "morphsEditorContent", "settingsEditorContent",
+                    "npcDatabaseEditorContent"), childIds(loader, "editorPane"));
+            assertEquals(List.of("templatesInspectorScroll", "morphsInspectorScroll", "settingsInspectorContent",
+                    "npcDatabaseInspectorScroll"), childIds(loader, "inspectorPane"));
+            javafx.scene.Node settingsEditor = (javafx.scene.Node) LoadedWorkbench.node(loader, "settingsEditorContent");
+            assertFalse(settingsEditor.isVisible() || settingsEditor.isManaged());
 
-            assertTrue(jobs.frame().active());
-            assertEquals("omitRedundantSliders=false" + System.lineSeparator(),
-                    Files.readString(temporaryDirectory.resolve("workbench-generation.properties")));
+            ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
+
+            assertTrue(settingsEditor.isVisible() && settingsEditor.isManaged());
+            assertFalse(((javafx.scene.Node) loader.getNamespace().get("templatesEditorContent")).isVisible());
+            stage.close();
         });
+    }
 
-        Thread preferenceWorker = worker.runNextAsync();
-        preferenceWorker.join();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            publication.runNext();
-            publication.runNext();
-            publication.runNext();
-            assertFalse(jobs.frame().active());
-            assertTrue(((CheckBox) loaderReference.get().getNamespace()
-                    .get("omitRedundantSlidersCheck")).isSelected());
-            stageReference.get().close();
-        });
-
-        assertEquals("omitRedundantSliders=true" + System.lineSeparator(),
-                Files.readString(temporaryDirectory.resolve("workbench-generation.properties")));
+    /** @return the {@code fx:id}s of one shell container's children, in order */
+    private static List<String> childIds(FXMLLoader loader, String containerId) {
+        return ((javafx.scene.layout.Pane) loader.getNamespace().get(containerId)).getChildren().stream()
+                .map(javafx.scene.Node::getId).toList();
     }
 
     /** Reload returns immediately on JavaFX and applies the recovered pair only after worker and publication lanes. */
@@ -1714,7 +1698,7 @@ class WorkbenchControllerTest {
                 "{\"Defaults\":{},\"Multipliers\":{},\"Inverted\":[]}");
 
         FxTestToolkit.runOnFxThread(() -> {
-            ((Button) loaderReference.get().getNamespace().get("reloadSettingsButton")).fire();
+            ((Button) LoadedWorkbench.node(loaderReference.get(), "reloadSettingsButton")).fire();
 
             assertTrue(jobs.frame().active());
             assertEquals(1f, fixture().settings().getMultiplier("Waist"));
@@ -1731,7 +1715,7 @@ class WorkbenchControllerTest {
             FXMLLoader loader = loaderReference.get();
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             assertEquals(4f, entries.getItems().stream().filter(entry -> entry.name().equals("Waist"))
                     .findFirst().orElseThrow().multiplier().orElseThrow());
             assertEquals(50, flow.frame().snapshot().getSliderPresets().getFirst().getSliderChoices().stream()
@@ -1739,165 +1723,6 @@ class WorkbenchControllerTest {
                     .getEffectiveSmallValue());
             assertEquals(1, ((ListView<?>) loader.getNamespace().get("activityList")).getItems().size());
             assertTrue(((Label) loader.getNamespace().get("statusText")).getText().contains("Settings reloaded"));
-            stageReference.get().close();
-        });
-    }
-
-    /** Dirty Reload cancellation retains the draft, while Save persists it before the original Reload continues. */
-    @Test
-    void dirtySettingsReloadConfirmsAndSavesBeforeReloading() throws Exception {
-        Settings.InitializationResult initialized = fixture().startup();
-        assertTrue(initialized.isSuccessful());
-        ManualExecutor worker = new ManualExecutor();
-        ManualExecutor publication = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, publication,
-                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // The deterministic Reload settles before prolonged cancellation is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.CANCEL);
-        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.SAVE);
-        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
-        AtomicReference<Stage> stageReference = new AtomicReference<>();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, fixture().environment());
-            publication.runNext();
-            loaderReference.set(loader);
-            stageReference.set(stage);
-            @SuppressWarnings("unchecked")
-            ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
-            entries.getSelectionModel().select(entries.getItems().stream()
-                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-        });
-        Files.writeString(temporaryDirectory.resolve("settings.json"),
-                "{\"Defaults\":{\"Waist\":{\"valueSmall\":0.5,\"valueBig\":1}},"
-                        + "\"Multipliers\":{\"Waist\":4},\"Inverted\":[]}");
-        Files.writeString(temporaryDirectory.resolve("settings_UUNP.json"),
-                "{\"Defaults\":{},\"Multipliers\":{},\"Inverted\":[]}");
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = loaderReference.get();
-            Button reload = (Button) loader.getNamespace().get("reloadSettingsButton");
-            reload.fire();
-
-            assertFalse(jobs.frame().active());
-            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
-            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
-
-            reload.fire();
-
-            assertTrue(jobs.frame().active());
-            assertEquals("Save Settings", jobs.frame().attempt().orElseThrow().operation().name());
-            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
-        });
-
-        Thread saveWorker = worker.runNextAsync();
-        saveWorker.join();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            publication.runNext();
-            publication.runNext();
-            publication.runNext();
-            assertTrue(jobs.frame().active());
-            assertEquals("Reload Settings", jobs.frame().attempt().orElseThrow().operation().name());
-            assertEquals(2f, fixture().settings().getMultiplier("Waist"));
-        });
-
-        Thread reloadWorker = worker.runNextAsync();
-        reloadWorker.join();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            publication.runNext();
-            publication.runNext();
-            publication.runNext();
-            FXMLLoader loader = loaderReference.get();
-            assertFalse(jobs.frame().active());
-            assertEquals(2f, fixture().settings().getMultiplier("Waist"));
-            assertTrue(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
-            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
-            stageReference.get().close();
-        });
-    }
-
-    /** Dirty Reload Discard admits Reload directly and replaces the retained draft only after worker completion. */
-    @Test
-    void dirtySettingsReloadDiscardAdmitsReloadWithoutSaving() throws Exception {
-        Settings.InitializationResult initialized = fixture().startup();
-        assertTrue(initialized.isSuccessful());
-        ManualExecutor worker = new ManualExecutor();
-        ManualExecutor publication = new ManualExecutor();
-        JobCoordinator jobs = new JobCoordinator(worker, publication,
-                Clock.fixed(Instant.parse("2026-09-01T20:00:00Z"), ZoneOffset.UTC),
-                (delay, action) -> () -> {
-                    // The deterministic Reload settles before prolonged cancellation is relevant.
-                }, failure -> {
-            throw new AssertionError("Unexpected callback failure", failure);
-        });
-        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession(), jobs);
-        RecordingPlatform platform = new RecordingPlatform();
-        platform.respondConfirmationWith(WorkbenchFeedback.DialogAction.DISCARD);
-        AtomicReference<FXMLLoader> loaderReference = new AtomicReference<>();
-        AtomicReference<Stage> stageReference = new AtomicReference<>();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
-            Parent root = loader.load();
-            WorkbenchController controller = loader.getController();
-            Stage stage = new Stage();
-            stage.setScene(new Scene(root, 1300, 720));
-            controller.attach(flow, stage, platform, fixture().environment());
-            publication.runNext();
-            loaderReference.set(loader);
-            stageReference.set(stage);
-            @SuppressWarnings("unchecked")
-            ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
-            entries.getSelectionModel().select(entries.getItems().stream()
-                    .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-        });
-        Files.writeString(temporaryDirectory.resolve("settings.json"),
-                "{\"Defaults\":{\"Waist\":{\"valueSmall\":0.5,\"valueBig\":1}},"
-                        + "\"Multipliers\":{\"Waist\":4},\"Inverted\":[]}");
-        Files.writeString(temporaryDirectory.resolve("settings_UUNP.json"),
-                "{\"Defaults\":{},\"Multipliers\":{},\"Inverted\":[]}");
-
-        FxTestToolkit.runOnFxThread(() -> {
-            FXMLLoader loader = loaderReference.get();
-            ((Button) loader.getNamespace().get("reloadSettingsButton")).fire();
-
-            assertTrue(jobs.frame().active());
-            assertEquals("Reload Settings", jobs.frame().attempt().orElseThrow().operation().name());
-            assertEquals(1f, fixture().settings().getMultiplier("Waist"));
-            assertEquals("2.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
-        });
-
-        Thread reloadWorker = worker.runNextAsync();
-        reloadWorker.join();
-
-        FxTestToolkit.runOnFxThread(() -> {
-            publication.runNext();
-            publication.runNext();
-            publication.runNext();
-            FXMLLoader loader = loaderReference.get();
-            assertFalse(jobs.frame().active());
-            assertEquals(4f, fixture().settings().getMultiplier("Waist"));
-            assertTrue(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
-            assertEquals("4.0", ((TextField) loader.getNamespace().get("settingsMultiplierInput")).getText());
             stageReference.get().close();
         });
     }
@@ -1933,12 +1758,12 @@ class WorkbenchControllerTest {
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            ((Button) loader.getNamespace().get("reloadSettingsButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "reloadSettingsButton")).fire();
 
             assertTrue(jobs.frame().active());
             assertEquals("Save Settings", jobs.frame().attempt().orElseThrow().operation().name());
@@ -2598,18 +2423,18 @@ class WorkbenchControllerTest {
             controller.attach(flow, stage, platform, fixture().environment());
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
 
             WindowEvent closeRequest = new WindowEvent(stage, WindowEvent.WINDOW_CLOSE_REQUEST);
             stage.getOnCloseRequest().handle(closeRequest);
 
             assertTrue(closeRequest.isConsumed());
             assertEquals(0, platform.closeCount);
-            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertFalse(((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).isDisabled());
             ListView<?> activity = (ListView<?>) loader.getNamespace().get("activityList");
             assertEquals(WorkbenchFeedback.Disposition.CANCELLED,
                     assertInstanceOf(WorkbenchFeedback.ActivityRecord.class,
@@ -2655,11 +2480,11 @@ class WorkbenchControllerTest {
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
 
             ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
 
@@ -2710,11 +2535,11 @@ class WorkbenchControllerTest {
             controller.attach(flow, stage, platform, fixture().environment());
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
 
             ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
 
@@ -2757,11 +2582,11 @@ class WorkbenchControllerTest {
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
             ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
         });
         Files.deleteIfExists(temporaryDirectory.resolve("settings.json"));
@@ -2780,7 +2605,7 @@ class WorkbenchControllerTest {
 
             assertFalse(flow.frame().closed());
             assertEquals(0, platform.closeCount);
-            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertFalse(((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).isDisabled());
             assertEquals(JobCoordinator.Lifecycle.FAILED,
                     jobs.frame().attempt().orElseThrow().lifecycle());
             stageReference.get().setOnCloseRequest(null);
@@ -2820,11 +2645,11 @@ class WorkbenchControllerTest {
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
             assertEquals(JobCoordinator.ShutdownResponse.READY, jobs.requestShutdown());
 
             ((MenuItem) loader.getNamespace().get("exitMenuItem")).fire();
@@ -2835,7 +2660,7 @@ class WorkbenchControllerTest {
             assertTrue(jobs.resumeAfterShutdown());
             publication.runNext();
             publication.runNext();
-            ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).fire();
             assertTrue(jobs.frame().active());
         });
 
@@ -2891,12 +2716,12 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            TextField editor = (TextField) loader.getNamespace().get("settingsEntryNameInput");
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            TextField editor = (TextField) LoadedWorkbench.node(loader, "settingsEntryNameInput");
             editor.requestFocus();
             assertSame(editor, stage.getScene().getFocusOwner());
             returnFocus.set(editor);
@@ -2963,12 +2788,12 @@ class WorkbenchControllerTest {
             stageReference.set(stage);
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            ((Button) loader.getNamespace().get("saveSettingsButton")).fire();
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            ((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).fire();
         });
         Files.deleteIfExists(temporaryDirectory.resolve("settings.json"));
         Files.deleteIfExists(temporaryDirectory.resolve("settings_UUNP.json"));
@@ -2982,9 +2807,9 @@ class WorkbenchControllerTest {
             publication.runNext();
             publication.runNext();
             FXMLLoader loader = loaderReference.get();
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).clear();
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            assertTrue(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).clear();
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            assertTrue(((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).isDisabled());
             @SuppressWarnings("unchecked")
             ListView<WorkbenchFeedback.ActivityRecord> activity =
                     (ListView<WorkbenchFeedback.ActivityRecord>) loader.getNamespace().get("activityList");
@@ -3035,12 +2860,12 @@ class WorkbenchControllerTest {
             ((ToggleButton) loader.getNamespace().get("settingsAreaButton")).fire();
             @SuppressWarnings("unchecked")
             ListView<SettingsFeature.EntryFrame> entries =
-                    (ListView<SettingsFeature.EntryFrame>) loader.getNamespace().get("settingsEntryList");
+                    (ListView<SettingsFeature.EntryFrame>) LoadedWorkbench.node(loader, "settingsEntryList");
             entries.getSelectionModel().select(entries.getItems().stream()
                     .filter(entry -> entry.name().equals("Waist")).findFirst().orElseThrow());
-            ((TextField) loader.getNamespace().get("settingsMultiplierInput")).setText("2");
-            ((Button) loader.getNamespace().get("applySettingsEntryButton")).fire();
-            TextField editor = (TextField) loader.getNamespace().get("settingsEntryNameInput");
+            ((TextField) LoadedWorkbench.node(loader, "settingsMultiplierInput")).setText("2");
+            ((Button) LoadedWorkbench.node(loader, "applySettingsEntryButton")).fire();
+            TextField editor = (TextField) LoadedWorkbench.node(loader, "settingsEntryNameInput");
             editor.requestFocus();
             assertSame(editor, stage.getScene().getFocusOwner());
             returnFocus.set(editor);
@@ -3055,7 +2880,7 @@ class WorkbenchControllerTest {
                     jobs.frame().attempt().orElseThrow().lifecycle());
             assertFalse(flow.frame().closed());
             assertEquals(0, platform.closeCount);
-            assertFalse(((Button) loader.getNamespace().get("saveSettingsButton")).isDisabled());
+            assertFalse(((Button) LoadedWorkbench.node(loader, "saveSettingsButton")).isDisabled());
             assertSame(returnFocus.get(), stage.getScene().getFocusOwner());
             stageReference.get().setOnCloseRequest(null);
             stageReference.get().close();
@@ -4130,116 +3955,6 @@ class WorkbenchControllerTest {
                 return delegate.promoteNpcs(sources);
             ProjectOutcome refusal = apply(NpcMorphAssignmentEdits.addNpcs(sources));
             return new NpcPromotionOutcome(refusal, java.util.Collections.nCopies(sources.size(), refusal));
-        }
-    }
-
-    /**
-     * Test adapter for modal platform effects; responses are consumed in user-interaction order.
-     */
-    static final class RecordingPlatform implements WorkbenchPlatform {
-        private final Deque<WorkbenchProjectFlow.Response> responses = new ArrayDeque<>();
-        private final Deque<WorkbenchFeedback.DialogAction> confirmationResponses = new ArrayDeque<>();
-        private final Deque<WorkbenchFeedback.DialogAction> failureResponses = new ArrayDeque<>();
-        private final Deque<Runnable> failureHooks = new ArrayDeque<>();
-        private final Deque<Optional<Path>> outputDirectoryResponses = new ArrayDeque<>();
-        private final Deque<Optional<Path>> outputFileResponses = new ArrayDeque<>();
-        private final Deque<Optional<List<Path>>> npcSourceResponses = new ArrayDeque<>();
-        private final List<String> clipboardTexts = new java.util.ArrayList<>();
-        private WorkbenchFeedback.DialogSpec failureSpec;
-        private int closeCount;
-
-        /**
-         * Adds the next chooser or confirmation result.
-         */
-        void respondWith(WorkbenchProjectFlow.Response response) {
-            responses.addLast(response);
-        }
-
-        /**
-         * Adds the next destructive feature confirmation action.
-         */
-        void respondConfirmationWith(WorkbenchFeedback.DialogAction action) {
-            confirmationResponses.addLast(action);
-        }
-
-        /** Adds the next failure-dialog action and a hook run immediately before that response is returned. */
-        void respondFailureWith(WorkbenchFeedback.DialogAction action, Runnable beforeResponse) {
-            failureResponses.addLast(action);
-            failureHooks.addLast(beforeResponse);
-        }
-
-        /** Adds the next Output directory-chooser result. */
-        void respondOutputDirectoryWith(Optional<Path> response) {
-            outputDirectoryResponses.addLast(response);
-        }
-
-        /** Adds the next selected-BoS save-chooser result. */
-        void respondOutputFileWith(Optional<Path> response) {
-            outputFileResponses.addLast(response);
-        }
-
-        /** Adds the next NPC Database multi-file chooser result. */
-        void respondNpcSourcesWith(Optional<List<Path>> response) {
-            npcSourceResponses.addLast(response);
-        }
-
-        /** Returns the next scripted NPC Database source selection. */
-        @Override
-        public Optional<List<Path>> chooseNpcSources(Stage owner) {
-            return npcSourceResponses.removeFirst();
-        }
-
-        /**
-         * Returns the next scripted real-platform result.
-         */
-        @Override
-        public WorkbenchProjectFlow.Response complete(WorkbenchProjectFlow.Effect effect, Stage owner) {
-            return responses.removeFirst();
-        }
-
-        /**
-         * Returns the next scripted destructive feature confirmation.
-         */
-        @Override
-        public WorkbenchFeedback.DialogAction completeConfirmation(WorkbenchFeedback.DialogSpec spec, Stage owner) {
-            return confirmationResponses.removeFirst();
-        }
-
-        /** Records the offered failure actions and runs the scripted hook before returning a response. */
-        @Override
-        public WorkbenchFeedback.DialogAction completeFailure(WorkbenchFeedback.DialogSpec spec, Stage owner) {
-            failureSpec = spec;
-            if (failureResponses.isEmpty())
-                return WorkbenchFeedback.DialogAction.CLOSE;
-            failureHooks.removeFirst().run();
-            return failureResponses.removeFirst();
-        }
-
-        /** Records accepted clipboard text without consulting a JavaFX TextArea. */
-        @Override
-        public boolean copyOutputText(String text) {
-            clipboardTexts.add(text);
-            return true;
-        }
-
-        /** Returns the next scripted complete-batch directory. */
-        @Override
-        public Optional<Path> chooseOutputDirectory(Stage owner) {
-            return outputDirectoryResponses.removeFirst();
-        }
-
-        /** Returns the next scripted selected-BoS destination. */
-        @Override
-        public Optional<Path> chooseOutputFile(String suggestedFileName, Stage owner) {
-            return outputFileResponses.removeFirst();
-        }
-
-        /**
-         * Records the at-most-once final close effect without closing the test Stage.
-         */
-        @Override
-        public void closeWindow(Stage owner) {
-            closeCount++;
         }
     }
 

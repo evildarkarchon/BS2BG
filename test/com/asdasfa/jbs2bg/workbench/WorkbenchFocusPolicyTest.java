@@ -225,7 +225,8 @@ class WorkbenchFocusPolicyTest {
     }
 
     /**
-     * Pins the ancestor-walk classification of every keyboard-reachable control in {@code workbench.fxml} against
+     * Pins the ancestor-walk classification of every keyboard-reachable control in {@code workbench.fxml} and in the
+     * Area FXMLs the shell mounts into its landmark containers (#149) against
      * the FXML landmark containers (#146). The expected table was derived by hand from the containers: the rail and
      * the header/diagnostics strip are unregistered (RAIL); the three Area panes, the Output drawer, the Activity
      * section and the status bar are registered containers; the overlay launchers, the Output rail button and Morphs'
@@ -293,12 +294,13 @@ class WorkbenchFocusPolicyTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new WorkbenchControllerTest.RecordingPlatform(), fixture.environment());
+            controller.attach(flow, stage, new RecordingPlatform(), fixture.environment());
             // Shown so ScrollPane and TabPane skins parent their content: a focus owner is always in a showing scene.
             stage.show();
             try {
                 Map<String, Landmark> actual = new TreeMap<>();
-                loader.getNamespace().forEach((id, value) -> {
+                // The Area FXMLs the shell loads count too: their panes sit inside the same landmark containers.
+                LoadedWorkbench.namespace(loader).forEach((id, value) -> {
                     if (value instanceof Control control && control.isFocusTraversable())
                         actual.put(id, controller.focusPolicy().classify(control));
                 });
@@ -324,7 +326,7 @@ class WorkbenchFocusPolicyTest {
             WorkbenchController controller = loader.getController();
             Stage stage = new Stage();
             stage.setScene(new Scene(root, 1300.0, 800.0));
-            controller.attach(flow, stage, new WorkbenchControllerTest.RecordingPlatform(), fixture.environment());
+            controller.attach(flow, stage, new RecordingPlatform(), fixture.environment());
             stage.show();
             try {
                 Node sort = (Node) loader.getNamespace().get("sliderPresetSort");
