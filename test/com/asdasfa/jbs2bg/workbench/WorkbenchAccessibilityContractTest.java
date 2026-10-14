@@ -117,8 +117,8 @@ class WorkbenchAccessibilityContractTest {
     /**
      * A re-render that leaves membership unchanged must not touch any guarded collection: JavaFX 25+ Windows UIA can
      * drop every virtualized cell after a no-op replacement. A theme change is the trigger because its job frames
-     * re-render all five Areas without changing the Project; the unguarded Activity list is the witness that the
-     * re-render happened.
+     * re-render all five Areas and the Output drawer without changing the Project; the Activity list, which gains a
+     * row for the completed theme job, is the witness that the re-render happened.
      */
     @Test
     void reRenderWithUnchangedMembershipFiresNoListChangeOnGuardedCollections() throws Exception {
@@ -131,6 +131,8 @@ class WorkbenchAccessibilityContractTest {
                 + "Skyrim.esm | Beta | Beta01 | BretonRace | 00012346\n");
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
         flow.apply(SliderPresetEdits.create("Alpha"));
+        // Beta stays unassigned, so the selected Custom Morph Target offers it as an available Slider Preset.
+        flow.apply(SliderPresetEdits.create("Beta"));
         flow.apply(CustomMorphTargetEdits.create("All|Female", List.of("Alpha")));
         flow.apply(NpcMorphAssignmentEdits.addNpc(new NpcMorphAssignmentSnapshot(
                 "Lyra", "People.esp", "Lyra01", "NordRace", "A12B3", List.of())));
@@ -148,6 +150,7 @@ class WorkbenchAccessibilityContractTest {
             controller.customMorphTargetListNode().getSelectionModel().select(0);
             ((ToggleButton) loader.getNamespace().get("npcDatabaseAreaButton")).fire();
             ((Button) loader.getNamespace().get("importNpcSourcesButton")).fire();
+            ((Button) loader.getNamespace().get("generateOutputButton")).fire();
 
             Map<String, ObservableList<?>> guarded = new LinkedHashMap<>();
             guarded.put("Slider Presets", controller.sliderPresetListNode().getItems());
@@ -156,6 +159,9 @@ class WorkbenchAccessibilityContractTest {
             guarded.put("Custom Morph Targets", controller.customMorphTargetListNode().getItems());
             guarded.put("NPC Morph Assignments", controller.npcMorphAssignmentListNode().getItems());
             guarded.put("Assigned Slider Presets", controller.assignedMorphSliderPresetListNode().getItems());
+            guarded.put("Available Slider Presets",
+                    ((ComboBox<?>) loader.getNamespace().get("availableMorphSliderPreset")).getItems());
+            guarded.put("BoS artifacts", ((ComboBox<?>) loader.getNamespace().get("bosArtifactChoice")).getItems());
             guarded.put("NPC Database sources",
                     ((ListView<?>) loader.getNamespace().get("npcSourceList")).getItems());
             guarded.put("NPC Database catalog",
@@ -181,6 +187,58 @@ class WorkbenchAccessibilityContractTest {
                     flow.jobs().frame().attempt().orElseThrow().operation().name());
             assertTrue(activity.getItems().size() > activityBefore,
                     "the theme job frames must have re-rendered the Workbench");
+            assertEquals(List.of(), changed);
+            stage.close();
+        });
+    }
+
+    /**
+     * A feedback re-render that leaves Activity membership and both severities unchanged must not touch the Activity
+     * list or swap the InfoBar and status icon nodes. A status-only publish (a Custom Morph Target create) after the
+     * theme job's InfoBar is the trigger; the status text is the witness that the feedback re-render happened.
+     */
+    @Test
+    void statusOnlyFeedbackReRenderFiresNoChangeOnActivityOrSeverityIcons() throws Exception {
+        WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
+
+        FxTestToolkit.runOnFxThread(() -> {
+            FXMLLoader loader = new FXMLLoader(Main.class.getResource("workbench.fxml"));
+            Parent root = loader.load();
+            WorkbenchController controller = loader.getController();
+            Stage stage = new Stage();
+            stage.setScene(new Scene(root, 1300.0, 800.0));
+            controller.attach(flow, stage, new UnusedPlatform(), fixture().environment());
+            @SuppressWarnings("unchecked")
+            ComboBox<WorkbenchAppearance.ThemeChoice> theme =
+                    (ComboBox<WorkbenchAppearance.ThemeChoice>) loader.getNamespace().get("themeChoice");
+            theme.setValue(WorkbenchAppearance.ThemeChoice.DARK);
+            theme.fireEvent(new ActionEvent());
+            Node infoBar = (Node) loader.getNamespace().get("infoBar");
+            assertTrue(infoBar.isVisible(), "the completed theme job must leave an InfoBar to re-render");
+            Label status = (Label) loader.getNamespace().get("statusText");
+            String statusBefore = status.getText();
+            assertTrue(statusBefore.startsWith("Success"), statusBefore);
+
+            Map<String, ObservableList<?>> guarded = new LinkedHashMap<>();
+            guarded.put("Activity", ((ListView<?>) loader.getNamespace().get("activityList")).getItems());
+            guarded.put("InfoBar icon", ((Parent) loader.getNamespace().get("infoBarIconHost"))
+                    .getChildrenUnmodifiable());
+            guarded.put("Status icon", ((Parent) loader.getNamespace().get("statusIconHost"))
+                    .getChildrenUnmodifiable());
+            List<String> changed = new ArrayList<>();
+            guarded.forEach((name, items) -> {
+                assertFalse(items.isEmpty(), name + " must be populated for a no-op re-render to be observable");
+                items.addListener((ListChangeListener<Object>) change -> changed.add(name));
+            });
+
+            ((ToggleButton) loader.getNamespace().get("morphsAreaButton")).fire();
+            ((TextField) loader.getNamespace().get("customMorphTargetNameInput")).setText("All|Female");
+            ((Button) loader.getNamespace().get("createCustomMorphTargetButton")).fire();
+
+            assertEquals(1, flow.frame().snapshot().getCustomMorphTargets().size());
+            assertNotEquals(statusBefore, status.getText(), "the create must have re-rendered the feedback");
+            assertTrue(status.getText().startsWith("Success"), status.getText());
+            assertTrue(infoBar.isVisible());
             assertEquals(List.of(), changed);
             stage.close();
         });
