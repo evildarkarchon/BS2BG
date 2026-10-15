@@ -282,7 +282,11 @@ class MorphsAreaTest extends AreaTest<MorphsArea> {
         });
     }
 
-    /** The inspector portrait follows logical NPC selection and explains the missing-file fallback. */
+    /**
+     * The inspector portrait follows logical NPC selection and explains the missing-file fallback. Its status keeps a
+     * stable accessible name and publishes its state as HelpText: the inspector's guidance before the first NPC is
+     * selected (#156) and again once the selection clears, and the displayed status while an NPC is selected.
+     */
     @Test
     void npcPortraitInspectorClearsWithSelectionAndDescribesMissingImage() throws Exception {
         WorkbenchProjectFlow flow = new WorkbenchProjectFlow("BS2BG Preview", fixture().newSession());
@@ -291,19 +295,29 @@ class MorphsAreaTest extends AreaTest<MorphsArea> {
         FxTestToolkit.runOnFxThread(() -> {
             host(flow);
             try {
-                ListView<NpcMorphAssignmentSnapshot> npcs = hosted().module().npcMorphAssignmentListNode();
-                npcs.getSelectionModel().selectFirst();
+                String guidance = "Select an NPC Morph Assignment to inspect its portrait.";
                 ImageView portrait = (ImageView) hosted().namespace().get("npcPortraitImage");
                 Label status = (Label) hosted().namespace().get("npcPortraitStatus");
                 Button viewer = (Button) hosted().namespace().get("openNpcPortraitViewerButton");
+                assertEquals("NPC portrait status", status.queryAccessibleAttribute(AccessibleAttribute.TEXT));
+                assertEquals("No NPC portrait selected", status.getText());
+                assertEquals(guidance, status.queryAccessibleAttribute(AccessibleAttribute.HELP),
+                        "the portrait status explains itself before the first NPC is selected");
+
+                ListView<NpcMorphAssignmentSnapshot> npcs = hosted().module().npcMorphAssignmentListNode();
+                npcs.getSelectionModel().selectFirst();
                 assertEquals(AccessibleRole.NODE, portrait.getAccessibleRole());
                 assertNull(portrait.getAccessibleText(),
                         "the named NPC inspector makes its adjacent thumbnail decorative");
                 assertTrue(status.getText().contains("NoPortraitFixture (HousecarlWhiterun).jpg"));
+                assertEquals(status.getText(), status.queryAccessibleAttribute(AccessibleAttribute.HELP),
+                        "a selected NPC's portrait status mirrors its displayed value as HelpText");
                 assertTrue(viewer.isDisabled());
                 ((TextField) hosted().namespace().get("npcMorphAssignmentFilter")).setText("no match");
                 assertNull(portrait.getAccessibleText());
                 assertNull(portrait.getImage());
+                assertEquals("No NPC portrait selected", status.getText());
+                assertEquals(guidance, status.queryAccessibleAttribute(AccessibleAttribute.HELP));
             } finally {
                 hosted().stage().close();
             }

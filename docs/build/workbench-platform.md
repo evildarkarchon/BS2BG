@@ -148,10 +148,10 @@ they cannot show that a workaround is needed or enough:
   single-Area workaround is pinned in its Area's suite: node replacement on an empty-to-full refill and the refill
   focus in `TemplatesAreaTest` and `MorphsAreaTest` (all four lists), the rename edit lifecycle, in-place cell update
   and slider-row identity across edits in `TemplatesAreaTest`, `labelFor` re-pointing after the Assigned Slider
-  Presets swap in `MorphsAreaTest`, and the NPC Database label and portrait-status HelpText values in
-  `NpcDatabaseAreaTest`. `WorkbenchAccessibilityContractTest` keeps the contracts that span the whole Workbench: no
-  list-change event on a membership-preserving re-render (every guarded list, the Activity list and both severity
-  icon hosts), mnemonic stripping from accessible names, every mnemonic label's `labelFor` reaching the control it
+  Presets swap and the portrait-status HelpText values in `MorphsAreaTest`, and the NPC Database label and
+  portrait-status HelpText values in `NpcDatabaseAreaTest`. `WorkbenchAccessibilityContractTest` keeps the
+  contracts that span the whole Workbench: no list-change event on a membership-preserving re-render (every guarded
+  list, the Activity list and both severity icon hosts), mnemonic stripping from accessible names, every mnemonic label's `labelFor` reaching the control it
   precedes and its mnemonic surviving the shell's pane re-parenting (`MnemonicLabels`,
   [#155](https://github.com/evildarkarchon/BS2BG/issues/155)), and the typed dialog buttons' names. Each test fails
   if its workaround or contract is removed.
