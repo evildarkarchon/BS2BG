@@ -250,8 +250,11 @@
                                         accessibleRole="NODE" mouseTransparent="true"
                                         fitHeight="180.0" fitWidth="200.0"
                                         preserveRatio="true" smooth="true" />
+                                <!-- The portrait thumbnail sets this guidance only when a selection clears, so the
+                                     initial help repeats MorphsArea's no-selection text; keep the two equal (#156). -->
                                 <Label fx:id="npcPortraitStatus"
                                         accessibleText="NPC portrait status"
+                                        accessibleHelp="Select an NPC Morph Assignment to inspect its portrait."
                                         text="No NPC portrait selected"
                                         wrapText="true" />
                                 <Button fx:id="openNpcPortraitViewerButton"
